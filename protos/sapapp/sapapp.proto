@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package cloud.partners.sap.gcagent.protos.sapapp;
+
+
+
+enum InstanceType {
+  INSTANCE_TYPE_UNDEFINED = 0;
+  HANA = 1;
+  NETWEAVER = 2;
+}
+
+enum InstanceSite {
+  INSTANCE_SITE_UNDEFINED = 0;
+  HANA_PRIMARY = 1;
+  HANA_SECONDARY = 2;
+  HANA_STANDALONE = 3;
+}
+
+message SAPInstance {
+  string sapsid = 1;           // HDB
+  string instance_number = 2;  // 00
+  string service_name = 3;
+  InstanceType type = 4;  // HANA, NetWeaver
+  InstanceSite site = 5;  // PRIMARY, SECONDARY
+  repeated string hana_ha_members =
+      6;  // List of HANA instance names that form a HANA HA configuration.
+  string sapcontrol_path = 7;  // /usr/sap/HDB/HDB00/exe/sapcontrol
+  string user = 8;             // hdbadm
+  string instance_id = 9;      // HDB00 - unique identifier for SAP Instance.
+  string netweaver_http_port = 10;
+  string hana_db_user = 11;
+  string hana_db_password = 12;
+  string ld_library_path = 13;  // The Instance's LD_LIBRARY_PATH.
+  string profile_path = 14;     // The instance's profile path.
+  string netweaver_health_check_url = 15;
+}
+
+message SAPInstances {
+  repeated SAPInstance instances = 1;
+  bool linux_cluster_member = 2;
+}

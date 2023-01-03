@@ -1,0 +1,29 @@
+[Unit]
+Description=Google Cloud Agent for SAP
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+StartLimitIntervalSec=60
+
+[Service]
+WorkingDirectory=/usr/sap/google-cloud-sap-agent
+ExecStart=/usr/sap/google-cloud-sap-agent/google-cloud-sap-agent
+User=root
+Type=simple
+Restart=always
+RestartSec=10
+SuccessExitStatus=143
+# This limits the exits to 3 in one minute, if it fails 3 times in a minute
+# it will not be restarted
+StartLimitInterval=60
+StartLimitBurst=3
+# Resource controls
+MemoryAccounting=yes
+TasksAccounting=yes
+MemoryLimit=1G
+MemoryMax=1G
+# TODO(b/260993161) Need to add CPUQuota
+# CPUQuota of 100 will allow for up to 100% on 1 CPU
+# CPUQuota=100
+
+[Install]
+WantedBy=multi-user.target

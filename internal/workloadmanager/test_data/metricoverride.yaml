@@ -1,0 +1,10 @@
+metric: system
+  metric_value: 1
+  os: rhel-8.4
+  blank_metric:
+  metric_with_colons: val1:val2:val3
+
+metric: hana
+  metric_value: 0
+  hana_metric: /hana/log
+  invalid_key_no_colon 0

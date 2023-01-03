@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package cloud.partners.sap.gcagent.protos.metrics;
+
+import "google/protobuf/descriptor.proto";
+
+
+
+extend google.protobuf.EnumValueOptions {
+  string xml_name = 460533978;
+}
+
+enum Context {
+  CONTEXT_UNDEFINED = 0 [(xml_name) = ""];
+  CONTEXT_VM = 1 [(xml_name) = "vm"];
+  CONTEXT_HOST = 2 [(xml_name) = "host"];
+}
+
+enum Category {
+  CATEGORY_UNDEFINED = 0 [(xml_name) = ""];
+  CATEGORY_CONFIG = 1 [(xml_name) = "config"];
+  CATEGORY_CPU = 2 [(xml_name) = "cpu"];
+  CATEGORY_MEMORY = 3 [(xml_name) = "memory"];
+  CATEGORY_NETWORK = 4 [(xml_name) = "network"];
+  CATEGORY_DISK = 5 [(xml_name) = "disk"];
+}
+
+enum Type {
+  TYPE_UNDEFINED = 0 [(xml_name) = ""];
+  TYPE_INT32 = 1 [(xml_name) = "int32"];
+  TYPE_INT64 = 2 [(xml_name) = "int64"];
+  TYPE_UINT32 = 3 [(xml_name) = "uint32"];
+  TYPE_UINT64 = 4 [(xml_name) = "uint64"];
+  TYPE_REAL32 = 5 [(xml_name) = "real32"];
+  TYPE_REAL64 = 6 [(xml_name) = "real64"];
+  TYPE_DOUBLE = 7 [(xml_name) = "double"];
+  TYPE_STRING = 8 [(xml_name) = "string"];
+}
+
+enum Unit {
+  UNIT_UNDEFINED = 0 [(xml_name) = ""];
+  UNIT_NONE = 1 [(xml_name) = "none"];
+  UNIT_MHZ = 2 [(xml_name) = "MHz"];
+  UNIT_CU = 3 [(xml_name) = "CU"];
+  UNIT_PERCENT = 4 [(xml_name) = "Percent"];
+  UNIT_MB = 5 [(xml_name) = "MB"];
+  UNIT_KBPS = 6 [(xml_name) = "Kbps"];
+  UNIT_MBPS = 7 [(xml_name) = "Mbps"];
+  UNIT_MSEC = 8 [(xml_name) = "msec"];
+  UNIT_SEC = 9 [(xml_name) = "sec"];
+  UNIT_BPS = 10 [(xml_name) = "Bps"];
+  UNIT_OPS_PER_SEC = 11 [(xml_name) = "OpsPerSec"];
+  UNIT_PACKETS_PER_SEC = 12 [(xml_name) = "PacketsPerSec"];
+}
+
+enum RefreshInterval {
+  REFRESHINTERVAL_UNDEFINED = 0;
+  REFRESHINTERVAL_RESTART = 1;
+  REFRESHINTERVAL_PER_MINUTE = 2;
+}
+
+message MetricsCollection {
+  repeated Metric metrics = 1;
+}
+
+message Metric {
+  Category category = 1;
+  Type type = 2;
+  string name = 3;
+  string value = 4;
+  Unit unit = 5;
+  Context context = 6;
+  int64 last_refresh = 7;
+  RefreshInterval refresh_interval = 8;
+  string device_id = 9;
+}

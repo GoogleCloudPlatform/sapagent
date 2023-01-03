@@ -1,0 +1,206 @@
+<cib crm_feature_set="3.7.1" validate-with="pacemaker-3.6" epoch="90336" num_updates="0" admin_epoch="0" cib-last-written="Thu May  5 17:53:21 2022" update-origin="rhel-ha2" update-client="crm_attribute" update-user="root" have-quorum="1" dc-uuid="1">
+  <configuration>
+    <crm_config>
+      <cluster_property_set id="cib-bootstrap-options">
+        <nvpair id="cib-bootstrap-options-stonith-enabled" name="stonith-enabled" value="true"/>
+        <nvpair id="cib-bootstrap-options-stonith-timeout" name="stonith-timeout" value="300s"/>
+        <nvpair id="cib-bootstrap-options-have-watchdog" name="have-watchdog" value="false"/>
+        <nvpair id="cib-bootstrap-options-dc-version" name="dc-version" value="2.0.5-9.el8_4.3-ba59be7122"/>
+        <nvpair id="cib-bootstrap-options-cluster-infrastructure" name="cluster-infrastructure" value="corosync"/>
+        <nvpair id="cib-bootstrap-options-cluster-name" name="cluster-name" value="hacluster"/>
+      </cluster_property_set>
+      <cluster_property_set id="SAPHanaSR">
+        <nvpair id="SAPHanaSR-hana_har_site_srHook_rhel-ha1" name="hana_har_site_srHook_rhel-ha1" value="SOK"/>
+        <nvpair id="SAPHanaSR-hana_har_site_srHook_rhel-ha2" name="hana_har_site_srHook_rhel-ha2" value="PRIM"/>
+      </cluster_property_set>
+    </crm_config>
+    <nodes>
+      <node id="1" uname="rhel-ha1">
+        <instance_attributes id="nodes-1">
+          <nvpair id="nodes-1-hana_har_op_mode" name="hana_har_op_mode" value="logreplay"/>
+          <nvpair id="nodes-1-lpa_har_lpt" name="lpa_har_lpt" value="30"/>
+          <nvpair id="nodes-1-hana_har_vhost" name="hana_har_vhost" value="rhel-ha1"/>
+          <nvpair id="nodes-1-hana_har_srmode" name="hana_har_srmode" value="syncmem"/>
+          <nvpair id="nodes-1-hana_har_remoteHost" name="hana_har_remoteHost" value="rhel-ha2"/>
+          <nvpair id="nodes-1-hana_har_site" name="hana_har_site" value="rhel-ha1"/>
+          <nvpair id="nodes-1-standby" name="standby" value="off"/>
+        </instance_attributes>
+      </node>
+      <node id="2" uname="rhel-ha2">
+        <instance_attributes id="nodes-2">
+          <nvpair id="nodes-2-lpa_har_lpt" name="lpa_har_lpt" value="1651773201"/>
+          <nvpair id="nodes-2-hana_har_op_mode" name="hana_har_op_mode" value="logreplay"/>
+          <nvpair id="nodes-2-hana_har_vhost" name="hana_har_vhost" value="rhel-ha2"/>
+          <nvpair id="nodes-2-hana_har_site" name="hana_har_site" value="rhel-ha2"/>
+          <nvpair id="nodes-2-hana_har_srmode" name="hana_har_srmode" value="syncmem"/>
+          <nvpair id="nodes-2-hana_har_remoteHost" name="hana_har_remoteHost" value="rhel-ha1"/>
+          <nvpair id="nodes-2-standby" name="standby" value="off"/>
+        </instance_attributes>
+      </node>
+    </nodes>
+    <resources>
+      <primitive class="stonith" id="STONITH-rhel-ha1" type="fence_gce">
+        <instance_attributes id="STONITH-rhel-ha1-instance_attributes">
+          <nvpair id="STONITH-rhel-ha1-instance_attributes-pcmk_delay_max" name="pcmk_delay_max" value="30"/>
+          <nvpair id="STONITH-rhel-ha1-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
+          <nvpair id="STONITH-rhel-ha1-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
+          <nvpair id="STONITH-rhel-ha1-instance_attributes-port" name="port" value="rhel-ha1"/>
+          <nvpair id="STONITH-rhel-ha1-instance_attributes-project" name="project" value="core-connect-dev"/>
+          <nvpair id="STONITH-rhel-ha1-instance_attributes-zone" name="zone" value="us-east4-a"/>
+        </instance_attributes>
+        <operations>
+          <op id="STONITH-rhel-ha1-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
+          <op id="STONITH-rhel-ha1-start-interval-0" interval="0" name="start" timeout="60s"/>
+        </operations>
+      </primitive>
+      <primitive class="stonith" id="STONITH-rhel-ha2" type="fence_gce">
+        <instance_attributes id="STONITH-rhel-ha2-instance_attributes">
+          <nvpair id="STONITH-rhel-ha2-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
+          <nvpair id="STONITH-rhel-ha2-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
+          <nvpair id="STONITH-rhel-ha2-instance_attributes-port" name="port" value="rhel-ha2"/>
+          <nvpair id="STONITH-rhel-ha2-instance_attributes-project" name="project" value="core-connect-dev"/>
+          <nvpair id="STONITH-rhel-ha2-instance_attributes-zone" name="zone" value="us-east4-b"/>
+        </instance_attributes>
+        <operations>
+          <op id="STONITH-rhel-ha2-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
+          <op id="STONITH-rhel-ha2-start-interval-0" interval="0" name="start" timeout="60s"/>
+        </operations>
+      </primitive>
+      <group id="g-primary">
+        <primitive class="service" id="rsc_healthcheck_HAR" type="haproxy">
+          <operations>
+            <op id="rsc_healthcheck_HAR-monitor-interval-10s" interval="10s" name="monitor" timeout="20s"/>
+            <op id="rsc_healthcheck_HAR-start-interval-0s" interval="0s" name="start" timeout="100"/>
+            <op id="rsc_healthcheck_HAR-stop-interval-0s" interval="0s" name="stop" timeout="100"/>
+          </operations>
+        </primitive>
+        <primitive class="ocf" id="rsc_vip_HAR_00" provider="heartbeat" type="IPaddr2">
+          <instance_attributes id="rsc_vip_HAR_00-instance_attributes">
+            <nvpair id="rsc_vip_HAR_00-instance_attributes-cidr_netmask" name="cidr_netmask" value="32"/>
+            <nvpair id="rsc_vip_HAR_00-instance_attributes-ip" name="ip" value="10.150.1.20"/>
+            <nvpair id="rsc_vip_HAR_00-instance_attributes-nic" name="nic" value="eth0"/>
+          </instance_attributes>
+          <operations>
+            <op id="rsc_vip_HAR_00-monitor-interval-3600s" interval="3600s" name="monitor" timeout="60s"/>
+            <op id="rsc_vip_HAR_00-start-interval-0s" interval="0s" name="start" timeout="20s"/>
+            <op id="rsc_vip_HAR_00-stop-interval-0s" interval="0s" name="stop" timeout="20s"/>
+          </operations>
+        </primitive>
+      </group>
+      <clone id="SAPHanaTopology_HAR_00-clone">
+        <primitive class="ocf" id="SAPHanaTopology_HAR_00" provider="heartbeat" type="SAPHanaTopology">
+          <instance_attributes id="SAPHanaTopology_HAR_00-instance_attributes">
+            <nvpair id="SAPHanaTopology_HAR_00-instance_attributes-InstanceNumber" name="InstanceNumber" value="00"/>
+            <nvpair id="SAPHanaTopology_HAR_00-instance_attributes-SID" name="SID" value="HAR"/>
+          </instance_attributes>
+          <operations>
+            <op id="SAPHanaTopology_HAR_00-methods-interval-0s" interval="0s" name="methods" timeout="5"/>
+            <op id="SAPHanaTopology_HAR_00-monitor-interval-10" interval="10" name="monitor" timeout="600"/>
+            <op id="SAPHanaTopology_HAR_00-reload-interval-0s" interval="0s" name="reload" timeout="5"/>
+            <op id="SAPHanaTopology_HAR_00-start-interval-0s" interval="0s" name="start" timeout="600"/>
+            <op id="SAPHanaTopology_HAR_00-stop-interval-0s" interval="0s" name="stop" timeout="300"/>
+          </operations>
+        </primitive>
+        <meta_attributes id="SAPHanaTopology_HAR_00-clone-meta_attributes">
+          <nvpair id="SAPHanaTopology_HAR_00-clone-meta_attributes-clone-max" name="clone-max" value="2"/>
+          <nvpair id="SAPHanaTopology_HAR_00-clone-meta_attributes-clone-node-max" name="clone-node-max" value="1"/>
+          <nvpair id="SAPHanaTopology_HAR_00-clone-meta_attributes-interleave" name="interleave" value="true"/>
+        </meta_attributes>
+      </clone>
+      <clone id="SAPHana_HAR_00-clone">
+        <primitive class="ocf" id="SAPHana_HAR_00" provider="heartbeat" type="SAPHana">
+          <instance_attributes id="SAPHana_HAR_00-instance_attributes">
+            <nvpair id="SAPHana_HAR_00-instance_attributes-AUTOMATED_REGISTER" name="AUTOMATED_REGISTER" value="true"/>
+            <nvpair id="SAPHana_HAR_00-instance_attributes-DUPLICATE_PRIMARY_TIMEOUT" name="DUPLICATE_PRIMARY_TIMEOUT" value="7200"/>
+            <nvpair id="SAPHana_HAR_00-instance_attributes-InstanceNumber" name="InstanceNumber" value="00"/>
+            <nvpair id="SAPHana_HAR_00-instance_attributes-PREFER_SITE_TAKEOVER" name="PREFER_SITE_TAKEOVER" value="true"/>
+            <nvpair id="SAPHana_HAR_00-instance_attributes-SID" name="SID" value="HAR"/>
+          </instance_attributes>
+          <meta_attributes id="SAPHana_HAR_00-meta_attributes">
+            <nvpair id="SAPHana_HAR_00-meta_attributes-clone-max" name="clone-max" value="2"/>
+            <nvpair id="SAPHana_HAR_00-meta_attributes-clone-node-max" name="clone-node-max" value="1"/>
+            <nvpair id="SAPHana_HAR_00-meta_attributes-interleave" name="interleave" value="true"/>
+            <nvpair id="SAPHana_HAR_00-meta_attributes-notify" name="notify" value="true"/>
+          </meta_attributes>
+          <operations>
+            <op id="SAPHana_HAR_00-demote-interval-0s" interval="0s" name="demote" timeout="3600"/>
+            <op id="SAPHana_HAR_00-methods-interval-0s" interval="0s" name="methods" timeout="5"/>
+            <op id="SAPHana_HAR_00-monitor-interval-61" interval="61" name="monitor" role="Slave" timeout="700"/>
+            <op id="SAPHana_HAR_00-monitor-interval-59" interval="59" name="monitor" role="Master" timeout="700"/>
+            <op id="SAPHana_HAR_00-promote-interval-0s" interval="0s" name="promote" timeout="3600"/>
+            <op id="SAPHana_HAR_00-reload-interval-0s" interval="0s" name="reload" timeout="5"/>
+            <op id="SAPHana_HAR_00-start-interval-0s" interval="0s" name="start" timeout="3600"/>
+            <op id="SAPHana_HAR_00-stop-interval-0s" interval="0s" name="stop" timeout="3600"/>
+          </operations>
+        </primitive>
+        <meta_attributes id="SAPHana_HAR_00-clone-meta_attributes">
+          <nvpair id="SAPHana_HAR_00-clone-meta_attributes-promotable" name="promotable" value="true"/>
+        </meta_attributes>
+      </clone>
+    </resources>
+    <constraints>
+      <rsc_location id="location-STONITH-rhel-ha1-rhel-ha1--INFINITY" node="rhel-ha1" rsc="STONITH-rhel-ha1" score="-INFINITY"/>
+      <rsc_location id="location-STONITH-rhel-ha2-rhel-ha2--INFINITY" node="rhel-ha2" rsc="STONITH-rhel-ha2" score="-INFINITY"/>
+      <rsc_order first="SAPHanaTopology_HAR_00-clone" first-action="start" id="order-SAPHanaTopology_HAR_00-clone-SAPHana_HAR_00-clone-mandatory" symmetrical="false" then="SAPHana_HAR_00-clone" then-action="start"/>
+      <rsc_colocation id="colocation-g-primary-SAPHana_HAR_00-clone-4000" rsc="g-primary" rsc-role="Started" score="4000" with-rsc="SAPHana_HAR_00-clone" with-rsc-role="Master"/>
+    </constraints>
+    <rsc_defaults>
+      <meta_attributes id="rsc_defaults-meta_attributes">
+        <nvpair id="rsc_defaults-meta_attributes-resource-stickiness" name="resource-stickiness" value="1000"/>
+        <nvpair id="rsc_defaults-meta_attributes-migration-threshold" name="migration-threshold" value="5000"/>
+      </meta_attributes>
+    </rsc_defaults>
+    <op_defaults>
+      <meta_attributes id="op_defaults-meta_attributes">
+        <nvpair id="op_defaults-meta_attributes-timeout" name="timeout" value="600s"/>
+      </meta_attributes>
+    </op_defaults>
+  </configuration>
+  <status>
+    <node_state id="1" uname="rhel-ha1" in_ccm="true" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
+      <transient_attributes id="1">
+        <instance_attributes id="status-1">
+          <nvpair id="status-1-master-SAPHana_HAR_00" name="master-SAPHana_HAR_00" value="100"/>
+          <nvpair id="status-1-hana_har_version" name="hana_har_version" value="2.00.057.00.1629894416"/>
+          <nvpair id="status-1-hana_har_sync_state" name="hana_har_sync_state" value="SOK"/>
+          <nvpair id="status-1-hana_har_clone_state" name="hana_har_clone_state" value="DEMOTED"/>
+          <nvpair id="status-1-hana_har_roles" name="hana_har_roles" value="4:S:master1:master:worker:master"/>
+          <nvpair id="status-1-fail-count-SAPHana_HAR_00.monitor_59000" name="fail-count-SAPHana_HAR_00#monitor_59000" value="2"/>
+          <nvpair id="status-1-last-failure-SAPHana_HAR_00.monitor_59000" name="last-failure-SAPHana_HAR_00#monitor_59000" value="1651696943"/>
+        </instance_attributes>
+      </transient_attributes>
+      <lrm id="1">
+        <lrm_resources>
+          <lrm_resource id="SAPHanaTopology_HAR_00" type="SAPHanaTopology" class="ocf" provider="heartbeat">
+            <lrm_rsc_op id="SAPHanaTopology_HAR_00_last_0" operation_key="SAPHanaTopology_HAR_00_start_0" operation="start" crm-debug-origin="build_active_RAs" crm_feature_set="3.7.1" transition-key="20:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" transition-magic="0:0;20:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" exit-reason="" on_node="rhel-ha1" call-id="29" rc-code="0" op-status="0" interval="0" last-rc-change="1646251172" last-run="1646251172" exec-time="2719" queue-time="0" op-digest="95c004370528dbb0f6836ddb16bb73ac" op-force-restart="" op-restart-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+            <lrm_rsc_op id="SAPHanaTopology_HAR_00_monitor_10000" operation_key="SAPHanaTopology_HAR_00_monitor_10000" operation="monitor" crm-debug-origin="build_active_RAs" crm_feature_set="3.7.1" transition-key="21:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" transition-magic="0:0;21:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" exit-reason="" on_node="rhel-ha1" call-id="31" rc-code="0" op-status="0" interval="10000" last-rc-change="1646251175" exec-time="3548" queue-time="0" op-digest="0cbdbe857df192f74d644a9b362527d1"/>
+          </lrm_resource>
+          <lrm_resource id="SAPHana_HAR_00" type="SAPHana" class="ocf" provider="heartbeat">
+            <lrm_rsc_op id="SAPHana_HAR_00_last_0" operation_key="SAPHana_HAR_00_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="30:88437:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;30:88437:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha1" call-id="60" rc-code="0" op-status="0" interval="0" last-rc-change="1651697218" last-run="1651697218" exec-time="1986" queue-time="0" op-digest="6531e8b20586c0f3cf25a58a6b3d6032" op-force-restart="  INSTANCE_PROFILE  " op-restart-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+          </lrm_resource>
+        </lrm_resources>
+      </lrm>
+    </node_state>
+    <node_state id="2" uname="rhel-ha2" in_ccm="true" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
+      <lrm id="2">
+        <lrm_resources>
+          <lrm_resource id="STONITH-rhel-ha1" type="fence_gce" class="stonith">
+            <lrm_rsc_op id="STONITH-rhel-ha1_last_0" operation_key="STONITH-rhel-ha1_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="6:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;6:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha2" call-id="28" rc-code="0" op-status="0" interval="0" last-rc-change="1646253318" last-run="1646253318" exec-time="914" queue-time="0" op-digest="f451ebcf5bef089b57c909be03bb6504"/>
+            <lrm_rsc_op id="STONITH-rhel-ha1_monitor_300000" operation_key="STONITH-rhel-ha1_monitor_300000" operation="monitor" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="7:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;7:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha2" call-id="30" rc-code="0" op-status="0" interval="300000" last-rc-change="1646253319" exec-time="998" queue-time="0" op-digest="c0012f0aeca5d95f97a2dbcc8610cd9b"/>
+          </lrm_resource>
+        </lrm_resources>
+      </lrm>
+      <transient_attributes id="2">
+        <instance_attributes id="status-2">
+          <nvpair id="status-2-master-SAPHana_HAR_00" name="master-SAPHana_HAR_00" value="150"/>
+          <nvpair id="status-2-hana_har_version" name="hana_har_version" value="2.00.057.00.1629894416"/>
+          <nvpair id="status-2-hana_har_sync_state" name="hana_har_sync_state" value="PRIM"/>
+          <nvpair id="status-2-hana_har_clone_state" name="hana_har_clone_state" value="PROMOTED"/>
+          <nvpair id="status-2-hana_har_roles" name="hana_har_roles" value="4:P:master1:master:worker:master"/>
+          <nvpair id="status-2-fail-count-SAPHana_HAR_00.monitor_59000" name="fail-count-SAPHana_HAR_00#monitor_59000" value="1"/>
+          <nvpair id="status-2-last-failure-SAPHana_HAR_00.monitor_59000" name="last-failure-SAPHana_HAR_00#monitor_59000" value="1651247387"/>
+        </instance_attributes>
+      </transient_attributes>
+    </node_state>
+  </status>
+</cib>

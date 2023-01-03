@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package cloud.partners.sap.gcagent.protos.stats;
+
+
+
+message DiskStatsCollection {
+  repeated DiskStats disk_stats = 1;
+}
+
+message DiskStats {
+  string device_name = 1;
+  int64 queue_length = 2;
+  int64 average_read_response_time_millis = 3;
+  int64 average_write_response_time_millis = 4;
+  int64 read_ops_count = 5;
+  int64 read_svc_time_millis = 6;
+  int64 write_ops_count = 7;
+  int64 write_svc_time_millis = 8;
+}
+
+message MemoryStats {
+  int64 total = 1;
+  int64 free = 2;
+  int64 used = 3;
+}
+
+message CpuStats {
+  double cpu_utilization_percent = 1;
+  int64 cpu_count = 2;
+  int64 cpu_cores = 3;
+  int64 max_mhz = 4;
+  string processor_type = 5;
+}

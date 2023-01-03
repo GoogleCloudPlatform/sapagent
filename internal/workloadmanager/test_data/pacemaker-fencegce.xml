@@ -1,0 +1,73 @@
+<cib crm_feature_set="3.3.0" validate-with="pacemaker-3.2" epoch="35" num_updates="25" admin_epoch="0" cib-last-written="Sun Apr 24 00:25:06 2022" update-origin="instanceName" update-client="cibadmin" update-user="root" have-quorum="1" dc-uuid="1">
+  <configuration>
+    <crm_config>
+      <cluster_property_set id="cib-bootstrap-options">
+        <nvpair id="cib-bootstrap-options-have-watchdog" name="have-watchdog" value="false"/>
+        <nvpair id="cib-bootstrap-options-dc-version" name="dc-version" value="2.0.3-5.el8_2.5-4b1f869f0f"/>
+        <nvpair id="cib-bootstrap-options-cluster-infrastructure" name="cluster-infrastructure" value="corosync"/>
+        <nvpair id="cib-bootstrap-options-cluster-name" name="cluster-name" value="keithpayne-ha-cluster"/>
+      </cluster_property_set>
+    </crm_config>
+    <nodes>
+      <node id="1" uname="instanceName"/>
+      <node id="2" uname="keithpayne-rhel-ha-test-1"/>
+    </nodes>
+    <resources>
+      <primitive class="stonith" id="keithpayne-vm2" type="fence_gce">
+        <instance_attributes id="keithpayne-vm2-instance_attributes">
+          <nvpair id="keithpayne-vm2-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
+          <nvpair id="keithpayne-vm2-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
+          <nvpair id="keithpayne-vm2-instance_attributes-port" name="port" value="keithpayne-rhel-ha-test-1"/>
+          <nvpair id="keithpayne-vm2-instance_attributes-project" name="project" value="core-connect-dev"/>
+          <nvpair id="keithpayne-vm2-instance_attributes-zone" name="zone" value="us-central1-a"/>
+        </instance_attributes>
+        <operations>
+          <op id="keithpayne-vm2-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
+          <op id="keithpayne-vm2-start-interval-0" interval="0" name="start" timeout="60s"/>
+        </operations>
+      </primitive>
+      <primitive class="stonith" id="keithpayne-vm1" type="fence_gce">
+        <instance_attributes id="keithpayne-vm1-instance_attributes">
+          <nvpair id="keithpayne-vm1-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="5"/>
+          <nvpair id="keithpayne-vm1-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="200"/>
+          <nvpair id="keithpayne-vm1-instance_attributes-port" name="port" value="instanceName"/>
+          <nvpair id="keithpayne-vm1-instance_attributes-project" name="project" value="core-connect-dev"/>
+          <nvpair id="keithpayne-vm1-instance_attributes-zone" name="zone" value="us-central1-a"/>
+        </instance_attributes>
+        <operations>
+          <op id="keithpayne-vm1-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
+          <op id="keithpayne-vm1-start-interval-0" interval="0" name="start" timeout="60s"/>
+        </operations>
+      </primitive>
+    </resources>
+    <constraints/>
+  </configuration>
+  <status>
+    <node_state id="1" uname="instanceName" in_ccm="true" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
+      <lrm id="1">
+        <lrm_resources>
+          <lrm_resource id="keithpayne-vm2" type="fence_gce" class="stonith">
+            <lrm_rsc_op id="keithpayne-vm2_last_0" operation_key="keithpayne-vm2_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.3.0" transition-key="1:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" transition-magic="0:0;1:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" exit-reason="" on_node="instanceName" call-id="10" rc-code="0" op-status="0" interval="0" last-rc-change="1650895950" last-run="1650895950" exec-time="981" queue-time="0" op-digest="4fb00f77e2fb14cc44ae5ebf40738391"/>
+            <lrm_rsc_op id="keithpayne-vm2_monitor_300000" operation_key="keithpayne-vm2_monitor_300000" operation="monitor" crm-debug-origin="do_update_resource" crm_feature_set="3.3.0" transition-key="2:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" transition-magic="0:0;2:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" exit-reason="" on_node="instanceName" call-id="11" rc-code="0" op-status="0" interval="300000" last-rc-change="1650895951" exec-time="941" queue-time="0" op-digest="8905ea9d2b0ed33701906572e0edec5f"/>
+          </lrm_resource>
+          <lrm_resource id="keithpayne-vm1" type="fence_gce" class="stonith">
+            <lrm_rsc_op id="keithpayne-vm1_last_0" operation_key="keithpayne-vm1_monitor_0" operation="monitor" crm-debug-origin="build_active_RAs" crm_feature_set="3.3.0" transition-key="2:0:7:76dda2c4-0ab3-4287-a431-efd51f5ad068" transition-magic="0:7;2:0:7:76dda2c4-0ab3-4287-a431-efd51f5ad068" exit-reason="" on_node="instanceName" call-id="9" rc-code="7" op-status="0" interval="0" last-rc-change="1650895882" last-run="1650895882" exec-time="0" queue-time="0" op-digest="d11b89f53813be5cc20c39d3f9d0d53d"/>
+          </lrm_resource>
+        </lrm_resources>
+      </lrm>
+    </node_state>
+    <node_state id="2" uname="keithpayne-rhel-ha-test-1" in_ccm="true" crmd="online" expected="member" crm-debug-origin="do_update_resource" join="member">
+      <lrm id="2">
+        <lrm_resources>
+          <lrm_resource id="keithpayne-vm2" type="fence_gce" class="stonith">
+            <lrm_rsc_op id="keithpayne-vm2_last_0" operation_key="keithpayne-vm2_monitor_0" operation="monitor" crm-debug-origin="build_active_RAs" crm_feature_set="3.3.0" transition-key="1:0:7:075a56f3-b2da-4559-8a88-a3de123ae43e" transition-magic="0:7;1:0:7:075a56f3-b2da-4559-8a88-a3de123ae43e" exit-reason="" on_node="keithpayne-rhel-ha-test-1" call-id="5" rc-code="7" op-status="0" interval="0" last-rc-change="1650895881" last-run="1650895881" exec-time="3" queue-time="0" op-digest="4fb00f77e2fb14cc44ae5ebf40738391"/>
+          </lrm_resource>
+          <lrm_resource id="keithpayne-vm1" type="fence_gce" class="stonith">
+            <lrm_rsc_op id="keithpayne-vm1_last_0" operation_key="keithpayne-vm1_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.3.0" transition-key="3:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" transition-magic="0:0;3:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" exit-reason="" on_node="keithpayne-rhel-ha-test-1" call-id="10" rc-code="0" op-status="0" interval="0" last-rc-change="1650895950" last-run="1650895950" exec-time="899" queue-time="0" op-digest="d11b89f53813be5cc20c39d3f9d0d53d"/>
+            <lrm_rsc_op id="keithpayne-vm1_monitor_300000" operation_key="keithpayne-vm1_monitor_300000" operation="monitor" crm-debug-origin="do_update_resource" crm_feature_set="3.3.0" transition-key="4:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" transition-magic="0:0;4:1:0:76dda2c4-0ab3-4287-a431-efd51f5ad068" exit-reason="" on_node="keithpayne-rhel-ha-test-1" call-id="11" rc-code="0" op-status="0" interval="300000" last-rc-change="1650895951" exec-time="873" queue-time="0" op-digest="f9a61930ad3f86389ca4063ee828fec3"/>
+          </lrm_resource>
+        </lrm_resources>
+      </lrm>
+    </node_state>
+  </status>
+</cib>

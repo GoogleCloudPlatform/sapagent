@@ -1,0 +1,14 @@
+<service>
+  <id>google-cloud-sap-agent</id>
+  <name>Google Cloud Agent for SAP</name>
+  <description>Google Cloud Agent for SAP</description>
+  <workingdirectory>C:\Program Files\Google\google-cloud-sap-agent</workingdirectory>
+  <executable>C:\Program Files\Google\google-cloud-sap-agent\google-cloud-sap-agent.exe</executable>
+  <logpath>C:\Program Files\Google\google-cloud-sap-agent\logs</logpath>
+  <log mode="roll-by-time">
+    <pattern>yyyyMMdd</pattern>
+  </log>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="20 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+</service>

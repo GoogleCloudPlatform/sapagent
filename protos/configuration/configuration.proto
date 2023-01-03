@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package cloud.partners.sap.gcagent.protos.configuration;
+
+import "instanceinfo/instanceinfo.proto";
+
+
+
+message Configuration {
+  enum LogLevel {
+    UNDEFINED = 0;
+    DEBUG = 1;
+    INFO = 2;
+    WARNING = 3;
+    ERROR = 4;
+  }
+
+  bool provide_sap_host_agent_metrics = 1;
+  bool bare_metal = 2;
+  string service_endpoint_override = 3;
+  LogLevel log_level = 4;
+  CollectionConfiguration collection_configuration = 5;
+  instanceinfo.CloudProperties cloud_properties = 6;
+  AgentProperties agent_properties = 7;
+}
+
+message CollectionConfiguration {
+  bool collect_workload_validation_metrics = 1;
+  int64 workload_validation_metrics_frequency = 2;
+  bool collect_process_metrics = 3;
+  int64 process_metrics_frequency = 4;
+  int64 process_metrics_send_frequency = 5;
+  WorkloadValidationRemoteCollection workload_validation_remote_collection = 6;
+  bool collect_experimental_metrics = 7;
+  HANAMetricsConfig hana_metrics_config = 8;
+  bool sap_system_discovery = 9;
+  bool collect_agent_metrics = 10;
+  int64 agent_metrics_frequency = 11;
+}
+
+message AgentProperties {
+  string version = 1;
+  string name = 2;
+  bool log_usage_metrics = 3;
+}
+
+message WorkloadValidationRemoteCollection {
+  string remote_collection_binary = 1;
+  int64 concurrent_collections = 2;
+  RemoteCollectionGcloud remote_collection_gcloud = 3;
+  RemoteCollectionSsh remote_collection_ssh = 4;
+  repeated RemoteCollectionInstance remote_collection_instances = 5;
+}
+
+message RemoteCollectionInstance {
+  string project_id = 1;
+  string instance_id = 2;
+  string zone = 3;
+}
+
+message RemoteCollectionGcloud {
+  bool use_internal_ip = 1;
+  bool tunnel_through_iap = 2;
+  string gcloud_args = 3;
+}
+
+message RemoteCollectionSsh {
+  string ssh_username = 1;
+  string ssh_private_key_path = 2;
+  string ssh_host_address = 3;
+}
+
+message HANAMetricsConfig {
+  string hana_db_user = 1;
+  string hana_db_password = 2;
+  string hana_db_password_secret_name = 3;
+}
