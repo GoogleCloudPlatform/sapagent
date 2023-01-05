@@ -121,7 +121,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 		}
 		id, err := strconv.Atoi(n[1])
 		if err != nil {
-			log.Logger.Debug("Could not parse the process index", log.Error(err))
+			log.Logger.Debug("Could not parse the name process index", log.Error(err))
 			return nil, exitStatus, err
 		}
 		processes[id] = &ProcessStatus{Name: n[2]}
@@ -136,7 +136,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 		}
 		id, err := strconv.Atoi(d[1])
 		if err != nil {
-			log.Logger.Debug("Could not parse the process index", log.Error(err))
+			log.Logger.Debug("Could not parse the display status process index", log.Error(err))
 			return nil, exitStatus, err
 		}
 

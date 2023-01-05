@@ -317,6 +317,45 @@ func TestReadReplicationConfig(t *testing.T) {
 			wantErr:      nil,
 		},
 		{
+			name:       "HANAPrimarySwappedSites",
+			user:       "hdbadm",
+			sid:        "HDB",
+			instanceID: "00",
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "site/2/SITE_NAME=gce-2\nsite/1/SITE_NAME=gce-1\nlocal_site_id=1\n", "", 15, nil
+			},
+			wantMode:     1,
+			wantHAMebers: []string{"gce-1", "gce-2"},
+			wantErr:      nil,
+		},
+		{
+			name: "EmptySiteID",
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "local_site_id=\n", "", 10, nil
+			},
+			wantMode:     0,
+			wantHAMebers: nil,
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "EmptySiteName",
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "local_site_id=2\nsite/2/SITE_NAME=", "", 10, nil
+			},
+			wantMode:     0,
+			wantHAMebers: nil,
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "SiteNamePatternError",
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "local_site_id=2\nsite/2/SITE", "", 10, nil
+			},
+			wantMode:     2,
+			wantHAMebers: nil,
+			wantErr:      cmpopts.AnyError,
+		},
+		{
 			name: "CmdFailure",
 			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
 				return "abc", "123", 0, cmpopts.AnyError
@@ -814,8 +853,10 @@ func TestBuildURLAndServiceName(t *testing.T) {
 			instanceName: "HDB",
 			wantErr:      cmpopts.AnyError,
 		},
-		{name: "EmptyInstance",
-			wantErr: cmpopts.AnyError,
+		{
+			name:     "EmptyInstance",
+			httpPort: "1234",
+			wantErr:  cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {

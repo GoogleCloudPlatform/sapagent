@@ -291,26 +291,26 @@ func TestCollectAndSubmitLoop_respectsContextCancellation(t *testing.T) {
 	var testData = []struct {
 		testName  string
 		timeout   time.Duration
-		frequency int64
+		frequency int64 // seconds
 		want      int
 	}{
 		{
-			testName:  "600ms timeout 500ms collect",
+			testName:  "600ms timeout 1s collect",
 			timeout:   600 * time.Millisecond,
-			frequency: 500,
+			frequency: 1,
+			want:      0,
+		},
+		{
+			testName:  "1500ms timeout 1s collect",
+			timeout:   1500 * time.Millisecond,
+			frequency: 1,
 			want:      1,
 		},
 		{
-			testName:  "600ms timeout 250ms collect",
-			timeout:   600 * time.Millisecond,
-			frequency: 250,
+			testName:  "2500ms timeout 1s collect",
+			timeout:   2500 * time.Millisecond,
+			frequency: 1,
 			want:      2,
-		},
-		{
-			testName:  "100ms timeout 250ms collect",
-			timeout:   100 * time.Millisecond,
-			frequency: 250,
-			want:      0,
 		},
 	}
 	for _, d := range testData {

@@ -128,13 +128,13 @@ func hanaProcessOrGlobalINI(runner commandlineexecutor.CommandRunner) string {
 	if hanaPid != "" {
 		hanaProcessOrGlobalINI, _, _ = runner("ps", "-p "+strings.TrimSpace(hanaPid)+" -o cmd --no-headers")
 		if hanaProcessOrGlobalINI != "" && !strings.Contains(hanaProcessOrGlobalINI, "HDB") {
-			// No HDB services in this procecss.
+			// No HDB services in this process.
 			hanaProcessOrGlobalINI = ""
 		}
 	}
 	if hanaProcessOrGlobalINI == "" {
 		// check for the global.ini even if the process isn't running
-		hanaProcessOrGlobalINI, _, _ = runner("sh", "-c ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini")
+		hanaProcessOrGlobalINI, _, _ = runner(`sh`, `-c 'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'`)
 	}
 	return hanaProcessOrGlobalINI
 }

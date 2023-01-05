@@ -29,9 +29,7 @@ import (
 
 	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
@@ -65,19 +63,12 @@ func extractFromURI(uri, field string) string {
 }
 
 // StartSAPSystemDiscovery Initializes the discovery object and starts the discovery subroutine.
-func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration) {
-
+// Returns true if the discovery goroutine is started, and false otherwise.
+func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface) bool {
 	// Start SAP system discovery only if sap_system_discovery is enabled.
 	if config.GetCollectionConfiguration() != nil && !config.GetCollectionConfiguration().GetSapSystemDiscovery() {
 		log.Logger.Info("Not starting SAP system discovery.")
-		return
-	}
-
-	gceService, err := gce.New(ctx)
-	if err != nil {
-		log.Logger.Error("Failed to create GCE service", log.Error(err))
-		usagemetrics.Error(3) // Unexpected error
-		return
+		return false
 	}
 
 	d := Discovery{
@@ -87,6 +78,7 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration) {
 	}
 
 	go runDiscovery(config, d)
+	return true
 }
 
 func runDiscovery(config *cpb.Configuration, d Discovery) {

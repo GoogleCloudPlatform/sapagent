@@ -17,6 +17,7 @@ limitations under the License.
 package system
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	systempb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
@@ -46,6 +48,47 @@ var (
 	line4
 	`
 )
+
+func TestStartSAPSystemDiscovery(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *cfgpb.Configuration
+		want   bool
+	}{
+		{
+			name: "succeeds",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					SapSystemDiscovery: true,
+				},
+				CloudProperties: defaultCloudProperties,
+			},
+			want: true,
+		},
+		{
+			name: "failsDueToConfig",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					SapSystemDiscovery: false,
+				}},
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gceService := &fake.TestGCE{
+				GetInstanceResp: []*compute.Instance{nil},
+				GetInstanceErr:  []error{errors.New("Instance not found")},
+			}
+
+			got := StartSAPSystemDiscovery(context.Background(), test.config, gceService)
+			if got != test.want {
+				t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", test.config, got, test.want)
+			}
+		})
+	}
+}
 
 func TestDiscoverResources(t *testing.T) {
 	tests := []struct {

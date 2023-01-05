@@ -19,6 +19,7 @@ package computeresources
 import (
 	"errors"
 	"os"
+	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -171,6 +172,8 @@ func TestCollectProcessesForInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := collectProcessesForInstance(test.params)
+			// Sort by PID since sapcontrol's ProcessList does not guarantee any ordering.
+			sort.Slice(got, func(i, j int) bool { return got[i].PID < got[j].PID })
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("collectProcessesForInstance(%v) returned unexpected diff (-want +got):\n%s", test.params, diff)
 			}

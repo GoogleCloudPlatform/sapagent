@@ -49,7 +49,21 @@ func TestMemoryStats(t *testing.T) {
 		},
 		{
 			readFile: func(string) ([]byte, error) {
+				return []byte("#some comment line\nMemTotal:       32880828.123 kB\nMemFree:         3625472.123 kB\n"), nil
+			},
+			os:   "linux",
+			want: &mstatspb.MemoryStats{},
+		},
+		{
+			readFile: func(string) ([]byte, error) {
 				return []byte(""), nil
+			},
+			os:   "linux",
+			want: &mstatspb.MemoryStats{},
+		},
+		{
+			readFile: func(string) ([]byte, error) {
+				return nil, errors.New("error")
 			},
 			os:   "linux",
 			want: &mstatspb.MemoryStats{},
@@ -58,7 +72,7 @@ func TestMemoryStats(t *testing.T) {
 			wmicExecute: func(args ...string) (string, string, error) {
 				argStr := strings.Join(args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
-					return "", "", fmt.Errorf("Bad arguments for execute command %q", argStr)
+					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
 				}
 				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
 					return "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n", "", nil
@@ -73,6 +87,23 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
+			wmicExecute: func(args ...string) (string, string, error) {
+				argStr := strings.Join(args, " ")
+				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
+					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
+				}
+				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
+					return "\n\nTotalPhysicalMemory=34356005437.123 \n   \n    \n", "", nil
+				}
+				return "", "", nil
+			},
+			os: "windows",
+			want: &mstatspb.MemoryStats{
+				Total: -1,
+				Free:  -1,
+			},
+		},
+		{
 			wmicExecute: func(...string) (string, string, error) {
 				return "", "", errors.New("error")
 			},
@@ -83,7 +114,9 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 	} {
+		defer func(f func(string) ([]byte, error)) { readFile = f }(readFile)
 		readFile = v.readFile
+		defer func(f func(args ...string) (string, string, error)) { wmicExec = f }(wmicExec)
 		wmicExec = v.wmicExecute
 		m := MemoryMetricReader{OS: v.os}
 		got := m.MemoryStats()

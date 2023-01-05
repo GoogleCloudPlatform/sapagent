@@ -309,7 +309,7 @@ func startServices(goos string) {
 		}
 		processmetrics.Start(ctx, pmparams)
 
-		system.StartSAPSystemDiscovery(ctx, config)
+		system.StartSAPSystemDiscovery(ctx, config, gceService)
 
 		agentMetricsParams := agentmetrics.Parameters{
 			Config: config,

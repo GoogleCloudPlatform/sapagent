@@ -238,6 +238,10 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 	labels := make(map[string]string)
 	var err error
 	for e.scanner.Scan() {
+		if strings.HasPrefix(e.scanner.Text(), "#") {
+			// ignore comments
+			continue
+		}
 		key, value, found := strings.Cut(e.scanner.Text(), ":")
 		if !found {
 			if e.scanner.Text() != "" {

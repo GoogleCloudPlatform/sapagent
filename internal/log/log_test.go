@@ -68,14 +68,29 @@ func TestSetupLoggingToFile(t *testing.T) {
 	}
 	for _, test := range tests {
 		SetupLoggingToFile(test.os, test.config.LogLevel)
-		got := level
+		got := GetLevel()
 		if got != test.want {
-			t.Errorf("setupLogging() LogLevel is incorrect, got: %s, want: %s", got, test.want)
+			t.Errorf("setupLogging(goos: %s, l: %s) level is incorrect, got: %s, want: %s", test.os, test.config.LogLevel.String(), got, test.want)
 		}
 
-		got = logfile
+		got = GetLogFile()
 		if got != test.wantlogfile {
-			t.Errorf("setupLogging() logfile is incorrect, got: %s, want: %s", got, test.wantlogfile)
+			t.Errorf("setupLogging(goos: %s, l: %s) logfile is incorrect, got: %s, want: %s", test.os, test.config.LogLevel.String(), got, test.wantlogfile)
 		}
+	}
+}
+
+func TestSetupLoggingToDiscard(t *testing.T) {
+	wantLevel := ""
+	wantLogFile := ""
+	SetupLoggingToDiscard()
+	got := GetLevel()
+	if got != wantLevel {
+		t.Errorf("SetupLoggingToDiscard() level is incorrect, got: %s, want: %s", got, wantLevel)
+	}
+
+	got = GetLogFile()
+	if got != wantLogFile {
+		t.Errorf("SetupLoggingToDiscard() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
 	}
 }

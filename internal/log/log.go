@@ -80,6 +80,8 @@ SetupLoggingToDiscard provides the configuration of the Logger to discard all lo
 Discarding logs is only used when the agent is run remotely during workload manager metrics remote collection.
 */
 func SetupLoggingToDiscard() {
+	level = ""
+	logfile = ""
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(config)

@@ -133,7 +133,7 @@ func (s *Service) Start(ctx context.Context) {
 
 // collectAndSubmitLoop collects agent process metrics and submits them periodically until it is instructed to stop.
 func (s *Service) collectAndSubmitLoop(ctx context.Context) {
-	tickerHiatus := time.Millisecond * time.Duration(s.config.GetCollectionConfiguration().AgentMetricsFrequency)
+	tickerHiatus := time.Second * time.Duration(s.config.GetCollectionConfiguration().AgentMetricsFrequency)
 	loopTicker := time.NewTicker(tickerHiatus)
 	defer loopTicker.Stop()
 	for {

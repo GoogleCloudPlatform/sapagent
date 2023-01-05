@@ -22,6 +22,7 @@ import (
 	"errors"
 
 	"io"
+	"net"
 	"os"
 	"reflect"
 	"testing"
@@ -32,6 +33,7 @@ import (
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -156,6 +158,24 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 	wantOSVersion := "microsoft_windows_server_2019_datacenter-10.0.17763"
 	wantTimestamp := &timestamppb.Timestamp{Seconds: now()}
 
+	agentServiceStatus = func(string) (string, string, error) {
+		return "Running", "", nil
+	}
+	cmdExists = func(c string) bool {
+		return true
+	}
+	ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
+	ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
+	netInterfaceAdddrs = func() ([]net.Addr, error) {
+		return []net.Addr{ip1, ip2}, nil
+	}
+	osCaptionExecute = func() (string, string, error) {
+		return "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n", "", nil
+	}
+	osVersionExecute = func() (string, string, error) {
+		return "\n Version=10.0.17763  \n\n", "", nil
+	}
+
 	want := wantSystemMetrics(wantTimestamp, wantOSVersion)
 	for _, metric := range []string{"corosync", "hana", "netweaver", "pacemaker"} {
 		wantMetric := wantSystemMetrics(wantTimestamp, wantOSVersion).Metrics[0]
@@ -269,6 +289,16 @@ func TestSendMetrics(t *testing.T) {
 				Points:   []*monitoringresourcespb.Point{},
 			}}},
 			wantMetricCount: 1,
+		},
+		{
+			name:   "failsWithMetrics",
+			client: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			workLoadMetrics: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+				Metric:   &metricpb.Metric{},
+				Resource: &monitoredresourcepb.MonitoredResource{},
+				Points:   []*monitoringresourcespb.Point{},
+			}}},
+			wantMetricCount: 0,
 		},
 	}
 

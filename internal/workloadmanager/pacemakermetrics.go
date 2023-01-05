@@ -48,7 +48,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- W
 	}
 	properties := params.Config.GetCloudProperties()
 	projectID := properties.GetProjectId()
-	crmAvailable := params.CommandExistsRunner("crm -h")
+	crmAvailable := params.CommandExistsRunner("crm")
 	pacemakerXMLString := pacemaker.XMLString(params.CommandRunner, params.CommandExistsRunner, crmAvailable)
 
 	if pacemakerXMLString == nil {

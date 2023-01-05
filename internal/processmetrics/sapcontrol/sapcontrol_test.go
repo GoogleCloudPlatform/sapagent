@@ -150,8 +150,9 @@ func TestProcessList(t *testing.T) {
 			name: "NameIntegerOverflow",
 			fRunner: &fakeRunner{
 				stdOut: `1000000000000000000000000 name: msg_server
-				1000000000000000000000000 description: Message Server
-				1000000000000000000000000 dispstatus: GREEN`,
+				0 description: Message Server
+				0 dispstatus: GREEN,
+				0 pid: 1234`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -160,7 +161,19 @@ func TestProcessList(t *testing.T) {
 			fRunner: &fakeRunner{
 				stdOut: `0 name: msg_server
 				0 description: Message Server
-				1000000000000000000000000 dispstatus: GREEN`,
+				1000000000000000000000000 dispstatus: GREEN,
+				0 pid: 1234`,
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoNameEntryForProcess",
+			fRunner: &fakeRunner{
+				stdOut: `1 name: hdbdaemon
+				0 description: HDB Daemon
+				0 dispstatus: GREEN
+				0 pid: 1234`,
+				exitCode: 3,
 			},
 			wantErr: cmpopts.AnyError,
 		},
