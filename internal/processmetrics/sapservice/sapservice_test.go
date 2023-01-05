@@ -18,11 +18,12 @@ package sapservice
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (
@@ -47,21 +48,68 @@ func TestCollect(t *testing.T) {
 	tests := []struct {
 		name      string
 		executor  commandExecutor
+		errorCode exitCode
 		wantCount int
 	}{
 		{
-			name: "CollectMetricsSuccessfully",
-			executor: func(string, string) (string, string, error) {
-				return "", "", nil
+			name: "CollectMetricsWithFailureExitCodeInIsFailedAndIsDisabled",
+			executor: func(cmd, args string) (string, string, error) {
+				if strings.HasPrefix(args, "is-failed") {
+					// a zero exit code will represent an error here
+					return "", "", nil
+				}
+				return "", "", errors.New("unable to execute command")
+			},
+			errorCode: func(err error) int {
+				if err == nil {
+					return 0
+				}
+				return 1
 			},
 			wantCount: 10,
 		},
 		{
-			name: "CollectMetricsWithFailureExitCode",
+			name: "CollectMetricsWithFailuresInExitCodeInIsFailed",
 			executor: func(string, string) (string, string, error) {
-				return "", "", errors.New("unable to execute command")
+				return "", "", nil
+			},
+			errorCode: func(err error) int {
+				if err == nil {
+					return 0
+				}
+				return 1
+			},
+			wantCount: 5,
+		},
+		{
+			name: "NoMetricsCollectedFromIsFailedAndIsDisabled",
+			executor: func(cmd, args string) (string, string, error) {
+				if strings.HasPrefix(args, "is-failed") {
+					// a non zero code is treated as no error here.
+					return "", "", errors.New("is-failed error")
+				}
+				return "", "", nil
+			},
+			errorCode: func(err error) int {
+				if err == nil {
+					return 0
+				}
+				return 1
 			},
 			wantCount: 0,
+		},
+		{
+			name: "CollectMetricsWithFailureInIsDisabled",
+			executor: func(cmd, args string) (string, string, error) {
+				return "", "", errors.New("unable to execute command")
+			},
+			errorCode: func(err error) int {
+				if err == nil {
+					return 0
+				}
+				return 1
+			},
+			wantCount: 5,
 		},
 	}
 	for _, test := range tests {
@@ -69,6 +117,7 @@ func TestCollect(t *testing.T) {
 			testInstanceProperties := &InstanceProperties{
 				Config:   defaultConfig,
 				Executor: test.executor,
+				ExitCode: test.errorCode,
 				Client:   &fake.TimeSeriesCreator{},
 			}
 			got := testInstanceProperties.Collect()

@@ -30,8 +30,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	statspb "github.com/GoogleCloudPlatform/sap-agent/protos/stats"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
 const (

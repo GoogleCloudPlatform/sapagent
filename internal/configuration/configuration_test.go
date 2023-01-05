@@ -23,8 +23,8 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (

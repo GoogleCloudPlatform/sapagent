@@ -22,7 +22,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var (

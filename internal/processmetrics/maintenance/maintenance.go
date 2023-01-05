@@ -35,7 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 const (

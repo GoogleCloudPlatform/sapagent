@@ -26,8 +26,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	systempb "github.com/GoogleCloudPlatform/sap-agent/protos/system"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	systempb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
 var (

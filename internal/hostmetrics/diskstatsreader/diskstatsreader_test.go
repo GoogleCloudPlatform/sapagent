@@ -27,8 +27,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	statspb "github.com/GoogleCloudPlatform/sap-agent/protos/stats"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
 var (

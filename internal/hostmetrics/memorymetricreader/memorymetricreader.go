@@ -26,7 +26,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	cli "github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	mstatspb "github.com/GoogleCloudPlatform/sap-agent/protos/stats"
+	mstatspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
 // MemoryMetricReader for reading memory statistics from the OS

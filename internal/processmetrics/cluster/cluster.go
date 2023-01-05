@@ -32,8 +32,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 // Node states.

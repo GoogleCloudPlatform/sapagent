@@ -27,8 +27,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
-	configpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (

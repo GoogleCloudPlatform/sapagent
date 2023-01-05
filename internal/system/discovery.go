@@ -32,9 +32,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	ipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	spb "github.com/GoogleCloudPlatform/sap-agent/protos/system"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
 type gceInterface interface {

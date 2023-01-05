@@ -23,7 +23,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	pb "github.com/GoogleCloudPlatform/sap-agent/protos/metrics"
+	pb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 )
 
 func TestGenerateXML_ConfigWithRestart(t *testing.T) {

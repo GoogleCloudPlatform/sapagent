@@ -24,8 +24,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // (TODO: b/246271686): Enhance tests in main_test.go

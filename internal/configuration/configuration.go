@@ -25,8 +25,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // ReadConfigFile abstracts os.ReadFile function for testability.

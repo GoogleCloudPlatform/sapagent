@@ -24,7 +24,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/gammazero/workerpool"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 // CollectMetricsToJSON will collect all of the workload manager metrics and return the

@@ -25,8 +25,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 
-	configpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // fakeDiskMapper provides a testable fake implementation of the DiskMapper interface

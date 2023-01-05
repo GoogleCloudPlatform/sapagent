@@ -25,7 +25,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var (

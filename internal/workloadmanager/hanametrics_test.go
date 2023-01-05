@@ -35,8 +35,8 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	configpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // fakeDiskMapper provides a testable fake implementation of the DiskMapper interface

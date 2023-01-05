@@ -19,7 +19,7 @@ package log
 import (
 	"testing"
 
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 func TestSetupLoggingToFile(t *testing.T) {

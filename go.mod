@@ -1,10 +1,10 @@
-module github.com/GoogleCloudPlatform/sap-agent
+module github.com/GoogleCloudPlatform/sapagent
 
 go 1.19
 
-replace github.com/GoogleCloudPlatform/sap-agent/internal => ./internal
+replace github.com/GoogleCloudPlatform/sapagent/internal => ./internal
 
-replace github.com/GoogleCloudPlatform/sap-agent/protos => ./protos
+replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
 require (
   cloud.google.com/go/monitoring v1.9.0

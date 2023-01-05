@@ -32,9 +32,9 @@ import (
 
 	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	configpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	mpb "github.com/GoogleCloudPlatform/sap-agent/protos/metrics"
+	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 )
 
 var (

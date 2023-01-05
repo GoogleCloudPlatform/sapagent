@@ -32,7 +32,7 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // ImageUnknown is the default value if image information cannot be obtained from the metadata server.

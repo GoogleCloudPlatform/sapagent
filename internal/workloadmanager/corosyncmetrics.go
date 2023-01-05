@@ -57,7 +57,7 @@ func readCorosyncConfig(reader ConfigFileReader, csConfig string) map[string]str
 	file, err := reader(csConfig)
 
 	if err != nil {
-		log.Logger.Warn("Could not read the corosync config file", log.Error(err))
+		log.Logger.Debug("Could not read the corosync config file", log.Error(err))
 		return config
 	}
 

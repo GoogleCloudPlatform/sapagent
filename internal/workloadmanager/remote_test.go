@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/zieckey/goini"
-	cfgpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 func TestCollectMetricsToJSON(t *testing.T) {

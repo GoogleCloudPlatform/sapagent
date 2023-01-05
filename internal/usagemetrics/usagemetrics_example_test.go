@@ -19,8 +19,8 @@ package usagemetrics_test
 import (
 	"github.com/jonboulle/clockwork"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func Example_standardLogger() {

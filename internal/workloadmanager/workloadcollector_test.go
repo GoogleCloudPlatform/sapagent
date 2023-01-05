@@ -32,12 +32,15 @@ import (
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
+	compute "google.golang.org/api/compute/v1"
 	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	cfgpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	gcefake "github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (
@@ -77,6 +80,61 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 		ini.Set("VERSION", "version")
 		return ini
 	}
+	defaultDiskMapper = &fakeDiskMapper{err: nil, out: "disk-mapping"}
+	defaultNetworkIP = "127.0.0.1"
+	defaultGCEService = &gcefake.TestGCE{
+		GetDiskResp: []*compute.Disk{{
+			Type: "/some/path/default-disk-type",
+		}, {
+			Type: "/some/path/default-disk-type",
+		}, {
+			Type: "/some/path/default-disk-type",
+		}},
+		GetDiskErr: []error{nil, nil, nil},
+		GetInstanceResp: []*compute.Instance{{
+			MachineType:       "test-machine-type",
+			CpuPlatform:       "test-cpu-platform",
+			CreationTimestamp: "test-creation-timestamp",
+			Disks: []*compute.AttachedDisk{
+				{
+					Source:     "/some/path/disk-name",
+					DeviceName: "disk-device-name",
+					Type:       "PERSISTENT",
+				},
+				{
+					Source:     "",
+					DeviceName: "other-disk-device-name",
+					Type:       "SCRATCH",
+				},
+				{
+					Source:     "/some/path/hana-disk-name",
+					DeviceName: "sdb",
+					Type:       "PERSISTENT",
+				},
+			},
+			NetworkInterfaces: []*compute.NetworkInterface{
+				{
+					Name:      "network-name",
+					Network:   "test-network",
+					NetworkIP: defaultNetworkIP,
+				},
+			},
+		},
+		},
+		GetInstanceErr: []error{nil},
+		ListZoneOperationsResp: []*compute.OperationList{{
+			Items: []*compute.Operation{
+				{
+					EndTime: "2022-08-23T12:00:01.000-04:00",
+				},
+				{
+					EndTime: "2022-08-23T12:00:00.000-04:00",
+				},
+			},
+		},
+		},
+		ListZoneOperationsErr: []error{nil},
+	}
 	p := Parameters{
 		Config: &cfgpb.Configuration{
 			CloudProperties: &iipb.CloudProperties{
@@ -93,6 +151,7 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 		OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
 		CommandExistsRunner:  func(string) bool { return false },
 		OSType:               "windows",
+		InstanceInfoReader:   *instanceinfo.New(defaultDiskMapper, defaultGCEService),
 	}
 	wantOSVersion := "microsoft_windows_server_2019_datacenter-10.0.17763"
 	wantTimestamp := &timestamppb.Timestamp{Seconds: now()}

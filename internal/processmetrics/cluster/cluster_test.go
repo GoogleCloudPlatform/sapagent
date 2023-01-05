@@ -25,9 +25,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	ipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var defaultInstanceProperties = &InstanceProperties{

@@ -32,8 +32,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	ipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 const usage = `ERROR: Usage of google-cloud-sap-agent-remote:

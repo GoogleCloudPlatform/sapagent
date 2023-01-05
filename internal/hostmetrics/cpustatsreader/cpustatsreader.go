@@ -27,7 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	cli "github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	statspb "github.com/GoogleCloudPlatform/sap-agent/protos/stats"
+	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
 // CPUMetricReader for reading cpu statistics from the OS

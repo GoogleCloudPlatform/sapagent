@@ -25,8 +25,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var (

@@ -30,9 +30,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var (

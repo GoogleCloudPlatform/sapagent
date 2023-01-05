@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	pb "github.com/GoogleCloudPlatform/sap-agent/protos/metrics"
+	pb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 )
 
 // GenerateXML creates an XML string that is consumable by the SAP host agent for a MetricsCollection.

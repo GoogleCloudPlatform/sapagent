@@ -21,7 +21,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 const (

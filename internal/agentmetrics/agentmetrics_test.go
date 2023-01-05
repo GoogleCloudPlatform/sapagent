@@ -29,7 +29,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	cfgpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 func basicParameters() Parameters {

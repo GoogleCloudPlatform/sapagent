@@ -31,7 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
-	cfgpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 const (

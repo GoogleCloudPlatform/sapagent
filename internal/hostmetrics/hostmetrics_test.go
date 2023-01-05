@@ -25,7 +25,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/google/go-cmp/cmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 func TestRequestHandler_ReturnsXML(t *testing.T) {

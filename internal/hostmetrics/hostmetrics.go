@@ -35,8 +35,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	mpb "github.com/GoogleCloudPlatform/sap-agent/protos/metrics"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 )
 
 // Parameters holds the paramters for all of the Collect* function calls.

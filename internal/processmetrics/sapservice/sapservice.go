@@ -21,22 +21,21 @@ package sapservice
 import (
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 const (
-	metricURL    = "workload.googleapis.com"
-	activeMPath  = "/sap/service/is_active"
-	enabledMPath = "/sap/service/is_enabled"
+	metricURL     = "workload.googleapis.com"
+	failedMPath   = "/sap/service/is_failed"
+	disabledMPath = "/sap/service/is_disabled"
 )
 
 var (
 	services = []string{"pacemaker", "corosync", "sapinit", "sapconf", "saptune"}
-	mPathMap = map[string]string{"is-active": activeMPath, "is-enabled": enabledMPath}
+	mPathMap = map[string]string{"is-failed": failedMPath, "is-enabled": disabledMPath}
 )
 
 type (
@@ -45,12 +44,18 @@ type (
 	// this package's APIs.
 	commandExecutor func(string, string) (string, string, error)
 
+	// exitCode is a function to get the exit code for the error passed in the argument. Production
+	// callers to pass commandlineexecutor.ExitCode while calling
+	// this package's APIs.
+	exitCode func(error) int
+
 	// InstanceProperties has necessary context for Metrics collection.
 	// InstanceProperties implements Collector interface for sapservice.
 	InstanceProperties struct {
 		Config   *cnfpb.Configuration
 		Client   cloudmonitoring.TimeSeriesCreator
 		Executor commandExecutor
+		ExitCode exitCode
 	}
 )
 
@@ -58,38 +63,41 @@ type (
 // responsible for collecting sap service statuses metric.
 func (p *InstanceProperties) Collect() []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
-	activeMetrics := queryInstanceState(p, "is-active", p.Executor)
-	metrics = append(metrics, activeMetrics...)
-	enabledMetrics := queryInstanceState(p, "is-enabled", p.Executor)
-	metrics = append(metrics, enabledMetrics...)
+	isFailedMetrics := queryInstanceState(p, "is-failed", p.Executor)
+	metrics = append(metrics, isFailedMetrics...)
+	isEnabledMetrics := queryInstanceState(p, "is-enabled", p.Executor)
+	metrics = append(metrics, isEnabledMetrics...)
 	return metrics
 }
 
-// queryInstanceState is resonsible for collecting active / enabled state of OS
+// queryInstanceState is responsible for collecting is_failed / is_enabled state of OS
 // services related to SAP and cluster services.
-// In case of `systemctl is-active service` it returns 0 if the specified service is
-// active (i.e running), non-zero otherwise.
+// In case of `systemctl is_failed service` it returns 0 if there has been an error in starting the
+// service, metric will be sent only in case of an error.
 //
 // In case of `systemctl is-enabled service` it returns 0 if the specified service is enabled,
-// non-zero otherwise.
+// non-zero otherwise, metric will be sent only in case service is enabled.
 func queryInstanceState(p *InstanceProperties, metric string, executor commandExecutor) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
 	for _, service := range services {
 		command := "systemctl"
 		args := metric + " --quiet " + service
 		_, stderr, err := executor(command, args)
-		exitCode := commandlineexecutor.ExitCode(err)
-		if err != nil {
-			log.Logger.Debugf("Error while executing command: %s %s, error: %s, exitcode: %d", command, args, stderr, exitCode)
+		exitCode := p.ExitCode(err)
+		if metric == "is-failed" && exitCode != 0 {
+			log.Logger.Debugf("No error while executing command: %s %s, not sending is_failed metric", command, args)
+			continue
+		} else if metric != "is-failed" && err == nil {
+			log.Logger.Debugf("No error while executing command: %s %s, not sending is_disabled metric", command, args)
 			continue
 		}
-
+		log.Logger.Debugf("Error while executing command: %s %s, error: %s", command, args, stderr)
 		params := timeseries.Params{
 			CloudProp:    p.Config.CloudProperties,
 			MetricType:   metricURL + mPathMap[metric],
 			MetricLabels: map[string]string{"service": service},
 			Timestamp:    tspb.Now(),
-			Int64Value:   int64(exitCode),
+			Int64Value:   1,
 			BareMetal:    p.Config.BareMetal,
 		}
 		ts := timeseries.BuildInt(params)

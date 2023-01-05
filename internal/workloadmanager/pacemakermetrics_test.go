@@ -40,8 +40,8 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 type (

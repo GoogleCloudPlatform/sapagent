@@ -23,9 +23,9 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	mpb "github.com/GoogleCloudPlatform/sap-agent/protos/metrics"
-	statspb "github.com/GoogleCloudPlatform/sap-agent/protos/stats"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
+	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
 func TestRead(t *testing.T) {

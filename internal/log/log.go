@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 // Logger used for logging structured messages

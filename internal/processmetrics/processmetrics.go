@@ -51,8 +51,8 @@ import (
 
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 type (
@@ -166,6 +166,7 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 		Config:   p.Config,
 		Client:   p.Client,
 		Executor: commandlineexecutor.ExpandAndExecuteCommand,
+		ExitCode: commandlineexecutor.ExitCode,
 	}
 
 	log.Logger.Info("Creating SAP control processes per process CPU, memory usage metrics collector.")

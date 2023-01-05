@@ -38,7 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	cnfpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 /*
@@ -148,6 +148,9 @@ func collectMetrics(ctx context.Context, params Parameters, metricOverride strin
 		log.Logger.Info("Using override metrics from yaml file")
 		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
 	}
+	// read the instance info
+	params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
+
 	sch := make(chan WorkloadMetrics)
 	go CollectSystemMetrics(params, sch)
 	cch := make(chan WorkloadMetrics)

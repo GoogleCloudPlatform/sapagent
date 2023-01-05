@@ -25,7 +25,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
-	statspb "github.com/GoogleCloudPlatform/sap-agent/protos/stats"
+	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
 func TestCPUStats_Linux(t *testing.T) {

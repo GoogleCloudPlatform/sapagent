@@ -26,7 +26,7 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
-	instancepb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func marshalResponse(t *testing.T, r metadataServerResponse) string {

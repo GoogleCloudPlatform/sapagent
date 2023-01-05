@@ -29,9 +29,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	ipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var (

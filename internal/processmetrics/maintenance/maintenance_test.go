@@ -24,8 +24,8 @@ import (
 
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/googleapis/gax-go/v2"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	iipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 type (

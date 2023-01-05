@@ -27,7 +27,7 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
-	ipb "github.com/GoogleCloudPlatform/sap-agent/protos/instanceinfo"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (

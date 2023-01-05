@@ -32,8 +32,8 @@ import (
 
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	smpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
-	cpb "github.com/GoogleCloudPlatform/sap-agent/protos/configuration"
-	sapb "github.com/GoogleCloudPlatform/sap-agent/protos/sapapp"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var (

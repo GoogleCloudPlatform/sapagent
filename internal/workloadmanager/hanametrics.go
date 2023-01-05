@@ -144,9 +144,9 @@ setVolumeLabels sets volume labels for the workload metric collector.  These vol
 data disks or logs.
 */
 func setVolumeLabels(l map[string]string, diskInfo map[string]string, dataOrLog string) {
-	log.Logger.Warnf("diskInfo for %s is empty: %t", dataOrLog, len(diskInfo) == 0)
+	log.Logger.Debugf("diskInfo for %s is empty: %t", dataOrLog, len(diskInfo) == 0)
 	if len(diskInfo) > 0 {
-		log.Logger.Warnf("Found basepath_%svolumes, adding disk_data labels", dataOrLog)
+		log.Logger.Debugf("Found basepath_%svolumes, adding disk_data labels", dataOrLog)
 		l["disk_"+dataOrLog+"_type"] = diskInfo["instancedisktype"]
 		l["disk_"+dataOrLog+"_mount"] = diskInfo["mountpoint"]
 		l["disk_"+dataOrLog+"_size"] = diskInfo["size"]
@@ -199,7 +199,6 @@ grepKeyInGlobalINI determines whether or not a given INI file contains a specifi
 func grepKeyInGlobalINI(key string, globalIniLocation string, runner commandlineexecutor.CommandRunner) bool {
 	grep, _, err := runner("grep", key+" "+globalIniLocation)
 	if err != nil {
-		log.Logger.Warn("Error running grep command", log.Error(err))
 		return false
 	}
 	return len(grep) > 0
@@ -266,6 +265,7 @@ func setDiskInfoForDevice(
 	matchedSize string,
 	iir instanceinfo.Reader,
 ) {
+	log.Logger.Debugf("Checking disk mappings against instance disks, disk array length: %d", len(iir.InstanceProperties().GetDisks()))
 	for _, disk := range iir.InstanceProperties().GetDisks() {
 		log.Logger.Debugf("Checking disk mapping: %s against matchedBlockDevice: %s", disk.GetMapping(), matchedBlockDevice.Name)
 		if strings.HasSuffix(matchedBlockDevice.Name, disk.GetMapping()) {

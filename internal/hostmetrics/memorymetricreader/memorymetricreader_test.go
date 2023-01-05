@@ -26,7 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	mstatspb "github.com/GoogleCloudPlatform/sap-agent/protos/stats"
+	mstatspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
 func TestMemoryStats(t *testing.T) {
