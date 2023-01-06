@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package cloud.partners.sap.system;
 
-  // see http://go/go-api-flag.
+
 
 message Metadata {
   string name = 1;

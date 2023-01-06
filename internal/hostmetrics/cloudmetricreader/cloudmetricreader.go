@@ -46,7 +46,7 @@ import (
 //
 // See [QueryClient] for the real client.
 //
-// [QueryClient]: https://godoc.corp.google.com/pkg/google3/third_party/golang/cloud_google_com/go/monitoring/v/v0/apiv3/v2/monitoring#QueryClient
+// [QueryClient]: https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2
 type QueryClient struct {
 	Client *monitoring.QueryClient
 }
