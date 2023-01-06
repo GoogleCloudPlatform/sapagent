@@ -256,6 +256,27 @@ func TestSetupFlagsAndParse(t *testing.T) {
 			pattern: "log-usage-status",
 			wantErr: errQuiet,
 		},
+		{
+			name:    "HasProejct",
+			fs:      flag.NewFlagSet("project", flag.ExitOnError),
+			osArgs:  []string{"HasProjectFlagSet", "-project", "p"},
+			pattern: "project",
+			wantErr: nil,
+		},
+		{
+			name:    "HasInstance",
+			fs:      flag.NewFlagSet("instance", flag.ExitOnError),
+			osArgs:  []string{"HasInstanceFlagSet", "-instance", "i"},
+			pattern: "instance",
+			wantErr: nil,
+		},
+		{
+			name:    "HasZone",
+			fs:      flag.NewFlagSet("zone", flag.ExitOnError),
+			osArgs:  []string{"HasZoneFlagSet", "-zone", "z"},
+			pattern: "zone",
+			wantErr: nil,
+		},
 	}
 
 	for _, test := range tests {

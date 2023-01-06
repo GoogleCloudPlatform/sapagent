@@ -6,12 +6,11 @@ running.
 
 See documentation at:
 
-TODO: Update the doc links once they are live
-
-*   Overview: https://cloud.google.com/solutions/sap/docs
-*   Install: https://cloud.google.com/solutions/sap/docs
-*   Configure: https://cloud.google.com/solutions/sap/docs
-*   Troubleshoot: https://cloud.google.com/solutions/sap/docs
+*   All Guides: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/all-guides
+*   Planning: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/planning
+*   Installation: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/install-config
+*   Operations: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/operations
+*   Troubleshooting: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/troubleshooting
 
 ## License and Copyright
 

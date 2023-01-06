@@ -54,15 +54,21 @@ import (
 )
 
 const usage = `Usage of google-cloud-sap-agent:
-  -h, --help prints help information
-  -c=PATH, --config=PATH path to configuration.json
-	-mm=true|false, --maintenancemode=true|false to configure maintenance mode
-	-mm-show, --maintenancemode-show displays the current value configured for maintenancemode
+  -h, --help                                    prints help information
+  -c=PATH, --config=PATH                        path to configuration.json
+  -mm=true|false, --maintenancemode=true|false  to configure maintenance mode
+  -mm-show, --maintenancemode-show              displays the current value configured for maintenancemode
+  -r, --remote                                  runs the agent in remote mode to collect workload manager metrics
+  -p=project_id, --project=project_id           [required if remote] project id of this instance
+  -i=instance_id, --instance=instance_id        [required if remote] instance id of this instance
+  -n=instance_name, --name=instance_name        [required if remote] instance name of this instance
+  -z=zone, --zone=zone                          [required if remote] zone of this instance
 `
 
 var (
 	configPath, logfile, usagePriorVersion, usageStatus string
 	logUsage                                            bool
+	remoteMode                                          bool
 	usageAction, usageError                             int
 	config                                              *cpb.Configuration
 	errQuiet                                            = fmt.Errorf("a quiet error which just signals the program to exit")
@@ -112,6 +118,7 @@ func configureUsageMetrics(cp *iipb.CloudProperties, version string) {
 
 func setupFlagsAndParse(fs *flag.FlagSet, args []string, fr maintenance.FileReader, fw maintenance.FileWriter) error {
 	var help, mntmode, showMntMode bool
+	var project, instanceid, instancename, zone string
 	fs.StringVar(&configPath, "config", "", "configuration path")
 	fs.StringVar(&configPath, "c", "", "configuration path")
 	fs.BoolVar(&help, "help", false, "display help")
@@ -130,6 +137,16 @@ func setupFlagsAndParse(fs *flag.FlagSet, args []string, fr maintenance.FileRead
 	fs.BoolVar(&mntmode, "mm", false, "configure maintenance mode")
 	fs.BoolVar(&showMntMode, "mm-show", false, "show maintenance mode")
 	fs.BoolVar(&showMntMode, "maintenancemode-show", false, "show maintenance mode")
+	fs.BoolVar(&remoteMode, "r", false, "run in remote mode to collect workload manager metrics")
+	fs.BoolVar(&remoteMode, "remote", false, "run in remote mode to collect workload manager metrics")
+	fs.StringVar(&project, "p", "", "project id of this instance")
+	fs.StringVar(&project, "project", "", "project id of this instance")
+	fs.StringVar(&instanceid, "i", "", "instance id of this instance")
+	fs.StringVar(&instanceid, "instance", "", "instance id of this instance")
+	fs.StringVar(&instancename, "n", "", "instance name of this instance")
+	fs.StringVar(&instancename, "name", "", "instance name of this instance")
+	fs.StringVar(&zone, "z", "", "zone of this instance")
+	fs.StringVar(&zone, "zone", "", "zone of this instance")
 	fs.Usage = func() { fmt.Print(usage) }
 	fs.Parse(args[1:])
 
@@ -170,6 +187,19 @@ func setupFlagsAndParse(fs *flag.FlagSet, args []string, fr maintenance.FileRead
 			log.Print("For status ACTION, an action code is required to be set")
 			return errQuiet
 		}
+	}
+
+	if remoteMode {
+		if project == "" || instanceid == "" || zone == "" {
+			log.Print("ERROR When running in remote mode the project, instanceid, and zone are required")
+			os.Exit(1)
+		}
+		config = &cpb.Configuration{}
+		config.CloudProperties = &iipb.CloudProperties{}
+		config.CloudProperties.ProjectId = project
+		config.CloudProperties.InstanceId = instanceid
+		config.CloudProperties.InstanceName = instancename
+		config.CloudProperties.Zone = zone
 	}
 
 	return nil
@@ -351,6 +381,32 @@ func handleShutdown(cancel context.CancelFunc) {
 	cancel()
 }
 
+func collecRemoteModetMetrics(goos string) {
+	ctx := context.Background()
+	gceService, err := gce.New(ctx)
+	if err != nil {
+		log.Print(fmt.Sprintf("ERROR: Failed to create GCE service: %v", err))
+		os.Exit(0)
+	}
+	ppr := &instanceinfo.PhysicalPathReader{goos}
+	instanceInfoReader := instanceinfo.New(ppr, gceService)
+
+	wlmparams := workloadmanager.Parameters{
+		Config:                config,
+		Remote:                true,
+		ConfigFileReader:      configFileReader,
+		CommandRunner:         commandRunner,
+		CommandRunnerNoSpace:  commandRunnerNoSpace,
+		CommandExistsRunner:   commandExistsRunner,
+		InstanceInfoReader:    *instanceInfoReader,
+		OSStatReader:          osStatReader,
+		DefaultTokenGetter:    defaultTokenGetter,
+		JSONCredentialsGetter: jsonCredentialsGetter,
+		OSType:                goos,
+	}
+	log.Print(workloadmanager.CollectMetricsToJSON(ctx, wlmparams))
+}
+
 func main() {
 	fs := flag.NewFlagSet("cli-flags", flag.ExitOnError)
 	err := setupFlagsAndParse(fs, os.Args, maintenance.ModeReader{}, maintenance.ModeWriter{})
@@ -361,6 +417,15 @@ func main() {
 		log.Print(err.Error())
 		os.Exit(1)
 	}
+
+	// remote operation
+	if remoteMode {
+		log.SetupLoggingToDiscard()
+		collecRemoteModetMetrics(runtime.GOOS)
+		os.Exit(0)
+	}
+
+	// local operation
 	config = configuration.ReadFromFile(configPath, os.ReadFile)
 	log.SetupLoggingToFile(runtime.GOOS, config.GetLogLevel())
 	cloudProps := fetchCloudProperties()
