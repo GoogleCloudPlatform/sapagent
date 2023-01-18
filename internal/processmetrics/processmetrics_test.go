@@ -59,6 +59,8 @@ var (
 		},
 		CloudProperties: defaultCloudProperties,
 	}
+
+	defaultBackOffIntervals = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
 )
 
 type (
@@ -73,7 +75,7 @@ type (
 	}
 )
 
-func (f *fakeCollector) Collect() []*sapdiscovery.Metrics {
+func (f *fakeCollector) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	m := make([]*sapdiscovery.Metrics, f.timeSeriesCount)
 	for i := 0; i < f.timeSeriesCount; i++ {
 		m[i] = &sapdiscovery.Metrics{
@@ -105,7 +107,8 @@ func fakeSAPInstances(app string) *sapb.SAPInstances {
 		return &sapb.SAPInstances{
 			Instances: []*sapb.SAPInstance{
 				&sapb.SAPInstance{
-					Type: sapb.InstanceType_HANA,
+					Type:   sapb.InstanceType_HANA,
+					Sapsid: "DEH",
 				},
 			},
 		}
@@ -113,7 +116,8 @@ func fakeSAPInstances(app string) *sapb.SAPInstances {
 		return &sapb.SAPInstances{
 			Instances: []*sapb.SAPInstance{
 				&sapb.SAPInstance{
-					Type: sapb.InstanceType_HANA,
+					Type:   sapb.InstanceType_HANA,
+					Sapsid: "DVA",
 				},
 			},
 			LinuxClusterMember: true,
@@ -122,7 +126,8 @@ func fakeSAPInstances(app string) *sapb.SAPInstances {
 		return &sapb.SAPInstances{
 			Instances: []*sapb.SAPInstance{
 				&sapb.SAPInstance{
-					Type: sapb.InstanceType_NETWEAVER,
+					Type:   sapb.InstanceType_NETWEAVER,
+					Sapsid: "AEK",
 				},
 			},
 			LinuxClusterMember: true,
@@ -147,6 +152,7 @@ func TestStart(t *testing.T) {
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
 				SAPInstances: fakeSAPInstances("HANA"),
+				BackOffs:     defaultBackOffIntervals,
 			},
 			want: true,
 		},
@@ -161,14 +167,16 @@ func TestStart(t *testing.T) {
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
 				SAPInstances: fakeSAPInstances("HANA"),
+				BackOffs:     defaultBackOffIntervals,
 			},
 			want: false,
 		},
 		{
 			name: "FailsForWindowsOS",
 			parameters: Parameters{
-				Config: defaultConfig,
-				OSType: "windows",
+				Config:   defaultConfig,
+				OSType:   "windows",
+				BackOffs: defaultBackOffIntervals,
 			},
 			want: false,
 		},
@@ -179,6 +187,7 @@ func TestStart(t *testing.T) {
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
 				SAPInstances: fakeSAPInstances("HANA"),
+				BackOffs:     defaultBackOffIntervals,
 			},
 			want: false,
 		},
@@ -189,6 +198,7 @@ func TestStart(t *testing.T) {
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClientFailure,
 				SAPInstances: fakeSAPInstances("HANA"),
+				BackOffs:     defaultBackOffIntervals,
 			},
 			want: false,
 		},
@@ -199,6 +209,7 @@ func TestStart(t *testing.T) {
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
 				SAPInstances: fakeSAPInstances("NOSAP"),
+				BackOffs:     defaultBackOffIntervals,
 			},
 			want: false,
 		},
@@ -291,7 +302,7 @@ func TestCollectAndSend(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), test.runtime)
 			defer cancel()
 
-			got := test.properties.collectAndSend(ctx)
+			got := test.properties.collectAndSend(ctx, defaultBackOffIntervals)
 
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("Failure in collectAndSend(), got: %v want: %v.", got, test.want)
@@ -332,7 +343,7 @@ func TestCollectAndSendOnce(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotSent, gotBatchCount, gotErr := test.properties.collectAndSendOnce(context.Background())
+			gotSent, gotBatchCount, gotErr := test.properties.collectAndSendOnce(context.Background(), defaultBackOffIntervals)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("Failure in collectAndSendOnce(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
@@ -399,7 +410,7 @@ func TestSend(t *testing.T) {
 			}
 
 			metrics := createFakeMetrics(test.count)
-			got, gotBatchCount, gotErr := p.send(context.Background(), metrics)
+			got, gotBatchCount, gotErr := p.send(context.Background(), metrics, defaultBackOffIntervals)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("Failure in send(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
@@ -434,6 +445,7 @@ func TestInstancesWithCredentials(t *testing.T) {
 						},
 					},
 				},
+				BackOffs: defaultBackOffIntervals,
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{
@@ -441,6 +453,7 @@ func TestInstancesWithCredentials(t *testing.T) {
 						Type:           sapb.InstanceType_HANA,
 						HanaDbUser:     "test-db-user",
 						HanaDbPassword: "test-pass",
+						Sapsid:         "DEH",
 					},
 				},
 			},
@@ -450,6 +463,7 @@ func TestInstancesWithCredentials(t *testing.T) {
 			params: &Parameters{
 				SAPInstances: fakeSAPInstances("HANA"),
 				Config:       quickTestConfig,
+				BackOffs:     defaultBackOffIntervals,
 			},
 			want: fakeSAPInstances("HANA"),
 		},

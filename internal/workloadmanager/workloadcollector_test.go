@@ -20,6 +20,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"time"
 
 	"io"
 	"net"
@@ -49,7 +50,8 @@ var (
 	//go:embed test_data/metricoverride.yaml
 	sampleOverride string
 	//go:embed test_data/metricoverride.yaml
-	sampleOverrideFS embed.FS
+	sampleOverrideFS        embed.FS
+	defaultBackOffIntervals = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
 )
 
 func TestCollectMetrics_hasMetrics(t *testing.T) {
@@ -67,6 +69,7 @@ func TestCollectMetrics_hasMetrics(t *testing.T) {
 		ConfigFileReader:     DefaultTestReader,
 		OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
 		OSType:               "linux",
+		BackOffs:             defaultBackOffIntervals,
 	}
 	m := collectMetrics(context.Background(), p, metricOverridePath)
 	got := len(m.Metrics)
@@ -154,6 +157,7 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 		CommandExistsRunner:  func(string) bool { return false },
 		OSType:               "windows",
 		InstanceInfoReader:   *instanceinfo.New(defaultDiskMapper, defaultGCEService),
+		BackOffs:             defaultBackOffIntervals,
 	}
 	wantOSVersion := "microsoft_windows_server_2019_datacenter-10.0.17763"
 	wantTimestamp := &timestamppb.Timestamp{Seconds: now()}
@@ -214,7 +218,8 @@ func TestCollectMetrics_hasOverrideMetrics(t *testing.T) {
 			}
 			return f.Stat()
 		},
-		OSType: "linux",
+		OSType:   "linux",
+		BackOffs: defaultBackOffIntervals,
 	}
 	m := collectMetrics(context.Background(), p, "test_data/metricoverride.yaml")
 	got := len(m.Metrics)
@@ -304,7 +309,7 @@ func TestSendMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := sendMetrics(context.Background(), test.workLoadMetrics, "test-project", &test.client)
+			got := sendMetrics(context.Background(), test.workLoadMetrics, "test-project", &test.client, defaultBackOffIntervals)
 			if got != test.wantMetricCount {
 				t.Errorf("sendMetrics returned unexpected metric count for %s, got: %d, want: %d",
 					test.name, got, test.wantMetricCount)
@@ -337,7 +342,7 @@ func TestStartMetricsCollection(t *testing.T) {
 		want   bool
 	}{
 		{
-			name: "succeeds",
+			name: "succeedsForLocal",
 			params: Parameters{
 				Config: &cfgpb.Configuration{
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
@@ -349,6 +354,26 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
 				OSType:               "linux",
+				Remote:               false,
+				BackOffs:             defaultBackOffIntervals,
+			},
+			want: true,
+		},
+		{
+			name: "succeedsForRemote",
+			params: Parameters{
+				Config: &cfgpb.Configuration{
+					CollectionConfiguration: &cfgpb.CollectionConfiguration{
+						CollectWorkloadValidationMetrics: true,
+					}},
+				CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
+				CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
+				ConfigFileReader:     DefaultTestReader,
+				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
+				OSType:               "linux",
+				Remote:               true,
+				BackOffs:             defaultBackOffIntervals,
 			},
 			want: true,
 		},
@@ -359,7 +384,8 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: false,
 					}},
-				OSType: "linux",
+				OSType:   "linux",
+				BackOffs: defaultBackOffIntervals,
 			},
 			want: false,
 		},
@@ -370,7 +396,8 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 					}},
-				OSType: "windows",
+				OSType:   "windows",
+				BackOffs: defaultBackOffIntervals,
 			},
 			want: false,
 		},

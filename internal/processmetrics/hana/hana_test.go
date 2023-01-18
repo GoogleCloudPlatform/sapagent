@@ -17,6 +17,7 @@ limitations under the License.
 package hana
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -431,7 +432,7 @@ func TestCollect(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotCount := len(test.properties.Collect())
+			gotCount := len(test.properties.Collect(context.Background()))
 			if gotCount != test.wantCount {
 				t.Errorf("Collect(), got: %d want: %d.", gotCount, test.wantCount)
 			}

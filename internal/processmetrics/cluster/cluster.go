@@ -22,6 +22,7 @@ limitations under the License.
 package cluster
 
 import (
+	"context"
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
@@ -92,7 +93,7 @@ var (
 
 // Collect is cluster metrics implementation of Collector interface from
 // processmetrics.go. Returns a list of Linux cluster related metrics.
-func (p *InstanceProperties) Collect() []*sapdiscovery.Metrics {
+func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
 	nodeMetrics, _ := collectNodeState(p, pacemaker.NodeState)
 	metrics = append(metrics, nodeMetrics...)

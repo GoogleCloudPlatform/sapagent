@@ -23,12 +23,15 @@ limitations under the License.
 package maintenance
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
+	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
@@ -40,9 +43,9 @@ import (
 
 const (
 	// Linux path for the directory containing file for maintenancemode config.
-	linuxDirPath = "/usr/sap/google-cloud-sap-agent/conf"
+	linuxDirPath = "/etc/google-cloud-sap-agent/"
 
-	// Name of the file persisting the maintenancemode config.
+	// The file stores the maintenancemode config.
 	fileName    = "maintenance.json"
 	metricURL   = "workload.googleapis.com"
 	mntmodePath = "/sap/mntmode"
@@ -69,18 +72,18 @@ type (
 		MakeDirs(path string, perm os.FileMode) error
 	}
 
-	// ModeReader is a concrete type responsible for reading the value
-	// of maintenance mode from the maintenancemode.json file.
+	// ModeReader is a concrete type responsible for reading the contents of maintenance.json file.
 	ModeReader struct{}
 
 	// ModeWriter is a concrete type responsible for writing the value
-	// into the maintenancemode.json file.
+	// into the maintenance.json file.
 	ModeWriter struct{}
 
 	// maintenanceModeJson is a concrete type representing the content of
-	// maintenancemode.json file.
+	// maintenance.json file.
 	maintenanceModeJSON struct {
-		MaintenanceMode bool `json:"maintenance_mode"`
+		// SIDs contain the SAP SIDs under maintenance.
+		SIDs []string `json:"sids"`
 	}
 )
 
@@ -104,64 +107,97 @@ type InstanceProperties struct {
 	Config *cnfpb.Configuration
 	Client cloudmonitoring.TimeSeriesCreator
 	Reader FileReader
+	Sids   map[string]bool
 }
 
-// ReadMaintenanceMode reads the current value for maintenancemode persisted in
-// maintenance.json file, it returns the default value for maintenancemode i.e. false along
-// with err: nil if the file does not exist.
-//
-// An unsuccessful call will return false, err
-func ReadMaintenanceMode(fr FileReader) (bool, error) {
+// ReadMaintenanceMode reads the current value for the SIDs under maintenance persisted in
+// maintenance.json file, If the file is empty or it does not exist no sid is considered under
+// maintenace.
+// An unsuccessful call will return nil, err
+func ReadMaintenanceMode(fr FileReader) ([]string, error) {
 	content, err := fr.Read(filepath.Join(linuxDirPath, fileName))
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return nil, nil
 	} else if err != nil || len(content) == 0 {
 		log.Logger.Error(fmt.Sprintf("Could not read the file: %s", filepath.Join(linuxDirPath, fileName)), log.Error(err))
-		return false, err
+		return nil, err
 	}
 	mntModeContent := &maintenanceModeJSON{}
 	if err := json.Unmarshal(content, mntModeContent); err != nil {
 		log.Logger.Error("Could not parse maintenance.json file, error", log.Error(err))
-		return false, err
+		return nil, err
 	}
-	return mntModeContent.MaintenanceMode, nil
+	return mntModeContent.SIDs, nil
 }
 
-// UpdateMaintenanceMode updates the value for maintenancemode in
-// the maintenancemode.json file , it returns the error in case it
-// is unable to update the file.
-func UpdateMaintenanceMode(mntmode bool, fw FileWriter) error {
-	mntModeContent := &maintenanceModeJSON{MaintenanceMode: mntmode}
+// UpdateMaintenanceMode updates the maintenance.json file by appending / removing the sid passed
+// in the arguments based on the mntmode value passed.
+func UpdateMaintenanceMode(mntmode bool, sid string, fr FileReader, fw FileWriter) ([]string, error) {
+	sidsUnderMaintenance, err := ReadMaintenanceMode(fr)
+	if err != nil {
+		log.Logger.Error("Could not read maintenance.json file", log.Error(err))
+		return nil, err
+	}
+	ind := slices.Index(sidsUnderMaintenance, sid)
+	// SID not found in the slice
+	if ind == -1 {
+		if !mntmode {
+			return sidsUnderMaintenance, fmt.Errorf("SID: %s is not in maintenance mode already", sid)
+		}
+		sidsUnderMaintenance = append(sidsUnderMaintenance, sid)
+	} else {
+		if mntmode {
+			log.Logger.Debugf("SID: %s is already in maintenance mode.", sid)
+			return sidsUnderMaintenance, fmt.Errorf("SID: %s is already in maintenance mode", sid)
+		}
+		sidsUnderMaintenance = removeSID(sidsUnderMaintenance, ind)
+	}
+	mntModeContent := &maintenanceModeJSON{SIDs: sidsUnderMaintenance}
 	marshalContent, _ := json.Marshal(mntModeContent)
 	if err := fw.MakeDirs(linuxDirPath, 0777); err != nil {
 		log.Logger.Error(fmt.Sprintf("Error making directory %s", linuxDirPath), log.Error(err))
-		return err
+		return nil, err
 	}
 	if err := fw.Write(filepath.Join(linuxDirPath, fileName), marshalContent, 0777); err != nil {
 		log.Logger.Error("Could not write maintenance.json file", log.Error(err))
-		return err
+		return nil, err
 	}
-	return nil
+	return sidsUnderMaintenance, nil
+}
+
+func removeSID(SIDs []string, ind int) []string {
+	last := len(SIDs) - 1
+	swapper := reflect.Swapper(SIDs)
+	swapper(ind, last)
+	SIDs = SIDs[:last]
+	return SIDs
 }
 
 // Collect is a MaintenanceMode implementation of the Collector interface from
-// processmetrics. It returns the value of current maintenancemode configured
-// as a metric list.
-func (p *InstanceProperties) Collect() []*sapdiscovery.Metrics {
+// processmetrics. It returns the value of current maintenancemode configured per sid as a metric
+// list.
+func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
 	log.Logger.Debug("Starting maintenancemode metric collection.")
-	mntmode, err := ReadMaintenanceMode(p.Reader)
+	sidsUnderMaintenance, err := ReadMaintenanceMode(p.Reader)
 	if err != nil {
 		return nil
 	}
-	log.Logger.Debugf("MaintenanceMode metric is set to %t.", mntmode)
-	params := timeseries.Params{
-		CloudProp:  p.Config.CloudProperties,
-		MetricType: metricURL + mntmodePath,
-		Timestamp:  tspb.Now(),
-		BoolValue:  mntmode,
-		BareMetal:  p.Config.BareMetal,
+	for sid := range p.Sids {
+		mntmode := slices.Contains(sidsUnderMaintenance, sid)
+		labels := make(map[string]string)
+		labels["sid"] = sid
+		log.Logger.Debugf("MaintenanceMode metric for SID: %s is set to %t", sid, mntmode)
+		params := timeseries.Params{
+			CloudProp:    p.Config.CloudProperties,
+			MetricType:   metricURL + mntmodePath,
+			MetricLabels: labels,
+			Timestamp:    tspb.Now(),
+			BoolValue:    mntmode,
+			BareMetal:    p.Config.BareMetal,
+		}
+		ts := timeseries.BuildBool(params)
+		metrics = append(metrics, &sapdiscovery.Metrics{TimeSeries: ts})
 	}
-	ts := timeseries.BuildBool(params)
-	return append(metrics, &sapdiscovery.Metrics{TimeSeries: ts})
+	return metrics
 }

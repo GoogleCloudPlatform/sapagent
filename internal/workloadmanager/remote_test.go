@@ -18,12 +18,20 @@ package workloadmanager
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
+	mpb "google.golang.org/genproto/googleapis/api/metric"
+	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	"github.com/google/go-cmp/cmp"
+	"golang.org/x/exp/slices"
 	"github.com/zieckey/goini"
+	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
@@ -46,9 +54,210 @@ func TestCollectMetricsToJSON(t *testing.T) {
 		CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) { return "", "", nil },
 		ConfigFileReader:     func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
 		OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
+		BackOffs:             defaultBackOffIntervals,
 	}
-	got := CollectMetricsToJSON(context.Background(), p)
-	if !strings.HasPrefix(got, "[") || !strings.HasSuffix(got, "]") {
-		t.Errorf("CollectMetricsToJSON returned incorrect JSON, does not start with [ or end with ] got: %s", got)
+	got := strings.TrimSpace(CollectMetricsToJSON(context.Background(), p))
+	if !strings.HasPrefix(got, "{") || !strings.HasSuffix(got, "}") {
+		t.Errorf("CollectMetricsToJSON returned incorrect JSON, does not start with '{' and end with '}' got: %s", got)
+	}
+}
+
+func TestParseRemoteJSON(t *testing.T) {
+	tests := []struct {
+		name        string
+		want        []*monitoringresourcespb.TimeSeries
+		output      string
+		expectError bool
+	}{
+		{
+			name: "succeedsWithValidOutput",
+			want: append([]*monitoringresourcespb.TimeSeries{}, &monitoringresourcespb.TimeSeries{
+				Metric: &mpb.Metric{
+					Type:   "workload.googleapis.com/sap/validation/system",
+					Labels: map[string]string{"agent": "gcagent", "instance_name": "test-instance", "os": "\"sles\"-\"15\""},
+				},
+				Resource: &mrpb.MonitoredResource{
+					Type:   "gce_instance",
+					Labels: map[string]string{"instance_id": "5555"},
+				},
+				MetricKind: mpb.MetricDescriptor_GAUGE,
+			}),
+			output:      "{\"metric\":{\"type\":\"workload.googleapis.com/sap/validation/system\",\"labels\":{\"agent\":\"gcagent\",\"instance_name\":\"test-instance\",\"os\":\"\\\"sles\\\"-\\\"15\\\"\"}},\"resource\":{\"type\":\"gce_instance\",\"labels\":{\"instance_id\":\"5555\"}},\"metricKind\":\"GAUGE\"}\n\n",
+			expectError: false,
+		},
+		{
+			name:        "succeedsWithEmpty",
+			want:        []*monitoringresourcespb.TimeSeries{},
+			output:      "",
+			expectError: false,
+		},
+		{
+			name:        "failsWithBadInput",
+			want:        []*monitoringresourcespb.TimeSeries{},
+			output:      "somebadstuff",
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := []*monitoringresourcespb.TimeSeries{}
+			err := parseRemoteJSON(test.output, &got)
+			if !test.expectError && err != nil {
+				t.Errorf("parseRemoteJSON returned an error: %s", err)
+			}
+			diff := cmp.Diff(test.want, got, protocmp.Transform())
+			if !test.expectError && diff != "" {
+				t.Errorf("parseRemoteJSON did not return the expected values (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+}
+
+func TestAppendCommonGcloudArgs(t *testing.T) {
+	tests := []struct {
+		name       string
+		wantInArgs []string
+	}{
+		{
+			name:       "appendsProjectAndZone",
+			wantInArgs: []string{"--project", "--zone", "--tunnel-through-iap", "--internal-ip", "additionalargs"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{}
+			rc := &cfgpb.WorkloadValidationRemoteCollection{
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{
+					UseInternalIp:    true,
+					TunnelThroughIap: true,
+					GcloudArgs:       "additionalargs",
+				},
+			}
+			got := appendCommonGcloudArgs(args, rc, &cfgpb.RemoteCollectionInstance{
+				ProjectId: "projectId",
+				Zone:      "zone",
+			})
+			for _, want := range test.wantInArgs {
+				if !slices.Contains(got, want) {
+					t.Errorf("Did not get all of the args expected, want: %v, got: %v", want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestCollectAndSendRemoteMetrics(t *testing.T) {
+	tests := []struct {
+		name       string
+		config     *cfgpb.Configuration
+		execOutput string
+		wantCount  int
+		execError  error
+	}{
+		{
+			name: "returnsZeroWhenNotConfigured",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections: 1,
+					},
+				},
+			},
+			execOutput: "",
+			wantCount:  0,
+			execError:  nil,
+		},
+		{
+			name: "returnsSentWhenConfigured",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections:  1,
+						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
+							&cfgpb.RemoteCollectionInstance{
+								ProjectId:    "projectId",
+								Zone:         "zone",
+								InstanceId:   "instanceId",
+								InstanceName: "instanceName",
+							},
+						},
+					},
+				},
+			},
+			execOutput: "{\"metric\":{\"type\":\"workload.googleapis.com/sap/validation/system\",\"labels\":{\"agent\":\"gcagent\",\"instance_name\":\"test-instance\",\"os\":\"\\\"sles\\\"-\\\"15\\\"\"}},\"resource\":{\"type\":\"gce_instance\",\"labels\":{\"instance_id\":\"5555\"}},\"metricKind\":\"GAUGE\"}\n\n",
+			wantCount:  1,
+			execError:  nil,
+		},
+		{
+			name: "returnsZeroWithErrorFromRemote",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections:  1,
+						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
+							&cfgpb.RemoteCollectionInstance{
+								ProjectId:    "projectId",
+								Zone:         "zone",
+								InstanceId:   "instanceId",
+								InstanceName: "instanceName",
+							},
+						},
+					},
+				},
+			},
+			execOutput: "ERROR something did not work",
+			wantCount:  0,
+			execError:  nil,
+		},
+		{
+			name: "returnsZeroWithErrorExec",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections:  1,
+						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
+							&cfgpb.RemoteCollectionInstance{
+								ProjectId:    "projectId",
+								Zone:         "zone",
+								InstanceId:   "instanceId",
+								InstanceName: "instanceName",
+							},
+						},
+					},
+				},
+			},
+			execOutput: "{\"metric\":{\"type\":\"workload.googleapis.com/sap/validation/system\",\"labels\":{\"agent\":\"gcagent\",\"instance_name\":\"test-instance\",\"os\":\"\\\"sles\\\"-\\\"15\\\"\"}},\"resource\":{\"type\":\"gce_instance\",\"labels\":{\"instance_id\":\"5555\"}},\"metricKind\":\"GAUGE\"}\n\n",
+			wantCount:  0,
+			execError:  errors.New("Error executing"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := Parameters{
+				Config:               test.config,
+				CommandRunner:        func(cmd string, args string) (string, string, error) { return "", "", nil },
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) { return test.execOutput, "", test.execError },
+				ConfigFileReader:     func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
+				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
+				BackOffs:             defaultBackOffIntervals,
+			}
+
+			want := test.wantCount
+			got := collectAndSendRemoteMetrics(context.Background(), p)
+			if got != want {
+				t.Errorf("Did not collect and send the expected number of metrics, want: %d, got: %d", want, got)
+			}
+
+		})
 	}
 }

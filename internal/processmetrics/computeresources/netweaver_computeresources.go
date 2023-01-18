@@ -17,6 +17,8 @@ limitations under the License.
 package computeresources
 
 import (
+	"context"
+
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
@@ -46,7 +48,7 @@ type (
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP Netweaver processes.
-func (p *NetweaverInstanceProperties) Collect() []*sapdiscovery.Metrics {
+func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	params := Parameters{
 		executor:         p.Executor,
 		client:           p.Client,

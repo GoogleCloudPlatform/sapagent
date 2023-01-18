@@ -81,12 +81,6 @@ func (g *GCE) GetAddressByIP(project, region, ip string) (*compute.AddressList, 
 	return g.service.Addresses.List(project, region).Filter(filter).Do()
 }
 
-// GetFilestoreInstance retrieves a GCE Filestore Instance defined by the project, locaiton, and name provided.
-func (g *GCE) GetFilestoreInstance(project, location, filestore string) (*file.Instance, error) {
-	name := fmt.Sprintf("projects/%s/locations/%s/instances/%s", project, location, filestore)
-	return g.file.Projects.Locations.Instances.Get(name).Do()
-}
-
 // GetRegionalBackendService retrieves a GCE Backend Service defined by the project, region, and name provided.
 func (g *GCE) GetRegionalBackendService(project, region, service string) (*compute.BackendService, error) {
 	return g.service.RegionBackendServices.Get(project, region, service).Do()
@@ -105,4 +99,16 @@ func (g *GCE) GetInstanceGroup(project, zone, name string) (*compute.InstanceGro
 // ListInstanceGroupInstances retrieves a list of GCE Instances in the Instance group defined by the project, zone, and name provided.
 func (g *GCE) ListInstanceGroupInstances(project, zone, name string) (*compute.InstanceGroupsListInstances, error) {
 	return g.service.InstanceGroups.ListInstances(project, zone, name, nil).Do()
+}
+
+// GetFilestoreInstance retrieves a GCE Filestore Instance defined by the project, locaiton, and name provided.
+func (g *GCE) GetFilestoreInstance(project, location, filestore string) (*file.Instance, error) {
+	name := fmt.Sprintf("projects/%s/locations/%s/instances/%s", project, location, filestore)
+	return g.file.Projects.Locations.Instances.Get(name).Do()
+}
+
+// GetFilestoreByIP attempts to locate a GCE Filestore instance defined by the project, location, and IP Address provided.
+func (g *GCE) GetFilestoreByIP(project, location, ip string) (*file.ListInstancesResponse, error) {
+	name := fmt.Sprintf("projects/%s/locations/%s", project, location)
+	return g.file.Projects.Locations.Instances.List(name).Filter(fmt.Sprintf("networks.ipAddresses:%q", ip)).Do()
 }

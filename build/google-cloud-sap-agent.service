@@ -5,8 +5,8 @@ Wants=network-online.target systemd-networkd-wait-online.service
 StartLimitIntervalSec=60
 
 [Service]
-WorkingDirectory=/usr/sap/google-cloud-sap-agent
-ExecStart=/usr/sap/google-cloud-sap-agent/google-cloud-sap-agent
+WorkingDirectory=/usr/share/google-cloud-sap-agent
+ExecStart=/usr/bin/google_cloud_sap_agent
 User=root
 Type=simple
 Restart=always
@@ -21,6 +21,10 @@ MemoryAccounting=yes
 TasksAccounting=yes
 MemoryLimit=1G
 MemoryMax=1G
+ProtectSystem=true
+ProtectClock=true
+ProtectKernelModules=true
+RestrictRealtime=true
 # TODO(b/260993161) Need to add CPUQuota
 # CPUQuota of 100 will allow for up to 100% on 1 CPU
 # CPUQuota=100

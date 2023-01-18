@@ -17,6 +17,7 @@ limitations under the License.
 package computeresources
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -112,7 +113,7 @@ func TestCollectForNetweaver(t *testing.T) {
 				SAPInstance: defaultSAPInstanceNetWeaver,
 				Runner:      &fakeRunner{stdOut: test.sapControlOutput},
 			}
-			got := testNetweaverInstanceProperties.Collect()
+			got := testNetweaverInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Got metrics length (%d) != Want metrics length (%d) from CollectForNetweaver method.", len(got), test.wantCount)
 			}

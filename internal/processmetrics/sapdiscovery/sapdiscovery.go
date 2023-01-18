@@ -371,6 +371,7 @@ func findPort(instance *sapb.SAPInstance, instanceName string) (string, sapb.Ins
 		}
 	case "ERS":
 		log.Logger.Debugf("This is an Enqueue Replication System.")
+		instanceType = sapb.InstanceType_NETWEAVER
 	case "HDB":
 		log.Logger.Debugf("This is a HANA instance.")
 		instanceType = sapb.InstanceType_HANA

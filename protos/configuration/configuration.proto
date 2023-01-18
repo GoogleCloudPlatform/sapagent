@@ -70,7 +70,8 @@ message WorkloadValidationRemoteCollection {
 message RemoteCollectionInstance {
   string project_id = 1;
   string instance_id = 2;
-  string zone = 3;
+  string instance_name = 3;
+  string zone = 4;
 }
 
 message RemoteCollectionGcloud {

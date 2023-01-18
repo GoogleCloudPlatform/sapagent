@@ -81,7 +81,7 @@ type metricEmitter struct {
 }
 
 /*
-Parameters holds the paramters for all of the Collect* function calls.
+Parameters holds the parameters for all of the Collect* function calls.
 */
 type Parameters struct {
 	Config                *cnfpb.Configuration
@@ -96,13 +96,14 @@ type Parameters struct {
 	DefaultTokenGetter    DefaultTokenGetter
 	JSONCredentialsGetter JSONCredentialsGetter
 	OSType                string
+	BackOffs              *cloudmonitoring.BackOffIntervals
 }
 
 var (
 	now = currentTime
 )
 
-const metricOverridePath = "/usr/sap/google-cloud-sap-agent/conf/wlmmetricoverride.yaml"
+const metricOverridePath = "/etc/google-cloud-sap-agent/wlmmetricoverride.yaml"
 const metricTypePrefix = "workload.googleapis.com/sap/validation/"
 
 func currentTime() int64 {
@@ -111,16 +112,25 @@ func currentTime() int64 {
 
 func start(ctx context.Context, params Parameters, tsc cloudmonitoring.TimeSeriesCreator) {
 	log.Logger.Info("Starting collection of Workload Manager metrics")
+	st := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
+	if st <= 0 {
+		// default back to 5 minutes
+		st = time.Duration(5) * time.Minute
+	}
 	if params.Remote {
-		log.Logger.Info("Collecting metrics from remote sources")
-		collectAndSendRemoteMetrics(ctx, params)
+		// NOMUTANTS -- tested that when remote is set this is called, but cannot kill mutant
+		for {
+			log.Logger.Info("Collecting metrics from remote instances")
+			collectAndSendRemoteMetrics(ctx, params)
+			log.Logger.Debugf("Sleeping for %v", st)
+			time.Sleep(st)
+		}
 		return
 	}
 	for {
-		log.Logger.Info("Collecting metrics")
-		sendMetrics(ctx, collectMetrics(ctx, params, metricOverridePath), params.Config.GetCloudProperties().GetProjectId(), &tsc)
+		log.Logger.Info("Collecting metrics from this instance")
+		sendMetrics(ctx, collectMetrics(ctx, params, metricOverridePath), params.Config.GetCloudProperties().GetProjectId(), &tsc, params.BackOffs)
 		// sleep until the next collection interval
-		st := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 		log.Logger.Debugf("Sleeping for %v", st)
 		time.Sleep(st)
 	}
@@ -129,7 +139,8 @@ func start(ctx context.Context, params Parameters, tsc cloudmonitoring.TimeSerie
 // StartMetricsCollection continuously collects Workload Manager metrics for SAP workloads.
 // Returns true if the collection goroutine is started, and false otherwise.
 func StartMetricsCollection(ctx context.Context, params Parameters) bool {
-	if !params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics() {
+	if (params.Config.GetCollectionConfiguration() == nil || params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() == nil) &&
+		!params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics() {
 		log.Logger.Info("Not collecting Workload Manager metrics")
 		return false
 	}
@@ -271,7 +282,7 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 	return metricName, metricValue, labels, true
 }
 
-func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmonitoring.TimeSeriesCreator) int {
+func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmonitoring.TimeSeriesCreator, bo *cloudmonitoring.BackOffIntervals) int {
 	if wm.Metrics == nil || len(wm.Metrics) == 0 {
 		log.Logger.Info("No metrics to send to Cloud Monitoring")
 		return 0
@@ -291,7 +302,7 @@ func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmon
 	request := monitoringpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", p),
 		TimeSeries: wm.Metrics}
-	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, *mc, &request); err != nil {
+	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, *mc, &request, bo); err != nil {
 		log.Logger.Error("Failed to send metrics to Cloud Monitoring", log.Error(err))
 		usagemetrics.Error(5) // Workload metrics collection failure
 		return 0

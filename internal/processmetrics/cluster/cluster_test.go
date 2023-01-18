@@ -17,6 +17,7 @@ limitations under the License.
 package cluster
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -239,7 +240,7 @@ func TestCollect(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := defaultInstanceProperties.Collect()
+			got := defaultInstanceProperties.Collect(context.Background())
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("Collect() returned unexpected diff (-want,+got): %s\n", diff)
 			}

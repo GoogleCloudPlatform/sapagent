@@ -34,6 +34,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/agentmetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
@@ -53,10 +54,11 @@ import (
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-const usage = `Usage of google-cloud-sap-agent:
+const usage = `Usage of google_cloud_sap_agent:
   -h, --help                                    prints help information
   -c=PATH, --config=PATH                        path to configuration.json
   -mm=true|false, --maintenancemode=true|false  to configure maintenance mode
+	-sid=SAP System Identifier										[required if mm] SAP system id on which to configure maintenance mode
   -mm-show, --maintenancemode-show              displays the current value configured for maintenancemode
   -r, --remote                                  runs the agent in remote mode to collect workload manager metrics
   -p=project_id, --project=project_id           [required if remote] project id of this instance
@@ -118,7 +120,7 @@ func configureUsageMetrics(cp *iipb.CloudProperties, version string) {
 
 func setupFlagsAndParse(fs *flag.FlagSet, args []string, fr maintenance.FileReader, fw maintenance.FileWriter) error {
 	var help, mntmode, showMntMode bool
-	var project, instanceid, instancename, zone string
+	var project, instanceid, instancename, zone, sid string
 	fs.StringVar(&configPath, "config", "", "configuration path")
 	fs.StringVar(&configPath, "c", "", "configuration path")
 	fs.BoolVar(&help, "help", false, "display help")
@@ -135,6 +137,7 @@ func setupFlagsAndParse(fs *flag.FlagSet, args []string, fr maintenance.FileRead
 	fs.IntVar(&usageError, "lue", 0, "usage error code")
 	fs.BoolVar(&mntmode, "maintenancemode", false, "configure maintenance mode")
 	fs.BoolVar(&mntmode, "mm", false, "configure maintenance mode")
+	fs.StringVar(&sid, "sid", "", "SAP System Identifier")
 	fs.BoolVar(&showMntMode, "mm-show", false, "show maintenance mode")
 	fs.BoolVar(&showMntMode, "maintenancemode-show", false, "show maintenance mode")
 	fs.BoolVar(&remoteMode, "r", false, "run in remote mode to collect workload manager metrics")
@@ -151,10 +154,14 @@ func setupFlagsAndParse(fs *flag.FlagSet, args []string, fr maintenance.FileRead
 	fs.Parse(args[1:])
 
 	if isFlagPresent(fs, "mm") || isFlagPresent(fs, "maintenancemode") {
-		err := maintenance.UpdateMaintenanceMode(mntmode, fw)
+		if sid == "" {
+			return errors.New("invalid SID provided.\n" + usage)
+		}
+		_, err := maintenance.UpdateMaintenanceMode(mntmode, sid, fr, fw)
 		if err != nil {
 			return err
 		}
+		log.Print(fmt.Sprintf("Updated maintenace mode for the SID: %s", sid))
 		return errQuiet
 	}
 
@@ -163,7 +170,14 @@ func setupFlagsAndParse(fs *flag.FlagSet, args []string, fr maintenance.FileRead
 		if err != nil {
 			return err
 		}
-		log.Print(fmt.Sprintf("Maintenance mode flag for process metrics is set to: %v", res))
+		if len(res) == 0 {
+			log.Print("No SID is under maintenance.")
+			return errQuiet
+		}
+		log.Print(fmt.Sprintf("Maintenance mode flag for process metrics is set to true for the following SIDs:\n"))
+		for _, v := range res {
+			log.Print(v + "\n")
+		}
 		return errQuiet
 	}
 
@@ -266,12 +280,14 @@ func startServices(goos string) {
 	}
 	ppr := &instanceinfo.PhysicalPathReader{goos}
 	instanceInfoReader := instanceinfo.New(ppr, gceService)
+	mc, err := monitoring.NewMetricClient(ctx)
+	if err != nil {
+		log.Logger.Error("Failed to create Cloud Monitoring metric client", log.Error(err))
+		usagemetrics.Error(3) // Unexpected error
+		return
+	}
 
-	// NOTE for wlm remote collection: gcloud scp use --compress
-	// binary being sent should have +w set on it so it can overrided on scp
-	// should only send the binary to the host if it hasn't been sent during this runtime, maybe?
-	//    what about if a host has changed while the remote collection has been running
-	//    maybe we send always send it every X minutes / hours
+	// If this instance is doing remote collection then that is all that is done
 	if config.GetCollectionConfiguration() != nil && config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.
 		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
@@ -283,6 +299,8 @@ func startServices(goos string) {
 			CommandRunnerNoSpace: commandRunnerNoSpace,
 			InstanceInfoReader:   *instanceInfoReader,
 			OSStatReader:         osStatReader,
+			TimeSeriesCreator:    mc,
+			BackOffs:             cloudmonitoring.NewDefaultBackOffIntervals(),
 		}
 		workloadmanager.StartMetricsCollection(ctx, wlmparameters)
 	} else {
@@ -298,7 +316,10 @@ func startServices(goos string) {
 			usagemetrics.Error(3) // Unexpected error
 			return
 		}
-		cmr := &cloudmetricreader.CloudMetricReader{QueryClient: &cloudmetricreader.QueryClient{Client: mqc}}
+		cmr := &cloudmetricreader.CloudMetricReader{
+			QueryClient: &cloudmetricreader.QueryClient{Client: mqc},
+			BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
+		}
 		at := agenttime.New(agenttime.Clock{})
 		hmparams := hostmetrics.Parameters{
 			Config:             config,
@@ -309,12 +330,6 @@ func startServices(goos string) {
 		hostmetrics.StartSAPHostAgentProvider(ctx, hmparams)
 
 		// Start the Workload Manager metrics collection
-		mc, err := monitoring.NewMetricClient(ctx)
-		if err != nil {
-			log.Logger.Error("Failed to create Cloud Monitoring metric client", log.Error(err))
-			usagemetrics.Error(3) // Unexpected error
-			return
-		}
 		wlmparams := workloadmanager.Parameters{
 			Config:                config,
 			Remote:                false,
@@ -328,6 +343,7 @@ func startServices(goos string) {
 			DefaultTokenGetter:    defaultTokenGetter,
 			JSONCredentialsGetter: jsonCredentialsGetter,
 			OSType:                goos,
+			BackOffs:              cloudmonitoring.NewDefaultBackOffIntervals(),
 		}
 		workloadmanager.StartMetricsCollection(ctx, wlmparams)
 
@@ -336,13 +352,15 @@ func startServices(goos string) {
 			Config:       config,
 			OSType:       goos,
 			MetricClient: processmetrics.NewMetricClient,
+			BackOffs:     cloudmonitoring.NewDefaultBackOffIntervals(),
 		}
 		processmetrics.Start(ctx, pmparams)
 
 		system.StartSAPSystemDiscovery(ctx, config, gceService)
 
 		agentMetricsParams := agentmetrics.Parameters{
-			Config: config,
+			Config:   config,
+			BackOffs: cloudmonitoring.NewDefaultBackOffIntervals(),
 		}
 		agentmetricsService, err := agentmetrics.NewService(ctx, agentMetricsParams)
 		if err != nil {
@@ -404,7 +422,7 @@ func collecRemoteModetMetrics(goos string) {
 		JSONCredentialsGetter: jsonCredentialsGetter,
 		OSType:                goos,
 	}
-	log.Print(workloadmanager.CollectMetricsToJSON(ctx, wlmparams))
+	fmt.Println(workloadmanager.CollectMetricsToJSON(ctx, wlmparams))
 }
 
 func main() {
@@ -426,6 +444,7 @@ func main() {
 	}
 
 	// local operation
+	log.SetupLoggingToFile(runtime.GOOS, cpb.Configuration_INFO)
 	config = configuration.ReadFromFile(configPath, os.ReadFile)
 	log.SetupLoggingToFile(runtime.GOOS, config.GetLogLevel())
 	cloudProps := fetchCloudProperties()
@@ -436,7 +455,7 @@ func main() {
 		if err != nil {
 			log.Logger.Warn("Could not log usage", log.Error(err))
 		}
-		// exit the pgoram, this was a one time execution to just log a usage
+		// exit the program, this was a one time execution to just log a usage
 		os.Exit(0)
 	}
 

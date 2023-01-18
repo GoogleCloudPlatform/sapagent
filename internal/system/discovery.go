@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package system contains types and functions needed to perform SAP System discovery opeerations.
+// Package system contains types and functions needed to perform SAP System discovery operations.
 package system
 
 import (
@@ -26,6 +26,7 @@ import (
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
+	file "google.golang.org/api/file/v1"
 
 	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -33,6 +34,11 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+)
+
+var (
+	ipRegex      = regexp.MustCompile("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+")
+	fsMountRegex = regexp.MustCompile("([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+):(/[a-zA-Z0-9]+)")
 )
 
 type gceInterface interface {
@@ -43,6 +49,7 @@ type gceInterface interface {
 	GetRegionalBackendService(project, region, name string) (*compute.BackendService, error)
 	GetInstanceGroup(project, zone, name string) (*compute.InstanceGroup, error)
 	ListInstanceGroupInstances(project, zone, name string) (*compute.InstanceGroupsListInstances, error)
+	GetFilestoreByIP(project, location, ip string) (*file.ListInstancesResponse, error)
 }
 
 // Discovery is a type used to perform SAP System discovery operations.
@@ -66,7 +73,7 @@ func extractFromURI(uri, field string) string {
 // Returns true if the discovery goroutine is started, and false otherwise.
 func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface) bool {
 	// Start SAP system discovery only if sap_system_discovery is enabled.
-	if config.GetCollectionConfiguration() != nil && !config.GetCollectionConfiguration().GetSapSystemDiscovery() {
+	if !config.GetCollectionConfiguration().GetSapSystemDiscovery() {
 		log.Logger.Info("Not starting SAP system discovery.")
 		return false
 	}
@@ -90,7 +97,16 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 
 	for {
 		// Discover instance and immediately adjacent resources (disks, addresses, networks)
-		res := d.discoverResources(cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
+		res, ci, ir := d.discoverInstance(cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
+
+		netRes := d.discoverNetworks(cp.GetProjectId(), ci, ir)
+		res = append(res, netRes...)
+
+		disks := d.discoverDisks(cp.GetProjectId(), cp.GetZone(), ci, ir)
+		res = append(res, disks...)
+
+		fsRes := d.discoverFilestores(cp.GetProjectId(), ir)
+		res = append(res, fsRes...)
 
 		lbRes := d.discoverLoadBalancer(cp)
 
@@ -113,14 +129,17 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 
 }
 
-func (d *Discovery) discoverResources(projectID, zone, instanceName string) []*spb.Resource {
+func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*spb.Resource, *compute.Instance, *spb.Resource) {
 	var res []*spb.Resource
-
-	log.Logger.Debugf("Discovering instance: %s", instanceName)
+	log.Logger.Debug("Discovering instance", log.String("instance", instanceName))
 	ci, err := d.gceService.GetInstance(projectID, zone, instanceName)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not get instance info from compute API, project=%s zone=%s instance=%s", projectID, zone, instanceName), log.Error(err))
-		return res
+		log.Logger.Error("Could not get instance info from compute API",
+			log.String("project", projectID),
+			log.String("zone", zone),
+			log.String("instance", instanceName),
+			log.Error(err))
+		return res, nil, nil
 	}
 
 	now := time.Now().Unix()
@@ -133,23 +152,14 @@ func (d *Discovery) discoverResources(projectID, zone, instanceName string) []*s
 	}
 	res = append(res, ir)
 
-	disks := d.discoverDisks(projectID, zone, ci)
-	res = append(res, disks...)
-	for _, disk := range disks {
-		ir.RelatedResources = append(ir.RelatedResources, disk.ResourceUri)
-	}
-
-	netRes := d.discoverNetworks(projectID, ci)
-	res = append(res, netRes...)
-	for _, net := range netRes {
-		ir.RelatedResources = append(ir.RelatedResources, net.ResourceUri)
-	}
-
-	return res
+	return res, ci, ir
 }
 
-func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance) []*spb.Resource {
+func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, ir *spb.Resource) []*spb.Resource {
 	var disks []*spb.Resource
+	if ci == nil || ci.Disks == nil || len(ci.Disks) == 0 {
+		return disks
+	}
 	now := time.Now().Unix()
 	// Get the disks
 	for _, disk := range ci.Disks {
@@ -162,7 +172,11 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance) 
 
 		cd, err := d.gceService.GetDisk(projectID, zone, diskName)
 		if err != nil {
-			log.Logger.Warn(fmt.Sprintf("Could not get disk info from compute API, project=%s zone=%s instance=%s", projectID, zone, diskName), log.Error(err))
+			log.Logger.Warn("Could not get disk info from compute API",
+				log.String("project", projectID),
+				log.String("zone", zone),
+				log.String("instance", diskName),
+				log.Error(err))
 			continue
 		}
 
@@ -173,16 +187,19 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance) 
 			LastUpdated:  now,
 		}
 		disks = append(disks, dr)
+		ir.RelatedResources = append(ir.RelatedResources, dr.ResourceUri)
 	}
 	return disks
 }
 
-func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance) []*spb.Resource {
-	now := time.Now().Unix()
+func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir *spb.Resource) []*spb.Resource {
 	var netRes []*spb.Resource
+	if ci == nil || ci.NetworkInterfaces == nil || len(ci.NetworkInterfaces) == 0 {
+		return netRes
+	}
+	now := time.Now().Unix()
 	// Get Network related resources
 	for _, net := range ci.NetworkInterfaces {
-
 		sr := &spb.Resource{
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeSubnetwork",
@@ -190,6 +207,7 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance) []*
 			LastUpdated:  now,
 		}
 		netRes = append(netRes, sr)
+		ir.RelatedResources = append(ir.RelatedResources, sr.ResourceUri)
 
 		nr := &spb.Resource{
 			ResourceType: spb.Resource_COMPUTE,
@@ -199,6 +217,7 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance) []*
 		}
 		nr.RelatedResources = append(nr.RelatedResources, sr.ResourceUri)
 		netRes = append(netRes, nr)
+		ir.RelatedResources = append(ir.RelatedResources, nr.ResourceUri)
 
 		// Examine assigned IP addresses
 		for _, ac := range net.AccessConfigs {
@@ -209,11 +228,13 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance) []*
 				ResourceUri:  ac.NatIP,
 			}
 			netRes = append(netRes, ar)
+			ir.RelatedResources = append(ir.RelatedResources, ar.ResourceUri)
 		}
 
 		netRegion := extractFromURI(net.Subnetwork, "regions")
 		if netRegion == "" {
-			log.Logger.Warnf("Unable to extract region from subnetwork: %s", net.Subnetwork)
+			log.Logger.Warn("Unable to extract region from subnetwork",
+				log.String("subnetwork", net.Subnetwork))
 			continue
 		}
 
@@ -221,10 +242,17 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance) []*
 		ip := net.NetworkIP
 		addrs, err := d.gceService.GetAddressByIP(projectID, netRegion, ip)
 		if err != nil {
-			log.Logger.Warn(fmt.Sprintf("Error locating Address by IP, project=%s region=%s ip=%s", projectID, netRegion, ip), log.Error(err))
+			log.Logger.Warn("Error locating Address by IP",
+				log.String("project", projectID),
+				log.String("region", netRegion),
+				log.String("ip", ip),
+				log.Error(err))
 			continue
 		} else if len(addrs.Items) == 0 {
-			log.Logger.Infof("No ComputeAddress with IP=%s in project=%s, region=%s", ip, projectID, netRegion)
+			log.Logger.Info("No ComputeAddress with IP",
+				log.String("IP", ip),
+				log.String("project", projectID),
+				log.String("region", netRegion))
 			continue
 		}
 		ar := &spb.Resource{
@@ -235,31 +263,39 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance) []*
 		}
 		sr.RelatedResources = append(sr.RelatedResources, ar.ResourceUri)
 		netRes = append(netRes, ar)
+		ir.RelatedResources = append(ir.RelatedResources, sr.ResourceUri)
 	}
 	return netRes
 }
 
 func (d *Discovery) discoverLoadBalancer(cp *ipb.CloudProperties) []*spb.Resource {
-	log.Logger.Debugf("Discovering load balancer: %s", cp.GetInstanceName())
+	log.Logger.Debug("Discovering load balancer")
 	var res []*spb.Resource
 	projectID, zone := cp.GetProjectId(), cp.GetZone()
 	now := time.Now().Unix()
 	lbAddress, err := d.discoverCluster()
 	if err != nil || lbAddress == "" {
-		log.Logger.Infof("Encountered error discovering cluster address: %v", err)
+		log.Logger.Warn("Encountered error discovering cluster address", log.Error(err))
 		return res
 	}
 
-	// With address in hand we can find what it is assinged to
+	// With address in hand we can find what it is assigned to
 	region := strings.Join(strings.Split(zone, "-")[0:2], "-")
 	// Check Network Interface address to see if it exists as a resource
 	addrs, err := d.gceService.GetAddressByIP(projectID, region, lbAddress)
 	if err != nil {
-		log.Logger.Warnf("Error locating Address by IP, project=%s region=%s ip=%s. err: %v", projectID, region, lbAddress, err)
+		log.Logger.Warn("Error locating Address by IP",
+			log.String("project", projectID),
+			log.String("region", region),
+			log.String("ip", lbAddress),
+			log.Error(err))
 		return res
 	}
 	if len(addrs.Items) == 0 {
-		log.Logger.Infof("No ComputeAddress with IP=%s in project=%s, region=%s", lbAddress, projectID, region)
+		log.Logger.Info("No ComputeAddress with IP",
+			log.String("IP", lbAddress),
+			log.String("project", projectID),
+			log.String("region", region))
 		return res
 	}
 	addr := addrs.Items[0]
@@ -277,16 +313,16 @@ func (d *Discovery) discoverLoadBalancer(cp *ipb.CloudProperties) []*spb.Resourc
 		return res
 	}
 
-	// Examine the user of the address, should be a forwarding rule.
+	// Examine the user of the address, it should be a forwarding rule.
 	user := addr.Users[0]
 	name := extractFromURI(user, "forwardingRules")
 	if name == "" {
-		log.Logger.Infof("Cluster address not in use by forwarding rule: %s", user)
+		log.Logger.Info("Cluster address not in use by forwarding rule", log.String("user", user))
 		return res
 	}
 	fwr, err := d.gceService.GetForwardingRule(projectID, region, name)
 	if err != nil {
-		log.Logger.Warnf("Error retrieving forwarding rule: %v", err)
+		log.Logger.Warn("Error retrieving forwarding rule", log.Error(err))
 		return res
 	}
 
@@ -304,19 +340,20 @@ func (d *Discovery) discoverLoadBalancer(cp *ipb.CloudProperties) []*spb.Resourc
 	b := fwr.BackendService
 	bEName := extractFromURI(b, "backendServices")
 	if bEName == "" {
-		log.Logger.Infof("Forwarding rule does not have a backend service: %v", b)
+		log.Logger.Info("Forwarding rule does not have a backend service",
+			log.String("bakendService", b))
 		return res
 	}
 
 	bERegion := extractFromURI(b, "regions")
 	if bERegion == "" {
-		log.Logger.Infof("Unable to extract region from backend service: %v", b)
+		log.Logger.Info("Unable to extract region from backend service", log.String("backendService", b))
 		return res
 	}
 
 	bs, err := d.gceService.GetRegionalBackendService(projectID, bERegion, bEName)
 	if err != nil {
-		log.Logger.Warnf("Error retrieving backend service: %v", err)
+		log.Logger.Warn("Error retrieving backend service", log.Error(err))
 		return res
 	}
 
@@ -349,18 +386,18 @@ func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, cp *ipb.C
 	for _, g := range groups {
 		gName := extractFromURI(g, "instanceGroups")
 		if gName == "" {
-			log.Logger.Infof("Backend group is not an instance group")
+			log.Logger.Info("Backend group is not an instance group")
 			continue
 		}
 		gZone := extractFromURI(g, "zones")
 		if gZone == "" {
-			log.Logger.Infof("Unable to extract zone from group name")
+			log.Logger.Info("Unable to extract zone from group name")
 			continue
 		}
 
 		ig, err := d.gceService.GetInstanceGroup(projectID, gZone, gName)
 		if err != nil {
-			log.Logger.Warnf("Error retrieving instance group: %v", err)
+			log.Logger.Warn("Error retrieving instance group", log.Error(err))
 			continue
 		}
 		igr := &spb.Resource{
@@ -383,7 +420,7 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 	var res []*spb.Resource
 	list, err := d.gceService.ListInstanceGroupInstances(projectID, zone, name)
 	if err != nil {
-		log.Logger.Warnf("Error retrieving instance group instances: %v", err)
+		log.Logger.Warn("Error retrieving instance group instances", log.Error(err))
 		return res
 	}
 
@@ -392,7 +429,8 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 		parent.RelatedResources = append(parent.RelatedResources, i.Instance)
 		iName := extractFromURI(i.Instance, "instances")
 		if iName == "" {
-			log.Logger.Warnf("Unable to extract instance name from instance group items: %s", i.Instance)
+			log.Logger.Warn("Unable to extract instance name from instance group items",
+				log.String("item", i.Instance))
 			continue
 		}
 		if iName == cp.GetInstanceName() {
@@ -405,21 +443,28 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 	for _, i := range instances {
 		iName := extractFromURI(i, "instances")
 		if iName == "" {
-			log.Logger.Warnf("Unable to extract instance name from instance group items: %s", i)
+			log.Logger.Warn("Unable to extract instance name from instance group items", log.String("item", i))
 			continue
 		}
 		iProject := extractFromURI(i, "projects")
 		if iProject == "" {
-			log.Logger.Warnf("Unable to extract project from instance group items: %s", i)
+			log.Logger.Warn("Unable to extract project from instance group items", log.String("item", i))
 			continue
 		}
 		iZone := extractFromURI(i, "zones")
 		if iZone == "" {
-			log.Logger.Warnf("Unable to extract zone from instance group items: %s", i)
+			log.Logger.Warn("Unable to extract zone from instance group items", log.String("item", i))
 			continue
 		}
-		instance := d.discoverResources(iProject, iZone, iName)
-		res = append(res, instance...)
+		instanceRes, ci, ir := d.discoverInstance(iProject, iZone, iName)
+		res = append(res, instanceRes...)
+
+		netRes := d.discoverNetworks(cp.GetProjectId(), ci, ir)
+		res = append(res, netRes...)
+
+		disks := d.discoverDisks(cp.GetProjectId(), cp.GetZone(), ci, ir)
+		res = append(res, disks...)
+
 	}
 	return res
 }
@@ -438,12 +483,7 @@ func (d *Discovery) discoverCluster() (string, error) {
 				addrPrimitiveFound = true
 			}
 			if addrPrimitiveFound && strings.Contains(l, "params ip") {
-				re, err := regexp.Compile("[0-9]+.[0-9]+.[0-9]+.[0-9]+")
-				if err != nil {
-					log.Logger.Infof("Unable to parse IP Address regex: %v", err)
-					continue
-				}
-				address := re.FindString(l)
+				address := ipRegex.FindString(l)
 				if address == "" {
 					return "", errors.New("Unable to locate IP address in crm output: " + stdOut)
 				}
@@ -461,12 +501,7 @@ func (d *Discovery) discoverCluster() (string, error) {
 		var addrPrimitiveFound bool
 		for _, l := range strings.Split(stdOut, "\n") {
 			if addrPrimitiveFound && strings.Contains(l, "ip") {
-				re, err := regexp.Compile("[0-9]+.[0-9]+.[0-9]+.[0-9]+")
-				if err != nil {
-					log.Logger.Infof("Unable to parse IP Address regex: %v", err)
-					continue
-				}
-				address := re.FindString(l)
+				address := ipRegex.FindString(l)
 				if address == "" {
 					return "", errors.New("Unable to locate IP address in crm output: " + stdOut)
 				}
@@ -479,4 +514,47 @@ func (d *Discovery) discoverCluster() (string, error) {
 		return "", errors.New("No address found in pcs cluster config output")
 	}
 	return "", errors.New("No cluster command found")
+}
+
+func (d *Discovery) discoverFilestores(projectID string, parent *spb.Resource) []*spb.Resource {
+	log.Logger.Info("Discovering mounted file stores")
+	var res []*spb.Resource
+	if !d.exists("df") {
+		log.Logger.Warn("Cannot access command df to discover mounted file stores")
+		return res
+	}
+
+	stdOut, _, err := d.commandRunner("df", "-h")
+	if err != nil {
+		log.Logger.Warnf("Error retrieving mounts: %v", err)
+		return res
+	}
+	for _, l := range strings.Split(stdOut, "\n") {
+		matches := fsMountRegex.FindStringSubmatch(l)
+		if len(matches) < 2 {
+			continue
+		}
+		// The first match is the fully matched string, we only need the first submatch, the IP address.
+		address := matches[1]
+		fs, err := d.gceService.GetFilestoreByIP(projectID, "-", address)
+		if err != nil {
+			log.Logger.Errorf("Error retrieving filestore by IP: %v", err)
+			continue
+		} else if len(fs.Instances) == 0 {
+			log.Logger.Warnf("No filestore found with IP %s", address)
+			continue
+		}
+		for _, i := range fs.Instances {
+			fsr := &spb.Resource{
+				ResourceType:     spb.Resource_STORAGE,
+				ResourceKind:     "ComputeFilestore",
+				ResourceUri:      i.Name,
+				RelatedResources: []string{parent.ResourceUri},
+			}
+			parent.RelatedResources = append(parent.RelatedResources, fsr.ResourceUri)
+			res = append(res, fsr)
+		}
+	}
+
+	return res
 }

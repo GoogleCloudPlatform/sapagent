@@ -17,6 +17,7 @@ limitations under the License.
 package sapservice
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -120,7 +121,7 @@ func TestCollect(t *testing.T) {
 				ExitCode: test.errorCode,
 				Client:   &fake.TimeSeriesCreator{},
 			}
-			got := testInstanceProperties.Collect()
+			got := testInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Got %d != want %d", len(got), test.wantCount)
 			}

@@ -21,9 +21,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"runtime"
 	"time"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/configurationmetricreader"
@@ -80,7 +82,7 @@ func runHTTPServer() {
 // collectHostMetrics continuously collects metrics for the SAP Host Agent.
 func collectHostMetrics(ctx context.Context, params Parameters) {
 	configmr := &configurationmetricreader.ConfigMetricReader{runtime.GOOS}
-	cpusr := &cpustatsreader.CPUMetricReader{runtime.GOOS}
+	cpusr := cpustatsreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand)
 	mmr := &memorymetricreader.MemoryMetricReader{runtime.GOOS}
 	dsr := diskstatsreader.New()
 
@@ -89,7 +91,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 		usagemetrics.Action(2) // Collecting SAP host metrics
 
 		params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
-		cpuStats := cpusr.CPUStats()
+		cpuStats := cpusr.Read()
 		diskStats := dsr.Read(params.InstanceInfoReader.InstanceProperties())
 		memoryStats := mmr.MemoryStats()
 		params.AgentTime.UpdateRefreshTimes()

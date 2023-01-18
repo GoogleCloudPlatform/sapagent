@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
@@ -298,6 +299,7 @@ var (
 		}
 		return copy
 	}
+	defaultBackOffIntervals = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
 )
 
 func TestReadQueryTimeSeries(t *testing.T) {
@@ -475,6 +477,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			r := CloudMetricReader{
 				QueryClient: test.queryClient,
+				BackOffs:    defaultBackOffIntervals,
 			}
 			got := r.Read(context.Background(), test.config, test.instanceProperties, *at)
 			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {

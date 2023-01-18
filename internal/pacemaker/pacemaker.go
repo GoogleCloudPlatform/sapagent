@@ -252,7 +252,7 @@ XMLString obtains a string of encoded XML data describing the pacemaker metrics.
 */
 func XMLString(runner commandlineexecutor.CommandRunner, exists commandlineexecutor.CommandExistsRunner, crmAvailable bool) *string {
 	if crmAvailable {
-		result, _, _ := runner("crm_mon", "--as-xml")
+		result, _, _ := runner("cibadmin", "--query")
 		return &result
 	}
 	if exists("pcs") {

@@ -19,6 +19,8 @@ limitations under the License.
 package sapservice
 
 import (
+	"context"
+
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -61,12 +63,12 @@ type (
 
 // Collect is an implementation of Collector interface from processmetrics
 // responsible for collecting sap service statuses metric.
-func (p *InstanceProperties) Collect() []*sapdiscovery.Metrics {
+func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
 	isFailedMetrics := queryInstanceState(p, "is-failed", p.Executor)
 	metrics = append(metrics, isFailedMetrics...)
-	isEnabledMetrics := queryInstanceState(p, "is-enabled", p.Executor)
-	metrics = append(metrics, isEnabledMetrics...)
+	isDisabledMetrics := queryInstanceState(p, "is-enabled", p.Executor)
+	metrics = append(metrics, isDisabledMetrics...)
 	return metrics
 }
 
@@ -76,7 +78,7 @@ func (p *InstanceProperties) Collect() []*sapdiscovery.Metrics {
 // service, metric will be sent only in case of an error.
 //
 // In case of `systemctl is-enabled service` it returns 0 if the specified service is enabled,
-// non-zero otherwise, metric will be sent only in case service is enabled.
+// non-zero otherwise, metric will be sent only in case service is disabled.
 func queryInstanceState(p *InstanceProperties, metric string, executor commandExecutor) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
 	for _, service := range services {

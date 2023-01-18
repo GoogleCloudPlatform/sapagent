@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
+	file "google.golang.org/api/file/v1"
 )
 
 // GetDiskArguments is a struct to match arguments passed in to the GetDisk function for validation.
@@ -65,6 +66,10 @@ type TestGCE struct {
 	ListInstanceGroupInstancesResp      []*compute.InstanceGroupsListInstances
 	ListInstanceGroupInstancesErr       []error
 	ListInstanceGroupInstancesCallCount int
+
+	GetFilestoreByIPResp      []*file.ListInstancesResponse
+	GetFilestoreByIPErr       []error
+	GetFilestoreByIPCallCount int
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -157,7 +162,8 @@ func (g *TestGCE) GetInstanceGroup(project, zone, name string) (*compute.Instanc
 	return g.GetInstanceGroupResp[g.GetInstanceGroupCallCount], g.GetInstanceGroupErr[g.GetInstanceGroupCallCount]
 }
 
-// ListInstanceGroupInstances fakes a call to the compute API to retrieve a list of instances in an instance group.
+// ListInstanceGroupInstances fakes a call to the compute API to retrieve a list of instances
+// in an instance group.
 func (g *TestGCE) ListInstanceGroupInstances(project, zone, name string) (*compute.InstanceGroupsListInstances, error) {
 	defer func() {
 		g.ListInstanceGroupInstancesCallCount++
@@ -166,4 +172,16 @@ func (g *TestGCE) ListInstanceGroupInstances(project, zone, name string) (*compu
 		}
 	}()
 	return g.ListInstanceGroupInstancesResp[g.ListInstanceGroupInstancesCallCount], g.ListInstanceGroupInstancesErr[g.ListInstanceGroupInstancesCallCount]
+}
+
+// GetFilestoreByIP fakes a call to the compute API to retrieve a filestore instance
+// by its IP address.
+func (g *TestGCE) GetFilestoreByIP(project, location, ip string) (*file.ListInstancesResponse, error) {
+	defer func() {
+		g.GetFilestoreByIPCallCount++
+		if g.GetFilestoreByIPCallCount >= len(g.GetFilestoreByIPResp) || g.GetFilestoreByIPCallCount >= len(g.GetFilestoreByIPErr) {
+			g.GetFilestoreByIPCallCount = 0
+		}
+	}()
+	return g.GetFilestoreByIPResp[g.GetFilestoreByIPCallCount], g.GetFilestoreByIPErr[g.GetFilestoreByIPCallCount]
 }

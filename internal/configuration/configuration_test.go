@@ -132,7 +132,7 @@ func TestApplyDefaults(t *testing.T) {
 					CollectWorkloadValidationMetrics:   true,
 					WorkloadValidationMetricsFrequency: 300,
 					CollectProcessMetrics:              true,
-					ProcessMetricsFrequency:            60,
+					ProcessMetricsFrequency:            5,
 				},
 				AgentProperties: testAgentProps,
 				CloudProperties: testCloudProps,

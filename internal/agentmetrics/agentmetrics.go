@@ -46,14 +46,17 @@ type Service struct {
 	timeSeriesSubmitter timeSeriesSubmitter
 	timeSeriesCreator   cloudmonitoring.TimeSeriesCreator
 	usageReader         usageReader
+	now                 now
 }
 
 // Parameters aggregates the potential configuration values and inputs for Service.
 type Parameters struct {
+	BackOffs            *cloudmonitoring.BackOffIntervals
 	Config              *cfgpb.Configuration
 	timeSeriesCreator   cloudmonitoring.TimeSeriesCreator
 	timeSeriesSubmitter timeSeriesSubmitter
 	usageReader         usageReader
+	now                 now
 }
 
 // timeSeriesSubmitter is a strategy by which metrics can be submitted to a monitoring service.
@@ -61,6 +64,9 @@ type timeSeriesSubmitter func(ctx context.Context, request *monpb.CreateTimeSeri
 
 // usageReader is a strategy through which agent process metrics can be read.
 type usageReader func(ctx context.Context) (usage, error)
+
+// now is a strategy for getting the current timestamp.
+type now func() *tspb.Timestamp
 
 // usage represents a snapshot of the agent process resource usage.
 type usage struct {
@@ -80,6 +86,7 @@ func NewService(ctx context.Context, params Parameters) (*Service, error) {
 		timeSeriesCreator:   params.timeSeriesCreator,
 		timeSeriesSubmitter: params.timeSeriesSubmitter,
 		usageReader:         params.usageReader,
+		now:                 params.now,
 	}
 
 	if service.timeSeriesCreator == nil {
@@ -92,7 +99,7 @@ func NewService(ctx context.Context, params Parameters) (*Service, error) {
 
 	if service.timeSeriesSubmitter == nil {
 		service.timeSeriesSubmitter = func(ctx context.Context, req *monpb.CreateTimeSeriesRequest) error {
-			return cloudmonitoring.CreateTimeSeriesWithRetry(ctx, service.timeSeriesCreator, req)
+			return cloudmonitoring.CreateTimeSeriesWithRetry(ctx, service.timeSeriesCreator, req, params.BackOffs)
 		}
 	}
 
@@ -106,6 +113,9 @@ func NewService(ctx context.Context, params Parameters) (*Service, error) {
 		}
 	}
 
+	if service.now == nil {
+		service.now = tspb.Now
+	}
 	return service, nil
 }
 
@@ -178,18 +188,22 @@ func (s *Service) createTimeSeriesRequestFactory(timeSeries []*monrespb.TimeSeri
 // createTimeSeries constructs TimeSeries instances from usage data.
 func (s *Service) createTimeSeries(u usage) []*monrespb.TimeSeries {
 	timeSeries := make([]*monrespb.TimeSeries, 2)
+	now := s.now()
 	params := timeseries.Params{
-		CloudProp:    s.config.CloudProperties,
-		MetricType:   metricURL + agentCPU,
-		Timestamp:    tspb.Now(),
-		Float64Value: u.cpu,
 		BareMetal:    s.config.BareMetal,
+		CloudProp:    s.config.CloudProperties,
+		Float64Value: u.cpu,
+		MetricType:   metricURL + agentCPU,
+		Timestamp:    now,
 	}
 	timeSeries[0] = timeseries.BuildFloat64(params)
 
 	params = timeseries.Params{
-		MetricType:   metricURL + agentMemory,
+		BareMetal:    s.config.BareMetal,
+		CloudProp:    s.config.CloudProperties,
 		Float64Value: u.memory,
+		MetricType:   metricURL + agentMemory,
+		Timestamp:    now,
 	}
 	timeSeries[1] = timeseries.BuildFloat64(params)
 	return timeSeries

@@ -30,14 +30,14 @@ type lsblkdevicechild struct {
 	Name       string
 	Type       string
 	Mountpoint string `json:"mountpoint"`
-	Size       int64
+	Size       json.RawMessage
 }
 
 type lsblkdevice struct {
 	Name       string
 	Type       string
 	Mountpoint string `json:"mountpoint"`
-	Size       int64
+	Size       json.RawMessage
 	Children   []lsblkdevicechild
 }
 
@@ -134,7 +134,7 @@ func hanaProcessOrGlobalINI(runner commandlineexecutor.CommandRunner) string {
 	}
 	if hanaProcessOrGlobalINI == "" {
 		// check for the global.ini even if the process isn't running
-		hanaProcessOrGlobalINI, _, _ = runner(`sh`, `-c 'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'`)
+		hanaProcessOrGlobalINI, _, _ = runner("ls", "/usr/sap/*/SYS/global/hdb/custom/config/global.ini")
 	}
 	return hanaProcessOrGlobalINI
 }
@@ -245,7 +245,8 @@ func diskInfo(basepathVolume string, globalINILocation string, runner commandlin
 			if strings.HasPrefix(basepathVolumePath, child.Mountpoint) && len(child.Mountpoint) > len(matchedMountPoint) {
 				matchedBlockDevice = blockDevice
 				matchedMountPoint = child.Mountpoint
-				matchedSize = strconv.FormatInt(child.Size, 10)
+				childSize := extractSize(child.Size)
+				matchedSize = strconv.FormatInt(childSize, 10)
 				log.Logger.Debugf("Found matchedBlockDevice: %s, matchedMountPoint: %s, matchedSize: %s", matchedBlockDevice.Name, matchedMountPoint, matchedSize)
 				break
 			}
@@ -269,12 +270,31 @@ func setDiskInfoForDevice(
 	for _, disk := range iir.InstanceProperties().GetDisks() {
 		log.Logger.Debugf("Checking disk mapping: %s against matchedBlockDevice: %s", disk.GetMapping(), matchedBlockDevice.Name)
 		if strings.HasSuffix(matchedBlockDevice.Name, disk.GetMapping()) {
+			matchedBlockDeviceSize := extractSize(matchedBlockDevice.Size)
 			log.Logger.Debugf("Found matched disk mapping for mount point: %s, diskType: %s", matchedMountPoint, strings.ToLower(disk.GetDeviceType()))
 			diskInfo["mountpoint"] = matchedMountPoint
 			diskInfo["instancedisktype"] = strings.ToLower(disk.GetDeviceType())
 			diskInfo["size"] = matchedSize
-			diskInfo["pdsize"] = strconv.FormatInt(matchedBlockDevice.Size, 10)
+			diskInfo["pdsize"] = strconv.FormatInt(matchedBlockDeviceSize, 10)
 			break
 		}
 	}
+}
+
+/*
+extractSize converts any "size" field of "lsblk" JSON formatted disk inventory to an int64 value
+
+the input value must be a string encoded 64 bit integer which may or may not be enclosed with quotes
+
+"\"42\"" -> 42
+"42" -> 42
+*/
+func extractSize(msg []byte) int64 {
+	val := strings.Trim(string(msg), `"`)
+	size, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		log.Logger.Errorf("Could not parse size value: %v - %#v", msg, err)
+	}
+
+	return size
 }

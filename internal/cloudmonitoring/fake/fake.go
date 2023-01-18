@@ -37,18 +37,6 @@ func (f *TimeSeriesCreator) CreateTimeSeries(ctx context.Context, req *monitorin
 	return f.Err
 }
 
-// TimeSeriesLister is a fake which implements the TimeSeriesLister interface.
-type TimeSeriesLister struct {
-	Calls []*monitoringpb.ListTimeSeriesRequest
-	Err   error
-	TS    []*mrpb.TimeSeries
-}
-
-func (f *TimeSeriesLister) ListTimeSeries(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest, ops ...gax.CallOption) ([]*mrpb.TimeSeries, error) {
-	f.Calls = append(f.Calls, req)
-	return f.TS, f.Err
-}
-
 // TimeSeriesQuerier is a fake which implements the TimeSeriesQuerier interface.
 type TimeSeriesQuerier struct {
 	Calls []*monitoringpb.QueryTimeSeriesRequest

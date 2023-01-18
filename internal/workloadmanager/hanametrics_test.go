@@ -216,7 +216,7 @@ var (
 							"name": "/dev/sdb1",
 							"type": "part",
 							"mountpoint": "/hana/data",
-							"size": 2048
+							"size": "2048"
 						}
 				 ]
       },{
@@ -229,12 +229,12 @@ var (
                "name": "/dev/sda1",
                "type": "part",
                "mountpoint": "/boot/efi",
-               "size": 1999634432
+               "size": "1999634432"
             },{
                "name": "/dev/sda2",
                "type": "part",
                "mountpoint": "/boot",
-               "size": 1999634432
+               "size": "1999634432"
             },
 						{
                "name": "/dev/sda3",
@@ -340,7 +340,7 @@ func GlobalINITest1Runner(cmd string, args string) (string, string, error) {
 }
 
 func GlobalINITest2Runner(cmd string, args string) (string, string, error) {
-	if cmd == "sh" {
+	if cmd == "ls" {
 		return "Global INI contents", "", nil
 	}
 	return "", "", nil
@@ -719,7 +719,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 			diskInfo: map[string]string{},
 			matchedBlockDevice: &lsblkdevice{
 				Name: "disk-device-name",
-				Size: 2048,
+				Size: []byte("2048"),
 			},
 			matchedMountPoint: "test-mount-point",
 			matchedSize:       "1024",
@@ -740,7 +740,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 			},
 			matchedBlockDevice: &lsblkdevice{
 				Name: "other-disk-device-name",
-				Size: 2048,
+				Size: []byte("2048"),
 			},
 			matchedMountPoint: "test-mount-point",
 			matchedSize:       "1024",
@@ -858,7 +858,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 			name:      "TestHanaAllLabelsDisabled",
 			runtimeOS: "linux",
 			runner: func(cmd string, args string) (string, string, error) {
-				if cmd == "sh" {
+				if cmd == "ls" {
 					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
 				return "", "", nil
@@ -875,7 +875,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 			name:      "TestHanaAllLabelsEnabled",
 			runtimeOS: "linux",
 			runner: func(cmd string, args string) (string, string, error) {
-				if cmd == "sh" {
+				if cmd == "ls" {
 					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
 				if cmd == "grep" {
@@ -901,7 +901,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 			name:      "TestHanaLabelsDisabledFromErrors",
 			runtimeOS: "linux",
 			runner: func(cmd string, args string) (string, string, error) {
-				if cmd == "sh" {
+				if cmd == "ls" {
 					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
 				if cmd == "cat" {

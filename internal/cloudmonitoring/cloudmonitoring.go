@@ -31,16 +31,36 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
-const initialBackoffInterval = 2 * time.Second
+// BackOffIntervals holds the initial intervals for the different back off mechanisms.
+type BackOffIntervals struct {
+	LongExponential, ShortConstant time.Duration
+}
+
+// Defaults for the different back off intervals.
+const (
+	DefaultLongExponentialBackOffInterval = 2 * time.Second
+	DefaultShortConstantBackOffInterval   = 5 * time.Second
+)
+
+// NewBackOffIntervals is a constructor for the back off intervals.
+func NewBackOffIntervals(longExponential, shortConstant time.Duration) *BackOffIntervals {
+	return &BackOffIntervals{
+		LongExponential: longExponential,
+		ShortConstant:   shortConstant,
+	}
+}
+
+// NewDefaultBackOffIntervals is a default constructor, utilizing the default back off intervals.
+func NewDefaultBackOffIntervals() *BackOffIntervals {
+	return &BackOffIntervals{
+		LongExponential: DefaultLongExponentialBackOffInterval,
+		ShortConstant:   DefaultShortConstantBackOffInterval,
+	}
+}
 
 // TimeSeriesCreator provides an easily testable translation to the cloud monitoring API.
 type TimeSeriesCreator interface {
 	CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error
-}
-
-// TimeSeriesLister provides an easily testable translation to the cloud monitoring API.
-type TimeSeriesLister interface {
-	ListTimeSeries(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest, opts ...gax.CallOption) ([]*mrpb.TimeSeries, error)
 }
 
 // TimeSeriesQuerier provides an easily testable translation to the cloud monitoring API.
@@ -49,7 +69,7 @@ type TimeSeriesQuerier interface {
 }
 
 // CreateTimeSeriesWithRetry decorates TimeSeriesCreator.CreateTimeSeries with a retry mechanism.
-func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, req *monitoringpb.CreateTimeSeriesRequest) error {
+func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, req *monitoringpb.CreateTimeSeriesRequest, bo *BackOffIntervals) error {
 	attempt := 1
 
 	err := backoff.Retry(func() error {
@@ -63,7 +83,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 			return err
 		}
 		return nil
-	}, shortConstantBackOffPolicy(ctx))
+	}, shortConstantBackOffPolicy(ctx, bo.ShortConstant))
 
 	if err != nil {
 		log.Logger.Errorf("CreateTimeSeries retry limit exceeded. req: %v", req)
@@ -72,35 +92,8 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 	return nil
 }
 
-// ListTimeSeriesWithRetry decorates TimeSeriesLister.ListTimeSeries with a retry mechanism.
-func ListTimeSeriesWithRetry(ctx context.Context, client TimeSeriesLister, req *monitoringpb.ListTimeSeriesRequest) ([]*mrpb.TimeSeries, error) {
-	var (
-		attempt = 1
-		res     []*mrpb.TimeSeries
-	)
-
-	err := backoff.Retry(func() error {
-		var err error
-		res, err = client.ListTimeSeries(ctx, req)
-		if err != nil {
-			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.Logger.Error(fmt.Sprintf("Error in ListTimeSeries (attempt %d), Permission denied - Enable the Monitoring Viewer IAM role for the Service Account", attempt), log.Error(err))
-			} else {
-				log.Logger.Error(fmt.Sprintf("Error in ListTimeSeries (attempt %d)", attempt), log.Error(err))
-			}
-			attempt++
-		}
-		return err
-	}, longExponentialBackOffPolicy(ctx))
-	if err != nil {
-		log.Logger.Errorf("ListTimeSeries retry limit exceeded. req: %v", req)
-		return nil, err
-	}
-	return res, nil
-}
-
 // QueryTimeSeriesWithRetry decorates TimeSeriesQuerier.QueryTimeSeries with a retry mechanism.
-func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req *monitoringpb.QueryTimeSeriesRequest) ([]*mrpb.TimeSeriesData, error) {
+func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req *monitoringpb.QueryTimeSeriesRequest, bo *BackOffIntervals) ([]*mrpb.TimeSeriesData, error) {
 	var (
 		attempt = 1
 		res     []*mrpb.TimeSeriesData
@@ -118,7 +111,7 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 			attempt++
 		}
 		return err
-	}, longExponentialBackOffPolicy(ctx))
+	}, longExponentialBackOffPolicy(ctx, bo.LongExponential))
 	if err != nil {
 		log.Logger.Errorf("QueryTimeSeries retry limit exceeded. req: %v", req)
 		return nil, err
@@ -127,16 +120,16 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 }
 
 // longExponentialBackOffPolicy returns a backoff policy with a One Minute MaxElapsedTime.
-func longExponentialBackOffPolicy(ctx context.Context) backoff.BackOffContext {
+func longExponentialBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
 	exp := backoff.NewExponentialBackOff()
-	exp.InitialInterval = initialBackoffInterval
+	exp.InitialInterval = initial
 	exp.MaxInterval = 15 * time.Second
 	exp.MaxElapsedTime = time.Minute
 	return backoff.WithContext(backoff.WithMaxRetries(exp, 4), ctx) // 4 retries = 5 total attempts
 }
 
 // shortConstantBackOffPolicy returns a backoff policy with 15s MaxElapsedTime.
-func shortConstantBackOffPolicy(ctx context.Context) backoff.BackOffContext {
-	constantBackoff := backoff.NewConstantBackOff(5 * time.Second)
+func shortConstantBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
+	constantBackoff := backoff.NewConstantBackOff(initial)
 	return backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 2), ctx) // 2 retries = 3 total attempts
 }

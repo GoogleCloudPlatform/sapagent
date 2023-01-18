@@ -17,6 +17,7 @@ limitations under the License.
 package computeresources
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -159,7 +160,7 @@ func TestCollectForHANA(t *testing.T) {
 				SAPInstance: defaultSAPInstanceHANA,
 				Runner:      &fakeRunner{stdOut: test.sapControlOutput},
 			}
-			got := testHanaInstanceProps.Collect()
+			got := testHanaInstanceProps.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Got metrics length (%d) != Want metrics length (%d) from CollectForHANA.", len(got), test.wantCount)
 			}

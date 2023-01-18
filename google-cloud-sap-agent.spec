@@ -58,7 +58,6 @@ if [ -d "/usr/sap/google-sapnetweavermonitoring-agent/" ]; then
     CONFIG="{"$'\n'
     CONFIG="${CONFIG}  \"provide_sap_host_agent_metrics\": true,"$'\n'
     CONFIG="${CONFIG}  \"log_level\": \"INFO\","$'\n'
-    CONFIG="${CONFIG}  \"log_to_file\": true,"$'\n'
     # bare_metal
     BARE_METAL=`grep bare_metal "/usr/sap/google-sapnetweavermonitoring-agent/conf/configuration.yaml" | cut -d' ' -f2 | xargs`
     if [ "${BARE_METAL}" = "true" ]; then
@@ -104,7 +103,7 @@ if [ -d "/usr/sap/google-sapnetweavermonitoring-agent/" ]; then
     # finally close off the config
     CONFIG="${CONFIG}"$'\n'"}"
     # move the migrated configuration into place
-    echo "${CONFIG}" > /usr/sap/google-cloud-sap-agent/conf/configuration.json
+    echo "${CONFIG}" > /etc/google-cloud-sap-agent/configuration.json
   fi
   # remove the v2 agent logs
   rm -fr /var/log/google-sapnetweavermonitoring-agent*  > /dev/null 2>&1
@@ -113,12 +112,12 @@ fi
 # link the systemd service and reload the daemon
 # RHEL
 if [ -d "/lib/systemd/system/" ] && [ ! -f "/lib/systemd/system/google-cloud-sap-agent.service" ]; then
-    cp -f /usr/sap/google-cloud-sap-agent/service/google-cloud-sap-agent.service /lib/systemd/system/google-cloud-sap-agent.service
+    cp -f /usr/share/google-cloud-sap-agent/service/google-cloud-sap-agent.service /lib/systemd/system/google-cloud-sap-agent.service
     systemctl daemon-reload
 fi
 # SLES
 if [ -d "/usr/lib/systemd/system/" ] && [ ! -f "/usr/lib/systemd/system/google-cloud-sap-agent.service" ]; then
-    cp -f /usr/sap/google-cloud-sap-agent/service/google-cloud-sap-agent.service /usr/lib/systemd/system/google-cloud-sap-agent.service
+    cp -f /usr/share/google-cloud-sap-agent/service/google-cloud-sap-agent.service /usr/lib/systemd/system/google-cloud-sap-agent.service
     systemctl daemon-reload
 fi
 
@@ -127,7 +126,7 @@ systemctl enable google-cloud-sap-agent
 systemctl start google-cloud-sap-agent
 
 # log usage metrics for install
-timeout 30 /usr/sap/google-cloud-sap-agent/google-cloud-sap-agent --log-usage -lus INSTALLED || true
+timeout 30 /usr/bin/google_cloud_sap_agent --log-usage -lus INSTALLED || true
 
 # next steps instructions
 echo ""
@@ -140,7 +139,7 @@ echo "Verify the agent is running with: "
 echo  "    sudo systemctl status google-cloud-sap-agent"
 echo "Verify the agents SAP Host Agent metrics with: "
 echo "    curl localhost:18181"
-echo "Configuration is available in /usr/sap/google-cloud-sap-agent/conf/configuration.json"
+echo "Configuration is available in /etc/google-cloud-sap-agent/configuration.json"
 echo ""
 echo "Documentation can be found at https://cloud.google.com/solutions/sap"
 echo "##########################################################################"
@@ -159,7 +158,7 @@ if [ "$1" = "0" ]; then
       systemctl disable google-cloud-sap-agent
   fi
   # log usage metrics for uninstall
-  timeout 30 /usr/sap/google-cloud-sap-agent/google-cloud-sap-agent --log-usage -lus UNINSTALLED || true
+  timeout 30 /usr/bin/google_cloud_sap_agent --log-usage -lus UNINSTALLED || true
 fi
 if [ "$1" = "1" ]; then
   VERSION_BEFORE=$(rpm -q google-cloud-sap-agent)
@@ -171,10 +170,11 @@ if [ "$1" = "0" ]; then
   # Uninstall
   rm -f /lib/systemd/system/google-cloud-sap-agent.service
   rm -f /usr/lib/systemd/system/google-cloud-sap-agent.service
-  rm -fr /usr/sap/google-cloud-sap-agent
+  rm -fr /usr/share/google-cloud-sap-agent
+  rm -fr /etc/google-cloud-sap-agent
   rm -f /var/log/google-cloud-sap-agent*
-# else
+else
   # upgrade
   # log usage metrics for upgrade
-  timeout 30 /usr/sap/google-cloud-sap-agent/google-cloud-sap-agent --log-usage -lus UPDATED -lup "${VERSION_BEFORE}" || true
+  timeout 30 /usr/bin/google_cloud_sap_agent --log-usage -lus UPDATED -lup "${VERSION_BEFORE}" || true
 fi

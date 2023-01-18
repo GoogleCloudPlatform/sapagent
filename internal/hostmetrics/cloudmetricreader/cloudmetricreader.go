@@ -76,6 +76,7 @@ type queryCallOptions struct {
 // CloudMetricReader handles how metrics will be read and returned.
 type CloudMetricReader struct {
 	QueryClient cloudmonitoring.TimeSeriesQuerier
+	BackOffs    *cloudmonitoring.BackOffIntervals
 }
 
 // Read reads metrics from the cloud monitoring API and returns a MetricsCollection.
@@ -270,7 +271,7 @@ func (r *CloudMetricReader) queryTimeSeriesData(ctx context.Context, metrics []s
 		Query: b.String(),
 	}
 	log.Logger.Debugf("QueryTimeSeries request: %s", b.String())
-	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, r.QueryClient, req)
+	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, r.QueryClient, req, r.BackOffs)
 	log.Logger.Debug(fmt.Sprintf("QueryTimeSeries response: %v", data), log.Error(err))
 
 	// Log any error that is encountered but allow the collection of metrics to proceed with a zero time series.

@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
@@ -150,7 +151,9 @@ as a string, and an error.  The error will be nil if the command was successful.
 Note: This is intended for Linux based system only see exe_linux.go.
 */
 func ExecuteCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
-	return executeCommandAsUser(user, executable, args...)
+	r := &Runner{User: user, Executable: executable, Args: strings.Join(args, " ")}
+	stdOut, stdErr, _, err = r.RunWithEnv()
+	return stdOut, stdErr, err
 }
 
 /*

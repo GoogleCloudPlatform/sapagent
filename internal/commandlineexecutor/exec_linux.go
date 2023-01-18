@@ -68,33 +68,6 @@ func (r *Runner) platformRunWithEnv() (stdOut, stdErr string, code int, err erro
 	return stdout.String(), stderr.String(), code, nil
 }
 
-// TODO(b/258685099): Remove executeCommandAsUser after migrating all its callers to Runner.Run*().
-func executeCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
-	uid, err := getUID(user)
-	if err != nil {
-		return "", "", err
-	}
-
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	exe := exec.Command(executable, args...)
-	exe.SysProcAttr = &syscall.SysProcAttr{}
-	exe.SysProcAttr.Credential = &syscall.Credential{Uid: uid}
-	exe.Stdout = stdout
-	exe.Stderr = stderr
-
-	log.Logger.Debugf("Executing command %q %q as user %q", executable, args, user)
-
-	if err := exe.Run(); err != nil {
-		log.Logger.Debugf("Running as User: %q. Could not execute %q.  Result exit code: %d", user, executable, ExitCode(err))
-		return stdout.String(), stderr.String(), err
-	}
-
-	// Exit code can assumed to be 0
-	log.Logger.Debugf("Running as User: %q. Result exit code: 0 stdout: %q", user, stdout.String())
-	return stdout.String(), stderr.String(), nil
-}
-
 /*
 getUID takes user string and returns the numeric LINUX UserId and an Error.
 Returns (0, error) in case of failure, and (uid, nil) when successful.

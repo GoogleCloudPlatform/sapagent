@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -31,6 +32,10 @@ import (
 	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+)
+
+var (
+	defaultBackOffIntervals = NewBackOffIntervals(time.Millisecond, time.Millisecond)
 )
 
 func TestCreateTimeSeriesWithRetry(t *testing.T) {
@@ -78,70 +83,12 @@ func TestCreateTimeSeriesWithRetry(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := CreateTimeSeriesWithRetry(context.Background(), test.client, test.req)
+			got := CreateTimeSeriesWithRetry(context.Background(), test.client, test.req, defaultBackOffIntervals)
 			if !cmp.Equal(test.want, got, cmpopts.EquateErrors()) {
-				t.Errorf("Failure in TimeSeriesCreateWithRetry(%v) = %v, want %v", test.req, got, test.want)
+				t.Errorf("Failure in CreateTimeSeriesWithRetry(%v) = %v, want %v", test.req, got, test.want)
 			}
 			if len(test.client.Calls) != test.wantCallCount {
-				t.Errorf("ListTimeSeriesWithRetry() unexpected call count. got: %d want: %d", len(test.client.Calls), test.wantCallCount)
-			}
-		})
-	}
-}
-
-func TestListTimeSeriesWithRetry(t *testing.T) {
-	newTimeSeries := func(v float64) []*mrpb.TimeSeries {
-		return []*mrpb.TimeSeries{
-			{
-				ValueType: metricpb.MetricDescriptor_DOUBLE,
-				Points: []*mrpb.Point{
-					{
-						Value: &commonpb.TypedValue{
-							Value: &commonpb.TypedValue_DoubleValue{v},
-						},
-					},
-				},
-			},
-		}
-	}
-
-	tests := []struct {
-		name          string
-		client        *fake.TimeSeriesLister
-		req           *monitoringpb.ListTimeSeriesRequest
-		want          []*mrpb.TimeSeries
-		wantErr       error
-		wantCallCount int
-	}{
-		{
-			name:          "succeeds",
-			client:        &fake.TimeSeriesLister{TS: newTimeSeries(0.12345)},
-			req:           &monitoringpb.ListTimeSeriesRequest{},
-			want:          newTimeSeries(0.12345),
-			wantErr:       nil,
-			wantCallCount: 1,
-		},
-		{
-			name:          "retryLimitExceeded",
-			client:        &fake.TimeSeriesLister{Err: errors.New("ListTimeSeries error")},
-			req:           &monitoringpb.ListTimeSeriesRequest{},
-			want:          nil,
-			wantErr:       cmpopts.AnyError,
-			wantCallCount: 5,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := ListTimeSeriesWithRetry(context.Background(), test.client, test.req)
-			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
-				t.Errorf("ListTimeSeriesWithRetry() mismatch (-want, +got):\n%s", d)
-			}
-			if !cmp.Equal(test.wantErr, err, cmpopts.EquateErrors()) {
-				t.Errorf("ListTimeSeriesWithRetry() err: %v want: %v", err, test.wantErr)
-			}
-			if len(test.client.Calls) != test.wantCallCount {
-				t.Errorf("ListTimeSeriesWithRetry() unexpected call count. got: %d want: %d", len(test.client.Calls), test.wantCallCount)
+				t.Errorf("CreateTimeSeriesWithRetry() unexpected call count. got: %d want: %d", len(test.client.Calls), test.wantCallCount)
 			}
 		})
 	}
@@ -188,7 +135,7 @@ func TestQueryTimeSeriesWithRetry(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := QueryTimeSeriesWithRetry(context.Background(), test.client, test.req)
+			got, err := QueryTimeSeriesWithRetry(context.Background(), test.client, test.req, defaultBackOffIntervals)
 			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
 				t.Errorf("QueryTimeSeriesWithRetry() mismatch (-want, +got):\n%s", d)
 			}

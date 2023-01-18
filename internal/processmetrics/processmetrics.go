@@ -60,7 +60,7 @@ type (
 	// This needs to be implennted by application specific modules that want to leverage
 	// startMetricGroup functionality.
 	Collector interface {
-		Collect() []*sapdiscovery.Metrics
+		Collect(context.Context) []*sapdiscovery.Metrics
 	}
 
 	// Properties has necessary context for Metrics collection.
@@ -80,6 +80,7 @@ type (
 		OSType       string
 		MetricClient CreateMetricClient
 		SAPInstances *sapb.SAPInstances
+		BackOffs     *cloudmonitoring.BackOffIntervals
 	}
 )
 
@@ -137,7 +138,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	usagemetrics.Action(3) // Collecting process metrics
 	p := create(parameters.Config, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
-	go p.collectAndSend(ctx)
+	go p.collectAndSend(ctx, parameters.BackOffs)
 	return true
 }
 
@@ -152,13 +153,6 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 		SAPInstances: sapInstances,
 		Config:       config,
 		Client:       client,
-	}
-
-	log.Logger.Info("Creating maintenance mode collector.")
-	maintenanceModeCollector := &maintenance.InstanceProperties{
-		Config: p.Config,
-		Client: p.Client,
-		Reader: maintenance.ModeReader{},
 	}
 
 	log.Logger.Info("Creating SAP additional metrics collector for sapservices (active and enabled metric).")
@@ -177,9 +171,11 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 		FileReader: maintenance.ModeReader{},
 	}
 
-	p.Collectors = append(p.Collectors, maintenanceModeCollector, sapServiceCollector, sapStartCollector)
+	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector)
 
+	sids := make(map[string]bool)
 	for _, instance := range p.SAPInstances.GetInstances() {
+		sids[instance.GetSapsid()] = true
 		if p.SAPInstances.GetLinuxClusterMember() {
 			log.Logger.Infof("Creating cluster collector for instance %q.", instance.GetInstanceId())
 			clusterCollector := &cluster.InstanceProperties{
@@ -239,6 +235,17 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 		}
 	}
 
+	if len(sids) != 0 {
+		log.Logger.Info("Creating maintenance mode collector.")
+		maintenanceModeCollector := &maintenance.InstanceProperties{
+			Config: p.Config,
+			Client: p.Client,
+			Reader: maintenance.ModeReader{},
+			Sids:   sids,
+		}
+		p.Collectors = append(p.Collectors, maintenanceModeCollector)
+	}
+
 	log.Logger.Infof("Created %d collectors.", len(p.Collectors))
 	return p
 }
@@ -276,7 +283,7 @@ For unit testing, the caller can cancel the context to terminate the workflow.
 An exit induced by context cancellation returns the last error seen during
 the workflow or nil if no error occurred.
 */
-func (p *Properties) collectAndSend(ctx context.Context) error {
+func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) error {
 
 	if len(p.Collectors) == 0 {
 		return fmt.Errorf("expected non-zero collectors, got: %d", len(p.Collectors))
@@ -291,7 +298,7 @@ func (p *Properties) collectAndSend(ctx context.Context) error {
 			log.Logger.Info("Context cancelled, exiting collectAndSend.")
 			return lastErr
 		default:
-			sent, batchCount, err := p.collectAndSendOnce(ctx)
+			sent, batchCount, err := p.collectAndSendOnce(ctx, bo)
 			if err != nil {
 				log.Logger.Error("Error sending metrics", log.Error(err))
 				lastErr = err
@@ -312,7 +319,7 @@ Monitoring API calls to send the metrics.
 
 Return values are pass-through from send().
 */
-func (p *Properties) collectAndSendOnce(ctx context.Context) (sent, batchCount int, err error) {
+func (p *Properties) collectAndSendOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
 	var wg sync.WaitGroup
 	msgs := make([][]*sapdiscovery.Metrics, len(p.Collectors))
 	log.Logger.Debugf("Start %d collectors in parallel.", len(p.Collectors))
@@ -321,13 +328,13 @@ func (p *Properties) collectAndSendOnce(ctx context.Context) (sent, batchCount i
 		wg.Add(1)
 		go func(slot int, c Collector) {
 			defer wg.Done()
-			msgs[slot] = c.Collect() // Each collector writes to its own slot.
+			msgs[slot] = c.Collect(ctx) // Each collector writes to its own slot.
 			log.Logger.Debugf("Type %T collected %d metrics.", c, len(msgs[slot]))
 		}(i, collector)
 	}
 	log.Logger.Debug("Wait for collectors to finish.")
 	wg.Wait()
-	return p.send(ctx, flatten(msgs))
+	return p.send(ctx, flatten(msgs), bo)
 }
 
 /*
@@ -341,7 +348,7 @@ cloudmonitoring.go), the remaining measurements are discarded.
   - Returns the number of batches(as batchCount) for unit testing coverage.
   - Returns error if cloud monitoring API fails.
 */
-func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics) (sent, batchCount int, err error) {
+func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
 	var batchTimeSeries []*mrpb.TimeSeries
 
 	for _, m := range metrics {
@@ -350,7 +357,7 @@ func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics) 
 		if len(batchTimeSeries) == maxTSPerRequest {
 			log.Logger.Debug("Maximum batch size is reached, send the batch.")
 			batchCount++
-			if err := p.sendBatch(ctx, batchTimeSeries); err != nil {
+			if err := p.sendBatch(ctx, batchTimeSeries, bo); err != nil {
 				return sent, batchCount, err
 			}
 			sent += len(batchTimeSeries)
@@ -358,7 +365,7 @@ func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics) 
 		}
 	}
 	batchCount++
-	if err := p.sendBatch(ctx, batchTimeSeries); err != nil {
+	if err := p.sendBatch(ctx, batchTimeSeries, bo); err != nil {
 		return sent, batchCount, err
 	}
 	return sent + len(batchTimeSeries), batchCount, nil
@@ -368,7 +375,7 @@ func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics) 
 sendBatch sends one batch of metrics to cloud monitoring using an API call with retries.
 Returns an error in case of failures.
 */
-func (p *Properties) sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries) error {
+func (p *Properties) sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, bo *cloudmonitoring.BackOffIntervals) error {
 	log.Logger.Debugf("Sending %d metrics to cloud monitoring.", len(batchTimeSeries))
 
 	req := &monitoringpb.CreateTimeSeriesRequest{
@@ -376,7 +383,7 @@ func (p *Properties) sendBatch(ctx context.Context, batchTimeSeries []*mrpb.Time
 		TimeSeries: batchTimeSeries,
 	}
 
-	return cloudmonitoring.CreateTimeSeriesWithRetry(ctx, p.Client, req)
+	return cloudmonitoring.CreateTimeSeriesWithRetry(ctx, p.Client, req, bo)
 }
 
 /*

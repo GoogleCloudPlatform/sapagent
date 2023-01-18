@@ -19,6 +19,7 @@ package netweaver
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -76,7 +77,7 @@ var (
 
 // Collect is Netweaver implementation of Collector interface from processmetrics.go.
 // Returns a list of NetWeaver related metrics.
-func (p *InstanceProperties) Collect() []*sapdiscovery.Metrics {
+func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	processListRunner := &commandlineexecutor.Runner{
 		User:       p.SAPInstance.GetUser(),
 		Executable: p.SAPInstance.GetSapcontrolPath(),

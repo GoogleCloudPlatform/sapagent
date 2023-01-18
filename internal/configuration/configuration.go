@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package configuration provides configuration reading cabailities.
+// Package configuration provides configuration reading capabilities.
 package configuration
 
 import (
@@ -41,7 +41,7 @@ const (
 	// LINT.IfChange
 	AgentVersion = "1.0"
 	// LINT.ThenChange(//depot/google3/third_party/sapagent/BUILD)
-	linuxConfigPath   = "/usr/sap/google-cloud-sap-agent/conf/configuration.json"
+	linuxConfigPath   = "/etc/google-cloud-sap-agent/configuration.json"
 	windowsConfigPath = "C:\\Program Files\\Google\\google-cloud-sap-agent\\conf\\configuration.json"
 )
 
@@ -87,9 +87,9 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 		cc.WorkloadValidationMetricsFrequency = 300
 	}
 	if cc != nil && cc.GetCollectProcessMetrics() == true && cc.GetProcessMetricsFrequency() <= 0 {
-		cc.ProcessMetricsFrequency = 60
+		cc.ProcessMetricsFrequency = 5
 	}
-	// If the user did not pass cloud properties, set the values read from metadata server.
+	// If the user did not pass cloud properties, set the values read from the metadata server.
 	if config.GetCloudProperties() == nil {
 		config.CloudProperties = cloudProps
 	}

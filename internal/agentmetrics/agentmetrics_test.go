@@ -19,17 +19,23 @@ package agentmetrics
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
+	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monrespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func basicParameters() Parameters {
@@ -41,6 +47,7 @@ func basicParameters() Parameters {
 			},
 		},
 		timeSeriesCreator: &fake.TimeSeriesCreator{},
+		BackOffs:          cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
 	}
 }
 
@@ -125,18 +132,68 @@ func TestValidateParameters_shouldCorrectlyValidate(t *testing.T) {
 }
 
 func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T) {
+	fakeTimestamp := &tspb.Timestamp{
+		Seconds: 42,
+	}
+	fakeNow := func() *tspb.Timestamp {
+		return fakeTimestamp
+	}
+
+	paramsFactory := func() Parameters {
+		return Parameters{
+			Config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectAgentMetrics:   true,
+					AgentMetricsFrequency: 10,
+				},
+				BareMetal: false,
+				CloudProperties: &ipb.CloudProperties{
+					InstanceId: "test-instance",
+					ProjectId:  "test-project",
+					Zone:       "test-zone",
+					Region:     "test-region",
+				},
+			},
+			now:               fakeNow,
+			timeSeriesCreator: &fake.TimeSeriesCreator{},
+		}
+	}
+	bareMetalLabels := map[string]string{
+		"project_id": "test-project",
+		"location":   "test-region",
+		"namespace":  "test-instance",
+		"node_id":    "test-instance",
+	}
+	vmLabels := map[string]string{
+		"instance_id": "test-instance",
+		"project_id":  "test-project",
+		"zone":        "test-zone",
+	}
+
 	var testData = []struct {
-		testName string
-		cpu      float64
-		memory   float64
-		want     []*monrespb.TimeSeries
+		testName  string
+		cpu       float64
+		memory    float64
+		timestamp *tspb.Timestamp
+		params    Parameters
+		want      []*monrespb.TimeSeries
 	}{
 		{
-			testName: "cpu 0.0 memory 0.0",
-			cpu:      0.0,
-			memory:   0.0,
+			testName:  "cpu 0.0 memory 0.0 baremetal",
+			cpu:       0.0,
+			memory:    0.0,
+			timestamp: fakeTimestamp,
+			params: func() Parameters {
+				p := paramsFactory()
+				p.Config.BareMetal = true
+				return p
+			}(),
 			want: []*monrespb.TimeSeries{
 				&monrespb.TimeSeries{
+					Resource: &mrpb.MonitoredResource{
+						Type:   "generic_node",
+						Labels: bareMetalLabels,
+					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/cpu/utilization",
 					},
@@ -145,10 +202,18 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{0.0},
 							},
+							Interval: &cpb.TimeInterval{
+								StartTime: fakeTimestamp,
+								EndTime:   fakeTimestamp,
+							},
 						},
 					},
 				},
 				&monrespb.TimeSeries{
+					Resource: &mrpb.MonitoredResource{
+						Type:   "generic_node",
+						Labels: bareMetalLabels,
+					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/memory/utilization",
 					},
@@ -157,17 +222,30 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{0.0},
 							},
+							Interval: &cpb.TimeInterval{
+								StartTime: fakeTimestamp,
+								EndTime:   fakeTimestamp,
+							},
 						},
 					},
 				},
 			},
 		},
 		{
-			testName: "cpu 1.2 memory 3.4",
+			testName: "cpu 1.2 memory 3.4 vm",
 			cpu:      1.2,
 			memory:   3.4,
+			params: func() Parameters {
+				p := paramsFactory()
+				p.Config.BareMetal = false
+				return p
+			}(),
 			want: []*monrespb.TimeSeries{
 				&monrespb.TimeSeries{
+					Resource: &mrpb.MonitoredResource{
+						Type:   "gce_instance",
+						Labels: vmLabels,
+					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/cpu/utilization",
 					},
@@ -176,10 +254,18 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{1.2},
 							},
+							Interval: &cpb.TimeInterval{
+								StartTime: fakeTimestamp,
+								EndTime:   fakeTimestamp,
+							},
 						},
 					},
 				},
 				&monrespb.TimeSeries{
+					Resource: &mrpb.MonitoredResource{
+						Type:   "gce_instance",
+						Labels: vmLabels,
+					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/memory/utilization",
 					},
@@ -188,26 +274,41 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{3.4},
 							},
+							Interval: &cpb.TimeInterval{
+								StartTime: fakeTimestamp,
+								EndTime:   fakeTimestamp,
+							},
 						},
 					},
 				},
 			},
 		},
 	}
-	params := basicParameters()
-	ctx := context.Background()
-	service := createService(ctx, params, t)
 	pointComparer := cmp.Comparer(func(a, b *monrespb.Point) bool {
-		return a.GetValue().GetDoubleValue() == b.GetValue().GetDoubleValue()
+		valueEqual := cmp.Equal(a.GetValue().GetDoubleValue(), b.GetValue().GetDoubleValue())
+		startTimeEqual := cmp.Equal(a.GetInterval().GetStartTime(), b.GetInterval().GetStartTime(), protocmp.Transform())
+		endTimeEqual := cmp.Equal(a.GetInterval().GetEndTime(), b.GetInterval().GetEndTime(), protocmp.Transform())
+		aDescriptor0, aDescriptor1 := a.Descriptor()
+		bDescriptor0, bDescriptor1 := b.Descriptor()
+		descriptorEqual := cmp.Equal(aDescriptor0, bDescriptor0) && cmp.Equal(aDescriptor1, bDescriptor1)
+		return valueEqual && startTimeEqual && endTimeEqual && descriptorEqual
+	})
+	resourceComparer := cmp.Comparer(func(a, b *mrpb.MonitoredResource) bool {
+		typeEqual := cmp.Equal(a.GetType(), b.GetType())
+		labelsEqual := cmp.Equal(a.GetLabels(), b.GetLabels())
+		return typeEqual && labelsEqual
 	})
 	comparer := cmp.Comparer(func(a, b *monrespb.TimeSeries) bool {
 		points := cmp.Equal(a.GetPoints(), b.GetPoints(), pointComparer)
-		metricType := a.GetMetric().GetType() == b.GetMetric().GetType()
+		metricType := cmp.Equal(a.GetMetric().GetType(), b.GetMetric().GetType())
 		metricLabel := cmp.Equal(a.GetMetric().GetLabels(), b.GetMetric().GetLabels())
-		return points && metricType && metricLabel
+		resourcesEqual := cmp.Equal(a.GetResource(), b.GetResource(), resourceComparer)
+		return points && metricType && metricLabel && resourcesEqual
 	})
 	for _, d := range testData {
 		t.Run(d.testName, func(t *testing.T) {
+			ctx := context.Background()
+			service := createService(ctx, d.params, t)
 			usage := usage{d.cpu, d.memory}
 			got := service.createTimeSeries(usage)
 			if diff := cmp.Diff(d.want, got, comparer); diff != "" {
@@ -323,15 +424,20 @@ func TestCollectAndSubmitLoop_respectsContextCancellation(t *testing.T) {
 			service := createService(ctx, params, t)
 			got := 0
 			wrappedUsageReader := service.usageReader
+			lock := sync.Mutex{}
 			service.usageReader = usageReader(func(ctx context.Context) (usage, error) {
+				lock.Lock()
 				got++
+				lock.Unlock()
 				return wrappedUsageReader(ctx)
 			})
 			service.Start(ctx)
 			<-ctx.Done()
+			lock.Lock()
 			if got != d.want {
 				t.Errorf("usageReader invocation count mismatch: got %v, want %v", got, d.want)
 			}
+			lock.Unlock()
 		})
 	}
 }

@@ -51,7 +51,7 @@ func SetupLoggingToFile(goos string, l cpb.Configuration_LogLevel) {
 	fileEncoder := zapcore.NewJSONEncoder(config)
 	writer := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   logfile,
-		MaxSize:    50, // megabytes
+		MaxSize:    25, // megabytes
 		MaxBackups: 3,
 	})
 	defaultLogLevel := zapcore.InfoLevel

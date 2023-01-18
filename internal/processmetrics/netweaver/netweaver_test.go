@@ -17,6 +17,7 @@ limitations under the License.
 package netweaver
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"io"
@@ -319,7 +320,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 
 func TestCollect(t *testing.T) {
 	// Production API returns no metrics in unit test setup.
-	metrics := defaultInstanceProperties.Collect()
+	metrics := defaultInstanceProperties.Collect(context.Background())
 	if len(metrics) != 0 {
 		t.Errorf("Collect() metric count mismatch, got: %v want: 0.", len(metrics))
 	}

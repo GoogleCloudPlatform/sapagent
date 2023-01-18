@@ -19,6 +19,7 @@ limitations under the License.
 package hana
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -104,7 +105,7 @@ var (
 
 // Collect is HANA implementation of Collector interface from processmetrics.go.
 // Returns a list of HANA related metrics.
-func (p *InstanceProperties) Collect() []*sapdiscovery.Metrics {
+func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	processListRunner := &commandlineexecutor.Runner{
 		User:       p.SAPInstance.GetUser(),
 		Executable: p.SAPInstance.GetSapcontrolPath(),

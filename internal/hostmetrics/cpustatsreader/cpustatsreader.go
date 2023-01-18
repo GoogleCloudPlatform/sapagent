@@ -14,43 +14,60 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cpustatsreader provides functionality for collecting OS cpu metrics
+// Package cpustatsreader provides functionality for collecting OS cpu metrics.
+//
+// TODO(b/265431344): Collect CPU stats using the gopsutil library.
 package cpustatsreader
 
 import (
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-
-	cli "github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
-// CPUMetricReader for reading cpu statistics from the OS
-type CPUMetricReader struct {
-	OS string
-}
-
-var (
-	readFile     = os.ReadFile
-	clistExecute = wmicClistExecute
+type (
+	// FileReader is a function type matching the signature for os.ReadFile.
+	FileReader func(string) ([]byte, error)
+	// RunCommand is a function type matching the signature for commandlineexecutor.ExecuteCommand.
+	RunCommand func(string, ...string) (string, string, error)
+	// A Reader is capable of reading cpu statistics from the OS.
+	//
+	// Due to the assignment of required unexported fields, a Reader must be initialized with New()
+	// instead of as a struct literal.
+	Reader struct {
+		os         string
+		fileReader FileReader
+		runCommand RunCommand
+	}
 )
 
-// CPUStats reads metrics from the OS for CPU and returns a CpuStats.
-func (r *CPUMetricReader) CPUStats() *statspb.CpuStats {
-	log.Logger.Debugf("Getting cpu metrics...")
-	var s *statspb.CpuStats
-	if r.OS == "windows" {
-		log.Logger.Debugf("Geting cpu stats for Windows")
-		s = readCPUStatsForWindows()
-	} else if r.OS == "linux" {
-		log.Logger.Debugf("Geting cpu stats for Linux")
-		s = readCPUStatsForLinux()
+// New instantiates a Reader with the capability to read cpu metrics from linux and windows operating systems.
+func New(os string, fileReader FileReader, runCommand RunCommand) *Reader {
+	return &Reader{
+		os:         os,
+		fileReader: fileReader,
+		runCommand: runCommand,
 	}
+}
+
+// The Read method reads CPU metrics from the OS and returns a proto for CpuStats.
+func (r *Reader) Read() *statspb.CpuStats {
+	log.Logger.Debugf("Reading CPU stats...")
+	var s *statspb.CpuStats
+	switch r.os {
+	case "linux":
+		s = r.readCPUStatsForLinux()
+	case "windows":
+		s = r.readCPUStatsForWindows()
+	default:
+		log.Logger.Errorf("Encountered an unexpected OS value: %s.", r.os)
+		return nil
+	}
+
 	if s != nil {
 		log.Logger.Debugf("Cpu processor type: %s", s.GetProcessorType())
 		log.Logger.Debugf("Cpu count: %d", s.GetCpuCount())
@@ -60,17 +77,13 @@ func (r *CPUMetricReader) CPUStats() *statspb.CpuStats {
 	return s
 }
 
-// Executes the wmic for CPU on Windows, will be overridden by tests
-func wmicClistExecute(args ...string) (string, string, error) {
-	// Note: must use separated arguments so the windows go exec does not escape the entire argument list
-	return cli.ExecuteCommand("wmic", args...)
-}
-
 // Reads CPU stats for Windows, usees wmic command for the OS values
-func readCPUStatsForWindows() *statspb.CpuStats {
+func (r *Reader) readCPUStatsForWindows() *statspb.CpuStats {
 	s := &statspb.CpuStats{}
-	// Using wmic to get the CPU info
-	o, e, err := clistExecute("cpu", "get", "Name,", "MaxClockSpeed,", "NumberOfCores,", "NumberOfLogicalProcessors/Format:List")
+	// Use wmic to get the CPU stats
+	// Note: must use separated arguments so the windows go exec does not escape the entire argument list
+	args := []string{"cpu", "get", "Name,", "MaxClockSpeed,", "NumberOfCores,", "NumberOfLogicalProcessors/Format:List"}
+	o, e, err := r.runCommand("wmic", args...)
 	if err != nil {
 		log.Logger.Error(fmt.Sprintf("Could not execute wmic, stderr: %s", e), log.Error(err))
 		return s
@@ -111,21 +124,16 @@ func readCPUStatsForWindows() *statspb.CpuStats {
 	return s
 }
 
-// Supplies the /proc/cpuinfo data for Linux, will be overridden by tests
-func procCPUInfo() string {
-	d, err := readFile("/proc/cpuinfo")
+// Reads CPU stats for Linux, uses /proc/cpuinfo for the OS values
+func (r *Reader) readCPUStatsForLinux() *statspb.CpuStats {
+	s := &statspb.CpuStats{}
+	// Use the contents of /proc/cpuinfo to get the CPU stats
+	d, err := r.fileReader("/proc/cpuinfo")
 	if err != nil {
 		log.Logger.Errorf("Could not read data from /proc/cpuinfo", log.Error(err))
-		return ""
 	}
-	return string(d)
-}
-
-// Reads CPU stats for Linux, usees /proc/cpuinfo for the OS values
-func readCPUStatsForLinux() *statspb.CpuStats {
-	s := &statspb.CpuStats{}
-	c := procCPUInfo()
-	log.Logger.Debugf("/proc/cpuinfo data: %s", c)
+	c := string(d)
+	log.Logger.Debugf("/proc/cpuinfo data: %q", c)
 	lines := strings.Split(c, "\n")
 	cc := int64(0)
 	for _, line := range lines {

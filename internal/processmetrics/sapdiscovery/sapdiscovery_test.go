@@ -671,6 +671,7 @@ func TestFindPort(t *testing.T) {
 		{
 			name:         "ERSInstance",
 			instanceName: "ERS",
+			wantType:     sapb.InstanceType_NETWEAVER,
 		},
 		{
 			name:         "HDBInstance",

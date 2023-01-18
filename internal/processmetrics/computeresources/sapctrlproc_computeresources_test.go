@@ -17,6 +17,7 @@ limitations under the License.
 package computeresources
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -98,7 +99,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 				Executor:   test.executor,
 				FileReader: test.fileReader,
 			}
-			got := testProps.Collect()
+			got := testProps.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Got metrics length (%d) != Want metrics length (%d) from CollectForSAPControlProcesses.", len(got), test.wantCount)
 			}
