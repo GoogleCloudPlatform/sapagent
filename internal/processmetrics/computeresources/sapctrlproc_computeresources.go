@@ -21,7 +21,6 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
@@ -35,28 +34,28 @@ type (
 	// SAPControlProcInstanceProperties have the required context for collecting metrics for cpu
 	// and memory per process for SAPControl processes.
 	SAPControlProcInstanceProperties struct {
-		Config     *cnfpb.Configuration
-		Client     cloudmonitoring.TimeSeriesCreator
-		Executor   commandExecutor
-		FileReader maintenance.FileReader
+		Config        *cnfpb.Configuration
+		Client        cloudmonitoring.TimeSeriesCreator
+		Executor      commandExecutor
+		NewProcHelper newProcessWithContextHelper
 	}
 )
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP Control Processes.
 func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
-	params := Parameters{
+	params := parameters{
 		executor:         p.Executor,
 		config:           p.Config,
 		client:           p.Client,
-		fileReader:       p.FileReader,
 		cpuMetricPath:    sapCTRLCPUPath,
 		memoryMetricPath: sapCtrlMemoryPath,
+		newProc:          p.NewProcHelper,
 	}
 	processes := collectControlProcesses(params)
 	if len(processes) == 0 {
 		log.Logger.Debug("Cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil
 	}
-	return append(collectCPUPerProcess(params, processes), collectMemoryPerProcess(params, processes)...)
+	return append(collectCPUPerProcess(ctx, params, processes), collectMemoryPerProcess(ctx, params, processes)...)
 }

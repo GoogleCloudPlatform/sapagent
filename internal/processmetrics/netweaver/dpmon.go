@@ -58,11 +58,11 @@ func parseABAPSessionStats(text string) (sessionCount map[string]int, totalCount
 			abapSessionsTable = append(abapSessionsTable, strings.Split(line, "|"))
 		}
 	}
-	log.Logger.Debugf("ABAP sessions table: %q.", abapSessionsTable)
+	log.Logger.Debugw("ABAP sessions table", "table", abapSessionsTable)
 
 	sessionCount = make(map[string]int)
 	for _, row := range abapSessionsTable {
-		log.Logger.Debugf("Processing row %q of length: %d.", row, len(row))
+		log.Logger.Debugw("Processing row", "row", row, "length", len(row))
 		if len(row) == numberOfColumns {
 			sessionCount[row[sessionColumn]]++
 			totalCount++
@@ -98,11 +98,12 @@ func parseRFCStats(text string) (rfcStateCount map[string]int) {
 
 	rfcStateCount = make(map[string]int)
 	for _, row := range rfcConnectionsTable {
-		log.Logger.Debugf("Processing RFC table row: %q of length: %d", row, len(row))
+		log.Logger.Debugw("Processing RFC table row", "row", row, "length", len(row))
 		if len(row) != numberOfColumns {
 			continue
 		}
 
+		// rfcTypeWithState -> "SERVER_ALLOCATED" or "CLIENT_ALLOCATED" this will be added as a label.
 		rfcTypeWithState := strings.ToLower(row[rfcTypeColumn]) + "_" + strings.ToLower(row[rfcStateColumn])
 		rfcStateCount[rfcTypeWithState]++
 

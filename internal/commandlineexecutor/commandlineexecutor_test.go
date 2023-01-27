@@ -70,22 +70,6 @@ func TestExpandAndExecuteCommand(t *testing.T) {
 	}
 }
 
-func TestExpandAndExecuteCommandAsUserSucceeds(t *testing.T) {
-	stdOut, _, err := ExpandAndExecuteCommandAsUser("", "echo", "hello, world")
-	if err != nil {
-		t.Fatalf(`ExpandAndExecuteCommandAsUser("", "echo", "hello, world") returned unexpected error, got: %v, want: nil`, err)
-	}
-	if wantOut := "hello, world\n"; wantOut != stdOut {
-		t.Errorf(`ExpandAndExecuteCommandAsUser("", "echo", "hello, world") = %s, want: %s`, stdOut, wantOut)
-	}
-}
-
-func TestExpandAndExecuteCommandAsUserFails(t *testing.T) {
-	if _, _, err := ExpandAndExecuteCommandAsUser("user-does-not-exist", "echo", "hello, world"); err == nil {
-		t.Errorf(`ExpandAndExecuteCommandAsUser("user-does-not-exist", "echo", "hello, world") did not return an error`)
-	}
-}
-
 func TestExecuteCommand(t *testing.T) {
 	input := []struct {
 		name    string
@@ -213,7 +197,7 @@ func TestRunCommandAsUserExitCode(t *testing.T) {
 				t.Fatalf("runCommandAsUserExitCode() got error: %v, want: %v", gotErr, test.wantErr)
 			}
 			if test.wantExitCode != gotExitCode {
-				t.Fatalf("runCommandAsUserExitCode() got unexpected exit code: %d, want: %d", gotExitCode, test.wantExitCode)
+				t.Fatalf("ExpandAndExecuteCommandAsUserExitCode() got unexpected exit code: %d, want: %d", gotExitCode, test.wantExitCode)
 			}
 		})
 

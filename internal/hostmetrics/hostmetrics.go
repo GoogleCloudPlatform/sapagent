@@ -41,7 +41,7 @@ import (
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 )
 
-// Parameters holds the paramters for all of the Collect* function calls.
+// Parameters holds the parameters for all of the Collect* function calls.
 type Parameters struct {
 	Config             *cpb.Configuration
 	InstanceInfoReader instanceinfo.Reader
@@ -74,7 +74,7 @@ func runHTTPServer() {
 	http.HandleFunc("/", requestHandler)
 	if err := http.ListenAndServe("localhost:18181", nil); err != nil {
 		usagemetrics.Error(2) // Could not create HTTP listener
-		log.Logger.Fatal("Could not start HTTP server on localhost:18181", log.Error(err))
+		log.Logger.Fatalw("Could not start HTTP server on localhost:18181", log.Error(err))
 	}
 	log.Logger.Info("HTTP server listening on localhost:18181 for SAP Host Agent connections")
 }
@@ -83,8 +83,8 @@ func runHTTPServer() {
 func collectHostMetrics(ctx context.Context, params Parameters) {
 	configmr := &configurationmetricreader.ConfigMetricReader{runtime.GOOS}
 	cpusr := cpustatsreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand)
-	mmr := &memorymetricreader.MemoryMetricReader{runtime.GOOS}
-	dsr := diskstatsreader.New()
+	mmr := memorymetricreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand)
+	dsr := diskstatsreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand)
 
 	for {
 		log.Logger.Info("Collecting host metrics...")
@@ -110,7 +110,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 		metricsCollection := &mpb.MetricsCollection{Metrics: allMetrics}
 		metricsXML = GenerateXML(metricsCollection)
 
-		log.Logger.Infof("Metrics collection complete, collected %d metrics.", len(metricsCollection.GetMetrics()))
+		log.Logger.Infow("Metrics collection complete", "metricscollected", len(metricsCollection.GetMetrics()))
 		time.Sleep(60 * time.Second)
 	}
 }

@@ -18,6 +18,7 @@ package workloadmanager
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -77,7 +78,7 @@ func CollectHanaMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 		// If the process is not running then the hanaProcessOrGlobalIni will contain the global.ini
 		// location similar to: /usr/sap/HAR/SYS/global/hdb/custom/config/global.ini
 
-		log.Logger.Debugf("Could not find gobal.ini file %s", globalINILocationVal)
+		log.Logger.Debugw("Could not find gobal.ini file", "globalinilocation", globalINILocationVal)
 		wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
 		return
 	}
@@ -94,7 +95,7 @@ func CollectHanaMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 
 	numaCat, _, err := params.CommandRunner("cat", "/proc/sys/kernel/numa_balancing")
 	if err != nil {
-		log.Logger.Warn("cat /proc/sys/kernel/numa_balancing failed", log.Error(err))
+		log.Logger.Warnw("cat /proc/sys/kernel/numa_balancing failed", "error", err)
 	} else {
 		l["numa_balancing"] = "disabled"
 		if numaCat == "1" {
@@ -104,7 +105,7 @@ func CollectHanaMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 
 	thpCat, _, err := params.CommandRunner("cat", "/sys/kernel/mm/transparent_hugepage/enabled")
 	if err != nil {
-		log.Logger.Warn("cat /sys/kernel/mm/transparent_hugepage/enabled failed", log.Error(err))
+		log.Logger.Warnw("cat /sys/kernel/mm/transparent_hugepage/enabled failed", "error", err)
 	} else {
 		l["transparent_hugepages"] = "disabled"
 		if strings.Contains(thpCat, "[always]") {
@@ -144,9 +145,9 @@ setVolumeLabels sets volume labels for the workload metric collector.  These vol
 data disks or logs.
 */
 func setVolumeLabels(l map[string]string, diskInfo map[string]string, dataOrLog string) {
-	log.Logger.Debugf("diskInfo for %s is empty: %t", dataOrLog, len(diskInfo) == 0)
+	log.Logger.Debugw("diskInfo empty check", "dataorlog", dataOrLog, "isempty", len(diskInfo) == 0)
 	if len(diskInfo) > 0 {
-		log.Logger.Debugf("Found basepath_%svolumes, adding disk_data labels", dataOrLog)
+		log.Logger.Debugw("Found basepath volumes, adding disk_data labels", "basepathvolumes", fmt.Sprintf("basepath_%svolumes", dataOrLog))
 		l["disk_"+dataOrLog+"_type"] = diskInfo["instancedisktype"]
 		l["disk_"+dataOrLog+"_mount"] = diskInfo["mountpoint"]
 		l["disk_"+dataOrLog+"_size"] = diskInfo["size"]
@@ -168,7 +169,7 @@ func globalINILocation(hanaProcessOrGlobalINI string) string {
 	globalINILocation := ""
 	commandOrFileLocation := pathSplit[0]
 	pathParts := strings.Split(commandOrFileLocation, "/")
-	log.Logger.Debugf("HANA commandOrFileLocation %s", commandOrFileLocation)
+	log.Logger.Debugw("HANA commandOrFileLocation", "commandorfilelocation", commandOrFileLocation)
 	if len(pathSplit) == 1 {
 		// This is just the global.ini path already.
 		globalINILocation = strings.TrimSpace(hanaProcessOrGlobalINI)
@@ -189,7 +190,7 @@ func globalINILocation(hanaProcessOrGlobalINI string) string {
 		}
 		globalINILocation += "SYS/global/hdb/custom/config/global.ini"
 	}
-	log.Logger.Debugf("HANA sid: %s and global.ini file: %s", sid, globalINILocation)
+	log.Logger.Debugw("HANA sid and global.ini file", "sid", sid, "globalinilocation", globalINILocation)
 	return globalINILocation
 }
 
@@ -216,11 +217,11 @@ func diskInfo(basepathVolume string, globalINILocation string, runner commandlin
 	}
 	vList := strings.Fields(volumeGrep)
 	if len(vList) < 3 {
-		log.Logger.Debugf("Could not find basepathVolume: %s in global.ini", basepathVolume)
+		log.Logger.Debugw("Could not find basepath volume in global.ini", "basepathvolume", basepathVolume, "globalinilocation", globalINILocation)
 		return diskInfo
 	}
 	basepathVolumePath := vList[2]
-	log.Logger.Debugf("basepathVolumePath: %s", basepathVolumePath)
+	log.Logger.Debugw("basepathVolumePath from string field", "basepathvolumepath", basepathVolumePath)
 
 	// JSON output from lsblk to match the lsblk.proto is produced by the following command:
 	// lsblk -p -J -o name,type,mountpoint
@@ -230,7 +231,7 @@ func diskInfo(basepathVolume string, globalINILocation string, runner commandlin
 	err = json.Unmarshal([]byte(lsblkJSON), &lsblk)
 
 	if err != nil {
-		log.Logger.Debug("Invalid lsblk json", log.Error(err))
+		log.Logger.Debugw("Invalid lsblk json", "error", err)
 		return diskInfo
 	}
 
@@ -247,7 +248,7 @@ func diskInfo(basepathVolume string, globalINILocation string, runner commandlin
 				matchedMountPoint = child.Mountpoint
 				childSize := extractSize(child.Size)
 				matchedSize = strconv.FormatInt(childSize, 10)
-				log.Logger.Debugf("Found matchedBlockDevice: %s, matchedMountPoint: %s, matchedSize: %s", matchedBlockDevice.Name, matchedMountPoint, matchedSize)
+				log.Logger.Debugw("Found matched block device", "matchedblockdevice", matchedBlockDevice.Name, "matchedmountpoint", matchedMountPoint, "matchedsize", matchedSize)
 				break
 			}
 		}
@@ -266,12 +267,12 @@ func setDiskInfoForDevice(
 	matchedSize string,
 	iir instanceinfo.Reader,
 ) {
-	log.Logger.Debugf("Checking disk mappings against instance disks, disk array length: %d", len(iir.InstanceProperties().GetDisks()))
+	log.Logger.Debugw("Checking disk mappings against instance disks", "numberofdisks", len(iir.InstanceProperties().GetDisks()))
 	for _, disk := range iir.InstanceProperties().GetDisks() {
-		log.Logger.Debugf("Checking disk mapping: %s against matchedBlockDevice: %s", disk.GetMapping(), matchedBlockDevice.Name)
+		log.Logger.Debugw("Checking disk mapping", "mapping", disk.GetMapping(), "matchedblockdevice", matchedBlockDevice.Name)
 		if strings.HasSuffix(matchedBlockDevice.Name, disk.GetMapping()) {
 			matchedBlockDeviceSize := extractSize(matchedBlockDevice.Size)
-			log.Logger.Debugf("Found matched disk mapping for mount point: %s, diskType: %s", matchedMountPoint, strings.ToLower(disk.GetDeviceType()))
+			log.Logger.Debugw("Found matched disk mapping", "mountpoint", matchedMountPoint, "disktype", strings.ToLower(disk.GetDeviceType()))
 			diskInfo["mountpoint"] = matchedMountPoint
 			diskInfo["instancedisktype"] = strings.ToLower(disk.GetDeviceType())
 			diskInfo["size"] = matchedSize
@@ -293,7 +294,7 @@ func extractSize(msg []byte) int64 {
 	val := strings.Trim(string(msg), `"`)
 	size, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		log.Logger.Errorf("Could not parse size value: %v - %#v", msg, err)
+		log.Logger.Errorw("Could not parse size value", "sizefield", msg, "error", err)
 	}
 
 	return size

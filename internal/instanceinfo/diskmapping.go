@@ -17,7 +17,6 @@ limitations under the License.
 package instanceinfo
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -61,12 +60,12 @@ integration tests.
 func forWindows(deviceName string) (string, error) {
 	stdOut, stdErr, err := executeCommand("cmd", "/C", "Powershell", "-File", winPsPath, deviceName)
 	if err != nil {
-		log.Logger.Warnf("Could not get disk mapping for device %v", deviceName)
-		log.Logger.Debug(fmt.Sprintf("Execution error for %s stdout: %v, stderr: %v", winPsPath, stdOut, stdErr), log.Error(err))
+		log.Logger.Warnw("Could not get disk mapping for device", "name", deviceName)
+		log.Logger.Debugw("Execution error", "executable", winPsPath, "stdout", stdOut, "stderror", stdErr, "error", err)
 		return "", err
 	}
 	m := strings.Trim(stdOut, "\r\n")
-	log.Logger.Debugf("Mapping for device %v = %v", deviceName, m)
+	log.Logger.Debugw("Mapping for device", "name", deviceName, "mapping", m)
 	return m, nil
 }
 
@@ -83,6 +82,6 @@ func forLinux(deviceName string) (string, error) {
 	if path != "" {
 		path = strings.TrimSuffix(filepath.Base(path), "\n")
 	}
-	log.Logger.Debugf("Mapping for device %v = %v", deviceName, path)
+	log.Logger.Debugw("Mapping for device", "name", deviceName, "mapping", path)
 	return path, nil
 }

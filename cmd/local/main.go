@@ -274,7 +274,7 @@ func startServices(goos string) {
 	ctx := context.Background()
 	gceService, err := gce.New(ctx)
 	if err != nil {
-		log.Logger.Error("Failed to create GCE service", log.Error(err))
+		log.Logger.Errorw("Failed to create GCE service", "error", err)
 		usagemetrics.Error(3) // Unexpected error
 		return
 	}
@@ -282,7 +282,7 @@ func startServices(goos string) {
 	instanceInfoReader := instanceinfo.New(ppr, gceService)
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
-		log.Logger.Error("Failed to create Cloud Monitoring metric client", log.Error(err))
+		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
 		usagemetrics.Error(3) // Unexpected error
 		return
 	}
@@ -297,6 +297,7 @@ func startServices(goos string) {
 			ConfigFileReader:     configFileReader,
 			CommandRunner:        commandRunner,
 			CommandRunnerNoSpace: commandRunnerNoSpace,
+			CommandExistsRunner:  commandExistsRunner,
 			InstanceInfoReader:   *instanceInfoReader,
 			OSStatReader:         osStatReader,
 			TimeSeriesCreator:    mc,
@@ -312,7 +313,7 @@ func startServices(goos string) {
 		// Start the SAP Host Metrics provider
 		mqc, err := monitoring.NewQueryClient(ctx)
 		if err != nil {
-			log.Logger.Error("Failed to create Cloud Monitoring query client", log.Error(err))
+			log.Logger.Errorw("Failed to create Cloud Monitoring query client", "error", err)
 			usagemetrics.Error(3) // Unexpected error
 			return
 		}
@@ -364,17 +365,12 @@ func startServices(goos string) {
 		}
 		agentmetricsService, err := agentmetrics.NewService(ctx, agentMetricsParams)
 		if err != nil {
-			log.Logger.Error("Failed to create agent metrics service", log.Error(err))
+			log.Logger.Errorw("Failed to create agent metrics service", "error", err)
 		} else {
 			agentmetricsService.Start(ctx)
 		}
 	}
 
-	/* (TODO: b/246271815): Add service status monitoring and restart capabilities in main.go.
-	 Sleep forever by blocking current goroutine. Other goroutines will continue to run. Once the
-		to-do is complete, this will be responsible for monitoring the status of services and
-	 	restarting the failed ones as necessary.
-	*/
 	go logRunningDaily()
 
 	// wait for the shutdown signal
@@ -446,6 +442,11 @@ func main() {
 	// local operation
 	log.SetupLoggingToFile(runtime.GOOS, cpb.Configuration_INFO)
 	config = configuration.ReadFromFile(configPath, os.ReadFile)
+	if config.GetBareMetal() && config.GetCloudProperties() == nil {
+		log.Logger.Error("Bare metal instance detected without cloud properties set. Manually set cloud properties in the configuration file to continue.")
+		usagemetrics.Error(1) // Invalid configuration
+		os.Exit(0)
+	}
 	log.SetupLoggingToFile(runtime.GOOS, config.GetLogLevel())
 	cloudProps := fetchCloudProperties()
 	config = configuration.ApplyDefaults(config, cloudProps)
@@ -453,7 +454,7 @@ func main() {
 	if logUsage {
 		err = logUsageStatus(usageStatus, usageAction, usageError)
 		if err != nil {
-			log.Logger.Warn("Could not log usage", log.Error(err))
+			log.Logger.Warnw("Could not log usage", "error", err)
 		}
 		// exit the program, this was a one time execution to just log a usage
 		os.Exit(0)

@@ -26,6 +26,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
@@ -52,6 +53,9 @@ var (
 	//go:embed test_data/metricoverride.yaml
 	sampleOverrideFS        embed.FS
 	defaultBackOffIntervals = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
+	DefaultTestReader       = ConfigFileReader(func(data string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(data)), nil
+	})
 )
 
 func TestCollectMetrics_hasMetrics(t *testing.T) {
@@ -66,6 +70,7 @@ func TestCollectMetrics_hasMetrics(t *testing.T) {
 		Config:               &cfgpb.Configuration{},
 		CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
 		CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
+		CommandExistsRunner:  func(string) bool { return true },
 		ConfigFileReader:     DefaultTestReader,
 		OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
 		OSType:               "linux",
@@ -206,6 +211,7 @@ func TestCollectMetrics_hasOverrideMetrics(t *testing.T) {
 		Config:               &cfgpb.Configuration{},
 		CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
 		CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
+		CommandExistsRunner:  func(string) bool { return true },
 		ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
 			file, err := sampleOverrideFS.Open(path)
 			var f io.ReadCloser = file
@@ -350,6 +356,7 @@ func TestStartMetricsCollection(t *testing.T) {
 					}},
 				CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
 				CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
+				CommandExistsRunner:  func(string) bool { return true },
 				ConfigFileReader:     DefaultTestReader,
 				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
@@ -368,6 +375,7 @@ func TestStartMetricsCollection(t *testing.T) {
 					}},
 				CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
 				CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
+				CommandExistsRunner:  func(string) bool { return true },
 				ConfigFileReader:     DefaultTestReader,
 				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator:    &fake.TimeSeriesCreator{},

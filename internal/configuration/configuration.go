@@ -18,7 +18,6 @@ limitations under the License.
 package configuration
 
 import (
-	"fmt"
 	"runtime"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -56,7 +55,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	}
 	content, err := read(p)
 	if err != nil || len(content) == 0 {
-		log.Logger.Error(fmt.Sprintf("Could not read from configuration file: %s", p), log.Error(err))
+		log.Logger.Errorw("Could not read from configuration file", "file", p, "error", err)
 		usagemetrics.Error(1) // Invalid configuration
 		return nil
 	}
@@ -67,7 +66,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
 		usagemetrics.Error(1) // Invalid configuration
-		log.Logger.Error(fmt.Sprintf("Invalid content in the configuration file: %s, content: %v", p, string(content)), log.Error(err))
+		log.Logger.Errorw("Invalid content in the configuration file", "file", p, "content", string(content), "error", err)
 	}
 	return config
 }

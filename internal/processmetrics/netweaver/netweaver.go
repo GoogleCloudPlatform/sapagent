@@ -104,22 +104,28 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 	}
 	metrics = append(metrics, collectABAPQueueStats(p, abapQueuesRunner)...)
 
-	// TODO(b/259208470): Explore using DB queries for DPMON instead of interactive command line tool.
-	command := `-c 'echo q | dpmon pf=%s v'`
+	dpmonPath := `/usr/sap/` + p.SAPInstance.GetSapsid() + `/SYS/exe/run/dpmon`
+	command := `-c 'echo q | %s pf=%s v'`
 	abapSessionRunner := &commandlineexecutor.Runner{
 		User:       p.SAPInstance.GetUser(),
 		Executable: "bash",
-		Args:       fmt.Sprintf(command, p.SAPInstance.GetProfilePath()),
-		Env:        []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
+		Args:       fmt.Sprintf(command, dpmonPath, p.SAPInstance.GetProfilePath()),
+		Env: []string{
+			"PATH=$PATH:" + p.SAPInstance.GetLdLibraryPath(),
+			"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath(),
+		},
 	}
 	metrics = append(metrics, collectABAPSessionStats(p, abapSessionRunner)...)
 
-	command = `-c 'echo q | dpmon pf=%s c'`
+	command = `-c 'echo q | %s pf=%s c'`
 	abapRFCRunner := &commandlineexecutor.Runner{
 		User:       p.SAPInstance.GetUser(),
 		Executable: "bash",
-		Args:       fmt.Sprintf(command, p.SAPInstance.GetProfilePath()),
-		Env:        []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
+		Args:       fmt.Sprintf(command, dpmonPath, p.SAPInstance.GetProfilePath()),
+		Env: []string{
+			"PATH=$PATH:" + p.SAPInstance.GetLdLibraryPath(),
+			"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath(),
+		},
 	}
 
 	metrics = append(metrics, collectRFCConnections(p, abapRFCRunner)...)
@@ -134,7 +140,7 @@ func collectNetWeaverMetrics(p *InstanceProperties, r sapcontrol.RunnerWithEnv) 
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	procs, _, err := sc.ProcessList(r)
 	if err != nil {
-		log.Logger.Error("Error getting ProcessList", log.Error(err))
+		log.Logger.Errorw("Error getting ProcessList", log.Error(err))
 		return nil
 	}
 
@@ -157,15 +163,16 @@ func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 		}
 
 		extraLabels := map[string]string{
-			"service_name": proc.Name,
+			"service_name":  proc.Name,
+			"instance_type": p.SAPInstance.GetKind().String(),
 		}
 		value := boolToInt64(proc.IsGreen)
 
-		log.Logger.Debugf("Create %q metric for process %q on instance %q with value: %d.",
-			nwServicePath, proc.Name, p.SAPInstance.GetInstanceId(), value)
+		log.Logger.Debugw("Creating metrics for process",
+			"metric", nwServicePath, "process", proc.Name, "instanceid", p.SAPInstance.GetInstanceId(), "value", value)
 		metrics = append(metrics, createMetrics(p, nwServicePath, extraLabels, now, value))
 	}
-	log.Logger.Debugf("Time taken to collect metrics in collectServiceMetrics(): %v.", time.Since(start.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectServiceMetrics()", "time", time.Since(start.AsTime()))
 	return metrics, availabilityValue
 }
 
@@ -176,7 +183,7 @@ func collectHTTPMetrics(p *InstanceProperties) []*sapdiscovery.Metrics {
 	if url == "" {
 		return nil
 	}
-	log.Logger.Debugf("SAP Instance %q has HTTP health check URL: %q.", p.SAPInstance.GetInstanceId(), url)
+	log.Logger.Debugw("SAP Instance HTTP health check", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
 
 	switch p.SAPInstance.GetServiceName() {
 	case "SAP-ICM-ABAP", "SAP-ICM-JAVA":
@@ -197,12 +204,14 @@ func collectICMMetrics(p *InstanceProperties, url string) []*sapdiscovery.Metric
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
 	if err != nil {
-		log.Logger.Debugf("HTTP GET failed for instance: %q URL: %q error: %v", p.SAPInstance.GetInstanceId(), url, err)
+		log.Logger.Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
 		return nil
 	}
+	defer response.Body.Close()
+
 	extraLabels := map[string]string{"service_name": p.SAPInstance.GetServiceName()}
 
-	log.Logger.Debugf("Time taken to collect metrics in collectICMMetrics(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectICMMetrics", "time", time.Since(now.AsTime()))
 	return []*sapdiscovery.Metrics{
 		createMetrics(p, nwICMRCodePath, extraLabels, now, int64(response.StatusCode)),
 		createMetrics(p, nwICMRTimePath, extraLabels, now, timeTaken.Milliseconds()),
@@ -219,7 +228,7 @@ func collectMessageServerMetrics(p *InstanceProperties, url string) []*sapdiscov
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
 	if err != nil {
-		log.Logger.Debugf("HTTP GET failed for instance: %q URL: %q error: %v.", p.SAPInstance.GetInstanceId(), url, err)
+		log.Logger.Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
 		return nil
 	}
 	defer response.Body.Close()
@@ -232,17 +241,17 @@ func collectMessageServerMetrics(p *InstanceProperties, url string) []*sapdiscov
 	}
 
 	if response.StatusCode != http.StatusOK {
-		log.Logger.Debugf("HTTP GET failed with status code: %q.", response.StatusCode)
-		log.Logger.Debugf("Time taken to collect metrics in collectMessageServerMetrics(): %v.", time.Since(now.AsTime()))
+		log.Logger.Debugw("HTTP GET failed", "statuscode", response.StatusCode, "response", response)
+		log.Logger.Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
 		return metrics
 	}
 
 	workProcessCount, err := parseWorkProcessCount(response.Body)
 	if err != nil {
-		log.Logger.Debugf("Reading work process count from message server info page failed: %v.", err)
+		log.Logger.Debugw("Reading work process count from message server info page failed", "error", err)
 		return metrics
 	}
-	log.Logger.Debugf("Time taken to collect metrics in collectMessageServerMetrics(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
 
 	return append(metrics, createMetrics(p, nwMSWorkProcessesPath, extraLabels, now, int64(workProcessCount)))
 }
@@ -272,25 +281,25 @@ func collectABAPProcessStatus(p *InstanceProperties, r sapcontrol.RunnerWithEnv)
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	processCount, busyProcessCount, err := sc.ParseABAPGetWPTable(r)
 	if err != nil {
-		log.Logger.Debugf("Command sapcontrol failed with error: %v.", err)
+		log.Logger.Debugw("Command sapcontrol failed", "error", err)
 		return nil
 	}
 
 	var metrics []*sapdiscovery.Metrics
 	for k, v := range processCount {
 		extraLabels := map[string]string{"abap_process": k}
-		log.Logger.Debugf("Create %q metric for abap_process %q on instance %q with value: %d.",
-			nwABAPProcCountPath, k, p.SAPInstance.GetInstanceNumber(), v)
+		log.Logger.Debugw("Creating metric for abap_process",
+			"metric", nwABAPProcCountPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPProcCountPath, extraLabels, now, int64(v)))
 	}
 
 	for k, v := range busyProcessCount {
 		extraLabels := map[string]string{"abap_process": k}
-		log.Logger.Debugf("Create %q metric for abap_process %q on instance %q with value: %d.",
-			nwABAPProcBusyPath, k, p.SAPInstance.GetInstanceNumber(), v)
+		log.Logger.Debugw("Creating metric for abap_process",
+			"metric", nwABAPProcCountPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPProcBusyPath, extraLabels, now, int64(v)))
 	}
-	log.Logger.Debugf("Time taken to collect metrics in collectABAPProcessStatus(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectABAPProcessStatus()", "time", time.Since(now.AsTime()))
 	return metrics
 }
 
@@ -300,63 +309,63 @@ func collectABAPQueueStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	currentQueueUsage, peakQueueUsage, err := sc.ParseQueueStats(r)
 	if err != nil {
-		log.Logger.Debugf("Command sapcontrol failed with error: %v.", err)
+		log.Logger.Debugw("Command sapcontrol failed", "error", err)
 		return nil
 	}
 
 	var metrics []*sapdiscovery.Metrics
 	for k, v := range currentQueueUsage {
 		extraLabels := map[string]string{"abap_queue": k}
-		log.Logger.Debugf("Create %q metric with labels %v on instance %q with value: %d.",
-			nwABAPProcQueueCurrentPath, extraLabels, p.SAPInstance.GetInstanceNumber(), v)
+		log.Logger.Debugw("Creating metric with labels",
+			"metric", nwABAPProcQueueCurrentPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 
 		metrics = append(metrics, createMetrics(p, nwABAPProcQueueCurrentPath, extraLabels, now, int64(v)))
 	}
 
 	for k, v := range peakQueueUsage {
 		extraLabels := map[string]string{"abap_queue_peak": k}
-		log.Logger.Debugf("Create %q metric with labels %v on instance %q with value: %d.",
-			nwABAPProcQueuePeakPath, extraLabels, p.SAPInstance.GetInstanceNumber(), v)
+		log.Logger.Debugw("Creating metric with labels",
+			"metric", nwABAPProcQueueCurrentPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 
 		metrics = append(metrics, createMetrics(p, nwABAPProcQueuePeakPath, extraLabels, now, int64(v)))
 	}
-	log.Logger.Debugf("Time taken to collect metrics in collectABAPQueueStats(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectABAPQueueStats()", "time", time.Since(now.AsTime()))
 	return metrics
 }
 
-// collectABAPSessionStats collects ABAP session realted metrics using dpmon tool.
+// collectABAPSessionStats collects ABAP session related metrics using dpmon tool.
 func collectABAPSessionStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
 	now := tspb.Now()
 
 	stdOut, stdErr, code, err := r.RunWithEnv()
-	log.Logger.Debugf("DPMON for sessionStats returned StdOut %q StdErr: %q, return code: %d, Error: %v.", stdOut, stdErr, code, err)
+	log.Logger.Debugw("DPMON for sessionStat output", "stdout", stdOut, "stderr", stdErr, "exitcode", code, "error", err)
 	if err != nil {
-		log.Logger.Debug("DPMON failed", log.Error(err))
+		log.Logger.Debugw("DPMON failed", log.Error(err))
 		return nil
 	}
 
 	var metrics []*sapdiscovery.Metrics
 	sessionCounts, totalCount, err := parseABAPSessionStats(stdOut)
 	if err != nil {
-		log.Logger.Debug("DPMON ran successfully, but no ABAP session currently active", log.Error(err))
+		log.Logger.Debugw("DPMON ran successfully, but no ABAP session currently active", log.Error(err))
 		return nil
 	}
 
 	for k, v := range sessionCounts {
 		extraLabels := map[string]string{"abap_session_type": k}
-		log.Logger.Debugf("Create %q metric with labels %v on instance %q with value: %d.",
-			nwABAPSessionsPath, extraLabels, p.SAPInstance.GetInstanceNumber(), v)
+		log.Logger.Debugw("Creating metric with labels",
+			"metric", nwABAPSessionsPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 
 		metrics = append(metrics, createMetrics(p, nwABAPSessionsPath, extraLabels, now, int64(v)))
 	}
 
 	extraLabels := map[string]string{"abap_session_type": "total_count"}
-	log.Logger.Debugf("Create %q metric with labels %v on instance %q with value: %d.",
-		nwABAPSessionsPath, extraLabels, p.SAPInstance.GetInstanceNumber(), totalCount)
+	log.Logger.Debugw("Creating metric with labels",
+		"metric", nwABAPSessionsPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", totalCount)
 
 	metrics = append(metrics, createMetrics(p, nwABAPSessionsPath, extraLabels, now, int64(totalCount)))
 
-	log.Logger.Debugf("Time taken to collect metrics in collectABAPSessionStats(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectABAPSessionStats()", "time", time.Since(now.AsTime()))
 	return metrics
 }
 
@@ -365,9 +374,9 @@ func collectRFCConnections(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 	now := tspb.Now()
 
 	stdOut, stdErr, code, err := r.RunWithEnv()
-	log.Logger.Debug(fmt.Sprintf("DPMON for RFC returned StdOut %q StdErr: %q, return code: %d", stdOut, stdErr, code), log.Error(err))
+	log.Logger.Debugw("DPMON for RFC output", "stdout", stdOut, "stderr", stdErr, "exitcode", code, "error", err)
 	if err != nil {
-		log.Logger.Debug("DPMON for RFC failed", log.Error(err))
+		log.Logger.Debugw("DPMON for RFC failed", log.Error(err))
 		return nil
 	}
 
@@ -375,11 +384,11 @@ func collectRFCConnections(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 	rfcStateCount := parseRFCStats(stdOut)
 	for k, v := range rfcStateCount {
 		extraLabels := map[string]string{"abap_rfc_conn": k}
-		log.Logger.Debugf("Create %q metric with labels %v on instance %q with value: %d.",
-			nwABAPRFCPath, extraLabels, p.SAPInstance.GetInstanceNumber(), v)
+		log.Logger.Debugw("Creating metric with labels",
+			"metric", nwABAPRFCPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPRFCPath, extraLabels, now, int64(v)))
 	}
-	log.Logger.Debugf("Time taken to collect metrics in collectRFCConnections(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectRFCConnections()", "time", time.Since(now.AsTime()))
 	return metrics
 }
 

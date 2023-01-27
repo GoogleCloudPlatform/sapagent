@@ -19,7 +19,6 @@ package cloudmonitoring
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -75,9 +74,9 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 	err := backoff.Retry(func() error {
 		if err := client.CreateTimeSeries(ctx, req); err != nil {
 			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.Logger.Error(fmt.Sprintf("Error in CreateTimeSeries (attempt %d), Permission denided - Enable the Monitoring Metrics Writer IAM role for the Service Account", attempt), log.Error(err))
+				log.Logger.Errorw("Error in CreateTimeSeries, Permission denided - Enable the Monitoring Metrics Writer IAM role for the Service Account", "attempt", attempt, "error", err)
 			} else {
-				log.Logger.Error(fmt.Sprintf("Error in CreateTimeSeries (attempt %d)", attempt), log.Error(err))
+				log.Logger.Errorw("Error in CreateTimeSeries", "attempt", attempt, "error", err)
 			}
 			attempt++
 			return err
@@ -86,7 +85,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 	}, shortConstantBackOffPolicy(ctx, bo.ShortConstant))
 
 	if err != nil {
-		log.Logger.Errorf("CreateTimeSeries retry limit exceeded. req: %v", req)
+		log.Logger.Errorw("CreateTimeSeries retry limit exceeded", "request", req)
 		return err
 	}
 	return nil
@@ -104,16 +103,16 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 		res, err = client.QueryTimeSeries(ctx, req)
 		if err != nil {
 			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.Logger.Error(fmt.Sprintf("Error in QueryTimeSeries (attempt %d), Permission denied - Enable the Monitoring Viewer IAM role for the Service Account", attempt), log.Error(err))
+				log.Logger.Errorw("Error in QueryTimeSeries, Permission denied - Enable the Monitoring Viewer IAM role for the Service Account", "attempt", attempt, "error", err)
 			} else {
-				log.Logger.Error(fmt.Sprintf("Error in QueryTimeSeries (attempt %d)", attempt), log.Error(err))
+				log.Logger.Errorw("Error in QueryTimeSeries", "attempt", attempt, "error", err)
 			}
 			attempt++
 		}
 		return err
 	}, longExponentialBackOffPolicy(ctx, bo.LongExponential))
 	if err != nil {
-		log.Logger.Errorf("QueryTimeSeries retry limit exceeded. req: %v", req)
+		log.Logger.Errorw("QueryTimeSeries retry limit exceeded", "request", req, "error", err, "attempt", attempt)
 		return nil, err
 	}
 	return res, nil

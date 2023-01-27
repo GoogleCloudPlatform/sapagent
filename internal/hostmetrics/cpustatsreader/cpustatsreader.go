@@ -15,12 +15,9 @@ limitations under the License.
 */
 
 // Package cpustatsreader provides functionality for collecting OS cpu metrics.
-//
-// TODO(b/265431344): Collect CPU stats using the gopsutil library.
 package cpustatsreader
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -56,7 +53,7 @@ func New(os string, fileReader FileReader, runCommand RunCommand) *Reader {
 
 // The Read method reads CPU metrics from the OS and returns a proto for CpuStats.
 func (r *Reader) Read() *statspb.CpuStats {
-	log.Logger.Debugf("Reading CPU stats...")
+	log.Logger.Debug("Reading CPU stats...")
 	var s *statspb.CpuStats
 	switch r.os {
 	case "linux":
@@ -64,15 +61,12 @@ func (r *Reader) Read() *statspb.CpuStats {
 	case "windows":
 		s = r.readCPUStatsForWindows()
 	default:
-		log.Logger.Errorf("Encountered an unexpected OS value: %s.", r.os)
+		log.Logger.Errorw("Encountered an unexpected OS value", "value", r.os)
 		return nil
 	}
 
 	if s != nil {
-		log.Logger.Debugf("Cpu processor type: %s", s.GetProcessorType())
-		log.Logger.Debugf("Cpu count: %d", s.GetCpuCount())
-		log.Logger.Debugf("Cpu cores: %d", s.GetCpuCores())
-		log.Logger.Debugf("Cpu max mhz: %d", s.GetMaxMhz())
+		log.Logger.Debugw("Cpu stats", "type", s.GetProcessorType(), "count", s.GetCpuCount(), "cores", s.GetCpuCores(), "maxmhz", s.GetMaxMhz())
 	}
 	return s
 }
@@ -85,7 +79,7 @@ func (r *Reader) readCPUStatsForWindows() *statspb.CpuStats {
 	args := []string{"cpu", "get", "Name,", "MaxClockSpeed,", "NumberOfCores,", "NumberOfLogicalProcessors/Format:List"}
 	o, e, err := r.runCommand("wmic", args...)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not execute wmic, stderr: %s", e), log.Error(err))
+		log.Logger.Errorw("Could not execute wmic get NumberOfLogicalProcessors/Format:List", "stdout", o, "stderr", e, "error", err)
 		return s
 	}
 	o = strings.ReplaceAll(o, "\r", "")
@@ -101,21 +95,21 @@ func (r *Reader) readCPUStatsForWindows() *statspb.CpuStats {
 		case "MaxClockSpeed":
 			n, err := strconv.ParseFloat(l[1], 64)
 			if err != nil {
-				log.Logger.Errorf(fmt.Sprintf("Could not parse NumberOfLogicalProcessors from %q", l[1]), log.Error(err))
+				log.Logger.Errorw("Could not parse MaxClockSpeed", "value", l[1], "error", err)
 				continue
 			}
 			s.MaxMhz = int64(math.Round(n))
 		case "NumberOfCores":
 			n, err := strconv.ParseInt(l[1], 10, 64)
 			if err != nil {
-				log.Logger.Error(fmt.Sprintf("Could not parse NumberOfLogicalProcessors from %q", l[1]), log.Error(err))
+				log.Logger.Errorw("Could not parse NumberOfCores", "value", l[1], "error", err)
 				continue
 			}
 			s.CpuCores = n
 		case "NumberOfLogicalProcessors":
 			n, err := strconv.ParseInt(l[1], 10, 64)
 			if err != nil {
-				log.Logger.Error(fmt.Sprintf("Could not parse NumberOfLogicalProcessors from %q", l[1]), log.Error(err))
+				log.Logger.Errorw("Could not parse NumberOfLogicalProcessors", "value", l[1], "error", err)
 				continue
 			}
 			s.CpuCount = n
@@ -130,10 +124,10 @@ func (r *Reader) readCPUStatsForLinux() *statspb.CpuStats {
 	// Use the contents of /proc/cpuinfo to get the CPU stats
 	d, err := r.fileReader("/proc/cpuinfo")
 	if err != nil {
-		log.Logger.Errorf("Could not read data from /proc/cpuinfo", log.Error(err))
+		log.Logger.Errorw("Could not read data from /proc/cpuinfo", log.Error(err))
 	}
 	c := string(d)
-	log.Logger.Debugf("/proc/cpuinfo data: %q", c)
+	log.Logger.Debugw("/proc/cpuinfo data", "data", c)
 	lines := strings.Split(c, "\n")
 	cc := int64(0)
 	for _, line := range lines {
@@ -154,14 +148,14 @@ func (r *Reader) readCPUStatsForLinux() *statspb.CpuStats {
 		case "cpu MHz":
 			n, err := strconv.ParseFloat(val, 64)
 			if err != nil {
-				log.Logger.Error(fmt.Sprintf("Could not parse cpu MHz from %q", val), log.Error(err))
+				log.Logger.Errorw("Could not parse cpu MHz from value", "value", val, "error", err)
 				continue
 			}
 			s.MaxMhz = int64(math.Round(n))
 		case "cpu cores":
 			n, err := strconv.ParseInt(val, 10, 64)
 			if err != nil {
-				log.Logger.Error(fmt.Sprintf("Could not parse cpu cores from %q", val), log.Error(err))
+				log.Logger.Errorw("Could not parse cpu cores from value", "value", val, "error", err)
 				continue
 			}
 			s.CpuCores = n

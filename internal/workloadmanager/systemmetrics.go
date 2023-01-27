@@ -17,7 +17,6 @@ limitations under the License.
 package workloadmanager
 
 import (
-	"fmt"
 	"net"
 	"strings"
 
@@ -56,7 +55,7 @@ func CollectSystemMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 func netInterfacesValue() string {
 	addrs, err := netInterfaceAdddrs()
 	if err != nil {
-		log.Logger.Warnf("Could not get network interface addresses: %s", err)
+		log.Logger.Warnw("Could not get network interface addresses", "error", err)
 		return ""
 	}
 	v := []string{}
@@ -70,7 +69,7 @@ func goiniParse(f string) *goini.INI {
 	ini := goini.New()
 	err := ini.ParseFile(f)
 	if err != nil {
-		log.Logger.Warn("Could not read OS information from /etc/os-release", log.Error(err))
+		log.Logger.Warnw("Could not read OS information from /etc/os-release", "error", err)
 	}
 	return ini
 }
@@ -121,13 +120,13 @@ func trimAndSplitWmicOutput(s string) string {
 func windowsOsRelease() string {
 	c, ce, cerr := osCaptionExecute()
 	if cerr != nil {
-		log.Logger.Warn(fmt.Sprintf("Could not execute wmic get Caption, stderr: %s", ce), log.Error(cerr))
+		log.Logger.Warnw("Could not execute wmic get Caption", "stderr", ce, "error", cerr)
 		c = ""
 	}
 	c = trimAndSplitWmicOutput(c)
 	v, ve, verr := osVersionExecute()
 	if verr != nil {
-		log.Logger.Warn(fmt.Sprintf("Could not execute wmic get Version, stderr: %s", ve), log.Error(verr))
+		log.Logger.Warnw("Could not execute wmic get Version", "stderr", ve, "error", verr)
 		v = ""
 	}
 	v = trimAndSplitWmicOutput(v)
@@ -156,7 +155,7 @@ func agentState(runtimeOS string) string {
 	state := "notinstalled"
 	s, _, err := agentServiceStatus(runtimeOS)
 	if err != nil {
-		log.Logger.Warn("Could not get the agents service status", log.Error(err))
+		log.Logger.Warnw("Could not get the agents service status", "error", err)
 		return state
 	}
 	s = strings.TrimSpace(s)

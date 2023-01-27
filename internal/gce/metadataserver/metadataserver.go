@@ -75,33 +75,33 @@ func CloudPropertiesWithRetry(bo backoff.BackOff) *instancepb.CloudProperties {
 		var err error
 		cp, err = requestCloudProperties()
 		if err != nil {
-			log.Logger.Errorf("Error in requestCloudProperties (attempt %d)", attempt)
-			log.Logger.Debug("Error", log.Error(err))
+			log.Logger.Errorw("Error in requestCloudProperties", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, bo)
 	if err != nil {
-		log.Logger.Error("CloudProperties retry limit exceeded", log.Error(err))
+		log.Logger.Errorw("CloudProperties request retry limit exceeded", log.Error(err))
 	}
 	return cp
 }
 
 // requestCloudProperties attempts to fetch information from the GCE metadata server.
 func requestCloudProperties() (*instancepb.CloudProperties, error) {
-	// TODO(b/260115683): Add better logging on how to resolve failures - links to docs, enabling apis, etc.
+	helpString := `For information on permissions needed to access metadata refer: https://cloud.google.com/compute/docs/metadata/querying-metadata#permissions. Restart the agent after adding necessary permissions.`
+
 	req, err := http.NewRequest("GET", metadataServerURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request to metadata server: %v", err)
+		return nil, fmt.Errorf("failed to make request to metadata server: %v, %s", err, helpString)
 	}
 	req.Header.Add("Metadata-Flavor", "Google")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to receive response from metadata server: %v", err)
+		return nil, fmt.Errorf("failed to receive response from metadata server: %v, %s", err, helpString)
 	}
 	defer res.Body.Close()
 	if !isStatusSuccess(res.StatusCode) {
-		return nil, fmt.Errorf("unsuccessful response from metadata server: %s", res.Status)
+		return nil, fmt.Errorf("unsuccessful response from metadata server: %s, %s", res.Status, helpString)
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
@@ -124,7 +124,8 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 		image = ImageUnknown
 	}
 
-	log.Logger.Infof("Default Cloud Properties from metadata server: projectId=%s, projectNum=%s, instanceId=%s, zone=%s, name=%s, image=%s", projectID, numericProjectID, instanceID, zone, instanceName, image)
+	log.Logger.Infow("Default Cloud Properties from metadata server",
+		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image)
 
 	if projectID == "" || numericProjectID == "0" || instanceID == "0" || zone == "" || instanceName == "" {
 		return nil, fmt.Errorf("metadata server responded with incomplete information")

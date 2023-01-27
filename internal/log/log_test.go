@@ -94,3 +94,18 @@ func TestSetupLoggingToDiscard(t *testing.T) {
 		t.Errorf("SetupLoggingToDiscard() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
 	}
 }
+
+func TestSetupLoggingForTest(t *testing.T) {
+	wantLevel := "debug"
+	wantLogFile := ""
+	SetupLoggingForTest()
+	got := GetLevel()
+	if got != wantLevel {
+		t.Errorf("TestSetupLoggingForTest() level is incorrect, got: %s, want: %s", got, wantLevel)
+	}
+
+	got = GetLogFile()
+	if got != wantLogFile {
+		t.Errorf("TestSetupLoggingForTest() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
+	}
+}

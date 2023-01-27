@@ -24,7 +24,6 @@ package pacemaker
 
 import (
 	"encoding/xml"
-	"fmt"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -110,7 +109,7 @@ func ParseCRMMon(byteVal []byte) (*CRMMon, error) {
 	if err := xml.Unmarshal(byteVal, crm); err != nil {
 		return nil, err
 	}
-	log.Logger.Debugf("XML parsed to 'crmMon' struct as: %v.", crm)
+	log.Logger.Debugw("XML parsed to 'crmMon' struct", "crm", crm)
 	return crm, nil
 }
 
@@ -120,8 +119,7 @@ func Enabled() bool {
 	return IsEnabled(commandlineexecutor.CommandExists, commandlineexecutor.ExpandAndExecuteCommand)
 }
 
-// IsEnabled is testable version of Enabled.
-// TODO(b/252819120): Test exported functions using test stubs.
+// IsEnabled is a testable version of Enabled.
 func IsEnabled(exists commandlineexecutor.CommandExistsRunner, runner commandlineexecutor.CommandRunner) bool {
 	if !exists("crm_mon") {
 		log.Logger.Debug("Command 'crm_mon' not found.")
@@ -129,12 +127,12 @@ func IsEnabled(exists commandlineexecutor.CommandExistsRunner, runner commandlin
 	}
 	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Command 'crm_mon --as-xml' failed, stdOut: %s, stdErr: %s.", stdOut, stdErr), log.Error(err))
+		log.Logger.Errorw("Command 'crm_mon --as-xml' failed", "stdout", stdOut, "stderr", stdErr, "error", err)
 		return false
 	}
 	crm, err := ParseCRMMon([]byte(stdOut))
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Failed to parse crm_mon's XML Output: %s", stdOut), log.Error(err))
+		log.Logger.Errorw("Failed to parse crm_mon's XML Output", "error", err)
 		return false
 	}
 	if len(crm.Nodes) > 0 {
@@ -150,11 +148,10 @@ func NodeState() (map[string]string, error) {
 	return nState(commandlineexecutor.ExpandAndExecuteCommand)
 }
 
-// TODO(b/252819120): Test exported functions using test stubs.
 // nState is a testable version of NodeState.
 func nState(runner commandlineexecutor.CommandRunner) (map[string]string, error) {
 	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
-	log.Logger.Debugf("Command 'crm_mon --as-xml' returned stdOut: %s, stdErr: %s.", stdOut, stdErr)
+	log.Logger.Debugw("Command 'crm_mon --as-xml' returned", "stdout", stdOut, "stderr", stdErr)
 	if err != nil {
 		return nil, err
 	}
@@ -187,11 +184,10 @@ func ResourceState() ([]Resource, error) {
 	return rState(commandlineexecutor.ExpandAndExecuteCommand)
 }
 
-// TODO(b/252819120): Test exported functions using test stubs.
 // rState is a testable version of ResourceState.
 func rState(runner commandlineexecutor.CommandRunner) ([]Resource, error) {
 	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
-	log.Logger.Debugf("Command 'crm_mon --as-xml' returned stdOut: %s, stdErr: %s.", stdOut, stdErr)
+	log.Logger.Debugw("Command 'crm_mon --as-xml' returned", "stdout", stdOut, "stderr", stdErr)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +218,7 @@ func rState(runner commandlineexecutor.CommandRunner) ([]Resource, error) {
 // Returns a (nil, error) in case of failures.
 func FailCount(runner commandlineexecutor.CommandRunner) ([]ResourceFailCount, error) {
 	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
-	log.Logger.Debugf("Command 'crm_mon --as-xml' returned stdOut: %s, stdErr: %s.", stdOut, stdErr)
+	log.Logger.Debugw("Command 'crm_mon --as-xml' returned", "stdout", stdOut, "stderr", stdErr)
 	if err != nil {
 		return nil, err
 	}

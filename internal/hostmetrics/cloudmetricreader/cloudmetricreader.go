@@ -122,7 +122,7 @@ func (r *CloudMetricReader) createPassthroughMetrics(ctx context.Context, config
 		})
 	}
 	metricValues := parseTimeSeriesData(passthroughMetrics, data)
-	log.Logger.Debugf("Metric values: %v", metricValues)
+	log.Logger.Debugw("Metric values", "values", metricValues)
 
 	var metrics []*mpb.Metric
 	for k, v := range metricValues {
@@ -152,7 +152,7 @@ func (r *CloudMetricReader) createNetworkMetrics(ctx context.Context, adapters [
 		})
 	}
 	metricValues := parseTimeSeriesData(networkMetrics, data)
-	log.Logger.Debugf("Metric values: %v", metricValues)
+	log.Logger.Debugw("Network metric values", "values", metricValues)
 
 	// Since device is shared across adapters, it is expected that the metrics returned will be the same for each.
 	for _, adapter := range adapters {
@@ -215,11 +215,11 @@ func (r *CloudMetricReader) createDiskMetrics(ctx context.Context, disks []*inst
 		})
 	}
 	diskDeltaMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskDeltaMetrics, diskDeltaData)
-	log.Logger.Debugf("Metric values: %v", diskDeltaMetricValues)
+	log.Logger.Debugw("Disk delta metric values", "values", diskDeltaMetricValues)
 	diskRateMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskRateMetrics, diskRateData)
-	log.Logger.Debugf("Metric values: %v", diskRateMetricValues)
+	log.Logger.Debugw("Disk rate metric values", "values", diskRateMetricValues)
 	diskMaxMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskMaxMetrics, diskMaxData)
-	log.Logger.Debugf("Metric values: %v", diskMaxMetricValues)
+	log.Logger.Debugw("Disk max metric values", "values", diskMaxMetricValues)
 
 	for _, deviceID := range deviceNames {
 		for _, k := range diskDeltaMetrics {
@@ -270,20 +270,20 @@ func (r *CloudMetricReader) queryTimeSeriesData(ctx context.Context, metrics []s
 		Name:  fmt.Sprintf("projects/%s", projectID),
 		Query: b.String(),
 	}
-	log.Logger.Debugf("QueryTimeSeries request: %s", b.String())
+	log.Logger.Debugw("QueryTimeSeries request", "request", b.String())
 	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, r.QueryClient, req, r.BackOffs)
-	log.Logger.Debug(fmt.Sprintf("QueryTimeSeries response: %v", data), log.Error(err))
+	log.Logger.Debugw("QueryTimeSeries response", "response", data, "error", err)
 
 	// Log any error that is encountered but allow the collection of metrics to proceed with a zero time series.
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("The QueryTimeSeries request for metrics %v has failed", metrics), log.Error(err))
+		log.Logger.Errorw("The QueryTimeSeries request for metrics has failed", "metrics", metrics, "error", err)
 	}
 	return data
 }
 
 // buildMetric returns a formatted Metric proto containing the time series data value found for a given metric key and refresh time.
 func buildMetric(key sapMetricKey, value float64, refresh time.Time, deviceID string) *mpb.Metric {
-	log.Logger.Debugf("Building metric %s with value %g.", key, value)
+	log.Logger.Debugw("Building metric with value", "metric", key, "value", value)
 	sap := sapMetrics[key]
 	metric := &mpb.Metric{
 		Context:         sap.context,
@@ -367,12 +367,12 @@ func parseTimeSeriesData(metrics []sapMetricKey, data []*mrpb.TimeSeriesData) ma
 	}
 
 	if len(data) == 0 {
-		log.Logger.Debugf("There is no time series data for metrics: %v.", metrics)
+		log.Logger.Debugw("There is no time series data for metrics", "metrics", metrics)
 		return metricValues
 	}
 	points := data[0].GetPointData()
 	if len(points) == 0 {
-		log.Logger.Debugf("There is no point data in the time series for metrics: %v.", metrics)
+		log.Logger.Debugw("There is no point data in the time series for metrics", "metrics", metrics)
 		return metricValues
 	}
 	// In the event of multiple points in the time series, the first entry is the most recent.
@@ -418,7 +418,7 @@ func parseTimeSeriesDataByDisk(deviceNames []string, metrics []sapMetricKey, dat
 	}
 
 	if len(data) == 0 {
-		log.Logger.Debugf("There is no time series data for metrics: %v.", metrics)
+		log.Logger.Debugw("There is no time series data for metrics", "metrics", metrics)
 		return metricValues
 	}
 	for i, d := range data {

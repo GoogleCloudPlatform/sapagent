@@ -124,13 +124,13 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 }
 
 func collectReplicationHA(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
-	log.Logger.Debugf("Collecting HANA Replication HA metrics for instance: %q.", p.SAPInstance.GetInstanceId())
+	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", p.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	processes, sapControlResult, err := sc.ProcessList(r)
 	if err != nil {
-		log.Logger.Error("Error getting ProcessList", log.Error(err))
+		log.Logger.Errorw("Error getting ProcessList", log.Error(err))
 		return nil
 	}
 	metrics, availabilityValue := collectHANAServiceMetrics(p, processes, now)
@@ -145,7 +145,7 @@ func collectReplicationHA(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*
 	haAvailabilityValue := haAvailabilityValue(p, int64(sapControlResult), haReplicationValue)
 	metrics = append(metrics, createMetrics(p, haAvailabilityPath, nil, now, haAvailabilityValue))
 
-	log.Logger.Debugf("Time taken to collect metrics in CollectReplicationHA(): %d.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
 	return metrics
 }
 
@@ -179,12 +179,12 @@ func collectHANAQueryMetrics(p *InstanceProperties, run runCmdAsUserExitCode) []
 	now := tspb.Now()
 	queryState, err := runHANAQuery(p, run)
 	if err != nil {
-		log.Logger.Error("Error in running query", log.Error(err))
+		log.Logger.Errorw("Error in running query", log.Error(err))
 		// Return a non-zero state in case of query failure.
 		return []*sapdiscovery.Metrics{createMetrics(p, queryStatePath, nil, now, 1)}
 	}
 
-	log.Logger.Debugf("HANA query metrics for instance %q : %v.", p.SAPInstance.GetInstanceId(), queryState)
+	log.Logger.Debugw("HANA query metrics for instance", "instanceid", p.SAPInstance.GetInstanceId(), "querystate", queryState)
 	return []*sapdiscovery.Metrics{
 		createMetrics(p, queryStatePath, nil, now, queryState.state),
 		createMetrics(p, queryOverallTimePath, nil, now, queryState.overallTime),
@@ -202,7 +202,7 @@ func runHANAQuery(p *InstanceProperties, run runCmdAsUserExitCode) (queryState, 
 		port, p.SAPInstance.GetHanaDbUser(), p.SAPInstance.GetHanaDbPassword(), hanaQuery)
 
 	stdOut, stdErr, state, err := run(p.SAPInstance.GetUser(), hdbsql, args)
-	log.Logger.Debugf("Command %q returned stdOut:%q, stdErr:%q, exitCode: %q.", hdbsql, stdOut, stdErr, state)
+	log.Logger.Debugw("HANA query command returned", "sql", hdbsql, "stdout", stdOut, "stderror", stdErr, "state", state, "err", err)
 	if err != nil {
 		return queryState{}, err
 	}
@@ -223,7 +223,7 @@ func runHANAQuery(p *InstanceProperties, run runCmdAsUserExitCode) (queryState, 
 // parseQueryOutput parses a string to get the time taken by the query.
 func parseQueryOutput(str string, regex *regexp.Regexp) (int64, error) {
 	matches := regex.FindStringSubmatch(str)
-	log.Logger.Debugf("Matching substrings for regex %s : %v.", regex.String(), matches)
+	log.Logger.Debugw("Matching substrings for regex", "regex", regex.String(), "matches", matches)
 	if len(matches) != 2 {
 		return 0, fmt.Errorf("error getting query time from output string: %q", str)
 	}
@@ -246,7 +246,7 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 		Int64Value:   val,
 		BareMetal:    p.Config.BareMetal,
 	}
-	log.Logger.Debugf("Create %s=%d metric for instance %q with labels=%s.", mPath, val, p.SAPInstance.GetInstanceId(), mLabels)
+	log.Logger.Debugw("Create metric for instance", "key", mPath, "value", val, "instanceid", p.SAPInstance.GetInstanceId(), "labels", mLabels)
 	return &sapdiscovery.Metrics{TimeSeries: timeseries.BuildInt(params)}
 }
 
@@ -291,8 +291,8 @@ func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicat
 	default:
 		log.Logger.Warn("HANA HA availability state unknown.")
 	}
-	log.Logger.Debugf("HANA HA availability: %d for sapcontrol return code: %d, replication code:%d.",
-		haAvVal, sapControlResult, replicationStatus)
+	log.Logger.Debugw("HANA HA availability for sapcontrol",
+		"availability", haAvVal, "returncode", sapControlResult, "replicationcode", replicationStatus)
 	return haAvVal
 }
 
@@ -307,7 +307,7 @@ func refreshHAReplicationConfig(p *InstanceProperties) int64 {
 
 	//This is not in-band error handling. Metric should be zero in case of failures.
 	if err != nil {
-		log.Logger.Debugf("Failed to refresh HANA HA Replication config for instance: %q.", p.SAPInstance.GetInstanceId())
+		log.Logger.Debugw("Failed to refresh HANA HA Replication config for instance", "instanceid", p.SAPInstance.GetInstanceId())
 		return 0
 	}
 

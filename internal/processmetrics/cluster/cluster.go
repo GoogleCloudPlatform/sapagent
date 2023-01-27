@@ -114,7 +114,7 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState) ([]*sa
 	now := tspb.Now()
 	nodeState, err := read()
 	if err != nil {
-		log.Logger.Error("Failure in reading pacemaker node state", log.Error(err))
+		log.Logger.Errorw("Failure in reading pacemaker node state", log.Error(err))
 		return nil, nil
 	}
 
@@ -127,7 +127,7 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState) ([]*sa
 		nodeMetric := createMetrics(p, nodesPath, extraLabels, now, int64(nodeValue))
 		metrics = append(metrics, nodeMetric)
 	}
-	log.Logger.Debugf("Time taken to collect metrics in nodeState(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in nodeState()", "time", time.Since(now.AsTime()))
 	return metrics, metricValues
 }
 
@@ -141,7 +141,7 @@ func collectResourceState(p *InstanceProperties, read readPacemakerResourceState
 	now := tspb.Now()
 	resourceState, err := read()
 	if err != nil {
-		log.Logger.Error("Failure in reading pacemaker resource state", log.Error(err))
+		log.Logger.Errorw("Failure in reading pacemaker resource state", log.Error(err))
 		return nil, nil
 	}
 
@@ -155,7 +155,7 @@ func collectResourceState(p *InstanceProperties, read readPacemakerResourceState
 		resourceMetric := createMetrics(p, resourcesPath, extraLabels, now, int64(rValue))
 		metrics = append(metrics, resourceMetric)
 	}
-	log.Logger.Debugf("Time taken to collect metrics in resourceState(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in resourceState()", "time", time.Since(now.AsTime()))
 	return metrics, metricValues
 }
 
@@ -178,7 +178,7 @@ func collectFailCount(p *InstanceProperties, read readPacemakerFailCount) ([]*sa
 	now := tspb.Now()
 	resourceFailCounts, err := read(commandlineexecutor.ExpandAndExecuteCommand)
 	if err != nil {
-		log.Logger.Debug("Failure reading pacemaker resource fail-count", log.Error(err))
+		log.Logger.Debugw("Failure reading pacemaker resource fail-count", log.Error(err))
 		return nil, nil
 	}
 
@@ -190,7 +190,7 @@ func collectFailCount(p *InstanceProperties, read readPacemakerFailCount) ([]*sa
 		metrics = append(metrics, createMetrics(p, failCountsPath, extraLabels, now, int64(r.FailCount)))
 		metricValues = append(metricValues, r.FailCount)
 	}
-	log.Logger.Debugf("Time taken to collect metrics in collectFailCount(): %v.", time.Since(now.AsTime()))
+	log.Logger.Debugw("Time taken to collect metrics in collectFailCount()", "time", time.Since(now.AsTime()))
 	return metrics, metricValues
 }
 

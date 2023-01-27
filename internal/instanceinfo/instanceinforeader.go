@@ -64,7 +64,7 @@ func (r *Reader) InstanceProperties() *instancepb.InstanceProperties {
 // Read queries instance information using the compute API and stores the result as instanceProperties.
 func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAddressMapper) {
 	if config.GetBareMetal() {
-		log.Logger.Debugf("Bare Metal configured, cannot get instance information from the Compute API")
+		log.Logger.Debug("Bare Metal configured, cannot get instance information from the Compute API")
 		return
 	}
 
@@ -77,7 +77,7 @@ func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAdd
 	projectID, zone, instanceID := cp.GetProjectId(), cp.GetZone(), cp.GetInstanceId()
 	instance, err := r.gceService.GetInstance(projectID, zone, instanceID)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not get instance info from compute API, project=%s zone=%s instance=%s, Enable the Compute Viewer IAM role for the Service Account", projectID, zone, instanceID), log.Error(err))
+		log.Logger.Errorw("Could not get instance info from compute API, Enable the Compute Viewer IAM role for the Service Account", "project", projectID, "zone", zone, "instanceid", instanceID, "error", err)
 		return
 	}
 
@@ -96,10 +96,10 @@ func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAdd
 
 		mapping, err := r.dm.ForDeviceName(disk.DeviceName)
 		if err != nil {
-			log.Logger.Warn(fmt.Sprintf("No mapping for instance disk %s", disk.DeviceName), log.Error(err))
+			log.Logger.Warnw("No mapping for instance disk", "disk", disk, "error", err)
 			mapping = "unknown"
 		}
-		log.Logger.Debugf("Instance disk %s is mapped to device name %s", disk.DeviceName, mapping)
+		log.Logger.Debugw("Instance disk is mapped to device name", "devicename", disk.DeviceName, "mapping", mapping)
 		builder.Disks = append(builder.Disks, &instancepb.Disk{
 			Type:       disk.Type,
 			DeviceType: r.getDeviceType(disk.Type, projectID, zone, diskName),
@@ -113,7 +113,7 @@ func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAdd
 	for _, networkInterface := range instance.NetworkInterfaces {
 		mapping, err := networkMappingForInterface(networkInterface, mapper)
 		if err != nil {
-			log.Logger.Warn(fmt.Sprintf("No mapping set for network %s with IP=%s", networkInterface.Name, networkInterface.NetworkIP), log.Error(err))
+			log.Logger.Warnw("No mapping set for network", "name", networkInterface.Name, "ip", networkInterface.NetworkIP, "error", err)
 		}
 		builder.NetworkAdapters = append(builder.NetworkAdapters, &instancepb.NetworkAdapter{
 			Name:      networkInterface.Name,
@@ -131,7 +131,7 @@ func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAdd
 		1,
 	)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not get zone operation list from compute API, project=%s zone=%s instance=%s", projectID, zone, instanceID), log.Error(err))
+		log.Logger.Errorw("Could not get zone operation list from compute API", "project", projectID, "zone", zone, "instanceid", instanceID, "error", err)
 	} else if len(operationList.Items) > 0 {
 		// Sort by EndTime and use the last (most recent) entry.
 		items := endTimeSort(operationList.Items)
@@ -155,7 +155,7 @@ func (r *Reader) getDeviceType(diskType, projectID, zone, name string) string {
 
 	disk, err := r.gceService.GetDisk(projectID, zone, name)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not get disk info from the Compute API, project=%s zone=%s name=%s", projectID, zone, name), log.Error(err))
+		log.Logger.Errorw("Could not get disk info from the Compute API", "project", projectID, "zone", zone, "instancename", name, "error", err)
 		return "UNKNOWN"
 	}
 

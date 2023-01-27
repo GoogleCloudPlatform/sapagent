@@ -174,10 +174,10 @@ func (l *Logger) Action(id int) {
 }
 
 func (l *Logger) log(s string) {
-	log.Logger.Debugf("log status of %s", s)
+	log.Logger.Debugw("logging status", "status", s)
 	err := l.requestComputeAPIWithUserAgent(buildComputeURL(l.cloudProps), buildUserAgent(l.agentProps, l.image, s))
 	if err != nil {
-		log.Logger.Warn("Failed to send agent status", log.Error(err))
+		log.Logger.Warnw("Failed to send agent status", "error", err)
 	}
 }
 
@@ -186,7 +186,7 @@ func (l *Logger) logOncePerDay(s Status, v string) {
 		return
 	}
 	if l.timeSource.Since(l.lastCalled[s]) < 24*time.Hour {
-		log.Logger.Debugf("Status %s not logged, most recent occurrence was at: %v", s, l.lastCalled[s])
+		log.Logger.Debugw("logging status once per day", "status", s, "lastcalled", l.lastCalled[s])
 		return
 	}
 	l.logStatus(s, v)

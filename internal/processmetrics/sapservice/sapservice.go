@@ -87,13 +87,13 @@ func queryInstanceState(p *InstanceProperties, metric string, executor commandEx
 		_, stderr, err := executor(command, args)
 		exitCode := p.ExitCode(err)
 		if metric == "is-failed" && exitCode != 0 {
-			log.Logger.Debugf("No error while executing command: %s %s, not sending is_failed metric", command, args)
+			log.Logger.Debugw("No error while executing command, not sending is_failed metric", "command", command, "args", args)
 			continue
 		} else if metric != "is-failed" && err == nil {
-			log.Logger.Debugf("No error while executing command: %s %s, not sending is_disabled metric", command, args)
+			log.Logger.Debugw("No error while executing command, not sending is_disabled metric", "command", command, "args", args)
 			continue
 		}
-		log.Logger.Debugf("Error while executing command: %s %s, error: %s", command, args, stderr)
+		log.Logger.Debugw("Error while executing command", "command", command, "args", args, "stderr", stderr)
 		params := timeseries.Params{
 			CloudProp:    p.Config.CloudProperties,
 			MetricType:   metricURL + mPathMap[metric],

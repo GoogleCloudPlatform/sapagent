@@ -19,16 +19,14 @@ limitations under the License.
 package computeresources
 
 import (
-	"errors"
-	"fmt"
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -58,27 +56,27 @@ type (
 	// to pass commandlineexecutor.ExpandAndExecuteCommand while calling
 	// this package's APIs.
 	commandExecutor func(string, string) (string, string, error)
-	// Parameters struct contains the parameters necessary for computeresources package common methods.
-	Parameters struct {
+	// parameters struct contains the parameters necessary for computeresources package common methods.
+	parameters struct {
 		executor         commandExecutor
 		config           *cnfpb.Configuration
 		client           cloudmonitoring.TimeSeriesCreator
 		cpuMetricPath    string
 		memoryMetricPath string
-		fileReader       maintenance.FileReader
 		sapInstance      *sapb.SAPInstance
 		runner           sapcontrol.RunnerWithEnv
+		newProc          newProcessWithContextHelper
 	}
 
-	// cpuTimes is a struct representing the various time values required for calculating
-	// CPU consumption:
-	// user: Time elapsed by a process in user mode.
-	// kernel: Time elapsed by a process in kernel mode.
-	// start: Time since a process started.
-	cpuTimes struct {
-		user   float64
-		kernel float64
-		start  float64
+	// newProcessWithContextHelper is a strategy which creates a new process type
+	// from PSUtil library using the provided context and PID.
+	newProcessWithContextHelper func(context.Context, int32) (usageReader, error)
+
+	// usageReader is an interface providing abstraction over PSUtil methods for calculating CPU
+	// percentage and memory usage stats for a process and makes them unit testable.
+	usageReader interface {
+		CPUPercentWithContext(context.Context) (float64, error)
+		MemoryInfoWithContext(context.Context) (*process.MemoryInfoStat, error)
 	}
 
 	// ProcessInfo holds the relevant info for processes, including its name and pid.
@@ -88,13 +86,20 @@ type (
 	}
 )
 
-func collectControlProcesses(p Parameters) []*ProcessInfo {
+func newProc(ctx context.Context, fn newProcessWithContextHelper, pid int32) (usageReader, error) {
+	if fn == nil {
+		return process.NewProcessWithContext(ctx, pid)
+	}
+	return fn(ctx, pid)
+}
+
+func collectControlProcesses(p parameters) []*ProcessInfo {
 	var processInfos []*ProcessInfo
 	cmd := "ps"
 	args := "-e -o comm,pid"
 	stdout, _, err := p.executor(cmd, args)
 	if err != nil {
-		log.Logger.Debug(fmt.Sprintf("Error while executing command: %s args: %s", cmd, args), log.Error(err))
+		log.Logger.Debugw("Error while executing command", "command", cmd, "args", args, "error", err)
 		return nil
 	}
 
@@ -110,7 +115,7 @@ func collectControlProcesses(p Parameters) []*ProcessInfo {
 		val = multiSpaceChars.ReplaceAllString(val, " ")
 		pnameAndPid := strings.Split(val, " ")
 		if len(pnameAndPid) != 2 {
-			log.Logger.Errorf("Could not parse output of %s, for regex: %s", cmd+args, process)
+			log.Logger.Errorw("Could not parse output", "command", cmd+args, "regex", process)
 			continue
 		}
 		processInfos = append(processInfos, &ProcessInfo{Name: pnameAndPid[0], PID: pnameAndPid[1]})
@@ -118,7 +123,7 @@ func collectControlProcesses(p Parameters) []*ProcessInfo {
 	return processInfos
 }
 
-func 	collectProcessesForInstance(p Parameters) []*ProcessInfo {
+func collectProcessesForInstance(p parameters) []*ProcessInfo {
 	if p.sapInstance == nil {
 		log.Logger.Error("Error getting ProcessList in computeresources, no sapInstance set.")
 		return nil
@@ -127,7 +132,7 @@ func 	collectProcessesForInstance(p Parameters) []*ProcessInfo {
 	sc := &sapcontrol.Properties{p.sapInstance}
 	processes, _, err := sc.ProcessList(p.runner)
 	if err != nil {
-		log.Logger.Error("Error getting ProcessList in computeresources", log.Error(err))
+		log.Logger.Errorw("Error getting ProcessList in computeresources", log.Error(err))
 		return nil
 	}
 
@@ -139,187 +144,91 @@ func 	collectProcessesForInstance(p Parameters) []*ProcessInfo {
 }
 
 // collectCPUPerProcess collects CPU utilization per process for HANA, Netweaver and SAP control processes.
-func collectCPUPerProcess(p Parameters, processes []*ProcessInfo) []*sapdiscovery.Metrics {
+func collectCPUPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
-	ticks, err := clockTicks(p)
-	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Invalid value for CLK_TCK: %f", ticks), log.Error(err))
-		return nil
-	}
-	for _, process := range processes {
-		procStatFilePath := strings.Replace(linuxProcStatPath, "PID", process.PID, 1)
-		content, err := p.fileReader.Read(procStatFilePath)
+	for _, processInfo := range processes {
+		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
-			log.Logger.Error(fmt.Sprintf("Could not read file: %s due to error", procStatFilePath), log.Error(err))
+			log.Logger.Errorw("Could not parse PID", "pid", processInfo.PID, "process", processInfo.Name, "error", err)
 			continue
 		}
-		outputSlice := strings.Split(string(content), " ")
-
-		times, err := processCPUTimeValues(process.PID, outputSlice)
+		proc, err := newProc(ctx, p.newProc, int32(pid))
 		if err != nil {
-			log.Logger.Error(log.Error(err))
-			continue
-		}
-
-		content, err = p.fileReader.Read("/proc/uptime")
-		if err != nil {
-			log.Logger.Error("Could not read file: /proc/uptime due to error", log.Error(err))
-			continue
-		}
-		outputSlice = strings.Split(string(content), " ")
-		if len(outputSlice) != 2 {
-			log.Logger.Error("/proc/uptime content could not be parsed correctly.")
-			continue
-		}
-		uptime, err := strconv.ParseFloat(outputSlice[0], 64)
-		if err != nil {
-			log.Logger.Error(fmt.Sprintf("Could not parse uptime for PID: %s", process.PID), log.Error(err))
-			continue
-		}
-		log.Logger.Debugf("utime: %f, stime: %f, starttime: %f, uptime: %f for PID: %s", times.user, times.kernel, times.start, uptime, process.PID)
-
-		userCPU, userCPUErr := calculatePercentageCPU(times.user, uptime, times.start, ticks)
-		kernelCPU, kernelCPUErr := calculatePercentageCPU(times.kernel, uptime, times.start, ticks)
-
-		if userCPUErr != nil && kernelCPUErr != nil {
-			log.Logger.Errorf("Could not calculate userCPU: Error(%s), kernelCPU: Error(%s).", userCPUErr, kernelCPUErr)
+			log.Logger.Errorw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
 			continue
 		}
 		labels := map[string]string{
-			"process": formatProcessName(process.Name) + ":" + process.PID,
+			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
 		}
-		if p.sapInstance != nil {
-			labels["sid"] = p.sapInstance.GetSapsid()
-			labels["instance_nr"] = p.sapInstance.GetInstanceNumber()
+		cpuusage, err := proc.CPUPercentWithContext(ctx)
+		if err != nil {
+			log.Logger.Errorw("Could not get process CPU stats", "pid", pid, "error", err)
+			continue
 		}
-		log.Logger.Debugf("Creating CPU utilization metric for Process: %s PID: %s", process.Name, process.PID)
-		params := timeseries.Params{
-			CloudProp:    p.config.CloudProperties,
-			MetricType:   metricURL + p.cpuMetricPath,
-			MetricLabels: labels,
-			Timestamp:    tspb.Now(),
-			Float64Value: userCPU + kernelCPU,
-			BareMetal:    p.config.BareMetal,
-		}
-		ts := timeseries.BuildFloat64(params)
-		metrics = append(metrics, &sapdiscovery.Metrics{TimeSeries: ts})
+		metrics = append(metrics, createMetrics(p.cpuMetricPath, labels, cpuusage, p))
 	}
 	return metrics
 }
 
 // collectMemoryPerProcess is a function responsible for collecting memory utilization
 // per process for Hana, Netweaver and SAP control processes.
-func collectMemoryPerProcess(p Parameters, processes []*ProcessInfo) []*sapdiscovery.Metrics {
+func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
-	for _, process := range processes {
-		content, err := p.fileReader.Read(strings.Replace(linuxMemoryStatusFilePath, "PID", process.PID, 1))
+	for _, processInfo := range processes {
+		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
-			log.Logger.Error(fmt.Sprintf("Could not read file: %s due to error", "/proc/"+process.PID+"/status"), log.Error(err))
-			return nil
+			log.Logger.Debugw("Could not parse PID", "pid", processInfo.PID, "process", processInfo.Name, "error", err)
+			continue
 		}
-		output := string(content)
-		for _, memoryRegex := range memoryTypeRegexList {
-			rexp := regexp.MustCompile(memoryRegex)
-			expr := rexp.FindString(output)
-			val := newlineChars.ReplaceAllString(expr, "")
-			val = strings.ReplaceAll(val, ":", "")
-			val = multiSpaceChars.ReplaceAllString(val, " ")
-			memoryTypeAndVal := strings.Split(val, " ")
-			if len(memoryTypeAndVal) < 2 {
-				log.Logger.Error("/proc/" + process.PID + "/status file content could not be parsed correctly.")
-				continue
-			}
-			memory, err := strconv.ParseFloat(memoryTypeAndVal[1], 64)
-
-			if err != nil {
-				log.Logger.Errorf("Could not parse memory type: %s, from: %s to float64.", memoryTypeAndVal[0], memoryTypeAndVal[1])
-				continue
-			}
-
-			labels := map[string]string{
-				"process": formatProcessName(process.Name) + ":" + process.PID,
-				"memType": memoryTypeAndVal[0],
-			}
-			if p.sapInstance != nil {
-				labels["sid"] = p.sapInstance.GetSapsid()
-				labels["instance_nr"] = p.sapInstance.GetInstanceNumber()
-			}
-			params := timeseries.Params{
-				CloudProp:    p.config.CloudProperties,
-				MetricType:   metricURL + p.memoryMetricPath,
-				MetricLabels: labels,
-				Timestamp:    tspb.Now(),
-				Float64Value: memory / 1024,
-				BareMetal:    p.config.BareMetal,
-			}
-			ts := timeseries.BuildFloat64(params)
-			metrics = append(metrics, &sapdiscovery.Metrics{TimeSeries: ts})
+		proc, err := newProc(ctx, p.newProc, int32(pid))
+		if err != nil {
+			log.Logger.Debugw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
+			continue
 		}
+		memoryUsage, err := proc.MemoryInfoWithContext(ctx)
+		if err != nil {
+			log.Logger.Debugw("Could not get process memory stats", "pid", pid, "error", err)
+			continue
+		}
+		vmSizeLables := map[string]string{
+			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"memType": "VmSize",
+		}
+		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS), p)
+		rSSLables := map[string]string{
+			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"memType": "VmRSS",
+		}
+		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS), p)
+		swapLables := map[string]string{
+			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"memType": "VmSwap",
+		}
+		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap), p)
+		metrics = append(metrics, vmSizeMetrics, rSSMetrics, swapMetrics)
 	}
 	return metrics
 }
 
-// calculatePercentageCPU calculates the percentage CPU using upTime, startTime and uTime or sTime.
-func calculatePercentageCPU(xxTime, upTime, startTime, ticks float64) (float64, error) {
-	var percentCPU float64 = 0
-	// runningSeconds represents the duration which a process has run.
-	runningSeconds := upTime - (startTime / ticks)
-	if runningSeconds == 0 {
-		log.Logger.Debug("Got runningSeconds as 0")
-		return 0, errors.New("invalid value for runningSeconds: 0")
+func createMetrics(mPath string, labels map[string]string, val float64, p parameters) *sapdiscovery.Metrics {
+	if p.sapInstance != nil {
+		labels["sid"] = p.sapInstance.GetSapsid()
+		labels["instance_nr"] = p.sapInstance.GetInstanceNumber()
 	}
-	percentCPU = metricsformatter.ToPercentage(((xxTime / ticks) / runningSeconds), 4)
-	return percentCPU, nil
+	ts := timeseries.Params{
+		CloudProp:    p.config.CloudProperties,
+		MetricType:   metricURL + mPath,
+		MetricLabels: labels,
+		Timestamp:    tspb.Now(),
+		Float64Value: val,
+		BareMetal:    p.config.BareMetal,
+	}
+	log.Logger.Debugw("Creating metric for instance", "metric", mPath, "value", val, "instancenumber", p.sapInstance.GetInstanceNumber(), "labels", labels)
+	return &sapdiscovery.Metrics{TimeSeries: timeseries.BuildFloat64(ts)}
 }
 
-// processCPUTimeValues is responsible for retrieving the cpuTimes from the corrresponding process
-// proc/pid/stat file.
-func processCPUTimeValues(pid string, procStatFileSlice []string) (cpuTimes, error) {
-	if len(procStatFileSlice) < 22 {
-		return cpuTimes{}, errors.New("invalid content from /proc/" + pid + "/stat")
-	}
-	uTime, err := strconv.ParseFloat(procStatFileSlice[13], 64)
-	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not parse uTime for PID: %s", pid), log.Error(err))
-		return cpuTimes{}, err
-	}
-	sTime, err := strconv.ParseFloat(procStatFileSlice[14], 64)
-	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not parse sTime for PID: %s", pid), log.Error(err))
-		return cpuTimes{}, err
-	}
-	startTime, err := strconv.ParseFloat(procStatFileSlice[21], 64)
-	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Could not parse startTime for PID: %s", pid), log.Error(err))
-		return cpuTimes{}, err
-	}
-	return cpuTimes{uTime, sTime, startTime}, nil
-}
-
-// clockTicks is responsible for fetching CPU clock tick(CLK_TCK). In case of a error a 0 value for
-// CLK_TCK and error is returned.
-func clockTicks(p Parameters) (float64, error) {
-	cmd := "getconf"
-	args := "CLK_TCK"
-	stdout, _, err := p.executor(cmd, args)
-	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Error while executing command: %s %s", cmd, args), log.Error(err))
-		return 0, err
-	}
-	ticks, err := strconv.ParseFloat(newlineChars.ReplaceAllLiteralString(stdout, ""), 64)
-	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Error while parsing output for clock ticks: %s", stdout), log.Error(err))
-		return 0, err
-	}
-	if ticks == 0 {
-		log.Logger.Errorf("Invalid value for CLK_TCK: %f", ticks)
-		return 0, errors.New("invalid value for CLK_TCK: 0")
-	}
-	return ticks, nil
-}
-
-func formatProcessName(pname string) string {
+func formatProcesLabel(pname, pid string) string {
 	result := forwardSlashChar.ReplaceAllString(pname, "_")
 	result = dashChars.ReplaceAllString(result, "_")
-	return result
+	return result + ":" + pid
 }

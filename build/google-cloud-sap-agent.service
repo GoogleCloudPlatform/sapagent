@@ -25,9 +25,8 @@ ProtectSystem=true
 ProtectClock=true
 ProtectKernelModules=true
 RestrictRealtime=true
-# TODO(b/260993161) Need to add CPUQuota
-# CPUQuota of 100 will allow for up to 100% on 1 CPU
-# CPUQuota=100
+# CPUQuota of 50 will allow for up to 50% on 1 CPU
+CPUQuota=50
 
 [Install]
 WantedBy=multi-user.target

@@ -58,7 +58,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- W
 	pacemakerDocument, err := ParseXML([]byte(*pacemakerXMLString))
 
 	if err != nil {
-		log.Logger.Debug(fmt.Sprintf("Could not parse the pacemaker configuration xml: %s", *pacemakerXMLString), log.Error(err))
+		log.Logger.Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
 		return
 	}
 
@@ -72,7 +72,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- W
 	bearerToken, err := getBearerToken(ctx, results["serviceAccountJsonFile"], params.ConfigFileReader,
 		params.JSONCredentialsGetter, params.DefaultTokenGetter)
 	if err != nil {
-		log.Logger.Debug(fmt.Sprintf("Could not parse the pacemaker configuration xml: %s", *pacemakerXMLString), log.Error(err))
+		log.Logger.Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
 		return
 	}
 	rscLocations := pacemakerDocument.Configuration.Constraints.RSCLocations
@@ -135,7 +135,7 @@ func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken st
 		fmt.Sprintf("Authorization: Bearer %s ", bearerToken),
 		fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s?fields=id", projectID))
 	if err != nil {
-		log.Logger.Debugf("Could not obtain fence agent compute API Access: %#v", err)
+		log.Logger.Debugw("Could not obtain fence agent compute API Access", log.Error(err))
 	}
 
 	fenceAgentLoggingAPIAccess, err := checkAPIAccess(runner,
@@ -150,7 +150,7 @@ func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken st
 		fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, projectID)+
 			`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"`)
 	if err != nil {
-		log.Logger.Debug("Could not obtain fence agent logging API Access", log.Error(err))
+		log.Logger.Debugw("Could not obtain fence agent logging API Access", log.Error(err))
 	}
 	l["fence_agent_compute_api_access"] = strconv.FormatBool(fenceAgentComputeAPIAccess)
 	l["fence_agent_logging_api_access"] = strconv.FormatBool(fenceAgentLoggingAPIAccess)

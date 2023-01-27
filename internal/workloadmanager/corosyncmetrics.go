@@ -57,7 +57,7 @@ func readCorosyncConfig(reader ConfigFileReader, csConfig string) map[string]str
 	file, err := reader(csConfig)
 
 	if err != nil {
-		log.Logger.Debug("Could not read the corosync config file", log.Error(err))
+		log.Logger.Debugw("Could not read the corosync config file", log.Error(err))
 		return config
 	}
 
@@ -70,7 +70,7 @@ func readCorosyncConfig(reader ConfigFileReader, csConfig string) map[string]str
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Logger.Warn("Could not read the corosync config from /etc/corosync/corosync.conf", log.Error(err))
+		log.Logger.Warnw("Could not read the corosync config from /etc/corosync/corosync.conf", log.Error(err))
 	}
 
 	return config
@@ -120,6 +120,7 @@ setConfigMapValueForLine processes a single line from a Corosync configuration f
 to a single entry in a configuration map
 */
 func setConfigMapValueForLine(config map[string]string, line string) {
+	line = strings.TrimSpace(line)
 	for key := range config {
 		if !strings.HasPrefix(line, key+":") {
 			continue
@@ -130,6 +131,7 @@ func setConfigMapValueForLine(config map[string]string, line string) {
 			value = strings.Trim(arr[1], " ")
 		}
 		config[key] = value
+		break
 	}
 }
 

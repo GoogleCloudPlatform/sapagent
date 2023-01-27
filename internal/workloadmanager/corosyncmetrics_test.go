@@ -18,374 +18,271 @@ package workloadmanager
 
 import (
 	"errors"
+	"fmt"
 	"io"
-	"net"
 	"strings"
 	"testing"
+	"time"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 )
 
 var (
-	DefaultTestReader = ConfigFileReader(func(data string) (io.ReadCloser, error) {
+	defaultConfiguration = &cnfpb.Configuration{
+		CloudProperties: &iipb.CloudProperties{
+			InstanceName: "test-instance-name",
+			InstanceId:   "test-instance-id",
+			Zone:         "test-zone",
+			ProjectId:    "test-project-id",
+		},
+		AgentProperties: &cnfpb.AgentProperties{Version: "1.0"},
+	}
+	defaultFileReader = ConfigFileReader(func(data string) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(data)), nil
 	})
-	DefaultTestReaderError = ConfigFileReader(func(data string) (io.ReadCloser, error) {
+	fileReaderError = ConfigFileReader(func(data string) (io.ReadCloser, error) {
 		return nil, errors.New("Could not find file")
 	})
+	validCSConfigFile = `totem {
+	version: 2
+	cluster_name: hacluster
+	transport: knet
+	join: 60
+	consensus: 1200
+	fail_recv_const: 2500
+	max_messages: 20
+	token: 20000
+	token_retransmits_before_loss_const: 10
+	crypto_cipher: aes256
+	crypto_hash: sha256
+}
+quorum {
+	provider: corosync_votequorum
+	two_node: 1
+}`
+	invalidCSConfigFile = `totem {
+	transport knet
+	join:60
+	"fail_recv_const": 2500
+	# max_messages: 20
+	token:
+	token_retransmits_before_loss_const: 1 2 3
+}`
+	defaultCommandRunner = func(cmd string, args ...string) (string, string, error) {
+		if len(args) < 2 {
+			return "", "", errors.New("not enough arguments")
+		}
+		cases := map[string]string{
+			"totem.token_retransmits_before_loss_const": "5",
+			"totem.token":           "10000",
+			"totem.consensus":       "600",
+			"totem.join":            "30",
+			"totem.max_messages":    "10",
+			"totem.transport":       "udp",
+			"totem.fail_recv_const": "1250",
+			"quorum.two_node":       "2",
+		}
+		return cases[args[1]], "", nil
+	}
+	commandRunnerError = func(cmd string, args ...string) (string, string, error) {
+		cases := map[string]string{
+			"totem.token_retransmits_before_loss_const": "1 2 3",
+			"totem.token":        "Can't get key",
+			"totem.consensus":    " Can't get key",
+			"totem.join":         " ",
+			"totem.max_messages": "",
+		}
+		v, ok := cases[args[1]]
+		if !ok {
+			return "", "", fmt.Errorf("Failed to get value for %s", args[1])
+		}
+		return v, "", nil
+	}
+	createWorkloadMetrics = func(labels map[string]string, value float64) WorkloadMetrics {
+		return WorkloadMetrics{
+			Metrics: []*monitoringresourcepb.TimeSeries{{
+				Metric: &metricpb.Metric{
+					Type:   "workload.googleapis.com/sap/validation/corosync",
+					Labels: labels,
+				},
+				MetricKind: metricpb.MetricDescriptor_GAUGE,
+				Resource: &monitoredresourcepb.MonitoredResource{
+					Type: "gce_instance",
+					Labels: map[string]string{
+						"instance_id": "test-instance-id",
+						"zone":        "test-zone",
+						"project_id":  "test-project-id",
+					},
+				},
+				Points: []*monitoringresourcepb.Point{{
+					// We are choosing to ignore these timestamp values when performing a comparison via cmp.Diff().
+					Interval: &cpb.TimeInterval{
+						StartTime: &timestamppb.Timestamp{Seconds: time.Now().Unix()},
+						EndTime:   &timestamppb.Timestamp{Seconds: time.Now().Unix()},
+					},
+					Value: &cpb.TypedValue{
+						Value: &cpb.TypedValue_DoubleValue{
+							DoubleValue: value,
+						},
+					},
+				}},
+			}},
+		}
+	}
 )
-
-func csTestCommand(cmd string, args ...string) (string, string, error) {
-	cases := map[string]string{
-		"totem.token": "token_test",
-		"totem.token_retransmits_before_loss_const": "-1",
-		"totem.consensus":       "consensus_test",
-		"totem.join":            "true",
-		"totem.max_messages":    "10",
-		"totem.transport":       "false",
-		"totem.fail_recv_const": "Can't get key",
-		"quorum.two_node":       "two_node value test",
-	}
-	if len(args) < 2 {
-		return "", "", errors.New("not enough arguments")
-	}
-	return cases[args[1]], "", nil
-}
-
-func wantWindowsCorosyncMetrics(ts *timestamppb.Timestamp, corosyncExists float64, os string) WorkloadMetrics {
-	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
-			Metric: &metricpb.Metric{
-				Type:   "workload.googleapis.com/sap/validation/corosync",
-				Labels: map[string]string{},
-			},
-			MetricKind: metricpb.MetricDescriptor_GAUGE,
-			Resource: &monitoredresourcepb.MonitoredResource{
-				Type: "gce_instance",
-				Labels: map[string]string{
-					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
-					"project_id":  "test-project-id",
-				},
-			},
-			Points: []*monitoringresourcepb.Point{{
-				Interval: &cpb.TimeInterval{
-					StartTime: ts,
-					EndTime:   ts,
-				},
-				Value: &cpb.TypedValue{
-					Value: &cpb.TypedValue_DoubleValue{
-						DoubleValue: corosyncExists,
-					},
-				},
-			}},
-		}},
-	}
-}
-
-func wantLinuxCorosyncMetrics(ts *timestamppb.Timestamp, corosyncExists float64, os string) WorkloadMetrics {
-	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
-			Metric: &metricpb.Metric{
-				Type: "workload.googleapis.com/sap/validation/corosync",
-				Labels: map[string]string{
-					"token":                               "",
-					"token_runtime":                       "",
-					"token_retransmits_before_loss_const": "",
-					"token_retransmits_before_loss_const_runtime": "",
-					"consensus":               "",
-					"consensus_runtime":       "",
-					"join":                    "",
-					"join_runtime":            "",
-					"max_messages":            "",
-					"max_messages_runtime":    "",
-					"transport":               "",
-					"transport_runtime":       "",
-					"fail_recv_const":         "",
-					"fail_recv_const_runtime": "",
-					"two_node":                "",
-					"two_node_runtime":        "",
-				},
-			},
-			MetricKind: metricpb.MetricDescriptor_GAUGE,
-			Resource: &monitoredresourcepb.MonitoredResource{
-				Type: "gce_instance",
-				Labels: map[string]string{
-					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
-					"project_id":  "test-project-id",
-				},
-			},
-			Points: []*monitoringresourcepb.Point{{
-				Interval: &cpb.TimeInterval{
-					StartTime: ts,
-					EndTime:   ts,
-				},
-				Value: &cpb.TypedValue{
-					Value: &cpb.TypedValue_DoubleValue{
-						DoubleValue: corosyncExists,
-					},
-				},
-			}},
-		}},
-	}
-}
-
-func TestReadCorosyncRuntime(t *testing.T) {
-	tests := []struct {
-		cscommand func(string, ...string) (string, string, error)
-		want      map[string]string
-	}{
-		{
-			cscommand: func(string, ...string) (string, string, error) { return "TEST2", "", nil },
-			want: map[string]string{
-				"token_runtime": "TEST2",
-				"token_retransmits_before_loss_const_runtime": "TEST2",
-				"consensus_runtime":                           "TEST2",
-				"join_runtime":                                "TEST2",
-				"max_messages_runtime":                        "TEST2",
-				"transport_runtime":                           "TEST2",
-				"fail_recv_const_runtime":                     "TEST2",
-				"two_node_runtime":                            "TEST2",
-			},
-		}, {
-			cscommand: func(key string, args ...string) (string, string, error) { return "Can't get key " + key, "", nil },
-			want: map[string]string{
-				"token_runtime": "",
-				"token_retransmits_before_loss_const_runtime": "",
-				"consensus_runtime":                           "",
-				"join_runtime":                                "",
-				"max_messages_runtime":                        "",
-				"transport_runtime":                           "",
-				"fail_recv_const_runtime":                     "",
-				"two_node_runtime":                            "",
-			},
-		},
-		{
-			cscommand: csTestCommand,
-			want: map[string]string{
-				"token_runtime": "token_test",
-				"token_retransmits_before_loss_const_runtime": "-1",
-				"consensus_runtime":                           "consensus_test",
-				"join_runtime":                                "true",
-				"max_messages_runtime":                        "10",
-				"transport_runtime":                           "false",
-				"fail_recv_const_runtime":                     "",
-				"two_node_runtime":                            "test",
-			},
-		},
-	}
-	for _, test := range tests {
-		got := readCorosyncRuntime(test.cscommand)
-		want := test.want
-
-		if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-			t.Errorf("readCorosyncRuntime returned unexpected metric labels diff (-want +got):\n%s", diff)
-		}
-	}
-}
-
-func TestReadCorosyncConfig(t *testing.T) {
-	tests := []struct {
-		file   string
-		reader ConfigFileReader
-		want   map[string]string
-	}{
-		{
-			file:   "",
-			reader: DefaultTestReader,
-			want: map[string]string{
-				"token":                               "",
-				"token_retransmits_before_loss_const": "",
-				"consensus":                           "",
-				"join":                                "",
-				"max_messages":                        "",
-				"transport":                           "",
-				"fail_recv_const":                     "",
-				"two_node":                            "",
-			},
-		},
-		{
-			file: `token: test1 test2 test3
-join : join_value
-token_retransmits_before_loss_const: test_retransmit
-two_node: true
-`,
-			reader: DefaultTestReader,
-			want: map[string]string{
-				"token":                               "test1",
-				"token_retransmits_before_loss_const": "test_retransmit",
-				"consensus":                           "",
-				"join":                                "",
-				"max_messages":                        "",
-				"transport":                           "",
-				"fail_recv_const":                     "",
-				"two_node":                            "true",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		got := readCorosyncConfig(test.reader, test.file)
-
-		if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-			t.Errorf("readCorosyncConfig returned unexpected metric labels diff (-want +got):\n%s", diff)
-		}
-	}
-}
-
-func TestReadCorosyncConfigWithErrors(t *testing.T) {
-	tests := []struct {
-		file   string
-		reader ConfigFileReader
-		want   map[string]string
-	}{
-		{
-			file:   "",
-			reader: DefaultTestReaderError,
-			want: map[string]string{
-				"token":                               "",
-				"token_retransmits_before_loss_const": "",
-				"consensus":                           "",
-				"join":                                "",
-				"max_messages":                        "",
-				"transport":                           "",
-				"fail_recv_const":                     "",
-				"two_node":                            "",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		got := readCorosyncConfig(test.reader, test.file)
-
-		if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-			t.Errorf("readCorosyncConfig returned unexpected metric labels diff (-want +got):\n%s", diff)
-		}
-	}
-}
-
-func TestSetConfigMapValueForLine(t *testing.T) {
-	tests := []struct {
-		line string
-		keys map[string]string
-		want map[string]string
-	}{
-		{
-			line: "",
-			keys: map[string]string{
-				"test": "",
-			},
-			want: map[string]string{
-				"test": "",
-			},
-		},
-		{
-			line: "param:  value asdf",
-			keys: map[string]string{
-				"param": "",
-			},
-			want: map[string]string{
-				"param": "value",
-			},
-		},
-		{
-			line: "short:    ",
-			keys: map[string]string{
-				"short": "",
-			},
-			want: map[string]string{
-				"short": "",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		config := test.keys
-		setConfigMapValueForLine(config, test.line)
-		got := config
-
-		if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-			t.Errorf("setConfigMapValueForLine returned unexpected metric labels diff (-want +got):\n%s", diff)
-		}
-	}
-}
 
 func TestCollectCorosyncMetrics(t *testing.T) {
 	tests := []struct {
-		name               string
-		runtimeOS          string
-		wantOsVersion      string
-		wantCorosyncExists float64
+		name       string
+		params     Parameters
+		csConfig   string
+		wantLabels map[string]string
+		wantValue  float64
 	}{
 		{
-			name:               "linuxHasMetrics",
-			runtimeOS:          "linux",
-			wantOsVersion:      "test-os-version",
-			wantCorosyncExists: float64(1.0),
+			name: "windows",
+			params: Parameters{
+				OSType: "windows",
+				Config: defaultConfiguration,
+			},
+			wantLabels: map[string]string{},
+			wantValue:  0.0,
 		},
 		{
-			name:               "windowsHasMetrics",
-			runtimeOS:          "windows",
-			wantOsVersion:      "microsoft_windows_server_2019_datacenter-10.0.17763",
-			wantCorosyncExists: float64(0.0),
+			name: "linux",
+			params: Parameters{
+				OSType:               "linux",
+				Config:               defaultConfiguration,
+				ConfigFileReader:     defaultFileReader,
+				CommandRunnerNoSpace: defaultCommandRunner,
+			},
+			csConfig: validCSConfigFile,
+			wantLabels: map[string]string{
+				"token":                               "20000",
+				"token_runtime":                       "10000",
+				"token_retransmits_before_loss_const": "10",
+				"token_retransmits_before_loss_const_runtime": "5",
+				"consensus":               "1200",
+				"consensus_runtime":       "600",
+				"join":                    "60",
+				"join_runtime":            "30",
+				"max_messages":            "20",
+				"max_messages_runtime":    "10",
+				"transport":               "knet",
+				"transport_runtime":       "udp",
+				"fail_recv_const":         "2500",
+				"fail_recv_const_runtime": "1250",
+				"two_node":                "1",
+				"two_node_runtime":        "2",
+			},
+			wantValue: 1.0,
 		},
-	}
-
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
-		return ini
-	}
-	ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
-	ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
-	netInterfaceAdddrs = func() ([]net.Addr, error) {
-		return []net.Addr{ip1, ip2}, nil
-	}
-	now = func() int64 {
-		return int64(1660930735)
-	}
-	nts := &timestamppb.Timestamp{
-		Seconds: now(),
-	}
-	osCaptionExecute = func() (string, string, error) {
-		return "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n", "", nil
-	}
-	osVersionExecute = func() (string, string, error) {
-		return "\n Version=10.0.17763  \n\n", "", nil
-	}
-	cmdExists = func(c string) bool {
-		return true
+		{
+			name: "linuxFileReaderError",
+			params: Parameters{
+				OSType:               "linux",
+				Config:               defaultConfiguration,
+				ConfigFileReader:     fileReaderError,
+				CommandRunnerNoSpace: defaultCommandRunner,
+			},
+			csConfig: validCSConfigFile,
+			wantLabels: map[string]string{
+				"token":                               "",
+				"token_runtime":                       "10000",
+				"token_retransmits_before_loss_const": "",
+				"token_retransmits_before_loss_const_runtime": "5",
+				"consensus":               "",
+				"consensus_runtime":       "600",
+				"join":                    "",
+				"join_runtime":            "30",
+				"max_messages":            "",
+				"max_messages_runtime":    "10",
+				"transport":               "",
+				"transport_runtime":       "udp",
+				"fail_recv_const":         "",
+				"fail_recv_const_runtime": "1250",
+				"two_node":                "",
+				"two_node_runtime":        "2",
+			},
+			wantValue: 1.0,
+		},
+		{
+			name: "linuxFileReaderParseErrors",
+			params: Parameters{
+				OSType:               "linux",
+				Config:               defaultConfiguration,
+				ConfigFileReader:     defaultFileReader,
+				CommandRunnerNoSpace: defaultCommandRunner,
+			},
+			csConfig: invalidCSConfigFile,
+			wantLabels: map[string]string{
+				"token":                               "",
+				"token_runtime":                       "10000",
+				"token_retransmits_before_loss_const": "1",
+				"token_retransmits_before_loss_const_runtime": "5",
+				"consensus":               "",
+				"consensus_runtime":       "600",
+				"join":                    "",
+				"join_runtime":            "30",
+				"max_messages":            "",
+				"max_messages_runtime":    "10",
+				"transport":               "",
+				"transport_runtime":       "udp",
+				"fail_recv_const":         "",
+				"fail_recv_const_runtime": "1250",
+				"two_node":                "",
+				"two_node_runtime":        "2",
+			},
+			wantValue: 1.0,
+		},
+		{
+			name: "linuxCommandRunnerErrors",
+			params: Parameters{
+				OSType:               "linux",
+				Config:               defaultConfiguration,
+				ConfigFileReader:     defaultFileReader,
+				CommandRunnerNoSpace: commandRunnerError,
+			},
+			csConfig: validCSConfigFile,
+			wantLabels: map[string]string{
+				"token":                               "20000",
+				"token_runtime":                       "",
+				"token_retransmits_before_loss_const": "10",
+				"token_retransmits_before_loss_const_runtime": "3",
+				"consensus":               "1200",
+				"consensus_runtime":       "",
+				"join":                    "60",
+				"join_runtime":            "",
+				"max_messages":            "20",
+				"max_messages_runtime":    "",
+				"transport":               "knet",
+				"transport_runtime":       "",
+				"fail_recv_const":         "2500",
+				"fail_recv_const_runtime": "",
+				"two_node":                "1",
+				"two_node_runtime":        "",
+			},
+			wantValue: 1.0,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runtimeOS := test.runtimeOS
-			want := wantWindowsCorosyncMetrics(nts, test.wantCorosyncExists, test.wantOsVersion)
-			if runtimeOS != "windows" {
-				want = wantLinuxCorosyncMetrics(nts, test.wantCorosyncExists, test.wantOsVersion)
-			}
 			cch := make(chan WorkloadMetrics)
-			p := Parameters{
-				Config:               cnf,
-				ConfigFileReader:     DefaultTestReader,
-				CommandRunnerNoSpace: commandlineexecutor.ExecuteCommand,
-				OSType:               runtimeOS,
-			}
-			go CollectCorosyncMetrics(p, cch, csConfigPath)
+			want := createWorkloadMetrics(test.wantLabels, test.wantValue)
+			go CollectCorosyncMetrics(test.params, cch, test.csConfig)
 			got := <-cch
-			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
+			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&timestamppb.Timestamp{}, "seconds")); diff != "" {
+				t.Errorf("CollectCorosyncMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

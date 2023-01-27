@@ -149,13 +149,13 @@ func (s *Service) collectAndSubmitLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Info("Stopping agent metrics service", log.String("reason", ctx.Err().Error()))
+			log.Logger.Infow("Stopping agent metrics service", log.String("reason", ctx.Err().Error()))
 			return
 		case <-loopTicker.C:
 			log.Logger.Debug("Collecting and submitting agent metrics")
 			err := s.collectAndSubmit(ctx)
 			if err != nil {
-				log.Logger.Warn("Failure during agent metrics collection and submition", log.Error(err))
+				log.Logger.Warnw("Failure during agent metrics collection and submition", "error", err)
 			}
 		}
 	}
@@ -255,6 +255,6 @@ func (u *defaultUsageReader) read(ctx context.Context) (usage, error) {
 	if err != nil {
 		return usage{}, err
 	}
-	log.Logger.Debug("Collected agent metrics", log.Float64("cpu", cpu), log.Float64("memory", mem))
+	log.Logger.Debugw("Collected agent metrics", log.Float64("cpu", cpu), log.Float64("memory", mem))
 	return usage{cpu: cpu, memory: mem}, nil
 }

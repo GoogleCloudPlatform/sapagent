@@ -21,7 +21,6 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -37,32 +36,32 @@ type (
 	// NetweaverInstanceProperties have the required context for collecting metrics for cpu and
 	// memory per process for Netweaver.
 	NetweaverInstanceProperties struct {
-		Config      *cnfpb.Configuration
-		Client      cloudmonitoring.TimeSeriesCreator
-		Executor    commandExecutor
-		FileReader  maintenance.FileReader
-		SAPInstance *sapb.SAPInstance
-		Runner      sapcontrol.RunnerWithEnv
+		Config        *cnfpb.Configuration
+		Client        cloudmonitoring.TimeSeriesCreator
+		Executor      commandExecutor
+		SAPInstance   *sapb.SAPInstance
+		Runner        sapcontrol.RunnerWithEnv
+		NewProcHelper newProcessWithContextHelper
 	}
 )
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP Netweaver processes.
 func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
-	params := Parameters{
+	params := parameters{
 		executor:         p.Executor,
 		client:           p.Client,
 		config:           p.Config,
-		fileReader:       p.FileReader,
 		memoryMetricPath: nwMemoryPath,
 		cpuMetricPath:    nwCPUPath,
 		sapInstance:      p.SAPInstance,
 		runner:           p.Runner,
+		newProc:          p.NewProcHelper,
 	}
 	processes := collectProcessesForInstance(params)
 	if len(processes) == 0 {
 		log.Logger.Debug("cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil
 	}
-	return append(collectCPUPerProcess(params, processes), collectMemoryPerProcess(params, processes)...)
+	return append(collectCPUPerProcess(ctx, params, processes), collectMemoryPerProcess(ctx, params, processes)...)
 }

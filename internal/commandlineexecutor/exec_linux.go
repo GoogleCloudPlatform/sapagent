@@ -34,7 +34,6 @@ func (r *Runner) platformRunWithEnv() (stdOut, stdErr string, code int, err erro
 
 	exe := exec.Command(r.Executable, splitParams(r.Args)...)
 	exe.Env = append(exe.Environ(), r.Env...)
-	log.Logger.Debugf("Environment: %s.", exe.Environ())
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -50,22 +49,49 @@ func (r *Runner) platformRunWithEnv() (stdOut, stdErr string, code int, err erro
 		exe.SysProcAttr.Credential = &syscall.Credential{Uid: uid}
 	}
 
-	log.Logger.Debugf("Executing command %q %q as user %q.", r.Executable, r.Args, r.User)
+	log.Logger.Debugw("executing command as user from runner", "executable", r.Executable, "args", r.Args, "user", r.User, "environment", exe.Environ())
 	if err := exe.Run(); err != nil {
-		log.Logger.Debugf("Running as User: %q. Could not execute %q. StdOut: %s, StdErr: %s.", r.User, r.Executable, stdout.String(), stderr.String())
+		log.Logger.Debugw("could not execute command", "user", r.User, "executable", r.Executable, "stdout", stdout.String(), "stderr", stderr.String())
 
 		m := exitStatusPattern.FindStringSubmatch(err.Error())
 		if len(m) == 2 {
 			code, err = strconv.Atoi(m[1])
 			if err != nil {
-				log.Logger.Debug("Failed to get command exit code.", log.Error(err))
+				log.Logger.Debugw("Failed to get command exit code.", "error", err)
 				return stdout.String(), stderr.String(), 0, err
 			}
 		}
 	}
 
-	log.Logger.Debugf("Running as User: %q. Exit code: 0 stdout: %q", r.User, stdout.String())
+	log.Logger.Debugw("executed command", "user", r.User, "stdout", stdout.String(), "stderr", stderr.String(), "exitcode", code)
 	return stdout.String(), stderr.String(), code, nil
+}
+
+// TODO(b/258685099): Remove executeCommandAsUser after migrating all its callers to Runner.Run*().
+func executeCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
+	uid, err := getUID(user)
+	if err != nil {
+		return "", "", err
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	exe := exec.Command(executable, args...)
+	exe.SysProcAttr = &syscall.SysProcAttr{}
+	exe.SysProcAttr.Credential = &syscall.Credential{Uid: uid}
+	exe.Stdout = stdout
+	exe.Stderr = stderr
+
+	log.Logger.Debugw("executing command as user", "executable", executable, "args", args, "user", user, "environment", exe.Environ())
+
+	if err := exe.Run(); err != nil {
+		log.Logger.Debugw("could not execute command", "user", user, "executable", executable, "stdout", stdout.String(), "stderr", stderr.String(), "exitcode", ExitCode(err))
+		return stdout.String(), stderr.String(), err
+	}
+
+	// Exit code can assumed to be 0
+	log.Logger.Debugw("executed command", "user", user, "stdout", stdout.String(), "stderr", stderr.String())
+	return stdout.String(), stderr.String(), nil
 }
 
 /*

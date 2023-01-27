@@ -19,7 +19,6 @@ package diskstatsreader
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -49,28 +48,12 @@ var (
 	}
 )
 
-func TestNew(t *testing.T) {
-	got := New()
-	if got == nil {
-		t.Fatalf("New() got nil, want %T", &Reader{})
-	}
-	if got.os != runtime.GOOS {
-		t.Errorf("New() unexpected runtime, got=%s want=%s", got.os, runtime.GOOS)
-	}
-	if got.fileReader == nil {
-		t.Errorf("New() fileReader not set")
-	}
-	if got.runCommand == nil {
-		t.Errorf("New() runCommand not set")
-	}
-}
-
 func TestRead(t *testing.T) {
 	tests := []struct {
 		name   string
 		os     string
-		reader fileReader
-		run    runCommand
+		reader FileReader
+		run    RunCommand
 		ip     *iipb.InstanceProperties
 		want   *statspb.DiskStatsCollection
 	}{
@@ -325,11 +308,7 @@ func TestRead(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			r := &Reader{
-				os:         test.os,
-				fileReader: test.reader,
-				runCommand: test.run,
-			}
+			r := New(test.os, test.reader, test.run)
 			got := r.Read(test.ip)
 			sortDiskStats := protocmp.SortRepeatedFields(&statspb.DiskStatsCollection{}, "disk_stats")
 			if d := cmp.Diff(test.want, got, protocmp.Transform(), sortDiskStats); d != "" {

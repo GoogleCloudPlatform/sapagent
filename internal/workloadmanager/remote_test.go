@@ -82,7 +82,10 @@ func TestParseRemoteJSON(t *testing.T) {
 				},
 				MetricKind: mpb.MetricDescriptor_GAUGE,
 			}),
-			output:      "{\"metric\":{\"type\":\"workload.googleapis.com/sap/validation/system\",\"labels\":{\"agent\":\"gcagent\",\"instance_name\":\"test-instance\",\"os\":\"\\\"sles\\\"-\\\"15\\\"\"}},\"resource\":{\"type\":\"gce_instance\",\"labels\":{\"instance_id\":\"5555\"}},\"metricKind\":\"GAUGE\"}\n\n",
+			output: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
+
+`,
+
 			expectError: false,
 		},
 		{
@@ -148,6 +151,50 @@ func TestAppendCommonGcloudArgs(t *testing.T) {
 	}
 }
 
+func TestAppendSSHArgs(t *testing.T) {
+	tests := []struct {
+		name       string
+		isScp      bool
+		wantInArgs []string
+	}{
+		{
+			name:       "appendsSSHArgumentsScp",
+			isScp:      true,
+			wantInArgs: []string{"-i", "keypath", "/usr/bin/google_cloud_sap_agent", "username" + "@" + "sshHostAddress" + ":" + "/tmp/google_cloud_sap_agent"},
+		},
+		{
+			name:       "appendsSSHArgumentsSsh",
+			isScp:      false,
+			wantInArgs: []string{"-i", "keypath", "username" + "@" + "sshHostAddress"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{}
+			rc := &cfgpb.WorkloadValidationRemoteCollection{
+				RemoteCollectionSsh: &cfgpb.RemoteCollectionSsh{
+					SshUsername:       "username",
+					SshPrivateKeyPath: "keypath",
+				},
+			}
+			instance := &cfgpb.RemoteCollectionInstance{
+				ProjectId:      "projectId",
+				InstanceId:     "instanceId",
+				InstanceName:   "instanceName",
+				Zone:           "zone",
+				SshHostAddress: "sshHostAddress",
+			}
+
+			got := appendSSHArgs(args, rc, instance, test.isScp)
+			for _, want := range test.wantInArgs {
+				if !slices.Contains(got, want) {
+					t.Errorf("Did not get all of the args expected, want: %v, got: %v", want, got)
+				}
+			}
+		})
+	}
+}
+
 func TestCollectAndSendRemoteMetrics(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -155,6 +202,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		execOutput string
 		wantCount  int
 		execError  error
+		cmdExists  bool
 	}{
 		{
 			name: "returnsZeroWhenNotConfigured",
@@ -169,6 +217,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 			execOutput: "",
 			wantCount:  0,
 			execError:  nil,
+			cmdExists:  true,
 		},
 		{
 			name: "returnsSentWhenConfigured",
@@ -189,9 +238,12 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: "{\"metric\":{\"type\":\"workload.googleapis.com/sap/validation/system\",\"labels\":{\"agent\":\"gcagent\",\"instance_name\":\"test-instance\",\"os\":\"\\\"sles\\\"-\\\"15\\\"\"}},\"resource\":{\"type\":\"gce_instance\",\"labels\":{\"instance_id\":\"5555\"}},\"metricKind\":\"GAUGE\"}\n\n",
-			wantCount:  1,
-			execError:  nil,
+			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
+
+`,
+			wantCount: 1,
+			execError: nil,
+			cmdExists: true,
 		},
 		{
 			name: "returnsZeroWithErrorFromRemote",
@@ -215,6 +267,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 			execOutput: "ERROR something did not work",
 			wantCount:  0,
 			execError:  nil,
+			cmdExists:  true,
 		},
 		{
 			name: "returnsZeroWithErrorExec",
@@ -235,9 +288,111 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: "{\"metric\":{\"type\":\"workload.googleapis.com/sap/validation/system\",\"labels\":{\"agent\":\"gcagent\",\"instance_name\":\"test-instance\",\"os\":\"\\\"sles\\\"-\\\"15\\\"\"}},\"resource\":{\"type\":\"gce_instance\",\"labels\":{\"instance_id\":\"5555\"}},\"metricKind\":\"GAUGE\"}\n\n",
+			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
+
+`,
+			wantCount: 0,
+			execError: errors.New("Error executing"),
+			cmdExists: true,
+		},
+		{
+			name: "gcloudNotFound",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections:  1,
+						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
+							&cfgpb.RemoteCollectionInstance{
+								ProjectId:    "projectId",
+								Zone:         "zone",
+								InstanceId:   "instanceId",
+								InstanceName: "instanceName",
+							},
+						},
+					},
+				},
+			},
+			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
+
+`,
+			wantCount: 0,
+			execError: nil,
+			cmdExists: false,
+		},
+		{
+			name: "returnsSentWhenConfiguredSSH",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections: 1,
+						RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
+							&cfgpb.RemoteCollectionInstance{
+								ProjectId:    "projectId",
+								Zone:         "zone",
+								InstanceId:   "instanceId",
+								InstanceName: "instanceName",
+							},
+						},
+					},
+				},
+			},
+			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
+
+`,
+			wantCount: 1,
+			execError: nil,
+		},
+		{
+			name: "returnsZeroWithErrorFromRemote",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections: 1,
+						RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
+							&cfgpb.RemoteCollectionInstance{
+								ProjectId:    "projectId",
+								Zone:         "zone",
+								InstanceId:   "instanceId",
+								InstanceName: "instanceName",
+							},
+						},
+					},
+				},
+			},
+			execOutput: "ERROR something did not work",
 			wantCount:  0,
-			execError:  errors.New("Error executing"),
+			execError:  nil,
+		},
+		{
+			name: "returnsZeroWithErrorExec",
+			config: &cfgpb.Configuration{
+				CollectionConfiguration: &cfgpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: false,
+					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
+						ConcurrentCollections: 1,
+						RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
+							&cfgpb.RemoteCollectionInstance{
+								ProjectId:    "projectId",
+								Zone:         "zone",
+								InstanceId:   "instanceId",
+								InstanceName: "instanceName",
+							},
+						},
+					},
+				},
+			},
+			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
+
+`,
+			wantCount: 0,
+			execError: errors.New("Error executing"),
 		},
 	}
 	for _, test := range tests {
@@ -246,6 +401,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 				Config:               test.config,
 				CommandRunner:        func(cmd string, args string) (string, string, error) { return "", "", nil },
 				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) { return test.execOutput, "", test.execError },
+				CommandExistsRunner:  func(string) bool { return test.cmdExists },
 				ConfigFileReader:     func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
 				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator:    &fake.TimeSeriesCreator{},

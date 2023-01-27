@@ -32,7 +32,7 @@ import (
 func TestMemoryStats(t *testing.T) {
 	for _, v := range []struct {
 		readFile    func(string) ([]byte, error)
-		wmicExecute func(args ...string) (string, string, error)
+		wmicExecute func(cmd string, args ...string) (string, string, error)
 		os          string
 		want        *mstatspb.MemoryStats
 	}{
@@ -69,7 +69,7 @@ func TestMemoryStats(t *testing.T) {
 			want: &mstatspb.MemoryStats{},
 		},
 		{
-			wmicExecute: func(args ...string) (string, string, error) {
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
 				argStr := strings.Join(args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
 					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
@@ -87,7 +87,34 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(args ...string) (string, string, error) {
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
+				return "", "", errors.New("error")
+			},
+			os: "windows",
+			want: &mstatspb.MemoryStats{
+				Total: -1,
+				Free:  -1,
+			},
+		},
+		{
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
+				argStr := strings.Join(args, " ")
+				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
+					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
+				}
+				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
+					return "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n", "", nil
+				}
+				return "", "", errors.New("error")
+			},
+			os: "windows",
+			want: &mstatspb.MemoryStats{
+				Total: 34356005437 / (1024 * 1024),
+				Free:  -1,
+			},
+		},
+		{
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
 				argStr := strings.Join(args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
 					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
@@ -104,7 +131,7 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(...string) (string, string, error) {
+			wmicExecute: func(string, ...string) (string, string, error) {
 				return "", "", errors.New("error")
 			},
 			os: "windows",
@@ -114,14 +141,95 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 	} {
-		defer func(f func(string) ([]byte, error)) { readFile = f }(readFile)
-		readFile = v.readFile
-		defer func(f func(args ...string) (string, string, error)) { wmicExec = f }(wmicExec)
-		wmicExec = v.wmicExecute
-		m := MemoryMetricReader{OS: v.os}
+		m := New(v.os, v.readFile, v.wmicExecute)
 		got := m.MemoryStats()
 		if diff := cmp.Diff(v.want, got, protocmp.Transform()); diff != "" {
 			t.Errorf("MemoryStats for Windows returned unexpected diff (-want +got):\n%s", diff)
 		}
+	}
+}
+
+func TestMBValueFromWmicOutput(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		n    string
+		d    int64
+		want int64
+	}{
+		{
+			name: "Test 1",
+			s:    "",
+			n:    "",
+			d:    0,
+			want: -1,
+		},
+		{
+			name: "Test 2",
+			s:    "x = 12\n",
+			n:    "y",
+			d:    1,
+			want: -1,
+		},
+		{
+			name: "Test 3",
+			s:    "x =  12 \n ",
+			n:    "x ",
+			d:    2,
+			want: 6,
+		},
+		{
+			name: "Test 4",
+			s:    "x =  abc \n ",
+			n:    "x ",
+			d:    2,
+			want: -1,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := mbValueFromWmicOutput(test.s, test.n, test.d)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("mbValueFromWmicOutput() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestProcMemInfo(t *testing.T) {
+	tests := []struct {
+		name       string
+		os         string
+		fileReader FileReader
+		want       string
+	}{
+		{
+			name:       "Test 1",
+			os:         "linux",
+			fileReader: func(string) ([]byte, error) { return []byte(""), errors.New("error") },
+			want:       "",
+		},
+		{
+			name:       "Test 2",
+			os:         "linux",
+			fileReader: func(string) ([]byte, error) { return []byte("memory info"), nil },
+			want:       "memory info",
+		},
+		{
+			name:       "Test 2",
+			os:         "windows",
+			fileReader: func(string) ([]byte, error) { return []byte("memory info"), nil },
+			want:       "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := New(test.os, test.fileReader, nil)
+			got := r.procMemInfo()
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("procMemInfo() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

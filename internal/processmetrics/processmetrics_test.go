@@ -132,6 +132,19 @@ func fakeSAPInstances(app string) *sapb.SAPInstances {
 			},
 			LinuxClusterMember: true,
 		}
+	case "TwoNetweaverInstancesOnSameMachine":
+		return &sapb.SAPInstances{
+			Instances: []*sapb.SAPInstance{
+				&sapb.SAPInstance{
+					Type:   sapb.InstanceType_NETWEAVER,
+					Sapsid: "AEK",
+				}, &sapb.SAPInstance{
+					Type:   sapb.InstanceType_NETWEAVER,
+					Sapsid: "AEK",
+				},
+			},
+			LinuxClusterMember: true,
+		}
 	default:
 		return nil
 	}
@@ -246,11 +259,16 @@ func TestCreate(t *testing.T) {
 			sapInstances:       fakeSAPInstances("NetweaverCluster"),
 			wantCollectorCount: 6,
 		},
+		{
+			name:               "TwoNetweaverInstancesOnSameMachine",
+			sapInstances:       fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
+			wantCollectorCount: 8,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := create(defaultConfig, &fake.TimeSeriesCreator{}, test.sapInstances)
+			got := create(context.Background(), defaultConfig, &fake.TimeSeriesCreator{}, test.sapInstances)
 
 			if len(got.Collectors) != test.wantCollectorCount {
 				t.Errorf("create() returned %d collectors, want %d", len(got.Collectors), test.wantCollectorCount)

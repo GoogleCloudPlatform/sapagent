@@ -18,19 +18,16 @@ package computeresources
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 )
 
 func TestCollectForSAPControlProcesses(t *testing.T) {
 	tests := []struct {
-		name       string
-		executor   commandExecutor
-		fileReader maintenance.FileReader
-		wantCount  int
+		name      string
+		executor  commandExecutor
+		wantCount int
 	}{
 		{
 			name: "EmptyPIDsMap",
@@ -43,24 +40,12 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			name: "OnlyMemoryPerProcessMetricAvailable",
 			executor: func(cmd, args string) (string, string, error) {
 				if cmd == "ps" {
-					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    9204\n", "", nil
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   111\nsapstart    222\n", "", nil
 				}
 				if cmd == "getconf" {
 					return "100\n", "", nil
 				}
 				return "", "", nil
-			},
-			fileReader: MockedFileReader{
-				expectedDataList: [][]byte{
-					[]byte(". . . . . . . . . . . . . 3 1 . . . . . . 84265 . . ."),
-					[]byte("Name:  xxx\nVmSize:   1340\nVmRSS:   14623\nVmSwap:     24634\n"),
-					[]byte(""),
-				},
-				expectedErrList: []error{
-					nil,
-					nil,
-					errors.New("unable to read file (proc/uptime)"),
-				},
 			},
 			wantCount: 3,
 		},
@@ -68,40 +53,41 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			name: "OnlyCPUPerProcessMetricAvailable",
 			executor: func(cmd, args string) (string, string, error) {
 				if cmd == "ps" {
-					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    9204\n", "", nil
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    333\n", "", nil
 				}
 				if cmd == "getconf" {
 					return "100\n", "", nil
 				}
 				return "", "", nil
 			},
-			fileReader: MockedFileReader{
-				expectedDataList: [][]byte{
-					[]byte(". . . . . . . . . . . . . 3 1 . . . . . . 84265 . . ."),
-					[]byte("Name:  xxx\nVmSize:   sample\nVmRSS:   sample\nVmSwap:     sample\n"),
-					[]byte("28057.65 218517.53\n"),
-				},
-				expectedErrList: []error{
-					nil,
-					nil,
-					nil,
-				},
-			},
 			wantCount: 1,
+		},
+		{
+			name: "FetchedBothCPUAndMemoryMetricsSuccessfully",
+			executor: func(cmd, args string) (string, string, error) {
+				if cmd == "ps" {
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    444\n", "", nil
+				}
+				if cmd == "getconf" {
+					return "100\n", "", nil
+				}
+				return "", "", nil
+			},
+			wantCount: 4,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testProps := &SAPControlProcInstanceProperties{
-				Config:     defaultConfig,
-				Client:     &fake.TimeSeriesCreator{},
-				Executor:   test.executor,
-				FileReader: test.fileReader,
+				Config:        defaultConfig,
+				Client:        &fake.TimeSeriesCreator{},
+				Executor:      test.executor,
+				NewProcHelper: newProcessWithContextHelperTest,
 			}
 			got := testProps.Collect(context.Background())
 			if len(got) != test.wantCount {
-				t.Errorf("Got metrics length (%d) != Want metrics length (%d) from CollectForSAPControlProcesses.", len(got), test.wantCount)
+				t.Errorf("Collect() = %d , want %d", len(got), test.wantCount)
 			}
 
 			for _, metric := range got {

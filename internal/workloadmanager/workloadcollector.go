@@ -122,7 +122,7 @@ func start(ctx context.Context, params Parameters, tsc cloudmonitoring.TimeSerie
 		for {
 			log.Logger.Info("Collecting metrics from remote instances")
 			collectAndSendRemoteMetrics(ctx, params)
-			log.Logger.Debugf("Sleeping for %v", st)
+			log.Logger.Debugw("Sleeping", "duration", st)
 			time.Sleep(st)
 		}
 		return
@@ -131,7 +131,7 @@ func start(ctx context.Context, params Parameters, tsc cloudmonitoring.TimeSerie
 		log.Logger.Info("Collecting metrics from this instance")
 		sendMetrics(ctx, collectMetrics(ctx, params, metricOverridePath), params.Config.GetCloudProperties().GetProjectId(), &tsc, params.BackOffs)
 		// sleep until the next collection interval
-		log.Logger.Debugf("Sleeping for %v", st)
+		log.Logger.Debugw("Sleeping", "duration", st)
 		time.Sleep(st)
 	}
 }
@@ -222,7 +222,7 @@ metric: hana
 func collectOverrideMetrics(config *cnfpb.Configuration, reader ConfigFileReader, metricOverride string) WorkloadMetrics {
 	file, err := reader(metricOverride)
 	if err != nil {
-		log.Logger.Warn("Could not read the metric override file", log.Error(err))
+		log.Logger.Warnw("Could not read the metric override file", "error", err)
 		return WorkloadMetrics{}
 	}
 	defer file.Close()
@@ -256,7 +256,7 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 		key, value, found := strings.Cut(e.scanner.Text(), ":")
 		if !found {
 			if e.scanner.Text() != "" {
-				log.Logger.Warnf("Could not parse key, value pair. Expected format: '<key>: <value>', got: %s", e.scanner.Text())
+				log.Logger.Warnw("Could not parse key, value pair. Expected format: '<key>: <value>'", "text", e.scanner.Text())
 			}
 			continue
 		}
@@ -270,14 +270,14 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 			metricName = value
 		case "metric_value":
 			if metricValue, err = strconv.ParseFloat(value, 64); err != nil {
-				log.Logger.Warn(fmt.Sprintf("Failed to parse float: %s", value), log.Error(err))
+				log.Logger.Warnw("Failed to parse float", "value", value, "error", err)
 			}
 		default:
 			labels[key] = strings.TrimSpace(value)
 		}
 	}
 	if err = e.scanner.Err(); err != nil {
-		log.Logger.Warn("Could not read from the override metrics file", log.Error(err))
+		log.Logger.Warnw("Could not read from the override metrics file", "error", err)
 	}
 	return metricName, metricValue, labels, true
 }
@@ -290,24 +290,24 @@ func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmon
 	// debugging metric data being sent
 	for _, m := range wm.Metrics {
 		if len(m.GetPoints()) == 0 {
-			log.Logger.Debugf("  Metric: %s has no point data", m.GetMetric().GetType())
+			log.Logger.Debugw("  Metric has no point data", "metric", m.GetMetric().GetType())
 			continue
 		}
-		log.Logger.Debugf("  Metric: %s, value: %f", m.GetMetric().GetType(), m.GetPoints()[0].GetValue().GetDoubleValue())
+		log.Logger.Debugw("  Metric", "metric", m.GetMetric().GetType(), "value", m.GetPoints()[0].GetValue().GetDoubleValue())
 		for k, v := range m.GetMetric().GetLabels() {
-			log.Logger.Debugf("    Label: %s = %s", k, v)
+			log.Logger.Debugw("    Label", "key", k, "value", v)
 		}
 	}
-	log.Logger.Infof("Sending %d metrics to Cloud Monitoring...", len(wm.Metrics))
+	log.Logger.Infow("Sending metrics to Cloud Monitoring...", "number", len(wm.Metrics))
 	request := monitoringpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", p),
 		TimeSeries: wm.Metrics}
 	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, *mc, &request, bo); err != nil {
-		log.Logger.Error("Failed to send metrics to Cloud Monitoring", log.Error(err))
+		log.Logger.Errorw("Failed to send metrics to Cloud Monitoring", "error", err)
 		usagemetrics.Error(5) // Workload metrics collection failure
 		return 0
 	}
-	log.Logger.Infof("Sent %d metrics to Cloud Monitoring.", len(wm.Metrics))
+	log.Logger.Infow("Sent metrics to Cloud Monitoring.", "number", len(wm.Metrics))
 	return len(wm.Metrics)
 }
 

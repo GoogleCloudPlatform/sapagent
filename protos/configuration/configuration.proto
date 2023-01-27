@@ -69,21 +69,24 @@ message WorkloadValidationRemoteCollection {
 
 message RemoteCollectionInstance {
   string project_id = 1;
-  string instance_id = 2;
-  string instance_name = 3;
-  string zone = 4;
+  string zone = 2;
+  string instance_id = 3;
+  string instance_name = 4;
+  string ssh_host_address = 5;
 }
 
 message RemoteCollectionGcloud {
-  bool use_internal_ip = 1;
-  bool tunnel_through_iap = 2;
-  string gcloud_args = 3;
+  // user that will be used when issue gcloud ssh commands, if omitted then the
+  // owner of the systemd service is used, usually root
+  string ssh_username = 1;
+  bool use_internal_ip = 2;
+  bool tunnel_through_iap = 3;
+  string gcloud_args = 4;
 }
 
 message RemoteCollectionSsh {
   string ssh_username = 1;
   string ssh_private_key_path = 2;
-  string ssh_host_address = 3;
 }
 
 message HANAMetricsConfig {

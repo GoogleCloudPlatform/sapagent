@@ -245,7 +245,7 @@ type LRMRSCOp struct {
 	ExecTime        int    `xml:"exec-time,attr"`
 	QueueTime       int    `xml:"queue-time,attr"`
 	OpDigest        string `xml:"op-digest,attr"`
-	OpForceRestart string `xml:"op-force-restart,attr"`
+	OpForceRestart  string `xml:"op-force-restart,attr"`
 	OpRestartDigest string `xml:"op-restart-digest,attr"`
 }
 
@@ -259,7 +259,7 @@ func ParseXML(xmlVal []byte) (*CIB, error) {
 	if err := xml.Unmarshal(xmlVal, cib); err != nil {
 		return nil, err
 	}
-	log.Logger.Debugf("XML parsed to 'crmMon' struct as: %v.", cib)
+	log.Logger.Debugw("XML parsed to 'crmMon' struct", "crmmon", cib)
 	return cib, nil
 
 }

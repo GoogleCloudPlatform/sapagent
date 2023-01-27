@@ -104,7 +104,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	cpm := parameters.Config.GetCollectionConfiguration().GetCollectProcessMetrics()
 	cf := parameters.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
 
-	log.Logger.Infof("Configuration option collect_process_metrics set to: %t.", cpm)
+	log.Logger.Infow("Configuration option for collect_process_metrics", "collectprocessmetrics", cpm)
 
 	switch {
 	case !cpm:
@@ -114,7 +114,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 		log.Logger.Info("Process Metrics collection is not supported for windows platform.")
 		return false
 	case cf < minimumFrequency:
-		log.Logger.Infof("Process metrics frequency: %d is smaller than minimum supported value: %d.", cf, minimumFrequency)
+		log.Logger.Infow("Process metrics frequency is smaller than minimum supported value.", "frequency", cf, "minimumfrequency", minimumFrequency)
 		log.Logger.Info("Not collecting Process Metrics.")
 		usagemetrics.Error(3) // Unexpected error
 		return false
@@ -122,7 +122,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 
 	mc, err := parameters.MetricClient(ctx)
 	if err != nil {
-		log.Logger.Error("Failed to create Cloud Monitoring client", log.Error(err))
+		log.Logger.Errorw("Failed to create Cloud Monitoring client", "error", err)
 		usagemetrics.Error(3) // Unexpected error
 		return false
 	}
@@ -136,7 +136,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 
 	log.Logger.Info("Starting process metrics collection in background.")
 	usagemetrics.Action(3) // Collecting process metrics
-	p := create(parameters.Config, mc, sapInstances)
+	p := create(ctx, parameters.Config, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
 	go p.collectAndSend(ctx, parameters.BackOffs)
 	return true
@@ -148,7 +148,7 @@ func NewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, er
 }
 
 // create sets up the processmetrics properties and metric collectors for SAP Instances.
-func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
+func create(ctx context.Context, config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
 		SAPInstances: sapInstances,
 		Config:       config,
@@ -165,33 +165,33 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 
 	log.Logger.Info("Creating SAP control processes per process CPU, memory usage metrics collector.")
 	sapStartCollector := &computeresources.SAPControlProcInstanceProperties{
-		Config:     p.Config,
-		Client:     p.Client,
-		Executor:   commandlineexecutor.ExpandAndExecuteCommand,
-		FileReader: maintenance.ModeReader{},
+		Config:   p.Config,
+		Client:   p.Client,
+		Executor: commandlineexecutor.ExpandAndExecuteCommand,
 	}
 
 	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector)
 
 	sids := make(map[string]bool)
+	clusterCollectorCreated := false
 	for _, instance := range p.SAPInstances.GetInstances() {
 		sids[instance.GetSapsid()] = true
-		if p.SAPInstances.GetLinuxClusterMember() {
-			log.Logger.Infof("Creating cluster collector for instance %q.", instance.GetInstanceId())
+		if p.SAPInstances.GetLinuxClusterMember() && clusterCollectorCreated == false {
+			log.Logger.Infow("Creating cluster collector for instance", "instance", instance)
 			clusterCollector := &cluster.InstanceProperties{
 				SAPInstance: instance,
 				Config:      p.Config,
 				Client:      p.Client,
 			}
 			p.Collectors = append(p.Collectors, clusterCollector)
+			clusterCollectorCreated = true
 		}
 		if instance.GetType() == sapb.InstanceType_HANA {
-			log.Logger.Infof("Creating HANA per process CPU, memory usage metrics collector for instance %q.", instance.GetInstanceId())
+			log.Logger.Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", instance)
 			hanaComputeresourcesCollector := &computeresources.HanaInstanceProperties{
 				Config:      p.Config,
 				Client:      p.Client,
 				Executor:    commandlineexecutor.ExpandAndExecuteCommand,
-				FileReader:  maintenance.ModeReader{},
 				SAPInstance: instance,
 				Runner: &commandlineexecutor.Runner{
 					User:       instance.GetUser(),
@@ -201,7 +201,7 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 				},
 			}
 
-			log.Logger.Infof("Creating HANA collector for instance %q.", instance.GetInstanceId())
+			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
 			hanaCollector := &hana.InstanceProperties{
 				SAPInstance: instance,
 				Config:      p.Config,
@@ -210,12 +210,11 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 		}
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
-			log.Logger.Info("Creating Netweaver per process CPU, memory usage metrics collector for instance %q.", instance.GetInstanceId())
+			log.Logger.Infow("Creating Netweaver per process CPU, memory usage metrics collector for instance.", "instance", instance)
 			netweaverComputeresourcesCollector := &computeresources.NetweaverInstanceProperties{
 				Config:      p.Config,
 				Client:      p.Client,
 				Executor:    commandlineexecutor.ExpandAndExecuteCommand,
-				FileReader:  maintenance.ModeReader{},
 				SAPInstance: instance,
 				Runner: &commandlineexecutor.Runner{
 					User:       instance.GetUser(),
@@ -225,7 +224,7 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 				},
 			}
 
-			log.Logger.Infof("Creating Netweaver collector for instance %q.", instance.GetInstanceId())
+			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)
 			netweaverCollector := &netweaver.InstanceProperties{
 				SAPInstance: instance,
 				Config:      p.Config,
@@ -246,7 +245,7 @@ func create(config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator,
 		p.Collectors = append(p.Collectors, maintenanceModeCollector)
 	}
 
-	log.Logger.Infof("Created %d collectors.", len(p.Collectors))
+	log.Logger.Infow("Created process metrics collectors.", "numberofcollectors", len(p.Collectors))
 	return p
 }
 
@@ -265,7 +264,7 @@ func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAP
 
 			instance.HanaDbUser, instance.HanaDbPassword, err = sapdiscovery.ReadHANACredentials(ctx, projectID, hanaConfig)
 			if err != nil {
-				log.Logger.Warn("HANA DB Credentials not set, will not collect HANA DB Query related metrics.", log.Error(err))
+				log.Logger.Warnw("HANA DB Credentials not set, will not collect HANA DB Query related metrics.", "error", err)
 			}
 		}
 	}
@@ -300,10 +299,10 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 		default:
 			sent, batchCount, err := p.collectAndSendOnce(ctx, bo)
 			if err != nil {
-				log.Logger.Error("Error sending metrics", log.Error(err))
+				log.Logger.Errorw("Error sending metrics", "error", err)
 				lastErr = err
 			}
-			log.Logger.Infof("Sent %d metrics in %d batches, sleeping for %d in collectAndSend.", sent, batchCount, cf)
+			log.Logger.Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", cf)
 			time.Sleep(time.Duration(cf) * time.Second)
 		}
 	}
@@ -322,17 +321,18 @@ Return values are pass-through from send().
 func (p *Properties) collectAndSendOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
 	var wg sync.WaitGroup
 	msgs := make([][]*sapdiscovery.Metrics, len(p.Collectors))
-	log.Logger.Debugf("Start %d collectors in parallel.", len(p.Collectors))
+	defer (func() { msgs = nil })() // free up reference in memory.
+	log.Logger.Debugw("Starting collectors in parallel.", "numberofcollectors", len(p.Collectors))
 
 	for i, collector := range p.Collectors {
 		wg.Add(1)
 		go func(slot int, c Collector) {
 			defer wg.Done()
 			msgs[slot] = c.Collect(ctx) // Each collector writes to its own slot.
-			log.Logger.Debugf("Type %T collected %d metrics.", c, len(msgs[slot]))
+			log.Logger.Debugw("Collected metrics", "type", c, "numberofmetrics", len(msgs[slot]))
 		}(i, collector)
 	}
-	log.Logger.Debug("Wait for collectors to finish.")
+	log.Logger.Debug("Waiting for collectors to finish.")
 	wg.Wait()
 	return p.send(ctx, flatten(msgs), bo)
 }
@@ -355,7 +355,7 @@ func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics, 
 		batchTimeSeries = append(batchTimeSeries, m.TimeSeries)
 
 		if len(batchTimeSeries) == maxTSPerRequest {
-			log.Logger.Debug("Maximum batch size is reached, send the batch.")
+			log.Logger.Debug("Maximum batch size has been reached, sending the batch.")
 			batchCount++
 			if err := p.sendBatch(ctx, batchTimeSeries, bo); err != nil {
 				return sent, batchCount, err
@@ -376,7 +376,7 @@ sendBatch sends one batch of metrics to cloud monitoring using an API call with 
 Returns an error in case of failures.
 */
 func (p *Properties) sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, bo *cloudmonitoring.BackOffIntervals) error {
-	log.Logger.Debugf("Sending %d metrics to cloud monitoring.", len(batchTimeSeries))
+	log.Logger.Debugw("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
 
 	req := &monitoringpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", p.Config.GetCloudProperties().GetProjectId()),

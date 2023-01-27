@@ -27,7 +27,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
@@ -36,7 +35,6 @@ var (
 	exitStatusPattern = regexp.MustCompile("exit status ([0-9]+)")
 )
 
-// TODO(b/259055422) Clean up the exported functions
 type (
 	runCmdAsUser func(string, string, string) (string, string, error)
 	// CommandRunner is a function to execute command. Production callers
@@ -50,7 +48,7 @@ type (
 	// to pass commandlineexecutor.CommandExists while calling
 	// this package's APIs.
 	CommandExistsRunner func(string) bool
-	// Runner has necessary info to to run a command.
+	// Runner has the necessary info to run a command.
 	Runner struct {
 		User, Executable, Args string
 		Env                    []string
@@ -89,15 +87,15 @@ func ExecuteCommand(executable string, args ...string) (stdOut string, stdErr st
 	exe.Stdout = stdout
 	exe.Stderr = stderr
 
-	log.Logger.Debugf("Executing command %q %q", executable, args)
+	log.Logger.Debugw("Executing command", "executable", executable, "args", args)
 
 	if err := exe.Run(); err != nil {
-		log.Logger.Debugf("Could not execute %q.  Result exit code: %q", executable, ExitCode(err))
+		log.Logger.Debugw("Could not execute command", "executable", executable, "exitcode", ExitCode(err), "error", err)
 		return stdout.String(), stderr.String(), err
 	}
 
 	// Exit code can assumed to be 0
-	log.Logger.Debugf("Result exit code: 0 stdout: %q", stdout.String())
+	log.Logger.Debugw("Successfully executed command", "stdout", stdout.String(), "stderr", stderr.String())
 	return stdout.String(), stderr.String(), nil
 
 }
@@ -123,20 +121,20 @@ func ExpandAndExecuteCommandAsUserExitCode(user, executable, args string) (stdOu
 // runCommandAsUserExitCode is a testable version of ExpandAndExecuteCommandAsUserExitCode.
 func runCommandAsUserExitCode(user, executable, args string, run runCmdAsUser) (stdOut string, stdErr string, code int64, err error) {
 	if !CommandExists(executable) {
+		log.Logger.Debugw("Command executable not found", "executable", executable)
 		msg := fmt.Sprintf("Command executable: %q not found.", executable)
-		log.Logger.Debug(msg)
 		return "", msg, 0, fmt.Errorf("command executable: %s not found", executable)
 	}
 
 	var exitCode int
 	stdOut, stdErr, err = run(user, executable, args)
 	if err != nil {
-		log.Logger.Debugf("Command returned stdOut: %s, stdErr: %s, err: %v.", stdOut, stdErr, err)
+		log.Logger.Debugw("Command execution complete", "stdout", stdOut, "stderr", stdErr, "error", err)
 
 		m := exitStatusPattern.FindStringSubmatch(err.Error())
 		exitCode, err = strconv.Atoi(m[1])
 		if err != nil {
-			log.Logger.Debug("Failed to get command exit code", log.Error(err))
+			log.Logger.Debugw("Failed to get command exit code", "error", err)
 			return stdOut, stdErr, 0, err
 		}
 	}
@@ -151,9 +149,7 @@ as a string, and an error.  The error will be nil if the command was successful.
 Note: This is intended for Linux based system only see exe_linux.go.
 */
 func ExecuteCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
-	r := &Runner{User: user, Executable: executable, Args: strings.Join(args, " ")}
-	stdOut, stdErr, _, err = r.RunWithEnv()
-	return stdOut, stdErr, err
+	return executeCommandAsUser(user, executable, args...)
 }
 
 /*

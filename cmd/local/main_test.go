@@ -28,10 +28,6 @@ import (
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-// (TODO: b/246271686): Enhance tests in main_test.go
-// - Test to ensure services return control to startServices() asynchrounously.
-// - Test to cover provideSapHostAgentMetrics and LogToFile.
-
 type (
 	mockedFileReader struct {
 		expectedData []byte

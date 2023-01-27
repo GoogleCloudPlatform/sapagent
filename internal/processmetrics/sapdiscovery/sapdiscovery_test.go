@@ -182,6 +182,7 @@ func TestInstances(t *testing.T) {
 						SapcontrolPath:          "/usr/sap/DEV/SYS/exe/sapcontrol",
 						User:                    "devadm",
 						InstanceId:              "ASCS00",
+						Kind:                    sapb.InstanceKind_CS,
 						ProfilePath:             "/usr/sap/DEV/SYS/profile/ASCS_ASCS00_vm1",
 						LdLibraryPath:           "/usr/sap/DEV/SYS/exe",
 						NetweaverHealthCheckUrl: "http://localhost:8100/msgserver/text/logon",
@@ -521,6 +522,7 @@ func TestNetweaverInstances(t *testing.T) {
 					InstanceNumber:          "00",
 					User:                    "devadm",
 					InstanceId:              "ASCS00",
+					Kind:                    sapb.InstanceKind_CS,
 					Type:                    sapb.InstanceType_NETWEAVER,
 					SapcontrolPath:          "/usr/sap/DEV/ASCS00/exe/sapcontrol",
 					NetweaverHttpPort:       "8100",
@@ -566,6 +568,7 @@ func TestNetweaverInstances(t *testing.T) {
 					InstanceNumber:          "00",
 					User:                    "ptsadm",
 					InstanceId:              "D00",
+					Kind:                    sapb.InstanceKind_APP,
 					Type:                    sapb.InstanceType_NETWEAVER,
 					SapcontrolPath:          "/usr/sap/PTS/D00/exe/sapcontrol",
 					LdLibraryPath:           "/usr/sap/PTS/D00/exe",
@@ -641,6 +644,7 @@ func TestFindPort(t *testing.T) {
 		instanceName string
 		wantPort     string
 		wantType     sapb.InstanceType
+		wantKind     sapb.InstanceKind
 	}{
 		{
 			name: "SuccessASCS",
@@ -654,6 +658,7 @@ func TestFindPort(t *testing.T) {
 			instanceName: "ASCS",
 			wantPort:     "8100",
 			wantType:     sapb.InstanceType_NETWEAVER,
+			wantKind:     sapb.InstanceKind_CS,
 		},
 		{
 			name: "SuccessD",
@@ -667,11 +672,13 @@ func TestFindPort(t *testing.T) {
 			instanceName: "D",
 			wantPort:     "50100",
 			wantType:     sapb.InstanceType_NETWEAVER,
+			wantKind:     sapb.InstanceKind_APP,
 		},
 		{
 			name:         "ERSInstance",
 			instanceName: "ERS",
 			wantType:     sapb.InstanceType_NETWEAVER,
+			wantKind:     sapb.InstanceKind_ERS,
 		},
 		{
 			name:         "HDBInstance",
@@ -685,10 +692,10 @@ func TestFindPort(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotPort, gotType := findPort(test.inst, test.instanceName)
-			if gotPort != test.wantPort || gotType != test.wantType {
-				t.Errorf("findPort() returned unexpected values. got(%v, %v), want(%v.%v)",
-					gotPort, gotType, test.wantPort, test.wantType)
+			gotPort, gotType, gotKind := findPort(test.inst, test.instanceName)
+			if gotPort != test.wantPort || gotType != test.wantType || gotKind != test.wantKind {
+				t.Errorf("findPort() returned unexpected values. got(%v, %v, %v), want(%v, %v, %v)",
+					gotPort, gotType, gotKind, test.wantPort, test.wantType, test.wantKind)
 			}
 		})
 	}

@@ -89,7 +89,7 @@ type (
 func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, error) {
 	stdOut, _, exitStatus, err := r.RunWithEnv()
 	if err != nil {
-		log.Logger.Debug("Failed to get SAP Process Status", log.Error(err))
+		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(err))
 		return nil, 0, err
 	}
 
@@ -97,7 +97,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 	if !ok {
 		return nil, exitStatus, fmt.Errorf("invalid sapcontrol return code: %d", exitStatus)
 	}
-	log.Logger.Debugf("Sapcontrol returned status %d : %q.", exitStatus, message)
+	log.Logger.Debugw("Sapcontrol returned", "status", exitStatus, "message", message)
 
 	names := processNameRegex.FindAllStringSubmatch(stdOut, -1)
 	if len(names) == 0 {
@@ -121,7 +121,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 		}
 		id, err := strconv.Atoi(n[1])
 		if err != nil {
-			log.Logger.Debug("Could not parse the name process index", log.Error(err))
+			log.Logger.Debugw("Could not parse the name process index", log.Error(err))
 			return nil, exitStatus, err
 		}
 		processes[id] = &ProcessStatus{Name: n[2]}
@@ -136,7 +136,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 		}
 		id, err := strconv.Atoi(d[1])
 		if err != nil {
-			log.Logger.Debug("Could not parse the display status process index", log.Error(err))
+			log.Logger.Debugw("Could not parse the display status process index", log.Error(err))
 			return nil, exitStatus, err
 		}
 
@@ -150,7 +150,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 		}
 	}
 
-	log.Logger.Debugf("Process statuses: %v.", processes)
+	log.Logger.Debugw("Process statuses", "statuses", processes)
 	return processes, exitStatus, nil
 }
 
@@ -167,7 +167,7 @@ func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProces
 
 	stdOut, _, _, err := r.RunWithEnv()
 	if err != nil {
-		log.Logger.Debug("Failed to run ABAPGetWPTable", log.Error(err))
+		log.Logger.Debugw("Failed to run ABAPGetWPTable", log.Error(err))
 		return nil, nil, err
 	}
 
@@ -187,7 +187,7 @@ func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProces
 		}
 	}
 
-	log.Logger.Debugf("Found ABAP Process counts: %v, busy ABAP Processes: %v.", processes, busyProcesses)
+	log.Logger.Debugw("Found ABAP Processes", "processcount", processes, "busyprocesses", busyProcesses)
 	return processes, busyProcesses, nil
 }
 
@@ -205,7 +205,7 @@ func (p *Properties) ParseQueueStats(r RunnerWithEnv) (currentQueueUsage, peakQu
 
 	stdOut, _, _, err := r.RunWithEnv()
 	if err != nil {
-		log.Logger.Debug("Failed to run GetQueueStatistic", log.Error(err))
+		log.Logger.Debugw("Failed to run GetQueueStatistic", log.Error(err))
 		return nil, nil, err
 	}
 
@@ -222,19 +222,19 @@ func (p *Properties) ParseQueueStats(r RunnerWithEnv) (currentQueueUsage, peakQu
 		queue, current, peak := row[typeColumn], row[currentQueueUsageColumn], row[peakQueueUsageColumn]
 		currentVal, err := strconv.Atoi(current)
 		if err != nil {
-			log.Logger.Debug("Could not parse current queue usage", log.Error(err))
+			log.Logger.Debugw("Could not parse current queue usage", log.Error(err))
 			continue
 		}
 		currentQueueUsage[queue] = currentVal
 
 		peakVal, err := strconv.Atoi(peak)
 		if err != nil {
-			log.Logger.Debug("Could not parse peak queue usage", log.Error(err))
+			log.Logger.Debugw("Could not parse peak queue usage", log.Error(err))
 			continue
 		}
 		peakQueueUsage[queue] = peakVal
 	}
 
-	log.Logger.Debugf("Found Queue stats - current queue usage: %v, peak queue usage: %v.", currentQueueUsage, peakQueueUsage)
+	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
 	return currentQueueUsage, peakQueueUsage, nil
 }

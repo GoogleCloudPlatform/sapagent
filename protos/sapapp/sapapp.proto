@@ -32,6 +32,13 @@ enum InstanceSite {
   HANA_STANDALONE = 3;
 }
 
+enum InstanceKind {
+  INSTANCE_KIND_UNDEFINED = 0;
+  APP = 1;
+  CS = 2;
+  ERS = 3;
+}
+
 message SAPInstance {
   string sapsid = 1;           // HDB
   string instance_number = 2;  // 00
@@ -49,6 +56,7 @@ message SAPInstance {
   string ld_library_path = 13;  // The Instance's LD_LIBRARY_PATH.
   string profile_path = 14;     // The instance's profile path.
   string netweaver_health_check_url = 15;
+  InstanceKind kind = 16; // APP, CS, ERS
 }
 
 message SAPInstances {

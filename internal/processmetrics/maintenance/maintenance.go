@@ -119,12 +119,12 @@ func ReadMaintenanceMode(fr FileReader) ([]string, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	} else if err != nil || len(content) == 0 {
-		log.Logger.Error(fmt.Sprintf("Could not read the file: %s", filepath.Join(linuxDirPath, fileName)), log.Error(err))
+		log.Logger.Errorw("Could not read the file", "file", filepath.Join(linuxDirPath, fileName), "error", err)
 		return nil, err
 	}
 	mntModeContent := &maintenanceModeJSON{}
 	if err := json.Unmarshal(content, mntModeContent); err != nil {
-		log.Logger.Error("Could not parse maintenance.json file, error", log.Error(err))
+		log.Logger.Errorw("Could not parse maintenance.json file, error", log.Error(err))
 		return nil, err
 	}
 	return mntModeContent.SIDs, nil
@@ -135,7 +135,7 @@ func ReadMaintenanceMode(fr FileReader) ([]string, error) {
 func UpdateMaintenanceMode(mntmode bool, sid string, fr FileReader, fw FileWriter) ([]string, error) {
 	sidsUnderMaintenance, err := ReadMaintenanceMode(fr)
 	if err != nil {
-		log.Logger.Error("Could not read maintenance.json file", log.Error(err))
+		log.Logger.Errorw("Could not read maintenance.json file", log.Error(err))
 		return nil, err
 	}
 	ind := slices.Index(sidsUnderMaintenance, sid)
@@ -147,7 +147,7 @@ func UpdateMaintenanceMode(mntmode bool, sid string, fr FileReader, fw FileWrite
 		sidsUnderMaintenance = append(sidsUnderMaintenance, sid)
 	} else {
 		if mntmode {
-			log.Logger.Debugf("SID: %s is already in maintenance mode.", sid)
+			log.Logger.Debugw("SID is already in maintenance mode.", "sid", sid)
 			return sidsUnderMaintenance, fmt.Errorf("SID: %s is already in maintenance mode", sid)
 		}
 		sidsUnderMaintenance = removeSID(sidsUnderMaintenance, ind)
@@ -155,11 +155,11 @@ func UpdateMaintenanceMode(mntmode bool, sid string, fr FileReader, fw FileWrite
 	mntModeContent := &maintenanceModeJSON{SIDs: sidsUnderMaintenance}
 	marshalContent, _ := json.Marshal(mntModeContent)
 	if err := fw.MakeDirs(linuxDirPath, 0777); err != nil {
-		log.Logger.Error(fmt.Sprintf("Error making directory %s", linuxDirPath), log.Error(err))
+		log.Logger.Errorw("Error making directory", "directory", linuxDirPath, "error", err)
 		return nil, err
 	}
 	if err := fw.Write(filepath.Join(linuxDirPath, fileName), marshalContent, 0777); err != nil {
-		log.Logger.Error("Could not write maintenance.json file", log.Error(err))
+		log.Logger.Errorw("Could not write maintenance.json file", log.Error(err))
 		return nil, err
 	}
 	return sidsUnderMaintenance, nil
@@ -187,7 +187,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 		mntmode := slices.Contains(sidsUnderMaintenance, sid)
 		labels := make(map[string]string)
 		labels["sid"] = sid
-		log.Logger.Debugf("MaintenanceMode metric for SID: %s is set to %t", sid, mntmode)
+		log.Logger.Debugw("MaintenanceMode metric for SID", "sid", sid, "maintenancemode", mntmode)
 		params := timeseries.Params{
 			CloudProp:    p.Config.CloudProperties,
 			MetricType:   metricURL + mntmodePath,

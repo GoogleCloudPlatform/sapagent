@@ -403,9 +403,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 			queryClient: &fake.TimeSeriesQuerier{
 				Err: errors.New("Query Time Series error"),
 			},
-			config: defaultConfig,
-			// TODO(b/254459768): Fully testing all error paths currently causes a timeout.
-			// Need to allow backoff interval to be adjusted in test contexts.
+			config:             defaultConfig,
 			instanceProperties: emptyInstanceProperties,
 			want: &mpb.MetricsCollection{
 				Metrics: []*mpb.Metric{

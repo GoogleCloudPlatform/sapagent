@@ -45,7 +45,7 @@ type AgentTime struct {
 // New initializes a AgentTime instance with the provided timeSource.
 func New(t TimeSource) *AgentTime {
 	startup := t.Now()
-	log.Logger.Debugf("startup time: %d (%s)", startup.Unix(), startup.String())
+	log.Logger.Debugw("startup time", "unix", startup.Unix(), "time", startup.String())
 	new := &AgentTime{timeSource: t, startup: startup}
 	// Make an initial call to UpdateRefreshTimes to guard against unexpected zero values.
 	new.UpdateRefreshTimes()
@@ -77,6 +77,6 @@ func (u *AgentTime) UpdateRefreshTimes() {
 	now := u.timeSource.Now()
 	u.cloudMetricRefresh = now.Add(-180 * time.Second)
 	u.localRefresh = now
-	log.Logger.Debugf("cloudMetricRefresh time: %d (%s)", u.cloudMetricRefresh.Unix(), u.cloudMetricRefresh.String())
-	log.Logger.Debugf("localRefresh time: %d (%s)", u.localRefresh.Unix(), u.localRefresh.String())
+	log.Logger.Debugw("cloudMetricRefresh time", "unix", u.cloudMetricRefresh.Unix(), "time", u.cloudMetricRefresh.String())
+	log.Logger.Debugw("localRefresh time", "unix", u.localRefresh.Unix(), "time", u.localRefresh.String())
 }

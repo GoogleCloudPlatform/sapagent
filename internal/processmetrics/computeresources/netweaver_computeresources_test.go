@@ -18,11 +18,9 @@ package computeresources
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
@@ -44,7 +42,6 @@ func TestCollectForNetweaver(t *testing.T) {
 		name             string
 		executor         commandExecutor
 		sapControlOutput string
-		fileReader       maintenance.FileReader
 		wantCount        int
 	}{
 		{
@@ -64,19 +61,7 @@ func TestCollectForNetweaver(t *testing.T) {
 				return "", "", nil
 			},
 			sapControlOutput: defaultSapControlOutputNetWeaver,
-			fileReader: MockedFileReader{
-				expectedDataList: [][]byte{
-					[]byte(". . . . . . . . . . . . . 3 1 . . . . . . 84265 . . ."),
-					[]byte("Name:  xxx\nVmSize:   1340\nVmRSS:   14623\nVmSwap:     24634\n"),
-					[]byte(""),
-				},
-				expectedErrList: []error{
-					nil,
-					nil,
-					errors.New("unable to read file (proc/uptime)"),
-				},
-			},
-			wantCount: 6,
+			wantCount:        3,
 		},
 		{
 			name: "OnlyCPUPerProcessMetricAvailable",
@@ -86,20 +71,15 @@ func TestCollectForNetweaver(t *testing.T) {
 				}
 				return "", "", nil
 			},
-			sapControlOutput: defaultSapControlOutputNetWeaver,
-			fileReader: MockedFileReader{
-				expectedDataList: [][]byte{
-					[]byte(". . . . . . . . . . . . . 3 1 . . . . . . 84265 . . ."),
-					[]byte("Name:  xxx\nVmSize:   sample\nVmRSS:   sample\nVmSwap:     sample\n"),
-					[]byte("28057.65 218517.53\n"),
-				},
-				expectedErrList: []error{
-					nil,
-					nil,
-					nil,
-				},
-			},
-			wantCount: 2,
+			sapControlOutput: `OK
+			0 name: msg_server
+			0 dispstatus: GREEN
+			0 pid: 111
+			1 name: enserver
+			1 dispstatus: GREEN
+			1 pid: 333
+			`,
+			wantCount:        1,
 		},
 	}
 
@@ -109,13 +89,13 @@ func TestCollectForNetweaver(t *testing.T) {
 				Config:      defaultConfig,
 				Client:      &fake.TimeSeriesCreator{},
 				Executor:    test.executor,
-				FileReader:  test.fileReader,
 				SAPInstance: defaultSAPInstanceNetWeaver,
 				Runner:      &fakeRunner{stdOut: test.sapControlOutput},
+				NewProcHelper: newProcessWithContextHelperTest,
 			}
 			got := testNetweaverInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
-				t.Errorf("Got metrics length (%d) != Want metrics length (%d) from CollectForNetweaver method.", len(got), test.wantCount)
+				t.Errorf("Collect() = %d , want %d", len(got), test.wantCount)
 			}
 
 			for _, metric := range got {

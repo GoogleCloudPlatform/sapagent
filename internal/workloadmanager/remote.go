@@ -22,7 +22,7 @@ import (
 	"strings"
 	"sync"
 
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -65,11 +65,11 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 
 	mu := &sync.Mutex{}
 	metricsSent := 0
-	for _, i := range rc.GetRemoteCollectionInstances() {
-		inst := i
+	for _, inst := range rc.GetRemoteCollectionInstances() {
+		inst := inst
 		ch := make(chan WorkloadMetrics)
 		wp.Submit(func() {
-			log.Logger.Infof("Collecting metrics from %v", inst)
+			log.Logger.Infow("Collecting metrics from", "instance", inst)
 			if rc.GetRemoteCollectionSsh() != nil {
 				go collectRemoteSSH(params, rc, inst, ch)
 			} else if rc.GetRemoteCollectionGcloud() != nil {
@@ -87,13 +87,13 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 }
 
 // parseRemoteJSON parses JSON strings from remote host collection
-func parseRemoteJSON(output string, metrics *[]*monitoringresourcespb.TimeSeries) error {
+func parseRemoteJSON(output string, metrics *[]*mrpb.TimeSeries) error {
 	for _, s := range strings.Split(output, "\n") {
 		if len(s) == 0 {
 			// blank line, continue
 			continue
 		}
-		metric := &monitoringresourcespb.TimeSeries{}
+		metric := &mrpb.TimeSeries{}
 		if err := protojson.Unmarshal([]byte(s), metric); err != nil {
 			return err
 		}
@@ -110,10 +110,17 @@ func appendCommonGcloudArgs(args []string, rc *cnfpb.WorkloadValidationRemoteCol
 	if rc.GetRemoteCollectionGcloud().GetUseInternalIp() {
 		args = append(args, "--internal-ip")
 	}
-	if rc.GetRemoteCollectionGcloud().GcloudArgs != "" {
+	if rc.GetRemoteCollectionGcloud().GetGcloudArgs() != "" {
 		args = append(args, strings.Split(rc.GetRemoteCollectionGcloud().GetGcloudArgs(), " ")...)
 	}
 	return args
+}
+
+func gcloudInstanceName(rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance) string {
+	if rc.GetRemoteCollectionGcloud().GetSshUsername() != "" {
+		return fmt.Sprintf("%s@%s", rc.GetRemoteCollectionGcloud().GetSshUsername(), i.GetInstanceName())
+	}
+	return i.GetInstanceName()
 }
 
 // The collectRemoteGcloud function will:
@@ -122,58 +129,81 @@ func appendCommonGcloudArgs(args []string, rc *cnfpb.WorkloadValidationRemoteCol
 //   - read the stdout and parse errors or JSON into Metrics
 //   - return the metrics from the host to the caller
 func collectRemoteGcloud(params Parameters, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, wm chan<- WorkloadMetrics) {
-
-	log.Logger.Debug("Collecting remote metrics using gcloud")
-	log.Logger.Infof("Collecting metrics from %s", i.GetInstanceName())
-	metrics := []*monitoringresourcespb.TimeSeries{}
-
-	// remove the binary just in case it still exists on the remote
-	sshArgs := []string{"compute", "ssh"}
-	sshArgs = appendCommonGcloudArgs(sshArgs, rc, i)
-	sshArgs = append(sshArgs, i.GetInstanceName(), "--command", "rm -f "+remoteAgentBinary)
-	output, stdErr, err := params.CommandRunnerNoSpace("gcloud", sshArgs...)
-	if err != nil {
-		log.Logger.Errorf("Could not ssh to remote host %s to remove existing tmp binary, err: %w, stdErr: %s, output: %s", i.GetInstanceName(), err, stdErr, output)
-	}
-
-	// gcloud compute scp --project someproject --zone somezone [--tunnel-through-iap] [--internal-ip] [otherargs] filetotranser instancename:path
-	scpArgs := []string{"compute", "scp"}
-	scpArgs = appendCommonGcloudArgs(scpArgs, rc, i)
-	scpArgs = append(scpArgs, agentBinary, fmt.Sprintf("%s:%s", i.GetInstanceName(), remoteAgentBinary))
-	log.Logger.Debugf("Sending binary to %s", i.GetInstanceName())
-	output, stdErr, err = params.CommandRunnerNoSpace("gcloud", scpArgs...)
-	if err != nil {
-		log.Logger.Errorf("Could not copy binary to %s, err: %w, stdErr: %s, output: %s", i.GetInstanceName(), err, stdErr, output)
+	var metrics []*mrpb.TimeSeries
+	if !params.CommandExistsRunner("gcloud") {
+		log.Logger.Error("gcloud command not found. Ensure the google cloud SDK is installed and that the gcloud command is in systemd's PATH environment variable: `systemctl show-environment`, `systemctl set-environment PATH=</path:/another/path>")
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 
-	// gcloud compute ssh ---project someproject --zone somezone [--tunnel-through-iap] [--internal-ip] [otherargs] instancename --command="commandtoexec"
+	log.Logger.Infow("Collecting remote metrics using gcloud", "instance", i)
+	iName := gcloudInstanceName(rc, i)
+	// remove the binary just in case it still exists on the remote
+	sshArgs := []string{"compute", "ssh"}
+	sshArgs = appendCommonGcloudArgs(sshArgs, rc, i)
+	sshArgs = append(sshArgs, iName, "--command", "sudo rm -f "+remoteAgentBinary)
+	output, stdErr, err := params.CommandRunnerNoSpace("gcloud", sshArgs...)
+	if err != nil {
+		log.Logger.Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", i, "error", err, "stderr", stdErr, "stdout", output)
+	}
+
+	// gcloud compute scp --project someproject --zone somezone [--tunnel-through-iap] [--internal-ip] [otherargs] filetotranser [user@]instancename:path
+	scpArgs := []string{"compute", "scp"}
+	scpArgs = appendCommonGcloudArgs(scpArgs, rc, i)
+	scpArgs = append(scpArgs, agentBinary, fmt.Sprintf("%s:%s", iName, remoteAgentBinary))
+	log.Logger.Debugw("Sending binary to remote host", "instance", i)
+	output, stdErr, err = params.CommandRunnerNoSpace("gcloud", scpArgs...)
+	if err != nil {
+		log.Logger.Errorw("Could not copy binary to remote instance", "instance", i, "error", err, "stderr", stdErr, "stdout", output)
+		wm <- WorkloadMetrics{Metrics: metrics}
+		return
+	}
+
+	// gcloud compute ssh ---project someproject --zone somezone [--tunnel-through-iap] [--internal-ip] [otherargs] [user@]instancename --command="commandtoexec"
 	sshArgs = []string{"compute", "ssh"}
 	sshArgs = appendCommonGcloudArgs(sshArgs, rc, i)
-	sshArgs = append(sshArgs, i.GetInstanceName(), "--command", remoteAgentBinary+fmt.Sprintf(" --remote -p=%s -z=%s -i=%s -n=%s; rm "+remoteAgentBinary, i.GetProjectId(), i.GetZone(), i.GetInstanceId(), i.GetInstanceName()))
+	sshArgs = append(sshArgs, iName, "--command", "sudo "+remoteAgentBinary+fmt.Sprintf(" --remote -p=%s -z=%s -i=%s -n=%s; rm "+remoteAgentBinary, i.GetProjectId(), i.GetZone(), i.GetInstanceId(), i.GetInstanceName()))
 	output, stdErr, err = params.CommandRunnerNoSpace("gcloud", sshArgs...)
 	if err != nil {
-		log.Logger.Errorf("Could not execute remote collection from %s, err: %w, stdErr: %s, output: %s", i.GetInstanceName(), err, stdErr, output)
+		log.Logger.Errorw("Could not execute remote collection on instance", "instance", i, "error", err, "stderr", stdErr, "stdout", output)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 	if strings.HasPrefix(output, "ERROR") {
-		log.Logger.Errorf("Error encountered on remote host %s, output: %s", i.GetInstanceName(), output)
+		log.Logger.Errorw("Error encountered on remote instance", "instance", i, "error", output)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 
 	err = parseRemoteJSON(output, &metrics)
 	if err != nil {
-		log.Logger.Errorf("Error in parsing metrics collected from %s, err: %w", i.GetInstanceName(), err)
+		log.Logger.Errorw("Error parsing metrics collected from remote instance", "instance", i, "error", err)
 	}
 
 	if len(metrics) == 0 {
-		log.Logger.Warnf("Error collected from %s has no data", i.GetInstanceName())
+		log.Logger.Warnw("No data collected from remote instance", "instance", i)
 	}
 
 	wm <- WorkloadMetrics{Metrics: metrics}
+}
+
+func appendSSHArgs(args []string, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, isScp bool) []string {
+
+	hostAddr := i.SshHostAddress
+	pkPath := rc.RemoteCollectionSsh.GetSshPrivateKeyPath()
+	userName := rc.RemoteCollectionSsh.GetSshUsername()
+	sshArg := userName + "@" + hostAddr
+
+	args = append(args, "-i", pkPath)
+	if isScp {
+		// append "-i /root/.ssh/sap-agent-key /usr/sap/google-cloud-sap-agent/google-cloud-sap-agent-remote username@10.128.0.36:remoteAgentBinary"
+		args = append(args, agentBinary, sshArg+":"+remoteAgentBinary)
+	} else {
+		// append "-i /root/.ssh/sap-agent-key username@10.128.0.36"
+		args = append(args, sshArg)
+	}
+
+	return args
 }
 
 // The collectRemoteSSH function will:
@@ -182,6 +212,59 @@ func collectRemoteGcloud(params Parameters, rc *cnfpb.WorkloadValidationRemoteCo
 //   - read the stdout and parse errors or JSON into Metrics
 //   - return the metrics from the host to the caller
 func collectRemoteSSH(params Parameters, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, wm chan<- WorkloadMetrics) {
-	// TODO
+	projectID := i.ProjectId
+	zone := i.Zone
+	instanceID := i.InstanceId
+	instanceName := i.InstanceName
 
+	log.Logger.Infow("Collecting remote metrics using ssh", "instance", i)
+
+	rmArgs := []string{}
+	rmArgs = appendSSHArgs(rmArgs, rc, i, false)
+	// append "rm -f remoteAgentBinary"
+	rmArgs = append(rmArgs, "rm -f "+remoteAgentBinary)
+	output, stdErr, err := params.CommandRunnerNoSpace("ssh", rmArgs...)
+	if err != nil {
+		log.Logger.Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", i, "error", err, "stderr", stdErr, "stdout", output)
+	}
+
+	metrics := []*mrpb.TimeSeries{}
+
+	scpArgs := []string{}
+	scpArgs = appendSSHArgs(scpArgs, rc, i, true)
+	output, stdErr, err = params.CommandRunnerNoSpace("scp", scpArgs...)
+	if err != nil {
+		log.Logger.Errorw("Could not copy binary to remote instance", "instance", i, "error", err, "stderr", stdErr, "stdout", output)
+		wm <- WorkloadMetrics{Metrics: metrics}
+		return
+	}
+
+	sshArgs := []string{}
+	sshArgs = appendSSHArgs(sshArgs, rc, i, false)
+	//append "remoteAgentBinary --remote -h=false -p=projectID -i=instanceID -n=instanceName -z=zone"
+	sshArgs = append(sshArgs, remoteAgentBinary, "--remote", "-h=false", "-p="+projectID+" -i="+instanceID+" -n="+instanceName+" -z="+zone)
+	output, stdErr, err = params.CommandRunnerNoSpace("ssh", sshArgs...)
+
+	if err != nil {
+		log.Logger.Errorw("Could not execute remote collection on instance", "instance", i, "error", err, "stderr", stdErr, "stdout", output)
+		wm <- WorkloadMetrics{Metrics: metrics}
+		return
+	}
+
+	if strings.HasPrefix(output, "ERROR") {
+		log.Logger.Errorw("Error encountered on remote instance", "instance", i, "error", output)
+		wm <- WorkloadMetrics{Metrics: metrics}
+		return
+	}
+
+	err = parseRemoteJSON(output, &metrics)
+	if err != nil {
+		log.Logger.Errorw("Error parsing metrics collected from remote instance", "instance", i, "error", err)
+	}
+
+	if len(metrics) == 0 {
+		log.Logger.Warnw("No data collected from remote instance", "instance", i)
+	}
+
+	wm <- WorkloadMetrics{Metrics: metrics}
 }
