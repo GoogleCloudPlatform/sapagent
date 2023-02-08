@@ -56,7 +56,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	content, err := read(p)
 	if err != nil || len(content) == 0 {
 		log.Logger.Errorw("Could not read from configuration file", "file", p, "error", err)
-		usagemetrics.Error(1) // Invalid configuration
+		usagemetrics.Error(usagemetrics.ConfigFileReadFailure)
 		return nil
 	}
 
@@ -65,7 +65,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	config := &cpb.Configuration{ProvideSapHostAgentMetrics: true}
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
-		usagemetrics.Error(1) // Invalid configuration
+		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		log.Logger.Errorw("Invalid content in the configuration file", "file", p, "content", string(content), "error", err)
 	}
 	return config

@@ -73,7 +73,7 @@ func StartSAPHostAgentProvider(ctx context.Context, params Parameters) bool {
 func runHTTPServer() {
 	http.HandleFunc("/", requestHandler)
 	if err := http.ListenAndServe("localhost:18181", nil); err != nil {
-		usagemetrics.Error(2) // Could not create HTTP listener
+		usagemetrics.Error(usagemetrics.LocalHTTPListenerCreateFailure) // Could not create HTTP listener
 		log.Logger.Fatalw("Could not start HTTP server on localhost:18181", log.Error(err))
 	}
 	log.Logger.Info("HTTP server listening on localhost:18181 for SAP Host Agent connections")
@@ -88,7 +88,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 
 	for {
 		log.Logger.Info("Collecting host metrics...")
-		usagemetrics.Action(2) // Collecting SAP host metrics
+		usagemetrics.Action(usagemetrics.CollectHostMetrics) // Collecting SAP host metrics
 
 		params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
 		cpuStats := cpusr.Read()

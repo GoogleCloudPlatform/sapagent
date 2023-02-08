@@ -207,6 +207,7 @@ func TestParseABAPGetWPTable(t *testing.T) {
 		fRunner           RunnerWithEnv
 		wantProcesses     map[string]int
 		wantBusyProcesses map[string]int
+		wantPIDMap        map[string]string
 		wantErr           error
 	}{
 		{
@@ -221,6 +222,7 @@ func TestParseABAPGetWPTable(t *testing.T) {
 			},
 			wantProcesses:     map[string]int{"DIA": 3, "BTC": 1, "SPO": 1},
 			wantBusyProcesses: map[string]int{"DIA": 1},
+			wantPIDMap: map[string]string{"7488": "DIA", "7489": "BTC", "7490": "SPO", "7491": "DIA", "7492": "DIA"},
 		},
 		{
 			name:    "Error",
@@ -232,7 +234,7 @@ func TestParseABAPGetWPTable(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotProcessCount, gotBusyProcessCount, err := p.ParseABAPGetWPTable(test.fRunner)
+			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ParseABAPGetWPTable(test.fRunner)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fRunner, err, test.wantErr)
@@ -242,6 +244,9 @@ func TestParseABAPGetWPTable(t *testing.T) {
 			}
 			if diff := cmp.Diff(test.wantBusyProcesses, gotBusyProcessCount); diff != "" {
 				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fRunner, gotBusyProcessCount, test.wantBusyProcesses)
+			}
+			if diff := cmp.Diff(test.wantPIDMap, gotPIDMap); diff != "" {
+				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fRunner, gotPIDMap, test.wantPIDMap)
 			}
 		})
 	}

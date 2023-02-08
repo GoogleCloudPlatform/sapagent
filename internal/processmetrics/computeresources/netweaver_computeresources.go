@@ -36,12 +36,13 @@ type (
 	// NetweaverInstanceProperties have the required context for collecting metrics for cpu and
 	// memory per process for Netweaver.
 	NetweaverInstanceProperties struct {
-		Config        *cnfpb.Configuration
-		Client        cloudmonitoring.TimeSeriesCreator
-		Executor      commandExecutor
-		SAPInstance   *sapb.SAPInstance
-		Runner        sapcontrol.RunnerWithEnv
-		NewProcHelper newProcessWithContextHelper
+		Config                     *cnfpb.Configuration
+		Client                     cloudmonitoring.TimeSeriesCreator
+		Executor                   commandExecutor
+		SAPInstance                *sapb.SAPInstance
+		NewProcHelper              newProcessWithContextHelper
+		RunnerForSAPControlProcess sapcontrol.RunnerWithEnv
+		RunnerForABAPProcess       sapcontrol.RunnerWithEnv
 	}
 )
 
@@ -49,14 +50,15 @@ type (
 // utilization of SAP Netweaver processes.
 func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
 	params := parameters{
-		executor:         p.Executor,
-		client:           p.Client,
-		config:           p.Config,
-		memoryMetricPath: nwMemoryPath,
-		cpuMetricPath:    nwCPUPath,
-		sapInstance:      p.SAPInstance,
-		runner:           p.Runner,
-		newProc:          p.NewProcHelper,
+		executor:                p.Executor,
+		client:                  p.Client,
+		config:                  p.Config,
+		memoryMetricPath:        nwMemoryPath,
+		cpuMetricPath:           nwCPUPath,
+		sapInstance:             p.SAPInstance,
+		newProc:                 p.NewProcHelper,
+		runnerForGetProcessList: p.RunnerForSAPControlProcess,
+		runnerForABAPGetWPTable: p.RunnerForABAPProcess,
 	}
 	processes := collectProcessesForInstance(params)
 	if len(processes) == 0 {

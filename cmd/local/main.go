@@ -264,7 +264,7 @@ func logUsageStatus(status string, actionID, errorID int) error {
 func startServices(goos string) {
 	if config.GetCloudProperties() == nil {
 		log.Logger.Error("Cloud properties are not set, cannot start services.")
-		usagemetrics.Error(1) // Invalid configuration
+		usagemetrics.Error(usagemetrics.CloudPropertiesNotSet)
 		return
 	}
 
@@ -275,7 +275,7 @@ func startServices(goos string) {
 	gceService, err := gce.New(ctx)
 	if err != nil {
 		log.Logger.Errorw("Failed to create GCE service", "error", err)
-		usagemetrics.Error(3) // Unexpected error
+		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 		return
 	}
 	ppr := &instanceinfo.PhysicalPathReader{goos}
@@ -283,7 +283,7 @@ func startServices(goos string) {
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
-		usagemetrics.Error(3) // Unexpected error
+		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return
 	}
 
@@ -314,7 +314,7 @@ func startServices(goos string) {
 		mqc, err := monitoring.NewQueryClient(ctx)
 		if err != nil {
 			log.Logger.Errorw("Failed to create Cloud Monitoring query client", "error", err)
-			usagemetrics.Error(3) // Unexpected error
+			usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
 			return
 		}
 		cmr := &cloudmetricreader.CloudMetricReader{
@@ -444,7 +444,7 @@ func main() {
 	config = configuration.ReadFromFile(configPath, os.ReadFile)
 	if config.GetBareMetal() && config.GetCloudProperties() == nil {
 		log.Logger.Error("Bare metal instance detected without cloud properties set. Manually set cloud properties in the configuration file to continue.")
-		usagemetrics.Error(1) // Invalid configuration
+		usagemetrics.Error(usagemetrics.BareMetalCloudPropertiesNotSet)
 		os.Exit(0)
 	}
 	log.SetupLoggingToFile(runtime.GOOS, config.GetLogLevel())

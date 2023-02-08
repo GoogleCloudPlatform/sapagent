@@ -396,6 +396,13 @@ func TestSend(t *testing.T) {
 			wantBatchCount: 1,
 		},
 		{
+			name: "SingleBatchMaximumTSInABatch",
+			count: 200,
+			client: &fake.TimeSeriesCreator{},
+			want: 200,
+			wantBatchCount: 1,
+		},
+		{
 			name:           "MultipleBatches",
 			count:          399,
 			client:         &fake.TimeSeriesCreator{},

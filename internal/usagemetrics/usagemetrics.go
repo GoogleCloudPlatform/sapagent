@@ -47,6 +47,30 @@ const (
 	StatusAction        Status = "ACTION"
 )
 
+// Agent wide error code mappings.
+const (
+	UnknownError = iota
+	CloudPropertiesNotSet
+	GCEServiceCreateFailure
+	MetricClientCreateFailure
+	QueryClientCreateFailure
+	BareMetalCloudPropertiesNotSet
+	LocalHTTPListenerCreateFailure
+	ConfigFileReadFailure
+	MalformedConfigFile
+	WLMMetricCollectionFailure
+	ProcessMetricsMetricClientCreateFailure
+	NoSAPInstancesFound
+)
+
+// Agent wide action mappings.
+const (
+	UnknownAction = iota
+	CollectWLMMetrics
+	CollectHostMetrics
+	CollectProcessMetrics
+)
+
 var (
 	// projectNumbers contains known project numbers for test instances.
 	projectNumbers = map[string]bool{
@@ -73,6 +97,9 @@ var (
 		"201338458013":  true,
 		"269972924358":  true,
 		"605897091243":  true,
+		"1008799658123": true,
+		"916154365516":  true,
+		"843031526114":  true,
 	}
 	imageProjects [12]string = [12]string{
 		"centos-cloud",

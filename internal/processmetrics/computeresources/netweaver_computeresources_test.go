@@ -90,8 +90,8 @@ func TestCollectForNetweaver(t *testing.T) {
 				Client:      &fake.TimeSeriesCreator{},
 				Executor:    test.executor,
 				SAPInstance: defaultSAPInstanceNetWeaver,
-				Runner:      &fakeRunner{stdOut: test.sapControlOutput},
 				NewProcHelper: newProcessWithContextHelperTest,
+				RunnerForSAPControlProcess: &fakeRunner{stdOut: test.sapControlOutput},
 			}
 			got := testNetweaverInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {

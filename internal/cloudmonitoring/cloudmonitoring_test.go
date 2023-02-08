@@ -148,3 +148,17 @@ func TestQueryTimeSeriesWithRetry(t *testing.T) {
 		})
 	}
 }
+
+func TestQueryTimeSeriesNilBackOffs(t *testing.T) {
+	_, err := QueryTimeSeriesWithRetry(context.Background(), &fake.TimeSeriesQuerier{}, &monitoringpb.QueryTimeSeriesRequest{}, nil)
+	if err != nil {
+		t.Errorf("QueryTimeSeriesWithRetry() with nil back off intervals returned err: %v", err)
+	}
+}
+
+func TestCreateTimeSeriesNilBackOffs(t *testing.T) {
+	err := CreateTimeSeriesWithRetry(context.Background(), &fake.TimeSeriesCreator{}, &monitoringpb.CreateTimeSeriesRequest{Name: "test-project", TimeSeries: []*mrpb.TimeSeries{}}, nil)
+	if err != nil {
+		t.Errorf("CreateTimeSeriesWithRetry() with nil back off intervals returned err: %v", err)
+	}
+}

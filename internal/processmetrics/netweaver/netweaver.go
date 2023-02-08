@@ -279,7 +279,7 @@ func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 func collectABAPProcessStatus(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
-	processCount, busyProcessCount, err := sc.ParseABAPGetWPTable(r)
+	processCount, busyProcessCount, _, err := sc.ParseABAPGetWPTable(r)
 	if err != nil {
 		log.Logger.Debugw("Command sapcontrol failed", "error", err)
 		return nil

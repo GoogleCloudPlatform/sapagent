@@ -158,21 +158,23 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 // Returns:
 //   - processes - A map with key->worker_process_type and value->total_process_count.
 //   - busyProcesses - A map with key->worker_process_type and value->busy_process_count.
-func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProcesses map[string]int, err error) {
+func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
 	const (
 		numberOfColumns = 15
 		typeColumn      = 1
+		pidColumn       = 2
 		timeColumn      = 9
 	)
 
 	stdOut, _, _, err := r.RunWithEnv()
 	if err != nil {
 		log.Logger.Debugw("Failed to run ABAPGetWPTable", log.Error(err))
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	processes = make(map[string]int)
 	busyProcesses = make(map[string]int)
+	processNameToPID = make(map[string]string)
 	lines := strings.Split(stdOut, "\n")
 	for _, line := range lines {
 		line = emptyChars.ReplaceAllString(line, "")
@@ -182,13 +184,14 @@ func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProces
 		}
 		workProcessType := row[typeColumn]
 		processes[workProcessType]++
+		processNameToPID[row[pidColumn]] = workProcessType
 		if row[timeColumn] != "" {
 			busyProcesses[workProcessType]++
 		}
 	}
 
-	log.Logger.Debugw("Found ABAP Processes", "processcount", processes, "busyprocesses", busyProcesses)
-	return processes, busyProcesses, nil
+	log.Logger.Debugw("Found ABAP Processes", "processcount", processes, "busyprocesses", busyProcesses, "pidMap", processNameToPID)
+	return processes, busyProcesses, processNameToPID, nil
 }
 
 // ParseQueueStats runs and parses the output of sapcontrol function GetQueueStatistic.

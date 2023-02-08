@@ -116,26 +116,25 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	case cf < minimumFrequency:
 		log.Logger.Infow("Process metrics frequency is smaller than minimum supported value.", "frequency", cf, "minimumfrequency", minimumFrequency)
 		log.Logger.Info("Not collecting Process Metrics.")
-		usagemetrics.Error(3) // Unexpected error
 		return false
 	}
 
 	mc, err := parameters.MetricClient(ctx)
 	if err != nil {
 		log.Logger.Errorw("Failed to create Cloud Monitoring client", "error", err)
-		usagemetrics.Error(3) // Unexpected error
+		usagemetrics.Error(usagemetrics.ProcessMetricsMetricClientCreateFailure) // Failed to create Cloud Monitoring client
 		return false
 	}
 
 	sapInstances := instancesWithCredentials(ctx, &parameters)
 	if len(sapInstances.GetInstances()) == 0 {
 		log.Logger.Error("No SAP Instances found. Cannot start process metrics collection.")
-		usagemetrics.Error(3) // Unexpected error
+		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
 		return false
 	}
 
 	log.Logger.Info("Starting process metrics collection in background.")
-	usagemetrics.Action(3) // Collecting process metrics
+	usagemetrics.Action(usagemetrics.CollectProcessMetrics) // Collecting process metrics
 	p := create(ctx, parameters.Config, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
 	go p.collectAndSend(ctx, parameters.BackOffs)
@@ -216,10 +215,16 @@ func create(ctx context.Context, config *cpb.Configuration, client cloudmonitori
 				Client:      p.Client,
 				Executor:    commandlineexecutor.ExpandAndExecuteCommand,
 				SAPInstance: instance,
-				Runner: &commandlineexecutor.Runner{
+				RunnerForSAPControlProcess: &commandlineexecutor.Runner{
 					User:       instance.GetUser(),
 					Executable: instance.GetSapcontrolPath(),
 					Args:       fmt.Sprintf("-nr %s -function GetProcessList -format script", instance.GetInstanceNumber()),
+					Env:        []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
+				},
+				RunnerForABAPProcess: &commandlineexecutor.Runner{
+					User:       instance.GetUser(),
+					Executable: instance.GetSapcontrolPath(),
+					Args:       fmt.Sprintf("-nr %s -function ABAPGetWPTable", instance.GetInstanceNumber()),
 					Env:        []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
 			}
@@ -363,6 +368,9 @@ func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics, 
 			sent += len(batchTimeSeries)
 			batchTimeSeries = nil
 		}
+	}
+	if len(batchTimeSeries) == 0 {
+		return sent, batchCount, nil
 	}
 	batchCount++
 	if err := p.sendBatch(ctx, batchTimeSeries, bo); err != nil {

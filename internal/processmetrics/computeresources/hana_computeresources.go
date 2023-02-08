@@ -57,8 +57,8 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Me
 		memoryMetricPath: hanaMemoryPath,
 		cpuMetricPath:    hanaCPUPath,
 		sapInstance:      p.SAPInstance,
-		runner:           p.Runner,
 		newProc:          p.NewProcHelper,
+		runnerForGetProcessList: p.Runner,
 	}
 	processes := collectProcessesForInstance(params)
 	if len(processes) == 0 {

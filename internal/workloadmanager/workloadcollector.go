@@ -154,7 +154,7 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 
 func collectMetrics(ctx context.Context, params Parameters, metricOverride string) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager metrics...")
-	usagemetrics.Action(1) // Collecting WLM metrics
+	usagemetrics.Action(usagemetrics.CollectWLMMetrics) // Collecting WLM metrics
 	if fileInfo, err := params.OSStatReader(metricOverride); fileInfo != nil && err == nil {
 		log.Logger.Info("Using override metrics from yaml file")
 		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
@@ -304,7 +304,7 @@ func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmon
 		TimeSeries: wm.Metrics}
 	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, *mc, &request, bo); err != nil {
 		log.Logger.Errorw("Failed to send metrics to Cloud Monitoring", "error", err)
-		usagemetrics.Error(5) // Workload metrics collection failure
+		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure) // Workload metrics collection failure
 		return 0
 	}
 	log.Logger.Infow("Sent metrics to Cloud Monitoring.", "number", len(wm.Metrics))

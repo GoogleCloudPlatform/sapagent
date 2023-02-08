@@ -70,6 +70,9 @@ type TimeSeriesQuerier interface {
 // CreateTimeSeriesWithRetry decorates TimeSeriesCreator.CreateTimeSeries with a retry mechanism.
 func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, req *monitoringpb.CreateTimeSeriesRequest, bo *BackOffIntervals) error {
 	attempt := 1
+	if bo == nil {
+		bo = NewDefaultBackOffIntervals()
+	}
 
 	err := backoff.Retry(func() error {
 		if err := client.CreateTimeSeries(ctx, req); err != nil {
@@ -97,6 +100,9 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 		attempt = 1
 		res     []*mrpb.TimeSeriesData
 	)
+	if bo == nil {
+		bo = NewDefaultBackOffIntervals()
+	}
 
 	err := backoff.Retry(func() error {
 		var err error

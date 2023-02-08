@@ -67,7 +67,6 @@ func (r *Runner) platformRunWithEnv() (stdOut, stdErr string, code int, err erro
 	return stdout.String(), stderr.String(), code, nil
 }
 
-// TODO(b/258685099): Remove executeCommandAsUser after migrating all its callers to Runner.Run*().
 func executeCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
 	uid, err := getUID(user)
 	if err != nil {

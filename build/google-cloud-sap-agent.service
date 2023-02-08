@@ -21,12 +21,13 @@ MemoryAccounting=yes
 TasksAccounting=yes
 MemoryLimit=1G
 MemoryMax=1G
-ProtectSystem=true
+ProtectSystem=strict
+ReadWritePaths=/var/log
 ProtectClock=true
 ProtectKernelModules=true
 RestrictRealtime=true
 # CPUQuota of 50 will allow for up to 50% on 1 CPU
-CPUQuota=50
+CPUQuota=50%
 
 [Install]
 WantedBy=multi-user.target

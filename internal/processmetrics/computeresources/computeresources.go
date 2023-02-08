@@ -20,7 +20,9 @@ package computeresources
 
 import (
 	"context"
+	"math"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -58,14 +60,15 @@ type (
 	commandExecutor func(string, string) (string, string, error)
 	// parameters struct contains the parameters necessary for computeresources package common methods.
 	parameters struct {
-		executor         commandExecutor
-		config           *cnfpb.Configuration
-		client           cloudmonitoring.TimeSeriesCreator
-		cpuMetricPath    string
-		memoryMetricPath string
-		sapInstance      *sapb.SAPInstance
-		runner           sapcontrol.RunnerWithEnv
+		executor                commandExecutor
+		config                  *cnfpb.Configuration
+		client                  cloudmonitoring.TimeSeriesCreator
+		cpuMetricPath           string
+		memoryMetricPath        string
+		sapInstance             *sapb.SAPInstance
 		newProc          newProcessWithContextHelper
+		runnerForGetProcessList sapcontrol.RunnerWithEnv
+		runnerForABAPGetWPTable sapcontrol.RunnerWithEnv
 	}
 
 	// newProcessWithContextHelper is a strategy which creates a new process type
@@ -130,13 +133,23 @@ func collectProcessesForInstance(p parameters) []*ProcessInfo {
 	}
 
 	sc := &sapcontrol.Properties{p.sapInstance}
-	processes, _, err := sc.ProcessList(p.runner)
+	processes, _, err := sc.ProcessList(p.runnerForGetProcessList)
 	if err != nil {
-		log.Logger.Errorw("Error getting ProcessList in computeresources", log.Error(err))
-		return nil
+		log.Logger.Error("Error getting ProcessList in computeresources", log.Error(err))
 	}
 
 	var processInfos []*ProcessInfo
+	if p.runnerForABAPGetWPTable != nil {
+		_, _, pidMap, err := sc.ParseABAPGetWPTable(p.runnerForABAPGetWPTable)
+		if err != nil {
+			log.Logger.Error("Error getting ABAP processes from ABAPGetWPTable", log.Error(err))
+		} else {
+			for pid, proc := range pidMap {
+				processInfos = append(processInfos, &ProcessInfo{Name: proc, PID: pid})
+			}
+		}
+	}
+
 	for _, process := range processes {
 		processInfos = append(processInfos, &ProcessInfo{Name: process.Name, PID: process.PID})
 	}
@@ -165,13 +178,15 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 			log.Logger.Errorw("Could not get process CPU stats", "pid", pid, "error", err)
 			continue
 		}
+		cpuusage = cpuusage / float64(runtime.NumCPU())
 		metrics = append(metrics, createMetrics(p.cpuMetricPath, labels, cpuusage, p))
 	}
 	return metrics
 }
 
 // collectMemoryPerProcess is a function responsible for collecting memory utilization
-// per process for Hana, Netweaver and SAP control processes.
+// per process for Hana, Netweaver and SAP control processes. Metric will represent memory
+// utilization in megabytes.
 func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) []*sapdiscovery.Metrics {
 	var metrics []*sapdiscovery.Metrics
 	for _, processInfo := range processes {
@@ -194,17 +209,17 @@ func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*Pro
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSize",
 		}
-		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS), p)
+		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS) / math.Pow(10, 6), p)
 		rSSLables := map[string]string{
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmRSS",
 		}
-		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS), p)
+		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS) / math.Pow(10, 6), p)
 		swapLables := map[string]string{
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSwap",
 		}
-		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap), p)
+		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap) / math.Pow(10, 6), p)
 		metrics = append(metrics, vmSizeMetrics, rSSMetrics, swapMetrics)
 	}
 	return metrics

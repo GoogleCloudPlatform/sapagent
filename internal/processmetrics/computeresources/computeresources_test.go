@@ -19,6 +19,7 @@ package computeresources
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -41,6 +42,14 @@ var (
 		1 name: hdbcompileserver
 		1 dispstatus: GREEN
 		1 pid: 222`
+
+	defaultABAPGetWPTableOuput = `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
+	0, DIA, 7488, Wait, , yes, , , 0:24:54, 4, , , , ,
+	1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`
+)
+
+const (
+	expectedCPUPercentage float64 = 46
 )
 
 type (
@@ -68,7 +77,7 @@ func (ur fakeUsageReader) CPUPercentWithContext(ctx context.Context) (float64, e
 	if ur.wantErrForCPUUsageStats != nil {
 		return 0, ur.wantErrForCPUUsageStats
 	}
-	return 34.31, nil
+	return expectedCPUPercentage * float64(runtime.NumCPU()), nil
 }
 
 func (ur fakeUsageReader) MemoryInfoWithContext(ctx context.Context) (*process.MemoryInfoStat, error) {
@@ -76,9 +85,9 @@ func (ur fakeUsageReader) MemoryInfoWithContext(ctx context.Context) (*process.M
 		return nil, ur.wantErrMemoryUsage
 	}
 	op := &process.MemoryInfoStat{
-		RSS:  92313,
-		VMS:  120345,
-		Swap: 12331,
+		RSS:  2000000,
+		VMS:  4000000,
+		Swap: 6000000,
 	}
 	return op, nil
 }
@@ -165,36 +174,71 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		{
 			name: "EmptyProcessList",
 			params: parameters{
-				config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
-				runner:           &fakeRunner{stdOut: ""},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: ""},
+				runnerForABAPGetWPTable: &fakeRunner{stdOut: ""},
 			},
 			want: nil,
 		},
 		{
 			name: "NilSAPInstance",
 			params: parameters{
-				config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      nil,
-				runner:           &fakeRunner{stdOut: defaultSapControlOutput},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             nil,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
 			},
 			want: nil,
 		},
 		{
+			name: "ErrorInFetchingABAPProcessList",
+			params: parameters{
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
+				runnerForABAPGetWPTable: &fakeRunner{stdOut: "", err: errors.New("could not parse ABAPGetWPTable")},
+			},
+			want: []*ProcessInfo{
+				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
+				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
+			},
+		},
+		{
+			name: "ProcessListCreatedWithABAPProcesses",
+			params: parameters{
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
+				runnerForABAPGetWPTable: &fakeRunner{stdOut: defaultABAPGetWPTableOuput},
+			},
+			want: []*ProcessInfo{
+				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
+				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
+				&ProcessInfo{Name: "DIA", PID: "7488"},
+				&ProcessInfo{Name: "BTC", PID: "7489"},
+			},
+		},
+		{
 			name: "ProcessListCreatedSuccessfully",
 			params: parameters{
-				config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
-				runner:           &fakeRunner{stdOut: defaultSapControlOutput},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
@@ -292,6 +336,21 @@ func TestCollectCPUPerProcess(t *testing.T) {
 	}
 }
 
+func TestCollectCPUPerProcessValues(t *testing.T) {
+	params := parameters{
+		config:      defaultConfig,
+		client:      &fake.TimeSeriesCreator{},
+		sapInstance: defaultSAPInstance,
+		newProc:     newProcessWithContextHelperTest,
+	}
+	ProcessList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
+	want := float64(expectedCPUPercentage)
+	got := collectCPUPerProcess(context.Background(), params, ProcessList)[0].TimeSeries.GetPoints()[0].GetValue().GetDoubleValue()
+	if got != want {
+		t.Errorf("collectCPUPerProcess(%v, %v) = %f , want %f", params, ProcessList, got, want)
+	}
+}
+
 func TestCollectMemoryPerProcess(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -356,6 +415,31 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 				t.Errorf("collectMemoryPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
 			}
 		})
+	}
+}
+
+func TestMemoryPerProcessValues(t *testing.T) {
+	params := parameters{
+		config:      defaultConfig,
+		client:      &fake.TimeSeriesCreator{},
+		sapInstance: defaultSAPInstance,
+		newProc:     newProcessWithContextHelperTest,
+	}
+	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
+	want := map[string]float64{
+		"VmRSS":  2,
+		"VmSize": 4,
+		"VmSwap": 6,
+	}
+	memoryUtilMap := make(map[string]float64)
+	got := collectMemoryPerProcess(context.Background(), params, processList)
+	for _, item := range got {
+		key := item.TimeSeries.GetMetric().GetLabels()["memType"]
+		val := item.TimeSeries.GetPoints()[0].GetValue().GetDoubleValue()
+		memoryUtilMap[key] = val
+	}
+	if diff := cmp.Diff(want, memoryUtilMap, protocmp.Transform()); diff != "" {
+		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
 	}
 }
 
