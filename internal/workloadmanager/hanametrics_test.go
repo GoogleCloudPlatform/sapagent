@@ -642,7 +642,7 @@ func TestDiskInfo(t *testing.T) {
 			mapper: defaultMapperFunc,
 			want: map[string]string{
 				"mountpoint":       "/hana/data",
-				"instancedisktype": "default_disk_type",
+				"instancedisktype": "default-disk-type",
 				"size":             "2048",
 				"pdsize":           "4096",
 			},
@@ -728,7 +728,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 			mapper:            defaultMapperFunc,
 			want: map[string]string{
 				"mountpoint":       "test-mount-point",
-				"instancedisktype": "default_disk_type",
+				"instancedisktype": "default-disk-type",
 				"size":             "1024",
 				"pdsize":           "2048",
 			},
@@ -750,7 +750,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 			want: map[string]string{
 				"testdiskinfo":     "N/A",
 				"mountpoint":       "test-mount-point",
-				"instancedisktype": "default_disk_type",
+				"instancedisktype": "default-disk-type",
 				"size":             "1024",
 				"pdsize":           "2048",
 			},

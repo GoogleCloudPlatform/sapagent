@@ -135,7 +135,7 @@ func TestRead(t *testing.T) {
 				Disks: []*instancepb.Disk{
 					&instancepb.Disk{
 						Type:       "PERSISTENT",
-						DeviceType: "DEVICE_TYPE",
+						DeviceType: "device-type",
 						DeviceName: "disk-device-name",
 						IsLocalSsd: false,
 						DiskName:   "disk-name",
@@ -143,7 +143,7 @@ func TestRead(t *testing.T) {
 					},
 					&instancepb.Disk{
 						Type:       "SCRATCH",
-						DeviceType: "LOCAL_SSD",
+						DeviceType: "local-ssd",
 						DeviceName: "disk-device-name",
 						IsLocalSsd: true,
 						DiskName:   "disk-device-name",
@@ -246,7 +246,7 @@ func TestRead(t *testing.T) {
 				Disks: []*instancepb.Disk{
 					&instancepb.Disk{
 						Type:       "PERSISTENT",
-						DeviceType: "UNKNOWN",
+						DeviceType: "unknown",
 						DeviceName: "disk-device-name",
 						IsLocalSsd: false,
 						DiskName:   "disk-name",

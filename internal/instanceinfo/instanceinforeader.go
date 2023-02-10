@@ -147,21 +147,20 @@ func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAdd
 // The Disk.Type value returned by the compute API is of the form:
 // https://www.googleapis.com/compute/v1/projects/sap-netweaver/zones/us-central1-a/diskTypes/pd-standard
 //
-// The returned device type will be formatted as: "PD_STANDARD".
+// The returned device type will be formatted as: "pd-standard".
 func (r *Reader) getDeviceType(diskType, projectID, zone, name string) string {
 	if diskType == "SCRATCH" {
-		return "LOCAL_SSD"
+		return "local-ssd"
 	}
 
 	disk, err := r.gceService.GetDisk(projectID, zone, name)
 	if err != nil {
 		log.Logger.Errorw("Could not get disk info from the Compute API", "project", projectID, "zone", zone, "instancename", name, "error", err)
-		return "UNKNOWN"
+		return "unknown"
 	}
 
 	s := strings.Split(disk.Type, "/")
-	t := strings.Replace(s[len(s)-1], "-", "_", -1)
-	return strings.ToUpper(t)
+	return s[len(s)-1]
 }
 
 // endTimeSort implements sort.Interface, sorting by EndTime asc.

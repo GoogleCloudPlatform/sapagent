@@ -23,6 +23,7 @@ package osmetricreader
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
@@ -92,6 +93,11 @@ func memoryMetrics(memoryStats *statspb.MemoryStats, startTime int64) []*mpb.Met
 	}
 }
 
+func formattedDeviceType(diskType string) string {
+	t := strings.Replace(diskType, "-", "_", -1)
+	return strings.ToUpper(t)
+}
+
 /*
 diskMetrics returns a slice of disk metrics from the OS.
 */
@@ -135,7 +141,7 @@ func diskMetrics(diskStats *statspb.DiskStatsCollection, instanceProperties *iip
 				RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_RESTART,
 				LastRefresh:     startTime,
 				DeviceId:        deviceID,
-				Value:           disk.GetDeviceType(),
+				Value:           formattedDeviceType(disk.GetDeviceType()),
 			},
 			&mpb.Metric{
 				Name:            "Mapping",
@@ -190,7 +196,7 @@ func diskMetrics(diskStats *statspb.DiskStatsCollection, instanceProperties *iip
 networkMetrics returns a slice of network adapter metrics from the OS - adapter ID, adapter device
 mapping, minimum bandwidth, maximum bandwidth, and the current bandwidth.
 
-This squence of metrics is generated for each network adapter in use by the OS
+This sequence of metrics is generated for each network adapter in use by the OS
 (i.e. {adapterID_1, mapping_1, minBandwidth_1, ..., adapterID_2, mapping_2, ...}).
 */
 func networkMetrics(cpuStats *statspb.CpuStats, instanceProperties *iipb.InstanceProperties, startTime int64) []*mpb.Metric {
@@ -284,7 +290,7 @@ func cpuMetrics(cpuStats *statspb.CpuStats, instanceProperties *iipb.InstancePro
 			},
 		}
 	}
-	// usually 2 threads pre core.
+	// usually 2 threads per core.
 	var threadsPerCore int64 = 2
 	if cpuStats.GetCpuCount() > 0 && cpuStats.GetCpuCores() > 9 {
 		threadsPerCore = cpuStats.GetCpuCount() / cpuStats.GetCpuCores()

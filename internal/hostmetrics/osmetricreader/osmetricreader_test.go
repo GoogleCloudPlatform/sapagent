@@ -205,7 +205,7 @@ func TestDiskMetrics(t *testing.T) {
 						Type:       "PERSISTENT",
 						DiskName:   deviceID1,
 						DeviceName: "sda1",
-						DeviceType: "LOCAL_SSD",
+						DeviceType: "local-ssd",
 						IsLocalSsd: true,
 						Mapping:    "sda",
 					},
@@ -301,7 +301,7 @@ func TestDiskMetrics(t *testing.T) {
 					&instancepb.Disk{
 						Type:       "PERSISTENT",
 						DeviceName: deviceID2,
-						DeviceType: "LOCAL_SSD",
+						DeviceType: "local-ssd",
 						IsLocalSsd: true,
 						Mapping:    "",
 					},
