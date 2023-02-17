@@ -37,6 +37,7 @@ message Configuration {
   CollectionConfiguration collection_configuration = 5;
   instanceinfo.CloudProperties cloud_properties = 6;
   AgentProperties agent_properties = 7;
+  HANAMonitoringConfiguration hana_monitoring_configuration = 8;
 }
 
 message CollectionConfiguration {
@@ -93,4 +94,60 @@ message HANAMetricsConfig {
   string hana_db_user = 1;
   string hana_db_password = 2;
   string hana_db_password_secret_name = 3;
+}
+
+message HANAMonitoringConfiguration {
+  int64 sample_interval_sec = 1;
+  int64 query_timeout_sec = 2;
+  int64 execution_threads = 3;
+  repeated HANAInstance hana_instances = 4;
+  repeated Query queries = 5;
+}
+
+message HANAInstance {
+  string name = 1;
+  string sid = 2;
+  string host = 3;
+  string port = 4;
+  string user = 5;
+  string password = 6;
+  string secret_name = 7;
+  bool enable_ssl = 8;
+  bool validate_certificate = 9;
+  string host_name_in_certificate = 10;
+}
+
+message Query {
+  bool enabled = 1;
+  string name = 2;
+  string description = 3;
+  string sql = 4;
+  int64 sample_interval_sec = 5;
+  repeated Column columns = 6;
+}
+
+message Column {
+  string name = 1;
+  string description = 2;
+  string units = 3;
+  MetricType metric_type = 4;
+  ValueType value_type = 5;
+  string name_override = 6;
+}
+
+enum MetricType {
+  METRIC_UNSPECIFIED = 0;
+  METRIC_LABEL = 1;
+  METRIC_GAUGE = 2;
+  METRIC_DELTA = 3;
+  METRIC_CUMULATIVE = 4;
+}
+
+enum ValueType {
+  VALUE_UNSPECIFIED = 0;
+  VALUE_BOOL = 1;
+  VALUE_INT64 = 2;
+  VALUE_STRING = 3;
+  VALUE_DOUBLE = 4;
+  VALUE_DISTRIBUTION = 5;
 }

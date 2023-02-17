@@ -30,12 +30,19 @@ type GetDiskArguments struct{ Project, Zone, DiskName string }
 // GetAddressByIPArguments is a struct to match arguments passed in to the GetAddressbyIP function for validation.
 type GetAddressByIPArguments struct{ Project, Region, Address string }
 
+// GetForwardingRuleArguments is a struct to match arguments passed in to the GetForwardingRule function for validation.
+type GetForwardingRuleArguments struct{ Project, Location, Name string }
+
 // TestGCE implements GCE interfaces. A new TestGCE instance should be used per iteration of the test.
 type TestGCE struct {
 	T                    *testing.T
 	GetInstanceResp      []*compute.Instance
 	GetInstanceErr       []error
 	GetInstanceCallCount int
+
+	GetInstanceByIPResp      []*compute.Instance
+	GetInstanceByIPErr       []error
+	GetInstanceByIPCallCount int
 
 	GetDiskResp      []*compute.Disk
 	GetDiskArgs      []*GetDiskArguments
@@ -46,7 +53,11 @@ type TestGCE struct {
 	ListZoneOperationsErr       []error
 	ListZoneOperationsCallCount int
 
-	GetAddressByIPResp      []*compute.AddressList
+	GetAddressResp      []*compute.Address
+	GetAddressErr       []error
+	GetAddressCallCount int
+
+	GetAddressByIPResp      []*compute.Address
 	GetAddressByIPArgs      []*GetAddressByIPArguments
 	GetAddressByIPErr       []error
 	GetAddressByIPCallCount int
@@ -57,6 +68,7 @@ type TestGCE struct {
 
 	GetForwardingRuleResp       []*compute.ForwardingRule
 	GetForwardingRuleErr        []error
+	GetForwardingRuleArgs       []*GetForwardingRuleArguments
 	GetForwardingRulleCallCount int
 
 	GetInstanceGroupResp      []*compute.InstanceGroup
@@ -70,6 +82,10 @@ type TestGCE struct {
 	GetFilestoreByIPResp      []*file.ListInstancesResponse
 	GetFilestoreByIPErr       []error
 	GetFilestoreByIPCallCount int
+
+	GetURIForIPResp      []string
+	GetURIForIPErr       []error
+	GetURIForIPCallCount int
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -112,8 +128,19 @@ func (g *TestGCE) ListZoneOperations(project, zone, filter string, maxResults in
 	return g.ListZoneOperationsResp[g.ListZoneOperationsCallCount], g.ListZoneOperationsErr[g.ListZoneOperationsCallCount]
 }
 
+// GetAddress fakes a call to the compute API to retrieve a list of addresses.
+func (g *TestGCE) GetAddress(project, location, name string) (*compute.Address, error) {
+	defer func() {
+		g.GetAddressCallCount++
+		if g.GetAddressCallCount >= len(g.GetAddressResp) || g.GetAddressCallCount >= len(g.GetAddressByIPErr) {
+			g.GetAddressCallCount = 0
+		}
+	}()
+	return g.GetAddressResp[g.GetAddressCallCount], g.GetAddressErr[g.GetAddressCallCount]
+}
+
 // GetAddressByIP fakes a call to the compute API to retrieve a list of addresses.
-func (g *TestGCE) GetAddressByIP(project, region, address string) (*compute.AddressList, error) {
+func (g *TestGCE) GetAddressByIP(project, region, address string) (*compute.Address, error) {
 	defer func() {
 		g.GetAddressByIPCallCount++
 		if g.GetAddressByIPCallCount >= len(g.GetAddressByIPResp) || g.GetAddressByIPCallCount >= len(g.GetAddressByIPErr) {
@@ -141,13 +168,20 @@ func (g *TestGCE) GetRegionalBackendService(project, region, name string) (*comp
 }
 
 // GetForwardingRule fakes a call to the compute API to retrieve a forwarding rule.
-func (g *TestGCE) GetForwardingRule(project, region, name string) (*compute.ForwardingRule, error) {
+func (g *TestGCE) GetForwardingRule(project, location, name string) (*compute.ForwardingRule, error) {
 	defer func() {
 		g.GetForwardingRulleCallCount++
 		if g.GetForwardingRulleCallCount >= len(g.GetForwardingRuleResp) || g.GetForwardingRulleCallCount >= len(g.GetForwardingRuleErr) {
 			g.GetForwardingRulleCallCount = 0
 		}
 	}()
+	if len(g.GetForwardingRuleArgs) > 0 {
+		args := g.GetForwardingRuleArgs[g.GetForwardingRulleCallCount]
+		if args != nil && (args.Project != project || args.Location != location || args.Name != name) {
+
+			g.T.Errorf("Mismatch in expected arguments for GetForwardingRule: \ngot: (%s, %s, %s)\nwant:  (%s, %s, %s)", project, location, name, args.Project, args.Location, args.Name)
+		}
+	}
 	return g.GetForwardingRuleResp[g.GetForwardingRulleCallCount], g.GetForwardingRuleErr[g.GetForwardingRulleCallCount]
 }
 
@@ -184,4 +218,27 @@ func (g *TestGCE) GetFilestoreByIP(project, location, ip string) (*file.ListInst
 		}
 	}()
 	return g.GetFilestoreByIPResp[g.GetFilestoreByIPCallCount], g.GetFilestoreByIPErr[g.GetFilestoreByIPCallCount]
+}
+
+// GetInstanceByIP fakes a call to the compute API to retrieve a compute instance
+// by its IP address.
+func (g *TestGCE) GetInstanceByIP(project, ip string) (*compute.Instance, error) {
+	defer func() {
+		g.GetInstanceByIPCallCount++
+		if g.GetInstanceByIPCallCount >= len(g.GetInstanceByIPResp) || g.GetInstanceByIPCallCount >= len(g.GetInstanceByIPErr) {
+			g.GetInstanceByIPCallCount = 0
+		}
+	}()
+	return g.GetInstanceByIPResp[g.GetInstanceByIPCallCount], g.GetInstanceByIPErr[g.GetInstanceByIPCallCount]
+}
+
+// GetURIForIP fakes calls to compute APIs to locate an object URI related to the IP address provided.
+func (g *TestGCE) GetURIForIP(project, ip string) (string, error) {
+	defer func() {
+		g.GetURIForIPCallCount++
+		if g.GetURIForIPCallCount >= len(g.GetURIForIPResp) || g.GetURIForIPCallCount >= len(g.GetURIForIPErr) {
+			g.GetURIForIPCallCount = 0
+		}
+	}()
+	return g.GetURIForIPResp[g.GetURIForIPCallCount], g.GetURIForIPErr[g.GetURIForIPCallCount]
 }

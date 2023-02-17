@@ -51,6 +51,26 @@ func (g *GCE) GetInstance(project, zone, instance string) (*compute.Instance, er
 	return g.service.Instances.Get(project, zone, instance).Do()
 }
 
+// GetInstanceByIP retrieves a GCE Instance defined by the project, and IP provided.
+// May return nil if an instance with the corresponding IP cannot be found.
+func (g *GCE) GetInstanceByIP(project, ip string) (*compute.Instance, error) {
+	list, err := g.service.Instances.AggregatedList(project).Do()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving aggregated instance list: %s", err)
+	}
+
+	for _, l := range list.Items {
+		for _, instance := range l.Instances {
+			for _, n := range instance.NetworkInterfaces {
+				if n.NetworkIP == ip {
+					return instance, nil
+				}
+			}
+		}
+	}
+	return nil, errors.Errorf("no instance with IP %s found", ip)
+}
+
 // GetDisk retrieves a GCE Persistent Disk defined by the project zone and name provided.
 func (g *GCE) GetDisk(project, zone, disk string) (*compute.Disk, error) {
 	return g.service.Disks.Get(project, zone, disk).Do()
@@ -69,16 +89,44 @@ func (g *GCE) ListZoneOperations(project, zone, filter string, maxResults int64)
 	return s.Do()
 }
 
-// GetAddress retrieves a GCE Address defined by the project, zone, and name provided.
-func (g *GCE) GetAddress(project, zone, address string) (*compute.Address, error) {
-	return g.service.Addresses.Get(project, zone, address).Do()
+// GetAddress retrieves a GCE Address defined by the project, location, and name provided.
+func (g *GCE) GetAddress(project, location, name string) (*compute.Address, error) {
+	if location == "" {
+		return g.service.GlobalAddresses.Get(project, name).Do()
+	}
+	return g.service.Addresses.Get(project, location, name).Do()
 }
 
 // GetAddressByIP attempts to find a ComputeAddress object with a given IP.
 // The string is assumed to be an exact match, so a full IPv4 address is expected.
-func (g *GCE) GetAddressByIP(project, region, ip string) (*compute.AddressList, error) {
+// A region should be supplied, or "" to search for a global address.
+func (g *GCE) GetAddressByIP(project, region, ip string) (*compute.Address, error) {
 	filter := fmt.Sprintf("(address eq %s)", ip)
-	return g.service.Addresses.List(project, region).Filter(filter).Do()
+	if region == "" {
+		list, err := g.service.Addresses.AggregatedList(project).Filter(filter).Do()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, l := range list.Items {
+			if len(l.Addresses) > 0 {
+				return l.Addresses[0], nil
+			}
+		}
+
+		return nil, errors.Errorf("No address with ip %s found", ip)
+	}
+
+	list, err := g.service.Addresses.List(project, region).Filter(filter).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, errors.Errorf("No address with IP %s found", ip)
+	}
+
+	return list.Items[0], nil
 }
 
 // GetRegionalBackendService retrieves a GCE Backend Service defined by the project, region, and name provided.
@@ -87,8 +135,8 @@ func (g *GCE) GetRegionalBackendService(project, region, service string) (*compu
 }
 
 // GetForwardingRule retrieves a GCE Forwarding rule defined by the project, zone, and name provided.
-func (g *GCE) GetForwardingRule(project, zone, name string) (*compute.ForwardingRule, error) {
-	return g.service.ForwardingRules.Get(project, zone, name).Do()
+func (g *GCE) GetForwardingRule(project, location, name string) (*compute.ForwardingRule, error) {
+	return g.service.ForwardingRules.Get(project, location, name).Do()
 }
 
 // GetInstanceGroup retrieves a GCE Instance Group rule defined by the project, zone, and name provided.
@@ -111,4 +159,18 @@ func (g *GCE) GetFilestoreInstance(project, location, filestore string) (*file.I
 func (g *GCE) GetFilestoreByIP(project, location, ip string) (*file.ListInstancesResponse, error) {
 	name := fmt.Sprintf("projects/%s/locations/%s", project, location)
 	return g.file.Projects.Locations.Instances.List(name).Filter(fmt.Sprintf("networks.ipAddresses:%q", ip)).Do()
+}
+
+// GetURIForIP attempts to locate the URI for any object that is related to the IP address provided.
+func (g *GCE) GetURIForIP(project, ip string) (string, error) {
+	addr, _ := g.GetAddressByIP(project, "", ip)
+	if addr != nil {
+		return addr.SelfLink, nil
+	}
+
+	inst, err := g.GetInstanceByIP(project, ip)
+	if inst != nil {
+		return inst.SelfLink, nil
+	}
+	return "", errors.Errorf("error locating object by IP: %v", err)
 }

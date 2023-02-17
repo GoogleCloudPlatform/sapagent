@@ -107,8 +107,8 @@ func TestCollectSystemMetrics(t *testing.T) {
 	}
 	iniParse = func(f string) *goini.INI {
 		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
+		ini.Set("ID", `"test-os"`)
+		ini.Set("VERSION", `"version"`)
 		return ini
 	}
 	ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")

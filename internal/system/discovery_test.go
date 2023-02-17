@@ -28,7 +28,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
-	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
@@ -46,6 +46,16 @@ const (
 	line3
 	line4
 	`
+	defaultUserstoreOutput = `
+KEY default
+	ENV: 
+	a:b:c
+  ENV : test-instance:30013
+  USER: SAPABAP1
+  DATABASE: DEH
+Operation succeed.
+`
+	defaultSID = "ABC"
 )
 
 var (
@@ -59,12 +69,12 @@ var (
 func TestStartSAPSystemDiscovery(t *testing.T) {
 	tests := []struct {
 		name   string
-		config *cfgpb.Configuration
+		config *cpb.Configuration
 		want   bool
 	}{{
 		name: "succeeds",
-		config: &cfgpb.Configuration{
-			CollectionConfiguration: &cfgpb.CollectionConfiguration{
+		config: &cpb.Configuration{
+			CollectionConfiguration: &cpb.CollectionConfiguration{
 				SapSystemDiscovery: true,
 			},
 			CloudProperties: defaultCloudProperties,
@@ -72,8 +82,8 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 		want: true,
 	}, {
 		name: "failsDueToConfig",
-		config: &cfgpb.Configuration{
-			CollectionConfiguration: &cfgpb.CollectionConfiguration{
+		config: &cpb.Configuration{
+			CollectionConfiguration: &cpb.CollectionConfiguration{
 				SapSystemDiscovery: false,
 			},
 		},
@@ -256,9 +266,7 @@ func TestDiscoverNetworks(t *testing.T) {
 	}{{
 		name: "instanceWithNetworkInterface",
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{SelfLink: "some/address/uri"}},
-			}},
+			GetAddressByIPResp: []*compute.Address{{SelfLink: "some/address/uri"}},
 			GetAddressByIPArgs: []*fake.GetAddressByIPArguments{{
 				Project: "test-project-id",
 				Region:  "test-region",
@@ -320,38 +328,13 @@ func TestDiscoverNetworks(t *testing.T) {
 	}, {
 		name: "errGetAddressByIP",
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{nil},
+			GetAddressByIPResp: []*compute.Address{nil},
 			GetAddressByIPArgs: []*fake.GetAddressByIPArguments{{
 				Project: "test-project-id",
 				Region:  "test-region",
 				Address: "10.2.3.4",
 			}},
 			GetAddressByIPErr: []error{errors.New("Error listing addresses")},
-		},
-		testCI: &compute.Instance{
-			SelfLink: "some/resource/uri",
-			NetworkInterfaces: []*compute.NetworkInterface{{
-				Network:    "network",
-				Subnetwork: "regions/test-region/subnet",
-				NetworkIP:  "10.2.3.4",
-			}},
-		},
-		testIR: &spb.Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeNetwork",
-			ResourceUri:      "network",
-			RelatedResources: []string{"regions/test-region/subnet"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeSubnetwork",
-			ResourceUri:  "regions/test-region/subnet",
-		}},
-	}, {
-		name: "noAddressFound",
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{}},
-			GetAddressByIPErr:  []error{nil},
 		},
 		testCI: &compute.Instance{
 			SelfLink: "some/resource/uri",
@@ -388,143 +371,62 @@ func TestDiscoverNetworks(t *testing.T) {
 	}
 }
 
-func TestDiscoverLoadBalancer(t *testing.T) {
+func TestDiscoverClusterForwardingRule(t *testing.T) {
 	tests := []struct {
 		name       string
 		gceService *fake.TestGCE
 		fakeExists commandlineexecutor.CommandExistsRunner
 		fakeRunner commandlineexecutor.CommandRunner
 		want       []*spb.Resource
+		wantFWR    *compute.ForwardingRule
+		wantFR     *spb.Resource
 	}{{
-		name:       "hasLoadBalancer",
+		name: "hasForwardingRule",
+		gceService: &fake.TestGCE{
+			GetAddressByIPResp: []*compute.Address{{
+				SelfLink: "some/compute/address",
+				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
+			}},
+			GetAddressByIPErr:     []error{nil},
+			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr"}},
+			GetForwardingRuleErr:  []error{nil},
+		},
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			}, {
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil, nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone/instances/test-instance-id",
-				}},
-			}, {
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{nil, nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
 		want: []*spb.Resource{{
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeForwardingRule",
+			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+			RelatedResources: []string{"some/compute/address"},
+		}, {
 			ResourceType:     spb.Resource_COMPUTE,
 			ResourceKind:     "ComputeAddress",
 			ResourceUri:      "some/compute/address",
 			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeBackendService",
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeInstanceGroup",
-			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/instances/test-instance-id"},
-		}, {
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeInstanceGroup",
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeInstance",
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
+		wantFWR: &compute.ForwardingRule{
+			SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
+		wantFR: &spb.Resource{
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeForwardingRule",
+			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+			RelatedResources: []string{"some/compute/address"},
+		},
 	}, {
-		name:       "hasLoadBalancerPcs",
+		name:       "hasForwardingRulePcs",
 		fakeExists: func(f string) bool { return f == "pcs" },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
+			GetAddressByIPResp: []*compute.Address{{
+				SelfLink: "some/compute/address",
+				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
 			}},
 			GetAddressByIPErr: []error{nil},
 			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+				SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
 			}},
 			GetForwardingRuleErr: []error{nil},
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			}, {
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil, nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone/instances/test-instance-id",
-				}},
-			}, {
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{nil, nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
 		},
 		want: []*spb.Resource{{
 			ResourceType:     spb.Resource_COMPUTE,
@@ -532,37 +434,20 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:      "some/compute/address",
 			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
 		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeBackendService",
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
 			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeInstanceGroup",
-			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/instances/test-instance-id"},
-		}, {
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeInstanceGroup",
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeInstance",
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+			ResourceKind:     "ComputeForwardingRule",
+			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+			RelatedResources: []string{"some/compute/address"},
 		}},
+		wantFWR: &compute.ForwardingRule{
+			SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
+		wantFR: &spb.Resource{
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeForwardingRule",
+			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+			RelatedResources: []string{"some/compute/address"},
+		},
 	}, {
 		name:       "noClusterCommands",
 		gceService: &fake.TestGCE{},
@@ -590,30 +475,18 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name: "errorListingAddresses",
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{nil},
+			GetAddressByIPResp: []*compute.Address{nil},
 			GetAddressByIPErr:  []error{errors.New("Some API error")},
 		},
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 	}, {
-		name:       "noAddressFound",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{},
-			}},
-			GetAddressByIPErr: []error{nil},
-		},
-	}, {
 		name:       "addressNotInUse",
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{SelfLink: "some/compute/address"}},
-			}},
-			GetAddressByIPErr: []error{nil},
+			GetAddressByIPResp: []*compute.Address{{SelfLink: "some/compute/address"}},
+			GetAddressByIPErr:  []error{nil},
 		},
 		want: []*spb.Resource{{
 			ResourceType: spb.Resource_COMPUTE,
@@ -625,11 +498,9 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/notFWR/some-name"},
-				}},
+			GetAddressByIPResp: []*compute.Address{{
+				SelfLink: "some/compute/address",
+				Users:    []string{"projects/test-project/zones/test-zone/notFWR/some-name"},
 			}},
 			GetAddressByIPErr: []error{nil},
 		},
@@ -643,11 +514,9 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
+			GetAddressByIPResp: []*compute.Address{{
+				SelfLink: "some/compute/address",
+				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
 			}},
 			GetAddressByIPErr:     []error{nil},
 			GetForwardingRuleResp: []*compute.ForwardingRule{nil},
@@ -658,113 +527,148 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceKind: "ComputeAddress",
 			ResourceUri:  "some/compute/address",
 		}},
+	}}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.gceService.T = t
+			d := Discovery{
+				gceService:    test.gceService,
+				exists:        test.fakeExists,
+				commandRunner: test.fakeRunner,
+			}
+			got, fwr, fr := d.discoverClusterForwardingRule(defaultProjectID, defaultZone)
+			less := func(a, b *spb.Resource) bool { return a.String() < b.String() }
+			if diff := cmp.Diff(got, test.want, protocmp.Transform(), protocmp.IgnoreFields(&spb.Resource{}, "last_updated"), protocmp.SortRepeatedFields(&spb.Resource{}, "related_resources"), cmpopts.SortSlices(less)); diff != "" {
+				t.Errorf("discoverClusterForwardingRule() mismatch (-want, +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(fwr, test.wantFWR, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverClusterForwardingRule() compute.ForwardingRule mismatch (-want, +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(fr, test.wantFR, protocmp.Transform(), protocmp.IgnoreFields(&spb.Resource{}, "last_updated")); diff != "" {
+				t.Errorf("discoverClusterForwardingRule() spb.Resource mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDiscoverLoadBalancer(t *testing.T) {
+	tests := []struct {
+		name       string
+		gceService *fake.TestGCE
+		fwr        *compute.ForwardingRule
+		fr         *spb.Resource
+		fakeExists commandlineexecutor.CommandExistsRunner
+		fakeRunner commandlineexecutor.CommandRunner
+		want       []*spb.Resource
+	}{{
+		name:       "hasLoadBalancer",
+		fakeExists: func(string) bool { return true },
+		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		gceService: &fake.TestGCE{
+			GetRegionalBackendServiceResp: []*compute.BackendService{{
+				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
+				Backends: []*compute.Backend{{
+					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+				}, {
+					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+				}},
+			}},
+			GetRegionalBackendServiceErr: []error{nil},
+			GetInstanceGroupResp: []*compute.InstanceGroup{{
+				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			}, {
+				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+			}},
+			GetInstanceGroupErr: []error{nil, nil},
+			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
+				Items: []*compute.InstanceWithNamedPorts{{
+					Instance: "projects/test-project/zones/test-zone/instances/test-instance-id",
+				}},
+			}, {
+				Items: []*compute.InstanceWithNamedPorts{{
+					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+				}},
+			}},
+			ListInstanceGroupInstancesErr: []error{nil, nil},
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+			}},
+			GetInstanceErr: []error{nil},
+		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeBackendService",
+			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
+			RelatedResources: []string{
+				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+			},
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeInstanceGroup",
+			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			RelatedResources: []string{"projects/test-project/zones/test-zone/instances/test-instance-id"},
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeInstanceGroup",
+			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+		}},
 	}, {
 		name:       "fwrNoBackendService",
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			}},
-			GetForwardingRuleErr: []error{nil},
+		gceService: &fake.TestGCE{},
+		fwr: &compute.ForwardingRule{
+			SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
 		},
-		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-			},
-		}},
+		fr: &spb.Resource{},
 	}, {
 		name:       "bakendServiceNoRegion",
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/zegion/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
+		gceService: &fake.TestGCE{},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/zegion/test-region/backendServices/test-bes",
 		},
-		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeForwardingRule",
-			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{"some/compute/address"},
-		}},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 	}, {
 		name:       "errorGettingBackendService",
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr:          []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{nil},
 			GetRegionalBackendServiceErr:  []error{errors.New("Some API error")},
 		},
-		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeForwardingRule",
-			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{"some/compute/address"},
-		}},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 	}, {
 		name:       "backendGroupNotInstanceGroup",
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
 				Backends: []*compute.Backend{{
@@ -789,20 +693,13 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeBackendService",
 			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -825,18 +722,6 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
 				Backends: []*compute.Backend{{
@@ -861,20 +746,13 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeBackendService",
 			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -897,18 +775,6 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
 				Backends: []*compute.Backend{{
@@ -934,20 +800,13 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeBackendService",
 			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -970,18 +829,6 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
 				Backends: []*compute.Backend{{
@@ -1011,20 +858,13 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeBackendService",
 			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -1052,18 +892,6 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
 				Backends: []*compute.Backend{{
@@ -1094,20 +922,13 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeBackendService",
 			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -1135,18 +956,6 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
 				Backends: []*compute.Backend{{
@@ -1177,20 +986,13 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeBackendService",
 			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -1218,18 +1020,6 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		fakeExists: func(string) bool { return true },
 		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
 		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.AddressList{{
-				Items: []*compute.Address{{
-					SelfLink: "some/compute/address",
-					Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				}},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink:       "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-			}},
-			GetForwardingRuleErr: []error{nil},
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
 				Backends: []*compute.Backend{{
@@ -1260,20 +1050,13 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
+		fwr: &compute.ForwardingRule{
+			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		},
+		fr: &spb.Resource{
+			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		},
 		want: []*spb.Resource{{
-			ResourceType:     spb.Resource_COMPUTE,
-			ResourceKind:     "ComputeAddress",
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType: spb.Resource_COMPUTE,
-			ResourceKind: "ComputeForwardingRule",
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{
-				"some/compute/address",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
 			ResourceType: spb.Resource_COMPUTE,
 			ResourceKind: "ComputeBackendService",
 			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -1305,7 +1088,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 				commandRunner: test.fakeRunner,
 				exists:        test.fakeExists,
 			}
-			got := d.discoverLoadBalancer(defaultCloudProperties)
+			got := d.discoverLoadBalancerFromForwardingRule(test.fwr, test.fr)
 			less := func(a, b *spb.Resource) bool { return a.String() < b.String() }
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&spb.Resource{}, "last_updated"), protocmp.SortRepeatedFields(&spb.Resource{}, "related_resources"), cmpopts.SortSlices(less)); diff != "" {
 				t.Errorf("discoverLoadBalancer() mismatch (-want, +got):\n%s", diff)
@@ -1416,7 +1199,7 @@ func TestDiscoverFilestores(t *testing.T) {
 				exists:        test.fakeExists,
 			}
 			got := d.discoverFilestores(defaultProjectID, test.testIR)
-			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&spb.Resource{}, "last_updated"), protocmp.SortRepeatedFields(&spb.Resource{}, "related_resources")); diff != "" {
 				t.Errorf("discoverFilestores() mismatch (-want, +got):\n%s", diff)
 			}
 			if test.wantRelatedRes == nil && test.testIR != nil && len(test.testIR.RelatedResources) != 0 {
@@ -1426,6 +1209,436 @@ func TestDiscoverFilestores(t *testing.T) {
 				if diff := cmp.Diff(test.wantRelatedRes, test.testIR.RelatedResources); diff != "" {
 					t.Errorf("discoverFilestores() mismatch (-want, +got):\n%s", diff)
 				}
+			}
+		})
+	}
+}
+func TestDiscoverAppToDBConnection(t *testing.T) {
+	tests := []struct {
+		name         string
+		fakeRunner   func(user, executable string, args ...string) (string, string, error)
+		fakeResolver func(string) ([]string, error)
+		gceService   *fake.TestGCE
+		want         []*spb.Resource
+	}{{
+		name:         "appToDBWithIPAddrToInstance",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/zones/test-zone/instances/test-instance"},
+				SelfLink: "some/compute/address",
+			}},
+			GetAddressErr: []error{nil},
+			GetAddressByIPResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/zones/test-zone/instances/test-instance"},
+				SelfLink: "some/compute/address2",
+			}},
+			GetAddressByIPErr: []error{nil},
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "some/compute/instance",
+				Disks: []*compute.AttachedDisk{{
+					Source:     "",
+					DeviceName: "noSourceDisk",
+				}},
+				NetworkInterfaces: []*compute.NetworkInterface{{
+					Network:       "network",
+					Subnetwork:    "regions/test-region/subnet",
+					AccessConfigs: []*compute.AccessConfig{{NatIP: "1.2.3.4"}},
+					NetworkIP:     "10.2.3.4",
+				}},
+			}},
+			GetInstanceErr:       []error{nil},
+			GetDiskResp:          []*compute.Disk{{SelfLink: "some/compute/disk"}},
+			GetDiskErr:           []error{nil},
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
+			GetFilestoreByIPErr:  []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeDisk",
+			ResourceUri:  "some/compute/disk",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "some/compute/address2",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "PublicAddress",
+			ResourceUri:  "1.2.3.4",
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeNetwork",
+			ResourceUri:      "network",
+			RelatedResources: []string{"regions/test-region/subnet"},
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeSubnetwork",
+			ResourceUri:      "regions/test-region/subnet",
+			RelatedResources: []string{"some/compute/address2"},
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeInstance",
+			ResourceUri:      "some/compute/instance",
+			RelatedResources: []string{"regions/test-region/subnet", "network", "1.2.3.4", "some/compute/address2", "some/compute/disk"},
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
+		}},
+	}, {
+		name:       "appToDBWithIPDirectToInstance",
+		fakeRunner: func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(host string) ([]string, error) {
+			if host == "test-instance" {
+				return []string{"1.2.3.4"}, nil
+			}
+			return nil, errors.New("Unrecognized host")
+		},
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/instances/test-instance"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressByIPResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/zones/test-zone/instances/test-instance"},
+				SelfLink: "projects/test-project/zones/test-zone/addresses/test-address",
+			}},
+			GetAddressByIPErr: []error{nil},
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "some/compute/instance",
+				Disks: []*compute.AttachedDisk{{
+					Source:     "",
+					DeviceName: "noSourceDisk",
+				}},
+				NetworkInterfaces: []*compute.NetworkInterface{{
+					Network:       "network",
+					Subnetwork:    "regions/test-region/subnet",
+					AccessConfigs: []*compute.AccessConfig{{NatIP: "1.2.3.4"}},
+					NetworkIP:     "10.2.3.4",
+				}},
+			}},
+			GetInstanceErr:       []error{nil},
+			GetDiskResp:          []*compute.Disk{{SelfLink: "some/compute/disk"}},
+			GetDiskErr:           []error{nil},
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
+			GetFilestoreByIPErr:  []error{nil},
+			GetInstanceByIPResp:  []*compute.Instance{{SelfLink: "projects/test-project/zones/test-zone/instances/test-instance"}},
+			GetInstanceByIPErr:   []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeDisk",
+			ResourceUri:  "some/compute/disk",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "PublicAddress",
+			ResourceUri:  "1.2.3.4",
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeNetwork",
+			ResourceUri:      "network",
+			RelatedResources: []string{"regions/test-region/subnet"},
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeSubnetwork",
+			ResourceUri:      "regions/test-region/subnet",
+			RelatedResources: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
+		}, {
+			ResourceType:     spb.Resource_COMPUTE,
+			ResourceKind:     "ComputeInstance",
+			ResourceUri:      "some/compute/instance",
+			RelatedResources: []string{"regions/test-region/subnet", "network", "1.2.3.4", "projects/test-project/zones/test-zone/addresses/test-address", "some/compute/disk"},
+		}},
+	}, {
+		name:         "appToDBWithIPToLoadBalancerZonalFwr",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
+				SelfLink: "some/compute/address",
+			}},
+			GetAddressErr:         []error{nil},
+			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr"}},
+			GetForwardingRuleErr:  []error{nil},
+			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
+				Project:  "test-project",
+				Location: "test-zone",
+				Name:     "test-fwr",
+			}},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeForwardingRule",
+			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
+		}},
+	}, {
+		name:         "appToDBWithIPToLoadBalancerRegionalFwr",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/regions/test-region/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/regions/test-region/forwardingRules/test-fwr"},
+				SelfLink: "some/compute/address",
+			}},
+			GetAddressErr:         []error{nil},
+			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/regions/test-region/forwardingRules/test-fwr"}},
+			GetForwardingRuleErr:  []error{nil},
+			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
+				Project:  "test-project",
+				Location: "test-region",
+				Name:     "test-fwr",
+			}},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/regions/test-region/addresses/test-address",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeForwardingRule",
+			ResourceUri:  "projects/test-project/regions/test-region/forwardingRules/test-fwr",
+		}},
+	}, {
+		name:         "appToDBWithIPToLoadBalancerGlobalFwr",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/global/forwardingRules/test-fwr"},
+				SelfLink: "some/compute/address",
+			}},
+			GetAddressErr:         []error{nil},
+			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/global/forwardingRules/test-fwr"}},
+			GetForwardingRuleErr:  []error{nil},
+			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
+				Project:  "test-project",
+				Location: "",
+				Name:     "test-fwr",
+			}},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}, {
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeForwardingRule",
+			ResourceUri:  "projects/test-project/global/forwardingRules/test-fwr",
+		}},
+	}, {
+		name:       "errGettingUserStore",
+		fakeRunner: func(string, string, ...string) (string, string, error) { return "", "", errors.New("error") },
+		gceService: &fake.TestGCE{},
+	}, {
+		name: "noHostnameInUserstoreOutput",
+		fakeRunner: func(string, string, ...string) (string, string, error) {
+			return "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
+				"",
+				nil
+		},
+		gceService: &fake.TestGCE{},
+	}, {
+		name:       "errGettingUserStore",
+		fakeRunner: func(string, string, ...string) (string, string, error) { return "", "", errors.New("error") },
+		gceService: &fake.TestGCE{},
+	}, {
+		name: "noHostnameInUserstoreOutput",
+		fakeRunner: func(string, string, ...string) (string, string, error) {
+			return "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
+				"",
+				nil
+		},
+		gceService: &fake.TestGCE{},
+	}, {
+		name:         "appToDBWithIPToFwrUnknownLocation",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/unknown-location/forwardingRules/test-fwr"},
+				SelfLink: "some/compute/address",
+			}},
+			GetAddressErr:         []error{nil},
+			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/global/forwardingRules/test-fwr"}},
+			GetForwardingRuleErr:  []error{nil},
+			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
+				Project:  "test-project",
+				Location: "",
+				Name:     "test-fwr",
+			}},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}},
+	}, {
+		name:       "errGettingUserStore",
+		fakeRunner: func(string, string, ...string) (string, string, error) { return "", "", errors.New("error") },
+		gceService: &fake.TestGCE{},
+	}, {
+		name: "noHostnameInUserstoreOutput",
+		fakeRunner: func(string, string, ...string) (string, string, error) {
+			return "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
+				"",
+				nil
+		},
+		gceService: &fake.TestGCE{},
+	}, {
+		name:         "unableToResolveHost",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return nil, errors.New("error") },
+		gceService:   &fake.TestGCE{},
+	}, {
+		name:         "noAddressesForHost",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{}, nil },
+		gceService:   &fake.TestGCE{},
+	}, {
+		name:         "hostNotComputeAddressNotInstance",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"nil"},
+			GetURIForIPErr:  []error{errors.New("No resource found")},
+		},
+	}, {
+		name:         "hostAddressNoUser",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp:  []*compute.Address{{SelfLink: "some/compute/address"}},
+			GetAddressErr:   []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}},
+	}, {
+		name:         "hostAddressUnrecognizedUser",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				SelfLink: "some/compute/address",
+				Users:    []string{"projects/test-project/zones/test-zone/unknownObject/test-object"},
+			}},
+			GetAddressErr: []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}},
+	}, {
+		name:         "hostAddressFwrUserUnknownLocation",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				SelfLink: "some/compute/address",
+				Users:    []string{"projects/test-project/unknownLocation/test-zone/instances/test-object"},
+			}},
+			GetAddressErr: []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}},
+	}, {
+		name:         "instanceMissingName",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/zones/test-zone/not-inst/no-name"},
+				SelfLink: "some/compute/address2",
+			}},
+			GetAddressErr: []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}},
+	}, {
+		name:         "instanceMissingProject",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"not-proj/no-project/zones/test-zone/instances/test-instance"},
+				SelfLink: "some/compute/address2",
+			}},
+			GetAddressErr: []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}},
+	}, {
+		name:         "instanceMissingZone",
+		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
+			GetURIForIPErr:  []error{nil},
+			GetAddressResp: []*compute.Address{{
+				Users:    []string{"projects/test-project/not-zone/no-zone/instances/test-instance"},
+				SelfLink: "some/compute/address2",
+			}},
+			GetAddressErr: []error{nil},
+		},
+		want: []*spb.Resource{{
+			ResourceType: spb.Resource_COMPUTE,
+			ResourceKind: "ComputeAddress",
+			ResourceUri:  "projects/test-project/global/addresses/test-address",
+		}},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.gceService.T = t
+			d := Discovery{
+				gceService:        test.gceService,
+				hostResolver:      test.fakeResolver,
+				userCommandRunner: test.fakeRunner,
+			}
+			parent := &spb.Resource{ResourceUri: "test/parent/uri"}
+			got := d.discoverAppToDBConnection(defaultCloudProperties, defaultSID, parent)
+			less := func(a, b *spb.Resource) bool { return a.ResourceUri < b.ResourceUri }
+			if diff := cmp.Diff(test.want, got, cmpopts.SortSlices(less), protocmp.Transform(), protocmp.IgnoreFields(&spb.Resource{}, "last_updated"), protocmp.SortRepeatedFields(&spb.Resource{}, "related_resources")); diff != "" {
+				t.Errorf("discoverAppToDBConnection() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}

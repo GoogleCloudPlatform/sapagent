@@ -38,7 +38,7 @@ const (
 	AgentName = "sapagent"
 	// AgentVersion is the version of the agent.
 	// LINT.IfChange
-	AgentVersion = "1.0"
+	AgentVersion = "1.1"
 	// LINT.ThenChange(//depot/google3/third_party/sapagent/BUILD)
 	linuxConfigPath   = "/etc/google-cloud-sap-agent/configuration.json"
 	windowsConfigPath = "C:\\Program Files\\Google\\google-cloud-sap-agent\\conf\\configuration.json"

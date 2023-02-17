@@ -92,7 +92,7 @@ func linuxOsRelease() string {
 	if len(vf) > 0 {
 		v = strings.TrimSpace(vf[0])
 	}
-	return id + "-" + v
+	return strings.ReplaceAll(id, `"`, "") + "-" + strings.ReplaceAll(v, `"`, "")
 }
 
 func wmicOsCaptionExecute() (string, string, error) {
