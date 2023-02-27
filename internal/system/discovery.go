@@ -40,8 +40,9 @@ import (
 )
 
 var (
-	ipRegex      = regexp.MustCompile("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+")
-	fsMountRegex = regexp.MustCompile("([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+):(/[a-zA-Z0-9]+)")
+	ipRegex      = regexp.MustCompile(`[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+`)
+	fsMountRegex = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
+	sidRegex     = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9]{2})`)
 )
 
 type gceInterface interface {
@@ -141,18 +142,42 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 
 		sapApps := sapdiscovery.SAPApplications()
 
+		sapSystems := []*spb.System{}
+
 		for _, app := range sapApps.Instances {
 			if app.Type == sappb.InstanceType_NETWEAVER {
-				dbres := d.discoverAppToDBConnection(cp, app.Sapsid, ir)
-				res = append(res, dbres...)
+				// See if a system with the same SID already exists
+				var system *spb.System
+				for _, sys := range sapSystems {
+					if sys.ApplicationLayer.Sid == app.Sapsid {
+						system = sys
+						break
+					}
+				}
+				if system == nil {
+					system = &spb.System{}
+					sapSystems = append(sapSystems, system)
+				}
+				system.ApplicationLayer = &spb.Component{
+					Sid:       app.Sapsid,
+					Resources: res,
+				}
+
+				dbRes := d.discoverAppToDBConnection(cp, app.Sapsid, ir)
+				if len(dbRes) > 0 {
+					// NW instance is connected to a database
+					dbSid, err := d.discoverDatabaseSID(app.Sapsid)
+					if err != nil {
+						log.Logger.Warnw("Encountered error discovering database SID", "error", err)
+						continue
+					}
+					system.DatabaseLayer = &spb.Component{
+						Sid:       dbSid,
+						Resources: dbRes,
+					}
+				}
 			}
 		}
-
-		var s string
-		for _, r := range res {
-			s += fmt.Sprintf("{\n%s\n},", r.String())
-		}
-		log.Logger.Debugw("Discovered resources", "resources", s)
 
 		// Perform discovery at most every 4 hours.
 		time.Sleep(4 * 60 * 60 * time.Second)
@@ -763,4 +788,47 @@ func (d *Discovery) discoverAddressUsers(addr *compute.Address) []*spb.Resource 
 	}
 
 	return res
+}
+
+func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
+	sidLower := strings.ToLower(appSID)
+	sidUpper := strings.ToUpper(appSID)
+	sidPath := fmt.Sprintf("/usr/sap/%s/hdbclient/hdbuserstore", sidUpper)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	stdOut, stdErr, err := d.userCommandRunner(sidAdm, sidPath, "list")
+	if err != nil {
+		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", err, "stdOut", stdOut, "stdErr", stdErr)
+		return "", err
+	}
+
+	re, err := regexp.Compile(`DATABASE\s*:\s*([a-zA-Z][a-zA-Z0-9]{2})`)
+	if err != nil {
+		log.Logger.Warnw("Error compiling regex", "error", err)
+		return "", err
+	}
+	sid := re.FindStringSubmatch(stdOut)
+	if len(sid) > 1 {
+		return sid[1], nil
+	}
+
+	// No DB SID in userstore, check profiles
+	profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/*", sidUpper)
+	stdOut, stdErr, err = d.commandRunner("sh", `-c 'grep "dbid\|dbms/name" `+profilePath+`'`)
+	if err != nil {
+		log.Logger.Warnw("Error retrieving sap profile info", "sid", appSID, "error", err, "stdOut", stdOut, "stdErr", stdErr)
+		return "", err
+	}
+
+	re, err = regexp.Compile(`(dbid|dbms\/name)\s*=\s*([a-zA-Z][a-zA-Z0-9]{2})`)
+	if err != nil {
+		log.Logger.Warnw("Error compiling regex", "error", err)
+		return "", err
+	}
+	sid = re.FindStringSubmatch(stdOut)
+	if len(sid) > 2 {
+		log.Logger.Infow("Found DB SID", "sid", sid[2])
+		return sid[2], nil
+	}
+
+	return "", errors.New("No database SID found")
 }

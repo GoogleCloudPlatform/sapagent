@@ -1643,3 +1643,118 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		})
 	}
 }
+
+func TestDiscoverDatabaseSID(t *testing.T) {
+	var userRunnerCalls int
+	var runnerCalls int
+	tests := []struct {
+		name                string
+		testSID             string
+		fakeUserRunner      func(user, executable string, args ...string) (string, string, error)
+		fakeRunner          commandlineexecutor.CommandRunner
+		want                string
+		wantErr             error
+		wantUserRunnerCalls int
+		wantRunnerCalls     int
+	}{{
+		name:    "hdbUserStoreErr",
+		testSID: defaultSID,
+		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
+			userRunnerCalls++
+			return "", "", errors.New("Some err")
+		},
+		wantErr:             cmpopts.AnyError,
+		wantUserRunnerCalls: 1,
+		wantRunnerCalls:     0,
+	}, {
+		name:    "profileGrepErr",
+		testSID: defaultSID,
+		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
+			userRunnerCalls++
+			return "", "", nil
+		},
+		fakeRunner: func(string, string) (string, string, error) {
+			runnerCalls++
+			return "", "", errors.New("Some err")
+		},
+		wantErr:             cmpopts.AnyError,
+		wantUserRunnerCalls: 1,
+		wantRunnerCalls:     1,
+	}, {
+		name:    "noSIDInGrep",
+		testSID: defaultSID,
+		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
+			userRunnerCalls++
+			return "", "", nil
+		},
+		fakeRunner: func(string, string) (string, string, error) {
+			runnerCalls++
+			return "", "", nil
+		},
+		wantErr:             cmpopts.AnyError,
+		wantUserRunnerCalls: 1,
+		wantRunnerCalls:     1,
+	}, {
+		name:    "sidInUserStore",
+		testSID: defaultSID,
+		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
+			userRunnerCalls++
+			return `KEY default
+			ENV : dnwh75ldbci:30013
+			USER: SAPABAP1
+			DATABASE: DEH
+		Operation succeed.`, "", nil
+		},
+		fakeRunner: func(string, string) (string, string, error) {
+			runnerCalls++
+			return "", "", errors.New("Some err")
+		},
+		want:                "DEH",
+		wantErr:             nil,
+		wantUserRunnerCalls: 1,
+		wantRunnerCalls:     0,
+	}, {
+		name:    "sidInProfiles",
+		testSID: defaultSID,
+		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
+			userRunnerCalls++
+			return "", "", nil
+		},
+		fakeRunner: func(string, string) (string, string, error) {
+			runnerCalls++
+			return `
+			grep: /usr/sap/S15/SYS/profile/DEFAULT.PFL: Permission denied
+			/usr/sap/S15/SYS/profile/s:rsdb/dbid = HN1`, "", nil
+		},
+		want:                "HN1",
+		wantErr:             nil,
+		wantUserRunnerCalls: 1,
+		wantRunnerCalls:     1,
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			userRunnerCalls = 0
+			runnerCalls = 0
+			d := Discovery{
+				userCommandRunner: test.fakeUserRunner,
+				commandRunner:     test.fakeRunner,
+			}
+			got, gotErr := d.discoverDatabaseSID(test.testSID)
+			if test.want != "" {
+				if got != test.want {
+					t.Errorf("discoverDatabaseSID() = %q, want %q", got, test.want)
+				}
+			}
+			if test.wantErr != nil && cmp.Equal(gotErr, test.wantErr) {
+				t.Errorf("discoverDatabaseSID() gotErr %q, wantErr %q", gotErr, test.wantErr)
+			}
+			if userRunnerCalls != test.wantUserRunnerCalls {
+				t.Errorf("discoverDatabaseSID() userRunnerCalls = %d, want %d", userRunnerCalls, test.wantUserRunnerCalls)
+			}
+			if runnerCalls != test.wantRunnerCalls {
+				t.Errorf("discoverDatabaseSID() runnerCalls = %d, want %d", runnerCalls, test.wantRunnerCalls)
+			}
+		})
+	}
+
+}
