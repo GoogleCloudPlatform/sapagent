@@ -52,6 +52,9 @@ message CollectionConfiguration {
   bool sap_system_discovery = 9;
   bool collect_agent_metrics = 10;
   int64 agent_metrics_frequency = 11;
+  int64 heartbeat_frequency = 12;
+  int64 missed_heartbeat_threshold = 13;
+  int64 agent_health_frequency = 14;
 }
 
 message AgentProperties {

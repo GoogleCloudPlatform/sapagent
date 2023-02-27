@@ -88,6 +88,18 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	if cc != nil && cc.GetCollectProcessMetrics() == true && cc.GetProcessMetricsFrequency() <= 0 {
 		cc.ProcessMetricsFrequency = 5
 	}
+	if cc != nil && cc.GetCollectAgentMetrics() && cc.GetAgentMetricsFrequency() <= 0 {
+		cc.AgentMetricsFrequency = 60
+	}
+	if cc.GetCollectAgentMetrics() && cc.GetAgentHealthFrequency() <= 0 {
+		cc.AgentHealthFrequency = 60
+	}
+	if cc.GetCollectAgentMetrics() && cc.GetHeartbeatFrequency() <= 0 {
+		cc.HeartbeatFrequency = 60
+	}
+	if cc.GetCollectAgentMetrics() && cc.GetMissedHeartbeatThreshold() <= 0 {
+		cc.MissedHeartbeatThreshold = 10
+	}
 	// If the user did not pass cloud properties, set the values read from the metadata server.
 	if config.GetCloudProperties() == nil {
 		config.CloudProperties = cloudProps

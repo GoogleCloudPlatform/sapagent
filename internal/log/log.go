@@ -155,6 +155,11 @@ func Error(err error) zap.Field {
 	return zap.Error(err)
 }
 
+// Int64 creates a zap Field for an int64.
+func Int64(key string, value int64) zap.Field {
+	return zap.Int64(key, value)
+}
+
 // Float64 creates a zap Field for a float64.
 func Float64(key string, value float64) zap.Field {
 	return zap.Float64(key, value)
