@@ -354,6 +354,7 @@ func startServices(goos string) {
 			OSType:       goos,
 			MetricClient: processmetrics.NewMetricClient,
 			BackOffs:     cloudmonitoring.NewDefaultBackOffIntervals(),
+			GCEService:   gceService,
 		}
 		processmetrics.Start(ctx, pmparams)
 

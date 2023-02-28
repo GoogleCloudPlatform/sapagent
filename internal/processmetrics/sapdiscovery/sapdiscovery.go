@@ -24,14 +24,12 @@ import (
 	"strconv"
 	"strings"
 
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
-	smpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -92,6 +90,11 @@ type (
 	replicationConfig func(string, string, string) (int, []string, int64, error)
 	instanceInfo      struct {
 		Sid, InstanceName, Snr, ProfilePath, LDLibraryPath string
+	}
+
+	// GCEInterface provides an easily testable translation to the secret manager API.
+	GCEInterface interface {
+		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
 	}
 )
 
@@ -467,7 +470,7 @@ func sapInitRunning(runner CommandRunner) (bool, error) {
 }
 
 // ReadHANACredentials returns the HANA DB user and password key from configuration.
-func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.HANAMetricsConfig) (user, password string, err error) {
+func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.HANAMetricsConfig, gceService GCEInterface) (user, password string, err error) {
 	// Value hana_db_user must be set to collect HANA DB query metrics.
 	user = hanaConfig.GetHanaDbUser()
 	if user == "" {
@@ -484,28 +487,9 @@ func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.
 		return user, hanaConfig.GetHanaDbPassword(), nil
 	}
 
-	secret := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, hanaConfig.GetHanaDbPasswordSecretName())
-	password, err = readKeyFromSecretManager(ctx, secret)
+	password, err = gceService.GetSecret(ctx, projectID, hanaConfig.GetHanaDbPasswordSecretName())
 	if err != nil {
 		return "", "", err
 	}
 	return user, password, nil
-}
-
-// readKeyFromSecretManager returns the value of the secret from secret manager.
-// The user is execpted to have configured the secret manager and provide the
-// secret name in configuration before starting the agent. We only read from
-// secret once during start-up. Any changes to secrets,ctedentials will need a
-// restart of the agent to take effect.
-func readKeyFromSecretManager(ctx context.Context, secretName string) (string, error) {
-	client, err := secretmanager.NewClient(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer client.Close()
-	result, err := client.AccessSecretVersion(ctx, &smpb.AccessSecretVersionRequest{Name: secretName})
-	if err != nil {
-		return "", err
-	}
-	return string(result.Payload.Data), nil
 }

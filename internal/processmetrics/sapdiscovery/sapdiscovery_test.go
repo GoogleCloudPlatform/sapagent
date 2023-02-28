@@ -18,11 +18,13 @@ package sapdiscovery
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -762,6 +764,7 @@ func TestReadHANACredentials(t *testing.T) {
 	tests := []struct {
 		name                   string
 		hanaConfig             *cpb.HANAMetricsConfig
+		gceService             GCEInterface
 		wantUser, wantPassword string
 		wantErr                error
 	}{
@@ -799,12 +802,29 @@ func TestReadHANACredentials(t *testing.T) {
 				HanaDbUser:               "hdbadm",
 				HanaDbPasswordSecretName: "TESTSECRET",
 			},
-			wantErr: cmpopts.AnyError, // Expect error, secretmanager API access fails in unit test.
+			gceService: &fake.TestGCE{
+				GetSecretResp: []string{"Dummy"},
+				GetSecretErr:  []error{nil},
+			},
+			wantUser:     "hdbadm",
+			wantPassword: "Dummy",
+		},
+		{
+			name: "SecretManagerError",
+			hanaConfig: &cpb.HANAMetricsConfig{
+				HanaDbUser:               "hdbadm",
+				HanaDbPasswordSecretName: "TESTSECRET",
+			},
+			gceService: &fake.TestGCE{
+				GetSecretResp: []string{""},
+				GetSecretErr:  []error{errors.New("error")},
+			},
+			wantErr: cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotUser, gotPassword, gotErr := ReadHANACredentials(context.Background(), "test-project", test.hanaConfig)
+			gotUser, gotPassword, gotErr := ReadHANACredentials(context.Background(), "test-project", test.hanaConfig, test.gceService)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ReadHANACredentials() returned error = %v, want %v", gotErr, test.wantErr)

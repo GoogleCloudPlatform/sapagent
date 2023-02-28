@@ -81,6 +81,7 @@ type (
 		MetricClient CreateMetricClient
 		SAPInstances *sapb.SAPInstances
 		BackOffs     *cloudmonitoring.BackOffIntervals
+		GCEService   sapdiscovery.GCEInterface
 	}
 )
 
@@ -267,7 +268,7 @@ func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAP
 			projectID := params.Config.GetCloudProperties().GetProjectId()
 			hanaConfig := params.Config.GetCollectionConfiguration().GetHanaMetricsConfig()
 
-			instance.HanaDbUser, instance.HanaDbPassword, err = sapdiscovery.ReadHANACredentials(ctx, projectID, hanaConfig)
+			instance.HanaDbUser, instance.HanaDbPassword, err = sapdiscovery.ReadHANACredentials(ctx, projectID, hanaConfig, params.GCEService)
 			if err != nil {
 				log.Logger.Warnw("HANA DB Credentials not set, will not collect HANA DB Query related metrics.", "error", err)
 			}
