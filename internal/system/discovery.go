@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 
@@ -134,7 +135,7 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 
 			// Only add the unique resources, some may be shared, such as network and subnetwork
 			for _, l := range lbRes {
-				if idx := slices.IndexFunc(res, func(r *spb.Resource) bool { return r.ResourceUri == l.ResourceUri }); idx == -1 {
+				if idx := slices.IndexFunc(res, func(r *spb.SapDiscovery_Resource) bool { return r.ResourceUri == l.ResourceUri }); idx == -1 {
 					res = append(res, l)
 				}
 			}
@@ -142,12 +143,12 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 
 		sapApps := sapdiscovery.SAPApplications()
 
-		sapSystems := []*spb.System{}
+		sapSystems := []*spb.SapDiscovery{}
 
 		for _, app := range sapApps.Instances {
 			if app.Type == sappb.InstanceType_NETWEAVER {
 				// See if a system with the same SID already exists
-				var system *spb.System
+				var system *spb.SapDiscovery
 				for _, sys := range sapSystems {
 					if sys.ApplicationLayer.Sid == app.Sapsid {
 						system = sys
@@ -155,10 +156,10 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 					}
 				}
 				if system == nil {
-					system = &spb.System{}
+					system = &spb.SapDiscovery{}
 					sapSystems = append(sapSystems, system)
 				}
-				system.ApplicationLayer = &spb.Component{
+				system.ApplicationLayer = &spb.SapDiscovery_Component{
 					Sid:       app.Sapsid,
 					Resources: res,
 				}
@@ -171,7 +172,7 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 						log.Logger.Warnw("Encountered error discovering database SID", "error", err)
 						continue
 					}
-					system.DatabaseLayer = &spb.Component{
+					system.DatabaseLayer = &spb.SapDiscovery_Component{
 						Sid:       dbSid,
 						Resources: dbRes,
 					}
@@ -185,8 +186,8 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 
 }
 
-func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*spb.Resource, *compute.Instance, *spb.Resource) {
-	var res []*spb.Resource
+func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*spb.SapDiscovery_Resource, *compute.Instance, *spb.SapDiscovery_Resource) {
+	var res []*spb.SapDiscovery_Resource
 	log.Logger.Debugw("Discovering instance", log.String("instance", instanceName))
 	ci, err := d.gceService.GetInstance(projectID, zone, instanceName)
 	if err != nil {
@@ -198,25 +199,22 @@ func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*s
 		return res, nil, nil
 	}
 
-	now := time.Now().Unix()
-
-	ir := &spb.Resource{
-		ResourceType: spb.Resource_COMPUTE,
+	ir := &spb.SapDiscovery_Resource{
+		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 		ResourceKind: "ComputeInstance",
 		ResourceUri:  ci.SelfLink,
-		LastUpdated:  now,
+		UpdateTime:   timestamppb.Now(),
 	}
 	res = append(res, ir)
 
 	return res, ci, ir
 }
 
-func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, ir *spb.Resource) []*spb.Resource {
-	var disks []*spb.Resource
+func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, ir *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+	var disks []*spb.SapDiscovery_Resource
 	if ci == nil || ci.Disks == nil || len(ci.Disks) == 0 {
 		return disks
 	}
-	now := time.Now().Unix()
 	// Get the disks
 	for _, disk := range ci.Disks {
 		source, diskName := disk.Source, disk.DeviceName
@@ -236,11 +234,11 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, 
 			continue
 		}
 
-		dr := &spb.Resource{
-			ResourceType: spb.Resource_COMPUTE,
+		dr := &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 			ResourceKind: "ComputeDisk",
 			ResourceUri:  cd.SelfLink,
-			LastUpdated:  now,
+			UpdateTime:   timestamppb.Now(),
 		}
 		disks = append(disks, dr)
 		ir.RelatedResources = append(ir.RelatedResources, dr.ResourceUri)
@@ -248,28 +246,27 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, 
 	return disks
 }
 
-func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir *spb.Resource) []*spb.Resource {
-	var netRes []*spb.Resource
+func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+	var netRes []*spb.SapDiscovery_Resource
 	if ci == nil || ci.NetworkInterfaces == nil || len(ci.NetworkInterfaces) == 0 {
 		return netRes
 	}
-	now := time.Now().Unix()
 	// Get Network related resources
 	for _, net := range ci.NetworkInterfaces {
-		sr := &spb.Resource{
-			ResourceType: spb.Resource_COMPUTE,
+		sr := &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 			ResourceKind: "ComputeSubnetwork",
 			ResourceUri:  net.Subnetwork,
-			LastUpdated:  now,
+			UpdateTime:   timestamppb.Now(),
 		}
 		netRes = append(netRes, sr)
 		ir.RelatedResources = append(ir.RelatedResources, sr.ResourceUri)
 
-		nr := &spb.Resource{
-			ResourceType: spb.Resource_COMPUTE,
+		nr := &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 			ResourceKind: "ComputeNetwork",
 			ResourceUri:  net.Network,
-			LastUpdated:  now,
+			UpdateTime:   timestamppb.Now(),
 		}
 		nr.RelatedResources = append(nr.RelatedResources, sr.ResourceUri)
 		netRes = append(netRes, nr)
@@ -277,10 +274,10 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 
 		// Examine assigned IP addresses
 		for _, ac := range net.AccessConfigs {
-			ar := &spb.Resource{
-				ResourceType: spb.Resource_COMPUTE,
+			ar := &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 				ResourceKind: "PublicAddress",
-				LastUpdated:  now,
+				UpdateTime:   timestamppb.Now(),
 				ResourceUri:  ac.NatIP,
 			}
 			netRes = append(netRes, ar)
@@ -305,11 +302,11 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 				log.Error(err))
 			continue
 		}
-		ar := &spb.Resource{
-			ResourceType: spb.Resource_COMPUTE,
+		ar := &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 			ResourceKind: "ComputeAddress",
 			ResourceUri:  addr.SelfLink,
-			LastUpdated:  now,
+			UpdateTime:   timestamppb.Now(),
 		}
 		sr.RelatedResources = append(sr.RelatedResources, ar.ResourceUri)
 		netRes = append(netRes, ar)
@@ -318,9 +315,8 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 	return netRes
 }
 
-func (d *Discovery) discoverClusterForwardingRule(projectID, zone string) ([]*spb.Resource, *compute.ForwardingRule, *spb.Resource) {
-	var res []*spb.Resource
-	now := time.Now().Unix()
+func (d *Discovery) discoverClusterForwardingRule(projectID, zone string) ([]*spb.SapDiscovery_Resource, *compute.ForwardingRule, *spb.SapDiscovery_Resource) {
+	var res []*spb.SapDiscovery_Resource
 	lbAddress, err := d.discoverCluster()
 	if err != nil || lbAddress == "" {
 		log.Logger.Warnw("Encountered error discovering cluster address", log.Error(err))
@@ -340,11 +336,11 @@ func (d *Discovery) discoverClusterForwardingRule(projectID, zone string) ([]*sp
 		return res, nil, nil
 	}
 
-	ar := &spb.Resource{
-		ResourceType: spb.Resource_COMPUTE,
+	ar := &spb.SapDiscovery_Resource{
+		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 		ResourceKind: "ComputeAddress",
 		ResourceUri:  addr.SelfLink,
-		LastUpdated:  now,
+		UpdateTime:   timestamppb.Now(),
 	}
 	res = append(res, ar)
 
@@ -366,12 +362,12 @@ func (d *Discovery) discoverClusterForwardingRule(projectID, zone string) ([]*sp
 		return res, nil, nil
 	}
 
-	fr := &spb.Resource{
-		ResourceType:     spb.Resource_COMPUTE,
+	fr := &spb.SapDiscovery_Resource{
+		ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
 		ResourceKind:     "ComputeForwardingRule",
 		ResourceUri:      fwr.SelfLink,
 		RelatedResources: []string{ar.ResourceUri},
-		LastUpdated:      now,
+		UpdateTime:       timestamppb.Now(),
 	}
 	ar.RelatedResources = append(ar.RelatedResources, fr.ResourceUri)
 	res = append(res, fr)
@@ -379,11 +375,10 @@ func (d *Discovery) discoverClusterForwardingRule(projectID, zone string) ([]*sp
 	return res, fwr, fr
 }
 
-func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.ForwardingRule, fr *spb.Resource) []*spb.Resource {
+func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.ForwardingRule, fr *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	log.Logger.Debug("Discovering load balancer")
-	var res []*spb.Resource
+	var res []*spb.SapDiscovery_Resource
 	projectID := extractFromURI(fwr.SelfLink, "projects")
-	now := time.Now().Unix()
 
 	// Examine fwr backend service, this should be the load balancer
 	b := fwr.BackendService
@@ -406,11 +401,11 @@ func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.Forwardi
 		return res
 	}
 
-	bsr := &spb.Resource{
-		ResourceType:     spb.Resource_COMPUTE,
+	bsr := &spb.SapDiscovery_Resource{
+		ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
 		ResourceKind:     "ComputeBackendService",
 		ResourceUri:      bs.SelfLink,
-		LastUpdated:      now,
+		UpdateTime:       timestamppb.Now(),
 		RelatedResources: []string{fr.ResourceUri},
 	}
 	fr.RelatedResources = append(fr.RelatedResources, bsr.ResourceUri)
@@ -421,10 +416,9 @@ func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.Forwardi
 	return res
 }
 
-func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *spb.Resource) []*spb.Resource {
-	now := time.Now().Unix()
+func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	projectID := extractFromURI(bs.SelfLink, "projects")
-	var res []*spb.Resource
+	var res []*spb.SapDiscovery_Resource
 	var groups []string
 	for _, be := range bs.Backends {
 		if be.Group != "" {
@@ -449,11 +443,11 @@ func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *s
 			log.Logger.Warnw("Error retrieving instance group", log.Error(err))
 			continue
 		}
-		igr := &spb.Resource{
-			ResourceType: spb.Resource_COMPUTE,
+		igr := &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 			ResourceKind: "ComputeInstanceGroup",
 			ResourceUri:  ig.SelfLink,
-			LastUpdated:  now,
+			UpdateTime:   timestamppb.Now(),
 		}
 		parent.RelatedResources = append(parent.RelatedResources, igr.ResourceUri)
 		res = append(res, igr)
@@ -465,8 +459,8 @@ func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *s
 	return res
 }
 
-func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string, parent *spb.Resource) []*spb.Resource {
-	var res []*spb.Resource
+func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
 	list, err := d.gceService.ListInstanceGroupInstances(projectID, zone, name)
 	if err != nil {
 		log.Logger.Warnw("Error retrieving instance group instances", log.Error(err))
@@ -561,10 +555,9 @@ func (d *Discovery) discoverCluster() (string, error) {
 	return "", errors.New("No cluster command found")
 }
 
-func (d *Discovery) discoverFilestores(projectID string, parent *spb.Resource) []*spb.Resource {
+func (d *Discovery) discoverFilestores(projectID string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	log.Logger.Info("Discovering mounted file stores")
-	now := time.Now().Unix()
-	var res []*spb.Resource
+	var res []*spb.SapDiscovery_Resource
 	if !d.exists("df") {
 		log.Logger.Warn("Cannot access command df to discover mounted file stores")
 		return res
@@ -591,12 +584,12 @@ func (d *Discovery) discoverFilestores(projectID string, parent *spb.Resource) [
 			continue
 		}
 		for _, i := range fs.Instances {
-			fsr := &spb.Resource{
-				ResourceType:     spb.Resource_STORAGE,
+			fsr := &spb.SapDiscovery_Resource{
+				ResourceType:     spb.SapDiscovery_Resource_STORAGE,
 				ResourceKind:     "ComputeFilestore",
 				ResourceUri:      i.Name,
 				RelatedResources: []string{parent.ResourceUri},
-				LastUpdated:      now,
+				UpdateTime:       timestamppb.Now(),
 			}
 			parent.RelatedResources = append(parent.RelatedResources, fsr.ResourceUri)
 			res = append(res, fsr)
@@ -606,8 +599,8 @@ func (d *Discovery) discoverFilestores(projectID string, parent *spb.Resource) [
 	return res
 }
 
-func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid string, parent *spb.Resource) []*spb.Resource {
-	var res []*spb.Resource
+func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
 
 	sidLower := strings.ToLower(sid)
 	sidUpper := strings.ToUpper(sid)
@@ -671,8 +664,8 @@ func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid strin
 	return res
 }
 
-func (d *Discovery) discoverInstanceFromURI(instanceURI string) []*spb.Resource {
-	var res []*spb.Resource
+func (d *Discovery) discoverInstanceFromURI(instanceURI string) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
 	iName := extractFromURI(instanceURI, "instances")
 	iZone := extractFromURI(instanceURI, "zones")
 	iProject := extractFromURI(instanceURI, "projects")
@@ -695,8 +688,8 @@ func (d *Discovery) discoverInstanceFromURI(instanceURI string) []*spb.Resource 
 	return res
 }
 
-func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.Resource {
-	var res []*spb.Resource
+func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
 	fwrName := extractFromURI(fwrURI, "forwardingRules")
 	fwrProject := extractFromURI(fwrURI, "projects")
 	fwrLocation := extractFromURI(fwrURI, "zones")
@@ -714,11 +707,11 @@ func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.Resource
 		return res
 	}
 
-	fr := &spb.Resource{
-		ResourceType: spb.Resource_COMPUTE,
+	fr := &spb.SapDiscovery_Resource{
+		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 		ResourceKind: "ComputeForwardingRule",
 		ResourceUri:  fwr.SelfLink,
-		LastUpdated:  time.Now().Unix(),
+		UpdateTime:   timestamppb.Now(),
 	}
 	res = append(res, fr)
 
@@ -728,8 +721,8 @@ func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.Resource
 	return res
 }
 
-func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.Resource {
-	var res []*spb.Resource
+func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
 	addrProject := extractFromURI(addressURI, "projects")
 	addrLocation := extractFromURI(addressURI, "zones")
 	addrName := extractFromURI(addressURI, "addresses")
@@ -742,11 +735,11 @@ func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.Resource {
 	}
 	// IP is assigned to an address
 	log.Logger.Info("Address found")
-	ar := &spb.Resource{
-		ResourceType: spb.Resource_COMPUTE,
+	ar := &spb.SapDiscovery_Resource{
+		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
 		ResourceKind: "ComputeAddress",
 		ResourceUri:  addressURI,
-		LastUpdated:  time.Now().Unix(),
+		UpdateTime:   timestamppb.Now(),
 	}
 	res = append(res, ar)
 	// parent.RelatedResources = append(parent.RelatedResources, ar.ResourceUri)
@@ -762,8 +755,8 @@ func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.Resource {
 	return res
 }
 
-func (d *Discovery) discoverAddressUsers(addr *compute.Address) []*spb.Resource {
-	var res []*spb.Resource
+func (d *Discovery) discoverAddressUsers(addr *compute.Address) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
 	// IP is associated with an address
 	// Is that address assigned to an instance or a load balancer
 	if len(addr.Users) == 0 {

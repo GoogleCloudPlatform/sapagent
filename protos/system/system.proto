@@ -17,68 +17,85 @@ syntax = "proto3";
 
 package cloud.partners.sap.system;
 
+import "google/protobuf/timestamp.proto";
 
 
-message Metadata {
-  string name = 1;
 
-  // This may be resource-specific
-  string sap_product = 2;
-
-  // Should be "prod", "QA", "dev", "staging", etc.
-  string environment_type = 3;
-
-  // Custom region string for customer's use. Does not represent GCP region
-  string customer_region = 4;
-}
-
-message Resource {
-  enum ResourceType {
-    UNSPECIFIED = 0;
-    COMPUTE = 1;
-    STORAGE = 2;
-    NETWORK = 3;
-  }
-  ResourceType resource_type = 1;
-
-  // ComputeInstance, ComputeDisk, VPC, Bare Metal server, etc.
-  string resource_kind = 2;
-
-  // URI of the resource, includes project, location, and name.
-  string resource_uri = 3;
-
-  // A list of resource URIs related to this resource.
-  repeated string related_resources = 4;
-
-  // Unix timstamp of when this resource last had its discovery data updated.
-  int64 last_updated = 5;
-}
-
-message Component {
-  repeated Resource resources = 1;
-  oneof type {
-    string application_type = 2;
-    string database_type = 3;
-  }
-
-  // Pantheon Project in which the resources reside
-  string host_project = 4;
-  string sid = 5;
-}
-
-message System {
+// The schema of SAP system discovery data.
+message SapDiscovery {
+  // The metadata for SAP system discovery data.
   Metadata metadata = 1;
 
-  // An SAP System must have a database
+  // An SAP System must have a database.
   Component database_layer = 2;
 
   // An SAP system may run without an application layer.
   Component application_layer = 3;
 
-  // A combination of Database SID, database instance URI and tenant DB name
+  // A combination of database SID, database instance URI and tenant DB name
   // to make a unique identifier per-system.
-  string system_identifier = 4;
+  string system_id = 4;
 
   // Unix timestamp this system has been updated last.
-  int64 last_updated = 5;
+  google.protobuf.Timestamp update_time = 5;
+
+  // Message describing SAP discovery system metadata
+  message Metadata {
+    // Customer defined, something like "E-commerce pre prod"
+    string defined_system = 1;
+
+    // This sap product name
+    string sap_product = 2;
+
+    // Should be "prod", "QA", "dev", "staging", etc.
+    string environment_type = 3;
+
+    // Customer region string for customer's use. Does not represent GCP region.
+    string customer_region = 4;
+  }
+
+  // Message describing a resource.
+  message Resource {
+    // Different types of resources attached to the SAP system.
+    enum ResourceType {
+      // Undefined resource type.
+      RESOURCE_TYPE_UNSPECIFIED = 0;
+      // This is a compute resource.
+      COMPUTE = 1;
+      // This a storage resource.
+      STORAGE = 2;
+      // This is a network resource.
+      NETWORK = 3;
+    }
+    // The type of this resource.
+    ResourceType resource_type = 1;
+
+    // ComputeInstance, ComputeDisk, VPC, Bare Metal server, etc.
+    string resource_kind = 2;
+
+    // URI of the resource, includes project, location, and name.
+    string resource_uri = 3;
+
+    // A list of resource URIs related to this resource.
+    repeated string related_resources = 4;
+
+    // Unix timestamp of when this resource last had its discovery data updated.
+    google.protobuf.Timestamp update_time = 5;
+  }
+  // Message describing the system component.
+  message Component {
+    // The resources in a component.
+    repeated Resource resources = 1;
+    oneof type {
+      // The component is a SAP application.
+      string application_type = 2;
+      // The component is a SAP database.
+      string database_type = 3;
+    }
+    // Pantheon Project in which the resources reside.
+    string host_project = 4;
+    // The sap identifier,
+    // used by the SAP software and helps differentiate systems for customers.
+    string sid = 5;
+  }
 }
