@@ -21,7 +21,9 @@ import (
 	"context"
 	"fmt"
 
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/pkg/errors"
+	smpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 )
@@ -30,6 +32,7 @@ import (
 type GCE struct {
 	service *compute.Service
 	file    *file.Service
+	secret  *secretmanager.Client
 }
 
 // New creates a new GCE service wrapper.
@@ -42,8 +45,12 @@ func New(ctx context.Context) (*GCE, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating filestore client")
 	}
+	sm, err := secretmanager.NewClient(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating secret manager client")
+	}
 
-	return &GCE{s, f}, nil
+	return &GCE{s, f, sm}, nil
 }
 
 // GetInstance retrieves a GCE Instance defined by the project, zone, and name provided.
@@ -173,4 +180,14 @@ func (g *GCE) GetURIForIP(project, ip string) (string, error) {
 		return inst.SelfLink, nil
 	}
 	return "", errors.Errorf("error locating object by IP: %v", err)
+}
+
+// GetSecret accesses the secret manager for the specified project ID and returns the stored password.
+func (g *GCE) GetSecret(ctx context.Context, projectID, secretName string) (string, error) {
+	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, secretName)
+	result, err := g.secret.AccessSecretVersion(ctx, &smpb.AccessSecretVersionRequest{Name: name})
+	if err != nil {
+		return "", err
+	}
+	return string(result.Payload.Data), nil
 }

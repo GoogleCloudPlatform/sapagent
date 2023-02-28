@@ -18,6 +18,7 @@ limitations under the License.
 package fake
 
 import (
+	"context"
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
@@ -86,6 +87,10 @@ type TestGCE struct {
 	GetURIForIPResp      []string
 	GetURIForIPErr       []error
 	GetURIForIPCallCount int
+
+	GetSecretResp      []string
+	GetSecretErr       []error
+	GetSecretCallCount int
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -241,4 +246,15 @@ func (g *TestGCE) GetURIForIP(project, ip string) (string, error) {
 		}
 	}()
 	return g.GetURIForIPResp[g.GetURIForIPCallCount], g.GetURIForIPErr[g.GetURIForIPCallCount]
+}
+
+// GetSecret fakes calls to secretmanager APIs to access a secret version.
+func (g *TestGCE) GetSecret(ctx context.Context, projectID, secretName string) (string, error) {
+	defer func() {
+		g.GetSecretCallCount++
+		if g.GetSecretCallCount >= len(g.GetSecretResp) || g.GetSecretCallCount >= len(g.GetSecretErr) {
+			g.GetSecretCallCount = 0
+		}
+	}()
+	return g.GetSecretResp[g.GetSecretCallCount], g.GetSecretErr[g.GetSecretCallCount]
 }
