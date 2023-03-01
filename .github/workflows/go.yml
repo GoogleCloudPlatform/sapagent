@@ -30,3 +30,11 @@ jobs:
 
     - name: Test
       run: go test -v ./...
+
+    - name: Notify on failure
+      if: ${{ failure() }}
+      uses: cinotify/github-action@v1.1.0
+      with:
+        to: 'sapagent-github-dev@google.com'
+        subject: '[Failure] GitHub Agent for SAP build failure'
+        body: 'There was a failure for the GitHub Agent for SAP workflow action.\n\n https://github.com/GoogleCloudPlatform/sapagent/actions/runs/${{ github.run_id }}'
