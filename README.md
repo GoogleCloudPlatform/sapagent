@@ -1,6 +1,6 @@
 # Agent for SAP
 
-![Build](https://github.com/GoogleCloudPlatform/sapagent/actions/workflows/go.yml/badge.svg)
+[![Build](https://github.com/GoogleCloudPlatform/sapagent/actions/workflows/go.yml/badge.svg)](https://github.com/GoogleCloudPlatform/sapagent/actions)
 
 This repository contains the Agent for SAP (Linux and Windows). The agent is
 intended to run on all Google Cloud compute instances where an SAP workload is
