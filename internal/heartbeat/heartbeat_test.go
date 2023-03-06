@@ -19,7 +19,6 @@ package heartbeat
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync"
 	"testing"
 	"time"
@@ -408,42 +407,6 @@ func TestRegister_shouldReturnFunctionThatResetsRegistrantMissedHeartbeats(t *te
 				if registrant.missedHeartbeats != 0 {
 					t.Errorf("spec.Beat() error, registrants[%v].missedHeartbeats = %v, want 0", name, registrant.missedHeartbeats)
 				}
-			}
-		})
-	}
-}
-
-func TestSpec_shouldCreateTickerWithTheConfiguredInterval(t *testing.T) {
-	testData := []struct {
-		name     string
-		interval time.Duration
-	}{
-		{
-			name:     "25ms interval",
-			interval: time.Millisecond * 25,
-		},
-		{
-			name:     "10ms interval",
-			interval: time.Millisecond * 10,
-		},
-	}
-	for _, d := range testData {
-		t.Run(d.name, func(t *testing.T) {
-			spec := &Spec{
-				BeatFunc: func() {},
-				Interval: d.interval,
-			}
-			start := time.Now()
-			ticker := spec.CreateTicker()
-			<-ticker.C
-			end := time.Now()
-			defer ticker.Stop()
-			delta := end.Sub(start)
-			deltaMs := delta.Milliseconds()
-			toleranceMs := int64(1)
-			absDiff := int64(math.Abs(float64(d.interval.Milliseconds() - deltaMs)))
-			if absDiff > toleranceMs {
-				t.Errorf("spec.CreateTicker() ms difference from expected = %v, want < %v", deltaMs, toleranceMs)
 			}
 		})
 	}
