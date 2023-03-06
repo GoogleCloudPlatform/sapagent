@@ -39,6 +39,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics"
@@ -370,6 +371,12 @@ func startServices(goos string) {
 		} else {
 			agentmetricsService.Start(ctx)
 		}
+
+		// Start HANA Monitoring
+		hanamonitoring.StartMonitoring(ctx, hanamonitoring.Parameters{
+			Config:     config,
+			GCEService: gceService,
+		})
 	}
 
 	go logRunningDaily()

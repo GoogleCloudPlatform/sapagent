@@ -18,12 +18,190 @@ package hanamonitoring
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
+
+func fakeQueryFunc(context.Context, string, ...any) (*sql.Rows, error) {
+	return &sql.Rows{}, nil
+}
+
+func fakeQueryFuncError(context.Context, string, ...any) (*sql.Rows, error) {
+	return nil, cmpopts.AnyError
+}
+
+func TestStartMonitoring(t *testing.T) {
+	tests := []struct {
+		name   string
+		params Parameters
+		want   bool
+	}{
+		{
+			name: "FailsWithEmptyConfig",
+			params: Parameters{
+				Config: &cpb.Configuration{},
+			},
+			want: false,
+		},
+		{
+			name: "FailsWithDisabled",
+			params: Parameters{
+				Config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled: false,
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "FailsWithEmptyQueries",
+			params: Parameters{
+				Config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled: true,
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "Succeeds",
+			params: Parameters{
+				Config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*cpb.Query{
+							&cpb.Query{},
+						},
+					},
+				},
+			}, want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			got := StartMonitoring(ctx, test.params)
+			if got != test.want {
+				t.Errorf("Start(%#v) = %t, want: %t", test.params, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCreateColumns(t *testing.T) {
+	tests := []struct {
+		name string
+		cols []*cpb.Column
+		want []any
+	}{
+		{
+			name: "EmptyColumns",
+			cols: nil,
+			want: nil,
+		},
+		{
+			name: "ColumnsWithMultipleTypes",
+			cols: []*cpb.Column{
+				&cpb.Column{
+					ValueType: cpb.ValueType_VALUE_BOOL,
+				},
+				&cpb.Column{
+					ValueType: cpb.ValueType_VALUE_STRING,
+				},
+				&cpb.Column{
+					ValueType: cpb.ValueType_VALUE_INT64,
+				},
+				&cpb.Column{
+					ValueType: cpb.ValueType_VALUE_DOUBLE,
+				},
+				&cpb.Column{
+					ValueType: cpb.ValueType_VALUE_DISTRIBUTION,
+				},
+			},
+			want: []any{
+				new(bool),
+				new(string),
+				new(int64),
+				new(float64),
+				new(any),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := createColumns(test.cols)
+
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("createColumns(%#v) unexpected diff: (-want +got):\n%s", test.cols, diff)
+			}
+		})
+	}
+}
+
+func TestQueryDatabase(t *testing.T) {
+	tests := []struct {
+		name      string
+		params    Parameters
+		queryFunc queryFunc
+		query     *cpb.Query
+		want      error
+	}{
+		{
+			name:  "FailsWithNilQuery",
+			query: nil,
+			want:  cmpopts.AnyError,
+		},
+		{
+			name: "FailsWithNilColumns",
+			query: &cpb.Query{
+				Columns: nil,
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailsWithQueryError",
+			query: &cpb.Query{
+				Columns: []*cpb.Column{
+					&cpb.Column{},
+				},
+			},
+			queryFunc: fakeQueryFuncError,
+			want:      cmpopts.AnyError,
+		},
+		{
+			name: "Succeeds",
+			query: &cpb.Query{
+				Columns: []*cpb.Column{
+					&cpb.Column{},
+				},
+			},
+			queryFunc: fakeQueryFunc,
+			want:      nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, _, got := queryDatabase(context.Background(), test.params, test.queryFunc, test.query)
+
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("queryDatabase(%#v, %#v, %#v) = %v, want: %v", test.params, test.queryFunc, test.query, got, test.want)
+			}
+		})
+	}
+}
 
 func TestConnectToDatabases(t *testing.T) {
 	// Connecting to a database with empty user, host and port arguments will still be able to validate the hdb driver and create a *sql.DB.
@@ -130,7 +308,7 @@ func TestConnectToDatabases(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := ConnectToDatabases(context.Background(), test.params)
+			got := connectToDatabases(context.Background(), test.params)
 
 			if len(got) != test.want {
 				t.Errorf("ConnectToDatabases(%#v) returned unexpected database count, got: %d, want: %d", test.params, len(got), test.want)

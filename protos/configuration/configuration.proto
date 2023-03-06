@@ -105,6 +105,7 @@ message HANAMonitoringConfiguration {
   int64 execution_threads = 3;
   repeated HANAInstance hana_instances = 4;
   repeated Query queries = 5;
+  bool enabled = 6;
 }
 
 message HANAInstance {

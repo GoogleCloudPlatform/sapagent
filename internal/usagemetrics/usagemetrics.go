@@ -61,6 +61,7 @@ const (
 	WLMMetricCollectionFailure
 	ProcessMetricsMetricClientCreateFailure
 	NoSAPInstancesFound
+	HANAMonitoringCollectionFailure
 )
 
 // Agent wide action mappings.
@@ -69,6 +70,7 @@ const (
 	CollectWLMMetrics
 	CollectHostMetrics
 	CollectProcessMetrics
+	CollectHANAMonitoringMetrics
 )
 
 var (
