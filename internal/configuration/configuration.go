@@ -76,7 +76,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 		log.Logger.Errorw("Invalid content in the configuration file", "file", p, "content", string(content), "error", err)
 	}
 	config.HanaMonitoringConfiguration = readConfig(linuxHANAMonitoringConfigPath, read)
-	log.Logger.Infow("Configuration read for the agent", "Configuration", config)
+	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
 	return config
 }
 
