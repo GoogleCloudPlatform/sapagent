@@ -1,0 +1,26 @@
+{
+  "queries": [
+    {
+      "name": "host_queries",
+      "sql": "sample sql",
+      "columns": [
+        {
+          "name": "host",
+          "metric_type": "METRIC_LABEL",
+          "value_type": "VALUE_STRING"
+        }
+      ]
+    },
+    {
+      "name": "cpu_queries",
+      "sql": "sample sql",
+      "columns": [
+        {
+          "name": "host",
+          "metric_type": "METRIC_LABEL",
+          "value_type": "VALUE_STRING"
+        }
+      ]
+    }
+  ]
+}

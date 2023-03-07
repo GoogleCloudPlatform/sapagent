@@ -17,6 +17,7 @@ limitations under the License.
 package configuration
 
 import (
+	_ "embed"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -37,6 +38,19 @@ var (
 		InstanceName:     "test-instance-name",
 		Image:            "test-image",
 	}
+	testHANAInstance = &cpb.HANAInstance{Name: "sample_instance1",
+		Host:                "127.0.0.1",
+		Port:                "30015",
+		User:                "SYSTEM",
+		Password:            "PASSWORD",
+		EnableSsl:           false,
+		ValidateCertificate: true,
+	}
+
+	//go:embed testdata/defaultHANAMonitoringQueries.json
+	sampleHANAMonitoringConfigQueriesJSON []byte
+	//go:embed testdata/customHANAMonitoringConfig.json
+	testCustomHANAMonitoringConfigQueriesJSON []byte
 )
 
 func TestReadFromFile(t *testing.T) {
@@ -158,12 +172,264 @@ func TestApplyDefaults(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "ConfigWithoutHANAMonitoringDefaults",
+			configFromFile: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: true,
+				CloudProperties:            testCloudProps,
+				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+					HanaInstances: []*cpb.HANAInstance{
+						testHANAInstance,
+					},
+					Queries: []*cpb.Query{
+						&cpb.Query{
+							Name: "host_query",
+							Sql:  "sample sql",
+						},
+						&cpb.Query{
+							Name: "service_query",
+							Sql:  "sample_sql",
+						},
+					},
+				},
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: true,
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
+				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+					SampleIntervalSec: 300,
+					QueryTimeoutSec:   300,
+					ExecutionThreads:  10,
+					HanaInstances: []*cpb.HANAInstance{
+						testHANAInstance,
+					},
+					Queries: []*cpb.Query{
+						&cpb.Query{
+							Name: "host_query",
+							Sql:  "sample sql",
+						},
+						&cpb.Query{
+							Name: "service_query",
+							Sql:  "sample_sql",
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := ApplyDefaults(test.configFromFile, testCloudProps)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("Test: %s ApplyDefaults() (-want +got):\n%s", test.name, diff)
+			}
+		})
+	}
+}
+
+func TestReadHANAMonitoringConfiguration(t *testing.T) {
+	tests := []struct {
+		name                 string
+		path                 string
+		testDefaultHMContent []byte
+		readFunc             ReadConfigFile
+		want                 *cpb.HANAMonitoringConfiguration
+	}{
+		{
+			name:                 "MalformedDefaultQueriesConfig",
+			path:                 "/sample/path",
+			testDefaultHMContent: []byte("{"),
+			readFunc: func(p string) ([]byte, error) {
+				return nil, cmpopts.AnyError
+			},
+			want: nil,
+		},
+		{
+			name:                 "UnableToReadCustomConfig",
+			path:                 "/sample/path",
+			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
+			readFunc: func(p string) ([]byte, error) {
+				return nil, cmpopts.AnyError
+			},
+			want: nil,
+		},
+		{
+			name:                 "EmptyCustomConfig",
+			path:                 "/sample/path",
+			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
+			readFunc: func(p string) ([]byte, error) {
+				return nil, nil
+			},
+			want: nil,
+		},
+		{
+			name:                 "MalformedCustomConfig",
+			path:                 "/sample/path",
+			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
+			readFunc: func(p string) ([]byte, error) {
+				return []byte("{"), nil
+			},
+			want: nil,
+		},
+		{
+			name:                 "ReadHANAMonitoringConfigSuccessfully",
+			path:                 "/sample/path",
+			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
+			readFunc: func(p string) ([]byte, error) {
+				return testCustomHANAMonitoringConfigQueriesJSON, nil
+			},
+			want: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:                "127.0.0.1",
+						Port:                "30015",
+						User:                "SYSTEM",
+						Password:            "PASSWORD",
+						EnableSsl:           false,
+						ValidateCertificate: true,
+					},
+				},
+				Queries: []*cpb.Query{
+					&cpb.Query{
+						Name:    "host_queries",
+						Sql:     "sample sql",
+						Enabled: true,
+						Columns: []*cpb.Column{
+							&cpb.Column{Name: "host", MetricType: cpb.MetricType_METRIC_LABEL, ValueType: cpb.ValueType_VALUE_STRING},
+						},
+					},
+					&cpb.Query{Name: "custom_memory_utilization",
+						Description: "Custom Total memory utilization by services\n",
+						Enabled:     true,
+						Sql:         "sample sql",
+						Columns: []*cpb.Column{
+							&cpb.Column{Name: "mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+							&cpb.Column{Name: "resident_mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			defaultHMQueriesContent = test.testDefaultHMContent
+			got := readConfig(test.path, test.readFunc)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("Test: %s readHANAMonitoringConfiguration() (-want +got):\n%s", test.name, diff)
+			}
+		})
+	}
+}
+
+func TestApplyOverrides(t *testing.T) {
+	tests := []struct {
+		name             string
+		defaultQueryList []*cpb.Query
+		customQueryList  []*cpb.Query
+		wantCount        int
+	}{
+		{
+			name: "OnlyDefaultQueryEnabled",
+			defaultQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name: "host_query",
+					Sql:  "sample sql",
+				},
+				&cpb.Query{
+					Name: "service_query",
+					Sql:  "sample_sql",
+				},
+			},
+			customQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name:    "default_service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+				},
+				&cpb.Query{
+					Name:    "default_host_query",
+					Sql:     "sample sql",
+					Enabled: true,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: false,
+				},
+			},
+			wantCount: 2,
+		},
+		{
+			name: "OnlyCustomQueryEnabled",
+			defaultQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name: "host_query",
+					Sql:  "sample sql",
+				},
+				&cpb.Query{
+					Name: "service_query",
+					Sql:  "sample_sql",
+				},
+			},
+			customQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name:    "default_service_query",
+					Sql:     "sample_sql",
+					Enabled: false,
+				},
+				&cpb.Query{
+					Name:    "default_host_query",
+					Sql:     "sample sql",
+					Enabled: false,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name: "OnlyDefaultQueryEnabled",
+			defaultQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name: "host_query",
+					Sql:  "sample sql",
+				},
+				&cpb.Query{
+					Name: "service_query",
+					Sql:  "sample_sql",
+				},
+			},
+			customQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name:    "default_service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+				},
+				&cpb.Query{
+					Name:    "default_host_query",
+					Sql:     "sample sql",
+					Enabled: false,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+			wantCount: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := applyOverrides(test.defaultQueryList, test.customQueryList)
+			if len(got) != test.wantCount {
+				t.Errorf("Test: %s applyOverrides() (-want +got): \n%s", test.name, cmp.Diff(test.wantCount, len(got)))
 			}
 		})
 	}

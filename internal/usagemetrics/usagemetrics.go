@@ -62,6 +62,9 @@ const (
 	ProcessMetricsMetricClientCreateFailure
 	NoSAPInstancesFound
 	HANAMonitoringCollectionFailure
+	HANAMonitoringConfigReadFailure
+	MalformedHANAMonitoringConfigFile
+	MalformedDefaultHANAMonitoringQueriesFile
 )
 
 // Agent wide action mappings.
