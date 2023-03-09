@@ -81,6 +81,26 @@ message SapDiscovery {
 
     // Unix timestamp of when this resource last had its discovery data updated.
     google.protobuf.Timestamp update_time = 5;
+
+    // State of the resource in the current discovery phase.
+    enum ResourceState {
+      // Undefined resource state
+      RESOURCE_STATE_UNSPECIFIED = 0;
+      // Resource was added this cycle
+      ADDED = 1;
+      // Resource already discovered, just updated this cycle
+      UPDATED = 2;
+      // Resource already discovered, but has been explicitly removed this cycle
+      REMOVED = 3;
+      // Resource already discovered, but has been replaced by a new resource
+      // this cycle
+      REPLACED = 4;
+      // Resource already discovered, but is missing or unresponsive this cycle
+      MISSING = 5;
+    }
+
+    // Indicates whether this is a new, updated, or missing resource.
+    ResourceState resource_state = 6;
   }
   // Message describing the system component.
   message Component {
