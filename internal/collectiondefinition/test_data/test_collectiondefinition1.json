@@ -1,0 +1,841 @@
+{
+  "workload_validation": {
+    "validation_system": {
+      "system_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "instance_name"
+          },
+          "value": "INSTANCE_NAME"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "os"
+          },
+          "value": "OS_NAME_VERSION"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "agent"
+          },
+          "value": "AGENT_NAME"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "agent_version"
+          },
+          "value": "AGENT_VERSION"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "network_ips"
+          },
+          "value": "NETWORK_IPS"
+        }
+      ],
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "gcloud"
+          },
+          "os_vendor": "ALL",
+          "command": "gcloud",
+          "args": ["-v"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "Google Cloud SDK"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "gsutil"
+          },
+          "os_vendor": "ALL",
+          "command": "gsutil",
+          "args": ["-v"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "gsutil version"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "agent_state"
+          },
+          "os_vendor": "ALL",
+          "command": "systemctl",
+          "args": ["is-active", "google-cloud-sap-agent"],
+          "or_eval_rules": [
+            {
+              "eval_rules": [
+                {
+                  "output_source": "STDOUT",
+                  "output_contains": "could not be found"
+                }
+              ],
+              "if_true": {
+                "value_from_literal": "notinstalled"
+              }
+            },
+            {
+              "eval_rules": [
+                {
+                  "output_source": "STDOUT",
+                  "output_equals": "active"
+                }
+              ],
+              "if_true": {
+                "value_from_literal": "running"
+              },
+              "if_false": {
+                "value_from_literal": "notrunning"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "validation_corosync": {
+      "config_path": "/etc/corosync/corosync.conf",
+      "config_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "token"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "token:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "token: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "token_retransmits_before_loss_const"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "token_retransmits_before_loss_const:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "token_retransmits_before_loss_const: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "consensus"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "consensus:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "consensus: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "join"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "join:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "join: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "max_messages"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "max_messages:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "max_messages: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "transport"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "transport:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "transport: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "fail_recv_const"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "fail_recv_const:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "fail_recv_const: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googlapis.com/sap/validation/corosync",
+            "label": "two_node"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "two_node:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "two_node: (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        }
+      ],
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "token_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.token"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.token"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "token_retransmits_before_loss_const_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.token_retransmits_before_loss_const"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.token_retransmits_before_loss_const"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "consensus_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.consensus"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.consensus"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "join_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.join"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.join"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "max_messages_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.max_messages"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.max_messages"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "transport_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.transport"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.transport"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "fail_recv_const_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.fail_recv_const"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.fail_recv_const"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/corosync",
+            "label": "two_node_runtime"
+          },
+          "os_vendor": "ALL",
+          "command": "corosync-cmapctl",
+          "args": ["-g", "totem.two_node"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "totem.two_node"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "= (\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        }
+      ]
+    },
+    "validation_hana": {
+      "global_ini_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "fast_restart"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "basepath_persistent_memory_volumes"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "enabled"
+            },
+            "if_false": {
+              "value_from_literal": "disabled"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "ha_sr_hook_configured"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "[ha_dr_provider_SAPHanaSR]"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "yes"
+            },
+            "if_false": {
+              "value_from_literal": "no"
+            }
+          }
+        }
+      ],
+      "hana_disk_volume_metrics": [
+        {
+          "basepath_volume": "basepath_datavolumes",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_data_type"
+              },
+              "value": "TYPE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_data_mount"
+              },
+              "value": "MOUNT"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_data_size"
+              },
+              "value": "SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_data_pd_size"
+              },
+              "value": "PD_SIZE"
+            }
+          ]
+        },
+        {
+          "basepath_volume": "basepath_logvolumes",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_log_type"
+              },
+              "value": "TYPE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_log_mount"
+              },
+              "value": "MOUNT"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_log_size"
+              },
+              "value": "SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "disk_log_pd_size"
+              },
+              "value": "PD_SIZE"
+            }
+          ]
+        }
+      ],
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "numa_balancing"
+          },
+          "os_vendor": "ALL",
+          "command": "cat",
+          "args": ["/proc/sys/kernel/numa_balancing"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_equals": "1"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "enabled"
+            },
+            "if_false": {
+              "value_from_literal": "disabled"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "transparent_hugepages"
+          },
+          "os_vendor": "ALL",
+          "command": "cat",
+          "args": ["/sys/kernel/mm/transparent_hugepage/enabled"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "[enabled]"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "enabled"
+            },
+            "if_false": {
+              "value_from_literal": "disabled"
+            }
+          }
+        }
+      ]
+    },
+    "validation_netweaver": {
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/netweaver",
+            "label": "foo"
+          },
+          "os_vendor": "ALL",
+          "command": "foo",
+          "args": ["--bar"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "foobar"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        }
+      ]
+    },
+    "validation_pacemaker": {
+      "config_metrics": {
+        "primitive_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "pcmk_delay_base"
+            },
+            "value": "PCMK_DELAY_BASE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "pcmk_delay_max"
+            },
+            "value": "PCMK_DELAY_MAX"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "pcmk_monitor_retries"
+            },
+            "value": "PCMK_MONITOR_RETRIES"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "pcmk_reboot_timeout"
+            },
+            "value": "PCMK_REBOOT_TIMEOUT"
+          }
+        ],
+        "rsc_location_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "location_preference_set"
+            },
+            "value": "LOCATION_PREFERENCE_SET"
+          }
+        ],
+        "rsc_option_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "migration_threshold"
+            },
+            "value": "MIGRATION_THRESHOLD"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "resource_stickiness"
+            },
+            "value": "RESOURCE_STICKINESS"
+          }
+        ],
+        "hana_operation_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_start_timeout"
+            },
+            "value": "SAPHANA_START_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_stop_timeout"
+            },
+            "value": "SAPHANA_STOP_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_promote_timeout"
+            },
+            "value": "SAPHANA_PROMOTE_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_demote_timeout"
+            },
+            "value": "SAPHANA_DEMOTE_TIMEOUT"
+          }
+        ],
+        "fence_agent_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "fence_agent"
+            },
+            "value": "FENCE_AGENT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "fence_agent_compute_api_access"
+            },
+            "value": "COMPUTE_API_ACCESS"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "fence_agent_logging_api_access"
+            },
+            "value": "LOGGING_API_ACCESS"
+          }
+        ],
+        "xpath_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "xpath"
+            },
+            "xpath": "//foo/bar",
+            "and_eval_rules": {
+              "eval_rules": [
+                {
+                  "output_contains": "foobar"
+                }
+              ],
+              "if_true": {
+                "value_from_literal": "true"
+              },
+              "if_false": {
+                "value_from_literal": "false"
+              }
+            }
+          }
+        ]
+      },
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/pacemaker",
+            "label": "foo"
+          },
+          "os_vendor": "ALL",
+          "command": "foo",
+          "args": ["--bar"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "foobar"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        }
+      ]
+    },
+    "validation_custom": {
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/custom",
+            "label": "foo"
+          },
+          "os_vendor": "ALL",
+          "command": "foo",
+          "args": ["--bar"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "foobar"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
