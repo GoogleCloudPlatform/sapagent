@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -37,7 +38,7 @@ func fakeQueryFuncError(context.Context, string, ...any) (*sql.Rows, error) {
 	return nil, cmpopts.AnyError
 }
 
-func TestStartMonitoring(t *testing.T) {
+func TestStart(t *testing.T) {
 	tests := []struct {
 		name   string
 		params Parameters
@@ -73,13 +74,30 @@ func TestStartMonitoring(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "Succeeds",
+			name: "FailsWithEmptyDatabases",
 			params: Parameters{
 				Config: &cpb.Configuration{
 					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
 						Enabled: true,
 						Queries: []*cpb.Query{
 							&cpb.Query{},
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "Succeeds",
+			params: Parameters{
+				Config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*cpb.Query{
+							&cpb.Query{SampleIntervalSec: 5},
+						},
+						HanaInstances: []*cpb.HANAInstance{
+							&cpb.HANAInstance{Password: "fakePassword"},
 						},
 					},
 				},
@@ -91,11 +109,31 @@ func TestStartMonitoring(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
-			got := StartMonitoring(ctx, test.params)
+			got := Start(ctx, test.params)
 			if got != test.want {
 				t.Errorf("Start(%#v) = %t, want: %t", test.params, got, test.want)
 			}
 		})
+	}
+}
+
+func TestQueryAndSend(t *testing.T) {
+	// fakeQueryFuncError is needed here since a sql.Rows object cannot be easily created outside of the database/sql package.
+	// However, we can still test the queryAndSend() workflow loop and test breaking out of it with a context timeout.
+	queryFunc := fakeQueryFuncError
+	query := &cpb.Query{
+		Columns: []*cpb.Column{
+			&cpb.Column{},
+		},
+	}
+	var timeout, sampleInterval int64 = 1, 1
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	got := queryAndSend(ctx, queryFunc, query, timeout, sampleInterval)
+	want := cmpopts.AnyError
+	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
+		t.Errorf("queryAndSend(%v, fakeQueryFuncError, %v, %v, %v) = %v want: %v.", ctx, query, timeout, sampleInterval, got, want)
 	}
 }
 
@@ -194,10 +232,10 @@ func TestQueryDatabase(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, _, got := queryDatabase(context.Background(), test.params, test.queryFunc, test.query)
+			_, _, got := queryDatabase(context.Background(), test.queryFunc, test.query)
 
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("queryDatabase(%#v, %#v, %#v) = %v, want: %v", test.params, test.queryFunc, test.query, got, test.want)
+				t.Errorf("queryDatabase(%#v, %#v) = %v, want: %v", test.queryFunc, test.query, got, test.want)
 			}
 		})
 	}

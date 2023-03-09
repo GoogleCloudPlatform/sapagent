@@ -373,7 +373,7 @@ func startServices(goos string) {
 		}
 
 		// Start HANA Monitoring
-		hanamonitoring.StartMonitoring(ctx, hanamonitoring.Parameters{
+		hanamonitoring.Start(ctx, hanamonitoring.Parameters{
 			Config:     config,
 			GCEService: gceService,
 		})

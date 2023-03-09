@@ -42,9 +42,9 @@ type Parameters struct {
 	GCEService gceInterface
 }
 
-// StartMonitoring begins the collection goroutine if enabled.
-// Returns true if the collection goroutine is started, and false otherwise.
-func StartMonitoring(ctx context.Context, params Parameters) bool {
+// Start begins the query goroutines if enabled.
+// Returns true if the query goroutines are started, and false otherwise.
+func Start(ctx context.Context, params Parameters) bool {
 	cfg := params.Config.GetHanaMonitoringConfiguration()
 	if !cfg.GetEnabled() {
 		log.Logger.Info("HANA Monitoring disabled, not starting HANA Monitoring.")
@@ -55,41 +55,67 @@ func StartMonitoring(ctx context.Context, params Parameters) bool {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		return false
 	}
-	go start(ctx, params)
-	return true
-}
-
-// start continuously collects HANA Monitoring metrics by querying HANA databases.
-func start(ctx context.Context, params Parameters) {
 	databases := connectToDatabases(ctx, params)
 	if len(databases) == 0 {
 		log.Logger.Info("No HANA databases to query, not starting HANA Monitoring.")
 		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
-		return
+		return false
 	}
 
-	// TODO: Execute the queries concurrently with specified intervals in the config.
 	log.Logger.Info("Starting HANA Monitoring.")
 	usagemetrics.Error(usagemetrics.CollectHANAMonitoringMetrics)
 	for _, db := range databases {
 		for _, query := range params.Config.GetHanaMonitoringConfiguration().GetQueries() {
-			ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(params.Config.GetHanaMonitoringConfiguration().GetQueryTimeoutSec()))
-			defer cancel()
-			rows, cols, err := queryDatabase(ctx, params, db.QueryContext, query)
-			if err != nil {
-				log.Logger.Errorw("Could not execute query", "query", query.GetName(), "err", err)
-				continue
+			sampleInterval := cfg.GetSampleIntervalSec()
+			if query.GetSampleIntervalSec() >= 5 {
+				sampleInterval = query.GetSampleIntervalSec()
 			}
-
-			for rows.Next() {
-				if err := rows.Scan(cols...); err != nil {
-					log.Logger.Error(err)
-					continue
-				}
-				// TODO: Package and send results to cloud monitoring.
-			}
+			// TODO: Add extra information for debugging purposes (host, port, user, etc.)
+			go queryAndSend(ctx, db.QueryContext, query, cfg.GetQueryTimeoutSec(), sampleInterval)
 		}
 	}
+	return true
+}
+
+// queryAndSend runs the perpetual querying and sending of results to cloud monitoring workflow.
+// If any errors occur during query or send, they are logged and the workflow continues to try again next sampleInterval.
+// For unit testing, the caller can cancel the context to terminate the workflow which will return the last error seen or nil if no errors occurred.
+func queryAndSend(ctx context.Context, queryFunc queryFunc, query *cpb.Query, timeout, sampleInterval int64) error {
+	var lastErr error
+	for {
+		select {
+		case <-ctx.Done():
+			log.Logger.Info("Context cancelled, exiting queryAndSend.")
+			return lastErr
+		default:
+			ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
+			sent, batchCount, err := queryAndSendOnce(ctxTimeout, queryFunc, query)
+			if err != nil {
+				log.Logger.Errorw("Error querying database or sending metrics", "error", err)
+				usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
+				lastErr = err
+			}
+			log.Logger.Debugw("Sent metrics from queryAndSend.", "sent", sent, "batches", batchCount, "sleeping", sampleInterval)
+			cancel()
+			time.Sleep(time.Duration(sampleInterval) * time.Second)
+		}
+	}
+}
+
+// queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.
+func queryAndSendOnce(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (sent, batchCount int64, err error) {
+	rows, cols, err := queryDatabase(ctx, queryFunc, query)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(cols...); err != nil {
+			return 0, 0, err
+		}
+		// TODO: Package and send results to cloud monitoring.
+	}
+	return 0, 0, nil
 }
 
 // createColumns creates pointers to the types defined in the configuration for each column in a query.
@@ -119,7 +145,7 @@ func createColumns(queryColumns []*cpb.Column) []any {
 }
 
 // queryDatabase attempts to execute the specified query, returning a sql.Rows iterator and a slice for storing the column results of each row.
-func queryDatabase(ctx context.Context, params Parameters, queryFunc queryFunc, query *cpb.Query) (*sql.Rows, []any, error) {
+func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (*sql.Rows, []any, error) {
 	if query == nil {
 		return nil, nil, errors.New("no query specified")
 	}
