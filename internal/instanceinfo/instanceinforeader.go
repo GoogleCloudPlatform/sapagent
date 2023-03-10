@@ -74,6 +74,12 @@ func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAdd
 		return
 	}
 
+	// Nil check before dereferencing to avoid panics.
+	if r.dm == nil || r.gceService == nil {
+		log.Logger.Debug("Disk mapper and GCE service must be non-nil to read instance info")
+		return
+	}
+
 	projectID, zone, instanceID := cp.GetProjectId(), cp.GetZone(), cp.GetInstanceId()
 	instance, err := r.gceService.GetInstance(projectID, zone, instanceID)
 	if err != nil {

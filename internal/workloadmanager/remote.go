@@ -162,7 +162,7 @@ func collectRemoteGcloud(params Parameters, rc *cnfpb.WorkloadValidationRemoteCo
 	// gcloud compute ssh ---project someproject --zone somezone [--tunnel-through-iap] [--internal-ip] [otherargs] [user@]instancename --command="commandtoexec"
 	sshArgs = []string{"compute", "ssh"}
 	sshArgs = appendCommonGcloudArgs(sshArgs, rc, i)
-	sshArgs = append(sshArgs, iName, "--command", "sudo "+remoteAgentBinary+fmt.Sprintf(" --remote -p=%s -z=%s -i=%s -n=%s; rm "+remoteAgentBinary, i.GetProjectId(), i.GetZone(), i.GetInstanceId(), i.GetInstanceName()))
+	sshArgs = append(sshArgs, iName, "--command", "sudo "+remoteAgentBinary+fmt.Sprintf(" remote -p=%s -z=%s -i=%s -n=%s; rm "+remoteAgentBinary, i.GetProjectId(), i.GetZone(), i.GetInstanceId(), i.GetInstanceName()))
 	output, stdErr, err = params.CommandRunnerNoSpace("gcloud", sshArgs...)
 	if err != nil {
 		log.Logger.Errorw("Could not execute remote collection on instance", "instance", i, "error", err, "stderr", stdErr, "stdout", output)
@@ -241,8 +241,8 @@ func collectRemoteSSH(params Parameters, rc *cnfpb.WorkloadValidationRemoteColle
 
 	sshArgs := []string{}
 	sshArgs = appendSSHArgs(sshArgs, rc, i, false)
-	//append "remoteAgentBinary --remote -h=false -p=projectID -i=instanceID -n=instanceName -z=zone"
-	sshArgs = append(sshArgs, remoteAgentBinary, "--remote", "-h=false", "-p="+projectID+" -i="+instanceID+" -n="+instanceName+" -z="+zone)
+	//append "remoteAgentBinary remote -h=false -p=projectID -i=instanceID -n=instanceName -z=zone"
+	sshArgs = append(sshArgs, remoteAgentBinary, "remote", "-h=false", "-p="+projectID+" -i="+instanceID+" -n="+instanceName+" -z="+zone)
 	output, stdErr, err = params.CommandRunnerNoSpace("ssh", sshArgs...)
 
 	if err != nil {

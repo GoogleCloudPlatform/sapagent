@@ -22,7 +22,7 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
-func TestSetupLoggingToFile(t *testing.T) {
+func TestSetupDaemonLogging(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      *cpb.Configuration
@@ -67,7 +67,7 @@ func TestSetupLoggingToFile(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		SetupLoggingToFile(test.os, test.config.LogLevel)
+		SetupDaemonLogging(test.os, test.config.LogLevel)
 		got := GetLevel()
 		if got != test.want {
 			t.Errorf("setupLogging(goos: %s, l: %s) level is incorrect, got: %s, want: %s", test.os, test.config.LogLevel.String(), got, test.want)

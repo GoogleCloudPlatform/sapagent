@@ -41,23 +41,29 @@ var defaultHMQueriesContent []byte
 
 const (
 	// AgentName is a short-hand name of the agent.
-	AgentName = "sapagent"
-	// AgentVersion is the version of the agent.
+	AgentName = `sapagent`
+
 	// LINT.IfChange
-	AgentVersion = "1.1"
+
+	// AgentVersion is the version of the agent.
+	AgentVersion = `1.1`
 	// LINT.ThenChange(//depot/google3/third_party/sapagent/BUILD)
-	linuxConfigPath               = "/etc/google-cloud-sap-agent/configuration.json"
-	linuxHANAMonitoringConfigPath = "/etc/google-cloud-sap-agent/hm-configuration.json"
-	windowsConfigPath             = "C:\\Program Files\\Google\\google-cloud-sap-agent\\conf\\configuration.json"
+
+	// LinuxConfigPath is the default path to agent configuration file on linux.
+	LinuxConfigPath = `/etc/google-cloud-sap-agent/configuration.json`
+	// WindowsConfigPath is the default path to agent configuration file on linux.
+	WindowsConfigPath = `C:\Program Files\Google\google-cloud-sap-agent\conf\configuration.json`
+	// LinuxHANAMonitoringConfigPath is the path of configuration specific to hana monitoring functionality.
+	LinuxHANAMonitoringConfigPath = `/etc/google-cloud-sap-agent/hm-configuration.json`
 )
 
 // ReadFromFile reads configuration from given file into proto.
 func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	p := path
 	if len(p) == 0 {
-		p = linuxConfigPath
+		p = LinuxConfigPath
 		if ros == "windows" {
-			p = windowsConfigPath
+			p = WindowsConfigPath
 		}
 	}
 	content, err := read(p)
@@ -75,7 +81,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		log.Logger.Errorw("Invalid content in the configuration file", "file", p, "content", string(content), "error", err)
 	}
-	config.HanaMonitoringConfiguration = readConfig(linuxHANAMonitoringConfigPath, read)
+	config.HanaMonitoringConfiguration = readConfig(LinuxHANAMonitoringConfigPath, read)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
 	return config
 }

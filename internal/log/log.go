@@ -20,7 +20,7 @@ Package log provides a wrapper to the underlying logging library.
 Logging should be done by accessing the log.Logger object to issue log statements.
 
 Using any of the base loggers (Debug, Info, Warn, Error) any additional fields will be concatenated
-onto into the "msg" field.  This may cause serialization issues.
+onto the "msg" field.  This may cause serialization issues.
 
 It's suggested to use the "with" log methods (Debugw, Infow, Warnw, Errorw) to include additional
 fields in the log line.
@@ -38,7 +38,7 @@ Examples:
 NOT RECOMMENDED
 
 	Log data in the message and additional fields:
-		log.Logger.Infow(fmt.Sprtingf("My message to log with data 5v"), "error", error)
+		log.Logger.Infow(fmt.Sprintf("My message to log with data 5v"), "error", error)
 
 	Log data directly into the message without serialization:
 		log.Logger.Infof("My message to log with data %v", 77.33232)
@@ -47,7 +47,7 @@ NOT RECOMMENDED
 Note:
 
 	    When using the logger if you use the "f" methods such as Infof the data in the message will
-			be serialized unless you use Sprintf style in the message and the correect type on the data
+			be serialized unless you use Sprintf style in the message and the correct type on the data
 			such as %v, %s, %d.  The suggested approach is to separate any data into separate fields for
 			logging.
 */
@@ -69,18 +69,46 @@ var Logger *zap.SugaredLogger
 var level string
 var logfile string
 
+const (
+	// LinuxDaemonLogPath is the log path for daemon mode features on linux.
+	LinuxDaemonLogPath = `/var/log/google-cloud-sap-agent.log`
+	// WindowsDaemonLogPath is the log path for daemon mode features on windows.
+	WindowsDaemonLogPath = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent.log`
+
+	// LinuxOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
+	LinuxOneTimeLogPrefix = `/var/log/google-cloud-sap-agent`
+	// WindowsOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
+	WindowsOneTimeLogPrefix = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent`
+)
+
 func init() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 	Logger = logger.Sugar()
 }
 
-// SetupLoggingToFile provides the configuration of the Logger to file based on configuration of the agent.
-func SetupLoggingToFile(goos string, l cpb.Configuration_LogLevel) {
-	logfile = "/var/log/google-cloud-sap-agent.log"
+// SetupDaemonLogging creates logging config for the agent's daemon mode.
+func SetupDaemonLogging(goos string, l cpb.Configuration_LogLevel) {
+	file := LinuxDaemonLogPath
 	if goos == "windows" {
-		logfile = "C:\\Program Files\\Google\\google-cloud-sap-agent\\logs\\google-cloud-sap-agent.log"
+		file = WindowsDaemonLogPath
 	}
+	SetupLogging(file, l)
+}
+
+// SetupOneTimeLogging creates logging config for the agent's one time execution.
+func SetupOneTimeLogging(goos, subcommandName string, l cpb.Configuration_LogLevel) {
+	prefix := LinuxOneTimeLogPrefix
+	if goos == "windows" {
+		prefix = WindowsOneTimeLogPrefix
+	}
+	file := prefix + subcommandName + ".log"
+	SetupLogging(file, l)
+}
+
+// SetupLogging uses the agent configuration to set up the file Logger.
+func SetupLogging(file string, l cpb.Configuration_LogLevel) {
+	logfile = file
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.TimeKey = "timestamp"

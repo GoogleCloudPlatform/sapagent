@@ -126,7 +126,7 @@ systemctl enable google-cloud-sap-agent
 systemctl start google-cloud-sap-agent
 
 # log usage metrics for install
-timeout 30 /usr/bin/google_cloud_sap_agent --log-usage -lus INSTALLED || true
+timeout 30 /usr/bin/google_cloud_sap_agent logusage -s INSTALLED || true
 
 # next steps instructions
 echo ""
@@ -158,7 +158,7 @@ if [ "$1" = "0" ]; then
       systemctl disable google-cloud-sap-agent
   fi
   # log usage metrics for uninstall
-  timeout 30 /usr/bin/google_cloud_sap_agent --log-usage -lus UNINSTALLED || true
+  timeout 30 /usr/bin/google_cloud_sap_agent logusage -s UNINSTALLED || true
 fi
 if [ "$1" = "1" ]; then
   VERSION_BEFORE=$(rpm -q google-cloud-sap-agent)
@@ -176,5 +176,5 @@ if [ "$1" = "0" ]; then
 else
   # upgrade
   # log usage metrics for upgrade
-  timeout 30 /usr/bin/google_cloud_sap_agent --log-usage -lus UPDATED -lup "${VERSION_BEFORE}" || true
+  timeout 30 /usr/bin/google_cloud_sap_agent logusage -s UPDATED -pv "${VERSION_BEFORE}" || true
 fi

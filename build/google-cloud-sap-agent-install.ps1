@@ -41,7 +41,7 @@ function Log-Write {
 function Log-Install {
   #.DESCRIPTION
   #  Invokes the service with usage logging enabled to log an install
-  Start-Process $INSTALL_DIR\$SVC_NAME_EXE -ArgumentList '--log-usage','-lus','INSTALLED' | Wait-Process -Timeout 30
+  Start-Process $INSTALL_DIR\$SVC_NAME_EXE -ArgumentList 'logusage','-s','INSTALLED' | Wait-Process -Timeout 30
 }
 
 function CreateItem-IfNotExists {

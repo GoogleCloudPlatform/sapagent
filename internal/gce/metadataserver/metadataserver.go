@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -147,7 +148,7 @@ func isStatusSuccess(statusCode int) bool {
 
 // parseZone retrieves the zone name from the metadata server response.
 //
-// The metadata server returns zone as "projects/PROJECT_NUM/zones/ZONE_NAME" but we only need ZONE_NAME.
+// The metadata server returns the zone as "projects/PROJECT_NUM/zones/ZONE_NAME" but we only need ZONE_NAME.
 func parseZone(raw string) string {
 	var zone string
 	match := zonePattern.FindStringSubmatch(raw)
@@ -155,4 +156,11 @@ func parseZone(raw string) string {
 		zone = match[1]
 	}
 	return zone
+}
+
+// FetchCloudProperties retrieves the cloud properties using a backoff policy.
+func FetchCloudProperties() *instancepb.CloudProperties {
+	exp := backoff.NewExponentialBackOff()
+	exp.InitialInterval = 5 * time.Second
+	return CloudPropertiesWithRetry(backoff.WithMaxRetries(exp, 2)) // 2 retries (3 total attempts)
 }
