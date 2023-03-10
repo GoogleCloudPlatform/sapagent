@@ -120,7 +120,10 @@ func TestStart(t *testing.T) {
 func TestQueryAndSend(t *testing.T) {
 	// fakeQueryFuncError is needed here since a sql.Rows object cannot be easily created outside of the database/sql package.
 	// However, we can still test the queryAndSend() workflow loop and test breaking out of it with a context timeout.
-	queryFunc := fakeQueryFuncError
+	db := &database{
+		queryFunc: fakeQueryFuncError,
+		instance:  &cpb.HANAInstance{Password: "fakePassword"},
+	}
 	query := &cpb.Query{
 		Columns: []*cpb.Column{
 			&cpb.Column{},
@@ -130,7 +133,7 @@ func TestQueryAndSend(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 
-	got := queryAndSend(ctx, queryFunc, query, timeout, sampleInterval)
+	got := queryAndSend(ctx, db, query, timeout, sampleInterval)
 	want := cmpopts.AnyError
 	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
 		t.Errorf("queryAndSend(%v, fakeQueryFuncError, %v, %v, %v) = %v want: %v.", ctx, query, timeout, sampleInterval, got, want)

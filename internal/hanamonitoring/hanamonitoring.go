@@ -42,6 +42,12 @@ type Parameters struct {
 	GCEService gceInterface
 }
 
+// database holds the relevant information for querying and debugging the database.
+type database struct {
+	queryFunc queryFunc
+	instance  *cpb.HANAInstance
+}
+
 // Start begins the query goroutines if enabled.
 // Returns true if the query goroutines are started, and false otherwise.
 func Start(ctx context.Context, params Parameters) bool {
@@ -70,8 +76,7 @@ func Start(ctx context.Context, params Parameters) bool {
 			if query.GetSampleIntervalSec() >= 5 {
 				sampleInterval = query.GetSampleIntervalSec()
 			}
-			// TODO: Add extra information for debugging purposes (host, port, user, etc.)
-			go queryAndSend(ctx, db.QueryContext, query, cfg.GetQueryTimeoutSec(), sampleInterval)
+			go queryAndSend(ctx, db, query, cfg.GetQueryTimeoutSec(), sampleInterval)
 		}
 	}
 	return true
@@ -80,8 +85,9 @@ func Start(ctx context.Context, params Parameters) bool {
 // queryAndSend runs the perpetual querying and sending of results to cloud monitoring workflow.
 // If any errors occur during query or send, they are logged and the workflow continues to try again next sampleInterval.
 // For unit testing, the caller can cancel the context to terminate the workflow which will return the last error seen or nil if no errors occurred.
-func queryAndSend(ctx context.Context, queryFunc queryFunc, query *cpb.Query, timeout, sampleInterval int64) error {
+func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, sampleInterval int64) error {
 	var lastErr error
+	user, host, port, queryName := db.instance.GetUser(), db.instance.GetHost(), db.instance.GetPort(), query.GetName()
 	for {
 		select {
 		case <-ctx.Done():
@@ -89,13 +95,13 @@ func queryAndSend(ctx context.Context, queryFunc queryFunc, query *cpb.Query, ti
 			return lastErr
 		default:
 			ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
-			sent, batchCount, err := queryAndSendOnce(ctxTimeout, queryFunc, query)
+			sent, batchCount, err := queryAndSendOnce(ctxTimeout, db, query)
 			if err != nil {
-				log.Logger.Errorw("Error querying database or sending metrics", "error", err)
+				log.Logger.Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "error", err)
 				usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
 				lastErr = err
 			}
-			log.Logger.Debugw("Sent metrics from queryAndSend.", "sent", sent, "batches", batchCount, "sleeping", sampleInterval)
+			log.Logger.Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", sampleInterval)
 			cancel()
 			time.Sleep(time.Duration(sampleInterval) * time.Second)
 		}
@@ -103,8 +109,8 @@ func queryAndSend(ctx context.Context, queryFunc queryFunc, query *cpb.Query, ti
 }
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.
-func queryAndSendOnce(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (sent, batchCount int64, err error) {
-	rows, cols, err := queryDatabase(ctx, queryFunc, query)
+func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query) (sent, batchCount int64, err error) {
+	rows, cols, err := queryDatabase(ctx, db.queryFunc, query)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -161,8 +167,8 @@ func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (
 }
 
 // connectToDatabases attempts to create a *sql.DB connection for each HANAInstance.
-func connectToDatabases(ctx context.Context, params Parameters) []*sql.DB {
-	var databases []*sql.DB
+func connectToDatabases(ctx context.Context, params Parameters) []*database {
+	var databases []*database
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
 		password := i.GetPassword()
 		if password == "" && i.GetSecretName() == "" {
@@ -176,8 +182,10 @@ func connectToDatabases(ctx context.Context, params Parameters) []*sql.DB {
 			}
 		}
 
-		if database, err := databaseconnector.Connect(i.GetUser(), password, i.GetHost(), i.GetPort()); err == nil {
-			databases = append(databases, database)
+		if handle, err := databaseconnector.Connect(i.GetUser(), password, i.GetHost(), i.GetPort()); err == nil {
+			databases = append(databases, &database{
+				queryFunc: handle.QueryContext,
+				instance:  i})
 		}
 	}
 	return databases
