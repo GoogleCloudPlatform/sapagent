@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/configurationmetricreader"
@@ -47,6 +48,7 @@ type Parameters struct {
 	InstanceInfoReader instanceinfo.Reader
 	CloudMetricReader  cloudmetricreader.CloudMetricReader
 	AgentTime          agenttime.AgentTime
+	HeartbeatSpec      *heartbeat.Spec
 }
 
 var metricsXML string = "<metrics></metrics>"
@@ -85,32 +87,44 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 	cpusr := cpustatsreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand)
 	mmr := memorymetricreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand)
 	dsr := diskstatsreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand)
+	collectTicker := time.NewTicker(60 * time.Second)
+	heartbeatTicker := params.HeartbeatSpec.CreateTicker()
+	defer collectTicker.Stop()
+	defer heartbeatTicker.Stop()
 
 	for {
-		log.Logger.Info("Collecting host metrics...")
-		usagemetrics.Action(usagemetrics.CollectHostMetrics) // Collecting SAP host metrics
+		select {
+		case <-ctx.Done():
+			log.Logger.Info("cancellation requested")
+			return
+		case <-heartbeatTicker.C:
+			params.HeartbeatSpec.Beat()
+		case <-collectTicker.C:
+			log.Logger.Info("Collecting host metrics...")
+			params.HeartbeatSpec.Beat()
+			usagemetrics.Action(usagemetrics.CollectHostMetrics) // Collecting SAP host metrics
 
-		params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
-		cpuStats := cpusr.Read()
-		diskStats := dsr.Read(params.InstanceInfoReader.InstanceProperties())
-		memoryStats := mmr.MemoryStats()
-		params.AgentTime.UpdateRefreshTimes()
+			params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
+			cpuStats := cpusr.Read()
+			diskStats := dsr.Read(params.InstanceInfoReader.InstanceProperties())
+			memoryStats := mmr.MemoryStats()
+			params.AgentTime.UpdateRefreshTimes()
 
-		var allMetrics []*mpb.Metric
+			var allMetrics []*mpb.Metric
 
-		cloudMetrics := params.CloudMetricReader.Read(ctx, params.Config, params.InstanceInfoReader.InstanceProperties(), params.AgentTime)
-		allMetrics = append(allMetrics, cloudMetrics.GetMetrics()...)
+			cloudMetrics := params.CloudMetricReader.Read(ctx, params.Config, params.InstanceInfoReader.InstanceProperties(), params.AgentTime)
+			allMetrics = append(allMetrics, cloudMetrics.GetMetrics()...)
 
-		osMetrics := osmetricreader.Read(cpuStats, params.InstanceInfoReader.InstanceProperties(), memoryStats, diskStats, params.AgentTime)
-		allMetrics = append(allMetrics, osMetrics.GetMetrics()...)
+			osMetrics := osmetricreader.Read(cpuStats, params.InstanceInfoReader.InstanceProperties(), memoryStats, diskStats, params.AgentTime)
+			allMetrics = append(allMetrics, osMetrics.GetMetrics()...)
 
-		configMetrics := configmr.Read(params.Config, cpuStats, params.InstanceInfoReader.InstanceProperties(), params.AgentTime)
-		allMetrics = append(allMetrics, configMetrics.GetMetrics()...)
+			configMetrics := configmr.Read(params.Config, cpuStats, params.InstanceInfoReader.InstanceProperties(), params.AgentTime)
+			allMetrics = append(allMetrics, configMetrics.GetMetrics()...)
 
-		metricsCollection := &mpb.MetricsCollection{Metrics: allMetrics}
-		metricsXML = GenerateXML(metricsCollection)
+			metricsCollection := &mpb.MetricsCollection{Metrics: allMetrics}
+			metricsXML = GenerateXML(metricsCollection)
 
-		log.Logger.Infow("Metrics collection complete", "metricscollected", len(metricsCollection.GetMetrics()))
-		time.Sleep(60 * time.Second)
+			log.Logger.Infow("Metrics collection complete", "metricscollected", len(metricsCollection.GetMetrics()))
+		}
 	}
 }

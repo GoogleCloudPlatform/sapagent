@@ -20,6 +20,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"sync"
 	"time"
 
 	"io"
@@ -42,6 +43,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	gcefake "github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -416,6 +418,75 @@ func TestStartMetricsCollection(t *testing.T) {
 			got := StartMetricsCollection(context.Background(), test.params)
 			if got != test.want {
 				t.Errorf("StartMetricsCollection(%#v) returned unexpected result, got: %t, want: %t", test.params, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
+	testData := []struct {
+		name         string
+		beatInterval time.Duration
+		timeout      time.Duration
+		want         int
+	}{
+		{
+			name:         "cancel before beat",
+			beatInterval: time.Second * 100,
+			timeout:      time.Millisecond * 50,
+			want:         0,
+		},
+		{
+			name:         "1 beat timeout",
+			beatInterval: time.Millisecond * 75,
+			timeout:      time.Millisecond * 140,
+			want:         1,
+		},
+		{
+			name:         "2 beat timeout",
+			beatInterval: time.Millisecond * 45,
+			timeout:      time.Millisecond * 125,
+			want:         2,
+		},
+	}
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(ctx, test.timeout)
+			defer cancel()
+			got := 0
+			lock := sync.Mutex{}
+			params := Parameters{
+				Config: &cfgpb.Configuration{
+					CollectionConfiguration: &cfgpb.CollectionConfiguration{
+						CollectWorkloadValidationMetrics: true,
+					}},
+				CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
+				CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
+				CommandExistsRunner:  func(string) bool { return true },
+				ConfigFileReader:     DefaultTestReader,
+				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
+				OSType:               "linux",
+				Remote:               false,
+				BackOffs:             defaultBackOffIntervals,
+				HeartbeatSpec: &heartbeat.Spec{
+					BeatFunc: func() {
+						lock.Lock()
+						defer lock.Unlock()
+						got++
+					},
+					Interval: test.beatInterval,
+				},
+			}
+
+			StartMetricsCollection(ctx, params)
+
+			<-ctx.Done()
+			lock.Lock()
+			defer lock.Unlock()
+			if got != test.want {
+				t.Errorf("collectAndSend() heartbeat mismatch got %d, want %d", got, test.want)
 			}
 		})
 	}

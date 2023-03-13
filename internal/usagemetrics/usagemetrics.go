@@ -65,6 +65,9 @@ const (
 	HANAMonitoringConfigReadFailure
 	MalformedHANAMonitoringConfigFile
 	MalformedDefaultHANAMonitoringQueriesFile
+	AgentMetricsServiceCreateFailure
+	HeartbeatMonitorCreateFailure
+	HeartbeatMonitorRegistrationFailure
 )
 
 // Agent wide action mappings.

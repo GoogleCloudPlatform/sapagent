@@ -39,6 +39,7 @@ import (
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/cluster"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
@@ -65,10 +66,11 @@ type (
 
 	// Properties has necessary context for Metrics collection.
 	Properties struct {
-		SAPInstances *sapb.SAPInstances // Optional for production use cases, used by unit tests.
-		Config       *cpb.Configuration
-		Client       cloudmonitoring.TimeSeriesCreator
-		Collectors   []Collector
+		SAPInstances  *sapb.SAPInstances // Optional for production use cases, used by unit tests.
+		Config        *cpb.Configuration
+		Client        cloudmonitoring.TimeSeriesCreator
+		Collectors    []Collector
+		HeartbeatSpec *heartbeat.Spec
 	}
 
 	// CreateMetricClient provides an easily testable translation to the cloud monitoring API.
@@ -76,11 +78,12 @@ type (
 
 	// Parameters has parameters necessary to invoke Start().
 	Parameters struct {
-		Config       *cpb.Configuration
-		OSType       string
-		MetricClient CreateMetricClient
-		SAPInstances *sapb.SAPInstances
-		BackOffs     *cloudmonitoring.BackOffIntervals
+		Config        *cpb.Configuration
+		OSType        string
+		MetricClient  CreateMetricClient
+		SAPInstances  *sapb.SAPInstances
+		BackOffs      *cloudmonitoring.BackOffIntervals
+		HeartbeatSpec *heartbeat.Spec
 		GCEService   sapdiscovery.GCEInterface
 	}
 )
@@ -136,7 +139,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 
 	log.Logger.Info("Starting process metrics collection in background.")
 	usagemetrics.Action(usagemetrics.CollectProcessMetrics) // Collecting process metrics
-	p := create(ctx, parameters.Config, mc, sapInstances)
+	p := create(ctx, parameters, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
 	go p.collectAndSend(ctx, parameters.BackOffs)
 	return true
@@ -148,11 +151,12 @@ func NewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, er
 }
 
 // create sets up the processmetrics properties and metric collectors for SAP Instances.
-func create(ctx context.Context, config *cpb.Configuration, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
+func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
-		SAPInstances: sapInstances,
-		Config:       config,
-		Client:       client,
+		SAPInstances:  sapInstances,
+		Config:        params.Config,
+		Client:        client,
+		HeartbeatSpec: params.HeartbeatSpec,
 	}
 
 	log.Logger.Info("Creating SAP additional metrics collector for sapservices (active and enabled metric).")
@@ -294,22 +298,29 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 		return fmt.Errorf("expected non-zero collectors, got: %d", len(p.Collectors))
 	}
 
-	var lastErr error
 	cf := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
-	time.Sleep(time.Duration(cf) * time.Second)
+	collectTicker := time.NewTicker(time.Duration(cf) * time.Second)
+	defer collectTicker.Stop()
+
+	heartbeatTicker := p.HeartbeatSpec.CreateTicker()
+	defer heartbeatTicker.Stop()
+
+	var lastErr error
 	for {
 		select {
 		case <-ctx.Done():
 			log.Logger.Info("Context cancelled, exiting collectAndSend.")
 			return lastErr
-		default:
+		case <-heartbeatTicker.C:
+			p.HeartbeatSpec.Beat()
+		case <-collectTicker.C:
+			p.HeartbeatSpec.Beat()
 			sent, batchCount, err := p.collectAndSendOnce(ctx, bo)
 			if err != nil {
 				log.Logger.Errorw("Error sending metrics", "error", err)
 				lastErr = err
 			}
 			log.Logger.Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", cf)
-			time.Sleep(time.Duration(cf) * time.Second)
 		}
 	}
 }

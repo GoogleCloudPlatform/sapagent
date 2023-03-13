@@ -18,6 +18,7 @@ package processmetrics
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -268,7 +270,10 @@ func TestCreate(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := create(context.Background(), defaultConfig, &fake.TimeSeriesCreator{}, test.sapInstances)
+			params := Parameters{
+				Config: defaultConfig,
+			}
+			got := create(context.Background(), params, &fake.TimeSeriesCreator{}, test.sapInstances)
 
 			if len(got.Collectors) != test.wantCollectorCount {
 				t.Errorf("create() returned %d collectors, want %d", len(got.Collectors), test.wantCollectorCount)
@@ -396,10 +401,10 @@ func TestSend(t *testing.T) {
 			wantBatchCount: 1,
 		},
 		{
-			name: "SingleBatchMaximumTSInABatch",
-			count: 200,
-			client: &fake.TimeSeriesCreator{},
-			want: 200,
+			name:           "SingleBatchMaximumTSInABatch",
+			count:          200,
+			client:         &fake.TimeSeriesCreator{},
+			want:           200,
 			wantBatchCount: 1,
 		},
 		{
@@ -500,6 +505,66 @@ func TestInstancesWithCredentials(t *testing.T) {
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("instancesWithCredentials() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
+	testData := []struct {
+		name         string
+		beatInterval time.Duration
+		timeout      time.Duration
+		want         int
+	}{
+		{
+			name:         "cancel before beat",
+			beatInterval: time.Millisecond * 200,
+			timeout:      time.Millisecond * 100,
+			want:         0,
+		},
+		{
+			name:         "1 beat timeout",
+			beatInterval: time.Millisecond * 75,
+			timeout:      time.Millisecond * 100,
+			want:         1,
+		},
+		{
+			name:         "2 beat timeout",
+			beatInterval: time.Millisecond * 45,
+			timeout:      time.Millisecond * 100,
+			want:         2,
+		},
+	}
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(ctx, test.timeout)
+			defer cancel()
+			got := 0
+			lock := sync.Mutex{}
+			parameters := Parameters{
+				Config:       defaultConfig,
+				OSType:       "linux",
+				MetricClient: fakeNewMetricClient,
+				SAPInstances: fakeSAPInstances("HANA"),
+				BackOffs:     defaultBackOffIntervals,
+				HeartbeatSpec: &heartbeat.Spec{
+					BeatFunc: func() {
+						lock.Lock()
+						defer lock.Unlock()
+						got++
+					},
+					Interval: test.beatInterval,
+				},
+			}
+			properties := create(context.Background(), parameters, &fake.TimeSeriesCreator{}, fakeSAPInstances("HANA"))
+			properties.collectAndSend(ctx, defaultBackOffIntervals)
+			<-ctx.Done()
+			lock.Lock()
+			defer lock.Unlock()
+			if got != test.want {
+				t.Errorf("collectAndSend() heartbeat mismatch got %d, want %d", got, test.want)
 			}
 		})
 	}

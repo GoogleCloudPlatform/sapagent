@@ -40,6 +40,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics"
@@ -60,6 +61,11 @@ type executionMode int
 const (
 	daemonMode = iota
 	oneTimeMode
+)
+const (
+	hostMetricsServiceName     = "hostmetrics"
+	processMetricsServiceName  = "processmetrics"
+	workloadManagerServiceName = "workloadmanager"
 )
 
 var (
@@ -110,6 +116,36 @@ func startServices(goos string) {
 	signal.Notify(shutdownch, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 
 	ctx := context.Background()
+
+	// When not collecting agent metrics and service health, the NullMonitor will provide
+	// sensible NOOPs. Downstream services can safely register and use the provided *Spec
+	// without fear nor penalty.
+	var healthMonitor agentmetrics.HealthMonitor = &heartbeat.NullMonitor{}
+	if config.GetCollectionConfiguration().GetCollectAgentMetrics() {
+		heartbeatParams := heartbeat.Parameters{
+			Config: config,
+		}
+		heartMonitor, err := heartbeat.NewMonitor(heartbeatParams)
+		healthMonitor = heartMonitor
+		if err != nil {
+			log.Logger.Error("Failed to create heartbeat monitor", log.Error(err))
+			usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
+			return
+		}
+		agentMetricsParams := agentmetrics.Parameters{
+			Config:        config,
+			BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
+			HealthMonitor: healthMonitor,
+		}
+		agentmetricsService, err := agentmetrics.NewService(ctx, agentMetricsParams)
+		if err != nil {
+			log.Logger.Error("Failed to create agent metrics service", log.Error(err))
+			usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
+			return
+		}
+		agentmetricsService.Start(ctx)
+	}
+
 	gceService, err := gce.New(ctx)
 	if err != nil {
 		log.Logger.Errorw("Failed to create GCE service", "error", err)
@@ -129,6 +165,12 @@ func startServices(goos string) {
 	if config.GetCollectionConfiguration() != nil && config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.
 		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
+		heartbeatSpec, err := healthMonitor.Register(workloadManagerServiceName)
+		if err != nil {
+			log.Logger.Error("Failed to register workload manager service", log.Error(err))
+			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+			return
+		}
 		wlmparameters := workloadmanager.Parameters{
 			Config:               config,
 			Remote:               true,
@@ -140,6 +182,7 @@ func startServices(goos string) {
 			OSStatReader:         osStatReader,
 			TimeSeriesCreator:    mc,
 			BackOffs:             cloudmonitoring.NewDefaultBackOffIntervals(),
+			HeartbeatSpec:        heartbeatSpec,
 		}
 		workloadmanager.StartMetricsCollection(ctx, wlmparameters)
 	} else {
@@ -155,6 +198,12 @@ func startServices(goos string) {
 			usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
 			return
 		}
+		heartbeatSpec, err := healthMonitor.Register(hostMetricsServiceName)
+		if err != nil {
+			log.Logger.Error("Failed to register host metrics service", log.Error(err))
+			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+			return
+		}
 		cmr := &cloudmetricreader.CloudMetricReader{
 			QueryClient: &cloudmetricreader.QueryClient{Client: mqc},
 			BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
@@ -165,10 +214,17 @@ func startServices(goos string) {
 			InstanceInfoReader: *instanceInfoReader,
 			CloudMetricReader:  *cmr,
 			AgentTime:          *at,
+			HeartbeatSpec:      heartbeatSpec,
 		}
 		hostmetrics.StartSAPHostAgentProvider(ctx, hmparams)
 
 		// Start the Workload Manager metrics collection
+		heartbeatSpec, err = healthMonitor.Register(workloadManagerServiceName)
+		if err != nil {
+			log.Logger.Error("Failed to register workload manager service", log.Error(err))
+			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+			return
+		}
 		wlmparams := workloadmanager.Parameters{
 			Config:                config,
 			Remote:                false,
@@ -183,31 +239,28 @@ func startServices(goos string) {
 			JSONCredentialsGetter: jsonCredentialsGetter,
 			OSType:                goos,
 			BackOffs:              cloudmonitoring.NewDefaultBackOffIntervals(),
+			HeartbeatSpec:         heartbeatSpec,
 		}
 		workloadmanager.StartMetricsCollection(ctx, wlmparams)
 
+		heartbeatSpec, err = healthMonitor.Register(processMetricsServiceName)
+		if err != nil {
+			log.Logger.Error("Failed to register process metrics service", log.Error(err))
+			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+			return
+		}
 		// Start the Process metrics collection
 		pmparams := processmetrics.Parameters{
-			Config:       config,
-			OSType:       goos,
-			MetricClient: processmetrics.NewMetricClient,
-			BackOffs:     cloudmonitoring.NewDefaultBackOffIntervals(),
-			GCEService:   gceService,
+			Config:        config,
+			OSType:        goos,
+			MetricClient:  processmetrics.NewMetricClient,
+			BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
+			HeartbeatSpec: heartbeatSpec,
+			GCEService:    gceService,
 		}
 		processmetrics.Start(ctx, pmparams)
 
 		system.StartSAPSystemDiscovery(ctx, config, gceService)
-
-		agentMetricsParams := agentmetrics.Parameters{
-			Config:   config,
-			BackOffs: cloudmonitoring.NewDefaultBackOffIntervals(),
-		}
-		agentmetricsService, err := agentmetrics.NewService(ctx, agentMetricsParams)
-		if err != nil {
-			log.Logger.Errorw("Failed to create agent metrics service", "error", err)
-		} else {
-			agentmetricsService.Start(ctx)
-		}
 
 		// Start HANA Monitoring
 		hanamonitoring.Start(ctx, hanamonitoring.Parameters{

@@ -20,10 +20,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/google/go-cmp/cmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
@@ -75,6 +78,59 @@ func TestStartSAPHostAgentProvider(t *testing.T) {
 			got := StartSAPHostAgentProvider(context.Background(), test.params)
 			if got != test.want {
 				t.Errorf("StartSAPHostAgentProvider(ProvideSapHostAgentMetrics: %t) = %t, want: %t", test.params.Config.ProvideSapHostAgentMetrics, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectHostMetrics_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
+	testData := []struct {
+		name         string
+		beatInterval time.Duration
+		timeout      time.Duration
+		want         int
+	}{
+		{
+			name:         "cancel before beat",
+			beatInterval: time.Second * 100,
+			timeout:      time.Millisecond * 100,
+			want:         0,
+		},
+		{
+			name:         "1 beat timeout",
+			beatInterval: time.Millisecond * 75,
+			timeout:      time.Millisecond * 100,
+			want:         1,
+		},
+		{
+			name:         "2 beat timeout",
+			beatInterval: time.Millisecond * 45,
+			timeout:      time.Millisecond * 100,
+			want:         2,
+		},
+	}
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(ctx, test.timeout)
+			defer cancel()
+			got := 0
+			lock := sync.Mutex{}
+			params := Parameters{
+				HeartbeatSpec: &heartbeat.Spec{
+					BeatFunc: func() {
+						lock.Lock()
+						defer lock.Unlock()
+						got++
+					},
+					Interval: test.beatInterval,
+				},
+			}
+			collectHostMetrics(ctx, params)
+			lock.Lock()
+			defer lock.Unlock()
+			if got != test.want {
+				t.Errorf("collectHostMetrics() heartbeat mismatch got %d, want %d", got, test.want)
 			}
 		})
 	}

@@ -34,6 +34,7 @@ import (
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -97,6 +98,7 @@ type Parameters struct {
 	JSONCredentialsGetter JSONCredentialsGetter
 	OSType                string
 	BackOffs              *cloudmonitoring.BackOffIntervals
+	HeartbeatSpec         *heartbeat.Spec
 }
 
 var (
@@ -127,12 +129,25 @@ func start(ctx context.Context, params Parameters, tsc cloudmonitoring.TimeSerie
 		}
 		return
 	}
+
+	projectID := params.Config.GetCloudProperties().GetProjectId()
+	heartbeatTicker := params.HeartbeatSpec.CreateTicker()
+	collectTicker := time.NewTicker(st)
+	defer heartbeatTicker.Stop()
+	defer collectTicker.Stop()
 	for {
-		log.Logger.Info("Collecting metrics from this instance")
-		sendMetrics(ctx, collectMetrics(ctx, params, metricOverridePath), params.Config.GetCloudProperties().GetProjectId(), &tsc, params.BackOffs)
-		// sleep until the next collection interval
-		log.Logger.Debugw("Sleeping", "duration", st)
-		time.Sleep(st)
+		select {
+		case <-ctx.Done():
+			log.Logger.Debug("cancellation requested")
+			return
+		case <-heartbeatTicker.C:
+			params.HeartbeatSpec.Beat()
+		case <-collectTicker.C:
+			log.Logger.Info("collecting metrics from this instance")
+			params.HeartbeatSpec.Beat()
+			metrics := collectMetrics(ctx, params, metricOverridePath)
+			sendMetrics(ctx, metrics, projectID, &tsc, params.BackOffs)
+		}
 	}
 }
 
