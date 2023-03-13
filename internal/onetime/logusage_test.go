@@ -24,6 +24,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func TestLogUsageHandler(t *testing.T) {
@@ -176,7 +177,7 @@ func TestLogUsageStatus(t *testing.T) {
 				usageAction: test.actionID,
 				usageError:  test.errorID,
 			}
-			got := l.logUsageStatus()
+			got := l.logUsageStatus(&ipb.CloudProperties{})
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("logUsageStatus(%q, %q, %q) got: %v, want nil", test.status, test.actionID, test.errorID, got)
 			}

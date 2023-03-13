@@ -46,7 +46,7 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 
 // Usage implements the subcommand interface for logusage.
 func (*LogUsage) Usage() string {
-	return `logusage [-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]\n`
+	return "logusage [-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]\\n"
 }
 
 // SetFlags implements the subcommand interface for logusage.
@@ -83,7 +83,7 @@ func (l *LogUsage) logUsageHandler() subcommands.ExitStatus {
 		return subcommands.ExitUsageError
 	}
 
-	if err := l.logUsageStatus(); err != nil {
+	if err := l.logUsageStatus(metadataserver.FetchCloudProperties()); err != nil {
 		log.Logger.Warnw("Could not log usage", "error", err)
 	}
 
@@ -91,8 +91,7 @@ func (l *LogUsage) logUsageHandler() subcommands.ExitStatus {
 }
 
 // logUsageStatus makes a call to the appropriate usage metrics API.
-func (l *LogUsage) logUsageStatus() error {
-	cloudProps := metadataserver.FetchCloudProperties()
+func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
 	configureUsageMetricsForOTE(cloudProps, l.usagePriorVersion)
 	switch usagemetrics.Status(l.usageStatus) {
 	case usagemetrics.StatusRunning:
