@@ -311,6 +311,7 @@ func registerSubCommands() {
 		&onetime.LogUsage{},
 		&onetime.MaintenanceMode{},
 		&onetime.RemoteValidation{},
+		&onetime.Snapshot{},
 	} {
 		subcommands.Register(command, "")
 	}

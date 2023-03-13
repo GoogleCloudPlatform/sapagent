@@ -23,7 +23,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
