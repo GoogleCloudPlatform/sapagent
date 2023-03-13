@@ -389,15 +389,15 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 	var testData = []struct {
 		testName  string
 		cpu       float64
-		memory    float64
+		memory    uint64
 		timestamp *tspb.Timestamp
 		params    Parameters
 		want      []*monrespb.TimeSeries
 	}{
 		{
-			testName:  "cpu 0.0 memory 0.0 baremetal",
+			testName:  "cpu 0.0 memory 0 baremetal",
 			cpu:       0.0,
-			memory:    0.0,
+			memory:    0,
 			timestamp: fakeTimestamp,
 			params: func() Parameters {
 				p := paramsFactory()
@@ -436,7 +436,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					Points: []*monrespb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_DoubleValue{0.0},
+								Value: &cpb.TypedValue_DoubleValue{0},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
@@ -448,9 +448,9 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 			},
 		},
 		{
-			testName: "cpu 1.2 memory 3.4 vm",
+			testName: "cpu 1.2 memory 1kb vm",
 			cpu:      1.2,
-			memory:   3.4,
+			memory:   1000,
 			params: func() Parameters {
 				p := paramsFactory()
 				p.Config.BareMetal = false
@@ -488,7 +488,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					Points: []*monrespb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_DoubleValue{3.4},
+								Value: &cpb.TypedValue_DoubleValue{1000},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,

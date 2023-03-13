@@ -82,8 +82,8 @@ type now func() *tspb.Timestamp
 type usage struct {
 	// cpu utilization percentage
 	cpu float64
-	// memory utilization percentage
-	memory float64
+	// virtual memory consumption in bytes
+	memory uint64
 }
 
 // NewService constructs and initializes a Service instance by using the provided parameters.
@@ -259,7 +259,7 @@ func (s *Service) createMetricTimeSeries(u usage) []*monrespb.TimeSeries {
 	params = timeseries.Params{
 		BareMetal:    s.config.BareMetal,
 		CloudProp:    s.config.CloudProperties,
-		Float64Value: u.memory,
+		Float64Value: float64(u.memory),
 		MetricType:   metricURL + agentMemory,
 		Timestamp:    now,
 	}
@@ -294,13 +294,13 @@ func (u *defaultUsageReader) cpu(ctx context.Context) (float64, error) {
 	return percent, nil
 }
 
-// memory reads the agent process' current memory as a percentage of the host.
-func (u *defaultUsageReader) memory(ctx context.Context) (float64, error) {
-	percent, err := u.proc.MemoryPercentWithContext(ctx)
+// memory reads the agent process' current virtual memory usage in bytes.
+func (u *defaultUsageReader) memory(ctx context.Context) (uint64, error) {
+	memInfo, err := u.proc.MemoryInfoWithContext(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("Failed reading memory usage: %v", err)
 	}
-	return float64(percent), nil
+	return memInfo.VMS, nil
 }
 
 // read determines the current usage of the agent process.
