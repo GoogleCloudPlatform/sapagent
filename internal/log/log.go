@@ -76,9 +76,9 @@ const (
 	WindowsDaemonLogPath = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent.log`
 
 	// LinuxOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
-	LinuxOneTimeLogPrefix = `/var/log/google-cloud-sap-agent`
+	LinuxOneTimeLogPrefix = `/var/log/google-cloud-sap-agent-`
 	// WindowsOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
-	WindowsOneTimeLogPrefix = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent`
+	WindowsOneTimeLogPrefix = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-`
 )
 
 func init() {

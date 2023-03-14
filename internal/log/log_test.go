@@ -109,3 +109,33 @@ func TestSetupLoggingForTest(t *testing.T) {
 		t.Errorf("TestSetupLoggingForTest() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
 	}
 }
+
+func TestSetupOneTimeLogging(t *testing.T) {
+	tests := []struct {
+		name           string
+		os             string
+		subCommandName string
+		want           string
+	}{
+		{
+			name:           "Windows",
+			os:             "windows",
+			subCommandName: "logusage",
+			want:           `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-logusage.log`,
+		},
+		{
+			name:           "Linux",
+			os:             "linux",
+			subCommandName: "snapshot",
+			want:           `/var/log/google-cloud-sap-agent-snapshot.log`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			SetupOneTimeLogging(test.os, test.subCommandName, cpb.Configuration_INFO)
+			if got := GetLogFile(); got != test.want {
+				t.Errorf("SetupOneTimeLogging(%s,%s)=%s, want: %s", test.os, test.subCommandName, got, test.want)
+			}
+		})
+	}
+}

@@ -44,7 +44,7 @@ func (*MaintenanceMode) Synopsis() string { return "configure maintenance mode" 
 
 // Usage implements the subcommand interface for maintenance.
 func (*MaintenanceMode) Usage() string {
-	return `maintenance [-enable=true|false -sid=<SAP System Identifier>] [show]\n`
+	return "maintenance [-enable=true|false -sid=<SAP System Identifier>] [show]\\n"
 }
 
 // SetFlags implements the subcommand interface for maintenance.
