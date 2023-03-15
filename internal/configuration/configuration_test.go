@@ -367,6 +367,18 @@ func TestPrepareHMConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:                 "InvalidMetricAndValueTypeCombinationInCustomQueries",
+			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
+			config: &cpb.HANAMonitoringConfiguration{
+				Queries: []*cpb.Query{
+					&cpb.Query{Name: "host_queries", Sql: "sample sql", Enabled: true, Columns: []*cpb.Column{
+						&cpb.Column{Name: "host", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_STRING},
+					}},
+				},
+			},
+			want: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -484,6 +496,142 @@ func TestApplyOverrides(t *testing.T) {
 			got := applyOverrides(test.defaultQueryList, test.customQueryList)
 			if len(got) != test.wantCount {
 				t.Errorf("Test: %s applyOverrides() (-want +got): \n%s", test.name, cmp.Diff(test.wantCount, len(got)))
+			}
+		})
+	}
+}
+
+func TestValidateCustomQueries(t *testing.T) {
+	tests := []struct {
+		name    string
+		queries []*cpb.Query
+		want    bool
+	}{
+		{
+			name: "ValidCustomQuery",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_LABEL,
+							ValueType:  cpb.ValueType_VALUE_STRING,
+						},
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_GAUGE,
+							ValueType:  cpb.ValueType_VALUE_INT64,
+						},
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_CUMULATIVE,
+							ValueType:  cpb.ValueType_VALUE_INT64,
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "MetricTypeGaugeAndValueTypeString",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_GAUGE,
+							ValueType:  cpb.ValueType_VALUE_STRING,
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "MetricTypeCumulativeAndValueTypeString",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_CUMULATIVE,
+							ValueType:  cpb.ValueType_VALUE_STRING,
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "MetricTypeCumulativeAndValueTypeBool",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_CUMULATIVE,
+							ValueType:  cpb.ValueType_VALUE_BOOL,
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "MetricTypeCumulativeAndValueTypeINT64",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_CUMULATIVE,
+							ValueType:  cpb.ValueType_VALUE_INT64,
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "MissingColumnTypeInQuery",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_CUMULATIVE,
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "MissingMetricTypeInQuery",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							ValueType: cpb.ValueType_VALUE_STRING,
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "MetricTypeLabelValueTypeInt",
+			queries: []*cpb.Query{
+				&cpb.Query{
+					Columns: []*cpb.Column{
+						&cpb.Column{
+							MetricType: cpb.MetricType_METRIC_LABEL,
+							ValueType:  cpb.ValueType_VALUE_INT64,
+						},
+					},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := validateCustomQueries(test.queries)
+			if got != test.want {
+				t.Errorf("Test: %s checkInvalidCustomMetrics() = %v, want %v", test.name, got, test.want)
 			}
 		})
 	}

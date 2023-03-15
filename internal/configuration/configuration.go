@@ -146,6 +146,9 @@ func prepareHMConf(config *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringC
 		return nil
 	}
 	config.Queries = applyOverrides(defaultConfig.GetQueries(), config.GetQueries())
+	if !validateCustomQueries(config.Queries) {
+		return nil
+	}
 	return config
 }
 
@@ -177,4 +180,34 @@ func applyOverrides(defaultHMQueriesList, customHMQueriesList []*cpb.Query) []*c
 		}
 	}
 	return result
+}
+
+// validateCustomQueries is responsible for making sure that the custom queries have the correct metric
+// and value type for the columns. In case of invalid combination it returns false.
+func validateCustomQueries(queries []*cpb.Query) bool {
+	for _, q := range queries {
+		for _, col := range q.GetColumns() {
+			if col.MetricType == cpb.MetricType_METRIC_UNSPECIFIED || col.ValueType == cpb.ValueType_VALUE_UNSPECIFIED {
+				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+				log.Logger.Errorw("Required fields for column not set", "queryName", q.Name, "column", col.Name, "metricType", col.MetricType, "valueType", col.ValueType)
+				return false
+			}
+			if col.MetricType == cpb.MetricType_METRIC_LABEL && col.ValueType != cpb.ValueType_VALUE_STRING {
+				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+				log.Logger.Errorw("Incompatible metric and value type for column", "queryName", q.Name, "column", col.Name, "metricType", col.MetricType, "valueType", col.ValueType)
+				return false
+			}
+			if col.MetricType == cpb.MetricType_METRIC_GAUGE && col.ValueType == cpb.ValueType_VALUE_STRING {
+				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+				log.Logger.Errorw("Invalid Config, the value type is not supported for GAUGE custom metrics on column", "queryName", q.Name, "valueType", col.ValueType, "column", col.Name)
+				return false
+			}
+			if col.MetricType == cpb.MetricType_METRIC_CUMULATIVE && (col.ValueType == cpb.ValueType_VALUE_STRING || col.ValueType == cpb.ValueType_VALUE_BOOL) {
+				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+				log.Logger.Errorw("Invalid Config, the value type is not supported for CUMULATIVE custom metrics on column", "queryName", q.Name, "valueType", col.ValueType, "column", col.Name)
+				return false
+			}
+		}
+	}
+	return true
 }
