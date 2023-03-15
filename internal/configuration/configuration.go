@@ -53,8 +53,6 @@ const (
 	LinuxConfigPath = `/etc/google-cloud-sap-agent/configuration.json`
 	// WindowsConfigPath is the default path to agent configuration file on linux.
 	WindowsConfigPath = `C:\Program Files\Google\google-cloud-sap-agent\conf\configuration.json`
-	// LinuxHANAMonitoringConfigPath is the path of configuration specific to hana monitoring functionality.
-	LinuxHANAMonitoringConfigPath = `/etc/google-cloud-sap-agent/hm-configuration.json`
 )
 
 // ReadFromFile reads configuration from given file into proto.
@@ -81,7 +79,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		log.Logger.Errorw("Invalid content in the configuration file", "file", p, "content", string(content), "error", err)
 	}
-	config.HanaMonitoringConfiguration = readConfig(LinuxHANAMonitoringConfigPath, read)
+	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
 	return config
 }
@@ -124,7 +122,7 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	if hmConfig != nil && hmConfig.GetQueryTimeoutSec() <= 0 {
 		hmConfig.QueryTimeoutSec = 300
 	}
-	if hmConfig != nil && hmConfig.GetSampleIntervalSec() <= 5 {
+	if hmConfig != nil && hmConfig.GetSampleIntervalSec() < 5 {
 		hmConfig.SampleIntervalSec = 300
 	}
 	if hmConfig != nil && hmConfig.GetExecutionThreads() <= 0 {
@@ -133,9 +131,9 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	return config
 }
 
-// readConfig reads the default HANA Monitoring queries and custom HANA Monitoring
-// configuration, parses them into a proto, applies overrides and returns final HANA Monitoring Configuration.
-func readConfig(path string, read ReadConfigFile) *cpb.HANAMonitoringConfiguration {
+// prepareHMConf reads the default HANA Monitoring queries, parses them into a proto,
+// applies overrides from user configuration and returns final HANA Monitoring Configuration.
+func prepareHMConf(config *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringConfiguration {
 	defaultConfig := &cpb.HANAMonitoringConfiguration{}
 	err := protojson.Unmarshal(defaultHMQueriesContent, defaultConfig)
 	if err != nil {
@@ -143,21 +141,12 @@ func readConfig(path string, read ReadConfigFile) *cpb.HANAMonitoringConfigurati
 		log.Logger.Errorw("Invalid content in the embeded default_queries.json file", "content", string(defaultHMQueriesContent), "error", err)
 		return nil
 	}
-	configContent, err := read(path)
-	if err != nil || len(configContent) == 0 {
-		usagemetrics.Error(usagemetrics.HANAMonitoringConfigReadFailure)
-		log.Logger.Errorw("Unable to read the configuration file", "file", path, "content", string(configContent), "error", err)
+	if config == nil {
+		log.Logger.Debugw("HANA Monitoring Configuration not set in config file", "file", LinuxConfigPath)
 		return nil
 	}
-	customConfig := &cpb.HANAMonitoringConfiguration{}
-	err = protojson.Unmarshal(configContent, customConfig)
-	if err != nil {
-		usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
-		log.Logger.Errorw("Invalid content in the configuration file", "file", path, "content", string(configContent), "error", err)
-		return nil
-	}
-	customConfig.Queries = applyOverrides(defaultConfig.GetQueries(), customConfig.GetQueries())
-	return customConfig
+	config.Queries = applyOverrides(defaultConfig.GetQueries(), config.GetQueries())
+	return config
 }
 
 // applyOverrides takes defaultHMQueriesList and CustomHMQueriesList to control which queries are

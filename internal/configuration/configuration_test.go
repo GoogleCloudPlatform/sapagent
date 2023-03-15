@@ -49,8 +49,8 @@ var (
 
 	//go:embed testdata/defaultHANAMonitoringQueries.json
 	sampleHANAMonitoringConfigQueriesJSON []byte
-	//go:embed testdata/customHANAMonitoringConfig.json
-	testCustomHANAMonitoringConfigQueriesJSON []byte
+	//go:embed testdata/sampleConfig.json
+	testConfigWithHANAMonitoringConfigJSON []byte
 )
 
 func TestReadFromFile(t *testing.T) {
@@ -87,6 +87,56 @@ func TestReadFromFile(t *testing.T) {
 			},
 		},
 		{
+			name: "ConfigWithHANAMonitoring",
+			readFunc: func(p string) ([]byte, error) {
+				return testConfigWithHANAMonitoringConfigJSON, nil
+			},
+			want: &cpb.Configuration{
+				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+					SampleIntervalSec: 300,
+					QueryTimeoutSec:   300,
+					HanaInstances: []*cpb.HANAInstance{
+						&cpb.HANAInstance{Name: "sample_instance1",
+							Host:                "127.0.0.1",
+							Port:                "30015",
+							User:                "SYSTEM",
+							Password:            "PASSWORD",
+							EnableSsl:           false,
+							ValidateCertificate: true,
+						},
+					},
+					Queries: []*cpb.Query{
+						&cpb.Query{
+							Name:    "host_queries",
+							Enabled: true,
+							Sql:     "sample sql",
+							Columns: []*cpb.Column{
+								&cpb.Column{
+									Name:       "host",
+									MetricType: cpb.MetricType_METRIC_LABEL,
+									ValueType:  cpb.ValueType_VALUE_STRING,
+								},
+							},
+						},
+						&cpb.Query{Name: "custom_memory_utilization",
+							Description: "Custom Total memory utilization by services\n",
+							Enabled:     true,
+							Sql:         "sample sql",
+							Columns: []*cpb.Column{
+								&cpb.Column{Name: "mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+								&cpb.Column{Name: "resident_mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+							},
+						},
+					},
+				},
+				CloudProperties: &iipb.CloudProperties{
+					ProjectId:  "config-project-id",
+					InstanceId: "config-instance-id",
+					Zone:       "config-zone",
+				},
+			},
+		},
+		{
 			name: "MalformedFConfigurationJsonFile",
 			readFunc: func(p string) ([]byte, error) {
 				fileContent := `{"provide_sap_host_agent_metrics": true, "cloud_properties": {"project_id": "config-project-id", "instance_id": "config-instance-id", "zone": "config-zone", } }`
@@ -98,6 +148,7 @@ func TestReadFromFile(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			defaultHMQueriesContent = sampleHANAMonitoringConfigQueriesJSON
 			got := ReadFromFile(test.path, test.readFunc)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("Test: %s ReadFromFile() for path: %s\n(-want +got):\n%s",
@@ -228,56 +279,59 @@ func TestApplyDefaults(t *testing.T) {
 	}
 }
 
-func TestReadHANAMonitoringConfiguration(t *testing.T) {
+func TestPrepareHMConfig(t *testing.T) {
 	tests := []struct {
 		name                 string
-		path                 string
 		testDefaultHMContent []byte
-		readFunc             ReadConfigFile
+		config               *cpb.HANAMonitoringConfiguration
 		want                 *cpb.HANAMonitoringConfiguration
 	}{
 		{
 			name:                 "MalformedDefaultQueriesConfig",
-			path:                 "/sample/path",
 			testDefaultHMContent: []byte("{"),
-			readFunc: func(p string) ([]byte, error) {
-				return nil, cmpopts.AnyError
-			},
-			want: nil,
+			want:                 nil,
 		},
 		{
-			name:                 "UnableToReadCustomConfig",
-			path:                 "/sample/path",
+			name:                 "NilHANAMonitoringConfiguration",
 			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
-			readFunc: func(p string) ([]byte, error) {
-				return nil, cmpopts.AnyError
-			},
-			want: nil,
-		},
-		{
-			name:                 "EmptyCustomConfig",
-			path:                 "/sample/path",
-			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
-			readFunc: func(p string) ([]byte, error) {
-				return nil, nil
-			},
-			want: nil,
-		},
-		{
-			name:                 "MalformedCustomConfig",
-			path:                 "/sample/path",
-			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
-			readFunc: func(p string) ([]byte, error) {
-				return []byte("{"), nil
-			},
-			want: nil,
+			config:               nil,
+			want:                 nil,
 		},
 		{
 			name:                 "ReadHANAMonitoringConfigSuccessfully",
-			path:                 "/sample/path",
 			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
-			readFunc: func(p string) ([]byte, error) {
-				return testCustomHANAMonitoringConfigQueriesJSON, nil
+			config: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:                "127.0.0.1",
+						Port:                "30015",
+						User:                "SYSTEM",
+						Password:            "PASSWORD",
+						EnableSsl:           false,
+						ValidateCertificate: true,
+					},
+				},
+				Queries: []*cpb.Query{
+					&cpb.Query{
+						Name:    "default_host_queries",
+						Enabled: true,
+					},
+					&cpb.Query{
+						Name:    "default_cpu_queries",
+						Enabled: false,
+					},
+					&cpb.Query{Name: "custom_memory_utilization",
+						Description: "Custom Total memory utilization by services\n",
+						Enabled:     true,
+						Sql:         "sample sql",
+						Columns: []*cpb.Column{
+							&cpb.Column{Name: "mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+							&cpb.Column{Name: "resident_mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+						},
+					},
+				},
 			},
 			want: &cpb.HANAMonitoringConfiguration{
 				SampleIntervalSec: 300,
@@ -318,7 +372,7 @@ func TestReadHANAMonitoringConfiguration(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			defaultHMQueriesContent = test.testDefaultHMContent
-			got := readConfig(test.path, test.readFunc)
+			got := prepareHMConf(test.config)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("Test: %s readHANAMonitoringConfiguration() (-want +got):\n%s", test.name, diff)
 			}

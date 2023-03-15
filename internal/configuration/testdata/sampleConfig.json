@@ -1,0 +1,53 @@
+{
+  "provide_sap_host_agent_metrics": false,
+  "cloud_properties": {
+    "project_id": "config-project-id",
+    "instance_id": "config-instance-id",
+    "zone": "config-zone"
+  },
+  "hana_monitoring_configuration": {
+    "sample_interval_sec": 300,
+    "query_timeout_sec": 300,
+    "hana_instances": [
+      {
+        "name": "sample_instance1",
+        "host": "127.0.0.1",
+        "port": "30015",
+        "user": "SYSTEM",
+        "password": "PASSWORD",
+        "enable_ssl": false,
+        "validate_certificate": true
+      }
+    ],
+    "queries": [
+      {
+        "name": "default_host_queries",
+        "enabled": true
+      },
+      {
+        "name": "default_cpu_queries",
+        "enabled": false
+      },
+      {
+        "name": "custom_memory_utilization",
+        "enabled": true,
+        "description": "Custom Total memory utilization by services\n",
+        "sql": "sample sql",
+        "columns": [
+          {
+            "name": "mem_used",
+            "metric_type": "METRIC_GAUGE",
+            "value_type": "VALUE_INT64",
+            "units": "By"
+          },
+          {
+            "name": "resident_mem_used",
+            "metric_type": "METRIC_GAUGE",
+            "value_type": "VALUE_INT64",
+            "units": "By"
+            }
+          ]
+        }
+      ]
+  }
+}

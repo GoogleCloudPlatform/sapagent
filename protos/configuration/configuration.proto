@@ -143,8 +143,7 @@ enum MetricType {
   METRIC_UNSPECIFIED = 0;
   METRIC_LABEL = 1;
   METRIC_GAUGE = 2;
-  METRIC_DELTA = 3;
-  METRIC_CUMULATIVE = 4;
+  METRIC_CUMULATIVE = 3;
 }
 
 enum ValueType {

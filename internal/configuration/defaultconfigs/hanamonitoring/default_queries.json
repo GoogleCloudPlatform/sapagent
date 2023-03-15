@@ -348,7 +348,7 @@
             {
                 "name": "alert_rating",
                 "metric_type": "METRIC_LABEL",
-                "value_type": "VALUE_INT64"
+                "value_type": "VALUE_STRING"
             },
             {
                 "name": "alerts",
@@ -402,7 +402,7 @@
             {
                 "name": "port",
                 "metric_type": "METRIC_LABEL",
-                "value_type": "VALUE_INT64"
+                "value_type": "VALUE_STRING"
             },
             {
                 "name": "mode",
@@ -435,7 +435,7 @@
             {
                 "name": "port",
                 "metric_type": "METRIC_LABEL",
-                "value_type": "VALUE_INT64"
+                "value_type": "VALUE_STRING"
             },
             {
                 "name": "transactions",
