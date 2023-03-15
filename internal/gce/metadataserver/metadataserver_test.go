@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -37,135 +39,185 @@ func marshalResponse(t *testing.T, r metadataServerResponse) string {
 	return string(s)
 }
 
+func mockMetadataServer(t *testing.T, handler endpoint) *httptest.Server {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h, _ := r.Header["Metadata-Flavor"]; len(h) != 1 || h[0] != "Google" {
+			w.WriteHeader(403)
+			fmt.Fprint(w, "Metadata-flavor header missing")
+		}
+		if r.URL.Path != cloudPropertiesURI && r.URL.Path != maintenanceEventURI {
+			w.WriteHeader(404)
+			fmt.Fprint(w, "404 Page not found")
+		}
+		if handler.contentLength != "" {
+			w.Header().Set("Content-Length", handler.contentLength)
+			return
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(handler.responseBody)))
+		w.WriteHeader(200)
+		fmt.Fprint(w, handler.responseBody)
+	}))
+	return ts
+}
+
+type endpoint struct {
+	uri           string
+	contentLength string
+	responseBody  string
+}
+
 func testBackOffPolicy() backoff.BackOff {
 	return backoff.WithMaxRetries(&backoff.ZeroBackOff{}, 1)
 }
 
-func TestCloudPropertiesWithRetry(t *testing.T) {
+func TestGet(t *testing.T) {
 	tests := []struct {
-		name          string
-		url           string
-		statusCode    int
-		contentLength string
-		responseBody  string
-		want          *instancepb.CloudProperties
+		name      string
+		url       endpoint
+		want      []byte
+		wantError error
 	}{
 		{
-			name: "badRequest",
-			url:  "notAValidURL",
+			name:      "badRequest",
+			url:       endpoint{uri: "/unsupported"},
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name:      "cannotReadResponse",
+			url:       endpoint{uri: cloudPropertiesURI, contentLength: "1", responseBody: ""},
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name: "success",
+			url:  endpoint{uri: cloudPropertiesURI, responseBody: "successful response"},
+			want: []byte("successful response"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ts := mockMetadataServer(t, test.url)
+			defer ts.Close()
+			metadataServerURL = ts.URL
+
+			got, err := get(test.url.uri, "")
+			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
+				t.Errorf("get() response body mismatch (-want, +got):\n%s", d)
+			}
+			if d := cmp.Diff(test.wantError, err, cmpopts.EquateErrors()); d != "" {
+				t.Errorf("get() error mismatch (-want, +got):\n%s", d)
+			}
+		})
+	}
+}
+
+func TestCloudPropertiesWithRetry(t *testing.T) {
+	tests := []struct {
+		name string
+		url  endpoint
+		want *instancepb.CloudProperties
+	}{
+		{
+			name: "missingProjectID",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				}),
+			},
 			want: nil,
 		},
 		{
-			name:       "statusNotOK",
-			statusCode: 400,
-			want:       nil,
-		},
-		{
-			name:          "cannotReadResponse",
-			statusCode:    200,
-			contentLength: "1",
-			responseBody:  "",
-			want:          nil,
-		},
-		{
-			name:         "emptyBody",
-			statusCode:   200,
-			responseBody: "",
-			want:         nil,
-		},
-		{
-			name:       "missingProjectID",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{NumericProjectID: 1},
-				Instance: instanceInfo{
-					ID:    101,
-					Zone:  "projects/test-project/zones/test-zone",
-					Name:  "test-instance-name",
-					Image: "test-image",
-				},
-			}),
+			name: "missingNumericProjectID",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project"},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				}),
+			},
 			want: nil,
 		},
 		{
-			name:       "missingNumericProjectID",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{ProjectID: "test-project"},
-				Instance: instanceInfo{
-					ID:    101,
-					Zone:  "projects/test-project/zones/test-zone",
-					Name:  "test-instance-name",
-					Image: "test-image",
-				},
-			}),
+			name: "missingInstanceID",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				})},
 			want: nil,
 		},
 		{
-			name:       "missingInstanceID",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
-				Instance: instanceInfo{
-					Zone:  "projects/test-project/zones/test-zone",
-					Name:  "test-instance-name",
-					Image: "test-image",
-				},
-			}),
+			name: "missingZone",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				})},
 			want: nil,
 		},
 		{
-			name:       "missingZone",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
-				Instance: instanceInfo{
-					ID:    101,
-					Name:  "test-instance-name",
-					Image: "test-image",
-				},
-			}),
+			name: "nonMatchingZone",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				})},
 			want: nil,
 		},
 		{
-			name:       "nonMatchingZone",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
-				Instance: instanceInfo{
-					ID:    101,
-					Zone:  "test-zone",
-					Name:  "test-instance-name",
-					Image: "test-image",
-				},
-			}),
+			name: "missingInstanceName",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Image: "test-image",
+					},
+				})},
 			want: nil,
 		},
 		{
-			name:       "missingInstanceName",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
-				Instance: instanceInfo{
-					ID:    101,
-					Zone:  "projects/test-project/zones/test-zone",
-					Image: "test-image",
-				},
-			}),
-			want: nil,
-		},
-		{
-			name:       "success",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
-				Instance: instanceInfo{
-					ID:    101,
-					Zone:  "projects/test-project/zones/test-zone",
-					Name:  "test-instance-name",
-					Image: "test-image",
-				},
-			}),
+			name: "success",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				})},
 			want: &instancepb.CloudProperties{
 				ProjectId:        "test-project",
 				NumericProjectId: "1",
@@ -176,16 +228,17 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 			},
 		},
 		{
-			name:       "unknownImage",
-			statusCode: 200,
-			responseBody: marshalResponse(t, metadataServerResponse{
-				Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
-				Instance: instanceInfo{
-					ID:   101,
-					Zone: "projects/test-project/zones/test-zone",
-					Name: "test-instance-name",
-				},
-			}),
+			name: "unknownImage",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:   101,
+						Zone: "projects/test-project/zones/test-zone",
+						Name: "test-instance-name",
+					},
+				})},
 			want: &instancepb.CloudProperties{
 				ProjectId:        "test-project",
 				NumericProjectId: "1",
@@ -199,24 +252,28 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if test.contentLength != "" {
-					w.Header().Set("Content-Length", test.contentLength)
-					return
-				}
-				w.WriteHeader(test.statusCode)
-				fmt.Fprint(w, test.responseBody)
-			}))
+			ts := mockMetadataServer(t, test.url)
 			defer ts.Close()
 			metadataServerURL = ts.URL
-			if test.url != "" {
-				metadataServerURL = test.url
-			}
 
 			got := CloudPropertiesWithRetry(testBackOffPolicy())
 			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
 				t.Errorf("CloudProperties() mismatch (-want, +got):\n%s", d)
 			}
 		})
+	}
+}
+
+func TestFetchGCEMaintenanceEvent(t *testing.T) {
+	endpoint := endpoint{uri: maintenanceEventURI, responseBody: "NONE"}
+
+	ts := mockMetadataServer(t, endpoint)
+	defer ts.Close()
+	metadataServerURL = ts.URL
+
+	want := endpoint.responseBody
+	got, _ := FetchGCEMaintenanceEvent()
+	if d := cmp.Diff(want, got, protocmp.Transform()); d != "" {
+		t.Errorf("get() response body mismatch (-want, +got):\n%s", d)
 	}
 }

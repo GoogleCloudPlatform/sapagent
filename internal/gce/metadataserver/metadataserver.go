@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"time"
@@ -43,7 +44,14 @@ var (
 	zonePattern = regexp.MustCompile("zones/([^/]*)")
 
 	// not a const so we can override in test suite.
-	metadataServerURL = "http://metadata.google.internal/computeMetadata/v1/?recursive=true"
+	metadataServerURL = "http://metadata.google.internal/computeMetadata/v1"
+)
+
+const (
+	cloudPropertiesURI  = "/"
+	maintenanceEventURI = "/instance/maintenance-event"
+
+	helpString = `For information on permissions needed to access metadata refer: https://cloud.google.com/compute/docs/metadata/querying-metadata#permissions. Restart the agent after adding necessary permissions.`
 )
 
 type metadataServerResponse struct {
@@ -87,11 +95,15 @@ func CloudPropertiesWithRetry(bo backoff.BackOff) *instancepb.CloudProperties {
 	return cp
 }
 
-// requestCloudProperties attempts to fetch information from the GCE metadata server.
-func requestCloudProperties() (*instancepb.CloudProperties, error) {
-	helpString := `For information on permissions needed to access metadata refer: https://cloud.google.com/compute/docs/metadata/querying-metadata#permissions. Restart the agent after adding necessary permissions.`
-
-	req, err := http.NewRequest("GET", metadataServerURL, nil)
+// get performs a get request to the metadata server and returns the response body.
+func get(uri, queryString string) ([]byte, error) {
+	metadataURL, err := url.Parse(metadataServerURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata server url: %v, %s", err, helpString)
+	}
+	metadataURL.RawQuery = queryString
+	reqURL := metadataURL.JoinPath(uri).String()
+	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request to metadata server: %v, %s", err, helpString)
 	}
@@ -107,6 +119,15 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body from metadata server: %v", err)
+	}
+	return body, nil
+}
+
+// requestCloudProperties attempts to fetch information from the GCE metadata server.
+func requestCloudProperties() (*instancepb.CloudProperties, error) {
+	body, err := get(cloudPropertiesURI, "recursive=true")
+	if err != nil {
+		return nil, err
 	}
 	resBodyJSON := &metadataServerResponse{}
 	if err = json.Unmarshal(body, resBodyJSON); err != nil {
@@ -163,4 +184,13 @@ func FetchCloudProperties() *instancepb.CloudProperties {
 	exp := backoff.NewExponentialBackOff()
 	exp.InitialInterval = 5 * time.Second
 	return CloudPropertiesWithRetry(backoff.WithMaxRetries(exp, 2)) // 2 retries (3 total attempts)
+}
+
+// FetchGCEMaintenanceEvent retrieves information about pending host maintenance events.
+func FetchGCEMaintenanceEvent() (string, error) {
+	body, err := get(maintenanceEventURI, "")
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }
