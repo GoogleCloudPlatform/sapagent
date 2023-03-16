@@ -152,5 +152,4 @@ enum ValueType {
   VALUE_INT64 = 2;
   VALUE_STRING = 3;
   VALUE_DOUBLE = 4;
-  VALUE_DISTRIBUTION = 5;
 }

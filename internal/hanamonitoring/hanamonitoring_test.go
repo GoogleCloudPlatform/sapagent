@@ -25,9 +25,41 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+
+	mpb "google.golang.org/genproto/googleapis/api/metric"
+	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	cloudFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	gceFake "github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+)
+
+var (
+	defaultParams = Parameters{
+		Config: &cpb.Configuration{
+			CloudProperties: &ipb.CloudProperties{
+				ProjectId:  "test-project",
+				Zone:       "test-zone",
+				InstanceId: "123456",
+			},
+			HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+				Enabled: true,
+			},
+		},
+		GCEService: &gceFake.TestGCE{
+			GetSecretResp: []string{"fakePassword"},
+			GetSecretErr:  []error{nil},
+		},
+		BackOffs:          cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+		TimeSeriesCreator: &cloudFake.TimeSeriesCreator{},
+	}
+	defaultTimestamp = &tspb.Timestamp{Seconds: 123}
 )
 
 func fakeQueryFunc(context.Context, string, ...any) (*sql.Rows, error) {
@@ -36,6 +68,41 @@ func fakeQueryFunc(context.Context, string, ...any) (*sql.Rows, error) {
 
 func fakeQueryFuncError(context.Context, string, ...any) (*sql.Rows, error) {
 	return nil, cmpopts.AnyError
+}
+
+func createFakeMetrics(count int) []*Metrics {
+	var metrics []*Metrics
+	for i := 0; i < count; i++ {
+		metrics = append(metrics, &Metrics{
+			TimeSeries: &monitoringresourcespb.TimeSeries{},
+		})
+	}
+	return metrics
+}
+
+func newDefaultMetrics() *Metrics {
+	return &Metrics{
+		TimeSeries: &monitoringresourcespb.TimeSeries{
+			MetricKind: mpb.MetricDescriptor_GAUGE,
+			Resource: &mrpb.MonitoredResource{
+				Type: "gce_instance",
+				Labels: map[string]string{
+					"project_id":  "test-project",
+					"zone":        "test-zone",
+					"instance_id": "123456",
+				},
+			},
+			Points: []*monitoringresourcespb.Point{
+				{
+					Interval: &commonpb.TimeInterval{
+						StartTime: &tspb.Timestamp{Seconds: 123},
+						EndTime:   &tspb.Timestamp{Seconds: 123},
+					},
+					Value: &commonpb.TypedValue{},
+				},
+			},
+		},
+	}
 }
 
 func TestStart(t *testing.T) {
@@ -133,7 +200,7 @@ func TestQueryAndSend(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 
-	got := queryAndSend(ctx, db, query, timeout, sampleInterval)
+	got := queryAndSend(ctx, db, query, timeout, sampleInterval, defaultParams)
 	want := cmpopts.AnyError
 	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
 		t.Errorf("queryAndSend(%v, fakeQueryFuncError, %v, %v, %v) = %v want: %v.", ctx, query, timeout, sampleInterval, got, want)
@@ -167,7 +234,7 @@ func TestCreateColumns(t *testing.T) {
 					ValueType: cpb.ValueType_VALUE_DOUBLE,
 				},
 				&cpb.Column{
-					ValueType: cpb.ValueType_VALUE_DISTRIBUTION,
+					ValueType: cpb.ValueType_VALUE_UNSPECIFIED,
 				},
 			},
 			want: []any{
@@ -312,7 +379,7 @@ func TestConnectToDatabases(t *testing.T) {
 						},
 					},
 				},
-				GCEService: &fake.TestGCE{
+				GCEService: &gceFake.TestGCE{
 					GetSecretResp: []string{"fakePassword"},
 					GetSecretErr:  []error{nil},
 				},
@@ -331,7 +398,7 @@ func TestConnectToDatabases(t *testing.T) {
 						},
 					},
 				},
-				GCEService: &fake.TestGCE{
+				GCEService: &gceFake.TestGCE{
 					GetSecretResp: []string{"fakePassword"},
 					GetSecretErr:  []error{errors.New("error")},
 				},
@@ -353,6 +420,170 @@ func TestConnectToDatabases(t *testing.T) {
 
 			if len(got) != test.want {
 				t.Errorf("ConnectToDatabases(%#v) returned unexpected database count, got: %d, want: %d", test.params, len(got), test.want)
+			}
+		})
+	}
+}
+
+func TestCreateMetricsForRow(t *testing.T) {
+	// This test simulates a row with several GAUGE metrics (3), a couple LABELs (2).
+	// The labels will be appended to each of the gauge metrics, making the number of gauge metrics (3) be the desired want value.
+	query := &cpb.Query{
+		Name: "testQuery",
+		Columns: []*cpb.Column{
+			{ValueType: cpb.ValueType_VALUE_INT64, Name: "testColInt", MetricType: cpb.MetricType_METRIC_GAUGE},
+			{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testColDouble", MetricType: cpb.MetricType_METRIC_GAUGE},
+			{ValueType: cpb.ValueType_VALUE_BOOL, Name: "testColBool", MetricType: cpb.MetricType_METRIC_GAUGE},
+			{ValueType: cpb.ValueType_VALUE_STRING, Name: "stringLabel", MetricType: cpb.MetricType_METRIC_LABEL},
+			{ValueType: cpb.ValueType_VALUE_STRING, Name: "stringLabel2", MetricType: cpb.MetricType_METRIC_LABEL},
+			// Add a misconfigured column (STRING cannot be GAUGE. This would be caught in the config validator) to kill mutants.
+			{ValueType: cpb.ValueType_VALUE_STRING, Name: "misconfiguredCol", MetricType: cpb.MetricType_METRIC_GAUGE},
+		},
+	}
+	cols := make([]any, len(query.Columns))
+	cols[0], cols[1], cols[2], cols[3], cols[4], cols[5] = new(int64), new(float64), new(bool), new(string), new(string), new(string)
+
+	wantMetrics := 3
+	got := createMetricsForRow("testName", "testSID", query, cols, defaultParams)
+	gotMetrics := len(got)
+	if gotMetrics != wantMetrics {
+		t.Errorf("createMetricsForRow(%#v) = %d, want metrics length: %d", query, gotMetrics, wantMetrics)
+	}
+
+	// 2 correctly configured labels in the column plus 2 default labels for instance_name and sid.
+	wantLabels := 4
+	gotLabels := 0
+	if len(got) > 0 {
+		gotLabels = len(got[0].TimeSeries.Metric.Labels)
+	}
+	if gotLabels != wantLabels {
+		t.Errorf("createMetricsForRow(%#v) = %d, want labels length: %d", query, gotLabels, wantLabels)
+	}
+}
+
+// For the following test, sql.Rows.Scan() requires pointers in order to populate the column values.
+// These values will eventually be passed to createGaugeMetric(). Simulate this behavior by creating pointers and populating them with a value.
+func TestCreateGaugeMetric(t *testing.T) {
+	tests := []struct {
+		name       string
+		column     *cpb.Column
+		val        any
+		want       *Metrics
+		wantMetric *mpb.Metric
+		wantValue  *commonpb.TypedValue
+	}{
+		{
+			name:       "Int",
+			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol"},
+			val:        proto.Int64(123),
+			want:       newDefaultMetrics(),
+			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 123}},
+		},
+		{
+			name:       "Double",
+			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testCol"},
+			val:        proto.Float64(123.456),
+			want:       newDefaultMetrics(),
+			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_DoubleValue{DoubleValue: 123.456}},
+		},
+		{
+			name:       "BoolWithNameOverride",
+			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_BOOL, Name: "testCol", NameOverride: "override/metric/path"},
+			val:        proto.Bool(true),
+			want:       newDefaultMetrics(),
+			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/override/metric/path", Labels: map[string]string{"abc": "def"}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_BoolValue{BoolValue: true}},
+		},
+		{
+			name:   "Fails",
+			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_STRING, Name: "testCol"},
+			val:    proto.String("test"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.want != nil {
+				test.want.TimeSeries.Metric = test.wantMetric
+				test.want.TimeSeries.Points[0].Value = test.wantValue
+			}
+			got, _ := createGaugeMetric(test.column, test.val, map[string]string{"abc": "def"}, "testQuery", defaultParams, defaultTimestamp)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("createGaugeMetric(%#v) unexpected diff: (-want +got):\n%s", test.column, diff)
+			}
+		})
+	}
+}
+
+func TestSend(t *testing.T) {
+	tests := []struct {
+		name              string
+		count             int
+		timeSeriesCreator *cloudFake.TimeSeriesCreator
+		wantSentCount     int
+		wantBatchCount    int
+		wantErr           error
+	}{
+		{
+			name:              "SingleBatch",
+			count:             199,
+			timeSeriesCreator: &cloudFake.TimeSeriesCreator{},
+			wantSentCount:     199,
+			wantBatchCount:    1,
+		},
+		{
+			name:              "SingleBatchMaximumTSInABatch",
+			count:             200,
+			timeSeriesCreator: &cloudFake.TimeSeriesCreator{},
+			wantSentCount:     200,
+			wantBatchCount:    1,
+		},
+		{
+			name:              "MultipleBatches",
+			count:             399,
+			timeSeriesCreator: &cloudFake.TimeSeriesCreator{},
+			wantSentCount:     399,
+			wantBatchCount:    2,
+		},
+		{
+			name:              "SendErrorSingleBatch",
+			count:             5,
+			timeSeriesCreator: &cloudFake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			wantErr:           cmpopts.AnyError,
+			wantSentCount:     0,
+			wantBatchCount:    1,
+		},
+		{
+			name:              "SendErrorMultipleBatches",
+			count:             399,
+			timeSeriesCreator: &cloudFake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			wantErr:           cmpopts.AnyError,
+			wantSentCount:     0,
+			wantBatchCount:    1,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			params := defaultParams
+			params.TimeSeriesCreator = test.timeSeriesCreator
+
+			metrics := createFakeMetrics(test.count)
+			gotSentCount, gotBatchCount, gotErr := send(context.Background(), metrics, params)
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("send(%d, %v) = %v wantErr: %v", len(metrics), params, gotErr, test.wantErr)
+			}
+
+			if gotSentCount != test.wantSentCount {
+				t.Errorf("send(%d, %v) = %v wantSentCount: %v", len(metrics), params, gotSentCount, test.wantSentCount)
+			}
+
+			if gotBatchCount != test.wantBatchCount {
+				t.Errorf("send(%d, %v) = %v wantBatchCount: %v", len(metrics), params, gotBatchCount, test.wantBatchCount)
 			}
 		})
 	}

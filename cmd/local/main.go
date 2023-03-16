@@ -264,8 +264,10 @@ func startServices(goos string) {
 
 		// Start HANA Monitoring
 		hanamonitoring.Start(ctx, hanamonitoring.Parameters{
-			Config:     config,
-			GCEService: gceService,
+			Config:            config,
+			GCEService:        gceService,
+			BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
+			TimeSeriesCreator: mc,
 		})
 	}
 
