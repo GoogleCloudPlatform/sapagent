@@ -44,6 +44,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/cluster"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/hana"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/infra"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/netweaver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
@@ -84,7 +85,7 @@ type (
 		SAPInstances  *sapb.SAPInstances
 		BackOffs      *cloudmonitoring.BackOffIntervals
 		HeartbeatSpec *heartbeat.Spec
-		GCEService   sapdiscovery.GCEInterface
+		GCEService    sapdiscovery.GCEInterface
 	}
 )
 
@@ -174,7 +175,13 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		Executor: commandlineexecutor.ExpandAndExecuteCommand,
 	}
 
-	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector)
+	log.Logger.Info("Creating infra migration event metrics collector.")
+	migrationCollector := &infra.Properties{
+		Config: p.Config,
+		Client: p.Client,
+	}
+
+	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector, migrationCollector)
 
 	sids := make(map[string]bool)
 	clusterCollectorCreated := false

@@ -249,22 +249,22 @@ func TestCreate(t *testing.T) {
 		{
 			name:               "HANAStandaloneInstance",
 			sapInstances:       fakeSAPInstances("HANA"),
-			wantCollectorCount: 5,
+			wantCollectorCount: 6,
 		},
 		{
 			name:               "HANAClusterInstance",
 			sapInstances:       fakeSAPInstances("HANACluster"),
-			wantCollectorCount: 6,
+			wantCollectorCount: 7,
 		},
 		{
 			name:               "NetweaverClusterInstance",
 			sapInstances:       fakeSAPInstances("NetweaverCluster"),
-			wantCollectorCount: 6,
+			wantCollectorCount: 7,
 		},
 		{
 			name:               "TwoNetweaverInstancesOnSameMachine",
 			sapInstances:       fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
-			wantCollectorCount: 8,
+			wantCollectorCount: 9,
 		},
 	}
 
