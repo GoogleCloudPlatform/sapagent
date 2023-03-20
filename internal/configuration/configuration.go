@@ -184,9 +184,26 @@ func applyOverrides(defaultHMQueriesList, customHMQueriesList []*cpb.Query) []*c
 
 // validateCustomQueries is responsible for making sure that the custom queries have the correct metric
 // and value type for the columns. In case of invalid combination it returns false.
+// Query names and column names within each query must be unique as they are both used to path the metric URL to cloud monitoring.
 func validateCustomQueries(queries []*cpb.Query) bool {
+	queryNames := make(map[string]bool)
 	for _, q := range queries {
+		if queryNames[q.Name] {
+			usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+			log.Logger.Errorw("Duplicate query name", "queryName", q.Name)
+			return false
+		}
+		queryNames[q.Name] = true
+
+		columnNames := make(map[string]bool)
 		for _, col := range q.GetColumns() {
+			if columnNames[col.Name] {
+				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+				log.Logger.Errorw("Duplicate column name", "queryName", q.Name, "column", col.Name)
+				return false
+			}
+			columnNames[col.Name] = true
+
 			if col.MetricType == cpb.MetricType_METRIC_UNSPECIFIED || col.ValueType == cpb.ValueType_VALUE_UNSPECIFIED {
 				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
 				log.Logger.Errorw("Required fields for column not set", "queryName", q.Name, "column", col.Name, "metricType", col.MetricType, "valueType", col.ValueType)

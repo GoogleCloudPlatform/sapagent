@@ -511,16 +511,20 @@ func TestValidateCustomQueries(t *testing.T) {
 			name: "ValidCustomQuery",
 			queries: []*cpb.Query{
 				&cpb.Query{
+					Name: "testQuery",
 					Columns: []*cpb.Column{
 						&cpb.Column{
+							Name:       "testCol1",
 							MetricType: cpb.MetricType_METRIC_LABEL,
 							ValueType:  cpb.ValueType_VALUE_STRING,
 						},
 						&cpb.Column{
+							Name:       "testCol2",
 							MetricType: cpb.MetricType_METRIC_GAUGE,
 							ValueType:  cpb.ValueType_VALUE_INT64,
 						},
 						&cpb.Column{
+							Name:       "testCol3",
 							MetricType: cpb.MetricType_METRIC_CUMULATIVE,
 							ValueType:  cpb.ValueType_VALUE_INT64,
 						},
@@ -528,6 +532,53 @@ func TestValidateCustomQueries(t *testing.T) {
 				},
 			},
 			want: true,
+		},
+		{
+			name: "DuplicateQueryNames",
+			queries: []*cpb.Query{
+				{
+					Name: "testQuery",
+					Columns: []*cpb.Column{
+						{
+							Name:       "testCol1",
+							MetricType: cpb.MetricType_METRIC_LABEL,
+							ValueType:  cpb.ValueType_VALUE_STRING,
+						},
+					},
+				},
+				{
+					Name: "testQuery",
+					Columns: []*cpb.Column{
+						{
+							Name:       "testCol1",
+							MetricType: cpb.MetricType_METRIC_LABEL,
+							ValueType:  cpb.ValueType_VALUE_STRING,
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "DuplicateColumnNames",
+			queries: []*cpb.Query{
+				{
+					Name: "testQuery",
+					Columns: []*cpb.Column{
+						{
+							Name:       "testCol1",
+							MetricType: cpb.MetricType_METRIC_LABEL,
+							ValueType:  cpb.ValueType_VALUE_STRING,
+						},
+						{
+							Name:       "testCol1",
+							MetricType: cpb.MetricType_METRIC_LABEL,
+							ValueType:  cpb.ValueType_VALUE_STRING,
+						},
+					},
+				},
+			},
+			want: false,
 		},
 		{
 			name: "MetricTypeGaugeAndValueTypeString",
