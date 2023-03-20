@@ -28,7 +28,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -77,12 +76,10 @@ type (
 	}
 )
 
-func (f *fakeCollector) Collect(ctx context.Context) []*sapdiscovery.Metrics {
-	m := make([]*sapdiscovery.Metrics, f.timeSeriesCount)
+func (f *fakeCollector) Collect(ctx context.Context) []*mrpb.TimeSeries {
+	m := make([]*mrpb.TimeSeries, f.timeSeriesCount)
 	for i := 0; i < f.timeSeriesCount; i++ {
-		m[i] = &sapdiscovery.Metrics{
-			TimeSeries: &mrpb.TimeSeries{},
-		}
+		m[i] = &mrpb.TimeSeries{}
 	}
 	return m
 }
@@ -282,13 +279,11 @@ func TestCreate(t *testing.T) {
 	}
 }
 
-func createFakeMetrics(count int) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+func createFakeMetrics(count int) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 
 	for i := 0; i < count; i++ {
-		metrics = append(metrics, &sapdiscovery.Metrics{
-			TimeSeries: &mrpb.TimeSeries{},
-		})
+		metrics = append(metrics, &mrpb.TimeSeries{})
 	}
 	return metrics
 }
@@ -379,79 +374,6 @@ func TestCollectAndSendOnce(t *testing.T) {
 
 			if gotSent != test.wantSent {
 				t.Errorf("Failure in collectAndSendOnce(), gotSent: %v wantSent: %v.", gotSent, test.wantSent)
-			}
-		})
-	}
-}
-
-func TestSend(t *testing.T) {
-	tests := []struct {
-		name           string
-		count          int
-		client         *fake.TimeSeriesCreator
-		want           int
-		wantBatchCount int
-		wantErr        error
-	}{
-		{
-			name:           "SingleBatch",
-			count:          199,
-			client:         &fake.TimeSeriesCreator{},
-			want:           199,
-			wantBatchCount: 1,
-		},
-		{
-			name:           "SingleBatchMaximumTSInABatch",
-			count:          200,
-			client:         &fake.TimeSeriesCreator{},
-			want:           200,
-			wantBatchCount: 1,
-		},
-		{
-			name:           "MultipleBatches",
-			count:          399,
-			client:         &fake.TimeSeriesCreator{},
-			want:           399,
-			wantBatchCount: 2,
-		},
-		{
-			name:           "SendErrorSingleBatch",
-			count:          5,
-			client:         &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
-			wantErr:        cmpopts.AnyError,
-			wantBatchCount: 1,
-		},
-		{
-			name:           "SendErrorMultipleBatches",
-			count:          399,
-			client:         &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
-			wantErr:        cmpopts.AnyError,
-			wantBatchCount: 1,
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			p := &Properties{
-				Client: test.client,
-				Config: quickTestConfig,
-			}
-
-			metrics := createFakeMetrics(test.count)
-			got, gotBatchCount, gotErr := p.send(context.Background(), metrics, defaultBackOffIntervals)
-
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("Failure in send(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
-			}
-
-			if got != test.want {
-				t.Errorf("Failure in send(), got: %v want: %v.", got, test.want)
-			}
-
-			if gotBatchCount != test.wantBatchCount {
-				t.Errorf("Failure in send(), gotBatchCount: %v wantBatchCount: %v.", gotBatchCount, test.wantBatchCount)
 			}
 		})
 	}

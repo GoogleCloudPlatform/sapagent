@@ -34,9 +34,9 @@ import (
 	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
@@ -176,8 +176,8 @@ func removeSID(SIDs []string, ind int) []string {
 // Collect is a MaintenanceMode implementation of the Collector interface from
 // processmetrics. It returns the value of current maintenancemode configured per sid as a metric
 // list.
-func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 	log.Logger.Debug("Starting maintenancemode metric collection.")
 	sidsUnderMaintenance, err := ReadMaintenanceMode(p.Reader)
 	if err != nil {
@@ -196,8 +196,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 			BoolValue:    mntmode,
 			BareMetal:    p.Config.BareMetal,
 		}
-		ts := timeseries.BuildBool(params)
-		metrics = append(metrics, &sapdiscovery.Metrics{TimeSeries: ts})
+		metrics = append(metrics, timeseries.BuildBool(params))
 	}
 	return metrics
 }

@@ -24,8 +24,8 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -230,7 +230,7 @@ func TestMetricLabels(t *testing.T) {
 func TestCollect(t *testing.T) {
 	tests := []struct {
 		name string
-		want []*sapdiscovery.Metrics
+		want []*mrpb.TimeSeries
 	}{
 		{
 			name: "EmptyMetricsWhenNoPacmaker",

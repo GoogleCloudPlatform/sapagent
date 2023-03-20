@@ -34,7 +34,6 @@ import (
 	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	cloudFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	gceFake "github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -56,8 +55,7 @@ var (
 			GetSecretResp: []string{"fakePassword"},
 			GetSecretErr:  []error{nil},
 		},
-		BackOffs:          cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
-		TimeSeriesCreator: &cloudFake.TimeSeriesCreator{},
+		BackOffs: cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
 	}
 	defaultTimestamp = &tspb.Timestamp{Seconds: 123}
 )
@@ -70,36 +68,24 @@ func fakeQueryFuncError(context.Context, string, ...any) (*sql.Rows, error) {
 	return nil, cmpopts.AnyError
 }
 
-func createFakeMetrics(count int) []*Metrics {
-	var metrics []*Metrics
-	for i := 0; i < count; i++ {
-		metrics = append(metrics, &Metrics{
-			TimeSeries: &monitoringresourcespb.TimeSeries{},
-		})
-	}
-	return metrics
-}
-
-func newDefaultMetrics() *Metrics {
-	return &Metrics{
-		TimeSeries: &monitoringresourcespb.TimeSeries{
-			MetricKind: mpb.MetricDescriptor_GAUGE,
-			Resource: &mrpb.MonitoredResource{
-				Type: "gce_instance",
-				Labels: map[string]string{
-					"project_id":  "test-project",
-					"zone":        "test-zone",
-					"instance_id": "123456",
-				},
+func newDefaultMetrics() *monitoringresourcespb.TimeSeries {
+	return &monitoringresourcespb.TimeSeries{
+		MetricKind: mpb.MetricDescriptor_GAUGE,
+		Resource: &mrpb.MonitoredResource{
+			Type: "gce_instance",
+			Labels: map[string]string{
+				"project_id":  "test-project",
+				"zone":        "test-zone",
+				"instance_id": "123456",
 			},
-			Points: []*monitoringresourcespb.Point{
-				{
-					Interval: &commonpb.TimeInterval{
-						StartTime: &tspb.Timestamp{Seconds: 123},
-						EndTime:   &tspb.Timestamp{Seconds: 123},
-					},
-					Value: &commonpb.TypedValue{},
+		},
+		Points: []*monitoringresourcespb.Point{
+			{
+				Interval: &commonpb.TimeInterval{
+					StartTime: &tspb.Timestamp{Seconds: 123},
+					EndTime:   &tspb.Timestamp{Seconds: 123},
 				},
+				Value: &commonpb.TypedValue{},
 			},
 		},
 	}
@@ -454,7 +440,7 @@ func TestCreateMetricsForRow(t *testing.T) {
 	wantLabels := 4
 	gotLabels := 0
 	if len(got) > 0 {
-		gotLabels = len(got[0].TimeSeries.Metric.Labels)
+		gotLabels = len(got[0].Metric.Labels)
 	}
 	if gotLabels != wantLabels {
 		t.Errorf("createMetricsForRow(%#v) = %d, want labels length: %d", query, gotLabels, wantLabels)
@@ -468,7 +454,7 @@ func TestCreateGaugeMetric(t *testing.T) {
 		name       string
 		column     *cpb.Column
 		val        any
-		want       *Metrics
+		want       *monitoringresourcespb.TimeSeries
 		wantMetric *mpb.Metric
 		wantValue  *commonpb.TypedValue
 	}{
@@ -505,85 +491,12 @@ func TestCreateGaugeMetric(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if test.want != nil {
-				test.want.TimeSeries.Metric = test.wantMetric
-				test.want.TimeSeries.Points[0].Value = test.wantValue
+				test.want.Metric = test.wantMetric
+				test.want.Points[0].Value = test.wantValue
 			}
 			got, _ := createGaugeMetric(test.column, test.val, map[string]string{"abc": "def"}, "testQuery", defaultParams, defaultTimestamp)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("createGaugeMetric(%#v) unexpected diff: (-want +got):\n%s", test.column, diff)
-			}
-		})
-	}
-}
-
-func TestSend(t *testing.T) {
-	tests := []struct {
-		name              string
-		count             int
-		timeSeriesCreator *cloudFake.TimeSeriesCreator
-		wantSentCount     int
-		wantBatchCount    int
-		wantErr           error
-	}{
-		{
-			name:              "SingleBatch",
-			count:             199,
-			timeSeriesCreator: &cloudFake.TimeSeriesCreator{},
-			wantSentCount:     199,
-			wantBatchCount:    1,
-		},
-		{
-			name:              "SingleBatchMaximumTSInABatch",
-			count:             200,
-			timeSeriesCreator: &cloudFake.TimeSeriesCreator{},
-			wantSentCount:     200,
-			wantBatchCount:    1,
-		},
-		{
-			name:              "MultipleBatches",
-			count:             399,
-			timeSeriesCreator: &cloudFake.TimeSeriesCreator{},
-			wantSentCount:     399,
-			wantBatchCount:    2,
-		},
-		{
-			name:              "SendErrorSingleBatch",
-			count:             5,
-			timeSeriesCreator: &cloudFake.TimeSeriesCreator{Err: cmpopts.AnyError},
-			wantErr:           cmpopts.AnyError,
-			wantSentCount:     0,
-			wantBatchCount:    1,
-		},
-		{
-			name:              "SendErrorMultipleBatches",
-			count:             399,
-			timeSeriesCreator: &cloudFake.TimeSeriesCreator{Err: cmpopts.AnyError},
-			wantErr:           cmpopts.AnyError,
-			wantSentCount:     0,
-			wantBatchCount:    1,
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			params := defaultParams
-			params.TimeSeriesCreator = test.timeSeriesCreator
-
-			metrics := createFakeMetrics(test.count)
-			gotSentCount, gotBatchCount, gotErr := send(context.Background(), metrics, params)
-
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("send(%d, %v) = %v wantErr: %v", len(metrics), params, gotErr, test.wantErr)
-			}
-
-			if gotSentCount != test.wantSentCount {
-				t.Errorf("send(%d, %v) = %v wantSentCount: %v", len(metrics), params, gotSentCount, test.wantSentCount)
-			}
-
-			if gotBatchCount != test.wantBatchCount {
-				t.Errorf("send(%d, %v) = %v wantBatchCount: %v", len(metrics), params, gotBatchCount, test.wantBatchCount)
 			}
 		})
 	}

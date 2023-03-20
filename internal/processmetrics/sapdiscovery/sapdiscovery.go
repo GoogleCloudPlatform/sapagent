@@ -29,7 +29,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -97,11 +96,6 @@ type (
 		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
 	}
 )
-
-// Metrics contains the TimeSeries values for process metrics.
-type Metrics struct {
-	TimeSeries *monitoringresourcespb.TimeSeries
-}
 
 // SAPApplications Discovers the SAP Application instances.
 //

@@ -21,10 +21,10 @@ package sapservice
 import (
 	"context"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
@@ -63,8 +63,8 @@ type (
 
 // Collect is an implementation of Collector interface from processmetrics
 // responsible for collecting sap service statuses metric.
-func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 	isFailedMetrics := queryInstanceState(p, "is-failed", p.Executor)
 	metrics = append(metrics, isFailedMetrics...)
 	isDisabledMetrics := queryInstanceState(p, "is-enabled", p.Executor)
@@ -79,8 +79,8 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 //
 // In case of `systemctl is-enabled service` it returns 0 if the specified service is enabled,
 // non-zero otherwise, metric will be sent only in case service is disabled.
-func queryInstanceState(p *InstanceProperties, metric string, executor commandExecutor) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+func queryInstanceState(p *InstanceProperties, metric string, executor commandExecutor) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 	for _, service := range services {
 		command := "systemctl"
 		args := metric + " --quiet " + service
@@ -102,8 +102,7 @@ func queryInstanceState(p *InstanceProperties, metric string, executor commandEx
 			Int64Value:   1,
 			BareMetal:    p.Config.BareMetal,
 		}
-		ts := timeseries.BuildInt(params)
-		metrics = append(metrics, &sapdiscovery.Metrics{TimeSeries: ts})
+		metrics = append(metrics, timeseries.BuildInt(params))
 	}
 	return metrics
 }

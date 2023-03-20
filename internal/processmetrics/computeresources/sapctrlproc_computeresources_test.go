@@ -91,7 +91,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			}
 
 			for _, metric := range got {
-				points := metric.TimeSeries.GetPoints()
+				points := metric.GetPoints()
 				if points[0].GetValue().GetDoubleValue() < 0 {
 					t.Errorf("Metric value for compute resources cannot be negative.")
 				}

@@ -31,9 +31,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -77,7 +77,7 @@ var (
 
 // Collect is Netweaver implementation of Collector interface from processmetrics.go.
 // Returns a list of NetWeaver related metrics.
-func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
+func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	processListRunner := &commandlineexecutor.Runner{
 		User:       p.SAPInstance.GetUser(),
 		Executable: p.SAPInstance.GetSapcontrolPath(),
@@ -134,7 +134,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 }
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
-func collectNetWeaverMetrics(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
+func collectNetWeaverMetrics(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*mrpb.TimeSeries {
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
@@ -152,7 +152,7 @@ func collectNetWeaverMetrics(p *InstanceProperties, r sapcontrol.RunnerWithEnv) 
 
 // collectServiceMetrics collects NetWeaver "service" metrics describing Netweaver service
 // processes as managed by the sapcontrol program.
-func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*sapdiscovery.Metrics, availabilityValue int64) {
+func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries, availabilityValue int64) {
 	start := tspb.Now()
 	availabilityValue = systemAllProcessesGreen
 
@@ -178,7 +178,7 @@ func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 
 // collectHTTPMetrics collects the HTTP health check metrics for different types of
 // Netweaver instances based on their types.
-func collectHTTPMetrics(p *InstanceProperties) []*sapdiscovery.Metrics {
+func collectHTTPMetrics(p *InstanceProperties) []*mrpb.TimeSeries {
 	url := p.SAPInstance.GetNetweaverHealthCheckUrl()
 	if url == "" {
 		return nil
@@ -199,7 +199,7 @@ func collectHTTPMetrics(p *InstanceProperties) []*sapdiscovery.Metrics {
 // Returns metrics built using:
 //   - HTTP response code.
 //   - Total time taken by the request.
-func collectICMMetrics(p *InstanceProperties, url string) []*sapdiscovery.Metrics {
+func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
@@ -212,7 +212,7 @@ func collectICMMetrics(p *InstanceProperties, url string) []*sapdiscovery.Metric
 	extraLabels := map[string]string{"service_name": p.SAPInstance.GetServiceName()}
 
 	log.Logger.Debugw("Time taken to collect metrics in collectICMMetrics", "time", time.Since(now.AsTime()))
-	return []*sapdiscovery.Metrics{
+	return []*mrpb.TimeSeries{
 		createMetrics(p, nwICMRCodePath, extraLabels, now, int64(response.StatusCode)),
 		createMetrics(p, nwICMRTimePath, extraLabels, now, timeTaken.Milliseconds()),
 	}
@@ -223,7 +223,7 @@ func collectICMMetrics(p *InstanceProperties, url string) []*sapdiscovery.Metric
 //   - Two metrics - HTTP response code and response time for all HTTP status codes.
 //   - Additional work process count as reported by the message server info page on StatusOK(200).
 //   - A nil in case of errors in HTTP GET request failures.
-func collectMessageServerMetrics(p *InstanceProperties, url string) []*sapdiscovery.Metrics {
+func collectMessageServerMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
@@ -235,7 +235,7 @@ func collectMessageServerMetrics(p *InstanceProperties, url string) []*sapdiscov
 
 	extraLabels := map[string]string{"service_name": p.SAPInstance.GetServiceName()}
 
-	metrics := []*sapdiscovery.Metrics{
+	metrics := []*mrpb.TimeSeries{
 		createMetrics(p, nwMSResponseCodePath, extraLabels, now, int64(response.StatusCode)),
 		createMetrics(p, nwMSResponseTimePath, extraLabels, now, timeTaken.Milliseconds()),
 	}
@@ -276,7 +276,7 @@ func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 }
 
 // collectABAPProcessStatus collects the ABAP worker process status metrics.
-func collectABAPProcessStatus(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
+func collectABAPProcessStatus(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	processCount, busyProcessCount, _, err := sc.ParseABAPGetWPTable(r)
@@ -285,7 +285,7 @@ func collectABAPProcessStatus(p *InstanceProperties, r sapcontrol.RunnerWithEnv)
 		return nil
 	}
 
-	var metrics []*sapdiscovery.Metrics
+	var metrics []*mrpb.TimeSeries
 	for k, v := range processCount {
 		extraLabels := map[string]string{"abap_process": k}
 		log.Logger.Debugw("Creating metric for abap_process",
@@ -304,7 +304,7 @@ func collectABAPProcessStatus(p *InstanceProperties, r sapcontrol.RunnerWithEnv)
 }
 
 // collectABAPQueueStats collects ABAP Queue utilization metrics using dpmon tool.
-func collectABAPQueueStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
+func collectABAPQueueStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	currentQueueUsage, peakQueueUsage, err := sc.ParseQueueStats(r)
@@ -313,7 +313,7 @@ func collectABAPQueueStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 		return nil
 	}
 
-	var metrics []*sapdiscovery.Metrics
+	var metrics []*mrpb.TimeSeries
 	for k, v := range currentQueueUsage {
 		extraLabels := map[string]string{"abap_queue": k}
 		log.Logger.Debugw("Creating metric with labels",
@@ -334,7 +334,7 @@ func collectABAPQueueStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 }
 
 // collectABAPSessionStats collects ABAP session related metrics using dpmon tool.
-func collectABAPSessionStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
+func collectABAPSessionStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*mrpb.TimeSeries {
 	now := tspb.Now()
 
 	stdOut, stdErr, code, err := r.RunWithEnv()
@@ -344,7 +344,7 @@ func collectABAPSessionStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) 
 		return nil
 	}
 
-	var metrics []*sapdiscovery.Metrics
+	var metrics []*mrpb.TimeSeries
 	sessionCounts, totalCount, err := parseABAPSessionStats(stdOut)
 	if err != nil {
 		log.Logger.Debugw("DPMON ran successfully, but no ABAP session currently active", log.Error(err))
@@ -370,7 +370,7 @@ func collectABAPSessionStats(p *InstanceProperties, r sapcontrol.RunnerWithEnv) 
 }
 
 // collectRFCConnections collects the ABAP RFC connection metrics using dpmon tool.
-func collectRFCConnections(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
+func collectRFCConnections(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*mrpb.TimeSeries {
 	now := tspb.Now()
 
 	stdOut, stdErr, code, err := r.RunWithEnv()
@@ -380,7 +380,7 @@ func collectRFCConnections(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 		return nil
 	}
 
-	var metrics []*sapdiscovery.Metrics
+	var metrics []*mrpb.TimeSeries
 	rfcStateCount := parseRFCStats(stdOut)
 	for k, v := range rfcStateCount {
 		extraLabels := map[string]string{"abap_rfc_conn": k}
@@ -392,8 +392,8 @@ func collectRFCConnections(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 	return metrics
 }
 
-// createMetrics - create sapdiscovery.Metrics object for the given metric.
-func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *sapdiscovery.Metrics {
+// createMetrics - create mrpb.TimeSeries object for the given metric.
+func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
 		CloudProp:    p.Config.CloudProperties,
 		MetricType:   metricURL + mPath,
@@ -402,7 +402,7 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 		Int64Value:   val,
 		BareMetal:    p.Config.BareMetal,
 	}
-	return &sapdiscovery.Metrics{TimeSeries: timeseries.BuildInt(params)}
+	return timeseries.BuildInt(params)
 }
 
 // metricLabels appends the default SAP Instance labels and extra labels

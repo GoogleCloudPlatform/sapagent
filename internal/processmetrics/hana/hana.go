@@ -36,6 +36,7 @@ import (
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type (
@@ -105,7 +106,7 @@ var (
 
 // Collect is HANA implementation of Collector interface from processmetrics.go.
 // Returns a list of HANA related metrics.
-func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
+func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	processListRunner := &commandlineexecutor.Runner{
 		User:       p.SAPInstance.GetUser(),
 		Executable: p.SAPInstance.GetSapcontrolPath(),
@@ -123,7 +124,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 	return metrics
 }
 
-func collectReplicationHA(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*sapdiscovery.Metrics {
+func collectReplicationHA(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*mrpb.TimeSeries {
 	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", p.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
@@ -152,7 +153,7 @@ func collectReplicationHA(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*
 // collectHANAServiceMetrics creates metrics for each of the services in
 // a HANA instance. Also returns availabilityValue a signal that depends
 // on the status of the HANA services.
-func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*sapdiscovery.Metrics, availabilityValue int64) {
+func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries, availabilityValue int64) {
 	if len(processes) == 0 {
 		return nil, 0
 	}
@@ -175,17 +176,17 @@ func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcont
 //   - state : Value is 0 in case of successful query.
 //   - overalltime: Overall time taken by query in micro seconds.
 //   - servertime: Time spent on the server side in micro seconds.
-func collectHANAQueryMetrics(p *InstanceProperties, run runCmdAsUserExitCode) []*sapdiscovery.Metrics {
+func collectHANAQueryMetrics(p *InstanceProperties, run runCmdAsUserExitCode) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	queryState, err := runHANAQuery(p, run)
 	if err != nil {
 		log.Logger.Errorw("Error in running query", log.Error(err))
 		// Return a non-zero state in case of query failure.
-		return []*sapdiscovery.Metrics{createMetrics(p, queryStatePath, nil, now, 1)}
+		return []*mrpb.TimeSeries{createMetrics(p, queryStatePath, nil, now, 1)}
 	}
 
 	log.Logger.Debugw("HANA query metrics for instance", "instanceid", p.SAPInstance.GetInstanceId(), "querystate", queryState)
-	return []*sapdiscovery.Metrics{
+	return []*mrpb.TimeSeries{
 		createMetrics(p, queryStatePath, nil, now, queryState.state),
 		createMetrics(p, queryOverallTimePath, nil, now, queryState.overallTime),
 		createMetrics(p, queryServerTimePath, nil, now, queryState.serverTime),
@@ -235,8 +236,8 @@ func parseQueryOutput(str string, regex *regexp.Regexp) (int64, error) {
 	return int64(timeTaken), nil
 }
 
-// createMetrics - create sapdiscovery.Metrics  object for the given metric.
-func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *sapdiscovery.Metrics {
+// createMetrics - create mrpb.TimeSeries object for the given metric.
+func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	mLabels := appendLabels(p, extraLabels)
 	params := timeseries.Params{
 		CloudProp:    p.Config.CloudProperties,
@@ -247,7 +248,7 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 		BareMetal:    p.Config.BareMetal,
 	}
 	log.Logger.Debugw("Create metric for instance", "key", mPath, "value", val, "instanceid", p.SAPInstance.GetInstanceId(), "labels", mLabels)
-	return &sapdiscovery.Metrics{TimeSeries: timeseries.BuildInt(params)}
+	return timeseries.BuildInt(params)
 }
 
 // appendLabels appends the default SAP Instance labels and extra labels

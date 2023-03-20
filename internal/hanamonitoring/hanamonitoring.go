@@ -21,7 +21,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
@@ -30,16 +29,12 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
-const (
-	metricURL       = "workload.googleapis.com/sap/hanamonitoring"
-	maxTSPerRequest = 200 // Reference: https://cloud.google.com/monitoring/quotas
-)
+const metricURL = "workload.googleapis.com/sap/hanamonitoring"
 
 type gceInterface interface {
 	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
@@ -60,11 +55,6 @@ type Parameters struct {
 type database struct {
 	queryFunc queryFunc
 	instance  *cpb.HANAInstance
-}
-
-// Metrics contain the TimeSeries values for HANA Monitoring metrics.
-type Metrics struct {
-	TimeSeries *mrpb.TimeSeries
 }
 
 // Start begins the query goroutines if enabled.
@@ -134,14 +124,14 @@ func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, param
 		return 0, 0, err
 	}
 
-	var metrics []*Metrics
+	var metrics []*mrpb.TimeSeries
 	for rows.Next() {
 		if err := rows.Scan(cols...); err != nil {
 			return 0, 0, err
 		}
 		metrics = append(metrics, createMetricsForRow(db.instance.GetName(), db.instance.GetSid(), query, cols, params)...)
 	}
-	return send(ctx, metrics, params)
+	return cloudmonitoring.SendTimeSeries(ctx, metrics, params.TimeSeriesCreator, params.BackOffs, params.Config.GetCloudProperties().GetProjectId())
 }
 
 // createColumns creates pointers to the types defined in the configuration for each column in a query.
@@ -212,7 +202,7 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 }
 
 // createMetricsForRow will loop through each column in a query row result to first populate the metric labels, then create metrics for GAUGE and CUMULATIVE types.
-func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, params Parameters) []*Metrics {
+func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, params Parameters) []*mrpb.TimeSeries {
 	labels := map[string]string{
 		"instance_name": dbName,
 		"sid":           sid,
@@ -227,7 +217,7 @@ func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, param
 		}
 	}
 
-	var metrics []*Metrics
+	var metrics []*mrpb.TimeSeries
 	// The second loop will create metrics for each GAUGE and CUMULATIVE type.
 	for i, c := range query.GetColumns() {
 		if c.GetMetricType() == cpb.MetricType_METRIC_GAUGE {
@@ -241,7 +231,7 @@ func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, param
 }
 
 // createGaugeMetric builds a cloud monitoring time series with a boolean, int, or float point value for the specified column.
-func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryName string, params Parameters, timestamp *tspb.Timestamp) (*Metrics, bool) {
+func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryName string, params Parameters, timestamp *tspb.Timestamp) (*mrpb.TimeSeries, bool) {
 	metricPath := metricURL + "/" + queryName + "/" + c.GetName()
 	if c.GetNameOverride() != "" {
 		metricPath = metricURL + "/" + c.GetNameOverride()
@@ -261,60 +251,18 @@ func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryNa
 		if result, ok := val.(*int64); ok {
 			ts.Int64Value = *result
 		}
-		return &Metrics{TimeSeries: timeseries.BuildInt(ts)}, true
+		return timeseries.BuildInt(ts), true
 	case cpb.ValueType_VALUE_DOUBLE:
 		if result, ok := val.(*float64); ok {
 			ts.Float64Value = *result
 		}
-		return &Metrics{TimeSeries: timeseries.BuildFloat64(ts)}, true
+		return timeseries.BuildFloat64(ts), true
 	case cpb.ValueType_VALUE_BOOL:
 		if result, ok := val.(*bool); ok {
 			ts.BoolValue = *result
 		}
-		return &Metrics{TimeSeries: timeseries.BuildBool(ts)}, true
+		return timeseries.BuildBool(ts), true
 	default:
 		return nil, false
 	}
-}
-
-// send sends all the timeseries objects in the metrics array to cloud monitoring.
-// maxTSPerRequest is used as an upper limit to batch send timeseries values per request.
-// If a cloud monitoring API call fails even after retries (done in cloudmonitoring.go), the remaining measurements are discarded.
-// TODO: Move send() from hanamonitoring and processmetrics to cloudmonitoring
-func send(ctx context.Context, metrics []*Metrics, params Parameters) (sent, batchCount int, err error) {
-	var batchTimeSeries []*mrpb.TimeSeries
-
-	for _, m := range metrics {
-		batchTimeSeries = append(batchTimeSeries, m.TimeSeries)
-
-		if len(batchTimeSeries) == maxTSPerRequest {
-			log.Logger.Debug("Maximum batch size has been reached, sending the batch.")
-			batchCount++
-			if err := sendBatch(ctx, batchTimeSeries, params); err != nil {
-				return sent, batchCount, err
-			}
-			sent += len(batchTimeSeries)
-			batchTimeSeries = nil
-		}
-	}
-	if len(batchTimeSeries) == 0 {
-		return sent, batchCount, nil
-	}
-	batchCount++
-	if err := sendBatch(ctx, batchTimeSeries, params); err != nil {
-		return sent, batchCount, err
-	}
-	return sent + len(batchTimeSeries), batchCount, nil
-}
-
-// sendBatch sends one batch of metrics to cloud monitoring using an API call with retries. Returns an error in case of failures.
-func sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, params Parameters) error {
-	log.Logger.Debugw("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
-
-	req := &monitoringpb.CreateTimeSeriesRequest{
-		Name:       fmt.Sprintf("projects/%s", params.Config.GetCloudProperties().GetProjectId()),
-		TimeSeries: batchTimeSeries,
-	}
-
-	return cloudmonitoring.CreateTimeSeriesWithRetry(ctx, params.TimeSeriesCreator, req, params.BackOffs)
 }

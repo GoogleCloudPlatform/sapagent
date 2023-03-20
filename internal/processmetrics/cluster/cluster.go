@@ -29,9 +29,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -93,8 +93,8 @@ var (
 
 // Collect is cluster metrics implementation of Collector interface from
 // processmetrics.go. Returns a list of Linux cluster related metrics.
-func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 	nodeMetrics, _ := collectNodeState(p, pacemaker.NodeState)
 	metrics = append(metrics, nodeMetrics...)
 	resourceMetrics, _ := collectResourceState(p, pacemaker.ResourceState)
@@ -104,12 +104,11 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metric
 	return metrics
 }
 
-// collectNodeState returns the Linux cluster node state metrics as
-// sapdiscovery.Metrics. The integer values are returned as an array
-// for testability.
-func collectNodeState(p *InstanceProperties, read readPacemakerNodeState) ([]*sapdiscovery.Metrics, []int) {
+// collectNodeState returns the Linux cluster node state metrics as time series.
+// The integer values are returned as an array for testability.
+func collectNodeState(p *InstanceProperties, read readPacemakerNodeState) ([]*mrpb.TimeSeries, []int) {
 	var metricValues []int
-	var metrics []*sapdiscovery.Metrics
+	var metrics []*mrpb.TimeSeries
 
 	now := tspb.Now()
 	nodeState, err := read()
@@ -131,12 +130,11 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState) ([]*sa
 	return metrics, metricValues
 }
 
-// collectResourceState returns the Linux cluster resource state metrics as
-// sapdiscovery.Metrics. The integer values of metric are returned as an array
-// for testability.
-func collectResourceState(p *InstanceProperties, read readPacemakerResourceState) ([]*sapdiscovery.Metrics, []int) {
+// collectResourceState returns the Linux cluster resource state metrics as time series.
+// The integer values of metric are returned as an array for testability.
+func collectResourceState(p *InstanceProperties, read readPacemakerResourceState) ([]*mrpb.TimeSeries, []int) {
 	var metricValues []int
-	var metrics []*sapdiscovery.Metrics
+	var metrics []*mrpb.TimeSeries
 
 	now := tspb.Now()
 	resourceState, err := read()
@@ -171,9 +169,9 @@ func stateFromString(m map[string]int, val string) int {
 // collectFailCount returns the Linux cluster resource failcounts.
 // The metrics are returned only for resources with a failcount entry in
 // crm_mon history.
-func collectFailCount(p *InstanceProperties, read readPacemakerFailCount) ([]*sapdiscovery.Metrics, []int) {
+func collectFailCount(p *InstanceProperties, read readPacemakerFailCount) ([]*mrpb.TimeSeries, []int) {
 	var metricValues []int
-	var metrics []*sapdiscovery.Metrics
+	var metrics []*mrpb.TimeSeries
 
 	now := tspb.Now()
 	resourceFailCounts, err := read(commandlineexecutor.ExpandAndExecuteCommand)
@@ -194,8 +192,8 @@ func collectFailCount(p *InstanceProperties, read readPacemakerFailCount) ([]*sa
 	return metrics, metricValues
 }
 
-// createMetricsInt creates sapdiscovery.Metrics for the given metric.
-func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *sapdiscovery.Metrics {
+// createMetricsInt creates mrpb.TimeSeries for the given metric.
+func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
 		CloudProp:    p.Config.CloudProperties,
 		MetricType:   metricURL + mPath,
@@ -204,7 +202,7 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 		Int64Value:   val,
 		BareMetal:    p.Config.BareMetal,
 	}
-	return &sapdiscovery.Metrics{TimeSeries: timeseries.BuildInt(params)}
+	return timeseries.BuildInt(params)
 }
 
 /*

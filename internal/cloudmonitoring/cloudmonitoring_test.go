@@ -38,6 +38,14 @@ var (
 	defaultBackOffIntervals = NewBackOffIntervals(time.Millisecond, time.Millisecond)
 )
 
+func createFakeTimeSeries(count int) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
+	for i := 0; i < count; i++ {
+		metrics = append(metrics, &mrpb.TimeSeries{})
+	}
+	return metrics
+}
+
 func TestCreateTimeSeriesWithRetry(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -160,5 +168,76 @@ func TestCreateTimeSeriesNilBackOffs(t *testing.T) {
 	err := CreateTimeSeriesWithRetry(context.Background(), &fake.TimeSeriesCreator{}, &monitoringpb.CreateTimeSeriesRequest{Name: "test-project", TimeSeries: []*mrpb.TimeSeries{}}, nil)
 	if err != nil {
 		t.Errorf("CreateTimeSeriesWithRetry() with nil back off intervals returned err: %v", err)
+	}
+}
+
+func TestSendTimeSeries(t *testing.T) {
+	tests := []struct {
+		name              string
+		count             int
+		timeSeriesCreator *fake.TimeSeriesCreator
+		wantSentCount     int
+		wantBatchCount    int
+		wantErr           error
+	}{
+		{
+			name:              "SingleBatch",
+			count:             199,
+			timeSeriesCreator: &fake.TimeSeriesCreator{},
+			wantSentCount:     199,
+			wantBatchCount:    1,
+		},
+		{
+			name:              "SingleBatchMaximumTSInABatch",
+			count:             200,
+			timeSeriesCreator: &fake.TimeSeriesCreator{},
+			wantSentCount:     200,
+			wantBatchCount:    1,
+		},
+		{
+			name:              "MultipleBatches",
+			count:             399,
+			timeSeriesCreator: &fake.TimeSeriesCreator{},
+			wantSentCount:     399,
+			wantBatchCount:    2,
+		},
+		{
+			name:              "SendErrorSingleBatch",
+			count:             5,
+			timeSeriesCreator: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			wantErr:           cmpopts.AnyError,
+			wantSentCount:     0,
+			wantBatchCount:    1,
+		},
+		{
+			name:              "SendErrorMultipleBatches",
+			count:             399,
+			timeSeriesCreator: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			wantErr:           cmpopts.AnyError,
+			wantSentCount:     0,
+			wantBatchCount:    1,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			timeSeries := createFakeTimeSeries(test.count)
+			gotSentCount, gotBatchCount, gotErr := SendTimeSeries(context.Background(), timeSeries, test.timeSeriesCreator, NewBackOffIntervals(time.Millisecond, time.Millisecond), "test-project")
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("send(%d, %v) = %v wantErr: %v", len(timeSeries), test.timeSeriesCreator, gotErr, test.wantErr)
+			}
+
+			if gotSentCount != test.wantSentCount {
+				t.Errorf("send(%d, %v) = %v wantSentCount: %v", len(timeSeries), test.timeSeriesCreator, gotSentCount, test.wantSentCount)
+			}
+
+			if gotBatchCount != test.wantBatchCount {
+				t.Errorf("send(%d, %v) = %v wantBatchCount: %v", len(timeSeries), test.timeSeriesCreator, gotBatchCount, test.wantBatchCount)
+			}
+		})
 	}
 }

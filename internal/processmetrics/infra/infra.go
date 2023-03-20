@@ -20,10 +20,10 @@ package infra
 import (
 	"context"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
@@ -49,27 +49,27 @@ type Properties struct {
 
 // Collect is an implementation of Collector interface from processmetrics
 // responsible for collecting infra migration event metrics.
-func (p *Properties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
+func (p *Properties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	if p.Config.BareMetal {
 		return nil
 	}
 	return collectScheduledMigration(p, metadataServerCall)
 }
 
-func collectScheduledMigration(p *Properties, f func() (string, error)) []*sapdiscovery.Metrics {
+func collectScheduledMigration(p *Properties, f func() (string, error)) []*mrpb.TimeSeries {
 	event, err := f()
 	if err != nil {
-		return []*sapdiscovery.Metrics{}
+		return []*mrpb.TimeSeries{}
 	}
 	var scheduledMigration int64
 	if event == metadataMigrationResponse {
 		scheduledMigration = 1
 	}
-	return []*sapdiscovery.Metrics{createMetrics(p, migrationPath, scheduledMigration)}
+	return []*mrpb.TimeSeries{createMetrics(p, migrationPath, scheduledMigration)}
 }
 
-// createMetrics - create sapdiscovery.Metrics object for the given metric.
-func createMetrics(p *Properties, mPath string, val int64) *sapdiscovery.Metrics {
+// createMetrics - create mrpb.TimeSeries object for the given metric.
+func createMetrics(p *Properties, mPath string, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
 		CloudProp:  p.Config.CloudProperties,
 		MetricType: metricURL + mPath,
@@ -77,5 +77,5 @@ func createMetrics(p *Properties, mPath string, val int64) *sapdiscovery.Metrics
 		Int64Value: val,
 		BareMetal:  p.Config.BareMetal,
 	}
-	return &sapdiscovery.Metrics{TimeSeries: timeseries.BuildInt(params)}
+	return timeseries.BuildInt(params)
 }

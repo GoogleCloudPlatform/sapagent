@@ -19,9 +19,9 @@ package computeresources
 import (
 	"context"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
@@ -43,7 +43,7 @@ type (
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP Control Processes.
-func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*sapdiscovery.Metrics {
+func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	params := parameters{
 		executor:         p.Executor,
 		config:           p.Config,

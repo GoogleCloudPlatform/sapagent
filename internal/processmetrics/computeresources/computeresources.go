@@ -30,9 +30,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -66,7 +66,7 @@ type (
 		cpuMetricPath           string
 		memoryMetricPath        string
 		sapInstance             *sapb.SAPInstance
-		newProc          newProcessWithContextHelper
+		newProc                 newProcessWithContextHelper
 		runnerForGetProcessList sapcontrol.RunnerWithEnv
 		runnerForABAPGetWPTable sapcontrol.RunnerWithEnv
 	}
@@ -157,8 +157,8 @@ func collectProcessesForInstance(p parameters) []*ProcessInfo {
 }
 
 // collectCPUPerProcess collects CPU utilization per process for HANA, Netweaver and SAP control processes.
-func collectCPUPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+func collectCPUPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
@@ -187,8 +187,8 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 // collectMemoryPerProcess is a function responsible for collecting memory utilization
 // per process for Hana, Netweaver and SAP control processes. Metric will represent memory
 // utilization in megabytes.
-func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
@@ -209,23 +209,23 @@ func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*Pro
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSize",
 		}
-		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS) / math.Pow(10, 6), p)
+		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS)/math.Pow(10, 6), p)
 		rSSLables := map[string]string{
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmRSS",
 		}
-		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS) / math.Pow(10, 6), p)
+		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS)/math.Pow(10, 6), p)
 		swapLables := map[string]string{
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSwap",
 		}
-		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap) / math.Pow(10, 6), p)
+		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap)/math.Pow(10, 6), p)
 		metrics = append(metrics, vmSizeMetrics, rSSMetrics, swapMetrics)
 	}
 	return metrics
 }
 
-func createMetrics(mPath string, labels map[string]string, val float64, p parameters) *sapdiscovery.Metrics {
+func createMetrics(mPath string, labels map[string]string, val float64, p parameters) *mrpb.TimeSeries {
 	if p.sapInstance != nil {
 		labels["sid"] = p.sapInstance.GetSapsid()
 		labels["instance_nr"] = p.sapInstance.GetInstanceNumber()
@@ -239,7 +239,7 @@ func createMetrics(mPath string, labels map[string]string, val float64, p parame
 		BareMetal:    p.config.BareMetal,
 	}
 	log.Logger.Debugw("Creating metric for instance", "metric", mPath, "value", val, "instancenumber", p.sapInstance.GetInstanceNumber(), "labels", labels)
-	return &sapdiscovery.Metrics{TimeSeries: timeseries.BuildFloat64(ts)}
+	return timeseries.BuildFloat64(ts)
 }
 
 func formatProcesLabel(pname, pid string) string {

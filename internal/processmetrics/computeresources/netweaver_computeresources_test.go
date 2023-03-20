@@ -79,18 +79,18 @@ func TestCollectForNetweaver(t *testing.T) {
 			1 dispstatus: GREEN
 			1 pid: 333
 			`,
-			wantCount:        1,
+			wantCount: 1,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testNetweaverInstanceProperties := &NetweaverInstanceProperties{
-				Config:      defaultConfig,
-				Client:      &fake.TimeSeriesCreator{},
-				Executor:    test.executor,
-				SAPInstance: defaultSAPInstanceNetWeaver,
-				NewProcHelper: newProcessWithContextHelperTest,
+				Config:                     defaultConfig,
+				Client:                     &fake.TimeSeriesCreator{},
+				Executor:                   test.executor,
+				SAPInstance:                defaultSAPInstanceNetWeaver,
+				NewProcHelper:              newProcessWithContextHelperTest,
 				RunnerForSAPControlProcess: &fakeRunner{stdOut: test.sapControlOutput},
 			}
 			got := testNetweaverInstanceProperties.Collect(context.Background())
@@ -99,7 +99,7 @@ func TestCollectForNetweaver(t *testing.T) {
 			}
 
 			for _, metric := range got {
-				points := metric.TimeSeries.GetPoints()
+				points := metric.GetPoints()
 				if points[0].GetValue().GetDoubleValue() < 0 {
 					t.Errorf("Metric value for compute resources cannot be negative.")
 				}

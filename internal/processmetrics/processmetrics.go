@@ -51,7 +51,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapservice"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -62,7 +61,7 @@ type (
 	// This needs to be implennted by application specific modules that want to leverage
 	// startMetricGroup functionality.
 	Collector interface {
-		Collect(context.Context) []*sapdiscovery.Metrics
+		Collect(context.Context) []*mrpb.TimeSeries
 	}
 
 	// Properties has necessary context for Metrics collection.
@@ -344,7 +343,7 @@ Return values are pass-through from send().
 */
 func (p *Properties) collectAndSendOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
 	var wg sync.WaitGroup
-	msgs := make([][]*sapdiscovery.Metrics, len(p.Collectors))
+	msgs := make([][]*mrpb.TimeSeries, len(p.Collectors))
 	defer (func() { msgs = nil })() // free up reference in memory.
 	log.Logger.Debugw("Starting collectors in parallel.", "numberofcollectors", len(p.Collectors))
 
@@ -358,66 +357,12 @@ func (p *Properties) collectAndSendOnce(ctx context.Context, bo *cloudmonitoring
 	}
 	log.Logger.Debug("Waiting for collectors to finish.")
 	wg.Wait()
-	return p.send(ctx, flatten(msgs), bo)
+	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
 }
 
-/*
-send sends all the timeseries objects in metrics array to cloud monitoring.
-
-The value maxTSPerRequest is used as upper limit to pack timeseries values per
-request. One or more synchrounous API calls are made to write the metrics to cloud
-monitoring. If a cloud monitoring API call fails even after retries (done in
-cloudmonitoring.go), the remaining measurements are discarded.
-  - Returns number of timeseries sent(as sent) to cloud monitoring.
-  - Returns the number of batches(as batchCount) for unit testing coverage.
-  - Returns error if cloud monitoring API fails.
-*/
-func (p *Properties) send(ctx context.Context, metrics []*sapdiscovery.Metrics, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
-	var batchTimeSeries []*mrpb.TimeSeries
-
-	for _, m := range metrics {
-		batchTimeSeries = append(batchTimeSeries, m.TimeSeries)
-
-		if len(batchTimeSeries) == maxTSPerRequest {
-			log.Logger.Debug("Maximum batch size has been reached, sending the batch.")
-			batchCount++
-			if err := p.sendBatch(ctx, batchTimeSeries, bo); err != nil {
-				return sent, batchCount, err
-			}
-			sent += len(batchTimeSeries)
-			batchTimeSeries = nil
-		}
-	}
-	if len(batchTimeSeries) == 0 {
-		return sent, batchCount, nil
-	}
-	batchCount++
-	if err := p.sendBatch(ctx, batchTimeSeries, bo); err != nil {
-		return sent, batchCount, err
-	}
-	return sent + len(batchTimeSeries), batchCount, nil
-}
-
-/*
-sendBatch sends one batch of metrics to cloud monitoring using an API call with retries.
-Returns an error in case of failures.
-*/
-func (p *Properties) sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, bo *cloudmonitoring.BackOffIntervals) error {
-	log.Logger.Debugw("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
-
-	req := &monitoringpb.CreateTimeSeriesRequest{
-		Name:       fmt.Sprintf("projects/%s", p.Config.GetCloudProperties().GetProjectId()),
-		TimeSeries: batchTimeSeries,
-	}
-
-	return cloudmonitoring.CreateTimeSeriesWithRetry(ctx, p.Client, req, bo)
-}
-
-/*
-flatten converts an 2D array of metric slices to a flat 1D array of metrics.
-*/
-func flatten(msgs [][]*sapdiscovery.Metrics) []*sapdiscovery.Metrics {
-	var metrics []*sapdiscovery.Metrics
+// flatten converts an 2D array of metric slices to a flat 1D array of metrics.
+func flatten(msgs [][]*mrpb.TimeSeries) []*mrpb.TimeSeries {
+	var metrics []*mrpb.TimeSeries
 	for _, msg := range msgs {
 		metrics = append(metrics, msg...)
 	}

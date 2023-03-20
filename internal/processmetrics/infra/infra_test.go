@@ -118,14 +118,14 @@ func TestCollectScheduledMigration_MetricValue(t *testing.T) {
 			if len(got) != 1 {
 				t.Fatalf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), 1)
 			}
-			gotPointsCount := len(got[0].TimeSeries.Points)
+			gotPointsCount := len(got[0].Points)
 			if gotPointsCount != 1 {
-				t.Fatalf("collectScheduledMigration() returned unexpected metric.timeseries.points count: got=%d, want=%d", gotPointsCount, 1)
+				t.Fatalf("collectScheduledMigration() returned unexpected metric.points count: got=%d, want=%d", gotPointsCount, 1)
 			}
 			// Test exported metric value.
-			gotValue := got[0].TimeSeries.Points[0].GetValue().GetInt64Value()
+			gotValue := got[0].Points[0].GetValue().GetInt64Value()
 			if gotValue != test.wantValue {
-				t.Errorf("collectScheduledMigration() returned unexpected metric.timeseries.point value: got=%d, want=%d", gotValue, test.wantValue)
+				t.Errorf("collectScheduledMigration() returned unexpected metric.point value: got=%d, want=%d", gotValue, test.wantValue)
 			}
 		})
 	}
@@ -137,11 +137,11 @@ func TestCollectScheduledMigration_MetricType(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), 1)
 	}
-	if got[0].TimeSeries.Metric == nil {
-		t.Fatal("collectScheduledMigration() returned unexpected metric.timeseries.metric: nil")
+	if got[0].Metric == nil {
+		t.Fatal("collectScheduledMigration() returned unexpected metric.metric: nil")
 	}
 	// Test exported metric type.
-	gotType := got[0].TimeSeries.Metric.GetType()
+	gotType := got[0].Metric.GetType()
 	if gotType != want {
 		t.Errorf("collectScheduledMigration() returned unexpected metric type: got=%s, want=%s", gotType, want)
 	}

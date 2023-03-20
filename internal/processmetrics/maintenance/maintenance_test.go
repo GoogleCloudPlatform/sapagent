@@ -308,7 +308,7 @@ func TestCollect(t *testing.T) {
 			}
 			trueCount := 0
 			for _, v := range got {
-				if v.TimeSeries.GetPoints()[0].GetValue().GetBoolValue() {
+				if v.GetPoints()[0].GetValue().GetBoolValue() {
 					trueCount++
 				}
 			}

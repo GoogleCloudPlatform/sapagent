@@ -19,6 +19,7 @@ package cloudmonitoring
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -40,6 +41,8 @@ const (
 	DefaultLongExponentialBackOffInterval = 2 * time.Second
 	DefaultShortConstantBackOffInterval   = 5 * time.Second
 )
+
+const maxTSPerRequest = 200 // Reference: https://cloud.google.com/monitoring/quotas
 
 // NewBackOffIntervals is a constructor for the back off intervals.
 func NewBackOffIntervals(longExponential, shortConstant time.Duration) *BackOffIntervals {
@@ -137,4 +140,45 @@ func longExponentialBackOffPolicy(ctx context.Context, initial time.Duration) ba
 func shortConstantBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
 	constantBackoff := backoff.NewConstantBackOff(initial)
 	return backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 2), ctx) // 2 retries = 3 total attempts
+}
+
+// SendTimeSeries sends all the time series objects to cloud monitoring.
+// maxTSPerRequest is used as an upper limit to batch send time series values per request.
+// If a cloud monitoring API call fails even after retries, the remaining measurements are discarded.
+func SendTimeSeries(ctx context.Context, timeSeries []*mrpb.TimeSeries, timeSeriesCreator TimeSeriesCreator, bo *BackOffIntervals, projectID string) (sent, batchCount int, err error) {
+	var batchTimeSeries []*mrpb.TimeSeries
+
+	for _, t := range timeSeries {
+		batchTimeSeries = append(batchTimeSeries, t)
+
+		if len(batchTimeSeries) == maxTSPerRequest {
+			log.Logger.Debug("Maximum batch size has been reached, sending the batch.")
+			batchCount++
+			if err := sendBatch(ctx, batchTimeSeries, timeSeriesCreator, bo, projectID); err != nil {
+				return sent, batchCount, err
+			}
+			sent += len(batchTimeSeries)
+			batchTimeSeries = nil
+		}
+	}
+	if len(batchTimeSeries) == 0 {
+		return sent, batchCount, nil
+	}
+	batchCount++
+	if err := sendBatch(ctx, batchTimeSeries, timeSeriesCreator, bo, projectID); err != nil {
+		return sent, batchCount, err
+	}
+	return sent + len(batchTimeSeries), batchCount, nil
+}
+
+// sendBatch sends one batch of metrics to cloud monitoring using an API call with retries. Returns an error in case of failures.
+func sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, timeSeriesCreator TimeSeriesCreator, bo *BackOffIntervals, projectID string) error {
+	log.Logger.Debugw("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
+
+	req := &monitoringpb.CreateTimeSeriesRequest{
+		Name:       fmt.Sprintf("projects/%s", projectID),
+		TimeSeries: batchTimeSeries,
+	}
+
+	return CreateTimeSeriesWithRetry(ctx, timeSeriesCreator, req, bo)
 }

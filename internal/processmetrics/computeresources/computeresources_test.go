@@ -345,7 +345,7 @@ func TestCollectCPUPerProcessValues(t *testing.T) {
 	}
 	ProcessList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
 	want := float64(expectedCPUPercentage)
-	got := collectCPUPerProcess(context.Background(), params, ProcessList)[0].TimeSeries.GetPoints()[0].GetValue().GetDoubleValue()
+	got := collectCPUPerProcess(context.Background(), params, ProcessList)[0].GetPoints()[0].GetValue().GetDoubleValue()
 	if got != want {
 		t.Errorf("collectCPUPerProcess(%v, %v) = %f , want %f", params, ProcessList, got, want)
 	}
@@ -434,8 +434,8 @@ func TestMemoryPerProcessValues(t *testing.T) {
 	memoryUtilMap := make(map[string]float64)
 	got := collectMemoryPerProcess(context.Background(), params, processList)
 	for _, item := range got {
-		key := item.TimeSeries.GetMetric().GetLabels()["memType"]
-		val := item.TimeSeries.GetPoints()[0].GetValue().GetDoubleValue()
+		key := item.GetMetric().GetLabels()["memType"]
+		val := item.GetPoints()[0].GetValue().GetDoubleValue()
 		memoryUtilMap[key] = val
 	}
 	if diff := cmp.Diff(want, memoryUtilMap, protocmp.Transform()); diff != "" {
@@ -456,7 +456,7 @@ func TestCollectMemoryPerProcessLabels(t *testing.T) {
 	want["memType"] = "VmSize"
 	want["sid"] = "HDB"
 	want["instance_nr"] = "001"
-	got := collectMemoryPerProcess(context.Background(), params, processList)[0].TimeSeries.GetMetric().GetLabels()
+	got := collectMemoryPerProcess(context.Background(), params, processList)[0].GetMetric().GetLabels()
 	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
 	}
