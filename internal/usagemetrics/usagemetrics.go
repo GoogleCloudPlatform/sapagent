@@ -68,6 +68,10 @@ const (
 	AgentMetricsServiceCreateFailure
 	HeartbeatMonitorCreateFailure
 	HeartbeatMonitorRegistrationFailure
+	SnapshotDBNotReadyFailure
+	DiskSnapshotCreateFailure
+	DiskSnapshotFailedDBNotComplete
+	DiskSnapshotDoneDBNotComplete
 )
 
 // Agent wide action mappings.
@@ -77,6 +81,7 @@ const (
 	CollectHostMetrics
 	CollectProcessMetrics
 	CollectHANAMonitoringMetrics
+	HANADiskSnapshot
 )
 
 var (
