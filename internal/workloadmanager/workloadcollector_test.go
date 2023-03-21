@@ -187,9 +187,14 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 		return "\n Version=10.0.17763  \n\n", "", nil
 	}
 
-	want := wantSystemMetrics(wantTimestamp, wantOSVersion)
+	labels := make(map[string]string)
+	for k, v := range defaultLabels {
+		labels[k] = v
+	}
+	labels["os"] = wantOSVersion
+	want := wantSystemMetrics(wantTimestamp, labels)
 	for _, metric := range []string{"corosync", "hana", "netweaver", "pacemaker"} {
-		wantMetric := wantSystemMetrics(wantTimestamp, wantOSVersion).Metrics[0]
+		wantMetric := wantSystemMetrics(wantTimestamp, labels).Metrics[0]
 		wantMetric.Metric.Type = "workload.googleapis.com/sap/validation/" + metric
 		wantMetric.Points[0].Value.Value = &cpb.TypedValue_DoubleValue{DoubleValue: 0}
 		want.Metrics = append(want.Metrics, wantMetric)

@@ -40,6 +40,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 /*
@@ -86,6 +87,7 @@ Parameters holds the parameters for all of the Collect* function calls.
 */
 type Parameters struct {
 	Config                *cnfpb.Configuration
+	WorkloadConfig        *wlmpb.WorkloadValidation
 	Remote                bool
 	ConfigFileReader      ConfigFileReader
 	OSStatReader          OSStatReader
@@ -99,6 +101,8 @@ type Parameters struct {
 	OSType                string
 	BackOffs              *cloudmonitoring.BackOffIntervals
 	HeartbeatSpec         *heartbeat.Spec
+	OSReleaseFilePath     string
+	InterfaceAddrsGetter  InterfaceAddrsGetter
 }
 
 var (

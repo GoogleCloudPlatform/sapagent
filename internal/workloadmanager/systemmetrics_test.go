@@ -17,9 +17,12 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"embed"
 	"errors"
+	"io"
 	"net"
 	"testing"
+	"time"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -28,9 +31,13 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/zieckey/goini"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
+	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
+	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 var (
@@ -41,25 +48,36 @@ var (
 			Zone:         "test-zone",
 			ProjectId:    "test-project-id",
 		},
-		AgentProperties: &cnfpb.AgentProperties{Version: "1.0"},
+		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
+	defaultLabels = map[string]string{
+		"instance_name": "test-instance-name",
+		"os":            "test-os-version",
+		"agent":         "gcagent",
+		"agent_version": "1.0",
+		"agent_state":   "running",
+		"gcloud":        "true",
+		"gsutil":        "true",
+		"network_ips":   "192.168.0.1,192.168.0.2",
+	}
+	// This is a copy of the standard collection definition that is accessible
+	// from within the workloadmanager package. The expectation is that both of
+	// these files are kept in sync.
+	// LINT.IfChange
+	//go:embed test_data/collectiondefinition.json
+	defaultCollectionDefinition []byte
+	// LINT.ThenChange(//depot/github.com/GoogleCloudPlatform/sapagent/internal/configuration/defaultconfigs/collectiondefinition/collectiondefinition.json)
+
+	//go:embed test_data/os-release.txt test_data/os-release-bad.txt test_data/os-release-empty.txt
+	testFS embed.FS
 )
 
-func wantSystemMetrics(ts *timestamppb.Timestamp, os string) WorkloadMetrics {
+func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
 	return WorkloadMetrics{
 		Metrics: []*monitoringresourcepb.TimeSeries{{
 			Metric: &metricpb.Metric{
-				Type: "workload.googleapis.com/sap/validation/system",
-				Labels: map[string]string{
-					"instance_name": "test-instance-name",
-					"os":            os,
-					"agent":         "gcagent",
-					"agent_version": "1.0",
-					"agent_state":   "running",
-					"gcloud":        "true",
-					"gsutil":        "true",
-					"network_ips":   "192.168.0.1,192.168.0.2",
-				},
+				Type:   "workload.googleapis.com/sap/validation/system",
+				Labels: labels,
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,
 			Resource: &monitoredresourcepb.MonitoredResource{
@@ -82,6 +100,172 @@ func wantSystemMetrics(ts *timestamppb.Timestamp, os string) WorkloadMetrics {
 				},
 			}},
 		}},
+	}
+}
+
+func TestCollectSystemMetricsFromConfig(t *testing.T) {
+	collectionDefinition := &cdpb.CollectionDefinition{}
+	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	if err != nil {
+		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+
+	systemMetricOSNameVersion := &wlmpb.WorkloadValidation{
+		ValidationSystem: &wlmpb.ValidationSystem{
+			SystemMetrics: []*wlmpb.SystemMetric{
+				&wlmpb.SystemMetric{
+					MetricInfo: &cmpb.MetricInfo{
+						Type:  "workload.googleapis.com/sap/validation/system",
+						Label: "os",
+					},
+					Value: wlmpb.SystemVariable_OS_NAME_VERSION,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name       string
+		params     Parameters
+		wantLabels map[string]string
+	}{
+		{
+			name: "DefaultCollectionDefinition",
+			params: Parameters{
+				Config:         cnf,
+				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
+				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
+					file, err := testFS.Open(path)
+					var f io.ReadCloser = file
+					return f, err
+				}),
+				OSReleaseFilePath: "test_data/os-release.txt",
+				InterfaceAddrsGetter: func() ([]net.Addr, error) {
+					ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
+					ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
+					return []net.Addr{ip1, ip2}, nil
+				},
+			},
+			wantLabels: map[string]string{
+				"instance_name": "test-instance-name",
+				"os":            "debian-11",
+				"agent":         "sapagent",
+				"agent_version": "1.0",
+				"network_ips":   "192.168.0.1,192.168.0.2",
+			},
+		},
+		{
+			name: "SystemValidationMetricsEmpty",
+			params: Parameters{
+				Config:         cnf,
+				WorkloadConfig: &wlmpb.WorkloadValidation{},
+			},
+			wantLabels: map[string]string{},
+		},
+		{
+			name: "SystemVariableUnknown",
+			params: Parameters{
+				Config: cnf,
+				WorkloadConfig: &wlmpb.WorkloadValidation{
+					ValidationSystem: &wlmpb.ValidationSystem{
+						SystemMetrics: []*wlmpb.SystemMetric{
+							&wlmpb.SystemMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/system",
+									Label: "foo",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantLabels: map[string]string{
+				"foo": "",
+			},
+		},
+		{
+			name: "OSReleaseFileReadError",
+			params: Parameters{
+				Config:         cnf,
+				WorkloadConfig: systemMetricOSNameVersion,
+				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
+					return nil, errors.New("File Read Error")
+				}),
+				OSReleaseFilePath: "test_data/os-release.txt",
+			},
+			wantLabels: map[string]string{
+				"os": "",
+			},
+		},
+		{
+			name: "OSReleaseFileParseError",
+			params: Parameters{
+				Config:         cnf,
+				WorkloadConfig: systemMetricOSNameVersion,
+				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
+					file, err := testFS.Open(path)
+					var f io.ReadCloser = file
+					return f, err
+				}),
+				OSReleaseFilePath: "test_data/os-release-bad.txt",
+			},
+			wantLabels: map[string]string{
+				"os": "",
+			},
+		},
+		{
+			name: "OSNameVersionEmpty",
+			params: Parameters{
+				Config:         cnf,
+				WorkloadConfig: systemMetricOSNameVersion,
+				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
+					file, err := testFS.Open(path)
+					var f io.ReadCloser = file
+					return f, err
+				}),
+				OSReleaseFilePath: "test_data/os-release-empty.txt",
+			},
+			wantLabels: map[string]string{
+				"os": "-",
+			},
+		},
+		{
+			name: "InterfaceAddrsError",
+			params: Parameters{
+				Config: cnf,
+				WorkloadConfig: &wlmpb.WorkloadValidation{
+					ValidationSystem: &wlmpb.ValidationSystem{
+						SystemMetrics: []*wlmpb.SystemMetric{
+							&wlmpb.SystemMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/system",
+									Label: "network_ips",
+								},
+								Value: wlmpb.SystemVariable_NETWORK_IPS,
+							},
+						},
+					},
+				},
+				InterfaceAddrsGetter: func() ([]net.Addr, error) {
+					return nil, errors.New("Interface Addrs Error")
+				},
+			},
+			wantLabels: map[string]string{
+				"network_ips": "",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			want := wantSystemMetrics(&timestamppb.Timestamp{Seconds: time.Now().Unix()}, test.wantLabels)
+			ch := make(chan WorkloadMetrics)
+			go CollectSystemMetricsFromConfig(test.params, ch)
+			got := <-ch
+			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
+				t.Errorf("CollectSystemMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -137,7 +321,12 @@ func TestCollectSystemMetrics(t *testing.T) {
 			agentServiceStatus = func(string) (string, string, error) {
 				return test.agentStatus, "", nil
 			}
-			want := wantSystemMetrics(nts, test.wantOsVersion)
+			labels := make(map[string]string)
+			for k, v := range defaultLabels {
+				labels[k] = v
+			}
+			labels["os"] = test.wantOsVersion
+			want := wantSystemMetrics(nts, labels)
 			sch := make(chan WorkloadMetrics)
 			p := Parameters{
 				Config: cnf,
@@ -215,7 +404,12 @@ func TestCollectSystemMetricsErrors(t *testing.T) {
 			agentServiceStatus = func(string) (string, string, error) {
 				return test.agentStatus, "", nil
 			}
-			want := wantSystemMetrics(nts, test.wantOsVersion)
+			labels := make(map[string]string)
+			for k, v := range defaultLabels {
+				labels[k] = v
+			}
+			labels["os"] = test.wantOsVersion
+			want := wantSystemMetrics(nts, labels)
 			sch := make(chan WorkloadMetrics)
 			p := Parameters{
 				Config: cnf,

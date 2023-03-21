@@ -20,6 +20,7 @@ package main
 import (
 	"context"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"runtime"
@@ -183,6 +184,8 @@ func startServices(goos string) {
 			TimeSeriesCreator:    mc,
 			BackOffs:             cloudmonitoring.NewDefaultBackOffIntervals(),
 			HeartbeatSpec:        heartbeatSpec,
+			OSReleaseFilePath:    workloadmanager.OSReleaseFilePath,
+			InterfaceAddrsGetter: net.InterfaceAddrs,
 		}
 		workloadmanager.StartMetricsCollection(ctx, wlmparameters)
 	} else {
@@ -240,6 +243,8 @@ func startServices(goos string) {
 			OSType:                goos,
 			BackOffs:              cloudmonitoring.NewDefaultBackOffIntervals(),
 			HeartbeatSpec:         heartbeatSpec,
+			OSReleaseFilePath:     workloadmanager.OSReleaseFilePath,
+			InterfaceAddrsGetter:  net.InterfaceAddrs,
 		}
 		workloadmanager.StartMetricsCollection(ctx, wlmparams)
 

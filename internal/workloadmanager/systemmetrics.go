@@ -17,12 +17,15 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"fmt"
 	"net"
 	"strings"
 
 	"github.com/zieckey/goini"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+
+	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 var (
@@ -34,8 +37,103 @@ var (
 	osVersionExecute   = wmicOsVersion
 )
 
+// OSReleaseFilePath lists the location of the os-release file in the Linux system.
+const OSReleaseFilePath = "/etc/os-release"
+
+// InterfaceAddrsGetter satisfies the function signature for net.InterfaceAddrs().
+type InterfaceAddrsGetter func() ([]net.Addr, error)
+
+// CollectSystemMetricsFromConfig collects the system metrics specified by the
+// WorkloadValidation config and sends them to a channel to be uploaded.
+func CollectSystemMetricsFromConfig(params Parameters, wm chan<- WorkloadMetrics) {
+	log.Logger.Info("Collecting Workload Manager System metrics...")
+	t := "workload.googleapis.com/sap/validation/system"
+	l := make(map[string]string)
+
+	for _, m := range params.WorkloadConfig.GetValidationSystem().GetSystemMetrics() {
+		v := collectSystemVariable(m, params)
+		l[m.GetMetricInfo().GetLabel()] = v
+	}
+
+	m := createTimeSeries(t, l, 1, params.Config)
+	wm <- WorkloadMetrics{Metrics: m}
+}
+
+// collectSystemVariable collects and returns the metric value for a given system metric variable.
+func collectSystemVariable(m *wlmpb.SystemMetric, params Parameters) string {
+	v := m.GetValue()
+	switch v {
+	case wlmpb.SystemVariable_INSTANCE_NAME:
+		return params.Config.GetCloudProperties().GetInstanceName()
+	case wlmpb.SystemVariable_OS_NAME_VERSION:
+		return osNameVersion(params)
+	case wlmpb.SystemVariable_AGENT_NAME:
+		return params.Config.GetAgentProperties().GetName()
+	case wlmpb.SystemVariable_AGENT_VERSION:
+		return params.Config.GetAgentProperties().GetVersion()
+	case wlmpb.SystemVariable_NETWORK_IPS:
+		return networkIPAddrs(params)
+	default:
+		log.Logger.Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
+		return ""
+	}
+}
+
+// osNameVersion parses the OS name and version from the system.
+func osNameVersion(params Parameters) string {
+	file, err := params.ConfigFileReader(params.OSReleaseFilePath)
+	if err != nil {
+		log.Logger.Warnw(fmt.Sprintf("Could not read from %s", params.OSReleaseFilePath), "error", err)
+		return ""
+	}
+	defer file.Close()
+
+	ini := goini.New()
+	if err := ini.ParseFrom(file, "\n", "="); err != nil {
+		log.Logger.Warnw(fmt.Sprintf("Failed to parse from %s", params.OSReleaseFilePath), "error", err)
+		return ""
+	}
+
+	id, ok := ini.Get("ID")
+	if !ok {
+		log.Logger.Warn(fmt.Sprintf("Could not read ID from %s", params.OSReleaseFilePath))
+		id = ""
+	}
+	id = strings.ReplaceAll(strings.TrimSpace(id), `"`, "")
+
+	version, ok := ini.Get("VERSION")
+	if !ok {
+		log.Logger.Warn(fmt.Sprintf("Could not read VERSION from %s", params.OSReleaseFilePath))
+		version = ""
+	}
+	vf := strings.Fields(version)
+	v := ""
+	if len(vf) > 0 {
+		v = strings.ReplaceAll(strings.TrimSpace(vf[0]), `"`, "")
+	}
+
+	return fmt.Sprintf("%s-%s", id, v)
+}
+
+// networkIPAddrs parses the network interface addresses from the system.
+func networkIPAddrs(params Parameters) string {
+	addrs, err := params.InterfaceAddrsGetter()
+	if err != nil {
+		log.Logger.Warnw("Could not get network interface addresses", "error", err)
+		return ""
+	}
+	v := []string{}
+	for _, ipaddr := range addrs {
+		v = append(v, ipaddr.String())
+	}
+	return strings.Join(v, ",")
+}
+
 // CollectSystemMetrics will collect the systme metrics for Workload Manager and send them to the
 // channel wm
+//
+// This is a legacy collection method that can be removed from the codebase
+// once configurable WLM metric collection is fully implemented.
 func CollectSystemMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 	log.Logger.Info("Collecting Workload Manager System metrics...")
 	gcl := "false"
