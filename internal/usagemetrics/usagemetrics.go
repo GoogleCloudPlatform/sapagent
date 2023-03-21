@@ -18,12 +18,15 @@ limitations under the License.
 package usagemetrics
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	compute "google.golang.org/api/compute/v1"
+	"golang.org/x/oauth2/google"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -255,7 +258,11 @@ func (l *Logger) requestComputeAPIWithUserAgent(url, ua string) error {
 	}
 	req.Header.Add("Metadata-Flavor", "Google")
 	req.Header.Add("User-Agent", ua)
-	if _, err = http.DefaultClient.Do(req); err != nil {
+	client, _ := google.DefaultClient(context.Background(), compute.ComputeScope)
+	if client == nil {
+		client = http.DefaultClient // If OAUTH fails, use the default http client.
+	}
+	if _, err = client.Do(req); err != nil {
 		return err
 	}
 	return nil
