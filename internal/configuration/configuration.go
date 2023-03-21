@@ -46,7 +46,7 @@ const (
 	// LINT.IfChange
 
 	// AgentVersion is the version of the agent.
-	AgentVersion = `1.1`
+	AgentVersion = `1.2`
 	// LINT.ThenChange(//depot/google3/third_party/sapagent/BUILD)
 
 	// LinuxConfigPath is the default path to agent configuration file on linux.
