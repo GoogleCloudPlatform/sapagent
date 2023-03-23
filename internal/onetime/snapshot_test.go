@@ -21,12 +21,15 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
+	"time"
 
 	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 )
@@ -42,7 +45,7 @@ var defaultSnapshot = Snapshot{
 	password: "password",
 }
 
-func TestHandler(t *testing.T) {
+func TestSnapshotHandler(t *testing.T) {
 	tests := []struct {
 		name               string
 		snapshot           Snapshot
@@ -53,7 +56,7 @@ func TestHandler(t *testing.T) {
 		{
 			name:     "InvalidParams",
 			snapshot: Snapshot{},
-			want:     subcommands.ExitUsageError,
+			want:     subcommands.ExitFailure,
 		},
 		{
 			name:       "GCEServiceCreationFailure",
@@ -78,9 +81,9 @@ func TestHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.handler(context.Background(), test.fakeNewGCE, test.fakeComputeService)
+			got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService)
 			if got != test.want {
-				t.Errorf("handler(%v)=%v want %v", test.name, got, test.want)
+				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
 			}
 		})
 	}
@@ -367,7 +370,46 @@ func TestExecute(t *testing.T) {
 	s.SetFlags(&flag.FlagSet{})
 	got := s.Execute(context.Background(), nil)
 	// Execute fails in unit tests as there is no DB.
-	if got != subcommands.ExitUsageError {
+	if got != subcommands.ExitFailure {
 		t.Errorf("Execute()=%v, want=%v", got, subcommands.ExitFailure)
+	}
+}
+
+func TestSendStatusToMonitoring(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		want     bool
+	}{
+		{
+			name: "SendMetricsDisabled",
+			snapshot: Snapshot{
+				sendToMonitoring:  false,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
+			},
+		},
+		{
+			name: "SendMetricsEnabled",
+			snapshot: Snapshot{
+				sendToMonitoring:  true,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
+			},
+			want: true,
+		},
+		{
+			name: "SendMetricsFailure",
+			snapshot: Snapshot{
+				sendToMonitoring:  true,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.snapshot.sendStatusToMonitoring(context.Background(), cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond))
+			if got != test.want {
+				t.Errorf("sendStatusToMonitoring()=%v, want=%v", got, test.want)
+			}
+		})
 	}
 }

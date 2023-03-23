@@ -26,17 +26,23 @@ import (
 
 	"flag"
 	backoff "github.com/cenkalti/backoff/v4"
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 	"golang.org/x/oauth2/google"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 type (
@@ -63,11 +69,14 @@ type Snapshot struct {
 
 	diskKeyFile, storageLocation, csekKeyFile string
 	snapshotName, description                 string
-	abandonPrepared                           bool
+	abandonPrepared, sendToMonitoring         bool
 
-	db             *sql.DB
-	gceService     gceInterface
-	computeService *compute.Service
+	db                *sql.DB
+	gceService        gceInterface
+	computeService    *compute.Service
+	status            bool
+	timeSeriesCreator cloudmonitoring.TimeSeriesCreator
+	cloudProps        *ipb.CloudProperties
 }
 
 // Name implements the subcommand interface for snapshot.
@@ -100,19 +109,30 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.storageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) (default: nearby regional or multi-regional location automatically chosen.)")
 	fs.StringVar(&s.csekKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
 	fs.StringVar(&s.description, "snapshot-description", "", "Description of the new snapshot(optional)")
+	fs.BoolVar(&s.sendToMonitoring, "send-status-to-monitoring", true, "Send the execution status to cloud monitoring as a metric")
 }
 
 // Execute implements the subcommand interface for snapshot.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	return s.handler(ctx, gce.New, newComputeService)
+	mc, err := monitoring.NewMetricClient(ctx)
+	if err != nil {
+		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
+		return subcommands.ExitFailure
+	}
+	s.timeSeriesCreator = mc
+	s.cloudProps = metadataserver.FetchCloudProperties()
+	return s.snapshotHandler(ctx, gce.New, newComputeService)
 }
 
-func (s *Snapshot) handler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc) subcommands.ExitStatus {
+func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc) subcommands.ExitStatus {
 	var err error
+	s.status = false
 	if err = s.validateParameters(runtime.GOOS); err != nil {
 		log.Print(err.Error())
-		return subcommands.ExitUsageError
+		return subcommands.ExitFailure
 	}
+
+	defer s.sendStatusToMonitoring(ctx, cloudmonitoring.NewDefaultBackOffIntervals())
 
 	s.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
@@ -140,6 +160,7 @@ func (s *Snapshot) handler(ctx context.Context, gceServiceCreator gceServiceFunc
 		return subcommands.ExitFailure
 	}
 	log.Print("SUCCESS: HANA backup and persistent disk snapshot creation successful.")
+	s.status = true
 	return subcommands.ExitSuccess
 }
 
@@ -315,4 +336,30 @@ func newComputeService(ctx context.Context) (cs *compute.Service, err error) {
 func logErrorToFileAndConsole(msg string, err error) {
 	log.Print(msg + " " + err.Error() + "\n" + "Refer log file at:" + log.GetLogFile())
 	log.Logger.Errorw(msg, "error", err.Error())
+}
+
+// sendStatusToMonitoring sends the status of one time execution to cloud monitoring as a GAUGE metric.
+func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) bool {
+	if !s.sendToMonitoring {
+		return false
+	}
+	log.Logger.Infow("Sending HANA disk snapshot status to cloud monitoring", "status", s.status)
+	ts := []*mrpb.TimeSeries{
+		timeseries.BuildBool(timeseries.Params{
+			CloudProp:  s.cloudProps,
+			MetricType: "workload.googleapis.com/sap/agent/" + s.Name(),
+			Timestamp:  tspb.Now(),
+			BoolValue:  s.status,
+			MetricLabels: map[string]string{
+				"sid":           s.sid,
+				"disk":          s.disk,
+				"snapshot_name": s.snapshotName,
+			},
+		}),
+	}
+	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.project); err != nil {
+		log.Logger.Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
+		return false
+	}
+	return true
 }
