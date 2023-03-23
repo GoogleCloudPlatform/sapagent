@@ -23,6 +23,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -79,13 +80,16 @@ func Start(ctx context.Context, params Parameters) bool {
 
 	log.Logger.Info("Starting HANA Monitoring.")
 	usagemetrics.Error(usagemetrics.CollectHANAMonitoringMetrics)
+	wp := workerpool.New(int(cfg.GetExecutionThreads()))
 	for _, db := range databases {
-		for _, query := range params.Config.GetHanaMonitoringConfiguration().GetQueries() {
+		for _, query := range cfg.GetQueries() {
 			sampleInterval := cfg.GetSampleIntervalSec()
 			if query.GetSampleIntervalSec() >= 5 {
 				sampleInterval = query.GetSampleIntervalSec()
 			}
-			go queryAndSend(ctx, db, query, cfg.GetQueryTimeoutSec(), sampleInterval, params)
+			wp.Submit(func() {
+				queryAndSend(ctx, db, query, cfg.GetQueryTimeoutSec(), sampleInterval, params, wp)
+			})
 		}
 	}
 	return true
@@ -93,28 +97,23 @@ func Start(ctx context.Context, params Parameters) bool {
 
 // queryAndSend runs the perpetual querying and sending of results to cloud monitoring workflow.
 // If any errors occur during query or send, they are logged and the workflow continues to try again next sampleInterval.
-// For unit testing, the caller can cancel the context to terminate the workflow which will return the last error seen or nil if no errors occurred.
-func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, sampleInterval int64, params Parameters) error {
-	var lastErr error
+func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, sampleInterval int64, params Parameters, wp *workerpool.WorkerPool) error {
 	user, host, port, queryName := db.instance.GetUser(), db.instance.GetHost(), db.instance.GetPort(), query.GetName()
-	for {
-		select {
-		case <-ctx.Done():
-			log.Logger.Info("Context cancelled, exiting queryAndSend.")
-			return lastErr
-		default:
-			ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
-			sent, batchCount, err := queryAndSendOnce(ctxTimeout, db, query, params)
-			if err != nil {
-				log.Logger.Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "error", err)
-				usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
-				lastErr = err
-			}
-			log.Logger.Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", sampleInterval)
-			cancel()
-			time.Sleep(time.Duration(sampleInterval) * time.Second)
-		}
+	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
+	sent, batchCount, err := queryAndSendOnce(ctxTimeout, db, query, params)
+	if err != nil {
+		log.Logger.Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "error", err)
+		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
 	}
+	log.Logger.Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", sampleInterval)
+	cancel()
+	// Release this worker back to the pool and schedule to insert this query back into the task queue after the sampleInterval.
+	time.AfterFunc(time.Duration(sampleInterval)*time.Second, func() {
+		wp.Submit(func() {
+			queryAndSend(ctx, db, query, timeout, sampleInterval, params, wp)
+		})
+	})
+	return err
 }
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.

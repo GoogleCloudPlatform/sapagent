@@ -27,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
@@ -172,7 +173,7 @@ func TestStart(t *testing.T) {
 
 func TestQueryAndSend(t *testing.T) {
 	// fakeQueryFuncError is needed here since a sql.Rows object cannot be easily created outside of the database/sql package.
-	// However, we can still test the queryAndSend() workflow loop and test breaking out of it with a context timeout.
+	// However, we can still test that the queryAndSend() workflow returns an error.
 	db := &database{
 		queryFunc: fakeQueryFuncError,
 		instance:  &cpb.HANAInstance{Password: "fakePassword"},
@@ -186,7 +187,7 @@ func TestQueryAndSend(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 
-	got := queryAndSend(ctx, db, query, timeout, sampleInterval, defaultParams)
+	got := queryAndSend(ctx, db, query, timeout, sampleInterval, defaultParams, workerpool.New(1))
 	want := cmpopts.AnyError
 	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
 		t.Errorf("queryAndSend(%v, fakeQueryFuncError, %v, %v, %v) = %v want: %v.", ctx, query, timeout, sampleInterval, got, want)
