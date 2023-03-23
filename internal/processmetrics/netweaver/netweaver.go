@@ -156,7 +156,7 @@ func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 	start := tspb.Now()
 	availabilityValue = systemAllProcessesGreen
 
-	processNames := []string{"msg_server", "enserver", "enrepserver", "disp+work", "gwrd", "icman", "jstart", "jcontrol"}
+	processNames := []string{"msg_server", "enserver", "enrepserver", "disp+work", "gwrd", "icman", "jstart", "jcontrol", "enq_replicator", "enq_server"}
 	for _, proc := range procs {
 		if contains(processNames, proc.Name) && !proc.IsGreen {
 			availabilityValue = systemAtLeastOneProcessNotGreen

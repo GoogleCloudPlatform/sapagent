@@ -251,6 +251,50 @@ func TestNWAvailabilityValue(t *testing.T) {
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
+		{
+			name: "SapControlSuccessEnqReplicator",
+			fRunner: &fakeRunner{
+				stdOut: `0 name: enq_replicator
+				0 description: enq_replicator
+				0 dispstatus: GREEN
+				0 pid: 111`,
+				exitCode: 1,
+			},
+			wantAvailability: systemAllProcessesGreen,
+		},
+		{
+			name: "SapControlFailsEnqReplicator",
+			fRunner: &fakeRunner{
+				stdOut: `0 name: enq_replicator
+				0 description: enq_replicator
+				0 dispstatus: RED
+				0 pid: 111`,
+				exitCode: 1,
+			},
+			wantAvailability: systemAtLeastOneProcessNotGreen,
+		},
+		{
+			name: "SapControlSuccessEnqServer",
+			fRunner: &fakeRunner{
+				stdOut: `0 name: enq_server
+				0 description: enq_server
+				0 dispstatus: GREEN
+				0 pid: 111`,
+				exitCode: 1,
+			},
+			wantAvailability: systemAllProcessesGreen,
+		},
+		{
+			name: "SapControlFailsEnqServer",
+			fRunner: &fakeRunner{
+				stdOut: `0 name: enq_server
+				0 description: enq_server
+				0 dispstatus: GRAY
+				0 pid: 111`,
+				exitCode: 1,
+			},
+			wantAvailability: systemAtLeastOneProcessNotGreen,
+		},
 	}
 
 	for _, test := range tests {
