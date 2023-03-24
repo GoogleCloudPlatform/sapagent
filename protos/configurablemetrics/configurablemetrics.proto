@@ -35,8 +35,10 @@ enum OutputSource {
 
 message EvalMetric {
   MetricInfo metric_info = 1;
-  EvalMetricRule and_eval_rules = 2;
-  repeated EvalMetricRule or_eval_rules = 3;
+  oneof eval_rule_types {
+    EvalMetricRule and_eval_rules = 2;
+    OrEvalMetricRule or_eval_rules = 3;
+  }
 }
 
 message OSCommandMetric {
@@ -44,15 +46,19 @@ message OSCommandMetric {
   OSVendor os_vendor = 2;
   string command = 3;
   repeated string args = 4;
-  EvalMetricRule and_eval_rules = 6;
-  repeated EvalMetricRule or_eval_rules = 7;
+  oneof eval_rule_types {
+    EvalMetricRule and_eval_rules = 6;
+    OrEvalMetricRule or_eval_rules = 7;
+  }
 }
 
 message XPathMetric {
   MetricInfo metric_info = 1;
   string xpath = 2;
-  EvalMetricRule and_eval_rules = 3;
-  repeated EvalMetricRule or_eval_rules = 4;
+  oneof eval_rule_types {
+    EvalMetricRule and_eval_rules = 3;
+    OrEvalMetricRule or_eval_rules = 4;
+  }
 }
 
 message MetricInfo {
@@ -61,28 +67,37 @@ message MetricInfo {
   string label = 3;
 }
 
+message OrEvalMetricRule {
+  repeated EvalMetricRule or_eval_rules = 1;
+}
+
 message EvalMetricRule {
   repeated EvalRule eval_rules = 1;
-  MetricValue if_true = 2;
-  MetricValue if_false = 3;
+  EvalResult if_true = 2;
+  EvalResult if_false = 3;
 }
 
 message EvalRule {
   OutputSource output_source = 1;
-  string output_equals = 2;
-  string output_not_equals = 3;
-  double output_less_than = 4;
-  double output_less_than_or_equal = 5;
-  double output_greater_than = 6;
-  double output_greater_than_or_equal = 7;
-  string output_starts_with = 8;
-  string output_ends_with = 9;
-  string output_contains = 10;
-  string output_not_contains = 11;
+  oneof eval_rule_types {
+    string output_equals = 2;
+    string output_not_equals = 3;
+    double output_less_than = 4;
+    double output_less_than_or_equal = 5;
+    double output_greater_than = 6;
+    double output_greater_than_or_equal = 7;
+    string output_starts_with = 8;
+    string output_ends_with = 9;
+    string output_contains = 10;
+    string output_not_contains = 11;
+  }
 }
 
-message MetricValue {
-  string value_from_literal = 1;
-  bool value_from_output = 2;
-  string value_from_regex = 3;
+message EvalResult {
+  oneof eval_result_types {
+    string value_from_literal = 1;
+    bool value_from_output = 2;
+    string value_from_regex = 3;
+  }
+  OutputSource output_source = 4;
 }

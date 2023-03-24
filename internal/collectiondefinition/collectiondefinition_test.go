@@ -39,18 +39,22 @@ var (
 				Type:  metricType,
 				Label: label,
 			},
-			OrEvalRules: []*cmpb.EvalMetricRule{
-				&cmpb.EvalMetricRule{
-					EvalRules: []*cmpb.EvalRule{
-						&cmpb.EvalRule{
-							OutputContains: contains,
+			EvalRuleTypes: &cmpb.EvalMetric_OrEvalRules{
+				OrEvalRules: &cmpb.OrEvalMetricRule{
+					OrEvalRules: []*cmpb.EvalMetricRule{
+						&cmpb.EvalMetricRule{
+							EvalRules: []*cmpb.EvalRule{
+								&cmpb.EvalRule{
+									EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: contains},
+								},
+							},
+							IfTrue: &cmpb.EvalResult{
+								EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
+							},
+							IfFalse: &cmpb.EvalResult{
+								EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
+							},
 						},
-					},
-					IfTrue: &cmpb.MetricValue{
-						ValueFromLiteral: "true",
-					},
-					IfFalse: &cmpb.MetricValue{
-						ValueFromLiteral: "false",
 					},
 				},
 			},
@@ -58,25 +62,26 @@ var (
 	}
 	createOSCommandMetric = func(metricType, label, command string) *cmpb.OSCommandMetric {
 		return &cmpb.OSCommandMetric{
-			OsVendor: cmpb.OSVendor_ALL,
-			MetricInfo: &cmpb.MetricInfo{
-				Type:  metricType,
-				Label: label,
-			},
-			Command: command,
-			Args:    []string{"-v"},
-			AndEvalRules: &cmpb.EvalMetricRule{
-				EvalRules: []*cmpb.EvalRule{
-					&cmpb.EvalRule{
-						OutputSource:   cmpb.OutputSource_STDOUT,
-						OutputContains: "Contains Text",
+			MetricInfo: &cmpb.MetricInfo{Type: metricType, Label: label},
+			OsVendor:   cmpb.OSVendor_ALL,
+			Command:    command,
+			Args:       []string{"-v"},
+			EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+				AndEvalRules: &cmpb.EvalMetricRule{
+					EvalRules: []*cmpb.EvalRule{
+						&cmpb.EvalRule{
+							OutputSource:  cmpb.OutputSource_STDOUT,
+							EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "Contains Text"},
+						},
 					},
-				},
-				IfTrue: &cmpb.MetricValue{
-					ValueFromLiteral: "true",
-				},
-				IfFalse: &cmpb.MetricValue{
-					ValueFromLiteral: "false",
+					IfTrue: &cmpb.EvalResult{
+						OutputSource:    cmpb.OutputSource_STDOUT,
+						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
+					},
+					IfFalse: &cmpb.EvalResult{
+						OutputSource:    cmpb.OutputSource_STDOUT,
+						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
+					},
 				},
 			},
 		}
@@ -88,17 +93,19 @@ var (
 				Label: label,
 			},
 			Xpath: xpath,
-			AndEvalRules: &cmpb.EvalMetricRule{
-				EvalRules: []*cmpb.EvalRule{
-					&cmpb.EvalRule{
-						OutputContains: "Contains Text",
+			EvalRuleTypes: &cmpb.XPathMetric_AndEvalRules{
+				AndEvalRules: &cmpb.EvalMetricRule{
+					EvalRules: []*cmpb.EvalRule{
+						&cmpb.EvalRule{
+							EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "Contains Text"},
+						},
 					},
-				},
-				IfTrue: &cmpb.MetricValue{
-					ValueFromLiteral: "true",
-				},
-				IfFalse: &cmpb.MetricValue{
-					ValueFromLiteral: "false",
+					IfTrue: &cmpb.EvalResult{
+						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
+					},
+					IfFalse: &cmpb.EvalResult{
+						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
+					},
 				},
 			},
 		}
@@ -737,15 +744,18 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -771,15 +781,18 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -804,15 +817,18 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -837,15 +853,18 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -871,15 +890,18 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -892,15 +914,18 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -922,17 +947,19 @@ func TestValidate(t *testing.T) {
 									Type:  "workload.googleapis.com/sap/validation/custom",
 									Label: "foo",
 								},
-								OsVendor: cmpb.OSVendor_ALL,
-								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								Args: []string{"--bar"},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -979,9 +1006,12 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -1006,10 +1036,15 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								OrEvalRules: []*cmpb.EvalMetricRule{
-									&cmpb.EvalMetricRule{
-										IfTrue: &cmpb.MetricValue{
-											ValueFromLiteral: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_OrEvalRules{
+									OrEvalRules: &cmpb.OrEvalMetricRule{
+										OrEvalRules: []*cmpb.EvalMetricRule{
+											&cmpb.EvalMetricRule{
+												IfTrue: &cmpb.EvalResult{
+													OutputSource:    cmpb.OutputSource_STDOUT,
+													EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+												},
+											},
 										},
 									},
 								},
@@ -1035,11 +1070,13 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
 									},
 								},
@@ -1065,15 +1102,18 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromRegex: "foo)bar(",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromRegex{ValueFromRegex: "foo)bar("},
+										},
 									},
 								},
 							},
@@ -1098,18 +1138,22 @@ func TestValidate(t *testing.T) {
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromRegex: "foo(bar)?",
-									},
-									IfFalse: &cmpb.MetricValue{
-										ValueFromRegex: "foo)bar(",
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromRegex{ValueFromRegex: "foo(bar)"},
+										},
+										IfFalse: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromRegex{ValueFromRegex: "foo)bar("},
+										},
 									},
 								},
 							},
@@ -1131,15 +1175,17 @@ func TestValidate(t *testing.T) {
 									MinVersion: "1.0",
 									Label:      "foo",
 								},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.EvalMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -1161,15 +1207,17 @@ func TestValidate(t *testing.T) {
 									MinVersion: "1.0",
 									Type:       "workload.googleapis.com/sap/validation/custom",
 								},
-								AndEvalRules: &cmpb.EvalMetricRule{
-									EvalRules: []*cmpb.EvalRule{
-										&cmpb.EvalRule{
-											OutputSource:   cmpb.OutputSource_STDOUT,
-											OutputContains: "foobar",
+								EvalRuleTypes: &cmpb.EvalMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
 										},
-									},
-									IfTrue: &cmpb.MetricValue{
-										ValueFromLiteral: "foobar",
+										IfTrue: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
 									},
 								},
 							},
@@ -1339,14 +1387,16 @@ func TestValidate(t *testing.T) {
 										Type:  "workload.googleapis.com/sap/validation/pacemaker",
 										Label: "foo",
 									},
-									AndEvalRules: &cmpb.EvalMetricRule{
-										EvalRules: []*cmpb.EvalRule{
-											&cmpb.EvalRule{
-												OutputContains: "foobar",
+									EvalRuleTypes: &cmpb.XPathMetric_AndEvalRules{
+										AndEvalRules: &cmpb.EvalMetricRule{
+											EvalRules: []*cmpb.EvalRule{
+												&cmpb.EvalRule{
+													EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+												},
 											},
-										},
-										IfTrue: &cmpb.MetricValue{
-											ValueFromLiteral: "foobar",
+											IfTrue: &cmpb.EvalResult{
+												EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+											},
 										},
 									},
 								},

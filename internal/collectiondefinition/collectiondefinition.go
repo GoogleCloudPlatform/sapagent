@@ -419,9 +419,8 @@ func validateMetricEvaluation[M proto.Message](v *Validator, metric M) {
 		andEval := metric.ProtoReflect().Get(andFD).Message().Interface().(*cmpb.EvalMetricRule)
 		validateEvalMetricRule(v, andEval, metric)
 	} else if metric.ProtoReflect().Has(orFD) {
-		orEvals := metric.ProtoReflect().Get(orFD).List()
-		for i := 0; i < orEvals.Len(); i++ {
-			orEval := orEvals.Get(i).Message().Interface().(*cmpb.EvalMetricRule)
+		orEvals := metric.ProtoReflect().Get(orFD).Message().Interface().(*cmpb.OrEvalMetricRule)
+		for _, orEval := range orEvals.GetOrEvalRules() {
 			validateEvalMetricRule(v, orEval, metric)
 		}
 	} else {

@@ -93,33 +93,35 @@
           "os_vendor": "ALL",
           "command": "systemctl",
           "args": ["is-active", "google-cloud-sap-agent"],
-          "or_eval_rules": [
-            {
-              "eval_rules": [
-                {
-                  "output_source": "STDOUT",
-                  "output_contains": "could not be found"
+          "or_eval_rules": {
+            "or_eval_rules": [
+              {
+                "eval_rules": [
+                  {
+                    "output_source": "STDOUT",
+                    "output_contains": "could not be found"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "notinstalled"
                 }
-              ],
-              "if_true": {
-                "value_from_literal": "notinstalled"
-              }
-            },
-            {
-              "eval_rules": [
-                {
-                  "output_source": "STDOUT",
-                  "output_equals": "active"
-                }
-              ],
-              "if_true": {
-                "value_from_literal": "running"
               },
-              "if_false": {
-                "value_from_literal": "notrunning"
+              {
+                "eval_rules": [
+                  {
+                    "output_source": "STDOUT",
+                    "output_equals": "active"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "running"
+                },
+                "if_false": {
+                  "value_from_literal": "notrunning"
+                }
               }
-            }
-          ]
+            ]
+          }
         }
       ]
     },
