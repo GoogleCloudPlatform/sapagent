@@ -38,7 +38,10 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
-const metricURL = "workload.googleapis.com/sap/hanamonitoring"
+const (
+	metricURL        = "workload.googleapis.com/sap/hanamonitoring"
+	maxQueryFailures = 3
+)
 
 type gceInterface interface {
 	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
@@ -69,6 +72,18 @@ type Parameters struct {
 	GCEService        gceInterface
 	BackOffs          *cloudmonitoring.BackOffIntervals
 	TimeSeriesCreator cloudmonitoring.TimeSeriesCreator
+}
+
+// queryOptions holds parameters for the queryAndSend workflows.
+type queryOptions struct {
+	db             *database
+	query          *cpb.Query
+	timeout        int64
+	sampleInterval int64
+	failCount      int64
+	params         Parameters
+	wp             *workerpool.WorkerPool
+	runningSum     map[timeSeriesKey]prevVal
 }
 
 // database holds the relevant information for querying and debugging the database.
@@ -103,12 +118,20 @@ func Start(ctx context.Context, params Parameters) bool {
 	for _, db := range databases {
 		for _, query := range cfg.GetQueries() {
 			sampleInterval := cfg.GetSampleIntervalSec()
-			runningSum := make(map[timeSeriesKey]prevVal)
 			if query.GetSampleIntervalSec() >= 5 {
 				sampleInterval = query.GetSampleIntervalSec()
 			}
 			wp.Submit(func() {
-				queryAndSend(ctx, db, query, cfg.GetQueryTimeoutSec(), sampleInterval, params, wp, runningSum)
+				queryAndSend(ctx, queryOptions{
+					db:             db,
+					query:          query,
+					timeout:        cfg.GetQueryTimeoutSec(),
+					sampleInterval: sampleInterval,
+					failCount:      0,
+					params:         params,
+					wp:             wp,
+					runningSum:     make(map[timeSeriesKey]prevVal),
+				})
 			})
 		}
 	}
@@ -116,26 +139,35 @@ func Start(ctx context.Context, params Parameters) bool {
 }
 
 // queryAndSend perpetually queries databases and sends results to cloud monitoring.
-// If any errors occur during query or send, they are logged
-// and the workflow continues to try again next sampleInterval.
-func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, sampleInterval int64, params Parameters, wp *workerpool.WorkerPool, runningSum map[timeSeriesKey]prevVal) error {
-	user, host, port, queryName := db.instance.GetUser(), db.instance.GetHost(), db.instance.GetPort(), query.GetName()
-	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
-	sent, batchCount, err := queryAndSendOnce(ctxTimeout, db, query, params, runningSum)
-	if err != nil {
-		log.Logger.Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "error", err)
-		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
-	}
-	log.Logger.Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", sampleInterval)
+// If any errors occur during query or send, they are logged.
+// After several consecutive errors, the query will not be restarted.
+// Returns true if the query is queued back to the workerpool, false if it is canceled.
+func queryAndSend(ctx context.Context, opts queryOptions) (bool, error) {
+	user, host, port, queryName := opts.db.instance.GetUser(), opts.db.instance.GetHost(), opts.db.instance.GetPort(), opts.query.GetName()
+	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(opts.timeout))
+	sent, batchCount, err := queryAndSendOnce(ctxTimeout, opts.db, opts.query, opts.params, opts.runningSum)
 	cancel()
+	if err != nil {
+		opts.failCount++
+		log.Logger.Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount, "error", err)
+		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
+	} else {
+		opts.failCount = 0
+		log.Logger.Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", opts.sampleInterval)
+	}
+
+	if opts.failCount >= maxQueryFailures {
+		log.Logger.Errorw("Query reached max failure count, not restarting.", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount)
+		return false, err
+	}
 	// Schedule to insert this query back into the task queue after the sampleInterval.
 	// Also release this worker back to the pool since AfterFunc() is non-blocking.
-	time.AfterFunc(time.Duration(sampleInterval)*time.Second, func() {
-		wp.Submit(func() {
-			queryAndSend(ctx, db, query, timeout, sampleInterval, params, wp, runningSum)
+	time.AfterFunc(time.Duration(opts.sampleInterval)*time.Second, func() {
+		opts.wp.Submit(func() {
+			queryAndSend(ctx, opts)
 		})
 	})
-	return err
+	return true, err
 }
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.

@@ -59,6 +59,15 @@ var (
 		BackOffs: cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
 	}
 	defaultTimestamp = &tspb.Timestamp{Seconds: 123}
+	defaultDb        = &database{
+		queryFunc: fakeQueryFuncError,
+		instance:  &cpb.HANAInstance{Password: "fakePassword"},
+	}
+	defaultQuery = &cpb.Query{
+		Columns: []*cpb.Column{
+			&cpb.Column{},
+		},
+	}
 )
 
 func newDefaultCumulativeMetric(st, et int64) *monitoringresourcespb.TimeSeries {
@@ -204,27 +213,55 @@ func TestStart(t *testing.T) {
 }
 
 func TestQueryAndSend(t *testing.T) {
-	// fakeQueryFuncError is needed here since a sql.Rows object cannot be easily created outside of the database/sql package.
-	// However, we can still test that the queryAndSend() workflow returns an error.
-	db := &database{
-		queryFunc: fakeQueryFuncError,
-		instance:  &cpb.HANAInstance{Password: "fakePassword"},
-	}
-	query := &cpb.Query{
-		Columns: []*cpb.Column{
-			&cpb.Column{},
+	// fakeQueryFuncError is needed here since a sql.Rows object cannot be easily
+	// created outside of the database/sql package. However, we can still test
+	// that the queryAndSend() workflow returns an error and retries or cancels
+	// the query based on the failCount.
+	tests := []struct {
+		name    string
+		opts    queryOptions
+		want    bool
+		wantErr error
+	}{
+		{
+			name: "queryRetried",
+			opts: queryOptions{
+				db:        defaultDb,
+				query:     defaultQuery,
+				params:    defaultParams,
+				wp:        workerpool.New(1),
+				failCount: 0,
+			},
+			want:    true,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "queryCancelled",
+			opts: queryOptions{
+				db:        defaultDb,
+				query:     defaultQuery,
+				params:    defaultParams,
+				wp:        workerpool.New(1),
+				failCount: maxQueryFailures,
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
 		},
 	}
-	var timeout, sampleInterval int64 = 1, 1
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	t.Cleanup(cancel)
 
-	runningSum := make(map[timeSeriesKey]prevVal)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
 
-	got := queryAndSend(ctx, db, query, timeout, sampleInterval, defaultParams, workerpool.New(1), runningSum)
-	want := cmpopts.AnyError
-	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
-		t.Errorf("queryAndSend(%v, fakeQueryFuncError, %v, %v, %v) = %v want: %v.", ctx, query, timeout, sampleInterval, got, want)
+			got, gotErr := queryAndSend(ctx, test.opts)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Fatalf("queryAndSend(%#v) = %v want: %v.", test.opts, gotErr, test.wantErr)
+			}
+			if got != test.want {
+				t.Fatalf("queryAndSend(%#v) = %t want: %t", test.opts, got, test.want)
+			}
+		})
 	}
 }
 
