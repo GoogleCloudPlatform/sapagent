@@ -115,8 +115,9 @@ func Start(ctx context.Context, params Parameters) bool {
 	return true
 }
 
-// queryAndSend runs the perpetual querying and sending of results to cloud monitoring workflow.
-// If any errors occur during query or send, they are logged and the workflow continues to try again next sampleInterval.
+// queryAndSend perpetually queries databases and sends results to cloud monitoring.
+// If any errors occur during query or send, they are logged
+// and the workflow continues to try again next sampleInterval.
 func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, sampleInterval int64, params Parameters, wp *workerpool.WorkerPool, runningSum map[timeSeriesKey]prevVal) error {
 	user, host, port, queryName := db.instance.GetUser(), db.instance.GetHost(), db.instance.GetPort(), query.GetName()
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
@@ -127,7 +128,8 @@ func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, 
 	}
 	log.Logger.Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", sampleInterval)
 	cancel()
-	// Release this worker back to the pool and schedule to insert this query back into the task queue after the sampleInterval.
+	// Schedule to insert this query back into the task queue after the sampleInterval.
+	// Also release this worker back to the pool since AfterFunc() is non-blocking.
 	time.AfterFunc(time.Duration(sampleInterval)*time.Second, func() {
 		wp.Submit(func() {
 			queryAndSend(ctx, db, query, timeout, sampleInterval, params, wp, runningSum)
@@ -171,7 +173,9 @@ func createColumns(queryColumns []*cpb.Column) []any {
 		case cpb.ValueType_VALUE_STRING:
 			col = new(string)
 		default:
-			// Rows.Scan() is able to populate any cell as *interface{} by "copying the value provided by the underlying driver without conversion". https://pkg.go.dev/database/sql#Rows.Scan
+			// Rows.Scan() is able to populate any cell as *interface{} by
+			// "copying the value provided by the underlying driver without conversion".
+			// Reference: https://pkg.go.dev/database/sql#Rows.Scan
 			col = new(any)
 		}
 		cols[i] = col
@@ -220,7 +224,8 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 	return databases
 }
 
-// createMetricsForRow will loop through each column in a query row result to first populate the metric labels, then create metrics for GAUGE and CUMULATIVE types.
+// createMetricsForRow will loop through each column in a query row result twice.
+// First populate the metric labels, then create metrics for GAUGE and CUMULATIVE types.
 func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, params Parameters, runningSum map[timeSeriesKey]prevVal) []*mrpb.TimeSeries {
 	labels := map[string]string{
 		"instance_name": dbName,
@@ -229,7 +234,8 @@ func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, param
 	// The first loop through the columns will add all labels for the metrics.
 	for i, c := range query.GetColumns() {
 		if c.GetMetricType() == cpb.MetricType_METRIC_LABEL {
-			// String type is enforced by the config validator for METRIC_LABEL. Type asserting to a pointer due to the coupling with sql.Rows.Scan() populating the columns as such.
+			// String type is enforced by the config validator for METRIC_LABEL.
+			// Type asserting to a pointer due to the coupling with sql.Rows.Scan() populating the columns as such.
 			if result, ok := cols[i].(*string); ok {
 				labels[c.GetName()] = *result
 			}
