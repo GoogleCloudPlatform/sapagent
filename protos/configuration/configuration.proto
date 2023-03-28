@@ -119,6 +119,7 @@ message HANAInstance {
   bool enable_ssl = 8;
   bool validate_certificate = 9;
   string host_name_in_certificate = 10;
+  string tls_root_ca_file = 11;
 }
 
 message Query {
