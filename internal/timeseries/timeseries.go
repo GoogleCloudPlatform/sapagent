@@ -32,6 +32,8 @@ type Params struct {
 	CloudProp    *ipb.CloudProperties
 	MetricType   string
 	MetricLabels map[string]string
+	MetricKind   mpb.MetricDescriptor_MetricKind
+	StartTime    *tpb.Timestamp
 	Timestamp    *tpb.Timestamp
 	Int64Value   int64
 	Float64Value float64
@@ -41,9 +43,12 @@ type Params struct {
 // BuildInt builds a cloudmonitoring timeseries with Int64 point.
 func BuildInt(p Params) *monitoringresourcespb.TimeSeries {
 	ts := buildTimeSeries(p)
+	if p.StartTime == nil {
+		p.StartTime = p.Timestamp
+	}
 	ts.Points = []*monitoringresourcespb.Point{{
 		Interval: &cpb.TimeInterval{
-			StartTime: p.Timestamp,
+			StartTime: p.StartTime,
 			EndTime:   p.Timestamp,
 		},
 		Value: &cpb.TypedValue{
@@ -58,9 +63,12 @@ func BuildInt(p Params) *monitoringresourcespb.TimeSeries {
 // BuildBool builds a cloudmonitoring timeseries with boolean point.
 func BuildBool(p Params) *monitoringresourcespb.TimeSeries {
 	ts := buildTimeSeries(p)
+	if p.StartTime == nil {
+		p.StartTime = p.Timestamp
+	}
 	ts.Points = []*monitoringresourcespb.Point{{
 		Interval: &cpb.TimeInterval{
-			StartTime: p.Timestamp,
+			StartTime: p.StartTime,
 			EndTime:   p.Timestamp,
 		},
 		Value: &cpb.TypedValue{
@@ -75,9 +83,12 @@ func BuildBool(p Params) *monitoringresourcespb.TimeSeries {
 // BuildFloat64 builds a cloudmonitoring timeseries with float64 point.
 func BuildFloat64(p Params) *monitoringresourcespb.TimeSeries {
 	ts := buildTimeSeries(p)
+	if p.StartTime == nil {
+		p.StartTime = p.Timestamp
+	}
 	ts.Points = []*monitoringresourcespb.Point{{
 		Interval: &cpb.TimeInterval{
-			StartTime: p.Timestamp,
+			StartTime: p.StartTime,
 			EndTime:   p.Timestamp,
 		},
 		Value: &cpb.TypedValue{
@@ -90,12 +101,15 @@ func BuildFloat64(p Params) *monitoringresourcespb.TimeSeries {
 }
 
 func buildTimeSeries(p Params) *monitoringresourcespb.TimeSeries {
+	if p.MetricKind == mpb.MetricDescriptor_METRIC_KIND_UNSPECIFIED {
+		p.MetricKind = mpb.MetricDescriptor_GAUGE
+	}
 	return &monitoringresourcespb.TimeSeries{
 		Metric: &mpb.Metric{
 			Type:   p.MetricType,
 			Labels: p.MetricLabels,
 		},
-		MetricKind: mpb.MetricDescriptor_GAUGE,
+		MetricKind: p.MetricKind,
 		Resource:   monitoredResource(p.CloudProp, p.BareMetal),
 	}
 }

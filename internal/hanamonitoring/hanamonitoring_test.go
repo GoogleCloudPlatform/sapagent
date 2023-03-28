@@ -61,6 +61,38 @@ var (
 	defaultTimestamp = &tspb.Timestamp{Seconds: 123}
 )
 
+func newDefaultCumulativeMetric(st, et int64) *monitoringresourcespb.TimeSeries {
+	return &monitoringresourcespb.TimeSeries{
+		MetricKind: mpb.MetricDescriptor_CUMULATIVE,
+		Resource: &mrpb.MonitoredResource{
+			Type: "gce_instance",
+			Labels: map[string]string{
+				"project_id":  "test-project",
+				"zone":        "test-zone",
+				"instance_id": "123456",
+			},
+		},
+		Points: []*monitoringresourcespb.Point{
+			{
+				Interval: &commonpb.TimeInterval{
+					StartTime: tspb.New(time.Unix(st, 0)),
+					EndTime:   tspb.New(time.Unix(et, 0)),
+				},
+				Value: &commonpb.TypedValue{},
+			},
+		},
+	}
+}
+
+func newTimeSeriesKey() timeSeriesKey {
+	tsk := timeSeriesKey{
+		MetricKind:   mpb.MetricDescriptor_CUMULATIVE.String(),
+		MetricType:   "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol",
+		MetricLabels: "abc:def",
+	}
+	return tsk
+}
+
 func fakeQueryFunc(context.Context, string, ...any) (*sql.Rows, error) {
 	return &sql.Rows{}, nil
 }
@@ -83,8 +115,8 @@ func newDefaultMetrics() *monitoringresourcespb.TimeSeries {
 		Points: []*monitoringresourcespb.Point{
 			{
 				Interval: &commonpb.TimeInterval{
-					StartTime: &tspb.Timestamp{Seconds: 123},
-					EndTime:   &tspb.Timestamp{Seconds: 123},
+					StartTime: tspb.New(time.Unix(123, 0)),
+					EndTime:   tspb.New(time.Unix(123, 0)),
 				},
 				Value: &commonpb.TypedValue{},
 			},
@@ -187,7 +219,9 @@ func TestQueryAndSend(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 
-	got := queryAndSend(ctx, db, query, timeout, sampleInterval, defaultParams, workerpool.New(1))
+	runningSum := make(map[timeSeriesKey]prevVal)
+
+	got := queryAndSend(ctx, db, query, timeout, sampleInterval, defaultParams, workerpool.New(1), runningSum)
 	want := cmpopts.AnyError
 	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
 		t.Errorf("queryAndSend(%v, fakeQueryFuncError, %v, %v, %v) = %v want: %v.", ctx, query, timeout, sampleInterval, got, want)
@@ -423,15 +457,18 @@ func TestCreateMetricsForRow(t *testing.T) {
 			{ValueType: cpb.ValueType_VALUE_BOOL, Name: "testColBool", MetricType: cpb.MetricType_METRIC_GAUGE},
 			{ValueType: cpb.ValueType_VALUE_STRING, Name: "stringLabel", MetricType: cpb.MetricType_METRIC_LABEL},
 			{ValueType: cpb.ValueType_VALUE_STRING, Name: "stringLabel2", MetricType: cpb.MetricType_METRIC_LABEL},
+			{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testColDouble2", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
 			// Add a misconfigured column (STRING cannot be GAUGE. This would be caught in the config validator) to kill mutants.
 			{ValueType: cpb.ValueType_VALUE_STRING, Name: "misconfiguredCol", MetricType: cpb.MetricType_METRIC_GAUGE},
 		},
 	}
 	cols := make([]any, len(query.Columns))
-	cols[0], cols[1], cols[2], cols[3], cols[4], cols[5] = new(int64), new(float64), new(bool), new(string), new(string), new(string)
+	cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6] = new(int64), new(float64), new(bool), new(string), new(string), new(float64), new(string)
 
-	wantMetrics := 3
-	got := createMetricsForRow("testName", "testSID", query, cols, defaultParams)
+	runningSum := make(map[timeSeriesKey]prevVal)
+
+	wantMetrics := 4
+	got := createMetricsForRow("testName", "testSID", query, cols, defaultParams, runningSum)
 	gotMetrics := len(got)
 	if gotMetrics != wantMetrics {
 		t.Errorf("createMetricsForRow(%#v) = %d, want metrics length: %d", query, gotMetrics, wantMetrics)
@@ -498,6 +535,119 @@ func TestCreateGaugeMetric(t *testing.T) {
 			got, _ := createGaugeMetric(test.column, test.val, map[string]string{"abc": "def"}, "testQuery", defaultParams, defaultTimestamp)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("createGaugeMetric(%#v) unexpected diff: (-want +got):\n%s", test.column, diff)
+			}
+		})
+	}
+}
+
+func TestCreateCumulativeMetric(t *testing.T) {
+	tests := []struct {
+		name       string
+		column     *cpb.Column
+		val        any
+		want       *monitoringresourcespb.TimeSeries
+		runningSum map[timeSeriesKey]prevVal
+		wantMetric *mpb.Metric
+		wantValue  *commonpb.TypedValue
+	}{
+		{
+			name:       "FirstValueInCumulativeTimeSeries",
+			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			val:        proto.Int64(123),
+			runningSum: map[timeSeriesKey]prevVal{},
+			want:       newDefaultCumulativeMetric(123, 123),
+			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 123}},
+		},
+		{
+			name:   "KeyAlreadyExistInCumulativeTimeSeries",
+			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			val:    proto.Int64(123),
+			runningSum: map[timeSeriesKey]prevVal{
+				newTimeSeriesKey(): prevVal{val: int64(123), startTime: &tspb.Timestamp{Seconds: 0}},
+			},
+			want:       newDefaultCumulativeMetric(0, 123),
+			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 246}},
+		},
+		{
+			name:   "CumulativeTimeSeriesDouble",
+			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			val:    proto.Float64(123.23),
+			runningSum: map[timeSeriesKey]prevVal{
+				newTimeSeriesKey(): prevVal{val: float64(123.23), startTime: &tspb.Timestamp{Seconds: 0}},
+			},
+			want:       newDefaultCumulativeMetric(0, 123),
+			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_DoubleValue{DoubleValue: 246.46}},
+		},
+		{
+			name:       "IntWithNameOverride",
+			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE, NameOverride: "override/path"},
+			val:        proto.Int64(123),
+			runningSum: map[timeSeriesKey]prevVal{},
+			want:       newDefaultCumulativeMetric(123, 123),
+			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/override/path", Labels: map[string]string{"abc": "def"}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 123}},
+		},
+		{
+			name:   "Fails",
+			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_STRING, Name: "testCol"},
+			val:    proto.String("test"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.want != nil {
+				test.want.Metric = test.wantMetric
+				test.want.Points[0].Value = test.wantValue
+			}
+			got, _ := createCumulativeMetric(test.column, test.val, map[string]string{"abc": "def"}, "testQuery", defaultParams, defaultTimestamp, test.runningSum)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("createCumulativeMetric(%#v) unexpected diff: (-want +got):\n%s", test.column, diff)
+			}
+		})
+	}
+}
+
+func TestPrepareTimeSeriesKey(t *testing.T) {
+	tests := []struct {
+		name         string
+		metricType   string
+		metricKind   string
+		metricLabels map[string]string
+		want         timeSeriesKey
+	}{
+		{
+			name:         "PrepareKey",
+			metricType:   "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol",
+			metricKind:   mpb.MetricDescriptor_CUMULATIVE.String(),
+			metricLabels: map[string]string{"sample": "labels", "abc": "def"},
+			want: timeSeriesKey{
+				MetricKind:   mpb.MetricDescriptor_CUMULATIVE.String(),
+				MetricType:   "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol",
+				MetricLabels: "abc:def,sample:labels",
+			},
+		},
+		{
+			name:         "PrepareKeyWithDifferentOrderLabels",
+			metricType:   "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol",
+			metricKind:   mpb.MetricDescriptor_CUMULATIVE.String(),
+			metricLabels: map[string]string{"abc": "def", "sample": "labels"},
+			want: timeSeriesKey{
+				MetricKind:   mpb.MetricDescriptor_CUMULATIVE.String(),
+				MetricType:   "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol",
+				MetricLabels: "abc:def,sample:labels",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := prepareKey(test.metricType, test.metricKind, test.metricLabels)
+			if got != test.want {
+				t.Errorf("prepareKey() = %v, want %v", got, test.want)
 			}
 		})
 	}

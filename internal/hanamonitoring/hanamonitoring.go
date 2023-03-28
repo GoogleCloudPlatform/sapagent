@@ -21,6 +21,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/gammazero/workerpool"
@@ -30,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
+	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -39,6 +42,22 @@ const metricURL = "workload.googleapis.com/sap/hanamonitoring"
 
 type gceInterface interface {
 	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
+}
+
+// timeSeriesKey is a struct which holds the information which can uniquely identify each timeseries
+// and can be used as a Map key since every field is comparable.
+type timeSeriesKey struct {
+	MetricType   string
+	MetricKind   string
+	MetricLabels string
+}
+
+// prevVal struct stores the value of the last datapoint in the timeseries. It is needed to build
+// a cumulative timeseries which uses the previous data point value and timestamp since the process
+// started.
+type prevVal struct {
+	val       any
+	startTime *tspb.Timestamp
 }
 
 // queryFunc provides an easily testable translation to the SQL API.
@@ -84,11 +103,12 @@ func Start(ctx context.Context, params Parameters) bool {
 	for _, db := range databases {
 		for _, query := range cfg.GetQueries() {
 			sampleInterval := cfg.GetSampleIntervalSec()
+			runningSum := make(map[timeSeriesKey]prevVal)
 			if query.GetSampleIntervalSec() >= 5 {
 				sampleInterval = query.GetSampleIntervalSec()
 			}
 			wp.Submit(func() {
-				queryAndSend(ctx, db, query, cfg.GetQueryTimeoutSec(), sampleInterval, params, wp)
+				queryAndSend(ctx, db, query, cfg.GetQueryTimeoutSec(), sampleInterval, params, wp, runningSum)
 			})
 		}
 	}
@@ -97,10 +117,10 @@ func Start(ctx context.Context, params Parameters) bool {
 
 // queryAndSend runs the perpetual querying and sending of results to cloud monitoring workflow.
 // If any errors occur during query or send, they are logged and the workflow continues to try again next sampleInterval.
-func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, sampleInterval int64, params Parameters, wp *workerpool.WorkerPool) error {
+func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, sampleInterval int64, params Parameters, wp *workerpool.WorkerPool, runningSum map[timeSeriesKey]prevVal) error {
 	user, host, port, queryName := db.instance.GetUser(), db.instance.GetHost(), db.instance.GetPort(), query.GetName()
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
-	sent, batchCount, err := queryAndSendOnce(ctxTimeout, db, query, params)
+	sent, batchCount, err := queryAndSendOnce(ctxTimeout, db, query, params, runningSum)
 	if err != nil {
 		log.Logger.Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "error", err)
 		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
@@ -110,14 +130,14 @@ func queryAndSend(ctx context.Context, db *database, query *cpb.Query, timeout, 
 	// Release this worker back to the pool and schedule to insert this query back into the task queue after the sampleInterval.
 	time.AfterFunc(time.Duration(sampleInterval)*time.Second, func() {
 		wp.Submit(func() {
-			queryAndSend(ctx, db, query, timeout, sampleInterval, params, wp)
+			queryAndSend(ctx, db, query, timeout, sampleInterval, params, wp, runningSum)
 		})
 	})
 	return err
 }
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.
-func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, params Parameters) (sent, batchCount int, err error) {
+func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, params Parameters, runningSum map[timeSeriesKey]prevVal) (sent, batchCount int, err error) {
 	rows, cols, err := queryDatabase(ctx, db.queryFunc, query)
 	if err != nil {
 		return 0, 0, err
@@ -128,7 +148,7 @@ func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, param
 		if err := rows.Scan(cols...); err != nil {
 			return 0, 0, err
 		}
-		metrics = append(metrics, createMetricsForRow(db.instance.GetName(), db.instance.GetSid(), query, cols, params)...)
+		metrics = append(metrics, createMetricsForRow(db.instance.GetName(), db.instance.GetSid(), query, cols, params, runningSum)...)
 	}
 	return cloudmonitoring.SendTimeSeries(ctx, metrics, params.TimeSeriesCreator, params.BackOffs, params.Config.GetCloudProperties().GetProjectId())
 }
@@ -201,7 +221,7 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 }
 
 // createMetricsForRow will loop through each column in a query row result to first populate the metric labels, then create metrics for GAUGE and CUMULATIVE types.
-func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, params Parameters) []*mrpb.TimeSeries {
+func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, params Parameters, runningSum map[timeSeriesKey]prevVal) []*mrpb.TimeSeries {
 	labels := map[string]string{
 		"instance_name": dbName,
 		"sid":           sid,
@@ -223,8 +243,11 @@ func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, param
 			if metric, ok := createGaugeMetric(c, cols[i], labels, query.GetName(), params, tspb.Now()); ok {
 				metrics = append(metrics, metric)
 			}
+		} else if c.GetMetricType() == cpb.MetricType_METRIC_CUMULATIVE {
+			if metric, ok := createCumulativeMetric(c, cols[i], labels, query.GetName(), params, tspb.Now(), runningSum); ok {
+				metrics = append(metrics, metric)
+			}
 		}
-		// TODO: Add support for CUMULATIVE metrics.
 	}
 	return metrics
 }
@@ -264,4 +287,69 @@ func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryNa
 	default:
 		return nil, false
 	}
+}
+
+// createCumulativeMetric builds a cloudmonitoring timeseries with an int or float point value for
+// the specified column. It returns (ni, false) when it is unable to build the timeseries.
+func createCumulativeMetric(c *cpb.Column, val any, labels map[string]string, queryName string, params Parameters, timestamp *tspb.Timestamp, runningSum map[timeSeriesKey]prevVal) (*mrpb.TimeSeries, bool) {
+	metricPath := metricURL + "/" + queryName + "/" + c.GetName()
+	if c.GetNameOverride() != "" {
+		metricPath = metricURL + "/" + c.GetNameOverride()
+	}
+
+	ts := timeseries.Params{
+		CloudProp:    params.Config.GetCloudProperties(),
+		MetricType:   metricPath,
+		MetricLabels: labels,
+		Timestamp:    timestamp,
+		StartTime:    timestamp,
+		MetricKind:   mpb.MetricDescriptor_CUMULATIVE,
+		BareMetal:    params.Config.GetBareMetal(),
+	}
+
+	tsKey := prepareKey(metricPath, ts.MetricKind.String(), labels)
+
+	// Type asserting to pointers due to the coupling with sql.Rows.Scan() populating the columns as such.
+	switch c.GetValueType() {
+	case cpb.ValueType_VALUE_INT64:
+		if result, ok := val.(*int64); ok {
+			ts.Int64Value = *result
+		}
+		if lastVal, ok := runningSum[tsKey]; ok {
+			log.Logger.Infof("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
+			ts.Int64Value = ts.Int64Value + lastVal.val.(int64)
+			ts.StartTime = lastVal.startTime
+		}
+		runningSum[tsKey] = prevVal{val: ts.Int64Value, startTime: ts.StartTime}
+		return timeseries.BuildInt(ts), true
+	case cpb.ValueType_VALUE_DOUBLE:
+		if result, ok := val.(*float64); ok {
+			ts.Float64Value = *result
+		}
+		if lastVal, ok := runningSum[tsKey]; ok {
+			log.Logger.Infof("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
+			ts.Float64Value = ts.Float64Value + lastVal.val.(float64)
+			ts.StartTime = lastVal.startTime
+		}
+		runningSum[tsKey] = prevVal{val: ts.Float64Value, startTime: ts.StartTime}
+		return timeseries.BuildFloat64(ts), true
+	default:
+		return nil, false
+	}
+}
+
+// prepareKey creates the key which can be used to group a timeseries
+// based on MetricType, MetricKind and MetricLabels.
+func prepareKey(mtype, mkind string, labels map[string]string) timeSeriesKey {
+	tsk := timeSeriesKey{
+		MetricType: mtype,
+		MetricKind: mkind,
+	}
+	var metricLabels []string
+	for k, v := range labels {
+		metricLabels = append(metricLabels, k+":"+v)
+	}
+	sort.Strings(metricLabels)
+	tsk.MetricLabels = strings.Join(metricLabels, ",")
+	return tsk
 }
