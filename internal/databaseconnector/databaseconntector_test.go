@@ -21,17 +21,65 @@ import (
 )
 
 func TestConnectFailure(t *testing.T) {
-	_, err := Connect("fakeUser", "fakePass", "fakeHost", "fakePort")
+	p := Params{
+		Username: "fakeUser",
+		Password: "fakePass",
+		Host:     "fakeHost",
+		Port:     "fakePort",
+	}
+	_, err := Connect(p)
 	if err == nil {
-		t.Error("Connect('fakeUser', 'fakePass', 'fakeHost', 'fakePort') = nil, want any error")
+		t.Errorf("Connect(%#v) = nil, want any error", p)
 	}
 }
 
 func TestConnectValidatesDriver(t *testing.T) {
 	// Connect() with empty arguments will still be able to validate the hdb driver and create a *sql.DB.
 	// A call to Query() with this returned *sql.DB would encounter a ping error.
-	_, err := Connect("", "", "", "")
+	p := Params{}
+	_, err := Connect(p)
 	if err != nil {
-		t.Errorf("Connect('', '', '', '') = %v, want nil error", err)
+		t.Errorf("Connect(%#v) = %v, want nil error", p, err)
+	}
+}
+
+func TestConnectWithSSLParams(t *testing.T) {
+	tests := []struct {
+		name    string
+		p       Params
+		wantErr error
+	}{
+		{
+			name: "EnableSSLOnAndValidateCertificateOn",
+			p: Params{
+				Username:       "fakeUser",
+				Password:       "fakePass",
+				Host:           "fakeHost",
+				Port:           "fakePort",
+				EnableSSL:      true,
+				HostNameInCert: "hostname",
+				RootCAFile:     "/path",
+			},
+		},
+		{
+			name: "EnableSSLOffAndValidateCertificateOn",
+			p: Params{
+				Username:       "fakeUser",
+				Password:       "fakePass",
+				Host:           "fakeHost",
+				Port:           "fakePort",
+				EnableSSL:      false,
+				HostNameInCert: "hostname",
+				RootCAFile:     "/path",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := Connect(test.p); err == nil {
+				t.Errorf("Connect(%#v) = nil, want any error", test.p)
+			}
+		})
 	}
 }

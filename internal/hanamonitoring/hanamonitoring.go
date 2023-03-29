@@ -246,8 +246,16 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 				password = secret
 			}
 		}
-
-		if handle, err := databaseconnector.Connect(i.GetUser(), password, i.GetHost(), i.GetPort()); err == nil {
+		dbp := databaseconnector.Params{
+			Username:       i.GetUser(),
+			Host:           i.GetHost(),
+			Password:       i.GetPassword(),
+			Port:           i.GetPort(),
+			EnableSSL:      i.GetEnableSsl(),
+			HostNameInCert: i.GetHostNameInCertificate(),
+			RootCAFile:     i.GetTlsRootCaFile(),
+		}
+		if handle, err := databaseconnector.Connect(dbp); err == nil {
 			databases = append(databases, &database{
 				queryFunc: handle.QueryContext,
 				instance:  i})

@@ -39,12 +39,11 @@ var (
 		Image:            "test-image",
 	}
 	testHANAInstance = &cpb.HANAInstance{Name: "sample_instance1",
-		Host:                "127.0.0.1",
-		Port:                "30015",
-		User:                "SYSTEM",
-		Password:            "PASSWORD",
-		EnableSsl:           false,
-		ValidateCertificate: true,
+		Host:      "127.0.0.1",
+		Port:      "30015",
+		User:      "SYSTEM",
+		Password:  "PASSWORD",
+		EnableSsl: false,
 	}
 
 	//go:embed testdata/defaultHANAMonitoringQueries.json
@@ -97,12 +96,11 @@ func TestReadFromFile(t *testing.T) {
 					QueryTimeoutSec:   300,
 					HanaInstances: []*cpb.HANAInstance{
 						&cpb.HANAInstance{Name: "sample_instance1",
-							Host:                "127.0.0.1",
-							Port:                "30015",
-							User:                "SYSTEM",
-							Password:            "PASSWORD",
-							EnableSsl:           false,
-							ValidateCertificate: true,
+							Host:      "127.0.0.1",
+							Port:      "30015",
+							User:      "SYSTEM",
+							Password:  "PASSWORD",
+							EnableSsl: false,
 						},
 					},
 					Queries: []*cpb.Query{
@@ -151,8 +149,7 @@ func TestReadFromFile(t *testing.T) {
 			defaultHMQueriesContent = sampleHANAMonitoringConfigQueriesJSON
 			got := ReadFromFile(test.path, test.readFunc)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("Test: %s ReadFromFile() for path: %s\n(-want +got):\n%s",
-					test.name, test.path, diff)
+				t.Errorf("ReadFromFile() for path: %s\n(-want +got):\n%s", test.path, diff)
 			}
 		})
 	}
@@ -273,7 +270,7 @@ func TestApplyDefaults(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := ApplyDefaults(test.configFromFile, testCloudProps)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("Test: %s ApplyDefaults() (-want +got):\n%s", test.name, diff)
+				t.Errorf("ApplyDefaults() (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -289,13 +286,10 @@ func TestPrepareHMConfig(t *testing.T) {
 		{
 			name:                 "MalformedDefaultQueriesConfig",
 			testDefaultHMContent: []byte("{"),
-			want:                 nil,
 		},
 		{
 			name:                 "NilHANAMonitoringConfiguration",
 			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
-			config:               nil,
-			want:                 nil,
 		},
 		{
 			name:                 "ReadHANAMonitoringConfigSuccessfully",
@@ -305,12 +299,11 @@ func TestPrepareHMConfig(t *testing.T) {
 				QueryTimeoutSec:   300,
 				HanaInstances: []*cpb.HANAInstance{
 					&cpb.HANAInstance{Name: "sample_instance1",
-						Host:                "127.0.0.1",
-						Port:                "30015",
-						User:                "SYSTEM",
-						Password:            "PASSWORD",
-						EnableSsl:           false,
-						ValidateCertificate: true,
+						Host:      "127.0.0.1",
+						Port:      "30015",
+						User:      "SYSTEM",
+						Password:  "PASSWORD",
+						EnableSsl: false,
 					},
 				},
 				Queries: []*cpb.Query{
@@ -338,12 +331,11 @@ func TestPrepareHMConfig(t *testing.T) {
 				QueryTimeoutSec:   300,
 				HanaInstances: []*cpb.HANAInstance{
 					&cpb.HANAInstance{Name: "sample_instance1",
-						Host:                "127.0.0.1",
-						Port:                "30015",
-						User:                "SYSTEM",
-						Password:            "PASSWORD",
-						EnableSsl:           false,
-						ValidateCertificate: true,
+						Host:      "127.0.0.1",
+						Port:      "30015",
+						User:      "SYSTEM",
+						Password:  "PASSWORD",
+						EnableSsl: false,
 					},
 				},
 				Queries: []*cpb.Query{
@@ -377,7 +369,42 @@ func TestPrepareHMConfig(t *testing.T) {
 					}},
 				},
 			},
-			want: nil,
+		},
+		{
+			name:                 "InvalidSSLConfigHANAInstance",
+			testDefaultHMContent: sampleHANAMonitoringConfigQueriesJSON,
+			config: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:      "127.0.0.1",
+						Port:      "30015",
+						User:      "SYSTEM",
+						Password:  "PASSWORD",
+						EnableSsl: true,
+					},
+				},
+				Queries: []*cpb.Query{
+					&cpb.Query{
+						Name:    "default_host_queries",
+						Enabled: true,
+					},
+					&cpb.Query{
+						Name:    "default_cpu_queries",
+						Enabled: false,
+					},
+					&cpb.Query{Name: "custom_memory_utilization",
+						Description: "Custom Total memory utilization by services\n",
+						Enabled:     true,
+						Sql:         "sample sql",
+						Columns: []*cpb.Column{
+							&cpb.Column{Name: "mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+							&cpb.Column{Name: "resident_mem_used", MetricType: cpb.MetricType_METRIC_GAUGE, ValueType: cpb.ValueType_VALUE_INT64, Units: "By"},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -386,7 +413,7 @@ func TestPrepareHMConfig(t *testing.T) {
 			defaultHMQueriesContent = test.testDefaultHMContent
 			got := prepareHMConf(test.config)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("Test: %s readHANAMonitoringConfiguration() (-want +got):\n%s", test.name, diff)
+				t.Errorf("readHANAMonitoringConfiguration() (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -495,7 +522,7 @@ func TestApplyOverrides(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := applyOverrides(test.defaultQueryList, test.customQueryList)
 			if len(got) != test.wantCount {
-				t.Errorf("Test: %s applyOverrides() (-want +got): \n%s", test.name, cmp.Diff(test.wantCount, len(got)))
+				t.Errorf("applyOverrides() (-want +got): \n%s", cmp.Diff(test.wantCount, len(got)))
 			}
 		})
 	}
@@ -682,7 +709,119 @@ func TestValidateCustomQueries(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := validateCustomQueries(test.queries)
 			if got != test.want {
-				t.Errorf("Test: %s checkInvalidCustomMetrics() = %v, want %v", test.name, got, test.want)
+				t.Errorf("checkInvalidCustomMetrics() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestValidateHANASSLConfig(t *testing.T) {
+	tests := []struct {
+		name string
+		conf *cpb.HANAMonitoringConfiguration
+		want bool
+	}{
+		{
+			name: "ValidHANASSLConfig",
+			conf: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:                  "127.0.0.1",
+						Port:                  "30015",
+						User:                  "SYSTEM",
+						Password:              "PASSWORD",
+						EnableSsl:             true,
+						HostNameInCertificate: "hostname",
+						TlsRootCaFile:         "/path/",
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "ValidHANASSLConfigSSLOff",
+			conf: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:                  "127.0.0.1",
+						Port:                  "30015",
+						User:                  "SYSTEM",
+						Password:              "PASSWORD",
+						EnableSsl:             false,
+						HostNameInCertificate: "hostname",
+						TlsRootCaFile:         "/path/",
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "InvalidHANASSLConfigEmptyHostNameInCertificate",
+			conf: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:                  "127.0.0.1",
+						Port:                  "30015",
+						User:                  "SYSTEM",
+						Password:              "PASSWORD",
+						EnableSsl:             true,
+						HostNameInCertificate: "",
+						TlsRootCaFile:         "/path/",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "InvalidHANASSLConfigNoTLSRootPath",
+			conf: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:                  "127.0.0.1",
+						Port:                  "30015",
+						User:                  "SYSTEM",
+						Password:              "PASSWORD",
+						EnableSsl:             true,
+						HostNameInCertificate: "",
+						TlsRootCaFile:         "",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "InvalidHANASSLConfigNoTLSRootPathNoHostNameInCertificate",
+			conf: &cpb.HANAMonitoringConfiguration{
+				SampleIntervalSec: 300,
+				QueryTimeoutSec:   300,
+				HanaInstances: []*cpb.HANAInstance{
+					&cpb.HANAInstance{Name: "sample_instance1",
+						Host:                  "127.0.0.1",
+						Port:                  "30015",
+						User:                  "SYSTEM",
+						Password:              "PASSWORD",
+						EnableSsl:             true,
+						HostNameInCertificate: "",
+						TlsRootCaFile:         "",
+					},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := validateHANASSLConfig(test.conf); got != test.want {
+				t.Errorf("validateHANASSLConfig() = %v, want %v", got, test.want)
 			}
 		})
 	}

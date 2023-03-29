@@ -15,8 +15,7 @@
         "port": "30015",
         "user": "SYSTEM",
         "password": "PASSWORD",
-        "enable_ssl": false,
-        "validate_certificate": true
+        "enable_ssl": false
       }
     ],
     "queries": [

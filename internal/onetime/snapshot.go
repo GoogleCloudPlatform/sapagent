@@ -193,7 +193,14 @@ func (s *Snapshot) connectToDB(ctx context.Context) (handle *sql.DB, err error) 
 		}
 		log.Logger.Debug("Read from secret manager successful")
 	}
-	if s.db, err = databaseconnector.Connect(s.user, s.password, s.host, s.port); err != nil {
+	dbp := databaseconnector.Params{
+		Username:     s.user,
+		Password:     s.password,
+		Host:         s.host,
+		Port:         s.port,
+		EnableSSL:    false,
+	}
+	if s.db, err = databaseconnector.Connect(dbp); err != nil {
 		return nil, err
 	}
 	log.Logger.Debug("Database connection successful")

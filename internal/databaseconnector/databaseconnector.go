@@ -26,12 +26,26 @@ import (
 	_ "github.com/SAP/go-hdb/driver"
 )
 
+// Params is a struct which holds the information required for connecting to a database.
+type Params struct {
+	Username       string
+	Password       string
+	Host           string
+	Port           string
+	EnableSSL      bool
+	HostNameInCert string
+	RootCAFile     string
+}
+
 // Connect creates a SQL connection to a HANA database utilizing the go-hdb driver.
-func Connect(username, password, host, port string) (*sql.DB, error) {
-	dataSource := "hdb://" + username + ":" + password + "@" + host + ":" + port
+func Connect(p Params) (*sql.DB, error) {
+	dataSource := "hdb://" + p.Username + ":" + p.Password + "@" + p.Host + ":" + p.Port
+	if p.EnableSSL {
+		dataSource = dataSource + "?TLSServerName=" + p.HostNameInCert + "&TLSRootCAFile=" + p.RootCAFile
+	}
 	db, err := sql.Open("hdb", dataSource)
 	if err != nil {
-		log.Logger.Errorw("Could not open connection to database.", "username", username, "host", host, "port", port, "err", err)
+		log.Logger.Errorw("Could not open connection to database.", "username", p.Username, "host", p.Host, "port", p.Port, "err", err)
 		return nil, err
 	}
 	return db, nil

@@ -18,8 +18,8 @@ limitations under the License.
 package configuration
 
 import (
-	// Enable file embedding, see also http://go/go-embed.
-	_ "embed"
+	_ "embed" // Enable file embedding, see also http://go/go-embed.
+	"fmt"
 	"runtime"
 	"strings"
 
@@ -145,6 +145,9 @@ func prepareHMConf(config *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringC
 		log.Logger.Debugw("HANA Monitoring Configuration not set in config file", "file", LinuxConfigPath)
 		return nil
 	}
+	if !validateHANASSLConfig(config) {
+		return nil
+	}
 	config.Queries = applyOverrides(defaultConfig.GetQueries(), config.GetQueries())
 	if !validateCustomQueries(config.Queries) {
 		return nil
@@ -180,6 +183,28 @@ func applyOverrides(defaultHMQueriesList, customHMQueriesList []*cpb.Query) []*c
 		}
 	}
 	return result
+}
+
+// validateHANASSLConfig ensures that if a HANA instance wants to use SSL connection,
+// the certificate path and host name in certificate should be set.
+func validateHANASSLConfig(config *cpb.HANAMonitoringConfiguration) bool {
+	var errs []string
+	for _, i := range config.GetHanaInstances() {
+		if !i.GetEnableSsl() {
+			continue
+		}
+		if i.GetHostNameInCertificate() == "" {
+			errs = append(errs, fmt.Sprintf("missing hostname in certificate for HANA instance: %q", i.GetName()))
+		}
+		if i.GetTlsRootCaFile() == "" {
+			errs = append(errs, fmt.Sprintf("missing tls root ca file for HANA instance: %q", i.GetName()))
+		}
+	}
+	if len(errs) > 0 {
+		log.Logger.Errorw("Invalid Config", "err", strings.Join(errs, "\n"))
+		return false
+	}
+	return true
 }
 
 // validateCustomQueries is responsible for making sure that the custom queries have the correct metric
