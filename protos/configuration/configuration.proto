@@ -125,19 +125,16 @@ message HANAInstance {
 message Query {
   bool enabled = 1;
   string name = 2;
-  string description = 3;
-  string sql = 4;
-  int64 sample_interval_sec = 5;
-  repeated Column columns = 6;
+  string sql = 3;
+  int64 sample_interval_sec = 4;
+  repeated Column columns = 5;
 }
 
 message Column {
   string name = 1;
-  string description = 2;
-  string units = 3;
-  MetricType metric_type = 4;
-  ValueType value_type = 5;
-  string name_override = 6;
+  MetricType metric_type = 2;
+  ValueType value_type = 3;
+  string name_override = 4;
 }
 
 enum MetricType {

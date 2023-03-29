@@ -249,7 +249,7 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 		dbp := databaseconnector.Params{
 			Username:       i.GetUser(),
 			Host:           i.GetHost(),
-			Password:       i.GetPassword(),
+			Password:       password,
 			Port:           i.GetPort(),
 			EnableSSL:      i.GetEnableSsl(),
 			HostNameInCert: i.GetHostNameInCertificate(),

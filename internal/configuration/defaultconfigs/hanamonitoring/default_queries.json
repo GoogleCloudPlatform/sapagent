@@ -13,64 +13,55 @@
                 "name": "physical_memory",
                 "name_override": "host/memory/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "physical_memory_used",
                 "name_override": "host/memory/total_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "swap_space",
                 "name_override": "host/swap_space/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "swap_space_used",
                 "name_override": "host/swap_space/total_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "instance_memory_used",
                 "name_override": "host/instance_memory/total_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "instance_memory_peak_used",
                 "name_override": "host/instance_memory/total_peak_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "instance_memory_allocated",
                 "name_override": "host/instance_memory/total_allocated_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "instance_code",
                 "name_override": "host/instance_code/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "instance_shared_memory_allocated",
                 "name_override": "host/instance_shared_memory/total_allocated_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -92,8 +83,7 @@
                 "name": "cpu_time",
                 "name_override": "host/cpu/usage_time",
                 "metric_type": "METRIC_CUMULATIVE",
-                "value_type": "VALUE_INT64",
-                "units": "ms"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -115,8 +105,7 @@
                 "name": "mem_used",
                 "name_override": "component/memory/total_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -138,92 +127,79 @@
                 "name": "mem_used",
                 "name_override": "service/memory/total_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "virtual_mem_used",
                 "name_override": "service/logical_memory/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "resident_mem_used",
                 "name_override": "service/physical_memory/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "code_size",
                 "name_override": "service/code/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "stack_size",
                 "name_override": "service/stack/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "heap_mem_allocated",
                 "name_override": "service/heap_memory/total_allocated_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "heap_mem_used",
                 "name_override": "service/heap_memory/total_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "shared_mem_allocated",
                 "name_override": "service/shared_memory/total_allocated_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "shared_mem_used",
                 "name_override": "service/shared_memory/total_used_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "compactors_allocated",
                 "name_override": "service/compactor/total_allocated_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "compactors_freeable",
                 "name_override": "service/compactors/total_freeable_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "max_mem_pool_size",
                 "name_override": "service/memory/allocation_limit",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "effective_max_mem_pool_size",
                 "name_override": "service/memory/effective_allocation_limit",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -245,36 +221,31 @@
                 "name": "est_max_mem_total",
                 "name_override": "schema/memory/estimated_max_total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "last_compressed_record_count",
                 "name_override": "schema/record/last_compressed_total",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "1"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "reads",
                 "name_override": "schema/read/total_count",
                 "metric_type": "METRIC_CUMULATIVE",
-                "value_type": "VALUE_INT64",
-                "units": "1"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "writes",
                 "name_override": "schema/write/total_count",
                 "metric_type": "METRIC_CUMULATIVE",
-                "value_type": "VALUE_INT64",
-                "units": "1"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "merges",
                 "name_override": "schema/merge/total_count",
                 "metric_type": "METRIC_CUMULATIVE",
-                "value_type": "VALUE_INT64",
-                "units": "1"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -301,15 +272,13 @@
                 "name": "memory",
                 "name_override": "schema/memory/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             },
             {
                 "name": "records",
                 "name_override": "schema/record/total",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "1"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -336,8 +305,7 @@
                 "name": "memory",
                 "name_override": "column/memory/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -354,8 +322,7 @@
                 "name": "alerts",
                 "name_override": "system/alert/total",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "1"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -367,8 +334,7 @@
                 "name": "rowstore_size",
                 "name_override": "rowstore/memory/total_size",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -385,8 +351,7 @@
                 "name": "connections",
                 "name_override": "system/connection/total",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "units": "By"
+                "value_type": "VALUE_INT64"
             }
         ]
     },
@@ -418,8 +383,7 @@
                 "name": "data_latency_ms",
                 "name_override": "system/replication_data_latency/total_time",
                 "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_DOUBLE",
-                "units": "ms"
+                "value_type": "VALUE_DOUBLE"
             }
         ]
     },
@@ -441,8 +405,7 @@
                 "name": "transactions",
                 "name_override": "system/transaction/total_count",
                 "metric_type": "METRIC_CUMULATIVE",
-                "value_type": "VALUE_INT64",
-                "units": "1"
+                "value_type": "VALUE_INT64"
             }
         ]
     }
