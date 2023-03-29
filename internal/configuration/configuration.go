@@ -71,9 +71,9 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 		return nil
 	}
 
-	// The field provide_sap_host_agent_metrics is a special default that needs to be
+	// The fields provide_sap_host_agent_metrics and log_to_cloud are special defaults that need to be
 	// initialized before reading into proto. All other defaults are set later.
-	config := &cpb.Configuration{ProvideSapHostAgentMetrics: true}
+	config := &cpb.Configuration{ProvideSapHostAgentMetrics: true, LogToCloud: true}
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
@@ -89,7 +89,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProperties) *cpb.Configuration {
 	config := configFromFile
 	if config == nil {
-		config = &cpb.Configuration{ProvideSapHostAgentMetrics: true}
+		config = &cpb.Configuration{ProvideSapHostAgentMetrics: true, LogToCloud: true}
 	}
 	// always set the agent name and version
 	config.AgentProperties = &cpb.AgentProperties{Name: AgentName, Version: AgentVersion}

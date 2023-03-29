@@ -38,6 +38,7 @@ message Configuration {
   instanceinfo.CloudProperties cloud_properties = 6;
   AgentProperties agent_properties = 7;
   HANAMonitoringConfiguration hana_monitoring_configuration = 8;
+  bool log_to_cloud = 9;
 }
 
 message CollectionConfiguration {

@@ -166,6 +166,7 @@ func TestApplyDefaults(t *testing.T) {
 			configFromFile: nil,
 			want: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: true,
+				LogToCloud:                 true,
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 			},
@@ -174,9 +175,11 @@ func TestApplyDefaults(t *testing.T) {
 			name: "ConfigFileWithOverride",
 			configFromFile: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: false,
+				LogToCloud:                 false,
 			},
 			want: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: false,
+				LogToCloud:                 false,
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 			},
@@ -204,6 +207,7 @@ func TestApplyDefaults(t *testing.T) {
 			name: "ConfigWithCloudProperties",
 			configFromFile: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: false,
+				LogToCloud:                 false,
 				CloudProperties: &iipb.CloudProperties{
 					ProjectId:  "config-project-id",
 					InstanceId: "config-instance-id",
@@ -212,6 +216,7 @@ func TestApplyDefaults(t *testing.T) {
 			},
 			want: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: false,
+				LogToCloud:                 false,
 				AgentProperties:            testAgentProps,
 				CloudProperties: &iipb.CloudProperties{
 					ProjectId:  "config-project-id",
@@ -224,6 +229,7 @@ func TestApplyDefaults(t *testing.T) {
 			name: "ConfigWithoutHANAMonitoringDefaults",
 			configFromFile: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: true,
+				LogToCloud:                 true,
 				CloudProperties:            testCloudProps,
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
 					HanaInstances: []*cpb.HANAInstance{
@@ -243,6 +249,7 @@ func TestApplyDefaults(t *testing.T) {
 			},
 			want: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: true,
+				LogToCloud:                 true,
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{

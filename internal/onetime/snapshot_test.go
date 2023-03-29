@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
@@ -362,16 +361,6 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 				t.Errorf("createNewHANASnapshot()=%v, want=%v", got, test.want)
 			}
 		})
-	}
-}
-
-func TestExecute(t *testing.T) {
-	s := &Snapshot{}
-	s.SetFlags(&flag.FlagSet{})
-	got := s.Execute(context.Background(), nil)
-	// Execute fails in unit tests as there is no DB.
-	if got != subcommands.ExitFailure {
-		t.Errorf("Execute()=%v, want=%v", got, subcommands.ExitFailure)
 	}
 }
 

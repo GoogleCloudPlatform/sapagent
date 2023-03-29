@@ -330,24 +330,45 @@ func registerSubCommands() {
 
 func main() {
 	registerSubCommands()
+	ctx := context.Background()
+	lp := log.Parameters{
+		LogToCloud: false,
+		OSType:     runtime.GOOS,
+		Level:      cpb.Configuration_INFO,
+	}
+
 	if readExecutionMode(os.Args) == oneTimeMode {
 		// One-time execution
-		os.Exit(int(subcommands.Execute(context.Background())))
+		cloudProps := metadataserver.FetchCloudProperties()
+		lp.LogToCloud = true
+		lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.ProjectId)
+		if lp.CloudLoggingClient != nil {
+			defer lp.CloudLoggingClient.Close()
+		}
+		rc := int(subcommands.Execute(ctx, nil, lp))
+		// making sure we flush the cloud logs since os.Exit does not run deferred functions.
+		log.FlushCloudLog()
+		os.Exit(rc)
 		return
 	}
 
 	// Daemon mode operation
-	log.SetupDaemonLogging(runtime.GOOS, cpb.Configuration_INFO)
+	log.SetupDaemonLogging(lp)
 	config = configuration.ReadFromFile(configPath, os.ReadFile)
 	if config.GetBareMetal() && config.GetCloudProperties() == nil {
 		log.Logger.Error("Bare metal instance detected without cloud properties set. Manually set cloud properties in the configuration file to continue.")
 		usagemetrics.Error(usagemetrics.BareMetalCloudPropertiesNotSet)
 		os.Exit(0)
 	}
-	log.SetupDaemonLogging(runtime.GOOS, config.GetLogLevel())
 	cloudProps := metadataserver.FetchCloudProperties()
 	config = configuration.ApplyDefaults(config, cloudProps)
-
+	lp.LogToCloud = config.GetLogToCloud()
+	lp.Level = config.GetLogLevel()
+	lp.CloudLoggingClient = log.CloudLoggingClient(ctx, config.GetCloudProperties().ProjectId)
+	if lp.CloudLoggingClient != nil {
+		defer lp.CloudLoggingClient.Close()
+	}
+	log.SetupDaemonLogging(lp)
 	configureUsageMetricsForDaemon(cloudProps)
 	usagemetrics.Configured()
 	usagemetrics.Started()

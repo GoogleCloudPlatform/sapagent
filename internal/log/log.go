@@ -54,9 +54,11 @@ Note:
 package log
 
 import (
+	"io"
 	"io/ioutil"
 	"log"
 
+	logging "cloud.google.com/go/logging"
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -68,6 +70,7 @@ import (
 var Logger *zap.SugaredLogger
 var level string
 var logfile string
+var cloudCore *CloudCore
 
 const (
 	// LinuxDaemonLogPath is the log path for daemon mode features on linux.
@@ -81,6 +84,22 @@ const (
 	WindowsOneTimeLogPrefix = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-`
 )
 
+type (
+	// Parameters for setting up logging
+	Parameters struct {
+		LogToCloud         bool
+		CloudLoggingClient *logging.Client
+		OSType             string
+		Level              cpb.Configuration_LogLevel
+		SubCommandName     string
+		LogFileName        string
+		CloudLogName       string
+	}
+	cloudWriter struct {
+		w io.Writer
+	}
+)
+
 func init() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
@@ -88,38 +107,43 @@ func init() {
 }
 
 // SetupDaemonLogging creates logging config for the agent's daemon mode.
-func SetupDaemonLogging(goos string, l cpb.Configuration_LogLevel) {
-	file := LinuxDaemonLogPath
-	if goos == "windows" {
-		file = WindowsDaemonLogPath
+func SetupDaemonLogging(params Parameters) Parameters {
+	params.LogFileName = LinuxDaemonLogPath
+	if params.OSType == "windows" {
+		params.LogFileName = WindowsDaemonLogPath
 	}
-	SetupLogging(file, l)
+	params.CloudLogName = "google-cloud-sap-agent"
+	SetupLogging(params)
+	return params
 }
 
 // SetupOneTimeLogging creates logging config for the agent's one time execution.
-func SetupOneTimeLogging(goos, subcommandName string, l cpb.Configuration_LogLevel) {
+func SetupOneTimeLogging(params Parameters, subcommandName string) Parameters {
 	prefix := LinuxOneTimeLogPrefix
-	if goos == "windows" {
+	if params.OSType == "windows" {
 		prefix = WindowsOneTimeLogPrefix
 	}
-	file := prefix + subcommandName + ".log"
-	SetupLogging(file, l)
+	params.LogFileName = prefix + subcommandName + ".log"
+	params.CloudLogName = "google-cloud-sap-agent-" + subcommandName
+	SetupLogging(params)
+	return params
 }
 
 // SetupLogging uses the agent configuration to set up the file Logger.
-func SetupLogging(file string, l cpb.Configuration_LogLevel) {
-	logfile = file
+func SetupLogging(params Parameters) {
+	logfile = params.LogFileName
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.TimeKey = "timestamp"
 	fileEncoder := zapcore.NewJSONEncoder(config)
-	writer := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   logfile,
+	fileLogWriter := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   params.LogFileName,
 		MaxSize:    25, // megabytes
 		MaxBackups: 3,
 	})
+
 	defaultLogLevel := zapcore.InfoLevel
-	switch l {
+	switch params.Level {
 	case cpb.Configuration_DEBUG:
 		defaultLogLevel = zapcore.DebugLevel
 	case cpb.Configuration_INFO:
@@ -128,11 +152,26 @@ func SetupLogging(file string, l cpb.Configuration_LogLevel) {
 		defaultLogLevel = zapcore.WarnLevel
 	case cpb.Configuration_ERROR:
 		defaultLogLevel = zapcore.ErrorLevel
+	default:
 	}
 	level = defaultLogLevel.String()
-	core := zapcore.NewTee(
-		zapcore.NewCore(fileEncoder, writer, defaultLogLevel),
-	)
+
+	var core zapcore.Core
+	// if logging to Cloud Logging then add the file based logging + cloud logging, else just file logging
+	if params.LogToCloud && params.CloudLoggingClient != nil {
+		cloudCore = &CloudCore{
+			GoogleCloudLogger: params.CloudLoggingClient.Logger(params.CloudLogName),
+			LogLevel:          defaultLogLevel,
+		}
+		core = zapcore.NewTee(
+			zapcore.NewCore(fileEncoder, fileLogWriter, defaultLogLevel),
+			cloudCore,
+		)
+	} else {
+		core = zapcore.NewTee(
+			zapcore.NewCore(fileEncoder, fileLogWriter, defaultLogLevel),
+		)
+	}
 	coreLogger := zap.New(core, zap.AddCaller())
 	defer coreLogger.Sync()
 	// we use the sugared logger to allow for simpler field and message additions to logs
@@ -202,4 +241,11 @@ func Print(msg string) {
 // String creates a zap Field for a string.
 func String(key string, value string) zap.Field {
 	return zap.String(key, value)
+}
+
+// FlushCloudLog will flush any buffered log entries to cloud logging if it is enabled.
+func FlushCloudLog() {
+	if cloudCore != nil && cloudCore.GoogleCloudLogger != nil {
+		cloudCore.GoogleCloudLogger.Flush()
+	}
 }

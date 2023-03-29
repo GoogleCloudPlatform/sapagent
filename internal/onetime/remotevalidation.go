@@ -75,6 +75,8 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		return subcommands.ExitFailure
 	}
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{runtime.GOOS}, gceService)
+	log.SetupLoggingToDiscard()
+
 	return r.remoteValidationHandler(ctx, instanceInfoReader)
 }
 
@@ -105,7 +107,6 @@ var (
 )
 
 func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, instanceInfoReader *instanceinfo.Reader) subcommands.ExitStatus {
-	log.SetupOneTimeLogging(runtime.GOOS, r.Name(), cpb.Configuration_INFO)
 	if r.project == "" || r.instanceid == "" || r.zone == "" {
 		log.Print("ERROR When running in remote mode the project, instanceid, and zone are required")
 		return subcommands.ExitUsageError

@@ -19,7 +19,6 @@ package onetime
 import (
 	"context"
 	"fmt"
-	"runtime"
 
 	"flag"
 	"github.com/google/subcommands"
@@ -63,11 +62,12 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for logusage.
 func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	lp := args[0].(log.Parameters)
+	log.SetupOneTimeLogging(lp, l.Name())
 	return l.logUsageHandler()
 }
 
 func (l *LogUsage) logUsageHandler() subcommands.ExitStatus {
-	log.SetupOneTimeLogging(runtime.GOOS, l.Name(), cpb.Configuration_INFO)
 	switch {
 	case l.usageStatus == "":
 		log.Print("A usage status value is required.")

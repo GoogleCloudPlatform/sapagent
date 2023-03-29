@@ -24,50 +24,65 @@ import (
 
 func TestSetupDaemonLogging(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      *cpb.Configuration
-		want        string
-		os          string
-		wantlogfile string
+		name             string
+		config           *cpb.Configuration
+		want             string
+		os               string
+		wantlogfile      string
+		wantcloudlogname string
 	}{
 		{
-			name:        "LogLevelDEBUG",
-			config:      &cpb.Configuration{LogLevel: cpb.Configuration_DEBUG},
-			want:        "debug",
-			os:          "linux",
-			wantlogfile: "/var/log/google-cloud-sap-agent.log",
+			name:             "LogLevelDEBUG",
+			config:           &cpb.Configuration{LogLevel: cpb.Configuration_DEBUG},
+			want:             "debug",
+			os:               "linux",
+			wantlogfile:      "/var/log/google-cloud-sap-agent.log",
+			wantcloudlogname: "google-cloud-sap-agent",
 		},
 		{
-			name:        "LogLevelERROR",
-			config:      &cpb.Configuration{LogLevel: cpb.Configuration_ERROR},
-			want:        "error",
-			os:          "linux",
-			wantlogfile: "/var/log/google-cloud-sap-agent.log",
+			name:             "LogLevelERROR",
+			config:           &cpb.Configuration{LogLevel: cpb.Configuration_ERROR},
+			want:             "error",
+			os:               "linux",
+			wantlogfile:      "/var/log/google-cloud-sap-agent.log",
+			wantcloudlogname: "google-cloud-sap-agent",
 		},
 		{
-			name:        "LogLevelDEFAULT",
-			config:      &cpb.Configuration{},
-			want:        "info",
-			os:          "linux",
-			wantlogfile: "/var/log/google-cloud-sap-agent.log",
+			name:             "LogLevelDEFAULT",
+			config:           &cpb.Configuration{},
+			want:             "info",
+			os:               "linux",
+			wantlogfile:      "/var/log/google-cloud-sap-agent.log",
+			wantcloudlogname: "google-cloud-sap-agent",
 		},
 		{
-			name:        "LogLevelINFO",
-			config:      &cpb.Configuration{LogLevel: cpb.Configuration_INFO},
-			want:        "info",
-			os:          "linux",
-			wantlogfile: "/var/log/google-cloud-sap-agent.log",
+			name:             "LogLevelINFO",
+			config:           &cpb.Configuration{LogLevel: cpb.Configuration_INFO},
+			want:             "info",
+			os:               "linux",
+			wantlogfile:      "/var/log/google-cloud-sap-agent.log",
+			wantcloudlogname: "google-cloud-sap-agent",
 		},
 		{
-			name:        "LogLevelWARN",
-			config:      &cpb.Configuration{LogLevel: cpb.Configuration_WARNING},
-			want:        "warn",
-			os:          "windows",
-			wantlogfile: "C:\\Program Files\\Google\\google-cloud-sap-agent\\logs\\google-cloud-sap-agent.log",
+			name:             "LogLevelWARN",
+			config:           &cpb.Configuration{LogLevel: cpb.Configuration_WARNING},
+			want:             "warn",
+			os:               "windows",
+			wantlogfile:      "C:\\Program Files\\Google\\google-cloud-sap-agent\\logs\\google-cloud-sap-agent.log",
+			wantcloudlogname: "google-cloud-sap-agent",
 		},
 	}
 	for _, test := range tests {
-		SetupDaemonLogging(test.os, test.config.LogLevel)
+		lp := Parameters{
+			LogToCloud: false,
+			OSType:     test.os,
+			Level:      test.config.LogLevel,
+		}
+		gotparams := SetupDaemonLogging(lp)
+		if gotparams.CloudLogName != test.wantcloudlogname {
+			t.Errorf("setupLogging(goos: %s, l: %s) cloudlogname is incorrect, got: %s, want: %s", test.os, test.config.LogLevel.String(), gotparams.CloudLogName, test.wantcloudlogname)
+		}
+
 		got := GetLevel()
 		if got != test.want {
 			t.Errorf("setupLogging(goos: %s, l: %s) level is incorrect, got: %s, want: %s", test.os, test.config.LogLevel.String(), got, test.want)
@@ -112,28 +127,41 @@ func TestSetupLoggingForTest(t *testing.T) {
 
 func TestSetupOneTimeLogging(t *testing.T) {
 	tests := []struct {
-		name           string
-		os             string
-		subCommandName string
-		want           string
+		name             string
+		os               string
+		subCommandName   string
+		want             string
+		wantcloudlogname string
 	}{
 		{
-			name:           "Windows",
-			os:             "windows",
-			subCommandName: "logusage",
-			want:           `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-logusage.log`,
+			name:             "Windows",
+			os:               "windows",
+			subCommandName:   "logusage",
+			want:             `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-logusage.log`,
+			wantcloudlogname: "google-cloud-sap-agent-logusage",
 		},
 		{
-			name:           "Linux",
-			os:             "linux",
-			subCommandName: "snapshot",
-			want:           `/var/log/google-cloud-sap-agent-snapshot.log`,
+			name:             "Linux",
+			os:               "linux",
+			subCommandName:   "snapshot",
+			want:             `/var/log/google-cloud-sap-agent-snapshot.log`,
+			wantcloudlogname: "google-cloud-sap-agent-snapshot",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			SetupOneTimeLogging(test.os, test.subCommandName, cpb.Configuration_INFO)
-			if got := GetLogFile(); got != test.want {
+			lp := Parameters{
+				LogToCloud: false,
+				OSType:     test.os,
+				Level:      cpb.Configuration_INFO,
+			}
+			gotparams := SetupOneTimeLogging(lp, test.subCommandName)
+			if gotparams.CloudLogName != test.wantcloudlogname {
+				t.Errorf("SetupOneTimeLogging(%s,%s) cloudlogname is incorrect, got: %s, want: %s", test.os, test.subCommandName, gotparams.CloudLogName, test.wantcloudlogname)
+			}
+
+			got := GetLogFile()
+			if got != test.want {
 				t.Errorf("SetupOneTimeLogging(%s,%s)=%s, want: %s", test.os, test.subCommandName, got, test.want)
 			}
 		})

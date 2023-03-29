@@ -20,14 +20,11 @@ package onetime
 import (
 	"context"
 	"fmt"
-	"runtime"
 
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
-
-	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 // MaintenanceMode  has args for maintenance subcommands.
@@ -56,12 +53,12 @@ func (m *MaintenanceMode) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for maintenance.
 func (m *MaintenanceMode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	lp := args[0].(log.Parameters)
+	log.SetupOneTimeLogging(lp, m.Name())
 	return m.maintenanceModeHandler(f, maintenance.ModeReader{}, maintenance.ModeWriter{})
 }
 
 func (m *MaintenanceMode) maintenanceModeHandler(fs *flag.FlagSet, fr maintenance.FileReader, fw maintenance.FileWriter) subcommands.ExitStatus {
-	log.SetupOneTimeLogging(runtime.GOOS, m.Name(), cpb.Configuration_INFO)
-
 	if m.show {
 		res, err := maintenance.ReadMaintenanceMode(fr)
 		if err != nil {

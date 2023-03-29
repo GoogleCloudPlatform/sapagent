@@ -41,7 +41,6 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
@@ -114,6 +113,9 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for snapshot.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	lp := args[0].(log.Parameters)
+	log.SetupOneTimeLogging(lp, s.Name())
+
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
@@ -121,6 +123,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	}
 	s.timeSeriesCreator = mc
 	s.cloudProps = metadataserver.FetchCloudProperties()
+
 	return s.snapshotHandler(ctx, gce.New, newComputeService)
 }
 
@@ -165,7 +168,6 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 }
 
 func (s *Snapshot) validateParameters(os string) error {
-	log.SetupOneTimeLogging(os, s.Name(), cpb.Configuration_INFO)
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
