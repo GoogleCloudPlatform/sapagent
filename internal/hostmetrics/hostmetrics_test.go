@@ -94,19 +94,19 @@ func TestCollectHostMetrics_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 			name:         "cancel before beat",
 			beatInterval: time.Second * 100,
 			timeout:      time.Millisecond * 100,
-			want:         0,
+			want:         1,
 		},
 		{
 			name:         "1 beat timeout",
 			beatInterval: time.Millisecond * 75,
 			timeout:      time.Millisecond * 100,
-			want:         1,
+			want:         2,
 		},
 		{
 			name:         "2 beat timeout",
 			beatInterval: time.Millisecond * 45,
 			timeout:      time.Millisecond * 100,
-			want:         2,
+			want:         3,
 		},
 	}
 	for _, test := range testData {
@@ -116,7 +116,9 @@ func TestCollectHostMetrics_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 			defer cancel()
 			got := 0
 			lock := sync.Mutex{}
+			at := agenttime.New(clockwork.NewFakeClock())
 			params := Parameters{
+				AgentTime: *at,
 				HeartbeatSpec: &heartbeat.Spec{
 					BeatFunc: func() {
 						lock.Lock()

@@ -34,7 +34,7 @@ type Clock struct{}
 // Now implements the timeSource.Now interface, returning the value of time.Now().
 func (Clock) Now() time.Time { return time.Now() }
 
-// AgentTime struct holds application state that is required for various gcagent funcationality.
+// AgentTime struct holds application state that is required for various gcagent functionality.
 type AgentTime struct {
 	timeSource         TimeSource
 	cloudMetricRefresh time.Time
