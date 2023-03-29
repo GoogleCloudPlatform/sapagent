@@ -24,16 +24,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/testing/protocmp"
+
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-
-	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
+	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 var (
@@ -139,6 +142,77 @@ quorum {
 		}
 	}
 )
+
+func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
+	collectionDefinition := &cdpb.CollectionDefinition{}
+	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	if err != nil {
+		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+	collectionDefinition.GetWorkloadValidation().GetValidationCorosync().ConfigPath = validCSConfigFile
+
+	tests := []struct {
+		name       string
+		params     Parameters
+		wantLabels map[string]string
+	}{
+		{
+			name: "DefaultCollectionDefinition",
+			params: Parameters{
+				Config:           defaultConfiguration,
+				WorkloadConfig:   collectionDefinition.GetWorkloadValidation(),
+				ConfigFileReader: defaultFileReader,
+			},
+			wantLabels: map[string]string{
+				"token":                               "20000",
+				"token_retransmits_before_loss_const": "10",
+				"consensus":                           "1200",
+				"join":                                "60",
+				"max_messages":                        "20",
+				"transport":                           "knet",
+				"fail_recv_const":                     "2500",
+				"two_node":                            "1",
+			},
+		},
+		{
+			name: "CorosyncMetricsEmpty",
+			params: Parameters{
+				Config:           defaultConfiguration,
+				WorkloadConfig:   &wlmpb.WorkloadValidation{},
+				ConfigFileReader: defaultFileReader,
+			},
+			wantLabels: map[string]string{},
+		},
+		{
+			name: "CorosyncConfigFileReadError",
+			params: Parameters{
+				Config:           defaultConfiguration,
+				WorkloadConfig:   collectionDefinition.GetWorkloadValidation(),
+				ConfigFileReader: fileReaderError,
+			},
+			wantLabels: map[string]string{
+				"token":                               "",
+				"token_retransmits_before_loss_const": "",
+				"consensus":                           "",
+				"join":                                "",
+				"max_messages":                        "",
+				"transport":                           "",
+				"fail_recv_const":                     "",
+				"two_node":                            "",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			want := createWorkloadMetrics(test.wantLabels, 1.0)
+			got := CollectCorosyncMetricsFromConfig(test.params)
+			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
+				t.Errorf("CollectCorosyncMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
 
 func TestCollectCorosyncMetrics(t *testing.T) {
 	tests := []struct {
