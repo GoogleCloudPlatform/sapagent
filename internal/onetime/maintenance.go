@@ -53,7 +53,7 @@ func (m *MaintenanceMode) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for maintenance.
 func (m *MaintenanceMode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp := args[0].(log.Parameters)
+	lp := args[1].(log.Parameters)
 	log.SetupOneTimeLogging(lp, m.Name())
 	return m.maintenanceModeHandler(f, maintenance.ModeReader{}, maintenance.ModeWriter{})
 }

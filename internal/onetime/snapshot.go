@@ -113,7 +113,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for snapshot.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp := args[0].(log.Parameters)
+	lp := args[1].(log.Parameters)
 	log.SetupOneTimeLogging(lp, s.Name())
 
 	mc, err := monitoring.NewMetricClient(ctx)
@@ -196,11 +196,11 @@ func (s *Snapshot) connectToDB(ctx context.Context) (handle *sql.DB, err error) 
 		log.Logger.Debug("Read from secret manager successful")
 	}
 	dbp := databaseconnector.Params{
-		Username:     s.user,
-		Password:     s.password,
-		Host:         s.host,
-		Port:         s.port,
-		EnableSSL:    false,
+		Username:  s.user,
+		Password:  s.password,
+		Host:      s.host,
+		Port:      s.port,
+		EnableSSL: false,
 	}
 	if s.db, err = databaseconnector.Connect(dbp); err != nil {
 		return nil, err

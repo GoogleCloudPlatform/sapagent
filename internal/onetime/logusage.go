@@ -62,7 +62,7 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for logusage.
 func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp := args[0].(log.Parameters)
+	lp := args[1].(log.Parameters)
 	log.SetupOneTimeLogging(lp, l.Name())
 	return l.logUsageHandler()
 }
