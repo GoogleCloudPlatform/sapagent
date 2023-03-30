@@ -19,7 +19,9 @@ package onetime
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -32,6 +34,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
@@ -301,6 +304,15 @@ func (s *Snapshot) createPDSnapshot(ctx context.Context) (err error) {
 		Name:             s.snapshotName,
 		StorageLocations: []string{s.storageLocation},
 	}
+
+	if s.diskKeyFile != "" {
+		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.project, s.diskZone, s.disk)
+		srcDiskKey, err := readKey(s.diskKeyFile, srcDiskURI, os.ReadFile)
+		if err != nil {
+			return err
+		}
+		snapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+	}
 	if s.computeService == nil {
 		return fmt.Errorf("computeService needed to proceed")
 	}
@@ -371,4 +383,31 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 		return false
 	}
 	return true
+}
+
+// Key defines the contents of each entry in the encryption key file.
+// Reference: https://cloud.google.com/compute/docs/disks/customer-supplied-encryption#key_file
+type Key struct {
+	URI     string `json:"uri"`
+	Key     string `json:"key"`
+	KeyType string `json:"key-type"`
+}
+
+func readKey(file, diskURI string, read configuration.ReadConfigFile) (string, error) {
+	var keys []Key
+	fileContent, err := read(file)
+	if err != nil {
+		return "", err
+	}
+
+	if err := json.Unmarshal(fileContent, &keys); err != nil {
+		return "", err
+	}
+
+	for _, k := range keys {
+		if k.URI == diskURI {
+			return k.Key, nil
+		}
+	}
+	return "", fmt.Errorf("no matching key for for the disk")
 }
