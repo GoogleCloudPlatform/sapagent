@@ -17,9 +17,12 @@ limitations under the License.
 package configurablemetrics
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 )
 
@@ -57,6 +60,34 @@ var (
 			},
 		}
 	}
+	defaultOSCommandMetric = func(vendor cmpb.OSVendor, source cmpb.OutputSource, output string) *cmpb.OSCommandMetric {
+		return &cmpb.OSCommandMetric{
+			MetricInfo: &cmpb.MetricInfo{Label: "foo"},
+			OsVendor:   vendor,
+			Command:    "foo",
+			EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+				AndEvalRules: &cmpb.EvalMetricRule{
+					EvalRules: []*cmpb.EvalRule{
+						&cmpb.EvalRule{
+							OutputSource:  source,
+							EvalRuleTypes: &cmpb.EvalRule_OutputEquals{OutputEquals: output},
+						},
+					},
+					IfTrue: &cmpb.EvalResult{
+						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+					},
+					IfFalse: &cmpb.EvalResult{
+						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "not foobar"},
+					},
+				},
+			},
+		}
+	}
+	testCommandRunner = func(stdout, stderr string, err error) commandlineexecutor.CommandRunnerNoSpace {
+		return func(cmd string, args ...string) (string, string, error) {
+			return stdout, stderr, err
+		}
+	}
 )
 
 func TestBuildMetricMap(t *testing.T) {
@@ -92,6 +123,70 @@ func TestBuildMetricMap(t *testing.T) {
 			got := BuildMetricMap(test.metrics)
 			if d := cmp.Diff(test.want, got); d != "" {
 				t.Errorf("BuildMetricMap(%v) mismatch (-want, +got):\n%s", test.metrics, d)
+			}
+		})
+	}
+}
+
+func TestCollectOSCommandMetric(t *testing.T) {
+	tests := []struct {
+		name      string
+		metric    *cmpb.OSCommandMetric
+		runner    commandlineexecutor.CommandRunnerNoSpace
+		vendor    string
+		wantLabel string
+		wantValue string
+	}{
+		{
+			name:      "OSVendor_RHEL_Mismatch",
+			metric:    defaultOSCommandMetric(cmpb.OSVendor_RHEL, cmpb.OutputSource_STDOUT, "bar"),
+			runner:    testCommandRunner("bar", "", nil),
+			vendor:    "not_rhel",
+			wantLabel: "",
+			wantValue: "",
+		},
+		{
+			name:      "OSVendor_SLES_Mismatch",
+			metric:    defaultOSCommandMetric(cmpb.OSVendor_SLES, cmpb.OutputSource_STDOUT, "bar"),
+			runner:    testCommandRunner("bar", "", nil),
+			vendor:    "not_sles",
+			wantLabel: "",
+			wantValue: "",
+		},
+		{
+			name:      "OutputSource_StdOut",
+			metric:    defaultOSCommandMetric(cmpb.OSVendor_ALL, cmpb.OutputSource_STDOUT, "bar"),
+			runner:    testCommandRunner("bar", "", nil),
+			vendor:    "rhel",
+			wantLabel: "foo",
+			wantValue: "foobar",
+		},
+		{
+			name:      "OutputSource_StdErr",
+			metric:    defaultOSCommandMetric(cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, cmpb.OutputSource_STDERR, "bar"),
+			runner:    testCommandRunner("", "bar", nil),
+			vendor:    "rhel",
+			wantLabel: "foo",
+			wantValue: "foobar",
+		},
+		{
+			name:      "OutputSource_ExitCode",
+			metric:    defaultOSCommandMetric(cmpb.OSVendor_ALL, cmpb.OutputSource_EXIT_CODE, "-1"),
+			runner:    testCommandRunner("", "", &exec.ExitError{}),
+			vendor:    "debian",
+			wantLabel: "foo",
+			wantValue: "foobar",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotLabel, gotValue := CollectOSCommandMetric(test.metric, test.runner, test.vendor)
+			if gotLabel != test.wantLabel {
+				t.Errorf("CollectOSCommandMetric() unexpected metric label, got %q want %q", gotLabel, test.wantLabel)
+			}
+			if gotValue != test.wantValue {
+				t.Errorf("CollectOSCommandMetric() unexpected metric value, got %q want %q", gotValue, test.wantValue)
 			}
 		})
 	}

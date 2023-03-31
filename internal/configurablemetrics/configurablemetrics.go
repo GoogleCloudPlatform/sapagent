@@ -19,11 +19,13 @@ limitations under the License.
 package configurablemetrics
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -44,6 +46,34 @@ func BuildMetricMap(metrics []*cmpb.EvalMetric) map[string]string {
 		m[metric.GetMetricInfo().GetLabel()] = ""
 	}
 	return m
+}
+
+// CollectOSCommandMetric executes a command, evaluates the output, and returns
+// the metric label and resulting value of the evaluation.
+//
+// If a specific os_vendor is supplied for a metric, then the command will only
+// be run if the system is using the same vendor. Otherwise, the metric should
+// be excluded from collection.
+func CollectOSCommandMetric(m *cmpb.OSCommandMetric, runner commandlineexecutor.CommandRunnerNoSpace, vendor string) (label, value string) {
+	osVendor := m.GetOsVendor()
+	switch {
+	case osVendor == cmpb.OSVendor_RHEL && vendor != "rhel":
+		log.Logger.Warnw(fmt.Sprintf("Skip metric collection, OS vendor of %q not detected for this system", cmpb.OSVendor_RHEL.String()), "vendor", vendor, "metric", m)
+		return "", ""
+	case osVendor == cmpb.OSVendor_SLES && vendor != "sles":
+		log.Logger.Warnw(fmt.Sprintf("Skip metric collection, OS vendor of %q not detected for this system", cmpb.OSVendor_SLES.String()), "vendor", vendor, "metric", m)
+		return "", ""
+	}
+
+	exitCode := 0
+	stdout, stderr, err := runner(m.GetCommand(), m.GetArgs()...)
+	if err != nil {
+		exitCode = commandlineexecutor.ExitCode(err)
+	}
+
+	label = m.GetMetricInfo().GetLabel()
+	value, _ = Evaluate(m, Output{StdOut: stdout, StdErr: stderr, ExitCode: strconv.Itoa(exitCode)})
+	return label, value
 }
 
 // Evaluate runs a series of evaluation rules against an Output source and
