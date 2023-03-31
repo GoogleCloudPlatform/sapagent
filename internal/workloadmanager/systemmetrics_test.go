@@ -17,9 +17,8 @@ limitations under the License.
 package workloadmanager
 
 import (
-	"embed"
+	_ "embed"
 	"errors"
-	"io"
 	"net"
 	"testing"
 	"time"
@@ -67,9 +66,6 @@ var (
 	//go:embed test_data/collectiondefinition.json
 	defaultCollectionDefinition []byte
 	// LINT.ThenChange(//depot/github.com/GoogleCloudPlatform/sapagent/internal/configuration/defaultconfigs/collectiondefinition/collectiondefinition.json)
-
-	//go:embed test_data/os-release.txt test_data/os-release-bad.txt test_data/os-release-empty.txt
-	testFS embed.FS
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -134,16 +130,24 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: Parameters{
 				Config:         cnf,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
-				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-					file, err := testFS.Open(path)
-					var f io.ReadCloser = file
-					return f, err
-				}),
-				OSReleaseFilePath: "test_data/os-release.txt",
+				osVendorID:     "debian",
+				osVersion:      "11",
 				InterfaceAddrsGetter: func() ([]net.Addr, error) {
 					ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
 					ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
 					return []net.Addr{ip1, ip2}, nil
+				},
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					if cmd == "gcloud" {
+						return "Google Cloud SDK 393.0.0", "", nil
+					}
+					if cmd == "gsutil" {
+						return "gsutil version 5.10", "", nil
+					}
+					if cmd == "systemctl" {
+						return "active", "", nil
+					}
+					return "", "", nil
 				},
 			},
 			wantLabels: map[string]string{
@@ -152,6 +156,9 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"agent":         "sapagent",
 				"agent_version": "1.0",
 				"network_ips":   "192.168.0.1,192.168.0.2",
+				"gcloud":        "true",
+				"gsutil":        "true",
+				"agent_state":   "running",
 			},
 		},
 		{
@@ -184,46 +191,12 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "OSReleaseFileReadError",
-			params: Parameters{
-				Config:         cnf,
-				WorkloadConfig: systemMetricOSNameVersion,
-				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-					return nil, errors.New("File Read Error")
-				}),
-				OSReleaseFilePath: "test_data/os-release.txt",
-			},
-			wantLabels: map[string]string{
-				"os": "",
-			},
-		},
-		{
-			name: "OSReleaseFileParseError",
-			params: Parameters{
-				Config:         cnf,
-				WorkloadConfig: systemMetricOSNameVersion,
-				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-					file, err := testFS.Open(path)
-					var f io.ReadCloser = file
-					return f, err
-				}),
-				OSReleaseFilePath: "test_data/os-release-bad.txt",
-			},
-			wantLabels: map[string]string{
-				"os": "",
-			},
-		},
-		{
 			name: "OSNameVersionEmpty",
 			params: Parameters{
 				Config:         cnf,
 				WorkloadConfig: systemMetricOSNameVersion,
-				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-					file, err := testFS.Open(path)
-					var f io.ReadCloser = file
-					return f, err
-				}),
-				OSReleaseFilePath: "test_data/os-release-empty.txt",
+				osVendorID:     "",
+				osVersion:      "",
 			},
 			wantLabels: map[string]string{
 				"os": "-",
@@ -253,6 +226,46 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			wantLabels: map[string]string{
 				"network_ips": "",
 			},
+		},
+		{
+			name: "OSCommandMetrics_EmptyLabel",
+			params: Parameters{
+				Config: cnf,
+				WorkloadConfig: &wlmpb.WorkloadValidation{
+					ValidationSystem: &wlmpb.ValidationSystem{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type: "workload.googleapis.com/sap/validation/system",
+									Label: "foo",
+								},
+								OsVendor: cmpb.OSVendor_RHEL,
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource: cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputEquals{OutputEquals: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
+										},
+										IfFalse: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				osVendorID: "sles",
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					return "foobar", "", nil
+				},
+			},
+			wantLabels: map[string]string{},
 		},
 	}
 

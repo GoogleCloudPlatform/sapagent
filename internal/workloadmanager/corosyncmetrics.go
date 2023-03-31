@@ -41,6 +41,12 @@ func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
 	for k, v := range collectCorosyncConfigMetrics(params.ConfigFileReader, corosync.GetConfigPath(), corosync.GetConfigMetrics()) {
 		l[k] = v
 	}
+	for _, m := range corosync.GetOsCommandMetrics() {
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
+		if k != "" {
+			l[k] = v
+		}
+	}
 
 	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
 }
@@ -49,6 +55,10 @@ func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
 // of collected metric values, keyed by metric label.
 func collectCorosyncConfigMetrics(reader ConfigFileReader, path string, metrics []*cmpb.EvalMetric) map[string]string {
 	labels := configurablemetrics.BuildMetricMap(metrics)
+	if len(metrics) == 0 {
+		return labels
+	}
+
 	file, err := reader(path)
 	if err != nil {
 		log.Logger.Warnw("Could not read the corosync config file", log.Error(err))

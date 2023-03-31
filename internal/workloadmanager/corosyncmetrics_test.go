@@ -34,6 +34,7 @@ import (
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
+	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
@@ -162,6 +163,11 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				Config:           defaultConfiguration,
 				WorkloadConfig:   collectionDefinition.GetWorkloadValidation(),
 				ConfigFileReader: defaultFileReader,
+				osVendorID:       "rhel",
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					field := args[len(args)-1]
+					return fmt.Sprintf("%s = 999", field), "", nil
+				},
 			},
 			wantLabels: map[string]string{
 				"token":                               "20000",
@@ -172,6 +178,14 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				"transport":                           "knet",
 				"fail_recv_const":                     "2500",
 				"two_node":                            "1",
+				"token_runtime":                       "999",
+				"token_retransmits_before_loss_const_runtime": "999",
+				"consensus_runtime":                           "999",
+				"join_runtime":                                "999",
+				"max_messages_runtime":                        "999",
+				"transport_runtime":                           "999",
+				"fail_recv_const_runtime":                     "999",
+				"two_node_runtime":                            "999",
 			},
 		},
 		{
@@ -186,8 +200,13 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 		{
 			name: "CorosyncConfigFileReadError",
 			params: Parameters{
-				Config:           defaultConfiguration,
-				WorkloadConfig:   collectionDefinition.GetWorkloadValidation(),
+				Config: defaultConfiguration,
+				WorkloadConfig: &wlmpb.WorkloadValidation{
+					ValidationCorosync: &wlmpb.ValidationCorosync{
+						ConfigPath:    validCSConfigFile,
+						ConfigMetrics: collectionDefinition.GetWorkloadValidation().GetValidationCorosync().GetConfigMetrics(),
+					},
+				},
 				ConfigFileReader: fileReaderError,
 			},
 			wantLabels: map[string]string{
@@ -200,6 +219,46 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				"fail_recv_const":                     "",
 				"two_node":                            "",
 			},
+		},
+		{
+			name: "OSCommandMetrics_EmptyLabel",
+			params: Parameters{
+				Config: cnf,
+				WorkloadConfig: &wlmpb.WorkloadValidation{
+					ValidationCorosync: &wlmpb.ValidationCorosync{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/corosync",
+									Label: "foo",
+								},
+								OsVendor: cmpb.OSVendor_RHEL,
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputEquals{OutputEquals: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
+										},
+										IfFalse: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				osVendorID: "sles",
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					return "foobar", "", nil
+				},
+			},
+			wantLabels: map[string]string{},
 		},
 	}
 

@@ -20,15 +20,14 @@ import (
 	"context"
 	"embed"
 	"errors"
-	"sync"
-	"time"
-
 	"io"
 	"net"
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -52,13 +51,90 @@ import (
 var (
 	//go:embed test_data/metricoverride.yaml
 	sampleOverride string
-	//go:embed test_data/metricoverride.yaml
-	sampleOverrideFS        embed.FS
+	//go:embed test_data/metricoverride.yaml test_data/os-release.txt test_data/os-release-bad.txt test_data/os-release-empty.txt
+	testFS                  embed.FS
 	defaultBackOffIntervals = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
 	DefaultTestReader       = ConfigFileReader(func(data string) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(data)), nil
 	})
 )
+
+func TestSetOSReleaseInfo(t *testing.T) {
+	defaultFileReader := ConfigFileReader(func(path string) (io.ReadCloser, error) {
+		file, err := testFS.Open(path)
+		var f io.ReadCloser = file
+		return f, err
+	})
+
+	tests := []struct {
+		name        string
+		filePath    string
+		reader      ConfigFileReader
+		wantID      string
+		wantVersion string
+	}{
+		{
+			name:        "Success",
+			filePath:    "test_data/os-release.txt",
+			reader:      defaultFileReader,
+			wantID:      "debian",
+			wantVersion: "11",
+		},
+		{
+			name:        "ConfigFileReaderNil",
+			filePath:    "test_data/os-release.txt",
+			reader:      nil,
+			wantID:      "",
+			wantVersion: "",
+		},
+		{
+			name:        "OSReleaseFilePathEmpty",
+			filePath:    "",
+			reader:      defaultFileReader,
+			wantID:      "",
+			wantVersion: "",
+		},
+		{
+			name:     "FileReadError",
+			filePath: "test_data/os-release.txt",
+			reader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
+				return nil, errors.New("File Read Error")
+			}),
+			wantID:      "",
+			wantVersion: "",
+		},
+		{
+			name:        "FileParseError",
+			filePath:    "test_data/os-release-bad.txt",
+			reader:      defaultFileReader,
+			wantID:      "",
+			wantVersion: "",
+		},
+		{
+			name:        "FieldsEmpty",
+			filePath:    "test_data/os-release-empty.txt",
+			reader:      defaultFileReader,
+			wantID:      "",
+			wantVersion: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			params := Parameters{
+				OSReleaseFilePath: test.filePath,
+				ConfigFileReader:  test.reader,
+			}
+			params.SetOSReleaseInfo()
+			if params.osVendorID != test.wantID {
+				t.Errorf("SetOSReleaseInfo() unexpected osVendorID, got %q want %q", params.osVendorID, test.wantID)
+			}
+			if params.osVersion != test.wantVersion {
+				t.Errorf("SetOSReleaseInfo() unexpected osVersion, got %q want %q", params.osVersion, test.wantVersion)
+			}
+		})
+	}
+}
 
 func TestCollectMetrics_hasMetrics(t *testing.T) {
 	iniParse = func(f string) *goini.INI {
@@ -220,12 +296,12 @@ func TestCollectMetrics_hasOverrideMetrics(t *testing.T) {
 		CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
 		CommandExistsRunner:  func(string) bool { return true },
 		ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-			file, err := sampleOverrideFS.Open(path)
+			file, err := testFS.Open(path)
 			var f io.ReadCloser = file
 			return f, err
 		}),
 		OSStatReader: func(data string) (os.FileInfo, error) {
-			f, err := sampleOverrideFS.Open(data)
+			f, err := testFS.Open(data)
 			if err != nil {
 				return nil, err
 			}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/zieckey/goini"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
@@ -50,9 +51,16 @@ func CollectSystemMetricsFromConfig(params Parameters, wm chan<- WorkloadMetrics
 	t := "workload.googleapis.com/sap/validation/system"
 	l := make(map[string]string)
 
-	for _, m := range params.WorkloadConfig.GetValidationSystem().GetSystemMetrics() {
+	system := params.WorkloadConfig.GetValidationSystem()
+	for _, m := range system.GetSystemMetrics() {
 		v := collectSystemVariable(m, params)
 		l[m.GetMetricInfo().GetLabel()] = v
+	}
+	for _, m := range system.GetOsCommandMetrics() {
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
+		if k != "" {
+			l[k] = v
+		}
 	}
 
 	m := createTimeSeries(t, l, 1, params.Config)
@@ -66,7 +74,7 @@ func collectSystemVariable(m *wlmpb.SystemMetric, params Parameters) string {
 	case wlmpb.SystemVariable_INSTANCE_NAME:
 		return params.Config.GetCloudProperties().GetInstanceName()
 	case wlmpb.SystemVariable_OS_NAME_VERSION:
-		return osNameVersion(params)
+		return fmt.Sprintf("%s-%s", params.osVendorID, params.osVersion)
 	case wlmpb.SystemVariable_AGENT_NAME:
 		return params.Config.GetAgentProperties().GetName()
 	case wlmpb.SystemVariable_AGENT_VERSION:
@@ -77,42 +85,6 @@ func collectSystemVariable(m *wlmpb.SystemMetric, params Parameters) string {
 		log.Logger.Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
 		return ""
 	}
-}
-
-// osNameVersion parses the OS name and version from the system.
-func osNameVersion(params Parameters) string {
-	file, err := params.ConfigFileReader(params.OSReleaseFilePath)
-	if err != nil {
-		log.Logger.Warnw(fmt.Sprintf("Could not read from %s", params.OSReleaseFilePath), "error", err)
-		return ""
-	}
-	defer file.Close()
-
-	ini := goini.New()
-	if err := ini.ParseFrom(file, "\n", "="); err != nil {
-		log.Logger.Warnw(fmt.Sprintf("Failed to parse from %s", params.OSReleaseFilePath), "error", err)
-		return ""
-	}
-
-	id, ok := ini.Get("ID")
-	if !ok {
-		log.Logger.Warn(fmt.Sprintf("Could not read ID from %s", params.OSReleaseFilePath))
-		id = ""
-	}
-	id = strings.ReplaceAll(strings.TrimSpace(id), `"`, "")
-
-	version, ok := ini.Get("VERSION")
-	if !ok {
-		log.Logger.Warn(fmt.Sprintf("Could not read VERSION from %s", params.OSReleaseFilePath))
-		version = ""
-	}
-	vf := strings.Fields(version)
-	v := ""
-	if len(vf) > 0 {
-		v = strings.ReplaceAll(strings.TrimSpace(vf[0]), `"`, "")
-	}
-
-	return fmt.Sprintf("%s-%s", id, v)
 }
 
 // networkIPAddrs parses the network interface addresses from the system.

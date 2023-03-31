@@ -30,6 +30,7 @@ import (
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	"github.com/zieckey/goini"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
@@ -101,8 +102,49 @@ type Parameters struct {
 	OSType                string
 	BackOffs              *cloudmonitoring.BackOffIntervals
 	HeartbeatSpec         *heartbeat.Spec
-	OSReleaseFilePath     string
 	InterfaceAddrsGetter  InterfaceAddrsGetter
+	OSReleaseFilePath     string
+	// fields derived from parsing the file specified by OSReleaseFilePath
+	osVendorID string
+	osVersion  string
+}
+
+// SetOSReleaseInfo parses the OS release file and sets the values for the
+// osVendorID and osVersion fields in the Parameters struct.
+func (p *Parameters) SetOSReleaseInfo() {
+	if p.ConfigFileReader == nil || p.OSReleaseFilePath == "" {
+		log.Logger.Debug("A ConfigFileReader and OSReleaseFilePath must be set.")
+		return
+	}
+
+	file, err := p.ConfigFileReader(p.OSReleaseFilePath)
+	if err != nil {
+		log.Logger.Warnw(fmt.Sprintf("Could not read from %s", p.OSReleaseFilePath), "error", err)
+		return
+	}
+	defer file.Close()
+
+	ini := goini.New()
+	if err := ini.ParseFrom(file, "\n", "="); err != nil {
+		log.Logger.Warnw(fmt.Sprintf("Failed to parse from %s", p.OSReleaseFilePath), "error", err)
+		return
+	}
+
+	id, ok := ini.Get("ID")
+	if !ok {
+		log.Logger.Warn(fmt.Sprintf("Could not read ID from %s", p.OSReleaseFilePath))
+		id = ""
+	}
+	p.osVendorID = strings.ReplaceAll(strings.TrimSpace(id), `"`, "")
+
+	version, ok := ini.Get("VERSION")
+	if !ok {
+		log.Logger.Warn(fmt.Sprintf("Could not read VERSION from %s", p.OSReleaseFilePath))
+		version = ""
+	}
+	if vf := strings.Fields(version); len(vf) > 0 {
+		p.osVersion = strings.ReplaceAll(strings.TrimSpace(vf[0]), `"`, "")
+	}
 }
 
 var (
