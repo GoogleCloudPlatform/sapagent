@@ -691,6 +691,12 @@ func TestFindPort(t *testing.T) {
 			name:         "UnknownInstance",
 			instanceName: "XYZ",
 		},
+		{
+			name:         "WebDispatcherAsSeperateSID",
+			instanceName: "W01",
+			wantKind:     sapb.InstanceKind_APP,
+			wantType:     sapb.InstanceType_NETWEAVER,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

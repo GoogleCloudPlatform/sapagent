@@ -375,7 +375,12 @@ func findPort(instance *sapb.SAPInstance, instanceName string) (string, sapb.Ins
 		log.Logger.Debugw("This is a HANA instance.", "instancename", instanceName)
 		instanceType = sapb.InstanceType_HANA
 	default:
-		log.Logger.Debugw("Unknown instance", "instancename", instanceName)
+		if strings.HasPrefix(instanceName, "W") {
+			instanceKind = sapb.InstanceKind_APP
+			instanceType = sapb.InstanceType_NETWEAVER
+		} else {
+			log.Logger.Debugw("Unknown instance", "instancename", instanceName)
+		}
 	}
 	return httpPort, instanceType, instanceKind
 }

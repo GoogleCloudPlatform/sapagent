@@ -295,6 +295,28 @@ func TestNWAvailabilityValue(t *testing.T) {
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
+		{
+			name: "WebDispatctherGrey",
+			fRunner: &fakeRunner{
+				stdOut: `0 name: sapwebdisp
+				0 description: sapwebdisp
+				0 dispstatus: GRAY
+				0 pid: 111`,
+				exitCode: 1,
+			},
+			wantAvailability: systemAtLeastOneProcessNotGreen,
+		},
+		{
+			name: "gwrdGrey",
+			fRunner: &fakeRunner{
+				stdOut: `0 name: gwrd
+			0 description: gwrd
+			0 dispstatus: GRAY
+			0 pid: 111`,
+				exitCode: 1,
+			},
+			wantAvailability: systemAtLeastOneProcessNotGreen,
+		},
 	}
 
 	for _, test := range tests {

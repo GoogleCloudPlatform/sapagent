@@ -156,15 +156,21 @@ func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 	start := tspb.Now()
 	availabilityValue = systemAllProcessesGreen
 
-	processNames := []string{"msg_server", "enserver", "enrepserver", "disp+work", "gwrd", "icman", "jstart", "jcontrol", "enq_replicator", "enq_server"}
+	processNames := []string{"msg_server", "enserver", "enrepserver", "disp+work", "gwrd", "icman", "jstart", "jcontrol", "enq_replicator", "enq_server", "sapwebdisp"}
 	for _, proc := range procs {
 		if contains(processNames, proc.Name) && !proc.IsGreen {
 			availabilityValue = systemAtLeastOneProcessNotGreen
 		}
 
+		instanceType := p.SAPInstance.GetKind().String()
+		switch proc.Name {
+		case "gwrd", "sapwebdisp":
+			// For gwrd or web dispatcher process running on another instance, categorize it as "APP"
+			instanceType = sapb.InstanceKind_APP.String()
+		}
 		extraLabels := map[string]string{
 			"service_name":  proc.Name,
-			"instance_type": p.SAPInstance.GetKind().String(),
+			"instance_type": instanceType,
 		}
 		value := boolToInt64(proc.IsGreen)
 
