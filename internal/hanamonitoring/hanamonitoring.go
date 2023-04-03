@@ -121,13 +121,18 @@ func Start(ctx context.Context, params Parameters) bool {
 			if query.GetSampleIntervalSec() >= 5 {
 				sampleInterval = query.GetSampleIntervalSec()
 			}
+			// Since wp.Submit() is non-blocking, the for loop might progress before the
+			// task is executed in the workerpool. Create a copy of db and query outside
+			// of Submit() to ensure we copy the correct database and query into the call.
+			// Reference: https://go.dev/doc/faq#closures_and_goroutines
+			db := db
+			query := query
 			wp.Submit(func() {
 				queryAndSend(ctx, queryOptions{
 					db:             db,
 					query:          query,
 					timeout:        cfg.GetQueryTimeoutSec(),
 					sampleInterval: sampleInterval,
-					failCount:      0,
 					params:         params,
 					wp:             wp,
 					runningSum:     make(map[timeSeriesKey]prevVal),
@@ -336,7 +341,7 @@ func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryNa
 }
 
 // createCumulativeMetric builds a cloudmonitoring timeseries with an int or float point value for
-// the specified column. It returns (ni, false) when it is unable to build the timeseries.
+// the specified column. It returns (nil, false) when it is unable to build the timeseries.
 func createCumulativeMetric(c *cpb.Column, val any, labels map[string]string, queryName string, params Parameters, timestamp *tspb.Timestamp, runningSum map[timeSeriesKey]prevVal) (*mrpb.TimeSeries, bool) {
 	metricPath := metricURL + "/" + queryName + "/" + c.GetName()
 	if c.GetNameOverride() != "" {
@@ -362,23 +367,29 @@ func createCumulativeMetric(c *cpb.Column, val any, labels map[string]string, qu
 			ts.Int64Value = *result
 		}
 		if lastVal, ok := runningSum[tsKey]; ok {
-			log.Logger.Infof("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
+			log.Logger.Debugw("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
 			ts.Int64Value = ts.Int64Value + lastVal.val.(int64)
 			ts.StartTime = lastVal.startTime
+			runningSum[tsKey] = prevVal{val: ts.Int64Value, startTime: ts.StartTime}
+			return timeseries.BuildInt(ts), true
 		}
+		log.Logger.Debugw("Key does not yet exist, not creating metric.", "Key", tsKey)
 		runningSum[tsKey] = prevVal{val: ts.Int64Value, startTime: ts.StartTime}
-		return timeseries.BuildInt(ts), true
+		return nil, false
 	case cpb.ValueType_VALUE_DOUBLE:
 		if result, ok := val.(*float64); ok {
 			ts.Float64Value = *result
 		}
 		if lastVal, ok := runningSum[tsKey]; ok {
-			log.Logger.Infof("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
+			log.Logger.Debugw("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
 			ts.Float64Value = ts.Float64Value + lastVal.val.(float64)
 			ts.StartTime = lastVal.startTime
+			runningSum[tsKey] = prevVal{val: ts.Float64Value, startTime: ts.StartTime}
+			return timeseries.BuildFloat64(ts), true
 		}
+		log.Logger.Debugw("Key does not yet exist, not creating metric.", "Key", tsKey)
 		runningSum[tsKey] = prevVal{val: ts.Float64Value, startTime: ts.StartTime}
-		return timeseries.BuildFloat64(ts), true
+		return nil, false
 	default:
 		return nil, false
 	}

@@ -93,11 +93,11 @@ func newDefaultCumulativeMetric(st, et int64) *monitoringresourcespb.TimeSeries 
 	}
 }
 
-func newTimeSeriesKey() timeSeriesKey {
+func newTimeSeriesKey(metricType, metricLabels string) timeSeriesKey {
 	tsk := timeSeriesKey{
 		MetricKind:   mpb.MetricDescriptor_CUMULATIVE.String(),
-		MetricType:   "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol",
-		MetricLabels: "abc:def",
+		MetricType:   metricType,
+		MetricLabels: metricLabels,
 	}
 	return tsk
 }
@@ -503,6 +503,8 @@ func TestCreateMetricsForRow(t *testing.T) {
 	cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6] = new(int64), new(float64), new(bool), new(string), new(string), new(float64), new(string)
 
 	runningSum := make(map[timeSeriesKey]prevVal)
+	tsKey := newTimeSeriesKey("workload.googleapis.com/sap/hanamonitoring/testQuery/testColDouble2", "instance_name:testName,sid:testSID,stringLabel2:,stringLabel:")
+	runningSum[tsKey] = prevVal{val: float64(123.456), startTime: &tspb.Timestamp{Seconds: 0}}
 
 	wantMetrics := 4
 	got := createMetricsForRow("testName", "testSID", query, cols, defaultParams, runningSum)
@@ -588,20 +590,29 @@ func TestCreateCumulativeMetric(t *testing.T) {
 		wantValue  *commonpb.TypedValue
 	}{
 		{
-			name:       "FirstValueInCumulativeTimeSeries",
+			name:       "FirstValueInCumulativeTimeSeriesInt",
 			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
 			val:        proto.Int64(123),
 			runningSum: map[timeSeriesKey]prevVal{},
-			want:       newDefaultCumulativeMetric(123, 123),
-			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 123}},
+			want:       nil,
+			wantMetric: nil,
+			wantValue:  nil,
+		},
+		{
+			name:       "FirstValueInCumulativeTimeSeriesDouble",
+			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			val:        proto.Float64(123.23),
+			runningSum: map[timeSeriesKey]prevVal{},
+			want:       nil,
+			wantMetric: nil,
+			wantValue:  nil,
 		},
 		{
 			name:   "KeyAlreadyExistInCumulativeTimeSeries",
 			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
 			val:    proto.Int64(123),
 			runningSum: map[timeSeriesKey]prevVal{
-				newTimeSeriesKey(): prevVal{val: int64(123), startTime: &tspb.Timestamp{Seconds: 0}},
+				newTimeSeriesKey("workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", "abc:def"): prevVal{val: int64(123), startTime: &tspb.Timestamp{Seconds: 0}},
 			},
 			want:       newDefaultCumulativeMetric(0, 123),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
@@ -612,20 +623,22 @@ func TestCreateCumulativeMetric(t *testing.T) {
 			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
 			val:    proto.Float64(123.23),
 			runningSum: map[timeSeriesKey]prevVal{
-				newTimeSeriesKey(): prevVal{val: float64(123.23), startTime: &tspb.Timestamp{Seconds: 0}},
+				newTimeSeriesKey("workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", "abc:def"): prevVal{val: float64(123.23), startTime: &tspb.Timestamp{Seconds: 0}},
 			},
 			want:       newDefaultCumulativeMetric(0, 123),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
 			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_DoubleValue{DoubleValue: 246.46}},
 		},
 		{
-			name:       "IntWithNameOverride",
-			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE, NameOverride: "override/path"},
-			val:        proto.Int64(123),
-			runningSum: map[timeSeriesKey]prevVal{},
-			want:       newDefaultCumulativeMetric(123, 123),
+			name:   "IntWithNameOverride",
+			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE, NameOverride: "override/path"},
+			val:    proto.Int64(123),
+			runningSum: map[timeSeriesKey]prevVal{
+				newTimeSeriesKey("workload.googleapis.com/sap/hanamonitoring/override/path", "abc:def"): prevVal{val: int64(123), startTime: &tspb.Timestamp{Seconds: 0}},
+			},
+			want:       newDefaultCumulativeMetric(0, 123),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/override/path", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 123}},
+			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 246}},
 		},
 		{
 			name:   "Fails",

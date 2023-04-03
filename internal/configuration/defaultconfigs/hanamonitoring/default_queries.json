@@ -357,7 +357,7 @@
     },
     {
         "name": "replication_query",
-        "sql": "SELECT HOST AS primary_host, PORT AS port, REPLICATION_MODE AS mode, SECONDARY_HOST AS secondary_host, LPAD(TO_DECIMAL(IFNULL(MAP(SHIPPED_LOG_BUFFERS_COUNT, 0, 0, SHIPPED_LOG_BUFFERS_DURATION / 1000 / SHIPPED_LOG_BUFFERS_COUNT), 0), 10, 2), 12) AS data_latency_ms FROM M_SERVICE_REPLICATION;",
+        "sql": "SELECT HOST AS primary_host, PORT AS port, REPLICATION_MODE AS mode, SECONDARY_HOST AS secondary_host, LPAD(TO_DECIMAL(IFNULL(MAP(SHIPPED_LOG_BUFFERS_COUNT, 0, 0, SHIPPED_LOG_BUFFERS_DURATION / 1000 / SHIPPED_LOG_BUFFERS_COUNT), 0), 10, 2), 12, '') AS data_latency_ms FROM M_SERVICE_REPLICATION;",
         "columns": [
             {
                 "name": "primary_host",
