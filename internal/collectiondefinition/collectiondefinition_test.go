@@ -876,7 +876,7 @@ func TestValidate(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name: "WorkloadValidation_OSCommandMetrics_MetricInfo_Duplicate",
+			name: "WorkloadValidation_OSCommandMetrics_MetricInfo_Duplicate_OSVendor_HasAll",
 			definition: &cdpb.CollectionDefinition{
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
@@ -911,9 +911,190 @@ func TestValidate(t *testing.T) {
 									Type:       "workload.googleapis.com/sap/validation/custom",
 									Label:      "foo",
 								},
+								OsVendor: cmpb.OSVendor_RHEL,
+								Command:  "foo",
+								Args:     []string{"--bar"},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValid: false,
+			wantCount: 1,
+		},
+		{
+			name: "WorkloadValidation_OSCommandMetrics_MetricInfo_Duplicate_OSVendor_IsAll",
+			definition: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationNetweaver: &wlmpb.ValidationNetweaver{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									MinVersion: "1.0",
+									Type:       "workload.googleapis.com/sap/validation/custom",
+									Label:      "foo",
+								},
+								OsVendor: cmpb.OSVendor_SLES,
+								Command:  "foo",
+								Args:     []string{"--bar"},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
+									},
+								},
+							},
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									MinVersion: "1.0",
+									Type:       "workload.googleapis.com/sap/validation/custom",
+									Label:      "foo",
+								},
 								OsVendor: cmpb.OSVendor_ALL,
 								Command:  "foo",
 								Args:     []string{"--bar"},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValid: false,
+			wantCount: 1,
+		},
+		{
+			name: "WorkloadValidation_OSCommandMetrics_MetricInfo_Duplicate_OSVendor_HasVendor",
+			definition: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationNetweaver: &wlmpb.ValidationNetweaver{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									MinVersion: "1.0",
+									Type:       "workload.googleapis.com/sap/validation/custom",
+									Label:      "foo",
+								},
+								OsVendor: cmpb.OSVendor_RHEL,
+								Command:  "foo",
+								Args:     []string{"--bar"},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
+									},
+								},
+							},
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									MinVersion: "1.0",
+									Type:       "workload.googleapis.com/sap/validation/custom",
+									Label:      "foo",
+								},
+								OsVendor: cmpb.OSVendor_RHEL,
+								Command:  "foo",
+								Args:     []string{"--bar"},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValid: false,
+			wantCount: 1,
+		},
+		{
+			name: "WorkloadValidation_OSCommandMetrics_MetricInfo_Duplicate_OSVendor_UNSPECIFIED",
+			definition: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationNetweaver: &wlmpb.ValidationNetweaver{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									MinVersion: "1.0",
+									Type:       "workload.googleapis.com/sap/validation/custom",
+									Label:      "foo",
+								},
+								Command: "foo",
+								Args:    []string{"--bar"},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											&cmpb.EvalRule{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											OutputSource:    cmpb.OutputSource_STDOUT,
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
+										},
+									},
+								},
+							},
+							&cmpb.OSCommandMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									MinVersion: "1.0",
+									Type:       "workload.googleapis.com/sap/validation/custom",
+									Label:      "foo",
+								},
+								Command: "foo",
+								Args:    []string{"--bar"},
 								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
 									AndEvalRules: &cmpb.EvalMetricRule{
 										EvalRules: []*cmpb.EvalRule{

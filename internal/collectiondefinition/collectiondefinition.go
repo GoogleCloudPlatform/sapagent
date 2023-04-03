@@ -44,7 +44,7 @@ type Validator struct {
 	collectionDefinition      *cdpb.CollectionDefinition
 	failureCount              int
 	valid                     bool
-	workloadValidationMetrics map[string]bool
+	workloadValidationMetrics map[string]map[cmpb.OSVendor]bool
 }
 
 type metricInfoMapper func(i *cmpb.MetricInfo)
@@ -216,7 +216,7 @@ func NewValidator(version float64, collectionDefinition *cdpb.CollectionDefiniti
 		collectionDefinition:      collectionDefinition,
 		failureCount:              0,
 		valid:                     false,
-		workloadValidationMetrics: make(map[string]bool),
+		workloadValidationMetrics: make(map[string]map[cmpb.OSVendor]bool),
 	}
 }
 
@@ -239,6 +239,7 @@ func (v Validator) Valid() bool {
 //
 //   - Each metric should have a type and a label specified.
 //   - Metric type+label should be unique for all metrics within the definition.
+//   - An OSCommandMetric may reuse a metric type+label if os_vendor is distinct for each entry.
 //   - A metric should not have a min_version that exceeds the agent version.
 //   - Regular expressions should compile.
 //   - A metric should always provide accompanying evaluation rule(s).
@@ -249,7 +250,7 @@ func (v *Validator) Validate() {
 	// Reset validation state.
 	v.valid = true
 	v.failureCount = 0
-	v.workloadValidationMetrics = make(map[string]bool)
+	v.workloadValidationMetrics = make(map[string]map[cmpb.OSVendor]bool)
 
 	cd := v.collectionDefinition
 	workload := cd.GetWorkloadValidation()
@@ -263,7 +264,7 @@ func (v *Validator) Validate() {
 func (v *Validator) validateWorkloadValidation(wlm *wlmpb.WorkloadValidation) {
 	system := wlm.GetValidationSystem()
 	for _, m := range system.GetSystemMetrics() {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 		if m.GetValue() == wlmpb.SystemVariable_SYSTEM_VARIABLE_UNSPECIFIED {
 			validationFailure(v, m, "SystemVariable metric has no value specified")
 		}
@@ -278,7 +279,7 @@ func (v *Validator) validateWorkloadValidation(wlm *wlmpb.WorkloadValidation) {
 	v.validateEvalMetrics(hana.GetGlobalIniMetrics())
 	for _, d := range hana.GetHanaDiskVolumeMetrics() {
 		for _, m := range d.GetMetrics() {
-			validateMetricInfo(v, m.GetMetricInfo(), m)
+			validateMetricInfo(v, m)
 			if m.GetValue() == wlmpb.DiskVariable_DISK_VARIABLE_UNSPECIFIED {
 				validationFailure(v, m, "DiskVariable metric has no value specified")
 			}
@@ -301,31 +302,31 @@ func (v *Validator) validateWorkloadValidation(wlm *wlmpb.WorkloadValidation) {
 // PacemakerConfigMetrics proto definition.
 func (v *Validator) validatePacemakerConfigMetrics(config *wlmpb.PacemakerConfigMetrics) {
 	for _, m := range config.GetPrimitiveMetrics() {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 		if m.GetValue() == wlmpb.PrimitiveVariable_PRIMITIVE_VARIABLE_UNSPECIFIED {
 			validationFailure(v, m, "PrimitiveVariable metric has no value specified")
 		}
 	}
 	for _, m := range config.GetRscLocationMetrics() {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 		if m.GetValue() == wlmpb.RSCLocationVariable_RSC_LOCATION_VARIABLE_UNSPECIFIED {
 			validationFailure(v, m, "RSCLocationVariable metric has no value specified")
 		}
 	}
 	for _, m := range config.GetRscOptionMetrics() {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 		if m.GetValue() == wlmpb.RSCOptionVariable_RSC_OPTION_VARIABLE_UNSPECIFIED {
 			validationFailure(v, m, "RSCOptionVariable metric has no value specified")
 		}
 	}
 	for _, m := range config.GetHanaOperationMetrics() {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 		if m.GetValue() == wlmpb.HANAOperationVariable_HANA_OPERATION_VARIABLE_UNSPECIFIED {
 			validationFailure(v, m, "HANAOperationVariable metric has no value specified")
 		}
 	}
 	for _, m := range config.GetFenceAgentMetrics() {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 		if m.GetValue() == wlmpb.FenceAgentVariable_FENCE_AGENT_VARIABLE_UNSPECIFIED {
 			validationFailure(v, m, "FenceAgentVariable metric has no value specified")
 		}
@@ -336,7 +337,7 @@ func (v *Validator) validatePacemakerConfigMetrics(config *wlmpb.PacemakerConfig
 // validateEvalMetrics runs a series of validation checks against an EvalMetric slice.
 func (v *Validator) validateEvalMetrics(metrics []*cmpb.EvalMetric) {
 	for _, m := range metrics {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 
 		// A metric should always provide accompanying evaluation rule(s).
 		validateMetricEvaluation(v, m)
@@ -346,7 +347,7 @@ func (v *Validator) validateEvalMetrics(metrics []*cmpb.EvalMetric) {
 // validateOSCommandMetrics runs a series of validation checks against an OSCommandMetric slice.
 func (v *Validator) validateOSCommandMetrics(metrics []*cmpb.OSCommandMetric) {
 	for _, m := range metrics {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 
 		// An OSCommandMetric should always provide a command to run.
 		if m.GetCommand() == "" {
@@ -361,7 +362,7 @@ func (v *Validator) validateOSCommandMetrics(metrics []*cmpb.OSCommandMetric) {
 // validateXpathMetrics runs a series of validation checks against an XPathMetric slice.
 func (v *Validator) validateXPathMetrics(metrics []*cmpb.XPathMetric) {
 	for _, m := range metrics {
-		validateMetricInfo(v, m.GetMetricInfo(), m)
+		validateMetricInfo(v, m)
 
 		// An XPathMetric should always provide an xpath to evaluate.
 		if m.GetXpath() == "" {
@@ -376,7 +377,10 @@ func (v *Validator) validateXPathMetrics(metrics []*cmpb.XPathMetric) {
 // validateMetricInfo runs a series of validation checks against the MetricInfo
 // field of a given metric, using the supplied Validator to keep track of the
 // validation state.
-func validateMetricInfo[M proto.Message](v *Validator, info *cmpb.MetricInfo, metric M) {
+func validateMetricInfo[M proto.Message](v *Validator, metric M) {
+	infoFD := metric.ProtoReflect().Descriptor().Fields().ByName("metric_info")
+	info := metric.ProtoReflect().Get(infoFD).Message().Interface().(*cmpb.MetricInfo)
+
 	// A metric should not have a min_version that exceeds the agent version.
 	minVersion := info.GetMinVersion()
 	if minVersion != "" {
@@ -400,11 +404,27 @@ func validateMetricInfo[M proto.Message](v *Validator, info *cmpb.MetricInfo, me
 
 	// Metric type+label should be unique for all metrics within the definition.
 	if metricType != "" && label != "" {
+		vendor := cmpb.OSVendor_ALL
+		if _, ok := metric.ProtoReflect().Interface().(*cmpb.OSCommandMetric); ok {
+			vendorFD := metric.ProtoReflect().Descriptor().Fields().ByName("os_vendor")
+			if metric.ProtoReflect().Has(vendorFD) {
+				vendor = cmpb.OSVendor(int32(metric.ProtoReflect().Get(vendorFD).Enum()))
+			}
+		}
 		k := fmt.Sprintf("%s:%s", metricType, label)
-		if ok := v.workloadValidationMetrics[k]; ok {
-			validationFailure(v, metric, "Metric has a type and label which is already defined elsewhere in the collection definition")
+		if vendors, ok := v.workloadValidationMetrics[k]; ok {
+			// An OSCommandMetric may reuse a metric type+label if os_vendor is distinct for each entry.
+			_, hasVendor := vendors[vendor]
+			_, hasAll := vendors[cmpb.OSVendor_ALL]
+			isAll := vendor == cmpb.OSVendor_ALL
+			if hasVendor || hasAll || isAll {
+				validationFailure(v, metric, "Metric has a type and label which is already defined elsewhere in the collection definition")
+			}
+			vendors[vendor] = true
 		} else {
-			v.workloadValidationMetrics[k] = true
+			v.workloadValidationMetrics[k] = map[cmpb.OSVendor]bool{
+				vendor: true,
+			}
 		}
 	}
 }

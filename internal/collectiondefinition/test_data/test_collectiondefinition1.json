@@ -819,8 +819,31 @@
             "type": "workload.googleapis.com/sap/validation/custom",
             "label": "foo"
           },
-          "os_vendor": "ALL",
-          "command": "foo",
+          "os_vendor": "RHEL",
+          "command": "foo-rhel",
+          "args": ["--bar"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "foobar"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/custom",
+            "label": "foo"
+          },
+          "os_vendor": "SLES",
+          "command": "foo-sles",
           "args": ["--bar"],
           "and_eval_rules": {
             "eval_rules": [
