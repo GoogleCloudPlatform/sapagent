@@ -75,7 +75,9 @@ func TestStartSAPHostAgentProvider(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := StartSAPHostAgentProvider(context.Background(), test.params)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+			defer cancel()
+			got := StartSAPHostAgentProvider(ctx, test.params)
 			if got != test.want {
 				t.Errorf("StartSAPHostAgentProvider(ProvideSapHostAgentMetrics: %t) = %t, want: %t", test.params.Config.ProvideSapHostAgentMetrics, got, test.want)
 			}
@@ -98,21 +100,20 @@ func TestCollectHostMetrics_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 		},
 		{
 			name:         "1 beat timeout",
-			beatInterval: time.Millisecond * 75,
-			timeout:      time.Millisecond * 100,
+			beatInterval: time.Millisecond * 500,
+			timeout:      time.Millisecond * 520,
 			want:         2,
 		},
 		{
 			name:         "2 beat timeout",
-			beatInterval: time.Millisecond * 45,
-			timeout:      time.Millisecond * 100,
+			beatInterval: time.Millisecond * 500,
+			timeout:      time.Millisecond * 1020,
 			want:         3,
 		},
 	}
 	for _, test := range testData {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
-			ctx, cancel := context.WithTimeout(ctx, test.timeout)
+			ctx, cancel := context.WithTimeout(context.Background(), test.timeout)
 			defer cancel()
 			got := 0
 			lock := sync.Mutex{}
