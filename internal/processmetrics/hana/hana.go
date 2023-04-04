@@ -33,10 +33,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type (
@@ -50,10 +50,17 @@ type (
 	// InstanceProperties has necessary context for Metrics collection.
 	// InstanceProperties implements Collector interface for HANA.
 	InstanceProperties struct {
-		SAPInstance *sapb.SAPInstance
-		Config      *cnfpb.Configuration
-		Client      cloudmonitoring.TimeSeriesCreator
+		SAPInstance        *sapb.SAPInstance
+		Config             *cnfpb.Configuration
+		Client             cloudmonitoring.TimeSeriesCreator
+		HANAQueryFailCount int64
 	}
+)
+
+// HANA DB locks the user out after 3 failed authentication attempts, so we
+// will have only two max fail counts.
+const (
+	maxHANAQueryFailCount = 2
 )
 
 // HANA HA replication: Any code from 10-15 is a valid return code. Anything else needs to be treated as failure.
@@ -178,6 +185,12 @@ func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcont
 //   - servertime: Time spent on the server side in micro seconds.
 func collectHANAQueryMetrics(p *InstanceProperties, run runCmdAsUserExitCode) []*mrpb.TimeSeries {
 	now := tspb.Now()
+	if p.HANAQueryFailCount >= maxHANAQueryFailCount {
+		// if HANAQueryFailCount reaches maxHANAQueryFailCount we should not let it
+		// query again, because the user can be locked out.
+		log.Logger.Debugw("Not queryig for HANAQuery Metrics as failcount has reached max allowed fail count.", "instanceid", p.SAPInstance.GetInstanceId(), "failcount", p.HANAQueryFailCount)
+		return nil
+	}
 	queryState, err := runHANAQuery(p, run)
 	if err != nil {
 		log.Logger.Errorw("Error in running query", log.Error(err))
@@ -203,7 +216,10 @@ func runHANAQuery(p *InstanceProperties, run runCmdAsUserExitCode) (queryState, 
 		port, p.SAPInstance.GetHanaDbUser(), p.SAPInstance.GetHanaDbPassword(), hanaQuery)
 
 	stdOut, stdErr, state, err := run(p.SAPInstance.GetUser(), hdbsql, args)
-	log.Logger.Debugw("HANA query command returned", "sql", hdbsql, "stdout", stdOut, "stderror", stdErr, "state", state, "err", err)
+	log.Logger.Errorw("HANA query command returned", "sql", hdbsql, "stdout", stdOut, "stderror", stdErr, "state", state, "err", err)
+	if strings.Contains(stdErr, "authentication failed") {
+		p.HANAQueryFailCount++
+	}
 	if err != nil {
 		return queryState{}, err
 	}

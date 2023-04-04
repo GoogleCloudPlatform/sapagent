@@ -213,9 +213,10 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 
 			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
 			hanaCollector := &hana.InstanceProperties{
-				SAPInstance: instance,
-				Config:      p.Config,
-				Client:      p.Client,
+				SAPInstance:        instance,
+				Config:             p.Config,
+				Client:             p.Client,
+				HANAQueryFailCount: 0,
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 		}

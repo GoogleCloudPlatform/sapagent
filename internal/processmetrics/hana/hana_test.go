@@ -22,8 +22,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -340,6 +342,13 @@ func TestRunHANAQuery(t *testing.T) {
 			},
 			wantErr: cmpopts.AnyError,
 		},
+		{
+			name: "AuthenticationFailed",
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return "", "* 10: authentication failed SQLSTATE: 28000\n", 3, nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
 	}
 
 	for _, test := range tests {
@@ -365,6 +374,33 @@ func TestCollectHANAQueryMetrics(t *testing.T) {
 	got := collectHANAQueryMetrics(defaultInstanceProperties, fakeRun)
 	if len(got) != 3 {
 		t.Errorf("collectHANAQueryMetrics(), got: %d want: 3.", len(got))
+	}
+}
+
+func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
+	fakeRun := func(string, string, string) (string, string, int64, error) {
+		return "", "* 10: authentication failed SQLSTATE: 28000\n", 3, nil
+	}
+	ip := &InstanceProperties{
+		Config:             defaultConfig,
+		SAPInstance:        defaultSAPInstance,
+		HANAQueryFailCount: 0,
+	}
+
+	for i := 0; i < 3; i++ {
+		got := collectHANAQueryMetrics(ip, fakeRun)
+		switch i {
+		case 0, 1:
+			ts := got[0].GetPoints()[0].GetInterval().GetEndTime()
+			want := []*mrpb.TimeSeries{createMetrics(ip, queryStatePath, nil, ts, 1)}
+			if cmp.Diff(got[0], want[0], protocmp.Transform()) != "" {
+				t.Errorf("collectHANAQueryMetrics(), got: %v want: %v.", got, want)
+			}
+		default:
+			if got != nil {
+				t.Errorf("collectHANAQueryMetrics(), got: %v want: nil.", got)
+			}
+		}
 	}
 }
 

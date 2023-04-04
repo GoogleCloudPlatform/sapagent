@@ -39,8 +39,11 @@ import (
 )
 
 const (
-	metricURL        = "workload.googleapis.com/sap/hanamonitoring"
-	maxQueryFailures = 3
+	metricURL = "workload.googleapis.com/sap/hanamonitoring"
+
+	// HANA DB locks the user out after 3 failed authentication attempts, so we
+	// will have only two max fail counts.
+	maxQueryFailures = 2
 )
 
 type gceInterface interface {
