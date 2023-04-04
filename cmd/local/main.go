@@ -319,6 +319,7 @@ func registerSubCommands() {
 		&onetime.MaintenanceMode{},
 		&onetime.RemoteValidation{},
 		&onetime.Snapshot{},
+		&onetime.MigrateHANAMonitoring{},
 	} {
 		subcommands.Register(command, "")
 	}

@@ -18,8 +18,9 @@ limitations under the License.
 package configuration
 
 import (
-	_ "embed" // Enable file embedding, see also http://go/go-embed.
 	"fmt"
+	_ "embed" // Enable file embedding, see also http://go/go-embed.
+	"os"
 	"runtime"
 	"strings"
 
@@ -33,6 +34,9 @@ import (
 
 // ReadConfigFile abstracts os.ReadFile function for testability.
 type ReadConfigFile func(string) ([]byte, error)
+
+// WriteConfigFile abstracts os.WriteFile function for testability.
+type WriteConfigFile func(string, []byte, os.FileMode) error
 
 var ros = runtime.GOOS
 
@@ -149,7 +153,7 @@ func prepareHMConf(config *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringC
 		return nil
 	}
 	config.Queries = applyOverrides(defaultConfig.GetQueries(), config.GetQueries())
-	if !validateCustomQueries(config.Queries) {
+	if !ValidateQueries(config.Queries) {
 		return nil
 	}
 	return config
@@ -207,10 +211,10 @@ func validateHANASSLConfig(config *cpb.HANAMonitoringConfiguration) bool {
 	return true
 }
 
-// validateCustomQueries is responsible for making sure that the custom queries have the correct metric
+// ValidateQueries is responsible for making sure that the custom queries have the correct metric
 // and value type for the columns. In case of invalid combination it returns false.
 // Query names and column names within each query must be unique as they are both used to path the metric URL to cloud monitoring.
-func validateCustomQueries(queries []*cpb.Query) bool {
+func ValidateQueries(queries []*cpb.Query) bool {
 	queryNames := make(map[string]bool)
 	for _, q := range queries {
 		if queryNames[q.Name] {

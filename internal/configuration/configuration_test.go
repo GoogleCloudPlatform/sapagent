@@ -710,7 +710,7 @@ func TestValidateCustomQueries(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := validateCustomQueries(test.queries)
+			got := ValidateQueries(test.queries)
 			if got != test.want {
 				t.Errorf("checkInvalidCustomMetrics() = %v, want %v", got, test.want)
 			}

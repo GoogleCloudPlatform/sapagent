@@ -85,6 +85,7 @@ const (
 	CollectProcessMetrics
 	CollectHANAMonitoringMetrics
 	HANADiskSnapshot
+	SSLModeOnHANAMonitoring
 )
 
 var (
