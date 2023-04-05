@@ -90,7 +90,7 @@ func ExecuteCommand(executable string, args ...string) (stdOut string, stdErr st
 	log.Logger.Debugw("Executing command", "executable", executable, "args", args)
 
 	if err := exe.Run(); err != nil {
-		log.Logger.Debugw("Could not execute command", "executable", executable, "exitcode", ExitCode(err), "error", err)
+		log.Logger.Debugw("Could not execute command", "executable", executable, "exitcode", ExitCode(err), "error", err, "stdout", stdout.String(), "stderr", stderr.String())
 		return stdout.String(), stderr.String(), err
 	}
 

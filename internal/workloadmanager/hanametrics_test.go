@@ -340,7 +340,7 @@ func GlobalINITest1Runner(cmd string, args string) (string, string, error) {
 }
 
 func GlobalINITest2Runner(cmd string, args string) (string, string, error) {
-	if cmd == "ls" {
+	if cmd == "/bin/sh" {
 		return "Global INI contents", "", nil
 	}
 	return "", "", nil
@@ -858,7 +858,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 			name:      "TestHanaAllLabelsDisabled",
 			runtimeOS: "linux",
 			runner: func(cmd string, args string) (string, string, error) {
-				if cmd == "ls" {
+				if cmd == "/bin/sh" {
 					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
 				return "", "", nil
@@ -875,7 +875,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 			name:      "TestHanaAllLabelsEnabled",
 			runtimeOS: "linux",
 			runner: func(cmd string, args string) (string, string, error) {
-				if cmd == "ls" {
+				if cmd == "/bin/sh" {
 					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
 				if cmd == "grep" {
@@ -901,7 +901,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 			name:      "TestHanaLabelsDisabledFromErrors",
 			runtimeOS: "linux",
 			runner: func(cmd string, args string) (string, string, error) {
-				if cmd == "ls" {
+				if cmd == "/bin/sh" {
 					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
 				if cmd == "cat" {

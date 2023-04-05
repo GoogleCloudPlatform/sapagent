@@ -134,8 +134,9 @@ func hanaProcessOrGlobalINI(runner commandlineexecutor.CommandRunner) string {
 		}
 	}
 	if hanaProcessOrGlobalINI == "" {
-		// check for the global.ini even if the process isn't running
-		hanaProcessOrGlobalINI, _, _ = runner("ls", "/usr/sap/*/SYS/global/hdb/custom/config/global.ini")
+		// Check for the global.ini even if the process isn't running.
+		// Invoke the shell in order to expand the `*` wildcard.
+		hanaProcessOrGlobalINI, _, _ = runner("/bin/sh", "-c 'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'")
 	}
 	return hanaProcessOrGlobalINI
 }
