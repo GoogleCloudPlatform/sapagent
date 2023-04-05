@@ -60,10 +60,10 @@ var (
 			},
 		}
 	}
-	createOSCommandMetric = func(metricType, label, command string) *cmpb.OSCommandMetric {
+	createOSCommandMetric = func(metricType, label, command string, vendor cmpb.OSVendor) *cmpb.OSCommandMetric {
 		return &cmpb.OSCommandMetric{
 			MetricInfo: &cmpb.MetricInfo{Type: metricType, Label: label},
-			OsVendor:   cmpb.OSVendor_ALL,
+			OsVendor:   vendor,
 			Command:    command,
 			Args:       []string{"-v"},
 			EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
@@ -118,6 +118,7 @@ func TestMerge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}
+	all := cmpb.OSVendor_ALL
 
 	tests := []struct {
 		name      string
@@ -137,7 +138,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud", all),
 						},
 					},
 				},
@@ -146,7 +147,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud2", "gcloud2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud2", "gcloud2", all),
 						},
 					},
 				},
@@ -155,8 +156,8 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud"),
-							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud2", "gcloud2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud", all),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud2", "gcloud2", all),
 						},
 					},
 				},
@@ -168,7 +169,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud", all),
 						},
 					},
 				},
@@ -177,7 +178,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud2", all),
 						},
 					},
 				},
@@ -186,7 +187,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/system", "gcloud", "gcloud", all),
 						},
 					},
 				},
@@ -259,7 +260,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCorosync: &wlmpb.ValidationCorosync{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl", all),
 						},
 					},
 				},
@@ -268,7 +269,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCorosync: &wlmpb.ValidationCorosync{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync2", "token_runtime", "corosync-cmapctl2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync2", "token_runtime", "corosync-cmapctl2", all),
 						},
 					},
 				},
@@ -277,8 +278,8 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCorosync: &wlmpb.ValidationCorosync{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl"),
-							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync2", "token_runtime", "corosync-cmapctl2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl", all),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync2", "token_runtime", "corosync-cmapctl2", all),
 						},
 					},
 				},
@@ -290,7 +291,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCorosync: &wlmpb.ValidationCorosync{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl", all),
 						},
 					},
 				},
@@ -299,7 +300,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCorosync: &wlmpb.ValidationCorosync{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl2", all),
 						},
 					},
 				},
@@ -308,7 +309,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCorosync: &wlmpb.ValidationCorosync{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/corosync", "token_runtime", "corosync-cmapctl", all),
 						},
 					},
 				},
@@ -381,7 +382,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationHana: &wlmpb.ValidationHANA{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat", all),
 						},
 					},
 				},
@@ -390,7 +391,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationHana: &wlmpb.ValidationHANA{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/hana2", "numa_balancing2", "dog"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/hana2", "numa_balancing2", "dog", all),
 						},
 					},
 				},
@@ -399,8 +400,8 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationHana: &wlmpb.ValidationHANA{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat"),
-							createOSCommandMetric("workload.googleapis.com/sap/validation/hana2", "numa_balancing2", "dog"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat", all),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/hana2", "numa_balancing2", "dog", all),
 						},
 					},
 				},
@@ -412,7 +413,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationHana: &wlmpb.ValidationHANA{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat", all),
 						},
 					},
 				},
@@ -421,7 +422,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationHana: &wlmpb.ValidationHANA{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "dog"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "dog", all),
 						},
 					},
 				},
@@ -430,7 +431,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationHana: &wlmpb.ValidationHANA{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/hana", "numa_balancing", "cat", all),
 						},
 					},
 				},
@@ -442,7 +443,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar", all),
 						},
 					},
 				},
@@ -451,7 +452,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo2", "baz"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo2", "baz", all),
 						},
 					},
 				},
@@ -460,8 +461,8 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar"),
-							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo2", "baz"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar", all),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo2", "baz", all),
 						},
 					},
 				},
@@ -473,7 +474,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar", all),
 						},
 					},
 				},
@@ -482,7 +483,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "baz"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "baz", all),
 						},
 					},
 				},
@@ -491,7 +492,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar", all),
 						},
 					},
 				},
@@ -576,7 +577,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationPacemaker: &wlmpb.ValidationPacemaker{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs", all),
 						},
 					},
 				},
@@ -585,7 +586,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationPacemaker: &wlmpb.ValidationPacemaker{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker2", "maintenance_mode_active", "pcs2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker2", "maintenance_mode_active", "pcs2", all),
 						},
 					},
 				},
@@ -594,8 +595,8 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationPacemaker: &wlmpb.ValidationPacemaker{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs"),
-							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker2", "maintenance_mode_active", "pcs2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs", all),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker2", "maintenance_mode_active", "pcs2", all),
 						},
 					},
 				},
@@ -607,7 +608,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationPacemaker: &wlmpb.ValidationPacemaker{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs", all),
 						},
 					},
 				},
@@ -616,7 +617,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationPacemaker: &wlmpb.ValidationPacemaker{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs2"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs2", all),
 						},
 					},
 				},
@@ -625,7 +626,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationPacemaker: &wlmpb.ValidationPacemaker{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/pacemaker", "maintenance_mode_active", "pcs", all),
 						},
 					},
 				},
@@ -637,7 +638,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", all),
 						},
 					},
 				},
@@ -646,7 +647,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/custom2", "foo2", "baz"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", all),
 						},
 					},
 				},
@@ -655,8 +656,8 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar"),
-							createOSCommandMetric("workload.googleapis.com/sap/validation/custom2", "foo2", "baz"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", all),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", all),
 						},
 					},
 				},
@@ -668,7 +669,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", all),
 						},
 					},
 				},
@@ -677,7 +678,7 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "baz"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "baz", all),
 						},
 					},
 				},
@@ -686,7 +687,127 @@ func TestMerge(t *testing.T) {
 				WorkloadValidation: &wlmpb.WorkloadValidation{
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
-							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar"),
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", all),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Duplicate_OSVendor_HasAll",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", all),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "baz", cmpb.OSVendor_RHEL),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", all),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Duplicate_OSVendor_IsAll",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_SLES),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "baz", all),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_SLES),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Duplicate_OSVendor_HasVendor",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_RHEL),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "baz", cmpb.OSVendor_RHEL),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_RHEL),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Duplicate_OSVendor_UNSPECIFIED",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED),
 						},
 					},
 				},

@@ -31,6 +31,20 @@ import (
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
+// A metricsMap can be used to uniquely identify a full set of metrics in
+// a workload validation definition. The map is keyed by metric type and label,
+// and each entry contains an inner map which specifies the OSVendor values
+// which apply for that metric.
+//
+// In the following example, a metric with type "foo" and label "bar" has
+// definitions for RHEL and SLES vendors:
+//
+//	"foo:bar": map[cmpb.OSVendor]bool{
+//	  cmpb.OSVendor_RHEL: true
+//	  cmpb.OSVendor_SLES: true
+//	}
+type metricsMap map[string]map[cmpb.OSVendor]bool
+
 // A Validator holds information necessary for validating a CollectionDefinition.
 //
 // A Validator should be instantiated using NewValidator() and supplying the
@@ -44,18 +58,10 @@ type Validator struct {
 	collectionDefinition      *cdpb.CollectionDefinition
 	failureCount              int
 	valid                     bool
-	workloadValidationMetrics map[string]map[cmpb.OSVendor]bool
+	workloadValidationMetrics metricsMap
 }
 
-type metricInfoMapper func(i *cmpb.MetricInfo)
-
-// iterator loops over a slice of proto messages and invokes a metric info mapper function.
-func iterator[M proto.Message](metrics []M, mapper metricInfoMapper) {
-	for _, m := range metrics {
-		fd := m.ProtoReflect().Descriptor().Fields().ByName("metric_info")
-		mapper(m.ProtoReflect().Get(fd).Message().Interface().(*cmpb.MetricInfo))
-	}
-}
+type metricInfoMapper func(*cmpb.MetricInfo, cmpb.OSVendor)
 
 // Merge produces a CollectionDefinition which is the result of combining a
 // primary definition with additional metric fields specified in a secondary
@@ -84,56 +90,46 @@ func Merge(primary, secondary *cdpb.CollectionDefinition) (merged *cdpb.Collecti
 func mergeWorkloadValidations(primary, secondary *wlmpb.WorkloadValidation) *wlmpb.WorkloadValidation {
 	merged := proto.Clone(primary).(*wlmpb.WorkloadValidation)
 
-	// Construct a set of existing metrics in the primary workload validation definition.
-	existing := createWorkloadValidationSet(primary)
+	// Construct a map of existing metrics in the primary workload validation definition.
+	existing := mapWorkloadValidationMetrics(primary)
 
 	// Include additional metrics from the secondary definition that do not override primary metrics.
-	shouldMerge := func(i *cmpb.MetricInfo) bool {
-		t := i.GetType()
-		l := i.GetLabel()
-		k := fmt.Sprintf("%s:%s", t, l)
-		if ok := existing[k]; ok {
-			log.Logger.Warnw("Ignoring workload validation definition for metric.", "type", t, "label", l, "reason", "This metric definition is defined by the agent and cannot be overridden.")
-			return false
-		}
-		return true
-	}
 	log.Logger.Debug("Merging secondary workload validation definition.")
 
 	system := secondary.GetValidationSystem()
 	for _, m := range system.GetOsCommandMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationSystem.OsCommandMetrics = append(merged.GetValidationSystem().GetOsCommandMetrics(), m)
 		}
 	}
 
 	corosync := secondary.GetValidationCorosync()
 	for _, m := range corosync.GetConfigMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationCorosync.ConfigMetrics = append(merged.GetValidationCorosync().GetConfigMetrics(), m)
 		}
 	}
 	for _, m := range corosync.GetOsCommandMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationCorosync.OsCommandMetrics = append(merged.GetValidationCorosync().GetOsCommandMetrics(), m)
 		}
 	}
 
 	hana := secondary.GetValidationHana()
 	for _, m := range hana.GetGlobalIniMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationHana.GlobalIniMetrics = append(merged.GetValidationHana().GetGlobalIniMetrics(), m)
 		}
 	}
 	for _, m := range hana.GetOsCommandMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationHana.OsCommandMetrics = append(merged.GetValidationHana().GetOsCommandMetrics(), m)
 		}
 	}
 
 	netweaver := secondary.GetValidationNetweaver()
 	for _, m := range netweaver.GetOsCommandMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationNetweaver.OsCommandMetrics = append(merged.GetValidationNetweaver().GetOsCommandMetrics(), m)
 		}
 	}
@@ -141,19 +137,19 @@ func mergeWorkloadValidations(primary, secondary *wlmpb.WorkloadValidation) *wlm
 	pacemaker := secondary.GetValidationPacemaker()
 	pacemakerConfig := pacemaker.GetConfigMetrics()
 	for _, m := range pacemakerConfig.GetXpathMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationPacemaker.ConfigMetrics.XpathMetrics = append(merged.GetValidationPacemaker().GetConfigMetrics().GetXpathMetrics(), m)
 		}
 	}
 	for _, m := range pacemaker.GetOsCommandMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationPacemaker.OsCommandMetrics = append(merged.GetValidationPacemaker().GetOsCommandMetrics(), m)
 		}
 	}
 
 	custom := secondary.GetValidationCustom()
 	for _, m := range custom.GetOsCommandMetrics() {
-		if ok := shouldMerge(m.GetMetricInfo()); ok {
+		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationCustom.OsCommandMetrics = append(merged.GetValidationCustom().GetOsCommandMetrics(), m)
 		}
 	}
@@ -161,17 +157,16 @@ func mergeWorkloadValidations(primary, secondary *wlmpb.WorkloadValidation) *wlm
 	return merged
 }
 
-// createWorkloadValidationSet constructs a set of metrics in a workload validation definition.
-//
-// The resultant map is keyed by the metric type and label as follows: "type:label".
-func createWorkloadValidationSet(wlm *wlmpb.WorkloadValidation) map[string]bool {
-	metrics := make(map[string]bool)
+// mapWorkloadValidationMetrics constructs a map of metrics in a workload validation definition.
+func mapWorkloadValidationMetrics(wlm *wlmpb.WorkloadValidation) metricsMap {
+	metrics := make(metricsMap)
 
-	mapper := func(i *cmpb.MetricInfo) {
-		t := i.GetType()
-		l := i.GetLabel()
-		k := fmt.Sprintf("%s:%s", t, l)
-		metrics[k] = true
+	mapper := func(i *cmpb.MetricInfo, v cmpb.OSVendor) {
+		k := fmt.Sprintf("%s:%s", i.GetType(), i.GetLabel())
+		if _, ok := metrics[k]; !ok {
+			metrics[k] = make(map[cmpb.OSVendor]bool)
+		}
+		metrics[k][v] = true
 	}
 
 	system := wlm.GetValidationSystem()
@@ -209,6 +204,56 @@ func createWorkloadValidationSet(wlm *wlmpb.WorkloadValidation) map[string]bool 
 	return metrics
 }
 
+// osVendor retrieves the vendor for a given metric.
+//
+// The default vendor is "ALL" (i.e. the collection of the metric is vendor
+// agnostic). This applies to both OSCommandMetric messages where a vendor is
+// not set, and non OS-based metrics that do not have a vendor value.
+func osVendor[M proto.Message](metric M) cmpb.OSVendor {
+	vendor := cmpb.OSVendor_ALL
+	if _, ok := metric.ProtoReflect().Interface().(*cmpb.OSCommandMetric); !ok {
+		return vendor
+	}
+	vendorFD := metric.ProtoReflect().Descriptor().Fields().ByName("os_vendor")
+	if metric.ProtoReflect().Has(vendorFD) {
+		vendor = cmpb.OSVendor(int32(metric.ProtoReflect().Get(vendorFD).Enum()))
+	}
+	return vendor
+}
+
+// iterator loops over a slice of proto messages and invokes a mapper function.
+func iterator[M proto.Message](metrics []M, mapper metricInfoMapper) {
+	for _, m := range metrics {
+		infoFD := m.ProtoReflect().Descriptor().Fields().ByName("metric_info")
+		info := m.ProtoReflect().Get(infoFD).Message().Interface().(*cmpb.MetricInfo)
+		vendor := osVendor(m)
+		mapper(info, vendor)
+	}
+}
+
+// shouldMerge determines whether a given metric is eligible to be merged into
+// an existing metric collection.
+//
+// A metric may be merged so long as it is not a duplicate of an existing metric.
+func shouldMerge[M proto.Message](metric M, existing metricsMap) bool {
+	infoFD := metric.ProtoReflect().Descriptor().Fields().ByName("metric_info")
+	info := metric.ProtoReflect().Get(infoFD).Message().Interface().(*cmpb.MetricInfo)
+	t := info.GetType()
+	l := info.GetLabel()
+	k := fmt.Sprintf("%s:%s", t, l)
+	if vendors, ok := existing[k]; ok {
+		vendor := osVendor(metric)
+		_, hasVendor := vendors[vendor]
+		_, hasAll := vendors[cmpb.OSVendor_ALL]
+		isAll := vendor == cmpb.OSVendor_ALL
+		if hasVendor || hasAll || isAll {
+			log.Logger.Warnw("Ignoring workload validation definition for metric.", "type", t, "label", l, "reason", "This metric definition is specified by the agent and cannot be overridden.")
+			return false
+		}
+	}
+	return true
+}
+
 // NewValidator instantiates Validator for a CollectionDefinition.
 func NewValidator(version float64, collectionDefinition *cdpb.CollectionDefinition) *Validator {
 	return &Validator{
@@ -216,7 +261,7 @@ func NewValidator(version float64, collectionDefinition *cdpb.CollectionDefiniti
 		collectionDefinition:      collectionDefinition,
 		failureCount:              0,
 		valid:                     false,
-		workloadValidationMetrics: make(map[string]map[cmpb.OSVendor]bool),
+		workloadValidationMetrics: make(metricsMap),
 	}
 }
 
@@ -250,7 +295,7 @@ func (v *Validator) Validate() {
 	// Reset validation state.
 	v.valid = true
 	v.failureCount = 0
-	v.workloadValidationMetrics = make(map[string]map[cmpb.OSVendor]bool)
+	v.workloadValidationMetrics = make(metricsMap)
 
 	cd := v.collectionDefinition
 	workload := cd.GetWorkloadValidation()
@@ -404,13 +449,7 @@ func validateMetricInfo[M proto.Message](v *Validator, metric M) {
 
 	// Metric type+label should be unique for all metrics within the definition.
 	if metricType != "" && label != "" {
-		vendor := cmpb.OSVendor_ALL
-		if _, ok := metric.ProtoReflect().Interface().(*cmpb.OSCommandMetric); ok {
-			vendorFD := metric.ProtoReflect().Descriptor().Fields().ByName("os_vendor")
-			if metric.ProtoReflect().Has(vendorFD) {
-				vendor = cmpb.OSVendor(int32(metric.ProtoReflect().Get(vendorFD).Enum()))
-			}
-		}
+		vendor := osVendor(metric)
 		k := fmt.Sprintf("%s:%s", metricType, label)
 		if vendors, ok := v.workloadValidationMetrics[k]; ok {
 			// An OSCommandMetric may reuse a metric type+label if os_vendor is distinct for each entry.
