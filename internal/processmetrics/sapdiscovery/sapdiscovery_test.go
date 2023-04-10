@@ -289,7 +289,7 @@ func TestReadReplicationConfig(t *testing.T) {
 			sid:        "HDB",
 			instanceID: "00",
 			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
-				return "site/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n", "", 15, nil
+				return "site/1/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n", "", 15, nil
 			},
 			wantMode:     1,
 			wantHAMebers: []string{"gce-1", "gce-2"},
@@ -301,10 +301,10 @@ func TestReadReplicationConfig(t *testing.T) {
 			sid:        "HDB",
 			instanceID: "00",
 			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
-				return "local_site_id=2\nsite/2/SITE_NAME=gce-2\nPRIMARY_MASTERS=gce-1\n", "", 15, nil
+				return "site/1/REPLICATION_MODE=SYNCMEM\nlocal_site_id=1\nsite/1/SITE_NAME=gce-1\nsite/1/PRIMARY_MASTERS=gce-2\n", "", 15, nil
 			},
 			wantMode:     2,
-			wantHAMebers: []string{"gce-1", "gce-2"},
+			wantHAMebers: []string{"gce-2", "gce-1"},
 			wantErr:      nil,
 		},
 		{
@@ -325,7 +325,7 @@ func TestReadReplicationConfig(t *testing.T) {
 			sid:        "HDB",
 			instanceID: "00",
 			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
-				return "site/2/SITE_NAME=gce-2\nsite/1/SITE_NAME=gce-1\nlocal_site_id=1\n", "", 15, nil
+				return "site/1/REPLICATION_MODE=PRIMARY\nsite/2/SITE_NAME=gce-2\nsite/1/SITE_NAME=gce-1\nlocal_site_id=1\n", "", 15, nil
 			},
 			wantMode:     1,
 			wantHAMebers: []string{"gce-1", "gce-2"},
@@ -334,7 +334,16 @@ func TestReadReplicationConfig(t *testing.T) {
 		{
 			name: "EmptySiteID",
 			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
-				return "local_site_id=\n", "", 10, nil
+				return "local_site_id=\n", "", 15, nil
+			},
+			wantMode:     0,
+			wantHAMebers: nil,
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "EmptyReplicationMode",
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "site/2/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n", "", 15, nil
 			},
 			wantMode:     0,
 			wantHAMebers: nil,
@@ -343,7 +352,7 @@ func TestReadReplicationConfig(t *testing.T) {
 		{
 			name: "EmptySiteName",
 			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
-				return "local_site_id=2\nsite/2/SITE_NAME=", "", 10, nil
+				return "local_site_id=2\nsite/2/SITE_NAME=", "", 15, nil
 			},
 			wantMode:     0,
 			wantHAMebers: nil,
@@ -352,7 +361,7 @@ func TestReadReplicationConfig(t *testing.T) {
 		{
 			name: "SiteNamePatternError",
 			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
-				return "local_site_id=2\nsite/2/SITE", "", 10, nil
+				return "site/2/REPLICATION_MODE=SYNCMEM\nlocal_site_id=2\nsite/2/SITE", "", 15, nil
 			},
 			wantMode:     2,
 			wantHAMebers: nil,

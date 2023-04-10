@@ -188,7 +188,7 @@ func HANAReplicationConfig(user, sid, instID string) (site int, HAMembers []stri
 }
 
 // readReplicationConfig is a testable version of HANAReplicationConfig.
-func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (site int, HAMembers []string, exitStatus int64, err error) {
+func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (mode int, HAMembers []string, exitStatus int64, err error) {
 	cmd := fmt.Sprintf("/usr/sap/%s/%s/HDBSettings.sh", sid, instID)
 	args := "systemReplicationStatus.py --sapcontrol=1"
 	out, _, exitStatus, err := runCmd(user, cmd, args)
@@ -206,24 +206,42 @@ func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (site i
 	log.Logger.Debugw("SAP HANA Replication Config result", "out", out)
 	match := sitePattern.FindStringSubmatch(out)
 	if len(match) != 2 {
-		log.Logger.Errorw("Error determining SAP HANA Site for instance", "instanceid", instID)
+		log.Logger.Debugw("Error determining SAP HANA Site for instance", "instanceid", instID)
 		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Site for instance: %s", instID)
 	}
-	site, err = strconv.Atoi(match[1])
+	site, err := strconv.Atoi(match[1])
 	if err != nil {
 		log.Logger.Debugw("Failed to get the site info for SAP HANA", log.Error(err))
 		return 0, nil, 0, err
 	}
 
-	if site == 0 {
+	if exitStatus == 10 {
 		log.Logger.Debugw("HANA instance is in standalone mode for instance", "instanceid", instID)
-		return site, nil, exitStatus, nil
+		return 0, nil, exitStatus, nil
+	}
+
+	modePattern, err := regexp.Compile(fmt.Sprintf("site/%d/REPLICATION_MODE=(.*)", site))
+	if err != nil {
+		log.Logger.Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
+		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance")
+	}
+	match = modePattern.FindStringSubmatch(out)
+	if len(match) < 2 {
+		log.Logger.Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
+		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance: %s", instID)
+	}
+	if match[1] == "PRIMARY" {
+		mode = 1
+		log.Logger.Debug("Current SAP HANA node is primary")
+	} else {
+		mode = 2
+		log.Logger.Debug("Current SAP HANA node is secondary")
 	}
 
 	haSites := haPattern.FindAllStringSubmatch(out, -1)
 	if len(haSites) < 1 {
 		log.Logger.Debugw("Error determining SAP HANA HA members for instance", "instanceid", instID)
-		return site, nil, exitStatus, fmt.Errorf("error determining SAP HANA HA members for instance: %s", instID)
+		return mode, nil, exitStatus, fmt.Errorf("error determining SAP HANA HA members for instance: %s", instID)
 	}
 
 	if len(haSites) > 1 {
@@ -233,18 +251,18 @@ func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (site i
 		} else {
 			HAMembers = []string{site2, site1}
 		}
-		log.Logger.Debugw("Current node is primary. SAP HANA HA Members are", "hamembers", HAMembers)
+		log.Logger.Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
 	} else {
 		match := primaryMastersPattern.FindStringSubmatch(out)
 		if len(match) < 2 {
 			log.Logger.Debugw("Error determining SAP HANA HA - Primary for instance", "instanceid", instID)
-			return 0, nil, exitStatus, fmt.Errorf("error determining SAP HANA HA - Primary for instance: %s", instID)
+			return mode, nil, exitStatus, fmt.Errorf("error determining SAP HANA HA - Primary for instance: %s", instID)
 		}
 		HAMembers = []string{match[1], haSites[0][2]}
-		log.Logger.Debugw("Current node is secondary. SAP HANA HA Members are", "hamembers", HAMembers)
+		log.Logger.Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
 	}
 
-	return site, HAMembers, exitStatus, nil
+	return mode, HAMembers, exitStatus, nil
 }
 
 // HANASite maps an integer to SAP Instance Site Type.
