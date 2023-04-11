@@ -103,6 +103,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 	defer collectTicker.Stop()
 	defer heartbeatTicker.Stop()
 
+	go usagemetrics.LogActionDaily(usagemetrics.CollectHostMetrics)
 	// Do not wait for the first 60s tick and start collection immediately
 	select {
 	case <-ctx.Done():
@@ -129,7 +130,6 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 func collectHostMetricsOnce(ctx context.Context, params Parameters, readers hostMetricsReaders) {
 	log.Logger.Info("Collecting host metrics...")
 	params.HeartbeatSpec.Beat()
-	usagemetrics.Action(usagemetrics.CollectHostMetrics) // Collecting SAP host metrics
 
 	params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
 	cpuStats := readers.cpusr.Read()

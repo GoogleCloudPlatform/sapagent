@@ -17,9 +17,14 @@ limitations under the License.
 package usagemetrics
 
 import (
+	"fmt"
+	"time"
+
+	"github.com/jonboulle/clockwork"
+	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/jonboulle/clockwork"
 )
 
 var logger = NewLogger(nil, nil, clockwork.NewRealClock())
@@ -37,6 +42,21 @@ func SetCloudProperties(cp *iipb.CloudProperties) {
 // Running uses the standard logger to log the RUNNING status. This status is reported at most once per day.
 func Running() {
 	logger.Running()
+}
+
+// LogRunningDaily log that the agent is running once a day.
+func LogRunningDaily() {
+	if logger.dailyLogRunningStarted {
+		log.Logger.Debugw("Daily log of RUNNING status already started")
+		return
+	}
+	logger.dailyLogRunningStarted = true
+	log.Logger.Debugw("Starting daily log of RUNNING status")
+	for {
+		logger.Running()
+		// sleep for 24 hours and a minute.
+		time.Sleep(24*time.Hour + 1*time.Minute)
+	}
 }
 
 // Started uses the standard logger to log the STARTED status.
@@ -84,4 +104,19 @@ func Uninstalled() {
 // Action uses the standard logger to log the ACTION status.
 func Action(id int) {
 	logger.Action(id)
+}
+
+// LogActionDaily uses the standard logger to log the ACTION once a day.
+func LogActionDaily(id int) {
+	if _, ok := logger.dailyLogActionStarted[id]; ok {
+		log.Logger.Debugw("Daily log action already started", "ACTION", id)
+		return
+	}
+	logger.dailyLogActionStarted[id] = true
+	log.Logger.Debugw("Starting daily log action", "ACTION", id)
+	for {
+		logger.logOncePerDay(StatusAction, fmt.Sprintf("%d", id))
+		// sleep for 24 hours and a minute.
+		time.Sleep(24*time.Hour + 1*time.Minute)
+	}
 }

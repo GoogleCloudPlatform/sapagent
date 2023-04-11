@@ -158,20 +158,23 @@ type TimeSource interface {
 
 // A Logger is used to report the status of the agent to an internal metadata server.
 type Logger struct {
-	agentProps    *configpb.AgentProperties
-	cloudProps    *instancepb.CloudProperties
-	timeSource    TimeSource
-	image         string
-	isTestProject bool
-	lastCalled    map[Status]time.Time
+	agentProps             *configpb.AgentProperties
+	cloudProps             *instancepb.CloudProperties
+	timeSource             TimeSource
+	image                  string
+	isTestProject          bool
+	lastCalled             map[Status]time.Time
+	dailyLogActionStarted  map[int]bool
+	dailyLogRunningStarted bool
 }
 
 // NewLogger creates a new Logger with an initialized hash map of Status to a last called timestamp.
 func NewLogger(agentProps *configpb.AgentProperties, cloudProps *instancepb.CloudProperties, timeSource TimeSource) *Logger {
 	l := &Logger{
-		agentProps: agentProps,
-		timeSource: timeSource,
-		lastCalled: make(map[Status]time.Time),
+		agentProps:            agentProps,
+		timeSource:            timeSource,
+		lastCalled:            make(map[Status]time.Time),
+		dailyLogActionStarted: make(map[int]bool),
 	}
 	l.setCloudProps(cloudProps)
 	return l

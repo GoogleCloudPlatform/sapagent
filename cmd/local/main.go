@@ -276,22 +276,13 @@ func startServices(goos string) {
 		})
 	}
 
-	go logRunningDaily()
+	go usagemetrics.LogRunningDaily()
 
 	// wait for the shutdown signal
 	<-shutdownch
 	// once we have a shutdown event we will wait for up to 3 seconds before for final terminations
 	_, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer handleShutdown(cancel)
-}
-
-// logRunningDaily log that the agent is running once a day.
-func logRunningDaily() {
-	for {
-		usagemetrics.Running()
-		// sleep for 24 hours and a minute, we only log running once a day
-		time.Sleep(24*time.Hour + 1*time.Minute)
-	}
 }
 
 func handleShutdown(cancel context.CancelFunc) {

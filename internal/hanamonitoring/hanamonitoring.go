@@ -116,7 +116,7 @@ func Start(ctx context.Context, params Parameters) bool {
 	}
 
 	log.Logger.Info("Starting HANA Monitoring.")
-	usagemetrics.Action(usagemetrics.CollectHANAMonitoringMetrics)
+	go usagemetrics.LogActionDaily(usagemetrics.CollectHANAMonitoringMetrics)
 	wp := workerpool.New(int(cfg.GetExecutionThreads()))
 	for _, db := range databases {
 		for _, query := range cfg.GetQueries() {

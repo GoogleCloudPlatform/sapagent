@@ -138,7 +138,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	}
 
 	log.Logger.Info("Starting process metrics collection in background.")
-	usagemetrics.Action(usagemetrics.CollectProcessMetrics) // Collecting process metrics
+	go usagemetrics.LogActionDaily(usagemetrics.CollectProcessMetrics)
 	p := create(ctx, parameters, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
 	go p.collectAndSend(ctx, parameters.BackOffs)

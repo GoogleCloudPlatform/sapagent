@@ -209,13 +209,13 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 		log.Logger.Info("Workload Manager metrics collection is not supported for windows platform.")
 		return false
 	}
+	go usagemetrics.LogActionDaily(usagemetrics.CollectWLMMetrics)
 	go start(ctx, params, params.TimeSeriesCreator)
 	return true
 }
 
 func collectMetrics(ctx context.Context, params Parameters, metricOverride string) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager metrics...")
-	usagemetrics.Action(usagemetrics.CollectWLMMetrics) // Collecting WLM metrics
 	if fileInfo, err := params.OSStatReader(metricOverride); fileInfo != nil && err == nil {
 		log.Logger.Info("Using override metrics from yaml file")
 		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
