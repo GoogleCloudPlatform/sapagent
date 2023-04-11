@@ -238,7 +238,10 @@ func TestRun_shouldRespectCancellation(t *testing.T) {
 			defer cancel()
 			monitor.Run(ctx)
 			<-ctx.Done()
-			got := monitor.registrations["0"].missedHeartbeats
+			registrant := monitor.registrations["0"]
+			registrant.lock.Lock()
+			defer registrant.lock.Unlock()
+			got := registrant.missedHeartbeats
 			if got != d.want {
 				t.Errorf("missed heart beats = %v, want %v", got, d.want)
 			}
@@ -352,7 +355,10 @@ func TestIncrementAll_shouldIncrementAllMissedHeartbeatsToAtMostThreshold(t *tes
 			}
 			for regNum := 0; regNum < numRegistrants; regNum++ {
 				regName := d.registrantNames[regNum]
-				got := monitor.registrations[regName].missedHeartbeats
+				registrant := monitor.registrations[regName]
+				registrant.lock.Lock()
+				defer registrant.lock.Unlock()
+				got := registrant.missedHeartbeats
 				if got != d.threshold {
 					t.Errorf("incrementAll() error: registrants[%s].missedHeartbeats = %v, want %v", regName, got, d.threshold)
 				}
@@ -404,8 +410,11 @@ func TestRegister_shouldReturnFunctionThatResetsRegistrantMissedHeartbeats(t *te
 				registrant := monitor.registrations[name]
 				spec := specs[i]
 				spec.Beat()
-				if registrant.missedHeartbeats != 0 {
-					t.Errorf("spec.Beat() error, registrants[%v].missedHeartbeats = %v, want 0", name, registrant.missedHeartbeats)
+				registrant.lock.Lock()
+				defer registrant.lock.Unlock()
+				got := registrant.missedHeartbeats
+				if got != 0 {
+					t.Errorf("spec.Beat() error, registrants[%v].missedHeartbeats = %v, want 0", name, got)
 				}
 			}
 		})
