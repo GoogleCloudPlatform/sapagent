@@ -162,124 +162,108 @@ func startServices(goos string) {
 		return
 	}
 
-	// If this instance is doing remote collection then that is all that is done
-	if config.GetCollectionConfiguration() != nil && config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
+	wlmHeartbeatSpec, err := healthMonitor.Register(workloadManagerServiceName)
+	if err != nil {
+		log.Logger.Error("Failed to register workload manager service", log.Error(err))
+		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+		return
+	}
+	wlmparams := workloadmanager.Parameters{
+		Config:               config,
+		Remote:               false,
+		TimeSeriesCreator:    mc,
+		BackOffs:             cloudmonitoring.NewDefaultBackOffIntervals(),
+		CommandRunnerNoSpace: commandRunnerNoSpace,
+		CommandExistsRunner:  commandExistsRunner,
+		HeartbeatSpec:        wlmHeartbeatSpec,
+	}
+	if config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.
+		wlmparams.Remote = true
 		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
-		heartbeatSpec, err := healthMonitor.Register(workloadManagerServiceName)
-		if err != nil {
-			log.Logger.Error("Failed to register workload manager service", log.Error(err))
-			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
-			return
-		}
-		wlmparameters := workloadmanager.Parameters{
-			Config:               config,
-			Remote:               true,
-			ConfigFileReader:     configFileReader,
-			CommandRunner:        commandRunner,
-			CommandRunnerNoSpace: commandRunnerNoSpace,
-			CommandExistsRunner:  commandExistsRunner,
-			InstanceInfoReader:   *instanceInfoReader,
-			OSStatReader:         osStatReader,
-			TimeSeriesCreator:    mc,
-			BackOffs:             cloudmonitoring.NewDefaultBackOffIntervals(),
-			HeartbeatSpec:        heartbeatSpec,
-			OSReleaseFilePath:    workloadmanager.OSReleaseFilePath,
-			InterfaceAddrsGetter: net.InterfaceAddrs,
-		}
-		workloadmanager.StartMetricsCollection(ctx, wlmparameters)
-	} else {
-		/* The functions being called here should be asynchronous.
-		A typical StartXXX() will do the necessary initialisation synchronously and start its own goroutines
-		for the long running tasks. The control should be returned to main immediately after init succeeds.
-		*/
-
-		// Start the SAP Host Metrics provider
-		mqc, err := monitoring.NewQueryClient(ctx)
-		if err != nil {
-			log.Logger.Errorw("Failed to create Cloud Monitoring query client", "error", err)
-			usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
-			return
-		}
-		heartbeatSpec, err := healthMonitor.Register(hostMetricsServiceName)
-		if err != nil {
-			log.Logger.Error("Failed to register host metrics service", log.Error(err))
-			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
-			return
-		}
-		cmr := &cloudmetricreader.CloudMetricReader{
-			QueryClient: &cloudmetricreader.QueryClient{Client: mqc},
-			BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
-		}
-		at := agenttime.New(agenttime.Clock{})
-		hmparams := hostmetrics.Parameters{
-			Config:             config,
-			InstanceInfoReader: *instanceInfoReader,
-			CloudMetricReader:  *cmr,
-			AgentTime:          *at,
-			HeartbeatSpec:      heartbeatSpec,
-		}
-		hostmetrics.StartSAPHostAgentProvider(ctx, hmparams)
-
-		// Start the Workload Manager metrics collection
-		heartbeatSpec, err = healthMonitor.Register(workloadManagerServiceName)
-		if err != nil {
-			log.Logger.Error("Failed to register workload manager service", log.Error(err))
-			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
-			return
-		}
-		wlmparams := workloadmanager.Parameters{
-			Config:                config,
-			Remote:                false,
-			ConfigFileReader:      configFileReader,
-			CommandRunner:         commandRunner,
-			CommandRunnerNoSpace:  commandRunnerNoSpace,
-			CommandExistsRunner:   commandExistsRunner,
-			InstanceInfoReader:    *instanceInfoReader,
-			OSStatReader:          osStatReader,
-			TimeSeriesCreator:     mc,
-			DefaultTokenGetter:    defaultTokenGetter,
-			JSONCredentialsGetter: jsonCredentialsGetter,
-			OSType:                goos,
-			BackOffs:              cloudmonitoring.NewDefaultBackOffIntervals(),
-			HeartbeatSpec:         heartbeatSpec,
-			OSReleaseFilePath:     workloadmanager.OSReleaseFilePath,
-			InterfaceAddrsGetter:  net.InterfaceAddrs,
-		}
 		workloadmanager.StartMetricsCollection(ctx, wlmparams)
-
-		heartbeatSpec, err = healthMonitor.Register(processMetricsServiceName)
-		if err != nil {
-			log.Logger.Error("Failed to register process metrics service", log.Error(err))
-			usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
-			return
-		}
-		// Start the Process metrics collection
-		pmparams := processmetrics.Parameters{
-			Config:        config,
-			OSType:        goos,
-			MetricClient:  processmetrics.NewMetricClient,
-			BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
-			HeartbeatSpec: heartbeatSpec,
-			GCEService:    gceService,
-		}
-		processmetrics.Start(ctx, pmparams)
-
-		system.StartSAPSystemDiscovery(ctx, config, gceService)
-
-		// Start HANA Monitoring
-		hanamonitoring.Start(ctx, hanamonitoring.Parameters{
-			Config:            config,
-			GCEService:        gceService,
-			BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
-			TimeSeriesCreator: mc,
-		})
+		go usagemetrics.LogRunningDaily()
+		waitForShutdown(shutdownch)
+		return
 	}
 
-	go usagemetrics.LogRunningDaily()
+	// The functions being called below should be asynchronous.
+	// A typical StartXXX() will do the necessary initialisation synchronously
+	// and start its own goroutines for the long running tasks. The control
+	// should be returned to main immediately after init succeeds.
 
+	// Start the SAP Host Metrics provider
+	mqc, err := monitoring.NewQueryClient(ctx)
+	if err != nil {
+		log.Logger.Errorw("Failed to create Cloud Monitoring query client", "error", err)
+		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		return
+	}
+	cmr := &cloudmetricreader.CloudMetricReader{
+		QueryClient: &cloudmetricreader.QueryClient{Client: mqc},
+		BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
+	}
+	hmHeartbeatSpec, err := healthMonitor.Register(hostMetricsServiceName)
+	if err != nil {
+		log.Logger.Error("Failed to register host metrics service", log.Error(err))
+		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+		return
+	}
+	hostmetrics.StartSAPHostAgentProvider(ctx, hostmetrics.Parameters{
+		Config:             config,
+		InstanceInfoReader: *instanceInfoReader,
+		CloudMetricReader:  *cmr,
+		AgentTime:          *agenttime.New(agenttime.Clock{}),
+		HeartbeatSpec:      hmHeartbeatSpec,
+	})
+
+	// Start the Workload Manager metrics collection
+	wlmparams.OSType = goos
+	wlmparams.ConfigFileReader = configFileReader
+	wlmparams.CommandRunner = commandRunner
+	wlmparams.InstanceInfoReader = *instanceInfoReader
+	wlmparams.OSStatReader = osStatReader
+	wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
+	wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
+	wlmparams.DefaultTokenGetter = defaultTokenGetter
+	wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
+	workloadmanager.StartMetricsCollection(ctx, wlmparams)
+
+	// Start the Process metrics collection
+	pmHeartbeatSpec, err := healthMonitor.Register(processMetricsServiceName)
+	if err != nil {
+		log.Logger.Error("Failed to register process metrics service", log.Error(err))
+		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+		return
+	}
+	processmetrics.Start(ctx, processmetrics.Parameters{
+		Config:        config,
+		OSType:        goos,
+		MetricClient:  processmetrics.NewMetricClient,
+		BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
+		HeartbeatSpec: pmHeartbeatSpec,
+		GCEService:    gceService,
+	})
+
+	// Start SAP System Discovery
+	system.StartSAPSystemDiscovery(ctx, config, gceService)
+
+	// Start HANA Monitoring
+	hanamonitoring.Start(ctx, hanamonitoring.Parameters{
+		Config:            config,
+		GCEService:        gceService,
+		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
+		TimeSeriesCreator: mc,
+	})
+
+	go usagemetrics.LogRunningDaily()
+	waitForShutdown(shutdownch)
+}
+
+// waitForShutdown observes a channel for a shutdown signal, then proceeds to shut down the Agent.
+func waitForShutdown(ch <-chan os.Signal) {
 	// wait for the shutdown signal
-	<-shutdownch
+	<-ch
 	// once we have a shutdown event we will wait for up to 3 seconds before for final terminations
 	_, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer handleShutdown(cancel)

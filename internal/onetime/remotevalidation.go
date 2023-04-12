@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"runtime"
 
@@ -131,6 +132,8 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, instance
 		DefaultTokenGetter:    defaultTokenGetter,
 		JSONCredentialsGetter: jsonCredentialsGetter,
 		OSType:                runtime.GOOS,
+		OSReleaseFilePath:     workloadmanager.OSReleaseFilePath,
+		InterfaceAddrsGetter:  net.InterfaceAddrs,
 	}
 	fmt.Println(workloadmanager.CollectMetricsToJSON(ctx, wlmparams))
 	return subcommands.ExitSuccess

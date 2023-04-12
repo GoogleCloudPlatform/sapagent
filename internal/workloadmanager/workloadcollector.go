@@ -158,29 +158,28 @@ func currentTime() int64 {
 	return time.Now().Unix()
 }
 
-func start(ctx context.Context, params Parameters, tsc cloudmonitoring.TimeSeriesCreator) {
+func start(ctx context.Context, params Parameters) {
 	log.Logger.Info("Starting collection of Workload Manager metrics")
 	st := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 	if st <= 0 {
 		// default back to 5 minutes
 		st = time.Duration(5) * time.Minute
 	}
-	if params.Remote {
-		// NOMUTANTS -- tested that when remote is set this is called, but cannot kill mutant
-		for {
-			log.Logger.Info("Collecting metrics from remote instances")
-			collectAndSendRemoteMetrics(ctx, params)
-			log.Logger.Debugw("Sleeping", "duration", st)
-			time.Sleep(st)
-		}
-		return
-	}
 
-	projectID := params.Config.GetCloudProperties().GetProjectId()
 	heartbeatTicker := params.HeartbeatSpec.CreateTicker()
 	collectTicker := time.NewTicker(st)
 	defer heartbeatTicker.Stop()
 	defer collectTicker.Stop()
+
+	// Do not wait for the first tick and start metric collection immediately.
+	select {
+	case <-ctx.Done():
+		log.Logger.Debug("cancellation requested")
+		return
+	default:
+		collectWorkloadMetricsOnce(ctx, params)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -189,12 +188,22 @@ func start(ctx context.Context, params Parameters, tsc cloudmonitoring.TimeSerie
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
 		case <-collectTicker.C:
-			log.Logger.Info("collecting metrics from this instance")
-			params.HeartbeatSpec.Beat()
-			metrics := collectMetrics(ctx, params, metricOverridePath)
-			sendMetrics(ctx, metrics, projectID, &tsc, params.BackOffs)
+			collectWorkloadMetricsOnce(ctx, params)
 		}
 	}
+}
+
+// collectWorkloadMetricsOnce issues a heartbeat and initiates one round of metric collection.
+func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
+	params.HeartbeatSpec.Beat()
+	if params.Remote {
+		log.Logger.Info("Collecting metrics from remote instances")
+		collectAndSendRemoteMetrics(ctx, params)
+		return
+	}
+	log.Logger.Info("Collecting metrics from this instance")
+	metrics := collectMetrics(ctx, params, metricOverridePath)
+	sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
 }
 
 // StartMetricsCollection continuously collects Workload Manager metrics for SAP workloads.
@@ -210,7 +219,7 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 		return false
 	}
 	go usagemetrics.LogActionDaily(usagemetrics.CollectWLMMetrics)
-	go start(ctx, params, params.TimeSeriesCreator)
+	go start(ctx, params)
 	return true
 }
 

@@ -512,22 +512,28 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 		want         int
 	}{
 		{
-			name:         "cancel before beat",
-			beatInterval: time.Second * 100,
-			timeout:      time.Millisecond * 50,
+			name:         "CancelBeforeInitialCollection",
+			beatInterval: time.Second,
+			timeout:      time.Second * 0,
 			want:         0,
 		},
 		{
-			name:         "1 beat timeout",
-			beatInterval: time.Millisecond * 75,
-			timeout:      time.Millisecond * 140,
+			name:         "CancelBeforeBeat",
+			beatInterval: time.Second * 1,
+			timeout:      time.Millisecond * 50,
 			want:         1,
 		},
 		{
-			name:         "2 beat timeout",
+			name:         "Cancel1Beat",
+			beatInterval: time.Millisecond * 75,
+			timeout:      time.Millisecond * 140,
+			want:         2,
+		},
+		{
+			name:         "Cancel2Beats",
 			beatInterval: time.Millisecond * 45,
 			timeout:      time.Millisecond * 125,
-			want:         2,
+			want:         3,
 		},
 	}
 	for _, test := range testData {
