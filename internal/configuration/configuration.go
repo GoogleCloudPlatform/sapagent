@@ -18,8 +18,8 @@ limitations under the License.
 package configuration
 
 import (
-	"fmt"
 	_ "embed" // Enable file embedding, see also http://go/go-embed.
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -50,7 +50,7 @@ const (
 	// LINT.IfChange
 
 	// AgentVersion is the version of the agent.
-	AgentVersion = `1.3`
+	AgentVersion = `1.4`
 	// LINT.ThenChange(//depot/google3/third_party/sapagent/BUILD)
 
 	// LinuxConfigPath is the default path to agent configuration file on linux.
