@@ -18,13 +18,17 @@ package workloadmanager
 
 import (
 	"errors"
+	"io"
 	"net"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/zieckey/goini"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
@@ -35,6 +39,7 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -182,6 +187,39 @@ func wantHanaMetricsAllPositive(ts *timestamppb.Timestamp, hanaExists float64, o
 	}
 }
 
+func createHANAWorkloadMetrics(labels map[string]string, value float64) WorkloadMetrics {
+	return WorkloadMetrics{
+		Metrics: []*monitoringresourcepb.TimeSeries{{
+			Metric: &metricpb.Metric{
+				Type:   "workload.googleapis.com/sap/validation/hana",
+				Labels: labels,
+			},
+			MetricKind: metricpb.MetricDescriptor_GAUGE,
+			Resource: &monitoredresourcepb.MonitoredResource{
+				Type: "gce_instance",
+				Labels: map[string]string{
+					"instance_id": "test-instance-id",
+					"zone":        "test-zone",
+					"project_id":  "test-project-id",
+				},
+			},
+			Points: []*monitoringresourcepb.Point{{
+				// We are choosing to ignore these timestamp values 
+				// when performing a comparison via cmp.Diff().
+				Interval: &cpb.TimeInterval{
+					StartTime: &timestamppb.Timestamp{Seconds: time.Now().Unix()},
+					EndTime:   &timestamppb.Timestamp{Seconds: time.Now().Unix()},
+				},
+				Value: &cpb.TypedValue{
+					Value: &cpb.TypedValue_DoubleValue{
+						DoubleValue: value,
+					},
+				},
+			}},
+		}},
+	}
+}
+
 func (f *fakeDiskMapper) ForDeviceName(deviceName string) (string, error) {
 	return deviceName, f.err
 }
@@ -261,9 +299,12 @@ var (
 }
 `
 	defaultHanaINI = `
+[ha_dr_provider_SAPHanaSR]
+
 [persistance]
 basepath_datavolumes = /hana/data/ISC
 basepath_logvolumes = /hana/log/ISC
+basepath_persistent_memory_volumes = /hana/memory/ISC
 `
 	defaultConfig = &configpb.Configuration{
 		BareMetal: false,
@@ -963,6 +1004,159 @@ func TestCollectHanaMetrics(t *testing.T) {
 			got := <-hch
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
+			}
+		})
+	}
+}
+
+func TestCollectHANAMetricsFromConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		runner           commandlineexecutor.CommandRunner
+		runnerNoSpace    commandlineexecutor.CommandRunnerNoSpace
+		osStatReader     OSStatReader
+		configFileReader ConfigFileReader
+		wantHanaExists   float64
+		wantLabels       map[string]string
+	}{
+		{
+			name:             "TestHanaDoesNotExist",
+			runner:           func(string, string) (string, string, error) { return "", "", nil },
+			runnerNoSpace:    func(cmd string, args ...string) (string, string, error) { return "", "", nil },
+			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
+			configFileReader: defaultFileReader,
+			wantHanaExists:   float64(0.0),
+			wantLabels:       map[string]string{},
+		},
+		{
+			name: "TestHanaNoINI",
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
+				}
+				return "", "", nil
+			},
+			osStatReader:     os.Stat,
+			configFileReader: defaultFileReader,
+			wantHanaExists:   float64(0.0),
+			wantLabels:       map[string]string{},
+		},
+		{
+			name: "StatReaderError",
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
+				}
+				return "", "", nil
+			},
+			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+				return "", "", nil
+			},
+			osStatReader:     func(string) (os.FileInfo, error) { return nil, errors.New("error") },
+			configFileReader: defaultFileReader,
+			wantHanaExists:   float64(0.0),
+			wantLabels:       map[string]string{},
+		},
+		{
+			name: "TestHanaAllLabelsDisabled",
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
+				}
+				return "", "", nil
+			},
+			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+				return "", "", nil
+			},
+			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
+			configFileReader: defaultFileReader,
+			wantHanaExists:   float64(1.0),
+			wantLabels: map[string]string{
+				"disk_data_mount":       "",
+				"disk_data_pd_size":     "",
+				"disk_data_size":        "",
+				"disk_data_type":        "",
+				"disk_log_mount":        "",
+				"disk_log_pd_size":      "",
+				"disk_log_size":         "",
+				"disk_log_type":         "",
+				"fast_restart":          "disabled",
+				"ha_sr_hook_configured": "no",
+				"numa_balancing":        "disabled",
+				"transparent_hugepages": "disabled",
+			},
+		},
+		{
+			name: "TestHanaAllLabelsEnabled",
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
+				}
+				if cmd == "grep" {
+					return "basepath location /hana/data", "", nil
+				}
+				if cmd == "lsblk" {
+					return DefaultJSONDiskList, "", nil
+				}
+				return "", "", nil
+			},
+			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+				if cmd == "cat" {
+					if args[0] == "/proc/sys/kernel/numa_balancing" {
+						return "1", "", nil
+					}
+					return "[always]", "", nil
+				}
+				return "", "", nil
+			},
+			osStatReader: func(string) (os.FileInfo, error) { return nil, nil },
+			configFileReader: ConfigFileReader(func(data string) (io.ReadCloser, error) {
+				return io.NopCloser(strings.NewReader(defaultHanaINI)), nil
+			}),
+			wantHanaExists: float64(1.0),
+			wantLabels: map[string]string{
+				"disk_data_mount":       "/hana/data",
+				"disk_data_pd_size":     "4096",
+				"disk_data_size":        "2048",
+				"disk_data_type":        "default-disk-type",
+				"disk_log_mount":        "/hana/data",
+				"disk_log_pd_size":      "4096",
+				"disk_log_size":         "2048",
+				"disk_log_type":         "default-disk-type",
+				"fast_restart":          "enabled",
+				"ha_sr_hook_configured": "yes",
+				"numa_balancing":        "enabled",
+				"transparent_hugepages": "enabled",
+			},
+		},
+	}
+
+	collectionDefinition := &cdpb.CollectionDefinition{}
+	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	if err != nil {
+		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			iir := defaultIIR
+			iir.Read(defaultConfig, defaultMapperFunc)
+			p := Parameters{
+				Config:               cnf,
+				OSStatReader:         test.osStatReader,
+				InstanceInfoReader:   *iir,
+				CommandRunner:        test.runner,
+				CommandRunnerNoSpace: test.runnerNoSpace,
+				OSType:               "linux",
+				osVendorID:           "rhel",
+				WorkloadConfig:       collectionDefinition.GetWorkloadValidation(),
+				ConfigFileReader:     test.configFileReader,
+			}
+
+			want := createHANAWorkloadMetrics(test.wantLabels, test.wantHanaExists)
+			got := CollectHANAMetricsFromConfig(p)
+			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
+				t.Errorf("CollectHANAMetricsFromConfig() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

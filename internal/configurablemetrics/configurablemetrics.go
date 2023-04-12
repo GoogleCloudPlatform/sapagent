@@ -19,7 +19,9 @@ limitations under the License.
 package configurablemetrics
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -37,6 +39,9 @@ type Output struct {
 	StdErr   string
 	ExitCode string
 }
+
+// FileReader abstracts loading and reading files into an io.ReadCloser object.
+type FileReader func(string) (io.ReadCloser, error)
 
 // BuildMetricMap iterates over an EvalMetric slice and returns a map of
 // metric labels defaulted to an empty string value.
@@ -74,6 +79,51 @@ func CollectOSCommandMetric(m *cmpb.OSCommandMetric, runner commandlineexecutor.
 	label = m.GetMetricInfo().GetLabel()
 	value, _ = Evaluate(m, Output{StdOut: stdout, StdErr: stderr, ExitCode: strconv.Itoa(exitCode)})
 	return label, value
+}
+
+// CollectMetricsFromFile scans a configuration file and returns a map
+// of collected metric values, keyed by metric label.
+func CollectMetricsFromFile(reader FileReader, path string, metrics []*cmpb.EvalMetric) map[string]string {
+	labels := BuildMetricMap(metrics)
+	if len(metrics) == 0 {
+		return labels
+	}
+
+	file, err := reader(path)
+	if err != nil {
+		log.Logger.Warnw("Could not read the file", log.Error(err))
+		return labels
+	}
+	defer file.Close()
+
+	metricsByLabel := make(map[string]*cmpb.EvalMetric, len(metrics))
+	for _, m := range metrics {
+		metricsByLabel[m.GetMetricInfo().GetLabel()] = m
+	}
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		if len(metricsByLabel) == 0 {
+			break
+		}
+		line := strings.TrimSpace(scanner.Text())
+		for l, m := range metricsByLabel {
+			v, ok := Evaluate(m, Output{StdOut: line})
+			labels[l] = v
+			// For a result that evaluates as true, do not attempt to collect this metric again.
+			// This assumes that at most one metric will be collected per line scanned.
+			if ok {
+				delete(metricsByLabel, l)
+				break
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Logger.Warnw("Could not read the file", "path", path, log.Error(err))
+	}
+
+	return labels
 }
 
 // Evaluate runs a series of evaluation rules against an Output source and

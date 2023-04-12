@@ -17,7 +17,10 @@ limitations under the License.
 package configurablemetrics
 
 import (
+	"errors"
+	"io"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -44,6 +47,9 @@ var (
 	}
 	andEvalMetricIfTrue = func(ifTrue *cmpb.EvalResult) *cmpb.EvalMetric {
 		return &cmpb.EvalMetric{
+			MetricInfo: &cmpb.MetricInfo{
+				Label: "foo",
+			},
 			EvalRuleTypes: &cmpb.EvalMetric_AndEvalRules{
 				AndEvalRules: &cmpb.EvalMetricRule{
 					EvalRules: []*cmpb.EvalRule{
@@ -187,6 +193,59 @@ func TestCollectOSCommandMetric(t *testing.T) {
 			}
 			if gotValue != test.wantValue {
 				t.Errorf("CollectOSCommandMetric() unexpected metric value, got %q want %q", gotValue, test.wantValue)
+			}
+		})
+	}
+}
+
+func TestCollectMetricsFromFile(t *testing.T) {
+	tests := []struct {
+		name    string
+		reader  FileReader
+		path    string
+		metrics []*cmpb.EvalMetric
+		want    map[string]string
+	}{
+		{
+			name: "EmptyMetrics",
+			want: map[string]string{},
+		},
+		{
+			name: "FileReadError",
+			metrics: []*cmpb.EvalMetric{
+				andEvalMetricIfTrue(&cmpb.EvalResult{
+					EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "Literal Value"},
+				}),
+			},
+			reader: FileReader(func(data string) (io.ReadCloser, error) {
+				return nil, errors.New("error")
+			}),
+			want: map[string]string{
+				"foo": "",
+			},
+		},
+		{
+			name: "Success",
+			metrics: []*cmpb.EvalMetric{
+				andEvalMetricIfTrue(&cmpb.EvalResult{
+					EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "Literal Value"},
+				}),
+			},
+			reader: FileReader(func(data string) (io.ReadCloser, error) {
+				return io.NopCloser(strings.NewReader(data)), nil
+			}),
+			path: "foobar",
+			want: map[string]string{
+				"foo": "Literal Value",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := CollectMetricsFromFile(test.reader, test.path, test.metrics)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("CollectMetricsFromFile(%v) mismatch (-want, +got):\n%s", test.metrics, diff)
 			}
 		})
 	}

@@ -613,7 +613,7 @@
             "eval_rules": [
               {
                 "output_source": "STDOUT",
-                "output_contains": "[enabled]"
+                "output_contains": "[always]"
               }
             ],
             "if_true": {

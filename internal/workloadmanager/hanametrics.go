@@ -23,8 +23,10 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 type lsblkdevicechild struct {
@@ -47,6 +49,69 @@ type lsblk struct {
 }
 
 const hanaAPILabel = "workload.googleapis.com/sap/validation/hana"
+
+// CollectHANAMetricsFromConfig collects the HANA metrics as specified
+// by the WorkloadValidation config and formats the results as a time series to
+// be uploaded to a Collection Storage mechanism.
+func CollectHANAMetricsFromConfig(params Parameters) WorkloadMetrics {
+	log.Logger.Info("Collecting Workload Manager HANA metrics...")
+	t := hanaAPILabel
+	hanaVal := 0.0
+
+	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(params.CommandRunner)
+	globalINILocationVal := globalINILocation(hanaProcessOrGlobalIni)
+
+	l := map[string]string{}
+	if hanaProcessOrGlobalIni == "" || strings.Contains(hanaProcessOrGlobalIni, "cannot access") {
+		// No HANA INI file or processes were identified on the current host.
+		log.Logger.Debug("HANA process and global.ini not found, no HANA")
+		return WorkloadMetrics{Metrics: createTimeSeries(hanaAPILabel, l, hanaVal, params.Config)}
+	}
+	if _, err := params.OSStatReader(globalINILocationVal); err != nil {
+		// Parse out the SID and global.ini location.
+		// example process output:
+		// /usr/sap/RKT/HDB90/exe/sapstartsrv
+		// pf=/usr/sap/RKT/SYS/profile/RKT_HDB90_sap-hana-vm-hma-rev53-rhel -D -u rktadm
+
+		// The global.ini will be in /usr/sap/[SID]/SYS/global/hdb/custom/config/global.ini
+
+		// If the process is not running then the hanaProcessOrGlobalIni will contain the global.ini
+		// location similar to: /usr/sap/HAR/SYS/global/hdb/custom/config/global.ini
+
+		log.Logger.Debugw("Could not find gobal.ini file", "globalinilocation", globalINILocationVal)
+		return WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
+	}
+
+	hana := params.WorkloadConfig.GetValidationHana()
+	for k, v := range configurablemetrics.CollectMetricsFromFile(configurablemetrics.FileReader(params.ConfigFileReader), globalINILocationVal, hana.GetGlobalIniMetrics()) {
+		l[k] = v
+	}
+	for _, m := range hana.GetOsCommandMetrics() {
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
+		if k != "" {
+			l[k] = v
+		}
+	}
+	for _, volume := range hana.GetHanaDiskVolumeMetrics() {
+		diskInfo := diskInfo(volume.GetBasepathVolume(), globalINILocationVal, params.CommandRunner, params.InstanceInfoReader)
+		for _, m := range volume.GetMetrics() {
+			k := m.GetMetricInfo().GetLabel()
+			switch m.GetValue() {
+			case wpb.DiskVariable_TYPE:
+				l[k] = diskInfo["instancedisktype"]
+			case wpb.DiskVariable_MOUNT:
+				l[k] = diskInfo["mountpoint"]
+			case wpb.DiskVariable_SIZE:
+				l[k] = diskInfo["size"]
+			case wpb.DiskVariable_PD_SIZE:
+				l[k] = diskInfo["pdsize"]
+			}
+		}
+	}
+
+	hanaVal = 1.0
+	return WorkloadMetrics{Metrics: createTimeSeries(hanaAPILabel, l, hanaVal, params.Config)}
+}
 
 /*
 CollectHanaMetrics collects SAP HANA metrics for the Workload Manager and sends them to the wm

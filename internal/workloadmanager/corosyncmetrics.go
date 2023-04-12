@@ -23,8 +23,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-
-	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 )
 
 const csConfigPath = "/etc/corosync/corosync.conf"
@@ -38,7 +36,7 @@ func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
 	l := make(map[string]string)
 
 	corosync := params.WorkloadConfig.GetValidationCorosync()
-	for k, v := range collectCorosyncConfigMetrics(params.ConfigFileReader, corosync.GetConfigPath(), corosync.GetConfigMetrics()) {
+	for k, v := range configurablemetrics.CollectMetricsFromFile(configurablemetrics.FileReader(params.ConfigFileReader), corosync.GetConfigPath(), corosync.GetConfigMetrics()) {
 		l[k] = v
 	}
 	for _, m := range corosync.GetOsCommandMetrics() {
@@ -49,51 +47,6 @@ func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
 	}
 
 	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
-}
-
-// collectCorosyncConfigMetrics scans the corosync.conf file and returns a map
-// of collected metric values, keyed by metric label.
-func collectCorosyncConfigMetrics(reader ConfigFileReader, path string, metrics []*cmpb.EvalMetric) map[string]string {
-	labels := configurablemetrics.BuildMetricMap(metrics)
-	if len(metrics) == 0 {
-		return labels
-	}
-
-	file, err := reader(path)
-	if err != nil {
-		log.Logger.Warnw("Could not read the corosync config file", log.Error(err))
-		return labels
-	}
-	defer file.Close()
-
-	metricsByLabel := make(map[string]*cmpb.EvalMetric, len(metrics))
-	for _, m := range metrics {
-		metricsByLabel[m.GetMetricInfo().GetLabel()] = m
-	}
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if len(metricsByLabel) == 0 {
-			break
-		}
-		line := strings.TrimSpace(scanner.Text())
-		for l, m := range metricsByLabel {
-			v, ok := configurablemetrics.Evaluate(m, configurablemetrics.Output{StdOut: line})
-			labels[l] = v
-			// For a result that evaluates as true, do not attempt to collect this metric again.
-			// This assumes that at most one metric will be collected per line scanned.
-			if ok {
-				delete(metricsByLabel, l)
-				break
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Logger.Warnw("Could not read the corosync config file", "path", path, log.Error(err))
-	}
-
-	return labels
 }
 
 /*
