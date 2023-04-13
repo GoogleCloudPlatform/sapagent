@@ -18,6 +18,7 @@ package usagemetrics
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jonboulle/clockwork"
@@ -28,6 +29,7 @@ import (
 )
 
 var logger = NewLogger(nil, nil, clockwork.NewRealClock())
+var lock = sync.RWMutex{}
 
 // SetAgentProperties sets the configured agent properties on the standard logger.
 func SetAgentProperties(ap *cpb.AgentProperties) {
@@ -108,11 +110,14 @@ func Action(id int) {
 
 // LogActionDaily uses the standard logger to log the ACTION once a day.
 func LogActionDaily(id int) {
+	lock.RLock()
 	if _, ok := logger.dailyLogActionStarted[id]; ok {
 		log.Logger.Debugw("Daily log action already started", "ACTION", id)
+		lock.RUnlock()
 		return
 	}
 	logger.dailyLogActionStarted[id] = true
+	lock.RUnlock()
 	log.Logger.Debugw("Starting daily log action", "ACTION", id)
 	for {
 		logger.logOncePerDay(StatusAction, fmt.Sprintf("%d", id))
