@@ -195,12 +195,14 @@ collector.
 */
 func setPacemakerMaintenanceMode(l map[string]string, crmAvailable bool, runner commandlineexecutor.CommandRunner) {
 	maintenanceMode := ""
+	stderr := ""
 	err := error(nil)
 	if crmAvailable {
-		maintenanceMode, _, err = runner("sh", "-c crm configure show | grep maintenance | grep true")
+		maintenanceMode, stderr, err = runner("sh", "-c 'crm configure show | grep maintenance | grep true'")
 	} else {
-		maintenanceMode, _, err = runner("sh", "-c pcs property show | grep maintenance | grep true")
+		maintenanceMode, stderr, err = runner("sh", "-c 'pcs property show | grep maintenance | grep true'")
 	}
+	log.Logger.Debugw("Pacemaker maintenance mode", "maintenanceMode", maintenanceMode, "stderr", stderr, "err", err)
 	maintenanceModeLabel := "false"
 	if err == nil && maintenanceMode != "" {
 		maintenanceModeLabel = "true"

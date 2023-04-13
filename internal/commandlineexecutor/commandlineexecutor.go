@@ -90,12 +90,12 @@ func ExecuteCommand(executable string, args ...string) (stdOut string, stdErr st
 	log.Logger.Debugw("Executing command", "executable", executable, "args", args)
 
 	if err := exe.Run(); err != nil {
-		log.Logger.Debugw("Could not execute command", "executable", executable, "exitcode", ExitCode(err), "error", err, "stdout", stdout.String(), "stderr", stderr.String())
+		log.Logger.Debugw("Could not execute command", "executable", executable, "args", args, "exitcode", ExitCode(err), "error", err, "stdout", stdout.String(), "stderr", stderr.String())
 		return stdout.String(), stderr.String(), err
 	}
 
 	// Exit code can assumed to be 0
-	log.Logger.Debugw("Successfully executed command", "stdout", stdout.String(), "stderr", stderr.String())
+	log.Logger.Debugw("Successfully executed command", "executable", executable, "args", args, "stdout", stdout.String(), "stderr", stderr.String())
 	return stdout.String(), stderr.String(), nil
 
 }
@@ -129,12 +129,12 @@ func runCommandAsUserExitCode(user, executable, args string, run runCmdAsUser) (
 	var exitCode int
 	stdOut, stdErr, err = run(user, executable, args)
 	if err != nil {
-		log.Logger.Debugw("Command execution complete", "stdout", stdOut, "stderr", stdErr, "error", err)
+		log.Logger.Debugw("Command execution complete", "executable", executable, "args", args, "stdout", stdOut, "stderr", stdErr, "error", err)
 
 		m := exitStatusPattern.FindStringSubmatch(err.Error())
 		exitCode, err = strconv.Atoi(m[1])
 		if err != nil {
-			log.Logger.Debugw("Failed to get command exit code", "error", err)
+			log.Logger.Debugw("Failed to get command exit code", "executable", executable, "args", args, "error", err)
 			return stdOut, stdErr, 0, err
 		}
 	}
