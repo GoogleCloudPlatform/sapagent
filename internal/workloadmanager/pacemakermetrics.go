@@ -197,7 +197,7 @@ func setPacemakerMaintenanceMode(l map[string]string, crmAvailable bool, runner 
 	maintenanceMode := ""
 	err := error(nil)
 	if crmAvailable {
-		maintenanceMode, _, err = runner("sh", "-c crm_mon configure show | grep maintenance | grep true")
+		maintenanceMode, _, err = runner("sh", "-c crm configure show | grep maintenance | grep true")
 	} else {
 		maintenanceMode, _, err = runner("sh", "-c pcs property show | grep maintenance | grep true")
 	}
