@@ -12,22 +12,33 @@ Obsoletes: google-sapnetweavermonitoring-agent
 %description
 "Google Cloud Agent for SAP."
 
+%define _confdir /etc/%{name}
+%define _bindir /usr/bin
+%define _docdir /usr/share/doc/%{name}
+%define _servicedir /usr/share/%{name}/service
+
 %install
 # clean away any previous RPM build root
 /bin/rm --force --recursive "${RPM_BUILD_ROOT}"
 
 %include %build_rpm_install
 
-%files -f %build_rpm_files
+%files
 %defattr(-,root,root)
+%attr(0744,root,root) %{_bindir}/google_cloud_sap_agent
+%config(noreplace) %attr(0644,root,root) %{_confdir}/configuration.json
+%attr(0644,root,root) %{_servicedir}/%{name}.service
+%attr(0744,root,root) %{_docdir}/LICENSE
+%attr(0744,root,root) %{_docdir}/README.md
+%attr(0744,root,root) %{_docdir}/THIRD_PARTY_NOTICES
 
 %pre
 # If we need to check install / upgrade ($1 = 1 is install, $1 = 2 is upgrade)
 
 # SAP Agent
 # if the agent is running - stop it
-if `systemctl is-active --quiet google-cloud-sap-agent > /dev/null 2>&1`; then
-    systemctl stop google-cloud-sap-agent
+if `systemctl is-active --quiet %{name} > /dev/null 2>&1`; then
+    systemctl stop %{name}
 fi
 
 # v2 NetWeaver agent detection - stop it if it is running
@@ -103,7 +114,7 @@ if [ -d "/usr/sap/google-sapnetweavermonitoring-agent/" ]; then
     # finally close off the config
     CONFIG="${CONFIG}"$'\n'"}"
     # move the migrated configuration into place
-    echo "${CONFIG}" > /etc/google-cloud-sap-agent/configuration.json
+    echo "${CONFIG}" > %{_confdir}/configuration.json
   fi
   # remove the v2 agent logs
   rm -fr /var/log/google-sapnetweavermonitoring-agent*  > /dev/null 2>&1
@@ -111,73 +122,73 @@ fi
 
 # Disable HANA monitoring migration till its launch.
 if [ 1 == 2 ]; then
-  # migrate HANA Monitoring Agent and remove its contents
-  if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
-    # migrate
-    if [ -f "/usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml" ]; then
-      # invoking the migration flow
-      echo "Migration mode here"
-      timeout 30 /usr/bin/google_cloud_sap_agent migratehma;
-      if [ $? -eq 0 ]; then
-        cp /usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml /etc/google-cloud-sap-agent/oldHMAconfiguration.yaml
-        # migration successful, uninstall HANA Monitorig Agent and remove unwanted files
-        # TODO: Explore how to remove the package in case of successful migration only.
-        if `type "systemctl" > /dev/null 2>&1 && systemctl is-active --quiet google-saphanamonitoring-agent`; then
-          systemctl stop google-saphanamonitoring-agent
-        fi
-        # if the agent is enabled - disable it
-        if `type "systemctl" > /dev/null 2>&1 && systemctl is-enabled --quiet google-saphanamonitoring-agent`; then
-          systemctl disable google-saphanamonitoring-agent
-        fi
-        # init.d based (RHEL 6) check
-        if [ ! -d "/usr/lib/systemd/system/" ] && [ ! -d "/lib/systemd/system/" ] && [ -d "/etc/init.d" ]; then
-          chkconfig --del google-saphanamonitoring-agent
-          service google-saphanamonitoring-agent stop
-        fi
-        rm -f /lib/systemd/system/google-saphanamonitoring-agent.service
-        rm -f /usr/lib/systemd/system/google-saphanamonitoring-agent.service
-        rm -fr /usr/sap/google-saphanamonitoring-agent
-        # if it's an init.d system
-        rm -f /etc/init.d/google-saphanamonitoring-agent
-        # remove the HANA Monitorig Agent logs
-        rm -fr /var/log/google-saphanamonitoring-agent*  > /dev/null 2>&1
+# migrate HANA Monitoring Agent and remove its contents
+if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
+  # migrate
+  if [ -f "/usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml" ]; then
+    # invoking the migration flow
+    echo "Migration mode here"
+    timeout 30 %{_bindir}/google_cloud_sap_agent migratehma;
+    if [ $? -eq 0 ]; then
+      cp /usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml %{_confdir}/oldHMAconfiguration.yaml
+      # migration successful, uninstall HANA Monitorig Agent and remove unwanted files
+      # TODO: Explore how to remove the package in case of successful migration only.
+      if `type "systemctl" > /dev/null 2>&1 && systemctl is-active --quiet google-saphanamonitoring-agent`; then
+        systemctl stop google-saphanamonitoring-agent
       fi
+      # if the agent is enabled - disable it
+      if `type "systemctl" > /dev/null 2>&1 && systemctl is-enabled --quiet google-saphanamonitoring-agent`; then
+        systemctl disable google-saphanamonitoring-agent
+      fi
+      # init.d based (RHEL 6) check
+      if [ ! -d "/usr/lib/systemd/system/" ] && [ ! -d "/lib/systemd/system/" ] && [ -d "/etc/init.d" ]; then
+        chkconfig --del google-saphanamonitoring-agent
+        service google-saphanamonitoring-agent stop
+      fi
+      rm -f /lib/systemd/system/google-saphanamonitoring-agent.service
+      rm -f /usr/lib/systemd/system/google-saphanamonitoring-agent.service
+      rm -fr /usr/sap/google-saphanamonitoring-agent
+      # if it's an init.d system
+      rm -f /etc/init.d/google-saphanamonitoring-agent
+      # remove the HANA Monitorig Agent logs
+      rm -fr /var/log/google-saphanamonitoring-agent*  > /dev/null 2>&1
     fi
   fi
+fi
 fi
 
 
 # link the systemd service and reload the daemon
 # RHEL
-if [ -d "/lib/systemd/system/" ] && [ ! -f "/lib/systemd/system/google-cloud-sap-agent.service" ]; then
-    cp -f /usr/share/google-cloud-sap-agent/service/google-cloud-sap-agent.service /lib/systemd/system/google-cloud-sap-agent.service
+if [ -d "/lib/systemd/system/" ] && [ ! -f "/lib/systemd/system/%{name}.service" ]; then
+    cp -f %{_servicedir}/%{name}.service /lib/systemd/system/%{name}.service
     systemctl daemon-reload
 fi
 # SLES
-if [ -d "/usr/lib/systemd/system/" ] && [ ! -f "/usr/lib/systemd/system/google-cloud-sap-agent.service" ]; then
-    cp -f /usr/share/google-cloud-sap-agent/service/google-cloud-sap-agent.service /usr/lib/systemd/system/google-cloud-sap-agent.service
+if [ -d "/usr/lib/systemd/system/" ] && [ ! -f "/usr/lib/systemd/system/%{name}.service" ]; then
+    cp -f %{_servicedir}/%{name}.service /usr/lib/systemd/system/%{name}.service
     systemctl daemon-reload
 fi
 
 # enable and start the agent
-systemctl enable google-cloud-sap-agent
-systemctl start google-cloud-sap-agent
+systemctl enable %{name}
+systemctl start %{name}
 
 # log usage metrics for install
-timeout 30 /usr/bin/google_cloud_sap_agent logusage -s INSTALLED || true
+timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s INSTALLED || true
 
 # next steps instructions
 echo ""
 echo "##########################################################################"
 echo "Google Cloud Agent for SAP has been installed"
 echo ""
-echo "You can view the logs in /var/log/google-cloud-sap-agent.log"
+echo "You can view the logs in /var/log/%{name}.log"
 echo ""
 echo "Verify the agent is running with: "
-echo  "    sudo systemctl status google-cloud-sap-agent"
+echo  "    sudo systemctl status %{name}"
 echo "Verify the agents SAP Host Agent metrics with: "
 echo "    curl localhost:18181"
-echo "Configuration is available in /etc/google-cloud-sap-agent/configuration.json"
+echo "Configuration is available in %{_confdir}/configuration.json"
 echo ""
 echo "Documentation can be found at https://cloud.google.com/solutions/sap"
 echo "##########################################################################"
@@ -188,31 +199,31 @@ echo ""
 if [ "$1" = "0" ]; then
   # Uninstall
   # if the agent is running - stop it
-  if `type "systemctl" > /dev/null 2>&1 && systemctl is-active --quiet google-cloud-sap-agent`; then
-      systemctl stop google-cloud-sap-agent
+  if `type "systemctl" > /dev/null 2>&1 && systemctl is-active --quiet %{name}`; then
+      systemctl stop %{name}
   fi
   # if the agent is enabled - disable it
-  if `type "systemctl" > /dev/null 2>&1 && systemctl is-enabled --quiet google-cloud-sap-agent`; then
-      systemctl disable google-cloud-sap-agent
+  if `type "systemctl" > /dev/null 2>&1 && systemctl is-enabled --quiet %{name}`; then
+      systemctl disable %{name}
   fi
   # log usage metrics for uninstall
-  timeout 30 /usr/bin/google_cloud_sap_agent logusage -s UNINSTALLED || true
+  timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s UNINSTALLED || true
 fi
 if [ "$1" = "1" ]; then
-  VERSION_BEFORE=$(rpm -q google-cloud-sap-agent)
+  VERSION_BEFORE=$(rpm -q %{name})
 fi
 
 %postun
 # $1 == 0 is uninstall, $1 == 1 is upgrade
 if [ "$1" = "0" ]; then
   # Uninstall
-  rm -f /lib/systemd/system/google-cloud-sap-agent.service
-  rm -f /usr/lib/systemd/system/google-cloud-sap-agent.service
-  rm -fr /usr/share/google-cloud-sap-agent
-  rm -fr /etc/google-cloud-sap-agent
-  rm -f /var/log/google-cloud-sap-agent*
+  rm -f /lib/systemd/system/%{name}.service
+  rm -f /usr/lib/systemd/system/%{name}.service
+  rm -fr %{_docdir}
+  rm -fr %{_confdir}
+  rm -f /var/log/%{name}*
 else
   # upgrade
   # log usage metrics for upgrade
-  timeout 30 /usr/bin/google_cloud_sap_agent logusage -s UPDATED -pv "${VERSION_BEFORE}" || true
+  timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s UPDATED -pv "${VERSION_BEFORE}" || true
 fi
