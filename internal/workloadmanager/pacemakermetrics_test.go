@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -31,6 +30,7 @@ import (
 	"github.com/zieckey/goini"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
@@ -40,8 +40,11 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
+	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 type (
@@ -86,6 +89,19 @@ var (
 
 	defaultPacemakerConfigNoCloudProperties = &cnfpb.Configuration{
 		BareMetal: false,
+	}
+
+	defaultRunner        = func(string, string) (string, string, error) { return "", "", nil }
+	defaultRunnerNoSpace = func(string, ...string) (string, string, error) { return "", "", nil }
+	defaultExists        = func(string) bool { return true }
+	defaultToxenGetter   = func(context.Context, ...string) (oauth2.TokenSource, error) {
+		return fakeToken{T: &oauth2.Token{AccessToken: defaultCredentials}}, nil
+	}
+	defaultCredGetter = func(context.Context, []byte, ...string) (*google.Credentials, error) {
+		return &google.Credentials{
+			TokenSource: fakeToken{T: &oauth2.Token{AccessToken: defaultCredentials}},
+			JSON:        []byte{},
+		}, nil
 	}
 
 	jsonResponseError = `
@@ -144,6 +160,41 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"fence_agent_logging_api_access": "false",
 					"location_preference_set":        locationPref,
 					"maintenance_mode_active":        "true",
+				},
+			},
+			MetricKind: metricpb.MetricDescriptor_GAUGE,
+			Resource: &monitoredresourcepb.MonitoredResource{
+				Type: "gce_instance",
+				Labels: map[string]string{
+					"instance_id": "test-instance-id",
+					"zone":        "test-zone",
+					"project_id":  "test-project-id",
+				},
+			},
+			Points: []*monitoringresourcepb.Point{{
+				Interval: &cpb.TimeInterval{
+					StartTime: ts,
+					EndTime:   ts,
+				},
+				Value: &cpb.TypedValue{
+					Value: &cpb.TypedValue_DoubleValue{
+						DoubleValue: pacemakerExists,
+					},
+				},
+			}},
+		}},
+	}
+}
+
+func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
+	return WorkloadMetrics{
+		Metrics: []*monitoringresourcepb.TimeSeries{{
+			Metric: &metricpb.Metric{
+				Type: "workload.googleapis.com/sap/validation/pacemaker",
+				Labels: map[string]string{
+					"location_preference_set": locationPref,
+					"maintenance_mode_active": "true",
+					"foo":                     "true",
 				},
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -930,12 +981,10 @@ func TestGetJSONBearerToken(t *testing.T) {
 			wantErr:    cmpopts.AnyError,
 		},
 		{
-			name: "GetJSONBearerTokenTestFileReaderError3",
-			ctx:  context.Background(),
-			file: "",
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
+			name:       "GetJSONBearerTokenTestFileReaderError3",
+			ctx:        context.Background(),
+			file:       "",
+			fileReader: defaultFileReader,
 			credGetter: func(context.Context, []byte, ...string) (*google.Credentials, error) {
 				return nil, errors.New("Could not build credentials")
 			},
@@ -943,12 +992,10 @@ func TestGetJSONBearerToken(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "GetJSONBearerTokenTestFileReaderError4",
-			ctx:  context.Background(),
-			file: "",
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
+			name:       "GetJSONBearerTokenTestFileReaderError4",
+			ctx:        context.Background(),
+			file:       "",
+			fileReader: defaultFileReader,
 			credGetter: func(context.Context, []byte, ...string) (*google.Credentials, error) {
 				return &google.Credentials{
 					TokenSource: fakeErrorToken{},
@@ -959,12 +1006,10 @@ func TestGetJSONBearerToken(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "GetJSONBearerTokenTestFileReaderError5",
-			ctx:  context.Background(),
-			file: "",
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
+			name:       "GetJSONBearerTokenTestFileReaderError5",
+			ctx:        context.Background(),
+			file:       "",
+			fileReader: defaultFileReader,
 			credGetter: func(context.Context, []byte, ...string) (*google.Credentials, error) {
 				return &google.Credentials{
 					TokenSource: fakeErrorToken{},
@@ -975,23 +1020,13 @@ func TestGetJSONBearerToken(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "GetJSONBearerTokenTestAccessTokens",
-			ctx:  context.Background(),
-			file: "",
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
-			credGetter: func(context.Context, []byte, ...string) (*google.Credentials, error) {
-				return &google.Credentials{
-					TokenSource: fakeToken{T: &oauth2.Token{
-						AccessToken: defaultCredentials,
-					},
-					},
-					JSON: []byte{},
-				}, nil
-			},
-			want:    defaultCredentials,
-			wantErr: nil,
+			name:       "GetJSONBearerTokenTestAccessTokens",
+			ctx:        context.Background(),
+			file:       "",
+			fileReader: defaultFileReader,
+			credGetter: defaultCredGetter,
+			want:       defaultCredentials,
+			wantErr:    nil,
 		},
 	}
 
@@ -1024,32 +1059,20 @@ func TestGetBearerToken(t *testing.T) {
 			name:                   "DefaultTokenTest",
 			serviceAccountJSONFile: "",
 			fileReader:             func(string) (io.ReadCloser, error) { return nil, nil },
-			tokenGetter: func(context.Context, ...string) (oauth2.TokenSource, error) {
-				return fakeToken{T: &oauth2.Token{AccessToken: defaultCredentials}}, nil
-			},
-			want:    defaultCredentials,
-			wantErr: nil,
+			tokenGetter:            defaultToxenGetter,
+			want:                   defaultCredentials,
+			wantErr:                nil,
 		},
 		{
 			name:                   "DefaultTokenTest",
 			serviceAccountJSONFile: "/etc/jsoncreds.json",
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
+			fileReader:             defaultFileReader,
 			tokenGetter: func(context.Context, ...string) (oauth2.TokenSource, error) {
 				return fakeToken{T: &oauth2.Token{AccessToken: "fake token"}}, nil
 			},
-			credGetter: func(context.Context, []byte, ...string) (*google.Credentials, error) {
-				return &google.Credentials{
-					TokenSource: fakeToken{T: &oauth2.Token{
-						AccessToken: defaultCredentials,
-					},
-					},
-					JSON: []byte{},
-				}, nil
-			},
-			want:    defaultCredentials,
-			wantErr: nil,
+			credGetter: defaultCredGetter,
+			want:       defaultCredentials,
+			wantErr:    nil,
 		},
 	}
 
@@ -1063,6 +1086,221 @@ func TestGetBearerToken(t *testing.T) {
 
 			if diff := cmp.Diff(test.wantErr, err, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("getBearerToken() returned unexpected error diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
+	collectionDefinition := &cdpb.CollectionDefinition{}
+	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	if err != nil {
+		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+
+	tests := []struct {
+		name                 string
+		runner               commandlineexecutor.CommandRunner
+		runnerNoSpace        commandlineexecutor.CommandRunnerNoSpace
+		exists               commandlineexecutor.CommandExistsRunner
+		config               *cnfpb.Configuration
+		osStatReader         OSStatReader
+		workloadConfig       *wpb.WorkloadValidation
+		fileReader           ConfigFileReader
+		credGetter           JSONCredentialsGetter
+		tokenGetter          DefaultTokenGetter
+		wantPacemakerExists  float64
+		wantPacemakerMetrics func(*timestamppb.Timestamp, float64, string, string) WorkloadMetrics
+		locationPref         string
+	}{
+		{
+			name:                 "XMLNotFound",
+			runner:               defaultRunner,
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               func(string) bool { return false },
+			config:               defaultPacemakerConfig,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			wantPacemakerExists:  float64(0.0),
+			wantPacemakerMetrics: wantErrorPacemakerMetrics,
+		},
+		{
+			name:                 "UnparseableXML",
+			runner:               func(string, string) (string, string, error) { return "Error: Bad XML", "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			config:               defaultPacemakerConfig,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			wantPacemakerExists:  float64(0.0),
+			wantPacemakerMetrics: wantErrorPacemakerMetrics,
+		},
+		{
+			name:                 "ServiceAccountReadError",
+			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			config:               defaultPacemakerConfig,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			fileReader:           fileReaderError,
+			wantPacemakerExists:  float64(0.0),
+			wantPacemakerMetrics: wantErrorPacemakerMetrics,
+		},
+		{
+			name:                 "ServiceAccountReadSuccess",
+			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			config:               defaultPacemakerConfig,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			fileReader:           defaultFileReader,
+			credGetter:           defaultCredGetter,
+			wantPacemakerExists:  float64(1.0),
+			wantPacemakerMetrics: wantDefaultPacemakerMetrics,
+			locationPref:         "false",
+		},
+		{
+			name:          "CustomWorkloadConfig",
+			runner:        func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
+			runnerNoSpace: func(string, ...string) (string, string, error) { return "foobar", "", nil },
+			exists:        defaultExists,
+			config:        defaultPacemakerConfig,
+			workloadConfig: &wpb.WorkloadValidation{
+				ValidationPacemaker: &wpb.ValidationPacemaker{
+					ConfigMetrics: &wpb.PacemakerConfigMetrics{
+						RscLocationMetrics: []*wpb.PacemakerRSCLocationMetric{
+							{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/pacemaker",
+									Label: "location_preference_set",
+								},
+								Value: wpb.RSCLocationVariable_LOCATION_PREFERENCE_SET,
+							},
+						},
+					},
+					OsCommandMetrics: []*cmpb.OSCommandMetric{
+						{
+							MetricInfo: &cmpb.MetricInfo{
+								Type:  "workload.googleapis.com/sap/validation/corosync",
+								Label: "foo",
+							},
+							OsVendor: cmpb.OSVendor_RHEL,
+							EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+								AndEvalRules: &cmpb.EvalMetricRule{
+									EvalRules: []*cmpb.EvalRule{
+										&cmpb.EvalRule{
+											OutputSource:  cmpb.OutputSource_STDOUT,
+											EvalRuleTypes: &cmpb.EvalRule_OutputEquals{OutputEquals: "foobar"},
+										},
+									},
+									IfTrue: &cmpb.EvalResult{
+										EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
+									},
+									IfFalse: &cmpb.EvalResult{
+										EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
+									},
+								},
+							},
+						},
+						{
+							OsVendor: cmpb.OSVendor_OS_VENDOR_UNSPECIFIED,
+						},
+					},
+				},
+			},
+			fileReader:           defaultFileReader,
+			credGetter:           defaultCredGetter,
+			wantPacemakerExists:  float64(1.0),
+			wantPacemakerMetrics: wantCustomWorkloadConfigMetrics,
+			locationPref:         "false",
+		},
+		{
+			name:   "ProjectID",
+			runner: func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
+			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+				if cmd == "curl" {
+					if args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
+						return jsonHealthyResponse, "", nil
+					} else if args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
+						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"` {
+						return jsonHealthyResponse, "", nil
+					}
+				}
+				return "", "", nil
+			},
+			exists:               defaultExists,
+			config:               defaultPacemakerConfig,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			fileReader:           defaultFileReader,
+			credGetter:           defaultCredGetter,
+			wantPacemakerExists:  float64(1.0),
+			wantPacemakerMetrics: wantSuccessfulAccessPacemakerMetrics,
+			locationPref:         "false",
+		},
+		{
+			name:                 "LocationPref",
+			runner:               func(string, string) (string, string, error) { return pacemakerClipReferXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			config:               defaultPacemakerConfig,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			fileReader:           defaultFileReader,
+			tokenGetter:          defaultToxenGetter,
+			wantPacemakerExists:  float64(1.0),
+			wantPacemakerMetrics: wantCLIPreferPacemakerMetrics,
+			locationPref:         "true",
+		},
+		{
+			name:                 "CloneMetrics",
+			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			config:               defaultPacemakerConfig,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			fileReader:           defaultFileReader,
+			tokenGetter:          defaultToxenGetter,
+			wantPacemakerExists:  float64(1.0),
+			wantPacemakerMetrics: wantCLIPreferPacemakerMetrics,
+			locationPref:         "false",
+		},
+		{
+			name:                 "NilCloudProperties",
+			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			config:               defaultPacemakerConfigNoCloudProperties,
+			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
+			wantPacemakerExists:  float64(0.0),
+			wantPacemakerMetrics: wantNoPropertiesPacemakerMetrics,
+			locationPref:         "false",
+		},
+	}
+
+	now = func() int64 {
+		return int64(1660930735)
+	}
+	nts := &timestamppb.Timestamp{
+		Seconds: now(),
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			defaultIIR.Read(test.config, defaultMapperFunc)
+			want := test.wantPacemakerMetrics(nts, test.wantPacemakerExists, "test-os-version", test.locationPref)
+
+			p := Parameters{
+				Config:                test.config,
+				CommandRunner:         test.runner,
+				CommandRunnerNoSpace:  test.runnerNoSpace,
+				CommandExistsRunner:   test.exists,
+				ConfigFileReader:      test.fileReader,
+				DefaultTokenGetter:    test.tokenGetter,
+				JSONCredentialsGetter: test.credGetter,
+				WorkloadConfig:        test.workloadConfig,
+				OSType:                "linux",
+				osVendorID:            "rhel",
+			}
+			got := CollectPacemakerMetricsFromConfig(context.Background(), p)
+			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("CollectPacemakerMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -1090,8 +1328,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:                 "TestCollectPacemakerMetricsXMLNotFound",
 			runtimeOS:            "linux",
-			runner:               func(string, string) (string, string, error) { return "", "", nil },
-			runnerNoSpace:        func(string, ...string) (string, string, error) { return "", "", nil },
+			runner:               defaultRunner,
+			runnerNoSpace:        defaultRunnerNoSpace,
 			exists:               func(string) bool { return false },
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
@@ -1104,8 +1342,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			name:                 "TestCollectPacemakerMetricsUnparseableXML",
 			runtimeOS:            "linux",
 			runner:               func(string, string) (string, string, error) { return "Error: Bad XML", "", nil },
-			runnerNoSpace:        func(string, ...string) (string, string, error) { return "", "", nil },
-			exists:               func(string) bool { return true },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
 			mapper:               defaultMapperFunc,
@@ -1117,37 +1355,27 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			name:                 "TestCollectPacemakerMetricsServiceAccountReadError",
 			runtimeOS:            "linux",
 			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace:        func(string, ...string) (string, string, error) { return "", "", nil },
-			exists:               func(string) bool { return true },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
 			mapper:               defaultMapperFunc,
-			fileReader:           func(string) (io.ReadCloser, error) { return nil, errors.New("Failed to read file") },
+			fileReader:           fileReaderError,
 			wantOsVersion:        "test-os-version",
 			wantPacemakerExists:  float64(0.0),
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
-			name:          "TestCollectPacemakerMetricsServiceAccount",
-			runtimeOS:     "linux",
-			runner:        func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-			exists:        func(string) bool { return true },
-			iir:           defaultIIR,
-			config:        defaultPacemakerConfig,
-			mapper:        defaultMapperFunc,
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
-			credGetter: func(context.Context, []byte, ...string) (*google.Credentials, error) {
-				return &google.Credentials{
-					TokenSource: fakeToken{T: &oauth2.Token{
-						AccessToken: defaultCredentials,
-					},
-					},
-					JSON: []byte{},
-				}, nil
-			},
+			name:                 "TestCollectPacemakerMetricsServiceAccount",
+			runtimeOS:            "linux",
+			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			iir:                  defaultIIR,
+			config:               defaultPacemakerConfig,
+			mapper:               defaultMapperFunc,
+			fileReader:           defaultFileReader,
+			credGetter:           defaultCredGetter,
 			wantOsVersion:        "test-os-version",
 			wantPacemakerExists:  float64(1.0),
 			wantPacemakerMetrics: wantDefaultPacemakerMetrics,
@@ -1168,62 +1396,44 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 				}
 				return "", "", nil
 			},
-			exists: func(string) bool { return true },
-			iir:    defaultIIR,
-			config: defaultPacemakerConfig,
-			mapper: defaultMapperFunc,
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
-			credGetter: func(context.Context, []byte, ...string) (*google.Credentials, error) {
-				return &google.Credentials{
-					TokenSource: fakeToken{T: &oauth2.Token{
-						AccessToken: defaultCredentials,
-					},
-					},
-					JSON: []byte{},
-				}, nil
-			},
+			exists:               defaultExists,
+			iir:                  defaultIIR,
+			config:               defaultPacemakerConfig,
+			mapper:               defaultMapperFunc,
+			fileReader:           defaultFileReader,
+			credGetter:           defaultCredGetter,
 			wantOsVersion:        "test-os-version",
 			wantPacemakerExists:  float64(1.0),
 			wantPacemakerMetrics: wantSuccessfulAccessPacemakerMetrics,
 			locationPref:         "false",
 		},
 		{
-			name:          "TestCollectPacemakerMetricsLocationPref",
-			runtimeOS:     "linux",
-			runner:        func(string, string) (string, string, error) { return pacemakerClipReferXML, "", nil },
-			runnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-			exists:        func(string) bool { return true },
-			iir:           defaultIIR,
-			config:        defaultPacemakerConfig,
-			mapper:        defaultMapperFunc,
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
-			tokenGetter: func(context.Context, ...string) (oauth2.TokenSource, error) {
-				return fakeToken{T: &oauth2.Token{AccessToken: defaultCredentials}}, nil
-			},
+			name:                 "TestCollectPacemakerMetricsLocationPref",
+			runtimeOS:            "linux",
+			runner:               func(string, string) (string, string, error) { return pacemakerClipReferXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			iir:                  defaultIIR,
+			config:               defaultPacemakerConfig,
+			mapper:               defaultMapperFunc,
+			fileReader:           defaultFileReader,
+			tokenGetter:          defaultToxenGetter,
 			wantOsVersion:        "test-os-version",
 			wantPacemakerExists:  float64(1.0),
 			wantPacemakerMetrics: wantCLIPreferPacemakerMetrics,
 			locationPref:         "true",
 		},
 		{
-			name:          "TestCollectPacemakerMetricsCloneMetrics",
-			runtimeOS:     "linux",
-			runner:        func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
-			runnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-			exists:        func(string) bool { return true },
-			iir:           defaultIIR,
-			config:        defaultPacemakerConfig,
-			mapper:        defaultMapperFunc,
-			fileReader: func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("test")), nil
-			},
-			tokenGetter: func(context.Context, ...string) (oauth2.TokenSource, error) {
-				return fakeToken{T: &oauth2.Token{AccessToken: defaultCredentials}}, nil
-			},
+			name:                 "TestCollectPacemakerMetricsCloneMetrics",
+			runtimeOS:            "linux",
+			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
+			iir:                  defaultIIR,
+			config:               defaultPacemakerConfig,
+			mapper:               defaultMapperFunc,
+			fileReader:           defaultFileReader,
+			tokenGetter:          defaultToxenGetter,
 			wantOsVersion:        "test-os-version",
 			wantPacemakerExists:  float64(1.0),
 			wantPacemakerMetrics: wantCLIPreferPacemakerMetrics,
@@ -1233,8 +1443,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			name:                 "TestCollectPacemakerMetricsNilCloudProperties",
 			runtimeOS:            "linux",
 			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
-			runnerNoSpace:        func(string, ...string) (string, string, error) { return "", "", nil },
-			exists:               func(string) bool { return true },
+			runnerNoSpace:        defaultRunnerNoSpace,
+			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfigNoCloudProperties,
 			mapper:               defaultMapperFunc,

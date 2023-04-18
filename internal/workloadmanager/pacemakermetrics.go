@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 
@@ -33,18 +34,73 @@ import (
 
 const pacemakerAPILabel = "workload.googleapis.com/sap/validation/pacemaker"
 
+// CollectPacemakerMetricsFromConfig collects the pacemaker metrics as specified
+// by the WorkloadValidation config and formats the results as a time series to
+// be uploaded to a Collection Storage mechanism.
+func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
+	// Prune the configurable labels depending on what is defined in the workload config.
+	pruneLabels := map[string]bool{
+		"pcmk_delay_base":                true,
+		"pcmk_delay_max":                 true,
+		"pcmk_monitor_retries":           true,
+		"pcmk_reboot_timeout":            true,
+		"location_preference_set":        true,
+		"migration_threshold":            true,
+		"resource_stickiness":            true,
+		"saphana_start_timeout":          true,
+		"saphana_stop_timeout":           true,
+		"saphana_promote_timeout":        true,
+		"saphana_demote_timeout":         true,
+		"fence_agent":                    true,
+		"fence_agent_compute_api_access": true,
+		"fence_agent_logging_api_access": true,
+	}
+	pacemaker := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
+	for _, m := range pacemaker.GetPrimitiveMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+	for _, m := range pacemaker.GetRscLocationMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+	for _, m := range pacemaker.GetRscOptionMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+	for _, m := range pacemaker.GetHanaOperationMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+	for _, m := range pacemaker.GetFenceAgentMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+
+	pacemakerVal, l := collectPacemakerValAndLabels(ctx, params)
+	for label := range pruneLabels {
+		delete(l, label)
+	}
+	// Add OS command metrics to the labels.
+	for _, m := range params.WorkloadConfig.GetValidationPacemaker().GetOsCommandMetrics() {
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
+		if k != "" {
+			l[k] = v
+		}
+	}
+
+	return WorkloadMetrics{Metrics: createTimeSeries(pacemakerAPILabel, l, pacemakerVal, params.Config)}
+}
+
 // CollectPacemakerMetrics collects the pacemaker configuration and runtime metrics from the OS.
 func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- WorkloadMetrics) {
 	log.Logger.Info("Collecting workload pacemaker metrics...")
 	t := pacemakerAPILabel
-	l := map[string]string{}
-	pacemakerVal := 0.0
+	pacemakerVal, l := collectPacemakerValAndLabels(ctx, params)
+	wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, pacemakerVal, params.Config)}
+}
 
-	defer func() { wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, pacemakerVal, params.Config)} }()
+func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float64, map[string]string) {
+	l := map[string]string{}
 
 	if params.Config.GetCloudProperties() == nil {
 		log.Logger.Debug("No cloud properties")
-		return
+		return 0.0, l
 	}
 	properties := params.Config.GetCloudProperties()
 	projectID := properties.GetProjectId()
@@ -53,13 +109,13 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- W
 
 	if pacemakerXMLString == nil {
 		log.Logger.Debug("No pacemaker xml")
-		return
+		return 0.0, l
 	}
 	pacemakerDocument, err := ParseXML([]byte(*pacemakerXMLString))
 
 	if err != nil {
 		log.Logger.Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
-		return
+		return 0.0, l
 	}
 
 	primitives := pacemakerDocument.Configuration.Resources.Primitives
@@ -73,7 +129,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- W
 		params.JSONCredentialsGetter, params.DefaultTokenGetter)
 	if err != nil {
 		log.Logger.Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
-		return
+		return 0.0, l
 	}
 	rscLocations := pacemakerDocument.Configuration.Constraints.RSCLocations
 	locationPreferenceSet := "false"
@@ -98,7 +154,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- W
 	setPacemakerAPIAccess(l, projectID, bearerToken, params.CommandRunnerNoSpace)
 	setPacemakerMaintenanceMode(l, crmAvailable, params.CommandRunner)
 
-	pacemakerVal = 1.0
+	return 1.0, l
 }
 
 func filterPrimitiveOpsByType(primitives []PrimitiveClass, primitiveType string) []Op {
