@@ -18,7 +18,7 @@ limitations under the License.
   <name>Google Cloud Agent for SAP</name>
   <description>Google Cloud Agent for SAP</description>
   <workingdirectory>C:\Program Files\Google\google-cloud-sap-agent</workingdirectory>
-  <executable>C:\Program Files\Google\google-cloud-sap-agent\google-cloud-sap-agent.exe</executable>
+  <executable>C:\Program Files\Google\google-cloud-sap-agent\google-cloud-sap-agent.exe startdaemon</executable>
   <logpath>C:\Program Files\Google\google-cloud-sap-agent\logs</logpath>
   <log mode="roll-by-time">
     <pattern>yyyyMMdd</pattern>

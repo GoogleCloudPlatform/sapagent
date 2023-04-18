@@ -6,7 +6,7 @@ StartLimitIntervalSec=60
 
 [Service]
 WorkingDirectory=/usr/share/google-cloud-sap-agent
-ExecStart=/usr/bin/google_cloud_sap_agent
+ExecStart=/usr/bin/google_cloud_sap_agent startdaemon
 User=root
 Type=simple
 Restart=always

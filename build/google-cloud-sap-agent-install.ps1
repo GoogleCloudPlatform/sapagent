@@ -14,6 +14,7 @@ $INSTALL_DIR = 'C:\Program Files\Google\google-cloud-sap-agent'
 $SVC_NAME = 'google-cloud-sap-agent'
 # The google-cloud-sap-agent-service.exe is a Windows Service Wrapper for google-cloud-sap-agent.exe
 $SVC_NAME_EXE = 'google-cloud-sap-agent-service.exe'
+$BIN_NAME_EXE = 'google-cloud-sap-agent.exe'
 $MONITOR_TASK = 'google-cloud-sap-agent-monitor'
 $LOGS_DIR = "$INSTALL_DIR\logs"
 $CONF_DIR = "$INSTALL_DIR\conf"
@@ -41,7 +42,7 @@ function Log-Write {
 function Log-Install {
   #.DESCRIPTION
   #  Invokes the service with usage logging enabled to log an install
-  Start-Process $INSTALL_DIR\$SVC_NAME_EXE -ArgumentList 'logusage','-s','INSTALLED' | Wait-Process -Timeout 30
+  Start-Process $INSTALL_DIR\$BIN_NAME_EXE -ArgumentList 'logusage','-s','INSTALLED' | Wait-Process -Timeout 30
 }
 
 function CreateItem-IfNotExists {

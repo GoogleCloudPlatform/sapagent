@@ -146,7 +146,7 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 		image = ImageUnknown
 	}
 
-	log.Logger.Infow("Default Cloud Properties from metadata server",
+	log.Logger.Debugw("Default Cloud Properties from metadata server",
 		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image)
 
 	if projectID == "" || numericProjectID == "0" || instanceID == "0" || zone == "" || instanceName == "" {
