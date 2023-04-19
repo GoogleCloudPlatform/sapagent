@@ -28,7 +28,9 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -78,7 +80,13 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{runtime.GOOS}, gceService)
 	log.SetupLoggingToDiscard()
 
-	return r.remoteValidationHandler(ctx, instanceInfoReader)
+	loadOptions := collectiondefinition.LoadOptions{
+		ReadFile: os.ReadFile,
+		OSType:   runtime.GOOS,
+		Version:  configuration.AgentVersion,
+	}
+
+	return r.remoteValidationHandler(ctx, instanceInfoReader, loadOptions)
 }
 
 var (
@@ -107,7 +115,7 @@ var (
 	})
 )
 
-func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, instanceInfoReader *instanceinfo.Reader) subcommands.ExitStatus {
+func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *instanceinfo.Reader, opts collectiondefinition.LoadOptions) subcommands.ExitStatus {
 	if r.project == "" || r.instanceid == "" || r.zone == "" {
 		log.Print("ERROR When running in remote mode the project, instanceid, and zone are required")
 		return subcommands.ExitUsageError
@@ -120,14 +128,21 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, instance
 	config.CloudProperties.InstanceName = r.instancename
 	config.CloudProperties.Zone = r.zone
 
+	cd, err := collectiondefinition.Load(opts)
+	if err != nil {
+		log.Print(fmt.Sprintf("ERROR: %v", err))
+		return subcommands.ExitFailure
+	}
+
 	wlmparams := workloadmanager.Parameters{
 		Config:                config,
+		WorkloadConfig:        cd.GetWorkloadValidation(),
 		Remote:                true,
 		ConfigFileReader:      configFileReader,
 		CommandRunner:         commandRunner,
 		CommandRunnerNoSpace:  commandRunnerNoSpace,
 		CommandExistsRunner:   commandExistsRunner,
-		InstanceInfoReader:    *instanceInfoReader,
+		InstanceInfoReader:    *iir,
 		OSStatReader:          osStatReader,
 		DefaultTokenGetter:    defaultTokenGetter,
 		JSONCredentialsGetter: jsonCredentialsGetter,

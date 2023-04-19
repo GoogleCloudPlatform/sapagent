@@ -20,16 +20,32 @@ limitations under the License.
 package collectiondefinition
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"strconv"
+	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
+
+const (
+	// LinuxConfigPath is the path to the customer-defined collection definition file on Linux.
+	LinuxConfigPath = `/etc/google-cloud-sap-agent/collection-definition.json`
+	// WindowsConfigPath is the path to the customer-defined collection definition file on Windows.
+	WindowsConfigPath = `C:\Program Files\Google\google-cloud-sap-agent\conf\collection-definition.json`
+)
+
+// versionPattern matches version strings of type: MAJOR.MINOR or MAJOR.MINOR.RELEASE.
+var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+(\.[0-9]+)?$`)
 
 // A metricsMap can be used to uniquely identify a full set of metrics in
 // a workload validation definition. The map is keyed by metric type and label,
@@ -54,14 +70,85 @@ type metricsMap map[string]map[cmpb.OSVendor]bool
 // the FailureCount() method to get a total number of validation failures.
 // Information regarding each validation failure is output to a log file.
 type Validator struct {
-	agentVersion              float64
+	agentVersion              string
 	collectionDefinition      *cdpb.CollectionDefinition
 	failureCount              int
 	valid                     bool
 	workloadValidationMetrics metricsMap
 }
 
+// A ValidationError should be thrown when validation of a CollectionDefinition fails.
+type ValidationError struct {
+	FailureCount int
+}
+
+func (e ValidationError) Error() string {
+	return fmt.Sprintf("Validation of the Agent for SAP configurable collection definition uncovered %d total issues.", e.FailureCount)
+}
+
+// ReadFile abstracts the os.ReadFile function for testability.
+type ReadFile func(string) ([]byte, error)
+
+// LoadOptions define the parameters required to load a collection definition.
+type LoadOptions struct {
+	ReadFile ReadFile
+	OSType   string
+	Version  string
+}
+
+// metricInfoMapper describes the structure of a map function which operates on a MetricInfo struct.
 type metricInfoMapper func(*cmpb.MetricInfo, cmpb.OSVendor)
+
+// FromJSONFile reads a CollectionDefinition JSON configuration file and
+// unmarshals the data into a CollectionDefinition proto.
+func FromJSONFile(read ReadFile, path string) (*cdpb.CollectionDefinition, error) {
+	data, err := read(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		log.Logger.Infow("No collection definition file defined", "path", path)
+		return nil, nil
+	}
+	if err != nil {
+		log.Logger.Errorw("Failed to read collection definition file", "path", path, "error", err)
+		return nil, err
+	}
+	cd, err := unmarshal(data)
+	if err != nil {
+		log.Logger.Errorw("Failed to unmarshal collection definition data", "path", path, "error", err)
+		return nil, err
+	}
+	return cd, nil
+}
+
+// Load prepares a definitive CollectionDefinition ready for use by Agent for SAP services.
+//
+// The process of loading a collection definition involves the following steps:
+//  1. Retrieve the default CollectionDefinition for the agent.
+//  2. Retrieve the configurable CollectionDefinition from the local filesystem.
+//  3. Merge the two definitions, giving preference to the agent defaults.
+//  4. Validate the merged CollectionDefinition and log any errors found.
+func Load(opts LoadOptions) (*cdpb.CollectionDefinition, error) {
+	agentCD, err := unmarshal(configuration.DefaultCollectionDefinition)
+	if err != nil {
+		return nil, errors.New("Failed to load agent collection definition file")
+	}
+
+	path := LinuxConfigPath
+	if opts.OSType == "windows" {
+		path = WindowsConfigPath
+	}
+	localCD, err := FromJSONFile(opts.ReadFile, path)
+	if err != nil {
+		return nil, errors.New("Failed to load local collection definition file")
+	}
+
+	cd := Merge(agentCD, localCD)
+	v := NewValidator(opts.Version, cd)
+	v.Validate()
+	if !v.Valid() {
+		return nil, ValidationError{FailureCount: v.FailureCount()}
+	}
+	return cd, nil
+}
 
 // Merge produces a CollectionDefinition which is the result of combining a
 // primary definition with additional metric fields specified in a secondary
@@ -255,7 +342,7 @@ func shouldMerge[M proto.Message](metric M, existing metricsMap) bool {
 }
 
 // NewValidator instantiates Validator for a CollectionDefinition.
-func NewValidator(version float64, collectionDefinition *cdpb.CollectionDefinition) *Validator {
+func NewValidator(version string, collectionDefinition *cdpb.CollectionDefinition) *Validator {
 	return &Validator{
 		agentVersion:              version,
 		collectionDefinition:      collectionDefinition,
@@ -429,11 +516,10 @@ func validateMetricInfo[M proto.Message](v *Validator, metric M) {
 	// A metric should not have a min_version that exceeds the agent version.
 	minVersion := info.GetMinVersion()
 	if minVersion != "" {
-		version, err := strconv.ParseFloat(minVersion, 64)
-		if err != nil {
-			validationFailure(v, metric, fmt.Sprintf("Metric min_version of %s is invalid", minVersion))
-		} else if version > v.agentVersion {
-			validationFailure(v, metric, fmt.Sprintf("Metric min_version %g which exceeds agent version %g", version, v.agentVersion))
+		if !versionPattern.MatchString(minVersion) {
+			validationFailure(v, metric, fmt.Sprintf("Metric min_version of %q is invalid", minVersion))
+		} else if c := compareVersions(minVersion, v.agentVersion); c == 1 {
+			validationFailure(v, metric, fmt.Sprintf("Metric min_version %q which exceeds agent version %q", minVersion, v.agentVersion))
 		}
 	}
 
@@ -516,10 +602,42 @@ func validateEvalMetricRule[M proto.Message](v *Validator, eval *cmpb.EvalMetric
 	}
 }
 
+func compareVersions(a, b string) int {
+	aSplit := strings.Split(a, ".")
+	bSplit := strings.Split(b, ".")
+	for len(aSplit) < len(bSplit) {
+		aSplit = append(aSplit, "0")
+	}
+	for len(bSplit) < len(aSplit) {
+		bSplit = append(bSplit, "0")
+	}
+	for i := 0; i < len(aSplit); i++ {
+		// Suppressing errors because these version numbers should already be sanitized.
+		aNum, _ := strconv.Atoi(aSplit[i])
+		bNum, _ := strconv.Atoi(bSplit[i])
+		if aNum < bNum {
+			return -1
+		} else if aNum > bNum {
+			return 1
+		}
+	}
+	return 0
+}
+
 // validationFailure updates the state of the Validator and logs a message to
 // the agent indicating the nature of the failure.
 func validationFailure[M proto.Message](v *Validator, metric M, reason string) {
 	log.Logger.Warnw("Collection Definition validation failure", "reason", reason, "metric", metric)
 	v.failureCount++
 	v.valid = false
+}
+
+// unmarshal encapsulates the functionality of protojson.Unmarshal and supplies
+// a CollectionDefinition message.
+func unmarshal(b []byte) (*cdpb.CollectionDefinition, error) {
+	cd := &cdpb.CollectionDefinition{}
+	if err := protojson.Unmarshal(b, cd); err != nil {
+		return nil, err
+	}
+	return cd, nil
 }

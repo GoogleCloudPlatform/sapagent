@@ -75,6 +75,8 @@ const (
 	DiskSnapshotCreateFailure
 	DiskSnapshotFailedDBNotComplete
 	DiskSnapshotDoneDBNotComplete
+	CollectionDefinitionLoadFailure
+	CollectionDefinitionValidateFailure
 )
 
 // Agent wide action mappings.

@@ -34,6 +34,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/agentmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
@@ -272,16 +273,33 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	})
 
 	// Start the Workload Manager metrics collection
-	wlmparams.OSType = goos
-	wlmparams.ConfigFileReader = configFileReader
-	wlmparams.CommandRunner = commandRunner
-	wlmparams.InstanceInfoReader = *instanceInfoReader
-	wlmparams.OSStatReader = osStatReader
-	wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
-	wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
-	wlmparams.DefaultTokenGetter = defaultTokenGetter
-	wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
-	workloadmanager.StartMetricsCollection(ctx, wlmparams)
+	cd, err := collectiondefinition.Load(collectiondefinition.LoadOptions{
+		ReadFile: os.ReadFile,
+		OSType:   goos,
+		Version:  configuration.AgentVersion,
+	})
+	if err != nil {
+		// In the event of an error, log the problem that occurred but allow
+		// other agent services to start up.
+		id := usagemetrics.CollectionDefinitionLoadFailure
+		if _, ok := err.(collectiondefinition.ValidationError); ok {
+			id = usagemetrics.CollectionDefinitionValidateFailure
+		}
+		usagemetrics.Error(id)
+		log.Logger.Error(err)
+	} else {
+		wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
+		wlmparams.OSType = goos
+		wlmparams.ConfigFileReader = configFileReader
+		wlmparams.CommandRunner = commandRunner
+		wlmparams.InstanceInfoReader = *instanceInfoReader
+		wlmparams.OSStatReader = osStatReader
+		wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
+		wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
+		wlmparams.DefaultTokenGetter = defaultTokenGetter
+		wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
+		workloadmanager.StartMetricsCollection(ctx, wlmparams)
+	}
 
 	// Start the Process metrics collection
 	pmHeartbeatSpec, err := healthMonitor.Register(processMetricsServiceName)

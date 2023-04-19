@@ -1,0 +1,30 @@
+{
+  "workload_validation": {
+    "validation_custom": {
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/custom",
+            "label": "foo"
+          },
+          "os_vendor": "SLES",
+          "args": ["--bar"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "foobar"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

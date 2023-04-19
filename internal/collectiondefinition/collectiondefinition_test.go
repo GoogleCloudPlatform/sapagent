@@ -18,10 +18,12 @@ package collectiondefinition
 
 import (
 	_ "embed"
+	"errors"
+	"io/fs"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/encoding/protojson"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
@@ -32,6 +34,9 @@ import (
 var (
 	//go:embed test_data/test_collectiondefinition1.json
 	testCollectionDefinition1 []byte
+
+	//go:embed test_data/invalid_collectiondefinition.json
+	invalidCollectionDefinition []byte
 
 	createEvalMetric = func(metricType, label, contains string) *cmpb.EvalMetric {
 		return &cmpb.EvalMetric{
@@ -112,9 +117,106 @@ var (
 	}
 )
 
+func TestFromJSONFile(t *testing.T) {
+	wantCollectionDefinition1, err := unmarshal(testCollectionDefinition1)
+	if err != nil {
+		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		reader  func(string) ([]byte, error)
+		path    string
+		want    *cdpb.CollectionDefinition
+		wantErr error
+	}{
+		{
+			name: "FileNotFound",
+			reader: func(string) ([]byte, error) {
+				return nil, fs.ErrNotExist
+			},
+			path: "not-found",
+		},
+		{
+			name:    "FileReadError",
+			reader:  func(string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
+			path:    "error",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "UnmarshalError",
+			reader:  func(string) ([]byte, error) { return []byte("Not JSON"), nil },
+			path:    "invalid",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:   "Success",
+			reader: func(string) ([]byte, error) { return testCollectionDefinition1, nil },
+			path:   LinuxConfigPath,
+			want:   wantCollectionDefinition1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, gotErr := FromJSONFile(test.reader, test.path)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("FromJSONFile() mismatch (-want, +got):\n%s", diff)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("FromJSONFile() got %v want %v", gotErr, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoad(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    LoadOptions
+		wantErr error
+	}{
+		{
+			name: "LocalReadFileError",
+			opts: LoadOptions{
+				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
+				OSType:   "windows",
+				Version:  "1.4",
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ValidationError",
+			opts: LoadOptions{
+				ReadFile: func(s string) ([]byte, error) { return invalidCollectionDefinition, nil },
+				OSType:   "linux",
+				Version:  "1.4",
+			},
+			wantErr: ValidationError{FailureCount: 1},
+		},
+		{
+			name: "Success",
+			opts: LoadOptions{
+				ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+				OSType:   "linux",
+				Version:  "1.4",
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, gotErr := Load(test.opts)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Load() got %v want %v", gotErr, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestMerge(t *testing.T) {
-	defaultPrimaryDefinition := &cdpb.CollectionDefinition{}
-	err := protojson.Unmarshal(testCollectionDefinition1, defaultPrimaryDefinition)
+	defaultPrimaryDefinition, err := unmarshal(testCollectionDefinition1)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}
@@ -826,8 +928,7 @@ func TestMerge(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	defaultPrimaryDefinition := &cdpb.CollectionDefinition{}
-	err := protojson.Unmarshal(testCollectionDefinition1, defaultPrimaryDefinition)
+	validCollectionDefinition, err := unmarshal(testCollectionDefinition1)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}
@@ -840,7 +941,7 @@ func TestValidate(t *testing.T) {
 	}{
 		{
 			name:       "ValidationSuccess",
-			definition: defaultPrimaryDefinition,
+			definition: validCollectionDefinition,
 			wantValid:  true,
 			wantCount:  0,
 		},
@@ -1714,8 +1815,7 @@ func TestValidate(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			agentVersion := float64(1.1)
-			v := NewValidator(agentVersion, test.definition)
+			v := NewValidator("1.1", test.definition)
 			v.Validate()
 			gotValid := v.Valid()
 			if gotValid != test.wantValid {
@@ -1724,6 +1824,67 @@ func TestValidate(t *testing.T) {
 			gotCount := v.FailureCount()
 			if gotCount != test.wantCount {
 				t.Errorf("FailureCount() got %d want %d", gotCount, test.wantCount)
+			}
+		})
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		name string
+		a    string
+		b    string
+		want int
+	}{
+		{
+			name: "Equal1",
+			a:    "1.1",
+			b:    "1.1",
+			want: 0,
+		},
+		{
+			name: "Equal2",
+			a:    "1.1.0",
+			b:    "1.1",
+			want: 0,
+		},
+		{
+			name: "Equal3",
+			a:    "1.1",
+			b:    "1.1.0",
+			want: 0,
+		},
+		{
+			name: "LessThan1",
+			a:    "1.9",
+			b:    "1.10",
+			want: -1,
+		},
+		{
+			name: "LessThan2",
+			a:    "1.1.10",
+			b:    "1.2",
+			want: -1,
+		},
+		{
+			name: "GreaterThan1",
+			a:    "1.10",
+			b:    "1.9",
+			want: 1,
+		},
+		{
+			name: "GreaterThan2",
+			a:    "1.2",
+			b:    "1.1.10",
+			want: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := compareVersions(test.a, test.b)
+			if got != test.want {
+				t.Errorf("compareVersions(%s, %s) got %d want %d", test.a, test.b, got, test.want)
 			}
 		})
 	}

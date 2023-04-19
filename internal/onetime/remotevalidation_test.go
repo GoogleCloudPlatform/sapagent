@@ -18,18 +18,27 @@ package onetime
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"testing"
 
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 )
 
 func TestRemoteValidationHandler(t *testing.T) {
+	defaultLoadOptions := collectiondefinition.LoadOptions{
+		ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+		OSType:   "linux",
+		Version:  "1.0",
+	}
 
 	tests := []struct {
-		name   string
-		remote *RemoteValidation
-		want   subcommands.ExitStatus
+		name        string
+		remote      *RemoteValidation
+		loadOptions collectiondefinition.LoadOptions
+		want        subcommands.ExitStatus
 	}{
 		{
 			name: "EmptyProject",
@@ -37,19 +46,36 @@ func TestRemoteValidationHandler(t *testing.T) {
 				instanceid: "instance-1",
 				zone:       "zone-1",
 			},
-			want: subcommands.ExitUsageError,
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitUsageError,
 		},
 		{
-			name:   "EmptyInstanceID",
-			remote: &RemoteValidation{},
-			want:   subcommands.ExitUsageError,
+			name:        "EmptyInstanceID",
+			remote:      &RemoteValidation{},
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitUsageError,
 		},
 		{
 			name: "EmptyZone",
 			remote: &RemoteValidation{
 				project: "project-1",
 			},
-			want: subcommands.ExitUsageError,
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitUsageError,
+		},
+		{
+			name: "CollectionDefinitionLoadError",
+			remote: &RemoteValidation{
+				project:    "project-1",
+				instanceid: "instance-1",
+				zone:       "zone-1",
+			},
+			loadOptions: collectiondefinition.LoadOptions{
+				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
+				OSType:   "linux",
+				Version:  "1.0",
+			},
+			want: subcommands.ExitFailure,
 		},
 		{
 			name: "Success",
@@ -58,12 +84,13 @@ func TestRemoteValidationHandler(t *testing.T) {
 				instanceid: "instance-1",
 				zone:       "zone-1",
 			},
-			want: subcommands.ExitSuccess,
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitSuccess,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.remote.remoteValidationHandler(context.Background(), instanceinfo.New(nil, nil))
+			got := test.remote.remoteValidationHandler(context.Background(), instanceinfo.New(nil, nil), test.loadOptions)
 			if got != test.want {
 				t.Errorf("remoteValidationHandler(%v) = %v, want %v", test.remote, got, test.want)
 			}

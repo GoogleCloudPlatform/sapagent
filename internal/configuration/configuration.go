@@ -43,6 +43,11 @@ var ros = runtime.GOOS
 //go:embed defaultconfigs/hanamonitoring/default_queries.json
 var defaultHMQueriesContent []byte
 
+// DefaultCollectionDefinition embeds the contents of the file located at:
+//
+//go:embed defaultconfigs/collectiondefinition/collection_definition.json
+var DefaultCollectionDefinition []byte
+
 const (
 	// AgentName is a short-hand name of the agent.
 	AgentName = `sapagent`

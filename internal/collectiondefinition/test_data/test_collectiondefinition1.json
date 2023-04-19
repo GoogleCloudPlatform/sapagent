@@ -130,7 +130,7 @@
       "config_metrics": [
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "token"
           },
           "and_eval_rules": {
@@ -149,7 +149,7 @@
         },
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "token_retransmits_before_loss_const"
           },
           "and_eval_rules": {
@@ -168,7 +168,7 @@
         },
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "consensus"
           },
           "and_eval_rules": {
@@ -187,7 +187,7 @@
         },
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "join"
           },
           "and_eval_rules": {
@@ -206,7 +206,7 @@
         },
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "max_messages"
           },
           "and_eval_rules": {
@@ -225,7 +225,7 @@
         },
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "transport"
           },
           "and_eval_rules": {
@@ -244,7 +244,7 @@
         },
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "fail_recv_const"
           },
           "and_eval_rules": {
@@ -263,7 +263,7 @@
         },
         {
           "metric_info": {
-            "type": "workload.googlapis.com/sap/validation/corosync",
+            "type": "workload.googleapis.com/sap/validation/corosync",
             "label": "two_node"
           },
           "and_eval_rules": {
