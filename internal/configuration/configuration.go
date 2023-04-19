@@ -82,6 +82,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		log.Logger.Errorw("Invalid content in the configuration file", "file", p, "content", string(content), "error", err)
+		log.Logger.Errorf("Configuration JSON at '%s' has errors as displayed above. Only hostmetrics will be started. Please fix the JSON and restart the agent", p)
 	}
 	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
