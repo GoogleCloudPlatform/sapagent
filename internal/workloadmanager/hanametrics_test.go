@@ -31,6 +31,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 
@@ -1132,7 +1133,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 	}
 
 	collectionDefinition := &cdpb.CollectionDefinition{}
-	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	err := protojson.Unmarshal(configuration.DefaultCollectionDefinition, collectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}

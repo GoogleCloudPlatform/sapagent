@@ -32,6 +32,7 @@ import (
 	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -59,13 +60,6 @@ var (
 		"gsutil":        "true",
 		"network_ips":   "192.168.0.1,192.168.0.2",
 	}
-	// This is a copy of the standard collection definition that is accessible
-	// from within the workloadmanager package. The expectation is that both of
-	// these files are kept in sync.
-	// LINT.IfChange
-	//go:embed test_data/collectiondefinition.json
-	defaultCollectionDefinition []byte
-	// LINT.ThenChange(//depot/github.com/GoogleCloudPlatform/sapagent/internal/configuration/defaultconfigs/collectiondefinition/collectiondefinition.json)
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -101,7 +95,7 @@ func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) Work
 
 func TestCollectSystemMetricsFromConfig(t *testing.T) {
 	collectionDefinition := &cdpb.CollectionDefinition{}
-	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	err := protojson.Unmarshal(configuration.DefaultCollectionDefinition, collectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}
@@ -236,7 +230,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
 							&cmpb.OSCommandMetric{
 								MetricInfo: &cmpb.MetricInfo{
-									Type: "workload.googleapis.com/sap/validation/system",
+									Type:  "workload.googleapis.com/sap/validation/system",
 									Label: "foo",
 								},
 								OsVendor: cmpb.OSVendor_RHEL,
@@ -244,7 +238,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 									AndEvalRules: &cmpb.EvalMetricRule{
 										EvalRules: []*cmpb.EvalRule{
 											&cmpb.EvalRule{
-												OutputSource: cmpb.OutputSource_STDOUT,
+												OutputSource:  cmpb.OutputSource_STDOUT,
 												EvalRuleTypes: &cmpb.EvalRule_OutputEquals{OutputEquals: "foobar"},
 											},
 										},
@@ -272,9 +266,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			want := wantSystemMetrics(&timestamppb.Timestamp{Seconds: time.Now().Unix()}, test.wantLabels)
-			ch := make(chan WorkloadMetrics)
-			go CollectSystemMetricsFromConfig(test.params, ch)
-			got := <-ch
+			got := CollectSystemMetricsFromConfig(test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectSystemMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}

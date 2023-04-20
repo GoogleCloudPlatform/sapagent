@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
@@ -1093,7 +1094,7 @@ func TestGetBearerToken(t *testing.T) {
 
 func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 	collectionDefinition := &cdpb.CollectionDefinition{}
-	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	err := protojson.Unmarshal(configuration.DefaultCollectionDefinition, collectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}

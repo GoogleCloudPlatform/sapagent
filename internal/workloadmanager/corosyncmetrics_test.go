@@ -27,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -146,7 +147,7 @@ quorum {
 
 func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 	collectionDefinition := &cdpb.CollectionDefinition{}
-	err := protojson.Unmarshal(defaultCollectionDefinition, collectionDefinition)
+	err := protojson.Unmarshal(configuration.DefaultCollectionDefinition, collectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}

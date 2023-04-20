@@ -45,8 +45,9 @@ const OSReleaseFilePath = "/etc/os-release"
 type InterfaceAddrsGetter func() ([]net.Addr, error)
 
 // CollectSystemMetricsFromConfig collects the system metrics specified by the
-// WorkloadValidation config and sends them to a channel to be uploaded.
-func CollectSystemMetricsFromConfig(params Parameters, wm chan<- WorkloadMetrics) {
+// WorkloadValidation config and formats the results as a time series to be
+// uploaded to a Collection Storage mechanism.
+func CollectSystemMetricsFromConfig(params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager System metrics...")
 	t := "workload.googleapis.com/sap/validation/system"
 	l := make(map[string]string)
@@ -63,8 +64,7 @@ func CollectSystemMetricsFromConfig(params Parameters, wm chan<- WorkloadMetrics
 		}
 	}
 
-	m := createTimeSeries(t, l, 1, params.Config)
-	wm <- WorkloadMetrics{Metrics: m}
+	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
 }
 
 // collectSystemVariable collects and returns the metric value for a given system metric variable.
