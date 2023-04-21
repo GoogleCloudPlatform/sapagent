@@ -183,7 +183,7 @@ func TestStart(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "Succeeds",
+			name: "FailedToFetchSID",
 			params: Parameters{
 				Config: &cpb.Configuration{
 					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
@@ -193,6 +193,23 @@ func TestStart(t *testing.T) {
 						},
 						HanaInstances: []*cpb.HANAInstance{
 							&cpb.HANAInstance{Password: "fakePassword"},
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Succeeds",
+			params: Parameters{
+				Config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*cpb.Query{
+							&cpb.Query{SampleIntervalSec: 5},
+						},
+						HanaInstances: []*cpb.HANAInstance{
+							&cpb.HANAInstance{Password: "fakePassword", Sid: "fakeSID"},
 						},
 					},
 				},

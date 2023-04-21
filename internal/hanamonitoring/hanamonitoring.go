@@ -119,6 +119,13 @@ func Start(ctx context.Context, params Parameters) bool {
 	go usagemetrics.LogActionDaily(usagemetrics.CollectHANAMonitoringMetrics)
 	wp := workerpool.New(int(cfg.GetExecutionThreads()))
 	for _, db := range databases {
+		if db.instance.GetSid() == "" {
+			sid, err := fetchSID(ctx, db)
+			if err != nil {
+				log.Logger.Errorw("Error while fetching SID for HANA Instance", db.instance.GetHost(), "error", err)
+			}
+			db.instance.Sid = sid
+		}
 		for _, query := range cfg.GetQueries() {
 			sampleInterval := cfg.GetSampleIntervalSec()
 			if query.GetSampleIntervalSec() >= 5 {
@@ -396,6 +403,21 @@ func createCumulativeMetric(c *cpb.Column, val any, labels map[string]string, qu
 	default:
 		return nil, false
 	}
+}
+
+// fetchSID is responsible for fetching the SID for a HANA instance if it not
+// already set by executing a query on the M_DATABASE table.
+func fetchSID(ctx context.Context, db *database) (string, error) {
+	rows, err := db.queryFunc(ctx, "SELECT SYSTEM_ID AS sid FROM M_DATABASE LIMIT 1;")
+	if err != nil {
+		return "", err
+	}
+	rows.Next()
+	var sid string
+	if err := rows.Scan(&sid); err != nil {
+		return "", err
+	}
+	return sid, nil
 }
 
 // prepareKey creates the key which can be used to group a timeseries
