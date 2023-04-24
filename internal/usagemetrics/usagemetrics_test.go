@@ -80,7 +80,7 @@ func TestLogger_Running(t *testing.T) {
 		{
 			name:       "tooSoon",
 			agentProps: defaultAgentProps,
-			nowOffset:  defaultNow.Add(time.Hour),
+			nowOffset:  defaultNow,
 			want:       defaultNow,
 		},
 	}
@@ -167,7 +167,7 @@ func TestLogger_Error(t *testing.T) {
 		},
 		{
 			name:      "tooSoon",
-			nowOffset: defaultNow.Add(time.Hour),
+			nowOffset: defaultNow,
 			want:      defaultNow,
 		},
 	}

@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
@@ -150,6 +151,7 @@ var (
 	imagePattern = regexp.MustCompile(
 		fmt.Sprintf("projects[/](?:%s)[/]global[/]images[/](.*)", strings.Join(imageProjects[:], "|")),
 	)
+	lock = sync.Mutex{}
 )
 
 // The TimeSource interface is a wrapper around time functionality needed for usage metrics logging.
@@ -167,25 +169,23 @@ type Logger struct {
 	image                  string
 	isTestProject          bool
 	lastCalled             map[Status]time.Time
-	dailyLogActionStarted  map[int]bool
 	dailyLogRunningStarted bool
 }
 
 // NewLogger creates a new Logger with an initialized hash map of Status to a last called timestamp.
 func NewLogger(agentProps *configpb.AgentProperties, cloudProps *instancepb.CloudProperties, timeSource TimeSource) *Logger {
 	l := &Logger{
-		agentProps:            agentProps,
-		timeSource:            timeSource,
-		lastCalled:            make(map[Status]time.Time),
-		dailyLogActionStarted: make(map[int]bool),
+		agentProps: agentProps,
+		timeSource: timeSource,
+		lastCalled: make(map[Status]time.Time),
 	}
 	l.setCloudProps(cloudProps)
 	return l
 }
 
-// Running logs the RUNNING status. This status is reported at most once per day.
+// Running logs the RUNNING status.
 func (l *Logger) Running() {
-	l.logOncePerDay(StatusRunning, "")
+	l.logStatus(StatusRunning, "")
 }
 
 // Started logs the STARTED status.
@@ -208,11 +208,11 @@ func (l *Logger) Misconfigured() {
 	l.logStatus(StatusMisconfigured, "")
 }
 
-// Error logs the ERROR status. This status is reported at most once per day.
+// Error logs the ERROR status.
 //
 // Any calls to Error should have an id mapping in this mapping sheet: go/sap-core-eng-tool-mapping.
 func (l *Logger) Error(id int) {
-	l.logOncePerDay(StatusError, fmt.Sprintf("%d", id))
+	l.logStatus(StatusError, fmt.Sprintf("%d", id))
 }
 
 // Installed logs the INSTALLED status.
@@ -243,17 +243,6 @@ func (l *Logger) log(s string) {
 	}
 }
 
-func (l *Logger) logOncePerDay(s Status, v string) {
-	if !l.agentProps.GetLogUsageMetrics() {
-		return
-	}
-	if l.timeSource.Since(l.lastCalled[s]) < 24*time.Hour {
-		log.Logger.Debugw("logging status once per day", "status", s, "lastcalled", l.lastCalled[s])
-		return
-	}
-	l.logStatus(s, v)
-}
-
 func (l *Logger) logStatus(s Status, v string) {
 	if !l.agentProps.GetLogUsageMetrics() {
 		return
@@ -263,6 +252,8 @@ func (l *Logger) logStatus(s Status, v string) {
 		msg = fmt.Sprintf("%s/%s", string(s), v)
 	}
 	l.log(msg)
+	lock.Lock()
+	defer lock.Unlock()
 	l.lastCalled[s] = l.timeSource.Now()
 }
 

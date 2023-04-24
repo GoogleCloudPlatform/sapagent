@@ -18,7 +18,6 @@ package usagemetrics
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/jonboulle/clockwork"
@@ -29,7 +28,6 @@ import (
 )
 
 var logger = NewLogger(nil, nil, clockwork.NewRealClock())
-var lock = sync.Mutex{}
 
 // SetAgentProperties sets the configured agent properties on the standard logger.
 func SetAgentProperties(ap *cpb.AgentProperties) {
@@ -44,21 +42,6 @@ func SetCloudProperties(cp *iipb.CloudProperties) {
 // Running uses the standard logger to log the RUNNING status. This status is reported at most once per day.
 func Running() {
 	logger.Running()
-}
-
-// LogRunningDaily log that the agent is running once a day.
-func LogRunningDaily() {
-	if logger.dailyLogRunningStarted {
-		log.Logger.Debugw("Daily log of RUNNING status already started")
-		return
-	}
-	logger.dailyLogRunningStarted = true
-	log.Logger.Debugw("Starting daily log of RUNNING status")
-	for {
-		logger.Running()
-		// sleep for 24 hours and a minute.
-		time.Sleep(24*time.Hour + 1*time.Minute)
-	}
 }
 
 // Started uses the standard logger to log the STARTED status.
@@ -108,19 +91,27 @@ func Action(id int) {
 	logger.Action(id)
 }
 
-// LogActionDaily uses the standard logger to log the ACTION once a day.
-func LogActionDaily(id int) {
-	lock.Lock()
-	if _, ok := logger.dailyLogActionStarted[id]; ok {
-		log.Logger.Debugw("Daily log action already started", "ACTION", id)
-		lock.Unlock()
+// LogRunningDaily log that the agent is running once a day.
+func LogRunningDaily() {
+	if logger.dailyLogRunningStarted {
+		log.Logger.Debugw("Daily log of RUNNING status already started")
 		return
 	}
-	logger.dailyLogActionStarted[id] = true
-	lock.Unlock()
+	logger.dailyLogRunningStarted = true
+	log.Logger.Debugw("Starting daily log of RUNNING status")
+	for {
+		logger.Running()
+		// sleep for 24 hours and a minute.
+		time.Sleep(24*time.Hour + 1*time.Minute)
+	}
+}
+
+// LogActionDaily uses the standard logger to log the ACTION once a day.
+// Should be called exactly once for each ACTION code.
+func LogActionDaily(id int) {
 	log.Logger.Debugw("Starting daily log action", "ACTION", id)
 	for {
-		logger.logOncePerDay(StatusAction, fmt.Sprintf("%d", id))
+		logger.logStatus(StatusAction, fmt.Sprintf("%d", id))
 		// sleep for 24 hours and a minute.
 		time.Sleep(24*time.Hour + 1*time.Minute)
 	}
