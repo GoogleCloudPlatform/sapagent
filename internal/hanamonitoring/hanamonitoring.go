@@ -120,7 +120,9 @@ func Start(ctx context.Context, params Parameters) bool {
 	wp := workerpool.New(int(cfg.GetExecutionThreads()))
 	for _, db := range databases {
 		if db.instance.GetSid() == "" {
-			sid, err := fetchSID(ctx, db)
+			ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(cfg.GetQueryTimeoutSec()))
+			sid, err := fetchSID(ctxTimeout, db)
+			cancel()
 			if err != nil {
 				log.Logger.Errorw("Error while fetching SID for HANA Instance", db.instance.GetHost(), "error", err)
 			}
