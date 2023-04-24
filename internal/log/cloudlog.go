@@ -140,6 +140,13 @@ func createPayloadWithFields(additionalFields []zapcore.Field) map[string]any {
 		case zapcore.Int8Type:
 			payload[f.Key] = int8(f.Integer)
 		case zapcore.TimeType:
+			if f.Interface != nil {
+				payload[f.Key] = time.Unix(0, f.Integer).In(f.Interface.(*time.Location))
+			} else {
+				// Fall back to UTC if location is nil.
+				payload[f.Key] = time.Unix(0, f.Integer)
+			}
+		case zapcore.TimeFullType:
 			payload[f.Key] = f.Interface.(time.Time)
 		case zapcore.Uint64Type:
 			payload[f.Key] = uint64(f.Integer)

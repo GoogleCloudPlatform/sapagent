@@ -139,6 +139,15 @@ func getStringZapcoreField(key string, value string, t zapcore.FieldType) zapcor
 	}
 }
 
+func getTimeTypeZapcoreField(key string, value int64, location any) zapcore.Field {
+	return zapcore.Field{
+		Key:       key,
+		Type:      zapcore.TimeType,
+		Integer:   value,
+		Interface: location,
+	}
+}
+
 func TestWrite(t *testing.T) {
 	ml := &mockLogger{}
 	cc := &CloudCore{GoogleCloudLogger: ml}
@@ -174,7 +183,7 @@ func TestWrite(t *testing.T) {
 				getStringZapcoreField("bytstringkey", "bytestring", zapcore.ByteStringType),
 				getInterfaceZapcoreField("complex128key", 128, zapcore.Complex128Type),
 				getInterfaceZapcoreField("complex64key", 64, zapcore.Complex64Type),
-				getInterfaceZapcoreField("timekey", ts, zapcore.TimeType),
+				getInterfaceZapcoreField("timefullkey", ts, zapcore.TimeFullType),
 				getInterfaceZapcoreField("skipkey", nil, zapcore.SkipType),
 				getInterfaceZapcoreField("stringerkey", ml, zapcore.StringerType),
 				getInterfaceZapcoreField("errorkey", fmt.Errorf("some error"), zapcore.ErrorType),
@@ -191,6 +200,8 @@ func TestWrite(t *testing.T) {
 				getIntZapcoreField("uintptrkey", 1, zapcore.UintptrType),
 				getIntZapcoreField("durationkey", 999, zapcore.DurationType),
 				getIntZapcoreField("boolkey", 1, zapcore.BoolType),
+				getTimeTypeZapcoreField("timekey", ts.UnixNano(), ts.Location()),
+				getTimeTypeZapcoreField("timekeyNilInterface", 123, nil),
 			},
 			wantfields: map[string]any{
 				"message":       "message",
@@ -212,9 +223,12 @@ func TestWrite(t *testing.T) {
 				"complex64key":  64,
 				"durationkey":   "999ns",
 				"defaultkey":    "defaultinterface",
-				"timekey":       ts,
+				"timefullkey":   ts,
 				"errorkey":      "some error",
 				"stringerkey":   "mockLogger",
+				// Strip monotonic clock reading
+				"timekey":             ts.Round(0),
+				"timekeyNilInterface": time.Unix(0, 123),
 			},
 			wantseverity: logging.Info,
 		},
