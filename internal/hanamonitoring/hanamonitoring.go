@@ -191,7 +191,7 @@ func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, param
 	if err != nil {
 		return 0, 0, err
 	}
-
+	log.Logger.Infow("Successfuly executed: ", "query", query.GetName(), "HANA Instance", db.instance.GetUser(), db.instance.GetHost(), db.instance.GetPort())
 	var metrics []*mrpb.TimeSeries
 	for rows.Next() {
 		if err := rows.Scan(cols...); err != nil {
