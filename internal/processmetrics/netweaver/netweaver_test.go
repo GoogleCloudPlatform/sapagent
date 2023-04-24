@@ -747,3 +747,52 @@ func TestCollectRFCConnections(t *testing.T) {
 		})
 	}
 }
+
+func TestCollectEnqLockMetrics(t *testing.T) {
+	tests := []struct {
+		name            string
+		props           *InstanceProperties
+		fRunner         sapcontrol.RunnerWithEnv
+		wantMetricCount int
+	}{
+		{
+			name: "ASCSInstanceSuccess",
+			props: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					InstanceId: "ASCS",
+				},
+			},
+			fRunner:         &fakeRunner{stdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE"},
+			wantMetricCount: 1,
+		},
+		{
+			name: "ASCSInstanceError",
+			props: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					InstanceId: "ASCS",
+				},
+			},
+			fRunner: &fakeRunner{err: cmpopts.AnyError},
+		},
+		{
+			name: "HANAInstance",
+			props: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					InstanceId: "HDB",
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := collectEnqLockMetrics(test.props, test.fRunner)
+
+			if len(got) != test.wantMetricCount {
+				t.Errorf("collectEnqLockMetrics()=%d, want: %d.", len(got), test.wantMetricCount)
+			}
+		})
+	}
+}

@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	defaultSapControlOutput = `OK
+	defaultProcessListOutput = `OK
 		0 name: hdbdaemon
 		0 dispstatus: GREEN
 		0 pid: 111
@@ -34,6 +34,26 @@ var (
 		2 name: hdbindexserver
 		2 dispstatus: GREEN
 		2 pid: 333`
+
+	defaultEnqTableOutputScript = `OK
+	0 lock_name: USR04
+	0 lock_arg: 000DDIC
+	0 lock_mode: E
+	0 owner: 20230424073648639586000402dnwh75ldbci.....................
+	0 owner_vb: 20230424073648639586000402dnwh75ldbci.....................
+	0 use_count_owner: 0
+	0 use_count_owner_vb: 1
+	0 client: 000
+	0 user: SAP*
+	0 transaction: SU01
+	0 object: E_USR04
+	0 backup: FALSE`
+
+	defaultEnqTableOutput = `
+	OK
+lock_name, lock_arg, lock_mode, owner, owner_vb, use_count_owner, use_count_owner_vb, client, user, transaction, object, backup
+USR04, 000DDIC, E, 20230424073648639586000402dnwh75ldbci....................., 20230424073648639586000402dnwh75ldbci....................., 0, 1, 000, SAP*, SU01, E_USR04, FALSE
+	`
 )
 
 type fakeRunner struct {
@@ -77,7 +97,7 @@ func TestProcessList(t *testing.T) {
 		{
 			name: "SucceedsAllProcesses",
 			fRunner: &fakeRunner{
-				stdOut:   defaultSapControlOutput,
+				stdOut:   defaultProcessListOutput,
 				exitCode: 4,
 			},
 			wantProcStatus: map[int]*ProcessStatus{
@@ -222,7 +242,7 @@ func TestParseABAPGetWPTable(t *testing.T) {
 			},
 			wantProcesses:     map[string]int{"DIA": 3, "BTC": 1, "SPO": 1},
 			wantBusyProcesses: map[string]int{"DIA": 1},
-			wantPIDMap: map[string]string{"7488": "DIA", "7489": "BTC", "7490": "SPO", "7491": "DIA", "7492": "DIA"},
+			wantPIDMap:        map[string]string{"7488": "DIA", "7489": "BTC", "7490": "SPO", "7491": "DIA", "7492": "DIA"},
 		},
 		{
 			name:    "Error",
@@ -309,6 +329,69 @@ func TestParseQueueStats(t *testing.T) {
 			}
 			if diff := cmp.Diff(test.wantPeak, gotPeakQueueUsage); diff != "" {
 				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fRunner, gotPeakQueueUsage, test.wantPeak)
+			}
+		})
+	}
+}
+
+func TestEnqGetLockTable(t *testing.T) {
+	tests := []struct {
+		name         string
+		fRunner      RunnerWithEnv
+		wantEnqLocks []*EnqLock
+		wantErr      error
+	}{
+		{
+			name:    "Success",
+			fRunner: &fakeRunner{stdOut: defaultEnqTableOutput},
+			wantEnqLocks: []*EnqLock{
+				{
+					LockName:         "USR04",
+					LockArg:          "000DDIC",
+					LockMode:         "E",
+					Owner:            "20230424073648639586000402dnwh75ldbci.....................",
+					OwnerVB:          "20230424073648639586000402dnwh75ldbci.....................",
+					UserCountOwner:   0,
+					UserCountOwnerVB: 1,
+					Client:           "000",
+					User:             "SAP*",
+					Transaction:      "SU01",
+					Object:           "E_USR04",
+					Backup:           "FALSE",
+				},
+			},
+		},
+		{
+			name:    "Error",
+			fRunner: &fakeRunner{err: cmpopts.AnyError},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "ErroneousOwnerCount",
+			fRunner: &fakeRunner{stdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1ab0, 1, 000, SAP*, SU01, E_USR04, FALSE"},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "ErroneousOwnerCountVB",
+			fRunner: &fakeRunner{stdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 10, 1000000000000000000000, 000, SAP*, SU01, E_USR04, FALSE"},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "InvalidStatus",
+			fRunner: &fakeRunner{exitCode: -1},
+			wantErr: cmpopts.AnyError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := Properties{}
+			gotEnqList, gotErr := p.EnqGetLockTable(test.fRunner)
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("EnqGetLockTable(%v)=%v, want: %v.", test.fRunner, gotErr, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantEnqLocks, gotEnqList); diff != "" {
+				t.Errorf("EnqGetLockTable(%v) mismatch, diff (-want, +got): %v", test.fRunner, diff)
 			}
 		})
 	}

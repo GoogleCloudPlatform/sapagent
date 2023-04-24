@@ -69,6 +69,7 @@ const (
 	nwABAPProcQueuePeakPath    = "/sap/nw/abap/queue/peak"
 	nwABAPSessionsPath         = "/sap/nw/abap/sessions"
 	nwABAPRFCPath              = "/sap/nw/abap/rfc"
+	nwEnqLocksPath             = "/sap/nw/enq/locks/usercountowner"
 )
 
 var (
@@ -127,8 +128,15 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 			"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath(),
 		},
 	}
-
 	metrics = append(metrics, collectRFCConnections(p, abapRFCRunner)...)
+
+	enqLockRunner := &commandlineexecutor.Runner{
+		User:       p.SAPInstance.GetUser(),
+		Executable: p.SAPInstance.GetSapcontrolPath(),
+		Args:       fmt.Sprintf("-nr %s -function EnqGetLockTable", p.SAPInstance.GetInstanceNumber()),
+		Env:        []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
+	}
+	metrics = append(metrics, collectEnqLockMetrics(p, enqLockRunner)...)
 
 	return metrics
 }
@@ -264,7 +272,7 @@ func collectMessageServerMetrics(p *InstanceProperties, url string) []*mrpb.Time
 
 // parseWorkProcessCount processes the HTTP text/plain response body one line at a time
 // to find the message server work process count.
-// Returns the work process count on succcess, an error on failures.
+// Returns the work process count on success, an error on failures.
 func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 	scanner := bufio.NewScanner(r)
 	// NOMUTANTS--cannot test if text is or is not read one line at a time.
@@ -398,6 +406,37 @@ func collectRFCConnections(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []
 	return metrics
 }
 
+// collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
+func collectEnqLockMetrics(p *InstanceProperties, r sapcontrol.RunnerWithEnv) []*mrpb.TimeSeries {
+	if p.SAPInstance.InstanceId != "ASCS" {
+		log.Logger.Debug("The Enq Lock metric is only applicable for application type: ASCS.")
+		return nil
+	}
+	now := tspb.Now()
+	sc := &sapcontrol.Properties{p.SAPInstance}
+	enqLocks, error := sc.EnqGetLockTable(r)
+	if error != nil {
+		return nil
+	}
+
+	var metrics []*mrpb.TimeSeries
+	for _, lock := range enqLocks {
+		extraLabels := map[string]string{
+			"lock_name":           lock.LockName,
+			"lock_mode":           lock.LockMode,
+			"user_count_owner":    fmt.Sprintf("%d", lock.UserCountOwner),
+			"user_count_owner_vb": fmt.Sprintf("%d", lock.UserCountOwnerVB),
+			"transaction":         lock.Transaction,
+			"object":              lock.Object,
+		}
+		log.Logger.Debugw("Creating metric with labels",
+			"metric", nwEnqLocksPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", lock.UserCountOwner)
+		metrics = append(metrics, createMetrics(p, nwEnqLocksPath, extraLabels, now, lock.UserCountOwner))
+
+	}
+	return metrics
+}
+
 // createMetrics - create mrpb.TimeSeries object for the given metric.
 func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
@@ -412,7 +451,7 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 }
 
 // metricLabels appends the default SAP Instance labels and extra labels
-// to return a consilidated map of metric labels.
+// to return a consolidated map of metric labels.
 func metricLabels(p *InstanceProperties, extraLabels map[string]string) map[string]string {
 	defaultLabels := map[string]string{
 		"sid":         p.SAPInstance.GetSapsid(),

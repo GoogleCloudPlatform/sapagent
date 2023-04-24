@@ -47,7 +47,7 @@ var (
 )
 
 type (
-	// Properties is a reciever for sapcontrol functions.
+	// Properties is a receiver for sapcontrol functions.
 	Properties struct {
 		Instance *sapb.SAPInstance
 	}
@@ -58,6 +58,13 @@ type (
 		DisplayStatus string
 		IsGreen       bool
 		PID           string
+	}
+
+	// EnqLock has the attributes returned by sapcontrol's EnqGetLockTable function.
+	EnqLock struct {
+		LockName, LockArg, LockMode, Owner, OwnerVB string
+		UserCountOwner, UserCountOwnerVB            int64
+		Client, User, Transaction, Object, Backup   string
 	}
 
 	// RunnerWithEnv is an interface that implements commandlineexecutor.Runner for testability.
@@ -240,4 +247,76 @@ func (p *Properties) ParseQueueStats(r RunnerWithEnv) (currentQueueUsage, peakQu
 
 	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
 	return currentQueueUsage, peakQueueUsage, nil
+}
+
+// EnqGetLockTable parses the output of sapcontrol function EnqGetLockTable.
+// Returns:
+//   - A slice of EnqLock structs containing lock details.
+//   - Error if sapcontrol fails, nil otherwise.
+func (p *Properties) EnqGetLockTable(r RunnerWithEnv) (EnqLocks []*EnqLock, err error) {
+	const numberOfColumns = 12
+	const (
+		lockName = iota
+		lockArg
+		lockMode
+		owner
+		ownerVB
+		UserCountOwner
+		UserCountOwnerVB
+		client
+		user
+		transaction
+		object
+		backup
+	)
+	stdOut, _, exitStatus, err := r.RunWithEnv()
+	if err != nil {
+		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(err))
+		return nil, err
+	}
+
+	message, ok := sapcontrolStatus[exitStatus]
+	if !ok {
+		return nil, fmt.Errorf("invalid sapcontrol return code: %d", exitStatus)
+	}
+	log.Logger.Debugw("Sapcontrol returned", "status", exitStatus, "message", message)
+
+	lines := strings.Split(stdOut, "\n")
+	for _, line := range lines {
+		line = emptyChars.ReplaceAllString(line, "")
+		row := strings.Split(line, ",")
+		if len(row) != numberOfColumns || row[lockName] == "lock_name" {
+			continue
+		}
+
+		uco, err := strconv.Atoi(row[UserCountOwner])
+		if err != nil {
+			log.Logger.Debugw("Could not parse UserCountOwner field in EnqGetLockTable", log.Error(err))
+			return nil, err
+		}
+
+		ucoVB, err := strconv.Atoi(row[UserCountOwnerVB])
+		if err != nil {
+			log.Logger.Debugw("Could not parse UserCountOwnerVB Field in EnqGetLockTable", log.Error(err))
+			return nil, err
+		}
+
+		lock := &EnqLock{
+			LockName:         row[lockName],
+			LockArg:          row[lockArg],
+			LockMode:         row[lockMode],
+			Owner:            row[owner],
+			OwnerVB:          row[ownerVB],
+			UserCountOwner:   int64(uco),
+			UserCountOwnerVB: int64(ucoVB),
+			Client:           row[client],
+			User:             row[user],
+			Transaction:      row[transaction],
+			Object:           row[object],
+			Backup:           row[backup],
+		}
+		EnqLocks = append(EnqLocks, lock)
+	}
+
+	return EnqLocks, nil
 }
