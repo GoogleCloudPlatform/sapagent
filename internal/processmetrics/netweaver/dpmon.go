@@ -42,9 +42,9 @@ var (
 //   - error in case of failures, nil otherwise.
 func parseABAPSessionStats(text string) (sessionCount map[string]int, totalCount int, err error) {
 	var (
-		abapSessionsTable [][]string
-		numberOfColumns   = 15
-		sessionColumn     = 1
+		abapSessionsTable      [][]string
+		minimumNumberOfColumns = 14
+		sessionColumn          = 1
 	)
 	// Parse the textual output to a 2D array/table of strings.
 	lines := strings.Split(text, "\n")
@@ -63,7 +63,7 @@ func parseABAPSessionStats(text string) (sessionCount map[string]int, totalCount
 	sessionCount = make(map[string]int)
 	for _, row := range abapSessionsTable {
 		log.Logger.Debugw("Processing row", "row", row, "length", len(row))
-		if len(row) == numberOfColumns {
+		if len(row) >= minimumNumberOfColumns {
 			sessionCount[row[sessionColumn]]++
 			totalCount++
 		}

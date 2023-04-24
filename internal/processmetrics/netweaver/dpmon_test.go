@@ -25,7 +25,10 @@ import (
 )
 
 //go:embed dpmon_output/abap_sessions.txt
-var abapSessionsOutput string
+var abapSessionsOutput string // Has Plgs column enabled.
+
+//go:embed dpmon_output/abap_sessions_no_plugin.txt
+var abapSessionsNoPluginOutput string // Default: Plgs column disabled.
 
 func TestParseABAPSessionStats(t *testing.T) {
 	tests := []struct {
@@ -38,6 +41,16 @@ func TestParseABAPSessionStats(t *testing.T) {
 		{
 			name:        "SuccessFullOutput",
 			dpmonOutput: abapSessionsOutput,
+			wantSessionCount: map[string]int{
+				"ASYNC_RFC": 1,
+				"BATCH":     1,
+				"SYNC_RFC":  1,
+			},
+			wantTotalCount: 3,
+		},
+		{
+			name:        "SuccessOutputWithoutPlugin",
+			dpmonOutput: abapSessionsNoPluginOutput,
 			wantSessionCount: map[string]int{
 				"ASYNC_RFC": 1,
 				"BATCH":     1,
