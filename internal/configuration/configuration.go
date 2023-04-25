@@ -52,11 +52,11 @@ const (
 	// AgentName is a short-hand name of the agent.
 	AgentName = `sapagent`
 
-	// LINT.IfChange
+	
 
 	// AgentVersion is the version of the agent.
 	AgentVersion = `1.4`
-	// LINT.ThenChange(//depot/google3/third_party/sapagent/BUILD)
+	
 
 	// LinuxConfigPath is the default path to agent configuration file on linux.
 	LinuxConfigPath = `/etc/google-cloud-sap-agent/configuration.json`
