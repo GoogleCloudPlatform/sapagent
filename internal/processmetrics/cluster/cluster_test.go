@@ -157,6 +157,26 @@ func TestCollectResourceState(t *testing.T) {
 			wantMetricCount: 3,
 		},
 		{
+			name: "SuccessDuplicateResources",
+			fakeResourceState: func() ([]pacemaker.Resource, error) {
+				rs := []pacemaker.Resource{
+					{
+						Name: "resource1",
+						Role: "Stopped",
+						Node: "test-instance-1",
+					},
+					{
+						Name: "resource1",
+						Role: "Stopped",
+						Node: "test-instance-1",
+					},
+				}
+				return rs, nil
+			},
+			wantValues:      []int{resourceStopped},
+			wantMetricCount: 1,
+		},
+		{
 			name: "PacemakerReadFailure",
 			fakeResourceState: func() ([]pacemaker.Resource, error) {
 				return nil, cmpopts.AnyError

@@ -190,7 +190,7 @@ func HANAReplicationConfig(user, sid, instID string) (site int, HAMembers []stri
 // readReplicationConfig is a testable version of HANAReplicationConfig.
 func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (mode int, HAMembers []string, exitStatus int64, err error) {
 	cmd := fmt.Sprintf("/usr/sap/%s/%s/HDBSettings.sh", sid, instID)
-	args := "systemReplicationStatus.py --sapcontrol=1"
+	args := "systemReplicationStatus.py --sapcontrol=1 >> /tmp/systemReplicationStatus.log 2>&1; cat /tmp/systemReplicationStatus.log"
 	out, _, exitStatus, err := runCmd(user, cmd, args)
 	if err != nil {
 		log.Logger.Debugw("Failed to get SAP HANA Replication Status", log.Error(err))

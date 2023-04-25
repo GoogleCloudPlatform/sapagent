@@ -143,7 +143,13 @@ func collectResourceState(p *InstanceProperties, read readPacemakerResourceState
 		return nil, nil
 	}
 
+	resourceNames := make(map[string]bool)
 	for _, r := range resourceState {
+		if _, ok := resourceNames[r.Name]; ok {
+			log.Logger.Debugw("Duplicate entry for resource", "name", r.Name)
+			continue
+		}
+		resourceNames[r.Name] = true
 		rValue := stateFromString(resourceStates, r.Role)
 		metricValues = append(metricValues, rValue)
 		extraLabels := map[string]string{
