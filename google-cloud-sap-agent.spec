@@ -120,8 +120,7 @@ if [ -d "/usr/sap/google-sapnetweavermonitoring-agent/" ]; then
   rm -fr /var/log/google-sapnetweavermonitoring-agent*  > /dev/null 2>&1
 fi
 
-# Disable HANA monitoring migration till its launch.
-if [ 1 == 2 ]; then
+# if [ 1 == 2 ]; then
 # migrate HANA Monitoring Agent and remove its contents
 if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
   # migrate
@@ -155,7 +154,7 @@ if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
     fi
   fi
 fi
-fi
+# fi
 
 
 # link the systemd service and reload the daemon
