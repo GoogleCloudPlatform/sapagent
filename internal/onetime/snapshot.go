@@ -127,7 +127,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	s.timeSeriesCreator = mc
 	s.cloudProps = metadataserver.FetchCloudProperties()
 
-	return s.snapshotHandler(ctx, gce.New, newComputeService)
+	return s.snapshotHandler(ctx, gce.NewGCEClient, newComputeService)
 }
 
 func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc) subcommands.ExitStatus {

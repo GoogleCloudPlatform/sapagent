@@ -27,11 +27,12 @@ import (
 	"time"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	"golang.org/x/exp/slices"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 
-	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -60,6 +61,10 @@ type gceInterface interface {
 	GetURIForIP(project, ip string) (string, error)
 }
 
+type wlmInterface interface {
+	WriteInsight(project, location string, writeInsightRequest *workloadmanager.WriteInsightRequest) error
+}
+
 type (
 	runCmdAsUser func(user, executable string, args ...string) (string, string, error)
 )
@@ -67,6 +72,7 @@ type (
 // Discovery is a type used to perform SAP System discovery operations.
 type Discovery struct {
 	gceService        gceInterface
+	wlmService        wlmInterface
 	exists            commandlineexecutor.CommandExistsRunner
 	commandRunner     commandlineexecutor.CommandRunner
 	userCommandRunner runCmdAsUser
@@ -80,12 +86,55 @@ func extractFromURI(uri, field string) string {
 			return parts[i+1]
 		}
 	}
+
 	return ""
+}
+
+func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadmanager.SapDiscoveryResource {
+
+	return &workloadmanager.SapDiscoveryResource{
+		RelatedResources: r.RelatedResources,
+		ResourceKind:     r.ResourceKind,
+		ResourceType:     r.ResourceType.String(),
+		ResourceURI:      r.ResourceUri,
+		UpdateTime:       r.UpdateTime.AsTime().Format(time.RFC3339),
+	}
+}
+
+func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *workloadmanager.SapDiscoveryComponent {
+	iComp := &workloadmanager.SapDiscoveryComponent{
+		HostProject: comp.HostProject,
+		Sid:         comp.Sid,
+	}
+
+	for _, r := range comp.Resources {
+		iComp.Resources = append(iComp.Resources, insightResourceFromSystemResource(r))
+	}
+
+	return iComp
+}
+
+func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
+	iDiscovery := &workloadmanager.SapDiscovery{
+		SystemID:   sys.SystemId,
+		UpdateTime: sys.UpdateTime.AsTime().Format(time.RFC3339),
+	}
+	if sys.ApplicationLayer != nil {
+		iDiscovery.ApplicationLayer = insightComponentFromSystemComponent(sys.ApplicationLayer)
+		iDiscovery.ApplicationLayer.ApplicationType = sys.ApplicationLayer.GetApplicationType()
+
+	}
+	if sys.DatabaseLayer != nil {
+		iDiscovery.DatabaseLayer = insightComponentFromSystemComponent(sys.DatabaseLayer)
+		iDiscovery.DatabaseLayer.DatabaseType = sys.DatabaseLayer.GetDatabaseType()
+	}
+
+	return &workloadmanager.Insight{SapDiscovery: iDiscovery}
 }
 
 // StartSAPSystemDiscovery Initializes the discovery object and starts the discovery subroutine.
 // Returns true if the discovery goroutine is started, and false otherwise.
-func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface) bool {
+func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface, wlmService wlmInterface) bool {
 	// Start SAP system discovery only if sap_system_discovery is enabled.
 	if !config.GetCollectionConfiguration().GetSapSystemDiscovery() {
 		log.Logger.Info("Not starting SAP system discovery.")
@@ -94,6 +143,7 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 
 	d := Discovery{
 		gceService:        gceService,
+		wlmService:        wlmService,
 		exists:            commandlineexecutor.CommandExists,
 		commandRunner:     commandlineexecutor.ExpandAndExecuteCommand,
 		userCommandRunner: commandlineexecutor.ExecuteCommandAsUser,
@@ -146,7 +196,8 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 		sapSystems := []*spb.SapDiscovery{}
 
 		for _, app := range sapApps.Instances {
-			if app.Type == sappb.InstanceType_NETWEAVER {
+			switch app.Type {
+			case sappb.InstanceType_NETWEAVER:
 				// See if a system with the same SID already exists
 				var system *spb.SapDiscovery
 				for _, sys := range sapSystems {
@@ -163,6 +214,7 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 					Sid:       app.Sapsid,
 					Resources: res,
 				}
+				system.UpdateTime = timestamppb.Now()
 
 				dbRes := d.discoverAppToDBConnection(cp, app.Sapsid, ir)
 				if len(dbRes) > 0 {
@@ -180,10 +232,23 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 			}
 		}
 
+		locationParts := strings.Split(cp.GetZone(), "-")
+		continent := locationParts[0]
+
+		log.Logger.Info("Sending systems to WLM API")
+		for _, sys := range sapSystems {
+			req := &workloadmanager.WriteInsightRequest{
+				Insight: insightFromSAPSystem(sys),
+			}
+			log.Logger.Infow("Sending write insight request", "request", req)
+
+			d.wlmService.WriteInsight(cp.ProjectId, continent, req)
+		}
+
+		log.Logger.Info("Done discovery")
 		// Perform discovery at most every 4 hours.
 		time.Sleep(4 * 60 * 60 * time.Second)
 	}
-
 }
 
 func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*spb.SapDiscovery_Resource, *compute.Instance, *spb.SapDiscovery_Resource) {

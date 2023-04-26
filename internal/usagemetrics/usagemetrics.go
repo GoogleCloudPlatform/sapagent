@@ -78,6 +78,7 @@ const (
 	DiskSnapshotDoneDBNotComplete
 	CollectionDefinitionLoadFailure
 	CollectionDefinitionValidateFailure
+	WLMServiceCreateFailure
 )
 
 // Agent wide action mappings.

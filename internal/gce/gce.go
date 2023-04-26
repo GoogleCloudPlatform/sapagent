@@ -35,8 +35,8 @@ type GCE struct {
 	secret  *secretmanager.Client
 }
 
-// New creates a new GCE service wrapper.
-func New(ctx context.Context) (*GCE, error) {
+// NewGCEClient creates a new GCE service wrapper.
+func NewGCEClient(ctx context.Context) (*GCE, error) {
 	s, err := compute.NewService(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating GCE client")

@@ -202,7 +202,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		agentmetricsService.Start(ctx)
 	}
 
-	gceService, err := gce.New(ctx)
+	gceService, err := gce.NewGCEClient(ctx)
 	if err != nil {
 		log.Logger.Errorw("Failed to create GCE service", "error", err)
 		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
@@ -317,8 +317,15 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		GCEService:    gceService,
 	})
 
+	wlmService, err := gce.NewWLMClient(ctx)
+	if err != nil {
+		log.Logger.Errorw("Error creating WLM Client", "error", err)
+		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)
+		return
+	}
+
 	// Start SAP System Discovery
-	system.StartSAPSystemDiscovery(ctx, d.config, gceService)
+	system.StartSAPSystemDiscovery(ctx, d.config, gceService, wlmService)
 
 	// Start HANA Monitoring
 	hanamonitoring.Start(ctx, hanamonitoring.Parameters{

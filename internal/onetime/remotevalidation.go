@@ -72,7 +72,7 @@ func (r *RemoteValidation) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for remote.
 func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	gceService, err := gce.New(ctx)
+	gceService, err := gce.NewGCEClient(ctx)
 	if err != nil {
 		log.Print(fmt.Sprintf("ERROR: Failed to create GCE service: %v", err))
 		return subcommands.ExitFailure

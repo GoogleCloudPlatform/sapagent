@@ -107,7 +107,7 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 				GetInstanceErr:  []error{errors.New("Instance not found")},
 			}
 
-			got := StartSAPSystemDiscovery(context.Background(), test.config, gceService)
+			got := StartSAPSystemDiscovery(context.Background(), test.config, gceService, nil)
 			if got != test.want {
 				t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", test.config, got, test.want)
 			}
@@ -1753,7 +1753,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 					t.Errorf("discoverDatabaseSID() = %q, want %q", got, test.want)
 				}
 			}
-			if test.wantErr != nil && cmp.Equal(gotErr, test.wantErr) {
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("discoverDatabaseSID() gotErr %q, wantErr %q", gotErr, test.wantErr)
 			}
 			if userRunnerCalls != test.wantUserRunnerCalls {
@@ -1764,5 +1764,4 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 			}
 		})
 	}
-
 }
