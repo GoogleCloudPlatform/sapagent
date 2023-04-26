@@ -9,10 +9,10 @@ set -exu
 
 echo "Starting the build process for the SAP Agent..."
 
-echo "**************  Getting go 1.19"
-wget -q https://go.dev/dl/go1.19.2.linux-amd64.tar.gz
+echo "**************  Getting go 1.20"
+wget -q https://go.dev/dl/go1.20.3.linux-amd64.tar.gz
 mkdir -p /tmp/sapagent
-tar -C /tmp/sapagent -xzf go1.19.2.linux-amd64.tar.gz
+tar -C /tmp/sapagent -xzf go1.20.3.linux-amd64.tar.gz
 export GOROOT=/tmp/sapagent/go
 mkdir -p $GOROOT/.cache
 mkdir -p $GOROOT/pkg/mod
@@ -32,7 +32,7 @@ mkdir -p buildoutput
 env GOOS=linux GOARCH=amd64 go build -o buildoutput/google_cloud_sap_agent cmd/local/main.go
 
 echo "**************  Cleaning up"
-rm -f go1.19.2.linux-amd64.tar.gz*
+rm -f go1.20.3.linux-amd64.tar.gz*
 go clean -modcache
 rm -fr /tmp/sapagent
 
