@@ -149,7 +149,7 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			want := createCustomWorkloadMetrics(test.wantLabels, 0)
+			want := createCustomWorkloadMetrics(test.wantLabels, 1)
 			got := CollectCustomMetricsFromConfig(test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectCustomMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)

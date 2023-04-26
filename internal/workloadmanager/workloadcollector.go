@@ -25,6 +25,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -221,6 +222,70 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 	go usagemetrics.LogActionDaily(usagemetrics.CollectWLMMetrics)
 	go start(ctx, params)
 	return true
+}
+
+// collectMetricsFromConfig returns the result of metric collection using the
+// collection definition configuration supplied to the agent.
+//
+// The results of this function can be overridden using a metricOverride file.
+func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOverride string) WorkloadMetrics {
+	log.Logger.Info("Collecting Workload Manager metrics...")
+	if fileInfo, err := params.OSStatReader(metricOverride); fileInfo != nil && err == nil {
+		log.Logger.Info("Using override metrics from yaml file")
+		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
+	}
+
+	// Read the latest instance info for this system.
+	params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
+
+	// Collect all metrics specified by the WLM Validation config.
+	var system, corosync, hana, netweaver, pacemaker, custom WorkloadMetrics
+	var wg sync.WaitGroup
+	wg.Add(6)
+	go func() {
+		defer wg.Done()
+		system = CollectSystemMetricsFromConfig(params)
+	}()
+	go func() {
+		defer wg.Done()
+		corosync = CollectCorosyncMetricsFromConfig(params)
+	}()
+	go func() {
+		defer wg.Done()
+		hana = CollectHANAMetricsFromConfig(params)
+	}()
+	go func() {
+		defer wg.Done()
+		netweaver = CollectNetWeaverMetricsFromConfig(params)
+	}()
+	go func() {
+		defer wg.Done()
+		pacemaker = CollectPacemakerMetricsFromConfig(ctx, params)
+	}()
+	go func() {
+		defer wg.Done()
+		custom = CollectCustomMetricsFromConfig(params)
+	}()
+	wg.Wait()
+
+	// Append the system metrics to all other metrics.
+	systemLabels := system.Metrics[0].Metric.Labels
+	appendLabels(corosync.Metrics[0].Metric.Labels, systemLabels)
+	appendLabels(hana.Metrics[0].Metric.Labels, systemLabels)
+	appendLabels(netweaver.Metrics[0].Metric.Labels, systemLabels)
+	appendLabels(pacemaker.Metrics[0].Metric.Labels, systemLabels)
+	appendLabels(custom.Metrics[0].Metric.Labels, systemLabels)
+
+	// Concatenate all of the metrics together.
+	allMetrics := []*monitoringresourcespb.TimeSeries{}
+	allMetrics = append(allMetrics, system.Metrics...)
+	allMetrics = append(allMetrics, corosync.Metrics...)
+	allMetrics = append(allMetrics, hana.Metrics...)
+	allMetrics = append(allMetrics, netweaver.Metrics...)
+	allMetrics = append(allMetrics, pacemaker.Metrics...)
+	allMetrics = append(allMetrics, custom.Metrics...)
+
+	return WorkloadMetrics{Metrics: allMetrics}
 }
 
 func collectMetrics(ctx context.Context, params Parameters, metricOverride string) WorkloadMetrics {

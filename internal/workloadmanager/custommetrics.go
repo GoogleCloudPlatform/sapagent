@@ -37,5 +37,5 @@ func CollectCustomMetricsFromConfig(params Parameters) WorkloadMetrics {
 		}
 	}
 
-	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 0, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
 }

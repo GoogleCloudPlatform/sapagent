@@ -49,7 +49,7 @@ var (
 			Zone:         "test-zone",
 			ProjectId:    "test-project-id",
 		},
-		AgentProperties: &cnfpb.AgentProperties{Version: "1.0"},
+		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 	defaultFileReader = ConfigFileReader(func(data string) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(data)), nil

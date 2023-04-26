@@ -36,16 +36,16 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	compute "google.golang.org/api/compute/v1"
 	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	gcefake "github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 var (
@@ -136,6 +136,116 @@ func TestSetOSReleaseInfo(t *testing.T) {
 	}
 }
 
+func TestCollectMetricsFromConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		params   Parameters
+		override string
+		want     WorkloadMetrics
+	}{
+		{
+			name: "HasMetricOverride",
+			params: Parameters{
+				Config: defaultConfiguration,
+				OSStatReader: func(data string) (os.FileInfo, error) {
+					f, err := testFS.Open(data)
+					if err != nil {
+						return nil, err
+					}
+					return f.Stat()
+				},
+				ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
+					file, err := testFS.Open(path)
+					var f io.ReadCloser = file
+					return f, err
+				}),
+			},
+			override: "test_data/metricoverride.yaml",
+			want: WorkloadMetrics{Metrics: append(createTimeSeries(
+				"workload.googleapis.com/sap/validation/system",
+				map[string]string{"blank_metric": "", "metric_with_colons": "val1:val2:val3", "os": "rhel-8.4"},
+				1.0,
+				defaultConfiguration,
+			), createTimeSeries(
+				"workload.googleapis.com/sap/validation/hana",
+				map[string]string{"hana_metric": "/hana/log"},
+				0.0,
+				defaultConfiguration,
+			)...)},
+		},
+		{
+			name: "HasWorkloadConfig",
+			params: Parameters{
+				Config: defaultConfiguration,
+				WorkloadConfig: &wlmpb.WorkloadValidation{
+					ValidationSystem: &wlmpb.ValidationSystem{
+						SystemMetrics: []*wlmpb.SystemMetric{
+							{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/system",
+									Label: "agent",
+								},
+								Value: wlmpb.SystemVariable_AGENT_NAME,
+							},
+						},
+					},
+				},
+				OSStatReader:        func(data string) (os.FileInfo, error) { return nil, nil },
+				InstanceInfoReader:  *instanceinfo.New(&fakeDiskMapper{}, defaultGCEService),
+				CommandRunner:       func(string, string) (string, string, error) { return "", "", nil },
+				CommandExistsRunner: func(string) bool { return false },
+			},
+			want: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{
+				createTimeSeries(
+					"workload.googleapis.com/sap/validation/system",
+					map[string]string{"agent": "sapagent"},
+					1.0,
+					defaultConfiguration,
+				)[0],
+				createTimeSeries(
+					"workload.googleapis.com/sap/validation/corosync",
+					map[string]string{"agent": "sapagent"},
+					1.0,
+					defaultConfiguration,
+				)[0],
+				createTimeSeries(
+					"workload.googleapis.com/sap/validation/hana",
+					map[string]string{"agent": "sapagent"},
+					0.0,
+					defaultConfiguration,
+				)[0],
+				createTimeSeries(
+					"workload.googleapis.com/sap/validation/netweaver",
+					map[string]string{"agent": "sapagent"},
+					0.0,
+					defaultConfiguration,
+				)[0],
+				createTimeSeries(
+					"workload.googleapis.com/sap/validation/pacemaker",
+					map[string]string{"agent": "sapagent"},
+					0.0,
+					defaultConfiguration,
+				)[0],
+				createTimeSeries(
+					"workload.googleapis.com/sap/validation/custom",
+					map[string]string{"agent": "sapagent"},
+					1.0,
+					defaultConfiguration,
+				)[0],
+			}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := collectMetricsFromConfig(context.Background(), test.params, test.override)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("collectMetricsFromConfig() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestCollectMetrics_hasMetrics(t *testing.T) {
 	iniParse = func(f string) *goini.INI {
 		ini := goini.New()
@@ -170,59 +280,6 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 	}
 	defaultDiskMapper = &fakeDiskMapper{err: nil, out: "disk-mapping"}
 	defaultNetworkIP = "127.0.0.1"
-	defaultGCEService = &gcefake.TestGCE{
-		GetDiskResp: []*compute.Disk{{
-			Type: "/some/path/default-disk-type",
-		}, {
-			Type: "/some/path/default-disk-type",
-		}, {
-			Type: "/some/path/default-disk-type",
-		}},
-		GetDiskErr: []error{nil, nil, nil},
-		GetInstanceResp: []*compute.Instance{{
-			MachineType:       "test-machine-type",
-			CpuPlatform:       "test-cpu-platform",
-			CreationTimestamp: "test-creation-timestamp",
-			Disks: []*compute.AttachedDisk{
-				{
-					Source:     "/some/path/disk-name",
-					DeviceName: "disk-device-name",
-					Type:       "PERSISTENT",
-				},
-				{
-					Source:     "",
-					DeviceName: "other-disk-device-name",
-					Type:       "SCRATCH",
-				},
-				{
-					Source:     "/some/path/hana-disk-name",
-					DeviceName: "sdb",
-					Type:       "PERSISTENT",
-				},
-			},
-			NetworkInterfaces: []*compute.NetworkInterface{
-				{
-					Name:      "network-name",
-					Network:   "test-network",
-					NetworkIP: defaultNetworkIP,
-				},
-			},
-		},
-		},
-		GetInstanceErr: []error{nil},
-		ListZoneOperationsResp: []*compute.OperationList{{
-			Items: []*compute.Operation{
-				{
-					EndTime: "2022-08-23T12:00:01.000-04:00",
-				},
-				{
-					EndTime: "2022-08-23T12:00:00.000-04:00",
-				},
-			},
-		},
-		},
-		ListZoneOperationsErr: []error{nil},
-	}
 	p := Parameters{
 		Config: &cfgpb.Configuration{
 			CloudProperties: &iipb.CloudProperties{
