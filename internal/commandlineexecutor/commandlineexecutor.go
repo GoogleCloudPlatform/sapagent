@@ -132,10 +132,12 @@ func runCommandAsUserExitCode(user, executable, args string, run runCmdAsUser) (
 		log.Logger.Debugw("Command execution complete", "executable", executable, "args", args, "stdout", stdOut, "stderr", stdErr, "error", err)
 
 		m := exitStatusPattern.FindStringSubmatch(err.Error())
-		exitCode, err = strconv.Atoi(m[1])
-		if err != nil {
-			log.Logger.Debugw("Failed to get command exit code", "executable", executable, "args", args, "error", err)
-			return stdOut, stdErr, 0, err
+		if len(m) > 1 {
+			exitCode, err = strconv.Atoi(m[1])
+			if err != nil {
+				log.Logger.Debugw("Failed to get command exit code", "executable", executable, "args", args, "error", err)
+				return stdOut, stdErr, 0, err
+			}
 		}
 	}
 	return stdOut, stdErr, int64(exitCode), nil
