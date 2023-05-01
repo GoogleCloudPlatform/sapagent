@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"golang.org/x/exp/maps"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
@@ -45,24 +44,26 @@ const (
 type (
 	// FileReader is a function type matching the signature for os.ReadFile.
 	FileReader func(string) ([]byte, error)
-	// A Reader is capable of reading disk statistics from the OS.
+	// RunCommand is a function type matching the signature for commandlineexecutor.ExpandAndExecuteCommand.
+	RunCommand func(string, ...string) (string, string, error)
+	// A Reader is capable of reading disk metrics from the OS.
 	//
 	// Due to the assignment of required unexported fields, a Reader must be initialized with New()
 	// instead of as a struct literal.
 	Reader struct {
 		os            string
 		fileReader    FileReader
-		execute       commandlineexecutor.Execute
+		runCommand    RunCommand
 		prevDiskStats map[string]*statspb.DiskStats
 	}
 )
 
 // New instantiates a Reader with the capability to read disk metrics from linux and windows operating systems.
-func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) *Reader {
+func New(os string, fileReader FileReader, runCommand RunCommand) *Reader {
 	return &Reader{
 		os:            os,
 		fileReader:    fileReader,
-		execute:       execute,
+		runCommand:    runCommand,
 		prevDiskStats: make(map[string]*statspb.DiskStats),
 	}
 }
@@ -219,13 +220,10 @@ func (r *Reader) readDiskStatsForWindows(instanceProps *iipb.InstanceProperties)
 		args = append(args, "Queue")
 		args = append(args, "Length').CounterSamples[0].CookedValue")
 
-		result := r.execute(commandlineexecutor.Params{
-			Executable: "powershell",
-			Args:       args,
-		})
-		stdOut := strings.Replace(strings.Replace(result.StdOut, "\n", "", -1), "\r", "", -1)
-		log.Logger.Debugw("PowerShell command returned data", "stdout", stdOut, "stderr", result.StdErr, "error", result.Error)
-		if result.Error != nil {
+		stdOut, stdErr, err := r.runCommand("powershell", args...)
+		stdOut = strings.Replace(strings.Replace(stdOut, "\n", "", -1), "\r", "", -1)
+		log.Logger.Debugw("PowerShell command returned data", "stdout", stdOut, "stderr", stdErr, "error", err)
+		if err != nil {
 			log.Logger.Warnw("Could not get stats for disk", "devicename", disk.GetDeviceName(), "mapping", disk.GetMapping(), "number", diskNumber)
 			continue
 		}

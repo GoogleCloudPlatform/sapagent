@@ -205,7 +205,7 @@ func createHANAWorkloadMetrics(labels map[string]string, value float64) Workload
 				},
 			},
 			Points: []*monitoringresourcepb.Point{{
-				// We are choosing to ignore these timestamp values
+				// We are choosing to ignore these timestamp values 
 				// when performing a comparison via cmp.Diff().
 				Interval: &cpb.TimeInterval{
 					StartTime: &timestamppb.Timestamp{Seconds: time.Now().Unix()},
@@ -377,93 +377,66 @@ basepath_persistent_memory_volumes = /hana/memory/ISC
 	defaultIIR = instanceinfo.New(defaultDiskMapper, defaultGCEService)
 )
 
-func GlobalINITest1Exec(commandlineexecutor.Params) commandlineexecutor.Result {
-	return commandlineexecutor.Result{
-		StdOut: "",
-		StdErr: "",
-	}
+func GlobalINITest1Runner(cmd string, args string) (string, string, error) {
+	return "", "", nil
 }
 
-func GlobalINITest2Exec(params commandlineexecutor.Params) commandlineexecutor.Result {
-	if params.Executable == "/bin/sh" {
-		return commandlineexecutor.Result{
-			StdOut: "Global INI contents",
-			StdErr: "",
-		}
+func GlobalINITest2Runner(cmd string, args string) (string, string, error) {
+	if cmd == "/bin/sh" {
+		return "Global INI contents", "", nil
 	}
-	return commandlineexecutor.Result{
-		StdOut: "",
-		StdErr: "",
-	}
+	return "", "", nil
 }
 
-func GlobalINITest3Exec(params commandlineexecutor.Params) commandlineexecutor.Result {
-	if params.Executable == "pidof" {
-		return commandlineexecutor.Result{
-			StdOut: "12345",
-			StdErr: "",
-		}
-	} else if params.Executable == "ps" {
-		return commandlineexecutor.Result{
-			StdOut: "Invalid string",
-			StdErr: "",
-		}
+func GlobalINITest3Runner(cmd string, args string) (string, string, error) {
+	if cmd == "pidof" {
+		return "12345", "", nil
+	} else if cmd == "ps" {
+		return "Invalid string", "", nil
 	}
-	return commandlineexecutor.Result{
-		StdOut: "",
-		StdErr: "",
-	}
+	return "", "", nil
 }
 
-func GlobalINITest4Exec(params commandlineexecutor.Params) commandlineexecutor.Result {
-	if params.Executable == "pidof" {
-		return commandlineexecutor.Result{
-			StdOut: "12345",
-			StdErr: "",
-		}
-	} else if params.Executable == "ps" {
-		return commandlineexecutor.Result{
-			StdOut: "HDB_INFO",
-			StdErr: "",
-		}
+func GlobalINITest4Runner(cmd string, args string) (string, string, error) {
+	if cmd == "pidof" {
+		return "12345", "", nil
+	} else if cmd == "ps" {
+		return "HDB_INFO", "", nil
 	}
-	return commandlineexecutor.Result{
-		StdOut: "",
-		StdErr: "",
-	}
+	return "", "", nil
 }
 
 func TestHanaProcessOrGlobalINI(t *testing.T) {
 	tests := []struct {
-		name string
-		exec commandlineexecutor.Execute
-		want string
+		name    string
+		fakeRun commandlineexecutor.CommandRunner
+		want    string
 	}{
 		{
-			name: "GlobalINITest1",
-			exec: GlobalINITest1Exec,
-			want: "",
+			name:    "GlobalINITest1",
+			fakeRun: GlobalINITest1Runner,
+			want:    "",
 		},
 		{
-			name: "GlobalINITest2",
-			exec: GlobalINITest2Exec,
-			want: "Global INI contents",
+			name:    "GlobalINITest2",
+			fakeRun: GlobalINITest2Runner,
+			want:    "Global INI contents",
 		},
 		{
-			name: "GlobalINITest3",
-			exec: GlobalINITest3Exec,
-			want: "",
+			name:    "GlobalINITest3",
+			fakeRun: GlobalINITest3Runner,
+			want:    "",
 		},
 		{
-			name: "GlobalINITest4",
-			exec: GlobalINITest4Exec,
-			want: "HDB_INFO",
+			name:    "GlobalINITest4",
+			fakeRun: GlobalINITest4Runner,
+			want:    "HDB_INFO",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := hanaProcessOrGlobalINI(test.exec)
+			got := hanaProcessOrGlobalINI(test.fakeRun)
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, hanaProcessOrGlobalINI returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -586,7 +559,7 @@ func TestDiskInfo(t *testing.T) {
 		name              string
 		basePathVolume    string
 		globalINILocation string
-		exec              commandlineexecutor.Execute
+		runner            commandlineexecutor.CommandRunner
 		iir               *instanceinfo.Reader
 		config            *configpb.Configuration
 		mapper            instanceinfo.NetworkInterfaceAddressMapper
@@ -596,7 +569,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoGrep",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec:              defaultExec,
+			runner:            func(string, string) (string, string, error) { return "", "", nil },
 			iir:               defaultIIR,
 			config:            defaultConfig,
 			mapper:            defaultMapperFunc,
@@ -606,28 +579,18 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoGrep2",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-					Error:  errors.New("Command failed"),
-				}
-			},
-			iir:    defaultIIR,
-			config: defaultConfig,
-			mapper: defaultMapperFunc,
-			want:   map[string]string{},
+			runner:            func(string, string) (string, string, error) { return defaultHanaINI, "", errors.New("Command failed") },
+			iir:               defaultIIR,
+			config:            defaultConfig,
+			mapper:            defaultMapperFunc,
+			want:              map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoNoGrepError",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-					Error:  errors.New("Command failed"),
-				}
+			runner: func(string, string) (string, string, error) {
+				return defaultHanaINI, "", errors.New("Command failed")
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -638,11 +601,8 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoBadINIFormat",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolume /hana/data/ISC",
-					StdErr: "",
-				}
+			runner: func(string, string) (string, string, error) {
+				return "basepath_datavolume /hana/data/ISC", "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -653,17 +613,11 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoInvalidLSBLKOutput",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: "",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "lsblk" {
+					return "", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+				return defaultHanaINI, "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -674,17 +628,11 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoInvalidLSBLKOutput2",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: "This is invalid lsblk output",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "lsblk" {
+					return "This is invalid lsblk output", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+				return defaultHanaINI, "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -695,18 +643,11 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoInvalidLSBLKOutput3",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
-						StdErr: "",
-						Error:  errors.New("This is invalid lsblk output"),
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "lsblk" {
+					return DefaultJSONDiskList, "", errors.New("This is invalid lsblk output")
 				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+				return defaultHanaINI, "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -717,17 +658,11 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoMatches",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "lsblk" {
+					return DefaultJSONDiskList, "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+				return defaultHanaINI, "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -738,17 +673,11 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoSomeMatches",
 			basePathVolume:    "/dev/sdb",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "lsblk" {
+					return DefaultJSONDiskList, "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+				return "basepath_datavolumes = /hana/data/ISC", "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -764,17 +693,11 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoDevices",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: EmptyJSONDiskList,
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "lsblk" {
+					return EmptyJSONDiskList, "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+				return "basepath_datavolumes = /hana/data/ISC", "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -785,17 +708,11 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoChildren",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: NoChildrenJSONDiskList,
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "lsblk" {
+					return NoChildrenJSONDiskList, "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+				return "basepath_datavolumes = /hana/data/ISC", "", nil
 			},
 			iir:    defaultIIR,
 			config: defaultConfig,
@@ -807,7 +724,7 @@ func TestDiskInfo(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.iir.Read(test.config, test.mapper)
-			got := diskInfo(test.basePathVolume, test.globalINILocation, test.exec, *test.iir)
+			got := diskInfo(test.basePathVolume, test.globalINILocation, test.runner, *test.iir)
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, diskInfo returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -898,44 +815,28 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 func TestGrepKeyInGlobalINI(t *testing.T) {
 	tests := []struct {
 		name              string
-		exec              commandlineexecutor.Execute
+		runner            commandlineexecutor.CommandRunner
 		key               string
 		globalINILocation string
 		want              bool
 	}{
 		{
-			name: "TestGrepKeyInGlobalINIGrepError",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-					Error:  errors.New("Command failed"),
-				}
-			},
+			name:              "TestGrepKeyInGlobalINIGrepError",
+			runner:            func(string, string) (string, string, error) { return "", "", errors.New("Command failed") },
 			key:               "disk_location",
 			globalINILocation: "/etc/config/test.ini",
 			want:              false,
 		},
 		{
-			name: "TestGrepKeyInGlobalINIGrepNoReturn",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			},
+			name:              "TestGrepKeyInGlobalINIGrepNoReturn",
+			runner:            func(string, string) (string, string, error) { return "", "", nil },
 			key:               "disk_location",
 			globalINILocation: "/etc/config/test.ini",
 			want:              false,
 		},
 		{
-			name: "TestGrepKeyInGlobalINIGrepSuccess",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "disk_location = /dev/sda",
-					StdErr: "",
-				}
-			},
+			name:              "TestGrepKeyInGlobalINIGrepSuccess",
+			runner:            func(string, string) (string, string, error) { return "disk_location = /dev/sda", "", nil },
 			key:               "disk_location",
 			globalINILocation: "/etc/config/test.ini",
 			want:              true,
@@ -944,7 +845,7 @@ func TestGrepKeyInGlobalINI(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := grepKeyInGlobalINI(test.key, test.globalINILocation, test.exec)
+			got := grepKeyInGlobalINI(test.key, test.globalINILocation, test.runner)
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, grepKeyInGlobalINI returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -957,7 +858,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 	tests := []struct {
 		name            string
 		runtimeOS       string
-		exec            commandlineexecutor.Execute
+		runner          commandlineexecutor.CommandRunner
 		iir             *instanceinfo.Reader
 		config          *configpb.Configuration
 		mapper          instanceinfo.NetworkInterfaceAddressMapper
@@ -969,7 +870,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:            "TestHanaDoesNotExist",
 			runtimeOS:       "linux",
-			exec:            defaultExec,
+			runner:          func(string, string) (string, string, error) { return "", "", nil },
 			iir:             defaultIIR,
 			config:          defaultConfig,
 			mapper:          defaultMapperFunc,
@@ -981,17 +882,11 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaNoINI",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
 			},
 			iir:             defaultIIR,
 			config:          defaultConfig,
@@ -1004,17 +899,11 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaAllLabelsDisabled",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
 			},
 			iir:             defaultIIR,
 			config:          defaultConfig,
@@ -1027,35 +916,20 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaAllLabelsEnabled",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				if params.Executable == "grep" {
-					return commandlineexecutor.Result{
-						StdOut: "dummy key insert",
-						StdErr: "",
-					}
+				if cmd == "grep" {
+					return "dummy key insert", "", nil
 				}
-				if params.Executable == "cat" {
-					if params.Args[0] == "/proc/sys/kernel/numa_balancing" {
-						return commandlineexecutor.Result{
-							StdOut: "1",
-							StdErr: "",
-						}
+				if cmd == "cat" {
+					if args == "/proc/sys/kernel/numa_balancing" {
+						return "1", "", nil
 					}
-					return commandlineexecutor.Result{
-						StdOut: "[always]",
-						StdErr: "",
-					}
+					return "[always]", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
 			},
 			iir:             defaultIIR,
 			config:          defaultConfig,
@@ -1068,24 +942,14 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaLabelsDisabledFromErrors",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				if params.Executable == "cat" {
-					return commandlineexecutor.Result{
-						StdOut: "",
-						StdErr: "",
-						Error:  errors.New("Command failed"),
-					}
+				if cmd == "cat" {
+					return "", "", errors.New("Command failed")
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
 			},
 			iir:             defaultIIR,
 			config:          defaultConfig,
@@ -1114,17 +978,11 @@ func TestCollectHanaMetrics(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	osCaptionExecute = func() commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
-			StdErr: "",
-		}
+	osCaptionExecute = func() (string, string, error) {
+		return "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n", "", nil
 	}
-	osVersionExecute = func() commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n Version=10.0.17763  \n\n",
-			StdErr: "",
-		}
+	osVersionExecute = func() (string, string, error) {
+		return "\n Version=10.0.17763  \n\n", "", nil
 	}
 	cmdExists = func(c string) bool {
 		return true
@@ -1140,7 +998,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 				Config:             cnf,
 				OSStatReader:       test.osStatReader,
 				InstanceInfoReader: *test.iir,
-				Execute:            test.exec,
+				CommandRunner:      test.runner,
 				OSType:             test.runtimeOS,
 			}
 			go CollectHanaMetrics(p, hch)
@@ -1155,20 +1013,17 @@ func TestCollectHanaMetrics(t *testing.T) {
 func TestCollectHANAMetricsFromConfig(t *testing.T) {
 	tests := []struct {
 		name             string
-		exec             commandlineexecutor.Execute
+		runner           commandlineexecutor.CommandRunner
+		runnerNoSpace    commandlineexecutor.CommandRunnerNoSpace
 		osStatReader     OSStatReader
 		configFileReader ConfigFileReader
 		wantHanaExists   float64
 		wantLabels       map[string]string
 	}{
 		{
-			name: "TestHanaDoesNotExist",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			},
+			name:             "TestHanaDoesNotExist",
+			runner:           func(string, string) (string, string, error) { return "", "", nil },
+			runnerNoSpace:    func(cmd string, args ...string) (string, string, error) { return "", "", nil },
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
 			wantHanaExists:   float64(0.0),
@@ -1176,17 +1031,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "TestHanaNoINI",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
 			},
 			osStatReader:     os.Stat,
 			configFileReader: defaultFileReader,
@@ -1195,17 +1044,14 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "StatReaderError",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
+			},
+			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+				return "", "", nil
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, errors.New("error") },
 			configFileReader: defaultFileReader,
@@ -1214,17 +1060,14 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "TestHanaAllLabelsDisabled",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
+			},
+			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+				return "", "", nil
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
@@ -1246,41 +1089,26 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "TestHanaAllLabelsEnabled",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
+			runner: func(cmd string, args string) (string, string, error) {
+				if cmd == "/bin/sh" {
+					return "/etc/config/this_ini_does_not_exist.ini", "", nil
 				}
-				if params.Executable == "grep" {
-					return commandlineexecutor.Result{
-						StdOut: "basepath location /hana/data",
-						StdErr: "",
-					}
+				if cmd == "grep" {
+					return "basepath location /hana/data", "", nil
 				}
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
-						StdErr: "",
-					}
+				if cmd == "lsblk" {
+					return DefaultJSONDiskList, "", nil
 				}
-				if params.Executable == "cat" {
-					if params.Args[0] == "/proc/sys/kernel/numa_balancing" {
-						return commandlineexecutor.Result{
-							StdOut: "1",
-							StdErr: "",
-						}
+				return "", "", nil
+			},
+			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+				if cmd == "cat" {
+					if args[0] == "/proc/sys/kernel/numa_balancing" {
+						return "1", "", nil
 					}
-					return commandlineexecutor.Result{
-						StdOut: "[always]",
-						StdErr: "",
-					}
+					return "[always]", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
+				return "", "", nil
 			},
 			osStatReader: func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: ConfigFileReader(func(data string) (io.ReadCloser, error) {
@@ -1315,14 +1143,15 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			iir := defaultIIR
 			iir.Read(defaultConfig, defaultMapperFunc)
 			p := Parameters{
-				Config:             cnf,
-				OSStatReader:       test.osStatReader,
-				InstanceInfoReader: *iir,
-				Execute:            test.exec,
-				OSType:             "linux",
-				osVendorID:         "rhel",
-				WorkloadConfig:     collectionDefinition.GetWorkloadValidation(),
-				ConfigFileReader:   test.configFileReader,
+				Config:               cnf,
+				OSStatReader:         test.osStatReader,
+				InstanceInfoReader:   *iir,
+				CommandRunner:        test.runner,
+				CommandRunnerNoSpace: test.runnerNoSpace,
+				OSType:               "linux",
+				osVendorID:           "rhel",
+				WorkloadConfig:       collectionDefinition.GetWorkloadValidation(),
+				ConfigFileReader:     test.configFileReader,
 			}
 
 			want := createHANAWorkloadMetrics(test.wantLabels, test.wantHanaExists)

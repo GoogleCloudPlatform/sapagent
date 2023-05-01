@@ -71,11 +71,12 @@ type (
 
 // Discovery is a type used to perform SAP System discovery operations.
 type Discovery struct {
-	gceService   gceInterface
-	wlmService   wlmInterface
-	exists       commandlineexecutor.Exists
-	execute      commandlineexecutor.Execute
-	hostResolver func(string) ([]string, error)
+	gceService        gceInterface
+	wlmService        wlmInterface
+	exists            commandlineexecutor.CommandExistsRunner
+	commandRunner     commandlineexecutor.CommandRunner
+	userCommandRunner runCmdAsUser
+	hostResolver      func(string) ([]string, error)
 }
 
 func extractFromURI(uri, field string) string {
@@ -141,11 +142,12 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 	}
 
 	d := Discovery{
-		gceService:   gceService,
-		wlmService:   wlmService,
-		exists:       commandlineexecutor.CommandExists,
-		execute:      commandlineexecutor.ExecuteCommand,
-		hostResolver: net.LookupHost,
+		gceService:        gceService,
+		wlmService:        wlmService,
+		exists:            commandlineexecutor.CommandExists,
+		commandRunner:     commandlineexecutor.ExpandAndExecuteCommand,
+		userCommandRunner: commandlineexecutor.ExecuteCommandAsUser,
+		hostResolver:      net.LookupHost,
 	}
 
 	go runDiscovery(config, d)
@@ -574,43 +576,38 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 func (d *Discovery) discoverCluster() (string, error) {
 	log.Logger.Info("Discovering cluster")
 	if d.exists("crm") {
-		result := d.execute(commandlineexecutor.Params{
-			Executable:  "crm",
-			ArgsToSplit: "config show",
-		})
-		if result.Error != nil {
-			return "", result.Error
+		stdOut, _, err := d.commandRunner("crm", "config show")
+		if err != nil {
+			return "", err
 		}
 
 		var addrPrimitiveFound bool
-		for _, l := range strings.Split(result.StdOut, "\n") {
+		for _, l := range strings.Split(stdOut, "\n") {
 			if strings.Contains(l, "rsc_vip_int-primary IPaddr2") {
 				addrPrimitiveFound = true
 			}
 			if addrPrimitiveFound && strings.Contains(l, "params ip") {
 				address := ipRegex.FindString(l)
 				if address == "" {
-					return "", errors.New("Unable to locate IP address in crm output: " + result.StdOut)
+					return "", errors.New("Unable to locate IP address in crm output: " + stdOut)
 				}
 				return address, nil
 			}
 		}
 		return "", errors.New("No address found in pcs cluster config output")
-	} else if d.exists("pcs") {
-		result := d.execute(commandlineexecutor.Params{
-			Executable:  "pcs",
-			ArgsToSplit: "config show",
-		})
-		if result.Error != nil {
-			return "", result.Error
+	}
+	if d.exists("pcs") {
+		stdOut, _, err := d.commandRunner("pcs", "config show")
+		if err != nil {
+			return "", err
 		}
 
 		var addrPrimitiveFound bool
-		for _, l := range strings.Split(result.StdOut, "\n") {
+		for _, l := range strings.Split(stdOut, "\n") {
 			if addrPrimitiveFound && strings.Contains(l, "ip") {
 				address := ipRegex.FindString(l)
 				if address == "" {
-					return "", errors.New("Unable to locate IP address in crm output: " + result.StdOut)
+					return "", errors.New("Unable to locate IP address in crm output: " + stdOut)
 				}
 				return address, nil
 			}
@@ -631,15 +628,12 @@ func (d *Discovery) discoverFilestores(projectID string, parent *spb.SapDiscover
 		return res
 	}
 
-	result := d.execute(commandlineexecutor.Params{
-		Executable: "df",
-		Args:       []string{"-h"},
-	})
-	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving mounts", "error", result.Error)
+	stdOut, _, err := d.commandRunner("df", "-h")
+	if err != nil {
+		log.Logger.Warnw("Error retrieving mounts", "error", err)
 		return res
 	}
-	for _, l := range strings.Split(result.StdOut, "\n") {
+	for _, l := range strings.Split(stdOut, "\n") {
 		matches := fsMountRegex.FindStringSubmatch(l)
 		if len(matches) < 2 {
 			continue
@@ -677,17 +671,13 @@ func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid strin
 	sidUpper := strings.ToUpper(sid)
 	sidPath := fmt.Sprintf("/usr/sap/%s/hdbclient/hdbuserstore", sidUpper)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	result := d.execute(commandlineexecutor.Params{
-		Executable: sidPath,
-		Args:       []string{"list", "DEFAULT"},
-		User:       sidAdm,
-	})
-	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
+	stdOut, stdErr, err := d.userCommandRunner(sidAdm, sidPath, "list", "DEFAULT")
+	if err != nil {
+		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", err, "stdout", stdOut, "stderr", stdErr)
 		return res
 	}
 
-	outLines := strings.Split(result.StdOut, "\n")
+	outLines := strings.Split(stdOut, "\n")
 	var dbHostname string
 	for _, l := range outLines {
 		t := strings.TrimSpace(l)
@@ -863,14 +853,10 @@ func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
 	sidUpper := strings.ToUpper(appSID)
 	sidPath := fmt.Sprintf("/usr/sap/%s/hdbclient/hdbuserstore", sidUpper)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	result := d.execute(commandlineexecutor.Params{
-		Executable: sidPath,
-		Args:       []string{"list"},
-		User:       sidAdm,
-	})
-	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
-		return "", result.Error
+	stdOut, stdErr, err := d.userCommandRunner(sidAdm, sidPath, "list")
+	if err != nil {
+		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", err, "stdOut", stdOut, "stdErr", stdErr)
+		return "", err
 	}
 
 	re, err := regexp.Compile(`DATABASE\s*:\s*([a-zA-Z][a-zA-Z0-9]{2})`)
@@ -878,21 +864,17 @@ func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
 		log.Logger.Warnw("Error compiling regex", "error", err)
 		return "", err
 	}
-	sid := re.FindStringSubmatch(result.StdOut)
+	sid := re.FindStringSubmatch(stdOut)
 	if len(sid) > 1 {
 		return sid[1], nil
 	}
 
 	// No DB SID in userstore, check profiles
 	profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/*", sidUpper)
-	result = d.execute(commandlineexecutor.Params{
-		Executable:  "sh",
-		ArgsToSplit: `-c 'grep "dbid\|dbms/name" ` + profilePath + `'`,
-	})
-
-	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
-		return "", result.Error
+	stdOut, stdErr, err = d.commandRunner("sh", `-c 'grep "dbid\|dbms/name" `+profilePath+`'`)
+	if err != nil {
+		log.Logger.Warnw("Error retrieving sap profile info", "sid", appSID, "error", err, "stdOut", stdOut, "stdErr", stdErr)
+		return "", err
 	}
 
 	re, err = regexp.Compile(`(dbid|dbms\/name)\s*=\s*([a-zA-Z][a-zA-Z0-9]{2})`)
@@ -900,7 +882,7 @@ func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
 		log.Logger.Warnw("Error compiling regex", "error", err)
 		return "", err
 	}
-	sid = re.FindStringSubmatch(result.StdOut)
+	sid = re.FindStringSubmatch(stdOut)
 	if len(sid) > 2 {
 		log.Logger.Infow("Found DB SID", "sid", sid[2])
 		return sid[2], nil

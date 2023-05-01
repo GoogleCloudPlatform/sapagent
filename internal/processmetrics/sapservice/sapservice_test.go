@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -49,22 +48,20 @@ var (
 func TestCollect(t *testing.T) {
 	tests := []struct {
 		name      string
-		execute   commandlineexecutor.Execute
-		exitCode  commandlineexecutor.ExitCode
+		executor  commandExecutor
+		errorCode exitCode
 		wantCount int
 	}{
 		{
 			name: "CollectMetricsWithFailureExitCodeInIsFailedAndIsDisabled",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.HasPrefix(params.ArgsToSplit, "is-failed") {
+			executor: func(cmd, args string) (string, string, error) {
+				if strings.HasPrefix(args, "is-failed") {
 					// a zero exit code will represent an error here
-					return commandlineexecutor.Result{}
+					return "", "", nil
 				}
-				return commandlineexecutor.Result{
-					Error: errors.New("unable to execute command"),
-				}
+				return "", "", errors.New("unable to execute command")
 			},
-			exitCode: func(err error) int {
+			errorCode: func(err error) int {
 				if err == nil {
 					return 0
 				}
@@ -74,10 +71,10 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "CollectMetricsWithFailuresInExitCodeInIsFailed",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
+			executor: func(string, string) (string, string, error) {
+				return "", "", nil
 			},
-			exitCode: func(err error) int {
+			errorCode: func(err error) int {
 				if err == nil {
 					return 0
 				}
@@ -87,18 +84,14 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "NoMetricsCollectedFromIsFailedAndIsDisabled",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.HasPrefix(params.ArgsToSplit, "is-failed") {
-					// a zero exit code will represent an error here
-					return commandlineexecutor.Result{
-						Error:            errors.New("is-failed error"),
-						ExitStatusParsed: true,
-						ExitCode:         1,
-					}
+			executor: func(cmd, args string) (string, string, error) {
+				if strings.HasPrefix(args, "is-failed") {
+					// a non zero code is treated as no error here.
+					return "", "", errors.New("is-failed error")
 				}
-				return commandlineexecutor.Result{}
+				return "", "", nil
 			},
-			exitCode: func(err error) int {
+			errorCode: func(err error) int {
 				if err == nil {
 					return 0
 				}
@@ -108,14 +101,10 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "CollectMetricsWithFailureInIsDisabled",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error:            errors.New("unable to execute command"),
-					ExitStatusParsed: true,
-					ExitCode:         1,
-				}
+			executor: func(cmd, args string) (string, string, error) {
+				return "", "", errors.New("unable to execute command")
 			},
-			exitCode: func(err error) int {
+			errorCode: func(err error) int {
 				if err == nil {
 					return 0
 				}
@@ -128,8 +117,8 @@ func TestCollect(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			testInstanceProperties := &InstanceProperties{
 				Config:   defaultConfig,
-				Execute:  test.execute,
-				ExitCode: test.exitCode,
+				Executor: test.executor,
+				ExitCode: test.errorCode,
 				Client:   &fake.TimeSeriesCreator{},
 			}
 			got := testInstanceProperties.Collect(context.Background())

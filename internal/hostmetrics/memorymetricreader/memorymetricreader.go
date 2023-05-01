@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	mstatspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
@@ -30,23 +29,22 @@ import (
 type (
 	// FileReader is a function type matching the signature for os.ReadFile.
 	FileReader func(string) ([]byte, error)
-	// A Reader is capable of reading memory statistics from the OS.
-	//
-	// Due to the assignment of required unexported fields, a Reader must be initialized with New()
-	// instead of as a struct literal.
+	// RunCommand is a function type matching the signature for commandlineexecutor.ExecuteCommand.
+	RunCommand func(string, ...string) (string, string, error)
+	// Reader is for reading memory statistics from the OS
 	Reader struct {
 		os         string
 		fileReader FileReader
-		execute    commandlineexecutor.Execute
+		runCommand RunCommand
 	}
 )
 
 // New instantiates a Reader with the capability to read memory metrics from linux and windows operating systems.
-func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) *Reader {
+func New(os string, fileReader FileReader, runCommand RunCommand) *Reader {
 	return &Reader{
 		os:         os,
 		fileReader: fileReader,
-		execute:    execute,
+		runCommand: runCommand,
 	}
 }
 
@@ -73,26 +71,20 @@ func (r *Reader) MemoryStats() *mstatspb.MemoryStats {
 // readMemoryStatsForWindows Reads memory stats for Windows, uses wmic command for the OS values
 func (r *Reader) readMemoryStatsForWindows() *mstatspb.MemoryStats {
 	ms := &mstatspb.MemoryStats{}
-	result := r.execute(commandlineexecutor.Params{
-		Executable: "wmic",
-		Args:       []string{"computersystem", "get", "TotalPhysicalMemory/Format:List"},
-	})
-	if result.Error != nil {
-		log.Logger.Errorw("Could not execute wmic get TotalPhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	o, e, err := r.runCommand("wmic", "computersystem", "get", "TotalPhysicalMemory/Format:List")
+	if err != nil {
+		log.Logger.Errorw("Could not execute wmic get TotalPhysicalMemory/Format:List", "stdout", o, "stderr", e, "error", err)
 		ms.Total = -1
 	} else {
 		// NOMUTANTS--precision is the same when dividend 1024*1024 is mutated to (1024*1024)-1
-		ms.Total = mbValueFromWmicOutput(result.StdOut, "TotalPhysicalMemory", 1024*1024)
+		ms.Total = mbValueFromWmicOutput(o, "TotalPhysicalMemory", 1024*1024)
 	}
-	result = r.execute(commandlineexecutor.Params{
-		Executable: "wmic",
-		Args:       []string{"OS", "get", "FreePhysicalMemory/Format:List"},
-	})
-	if result.Error != nil {
-		log.Logger.Errorw("Could not execute wmic get FreePhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	o, e, err = r.runCommand("wmic", "OS", "get", "FreePhysicalMemory/Format:List")
+	if err != nil {
+		log.Logger.Errorw("Could not execute wmic get FreePhysicalMemory/Format:List", "stdout", o, "stderr", e, "error", err)
 		ms.Free = -1
 	} else {
-		ms.Free = mbValueFromWmicOutput(result.StdOut, "FreePhysicalMemory", 1024)
+		ms.Free = mbValueFromWmicOutput(o, "FreePhysicalMemory", 1024)
 	}
 	return ms
 }

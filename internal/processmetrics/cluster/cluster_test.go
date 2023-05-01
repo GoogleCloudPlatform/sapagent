@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -49,7 +50,7 @@ func TestCollectNodeState(t *testing.T) {
 	}{
 		{
 			name: "StateUncleanAndShutdown",
-			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
+			fakeNodeState: func() (map[string]string, error) {
 				return map[string]string{
 					"test-instance-1": "unclean",
 					"test-instance-2": "shutdown",
@@ -60,7 +61,7 @@ func TestCollectNodeState(t *testing.T) {
 		},
 		{
 			name: "StateStandbyAndOnlineUnknown",
-			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
+			fakeNodeState: func() (map[string]string, error) {
 				return map[string]string{
 					"test-instance-1": "standby",
 					"test-instance-2": "online",
@@ -72,14 +73,14 @@ func TestCollectNodeState(t *testing.T) {
 		},
 		{
 			name: "PacemekerReadFailure",
-			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
+			fakeNodeState: func() (map[string]string, error) {
 				return nil, cmpopts.AnyError
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectNodeState(defaultInstanceProperties, test.fakeNodeState, nil)
+			gotMetrics, gotValues := collectNodeState(defaultInstanceProperties, test.fakeNodeState)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
@@ -102,7 +103,7 @@ func TestCollectResourceState(t *testing.T) {
 	}{
 		{
 			name: "SuccessStartedStartingMasterSlave",
-			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
+			fakeResourceState: func() ([]pacemaker.Resource, error) {
 				rs := []pacemaker.Resource{
 					{
 						Name: "resource1",
@@ -132,7 +133,7 @@ func TestCollectResourceState(t *testing.T) {
 		},
 		{
 			name: "SuccessStoppedFailedUnknown",
-			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
+			fakeResourceState: func() ([]pacemaker.Resource, error) {
 				rs := []pacemaker.Resource{
 					{
 						Name: "resource1",
@@ -157,7 +158,7 @@ func TestCollectResourceState(t *testing.T) {
 		},
 		{
 			name: "SuccessDuplicateResources",
-			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
+			fakeResourceState: func() ([]pacemaker.Resource, error) {
 				rs := []pacemaker.Resource{
 					{
 						Name: "resource1",
@@ -177,7 +178,7 @@ func TestCollectResourceState(t *testing.T) {
 		},
 		{
 			name: "PacemakerReadFailure",
-			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
+			fakeResourceState: func() ([]pacemaker.Resource, error) {
 				return nil, cmpopts.AnyError
 			},
 		},
@@ -185,7 +186,7 @@ func TestCollectResourceState(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectResourceState(defaultInstanceProperties, test.fakeResourceState, nil)
+			gotMetrics, gotValues := collectResourceState(defaultInstanceProperties, test.fakeResourceState)
 
 			if diff := cmp.Diff(test.wantValues, gotValues); diff != "" {
 				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
@@ -276,7 +277,7 @@ func TestCollectFailCount(t *testing.T) {
 	}{
 		{
 			name: "SuccessOneResource",
-			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
+			fakeReadFailCount: func(commandlineexecutor.CommandRunner) ([]pacemaker.ResourceFailCount, error) {
 				return []pacemaker.ResourceFailCount{
 					{
 						Node:         "test-instance-1",
@@ -290,7 +291,7 @@ func TestCollectFailCount(t *testing.T) {
 		},
 		{
 			name: "MultipleFailedResources",
-			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
+			fakeReadFailCount: func(commandlineexecutor.CommandRunner) ([]pacemaker.ResourceFailCount, error) {
 				return []pacemaker.ResourceFailCount{
 					{
 						Node:         "test-instance-1",
@@ -308,13 +309,13 @@ func TestCollectFailCount(t *testing.T) {
 		},
 		{
 			name: "ReadFailCountFailure",
-			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
+			fakeReadFailCount: func(commandlineexecutor.CommandRunner) ([]pacemaker.ResourceFailCount, error) {
 				return nil, cmpopts.AnyError
 			},
 		},
 		{
 			name: "NoFailedResource",
-			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
+			fakeReadFailCount: func(commandlineexecutor.CommandRunner) ([]pacemaker.ResourceFailCount, error) {
 				return nil, nil
 			},
 		},
@@ -322,7 +323,7 @@ func TestCollectFailCount(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectFailCount(defaultInstanceProperties, test.fakeReadFailCount, nil)
+			gotMetrics, gotValues := collectFailCount(defaultInstanceProperties, test.fakeReadFailCount)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectFailCount() returned unexpected diff (-want,+got): %s\n", diff)

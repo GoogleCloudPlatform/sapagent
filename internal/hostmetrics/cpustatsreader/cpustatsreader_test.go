@@ -23,7 +23,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
 
@@ -32,7 +31,7 @@ func TestRead(t *testing.T) {
 		name   string
 		os     string
 		reader FileReader
-		exec   commandlineexecutor.Execute
+		run    RunCommand
 		want   *statspb.CpuStats
 	}{
 		{
@@ -78,11 +77,8 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsSuccess",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "\n\r\n\r\nMaxClockSpeed=2200\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4\nNumberOfLogicalProcessors=8\n\r\n\r\n",
-					StdErr: "",
-				}
+			run: func(executable string, args ...string) (string, string, error) {
+				return "\n\r\n\r\nMaxClockSpeed=2200\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4\nNumberOfLogicalProcessors=8\n\r\n\r\n", "", nil
 			},
 			want: &statspb.CpuStats{
 				CpuCount:      8,
@@ -92,33 +88,26 @@ func TestRead(t *testing.T) {
 			},
 		},
 		{
-			name: "windowsErrExecuteCommand",
+			name: "windowsErrRunCommand",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "stdError output",
-					Error:  errors.New("Execute Command error"),
-				}
+			run: func(executable string, args ...string) (string, string, error) {
+				return "", "stdError output", errors.New("Run Command error")
 			},
 			want: &statspb.CpuStats{},
 		},
 		{
 			name: "windowsNoResults",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
+			run: func(executable string, args ...string) (string, string, error) {
+				return "", "", nil
 			},
 			want: &statspb.CpuStats{},
 		},
 		{
 			name: "windowsParseErors",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "\n\r\n\r\nMaxClockSpeed=not-a-float\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4.5\nNumberOfLogicalProcessors=8.5\n\r\n\r\n",
-					StdErr: "",
-				}
+			run: func(executable string, args ...string) (string, string, error) {
+				return "\n\r\n\r\nMaxClockSpeed=not-a-float\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4.5\nNumberOfLogicalProcessors=8.5\n\r\n\r\n", "", nil
 			},
 			want: &statspb.CpuStats{
 				ProcessorType: "Intel(R) Xeon(R) CPU @ 2.20GHz",
@@ -133,7 +122,7 @@ func TestRead(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			r := New(test.os, test.reader, test.exec)
+			r := New(test.os, test.reader, test.run)
 			got := r.Read()
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("Read() returned unexpected diff (-want +got):\n%s", diff)

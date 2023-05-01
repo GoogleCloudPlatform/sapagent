@@ -22,156 +22,134 @@ package commandlineexecutor
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
 	"strconv"
-	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
 
 var (
-	exitStatusPattern                     = regexp.MustCompile("exit status ([0-9]+)")
-	exists                                = CommandExists
-	exitCode                              = commandExitCode
-	run               Run                 = nil
-	exeForPlatform    SetupExeForPlatform = nil
+	exitStatusPattern = regexp.MustCompile("exit status ([0-9]+)")
 )
 
 type (
-	// Execute is a function to execute a command. Production callers
+	runCmdAsUser func(string, string, string) (string, string, error)
+	// CommandRunner is a function to execute command. Production callers
+	// to pass commandlineexecutor.ExpandAndExecuteCommand while calling
+	// this package's APIs.
+	CommandRunner func(string, string) (string, string, error)
+	// CommandRunnerNoSpace is a function to execute a command.  Production callers
 	// to pass commandlineexecutor.ExecuteCommand while calling this package's APIs.
-	Execute func(params Params) Result
-
-	// Exists is a function to check if a command exists.  Production callers
-	// to pass commandlineexecutor.CommandExists while calling this package's APIs.
-	Exists func(string) bool
-
-	// ExitCode is a function to get the exit code from an error.  Production callers
-	// to pass commandlineexecutor.CommandExitCode while calling this package's APIs.
-	ExitCode func(err error) int
-
-	// Run is a testable version of the exec.Run method.  Should only be used during testing.
-	Run func() error
-
-	// SetupExeForPlatform is a testable version of the setupExeForPlatform call.
-	// Should only be used during testing.
-	SetupExeForPlatform func(exe *exec.Cmd, params Params) error
-
-	// Params encapsulates the parameters used by the Exec* and RunWithEnv funcs.
-	Params struct {
-		Executable string
-		// One of ArgsToSplit or Args should be defined on the Params.
-		// ArgsToSplit should be preferred when issuing commands with a subshell and using "-c".
-		// An example would be an invocation like:
-		//   Executable: "/bin/sh"
-		//   ArgsToSplit: "-c 'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'"
-		// In this case ArgsToSplit will be split up correctly as:
-		//   []string{"-c", "'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'"}
-		ArgsToSplit string
-		Args        []string
-		Timeout     int // defaults to 60, so timeout will occur in 60 seconds
-		User        string
-		Env         []string
-	}
-
-	// Result holds the stdout, stderr, exit code, and error from the execution.
-	Result struct {
-		StdOut, StdErr   string
-		ExitCode         int
-		Error            error
-		ExecutableFound  bool
-		ExitStatusParsed bool // Will be true if "exit status ([0-9]+)" is in the error result
+	CommandRunnerNoSpace func(string, ...string) (string, string, error)
+	// CommandExistsRunner is a function to check if command exists.  Production callers
+	// to pass commandlineexecutor.CommandExists while calling
+	// this package's APIs.
+	CommandExistsRunner func(string) bool
+	// Runner has the necessary info to run a command.
+	Runner struct {
+		User, Executable, Args string
+		Env                    []string
 	}
 )
 
 /*
-ExecuteCommand takes Params and returns a Result.
+RunWithEnv uses the fields of Runner to execute a command.
 
-If the params.Executable does not exist it will return early with the Result.Error filled
-If the Params ArgsToSplit is not empty then it will be split into an arguments array
-Else the Args will be used as the arguments array
-If the User is not empty then the command will be executed as that user
-If Env is defined then that environment will be used to execute the command
-
-The returned Result will contain the standard out, standard error, the exit code and an error if
-one was encountered during execution.
+Returns StdOut, StdErr, exitCode of command and an error.
+Returns 0 if parsing of exit code fails.
 */
-func ExecuteCommand(params Params) Result {
-	if !exists(params.Executable) {
-		log.Logger.Debugw("Command executable not found", "executable", params.Executable)
-		msg := fmt.Sprintf("Command executable: %q not found.", params.Executable)
-		return Result{"", msg, 0, fmt.Errorf("command executable: %s not found", params.Executable), false, false}
-	}
+func (r *Runner) RunWithEnv() (stdOut string, stdErr string, code int, err error) {
+	return r.platformRunWithEnv()
+}
 
+/*
+ExpandAndExecuteCommand takes a command string and a single argument string containing space
+delimited arguments and executes said command after splitting the arguments into a slice.
+*/
+func ExpandAndExecuteCommand(executable string, args string) (stdOut string, stdErr string, err error) {
+	return ExecuteCommand(executable, splitParams(args)...)
+}
+
+/*
+ExecuteCommand takes a command string and a arbitrarily sized list of arguments as a slice of
+strings and executes the command with those arguments.  The function returns a tuple containing the
+command's stdOut as a string, the command's stdErr as a string, and an error.  The error will be nil
+if the command was successful.
+*/
+func ExecuteCommand(executable string, args ...string) (stdOut string, stdErr string, err error) {
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	// Timeout the command at 60 seconds by default.
-	timeout := 60 * time.Second
-	if params.Timeout > 0 {
-		timeout = time.Duration(params.Timeout) * time.Second
-	}
-	// TODO Refactor to get the Context through to all ExecuteCommand calls as a parameter
-	ctx := context.Background()
-	tctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	args := params.Args
-	if params.ArgsToSplit != "" {
-		args = splitParams(params.ArgsToSplit)
-	}
-	exe := exec.CommandContext(tctx, params.Executable, args...)
+	exe := exec.Command(executable, args...)
 
 	exe.Stdout = stdout
 	exe.Stderr = stderr
-	var err error
-	if exeForPlatform != nil {
-		err = exeForPlatform(exe, params)
-	} else {
-		err = setupExeForPlatform(exe, params)
-	}
-	if err != nil {
-		log.Logger.Debugw("Could not setup the executable environment", "executable", params.Executable, "args", args, "error", err)
-		return Result{stdout.String(), stderr.String(), 0, err, true, false}
-	}
 
-	log.Logger.Debugw("Executing command", "executable", params.Executable, "args", args,
-		"timeout", timeout, "user", params.User, "env", params.Env)
+	log.Logger.Debugw("Executing command", "executable", executable, "args", args)
 
-	if run != nil {
-		err = run()
-	} else {
-		err = exe.Run()
-	}
-	if err != nil {
-		// Set the exit code based on the error first, then see if we can get it from the error message.
-		exitCode := exitCode(err)
-		m := exitStatusPattern.FindStringSubmatch(err.Error())
-		exitStatusParsed := false
-		if len(m) > 0 {
-			atoi, serr := strconv.Atoi(m[1])
-			if serr != nil {
-				log.Logger.Debugw("Failed to get command exit code from string match", "executable", params.Executable,
-					"args", args, "error", serr)
-			} else {
-				// This is the case where we expect to have an Error but want the exit code from the "exit status #" string
-				exitCode = atoi
-				exitStatusParsed = true
-			}
-		} else {
-			log.Logger.Debugw("Error encountered when executing command", "executable", params.Executable,
-				"args", args, "exitcode", exitCode, "error", err, "stdout", stdout.String(),
-				"stderr", stderr.String())
-		}
-		return Result{stdout.String(), stderr.String(), exitCode, err, true, exitStatusParsed}
+	if err := exe.Run(); err != nil {
+		log.Logger.Debugw("Could not execute command", "executable", executable, "args", args, "exitcode", ExitCode(err), "error", err, "stdout", stdout.String(), "stderr", stderr.String())
+		return stdout.String(), stderr.String(), err
 	}
 
 	// Exit code can assumed to be 0
-	log.Logger.Debugw("Successfully executed command", "executable", params.Executable, "args", args,
-		"stdout", stdout.String(), "stderr", stderr.String())
-	return Result{stdout.String(), stderr.String(), 0, nil, true, false}
+	log.Logger.Debugw("Successfully executed command", "executable", executable, "args", args, "stdout", stdout.String(), "stderr", stderr.String())
+	return stdout.String(), stderr.String(), nil
+
+}
+
+/*
+ExpandAndExecuteCommandAsUser takes a user string, a command string and a single argument string containing
+space delimited arguments and executes said command after splitting the arguments into a slice.
+*/
+func ExpandAndExecuteCommandAsUser(user, executable, args string) (stdOut string, stdErr string, err error) {
+	return ExecuteCommandAsUser(user, executable, splitParams(args)...)
+}
+
+/*
+ExpandAndExecuteCommandAsUserExitCode takes a user string, a command string and a single argument
+string containing space delimited arguments and executes said command after splitting the arguments
+into a slice. It returns an additional exitCode which is an outcome of command execution.
+Returns 0 if parsing of exit code fails.
+*/
+func ExpandAndExecuteCommandAsUserExitCode(user, executable, args string) (stdOut string, stdErr string, code int64, err error) {
+	return runCommandAsUserExitCode(user, executable, args, ExpandAndExecuteCommandAsUser)
+}
+
+// runCommandAsUserExitCode is a testable version of ExpandAndExecuteCommandAsUserExitCode.
+func runCommandAsUserExitCode(user, executable, args string, run runCmdAsUser) (stdOut string, stdErr string, code int64, err error) {
+	if !CommandExists(executable) {
+		log.Logger.Debugw("Command executable not found", "executable", executable)
+		msg := fmt.Sprintf("Command executable: %q not found.", executable)
+		return "", msg, 0, fmt.Errorf("command executable: %s not found", executable)
+	}
+
+	var exitCode int
+	stdOut, stdErr, err = run(user, executable, args)
+	if err != nil {
+		log.Logger.Debugw("Command execution complete", "executable", executable, "args", args, "stdout", stdOut, "stderr", stdErr, "error", err)
+
+		m := exitStatusPattern.FindStringSubmatch(err.Error())
+		exitCode, err = strconv.Atoi(m[1])
+		if err != nil {
+			log.Logger.Debugw("Failed to get command exit code", "executable", executable, "args", args, "error", err)
+			return stdOut, stdErr, 0, err
+		}
+	}
+	return stdOut, stdErr, int64(exitCode), nil
+}
+
+/*
+ExecuteCommandAsUser takes a user string, a command string and a arbitrarily sized list of
+arguments as a slice of strings and executes the command with those arguments.
+The function returns a tuple containing the command's stdOut as a string, the command's stdErr
+as a string, and an error.  The error will be nil if the command was successful.
+Note: This is intended for Linux based system only see exe_linux.go.
+*/
+func ExecuteCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
+	return executeCommandAsUser(user, executable, args...)
 }
 
 /*
@@ -184,10 +162,10 @@ func CommandExists(executable string) bool {
 }
 
 /*
-commandExitCode returns the exit code attached to the error produced by a call to exec.Command or 0
-if the error is null.
+ExitCode returns the exit code attached to the error produced by a call to exec.Command or 0 if
+the error is null.
 */
-func commandExitCode(err error) int {
+func ExitCode(err error) int {
 	var exitErr *exec.ExitError
 	if err != nil && errors.As(err, &exitErr) {
 		return exitErr.ExitCode()

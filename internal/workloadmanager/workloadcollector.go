@@ -93,8 +93,9 @@ type Parameters struct {
 	Remote                bool
 	ConfigFileReader      ConfigFileReader
 	OSStatReader          OSStatReader
-	Execute               commandlineexecutor.Execute
-	Exists                commandlineexecutor.Exists
+	CommandRunner         commandlineexecutor.CommandRunner
+	CommandRunnerNoSpace  commandlineexecutor.CommandRunnerNoSpace
+	CommandExistsRunner   commandlineexecutor.CommandExistsRunner
 	InstanceInfoReader    instanceinfo.Reader
 	TimeSeriesCreator     cloudmonitoring.TimeSeriesCreator
 	DefaultTokenGetter    DefaultTokenGetter

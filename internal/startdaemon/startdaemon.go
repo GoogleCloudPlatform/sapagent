@@ -70,10 +70,13 @@ var (
 		var f io.ReadCloser = file
 		return f, err
 	})
-	execute = commandlineexecutor.Execute(func(params commandlineexecutor.Params) commandlineexecutor.Result {
-		return commandlineexecutor.ExecuteCommand(params)
+	commandRunnerNoSpace = commandlineexecutor.CommandRunnerNoSpace(func(exe string, args ...string) (string, string, error) {
+		return commandlineexecutor.ExecuteCommand(exe, args...)
 	})
-	exists = commandlineexecutor.Exists(func(exe string) bool {
+	commandRunner = commandlineexecutor.CommandRunner(func(exe string, args string) (string, string, error) {
+		return commandlineexecutor.ExpandAndExecuteCommand(exe, args)
+	})
+	commandExistsRunner = commandlineexecutor.CommandExistsRunner(func(exe string) bool {
 		return commandlineexecutor.CommandExists(exe)
 	})
 	defaultTokenGetter = workloadmanager.DefaultTokenGetter(func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -221,13 +224,13 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		return
 	}
 	wlmparams := workloadmanager.Parameters{
-		Config:            d.config,
-		Remote:            false,
-		TimeSeriesCreator: mc,
-		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
-		Execute:           execute,
-		Exists:            exists,
-		HeartbeatSpec:     wlmHeartbeatSpec,
+		Config:               d.config,
+		Remote:               false,
+		TimeSeriesCreator:    mc,
+		BackOffs:             cloudmonitoring.NewDefaultBackOffIntervals(),
+		CommandRunnerNoSpace: commandRunnerNoSpace,
+		CommandExistsRunner:  commandExistsRunner,
+		HeartbeatSpec:        wlmHeartbeatSpec,
 	}
 	if d.config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.
@@ -288,6 +291,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
 		wlmparams.OSType = goos
 		wlmparams.ConfigFileReader = configFileReader
+		wlmparams.CommandRunner = commandRunner
 		wlmparams.InstanceInfoReader = *instanceInfoReader
 		wlmparams.OSStatReader = osStatReader
 		wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath

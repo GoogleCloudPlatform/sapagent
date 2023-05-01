@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
@@ -30,6 +29,8 @@ import (
 type (
 	// FileReader is a function type matching the signature for os.ReadFile.
 	FileReader func(string) ([]byte, error)
+	// RunCommand is a function type matching the signature for commandlineexecutor.ExecuteCommand.
+	RunCommand func(string, ...string) (string, string, error)
 	// A Reader is capable of reading cpu statistics from the OS.
 	//
 	// Due to the assignment of required unexported fields, a Reader must be initialized with New()
@@ -37,16 +38,16 @@ type (
 	Reader struct {
 		os         string
 		fileReader FileReader
-		execute    commandlineexecutor.Execute
+		runCommand RunCommand
 	}
 )
 
 // New instantiates a Reader with the capability to read cpu metrics from linux and windows operating systems.
-func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) *Reader {
+func New(os string, fileReader FileReader, runCommand RunCommand) *Reader {
 	return &Reader{
 		os:         os,
 		fileReader: fileReader,
-		execute:    execute,
+		runCommand: runCommand,
 	}
 }
 
@@ -70,21 +71,18 @@ func (r *Reader) Read() *statspb.CpuStats {
 	return s
 }
 
-// Reads CPU stats for Windows, uses wmic command for the OS values
+// Reads CPU stats for Windows, usees wmic command for the OS values
 func (r *Reader) readCPUStatsForWindows() *statspb.CpuStats {
 	s := &statspb.CpuStats{}
 	// Use wmic to get the CPU stats
 	// Note: must use separated arguments so the windows go exec does not escape the entire argument list
 	args := []string{"cpu", "get", "Name,", "MaxClockSpeed,", "NumberOfCores,", "NumberOfLogicalProcessors/Format:List"}
-	result := r.execute(commandlineexecutor.Params{
-		Executable: "wmic",
-		Args:       args,
-	})
-	if result.Error != nil {
-		log.Logger.Errorw("Could not execute wmic get NumberOfLogicalProcessors/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	o, e, err := r.runCommand("wmic", args...)
+	if err != nil {
+		log.Logger.Errorw("Could not execute wmic get NumberOfLogicalProcessors/Format:List", "stdout", o, "stderr", e, "error", err)
 		return s
 	}
-	o := strings.ReplaceAll(result.StdOut, "\r", "")
+	o = strings.ReplaceAll(o, "\r", "")
 	lines := strings.Split(o, "\n")
 	for _, line := range lines {
 		l := strings.Split(line, "=")

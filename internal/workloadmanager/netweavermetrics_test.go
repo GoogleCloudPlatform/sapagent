@@ -27,7 +27,6 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -120,8 +119,8 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
 				osVendorID:     "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{}
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					return "", "", nil
 				},
 			},
 			wantLabels: map[string]string{},
@@ -132,8 +131,8 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{},
 				osVendorID:     "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{}
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					return "", "", nil
 				},
 			},
 			wantLabels: map[string]string{},
@@ -172,10 +171,8 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: "bar",
-					}
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					return "bar", "", nil
 				},
 			},
 			wantLabels: map[string]string{

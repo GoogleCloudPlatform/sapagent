@@ -58,7 +58,7 @@ func CollectHANAMetricsFromConfig(params Parameters) WorkloadMetrics {
 	t := hanaAPILabel
 	hanaVal := 0.0
 
-	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(params.Execute)
+	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(params.CommandRunner)
 	globalINILocationVal := globalINILocation(hanaProcessOrGlobalIni)
 
 	l := map[string]string{}
@@ -87,13 +87,13 @@ func CollectHANAMetricsFromConfig(params Parameters) WorkloadMetrics {
 		l[k] = v
 	}
 	for _, m := range hana.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
 	}
 	for _, volume := range hana.GetHanaDiskVolumeMetrics() {
-		diskInfo := diskInfo(volume.GetBasepathVolume(), globalINILocationVal, params.Execute, params.InstanceInfoReader)
+		diskInfo := diskInfo(volume.GetBasepathVolume(), globalINILocationVal, params.CommandRunner, params.InstanceInfoReader)
 		for _, m := range volume.GetMetrics() {
 			k := m.GetMetricInfo().GetLabel()
 			switch m.GetValue() {
@@ -122,7 +122,7 @@ func CollectHanaMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 	t := hanaAPILabel
 	hanaVal := 0.0
 
-	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(params.Execute)
+	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(params.CommandRunner)
 	globalINILocationVal := globalINILocation(hanaProcessOrGlobalIni)
 
 	l := map[string]string{}
@@ -149,43 +149,37 @@ func CollectHanaMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 	}
 
 	l["fast_restart"] = "disabled"
-	if grepKeyInGlobalINI("basepath_persistent_memory_volumes", globalINILocationVal, params.Execute) {
+	if grepKeyInGlobalINI("basepath_persistent_memory_volumes", globalINILocationVal, params.CommandRunner) {
 		l["fast_restart"] = "enabled"
 	}
 
 	l["ha_sr_hook_configured"] = "no"
-	if grepKeyInGlobalINI("ha_dr_provider_SAPHanaSR", globalINILocationVal, params.Execute) {
+	if grepKeyInGlobalINI("ha_dr_provider_SAPHanaSR", globalINILocationVal, params.CommandRunner) {
 		l["ha_sr_hook_configured"] = "yes"
 	}
 
-	nbresult := params.Execute(commandlineexecutor.Params{
-		Executable: "cat",
-		Args:       []string{"/proc/sys/kernel/numa_balancing"},
-	})
-	if nbresult.Error != nil {
-		log.Logger.Warnw("cat /proc/sys/kernel/numa_balancing failed", "error", nbresult.Error)
+	numaCat, _, err := params.CommandRunner("cat", "/proc/sys/kernel/numa_balancing")
+	if err != nil {
+		log.Logger.Warnw("cat /proc/sys/kernel/numa_balancing failed", "error", err)
 	} else {
 		l["numa_balancing"] = "disabled"
-		if nbresult.StdOut == "1" {
+		if numaCat == "1" {
 			l["numa_balancing"] = "enabled"
 		}
 	}
 
-	hpresult := params.Execute(commandlineexecutor.Params{
-		Executable: "cat",
-		Args:       []string{"/sys/kernel/mm/transparent_hugepage/enabled"},
-	})
-	if hpresult.Error != nil {
-		log.Logger.Warnw("cat /sys/kernel/mm/transparent_hugepage/enabled failed", "error", hpresult.Error)
+	thpCat, _, err := params.CommandRunner("cat", "/sys/kernel/mm/transparent_hugepage/enabled")
+	if err != nil {
+		log.Logger.Warnw("cat /sys/kernel/mm/transparent_hugepage/enabled failed", "error", err)
 	} else {
 		l["transparent_hugepages"] = "disabled"
-		if strings.Contains(hpresult.StdOut, "[always]") {
+		if strings.Contains(thpCat, "[always]") {
 			l["transparent_hugepages"] = "enabled"
 		}
 	}
 
-	setVolumeLabels(l, diskInfo("basepath_datavolumes", globalINILocationVal, params.Execute, params.InstanceInfoReader), "data")
-	setVolumeLabels(l, diskInfo("basepath_logvolumes", globalINILocationVal, params.Execute, params.InstanceInfoReader), "log")
+	setVolumeLabels(l, diskInfo("basepath_datavolumes", globalINILocationVal, params.CommandRunner, params.InstanceInfoReader), "data")
+	setVolumeLabels(l, diskInfo("basepath_logvolumes", globalINILocationVal, params.CommandRunner, params.InstanceInfoReader), "log")
 	hanaVal = 1.0
 	wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
 }
@@ -194,18 +188,11 @@ func CollectHanaMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 hanaProcessOrGlobalINI obtains hana cluster data from a running hana process or a "global" INI file
 if hana is not running on the current VM.
 */
-func hanaProcessOrGlobalINI(exec commandlineexecutor.Execute) string {
-	presult := exec(commandlineexecutor.Params{
-		Executable:  "pidof",
-		ArgsToSplit: "-s sapstartsrv",
-	})
+func hanaProcessOrGlobalINI(runner commandlineexecutor.CommandRunner) string {
+	hanaPid, _, _ := runner("pidof", "-s sapstartsrv")
 	hanaProcessOrGlobalINI := ""
-	if presult.StdOut != "" {
-		hpresult := exec(commandlineexecutor.Params{
-			Executable:  "ps",
-			ArgsToSplit: fmt.Sprintf("-p %s -o cmd --no-headers", strings.TrimSpace(presult.StdOut)),
-		})
-		hanaProcessOrGlobalINI = hpresult.StdOut
+	if hanaPid != "" {
+		hanaProcessOrGlobalINI, _, _ = runner("ps", "-p "+strings.TrimSpace(hanaPid)+" -o cmd --no-headers")
 		if hanaProcessOrGlobalINI != "" && !strings.Contains(hanaProcessOrGlobalINI, "HDB") {
 			// No HDB services in this process.
 			hanaProcessOrGlobalINI = ""
@@ -214,11 +201,7 @@ func hanaProcessOrGlobalINI(exec commandlineexecutor.Execute) string {
 	if hanaProcessOrGlobalINI == "" {
 		// Check for the global.ini even if the process isn't running.
 		// Invoke the shell in order to expand the `*` wildcard.
-		hpresult := exec(commandlineexecutor.Params{
-			Executable:  "/bin/sh",
-			ArgsToSplit: "-c 'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'",
-		})
-		hanaProcessOrGlobalINI = hpresult.StdOut
+		hanaProcessOrGlobalINI, _, _ = runner("/bin/sh", "-c 'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'")
 	}
 	return hanaProcessOrGlobalINI
 }
@@ -280,31 +263,25 @@ func globalINILocation(hanaProcessOrGlobalINI string) string {
 /*
 grepKeyInGlobalINI determines whether or not a given INI file contains a specific key definition
 */
-func grepKeyInGlobalINI(key string, globalIniLocation string, exec commandlineexecutor.Execute) bool {
-	result := exec(commandlineexecutor.Params{
-		Executable:  "grep",
-		ArgsToSplit: key + " " + globalIniLocation,
-	})
-	if result.Error != nil {
+func grepKeyInGlobalINI(key string, globalIniLocation string, runner commandlineexecutor.CommandRunner) bool {
+	grep, _, err := runner("grep", key+" "+globalIniLocation)
+	if err != nil {
 		return false
 	}
-	return len(result.StdOut) > 0
+	return len(grep) > 0
 }
 
-func diskInfo(basepathVolume string, globalINILocation string, exec commandlineexecutor.Execute, iir instanceinfo.Reader) map[string]string {
+func diskInfo(basepathVolume string, globalINILocation string, runner commandlineexecutor.CommandRunner, iir instanceinfo.Reader) map[string]string {
 	diskInfo := map[string]string{}
 
-	result := exec(commandlineexecutor.Params{
-		Executable:  "grep",
-		ArgsToSplit: basepathVolume + " " + globalINILocation,
-	})
+	volumeGrep, _, err := runner("grep", basepathVolume+" "+globalINILocation)
 	// volumeGrep will be of the format /hana/data/HAS (or something similar).
 	// In this case the mount point will be /hana/data.
 	// A deeper path like /hana/data/ABC/mnt00001 may also be used.
-	if result.Error != nil {
+	if err != nil {
 		return diskInfo
 	}
-	vList := strings.Fields(result.StdOut)
+	vList := strings.Fields(volumeGrep)
 	if len(vList) < 3 {
 		log.Logger.Debugw("Could not find basepath volume in global.ini", "basepathvolume", basepathVolume, "globalinilocation", globalINILocation)
 		return diskInfo
@@ -314,13 +291,10 @@ func diskInfo(basepathVolume string, globalINILocation string, exec commandlinee
 
 	// JSON output from lsblk to match the lsblk.proto is produced by the following command:
 	// lsblk -p -J -o name,type,mountpoint
-	lsblkresult := exec(commandlineexecutor.Params{
-		Executable:  "lsblk",
-		ArgsToSplit: "-b -p -J -o name,type,mountpoint,size",
-	})
+	lsblkJSON, _, _ := runner("lsblk", "-b -p -J -o name,type,mountpoint,size")
 
 	lsblk := lsblk{}
-	err := json.Unmarshal([]byte(lsblkresult.StdOut), &lsblk)
+	err = json.Unmarshal([]byte(lsblkJSON), &lsblk)
 
 	if err != nil {
 		log.Logger.Debugw("Invalid lsblk json", "error", err)

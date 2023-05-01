@@ -18,21 +18,13 @@ package commandlineexecutor
 
 import (
 	"fmt"
-	"os/exec"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-func setDefaults() {
-	exists = CommandExists
-	exitCode = commandExitCode
-	run = nil
-	exeForPlatform = nil
-}
-
-func TestExecuteCommandWithArgsToSplit(t *testing.T) {
+func TestExpandAndExecuteCommand(t *testing.T) {
 	input := []struct {
 		name    string
 		cmd     string
@@ -64,25 +56,21 @@ func TestExecuteCommandWithArgsToSplit(t *testing.T) {
 	}
 	for _, test := range input {
 		t.Run(test.name, func(t *testing.T) {
-			setDefaults()
-			result := ExecuteCommand(Params{
-				Executable:  test.cmd,
-				ArgsToSplit: test.args,
-			})
-			if result.Error != nil {
-				t.Fatalf("ExecuteCommand with argstosplit returned unexpected error: %v", result.Error)
+			stdOut, stdErr, err := ExpandAndExecuteCommand(test.cmd, test.args)
+			if err != nil {
+				t.Fatalf("ExpandAndExecuteCommand returned unexpected error: %v", err)
 			}
-			if diff := cmp.Diff(test.wantOut, result.StdOut); diff != "" {
-				t.Fatalf("ExecuteCommand with argstosplit returned unexpected diff (-want +got):\n%s", diff)
+			if diff := cmp.Diff(test.wantOut, stdOut); diff != "" {
+				t.Fatalf("ExpandAndExecuteCommand returned unexpected diff (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(test.wantErr, result.StdErr); diff != "" {
-				t.Fatalf("ExecuteCommand with argstosplit returned unexpected diff (-want +got):\n%s", diff)
+			if diff := cmp.Diff(test.wantErr, stdErr); diff != "" {
+				t.Fatalf("ExpandAndExecuteCommand returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
 
-func TestExecuteCommandWithArgs(t *testing.T) {
+func TestExecuteCommand(t *testing.T) {
 	input := []struct {
 		name    string
 		cmd     string
@@ -121,19 +109,15 @@ func TestExecuteCommandWithArgs(t *testing.T) {
 	}
 	for _, test := range input {
 		t.Run(test.name, func(t *testing.T) {
-			setDefaults()
-			result := ExecuteCommand(Params{
-				Executable: test.cmd,
-				Args:       test.args,
-			})
-			if result.Error != nil {
-				t.Fatal(result.Error)
+			stdOut, stdErr, err := ExecuteCommand(test.cmd, test.args...)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if diff := cmp.Diff(test.wantOut, result.StdOut); diff != "" {
-				t.Fatalf("ExecuteCommand with args returned unexpected diff (-want +got):\n%s", diff)
+			if diff := cmp.Diff(test.wantOut, stdOut); diff != "" {
+				t.Fatalf("ExecuteCommand returned unexpected diff (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(test.wantErr, result.StdErr); diff != "" {
-				t.Fatalf("ExecuteCommand with args returned unexpected diff (-want +got):\n%s", diff)
+			if diff := cmp.Diff(test.wantErr, stdErr); diff != "" {
+				t.Fatalf("ExecuteCommand returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -163,7 +147,6 @@ func TestCommandExists(t *testing.T) {
 	}
 	for _, test := range input {
 		t.Run(test.name, func(t *testing.T) {
-			setDefaults()
 			if got := CommandExists(test.cmd); got != test.exists {
 				t.Fatalf("CommandExists returned unexpected result, got: %t want: %t", got, test.exists)
 			}
@@ -171,78 +154,70 @@ func TestCommandExists(t *testing.T) {
 	}
 }
 
-func TestExecuteCommandAsUser(t *testing.T) {
+func TestRunCommandAsUserExitCode(t *testing.T) {
 	tests := []struct {
 		name         string
 		cmd          string
-		fakeExists   Exists
-		fakeRun      Run
-		fakeExitCode ExitCode
-		fakeSetupExe SetupExeForPlatform
+		fakeRun      runCmdAsUser
 		wantExitCode int64
 		wantErr      error
 	}{
 		{
-			name:         "ExistingCmd",
-			cmd:          "ls",
-			fakeExists:   func(string) bool { return true },
-			fakeRun:      func() error { return nil },
-			fakeSetupExe: func(exe *exec.Cmd, params Params) error { return nil },
-			wantErr:      nil,
+			name: "ExistingCmd",
+			cmd:  "ls",
+			fakeRun: func(user string, executable string, args string) (string, string, error) {
+				return "", "", nil
+			},
+			wantErr: nil,
 		},
 		{
-			name:         "NonExistingCmd",
-			cmd:          "encrypt",
-			fakeExists:   func(string) bool { return false },
+			name: "NonExistingCmd",
+			cmd:  "encrypt",
+			fakeRun: func(user string, executable string, args string) (string, string, error) {
+				return "", "", fmt.Errorf("command executable: encrypt not found")
+			},
 			wantExitCode: 0,
 			wantErr:      cmpopts.AnyError,
 		},
 		{
-			name:         "ExitCode15",
-			cmd:          "ls",
-			fakeExists:   func(string) bool { return true },
-			fakeRun:      func() error { return fmt.Errorf("some failure") },
-			fakeExitCode: func(error) int { return 15 },
-			fakeSetupExe: func(exe *exec.Cmd, params Params) error { return nil },
+			name: "ExitCode15",
+			cmd:  "ls",
+			fakeRun: func(user string, executable string, args string) (string, string, error) {
+				return "", "", fmt.Errorf("exit status 15")
+			},
 			wantExitCode: 15,
-			wantErr:      cmpopts.AnyError,
+			wantErr:      nil,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			exists = test.fakeExists
-			exitCode = test.fakeExitCode
-			run = test.fakeRun
-			exeForPlatform = test.fakeSetupExe
-			result := ExecuteCommand(Params{
-				Executable: test.cmd,
-				User:       "test-user",
-			})
-
-			if !cmp.Equal(result.Error, test.wantErr, cmpopts.EquateErrors()) {
-				t.Fatalf("ExecuteCommand with user got an error: %v, want: %v", result.Error, test.wantErr)
+			_, _, gotExitCode, gotErr := runCommandAsUserExitCode("test-user", test.cmd, "", test.fakeRun)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Fatalf("runCommandAsUserExitCode() got error: %v, want: %v", gotErr, test.wantErr)
 			}
-			if test.wantExitCode != int64(result.ExitCode) {
-				t.Fatalf("ExecuteCommand with user got an unexpected exit code: %d, want: %d", result.ExitCode, test.wantExitCode)
+			if test.wantExitCode != gotExitCode {
+				t.Fatalf("ExpandAndExecuteCommandAsUserExitCode() got unexpected exit code: %d, want: %d", gotExitCode, test.wantExitCode)
 			}
 		})
+
 	}
+
 }
 
-func TestExecuteWithEnv(t *testing.T) {
+func TestRunWithEnv(t *testing.T) {
 	tests := []struct {
 		name         string
-		params       Params
+		runner       Runner
 		wantStdOut   string
 		wantExitCode int
 		wantErr      error
 	}{
 		{
 			name: "ExistingCmd",
-			params: Params{
-				Executable:  "echo",
-				ArgsToSplit: "test",
+			runner: Runner{
+				Executable: "echo",
+				Args:       "test",
 			},
 			wantStdOut:   "test\n",
 			wantExitCode: 0,
@@ -250,23 +225,22 @@ func TestExecuteWithEnv(t *testing.T) {
 		},
 		{
 			name: "NonExistingCmd",
-			params: Params{
+			runner: Runner{
 				Executable: "encrypt",
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "CommandFailure",
-			params: Params{
-				Executable:  "cat",
-				ArgsToSplit: "nonexisting.txtjson",
+			runner: Runner{
+				Executable: "cat",
+				Args:       "nonexisting.txtjson",
 			},
 			wantExitCode: 1,
-			wantErr:      cmpopts.AnyError,
 		},
 		{
 			name: "InvalidUser",
-			params: Params{
+			runner: Runner{
 				Executable: "ls",
 				User:       "invalidUser",
 			},
@@ -276,18 +250,16 @@ func TestExecuteWithEnv(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			setDefaults()
+			wantStdOut, _, gotExitCode, gotErr := test.runner.RunWithEnv()
 
-			result := ExecuteCommand(test.params)
-
-			if !cmp.Equal(result.Error, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("ExecuteCommand with env got error: %v, want: %v", result.Error, test.wantErr)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("RunWithEnv() got error: %v, want: %v", gotErr, test.wantErr)
 			}
-			if test.wantExitCode != result.ExitCode {
-				t.Errorf("ExecuteCommand with env got exit code: %d, want: %d", result.ExitCode, test.wantExitCode)
+			if test.wantExitCode != gotExitCode {
+				t.Errorf("RunWithEnv() got exit code: %d, want: %d", gotExitCode, test.wantExitCode)
 			}
-			if diff := cmp.Diff(test.wantStdOut, result.StdOut); diff != "" {
-				t.Errorf("ExecuteCommand with env returned unexpected diff (-want +got):\n%s", diff)
+			if diff := cmp.Diff(test.wantStdOut, wantStdOut); diff != "" {
+				t.Errorf("RunWithEnv() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

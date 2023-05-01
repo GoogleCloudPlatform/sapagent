@@ -59,7 +59,7 @@ func BuildMetricMap(metrics []*cmpb.EvalMetric) map[string]string {
 // If a specific os_vendor is supplied for a metric, then the command will only
 // be run if the system is using the same vendor. Otherwise, the metric should
 // be excluded from collection.
-func CollectOSCommandMetric(m *cmpb.OSCommandMetric, exec commandlineexecutor.Execute, vendor string) (label, value string) {
+func CollectOSCommandMetric(m *cmpb.OSCommandMetric, runner commandlineexecutor.CommandRunnerNoSpace, vendor string) (label, value string) {
 	osVendor := m.GetOsVendor()
 	switch {
 	case osVendor == cmpb.OSVendor_RHEL && vendor != "rhel":
@@ -70,13 +70,14 @@ func CollectOSCommandMetric(m *cmpb.OSCommandMetric, exec commandlineexecutor.Ex
 		return "", ""
 	}
 
-	result := exec(commandlineexecutor.Params{
-		Executable: m.GetCommand(),
-		Args:       m.GetArgs(),
-	})
+	exitCode := 0
+	stdout, stderr, err := runner(m.GetCommand(), m.GetArgs()...)
+	if err != nil {
+		exitCode = commandlineexecutor.ExitCode(err)
+	}
 
 	label = m.GetMetricInfo().GetLabel()
-	value, _ = Evaluate(m, Output{StdOut: result.StdOut, StdErr: result.StdErr, ExitCode: strconv.Itoa(result.ExitCode)})
+	value, _ = Evaluate(m, Output{StdOut: stdout, StdErr: stderr, ExitCode: strconv.Itoa(exitCode)})
 	return label, value
 }
 

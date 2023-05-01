@@ -40,7 +40,7 @@ func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
 		l[k] = v
 	}
 	for _, m := range corosync.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
@@ -66,7 +66,7 @@ func CollectCorosyncMetrics(params Parameters, wm chan<- WorkloadMetrics, csConf
 	for k, v := range readCorosyncConfig(params.ConfigFileReader, csConfig) {
 		l[k] = v
 	}
-	for k, v := range readCorosyncRuntime(params.Execute) {
+	for k, v := range readCorosyncRuntime(params.CommandRunnerNoSpace) {
 		l[k] = v
 	}
 	wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
@@ -103,7 +103,7 @@ func readCorosyncConfig(reader ConfigFileReader, csConfig string) map[string]str
 readCorosyncRuntime loads Corosync runtime configuration data and converts it to a configuration
 map
 */
-func readCorosyncRuntime(exec commandlineexecutor.Execute) map[string]string {
+func readCorosyncRuntime(runner commandlineexecutor.CommandRunnerNoSpace) map[string]string {
 	config := map[string]string{}
 
 	runtimeKeys := []string{
@@ -118,13 +118,10 @@ func readCorosyncRuntime(exec commandlineexecutor.Execute) map[string]string {
 	}
 
 	for _, key := range runtimeKeys {
-		result := exec(commandlineexecutor.Params{
-			Executable: "corosync-cmapctl",
-			Args:       []string{"-g", key},
-		})
+		result, _, err := runner("corosync-cmapctl", "-g", key)
 		value := ""
-		if result.Error == nil {
-			value = strings.Trim(result.StdOut, " ")
+		if err == nil {
+			value = strings.Trim(result, " ")
 		}
 		if strings.HasPrefix(value, "Can't get key") {
 			value = ""

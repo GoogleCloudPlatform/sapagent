@@ -256,7 +256,7 @@ func TestParseCRMMon(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotCRMMon, gotErr := parseCRMMon(test.xmlInput)
+			gotCRMMon, gotErr := ParseCRMMon(test.xmlInput)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Fatalf("Failure in parseCRMMon(), gotErr: %v, wantErr: %v.", gotErr, test.wantErr)
@@ -270,51 +270,51 @@ func TestParseCRMMon(t *testing.T) {
 
 func TestIsEnabled(t *testing.T) {
 	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     bool
+		name       string
+		fakeExists commandlineexecutor.CommandExistsRunner
+		fakeRun    commandlineexecutor.CommandRunner
+		want       bool
 	}{
 		{
-			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: exampleXMLData,
-				}
+			name:       "Success",
+			fakeExists: func(string) bool { return true },
+			fakeRun: func(string, string) (string, string, error) {
+				return exampleXMLData, "", nil
 			},
 			want: true,
 		},
 		{
-			name: "CRMMonCommandFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			name:       "CommandDoesNotExist",
+			fakeExists: func(string) bool { return false },
+		},
+		{
+			name:       "CRMMonCommandFailure",
+			fakeExists: func(string) bool { return true },
+			fakeRun: func(string, string) (string, string, error) {
+				return "", "", cmpopts.AnyError
 			},
 		},
 		{
-			name: "InvalidXML",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "<i>Not XML</q>",
-				}
+			name:       "InvalidXML",
+			fakeExists: func(string) bool { return true },
+			fakeRun: func(string, string) (string, string, error) {
+				return "<i>Not XML</q>", "", nil
 			},
 		},
 		{
-			name: "ZeroNodeCRM",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: xmlZeroNodeCRM,
-				}
+			name:       "ZeroNodeCRM",
+			fakeExists: func(string) bool { return true },
+			fakeRun: func(string, string) (string, string, error) {
+				return xmlZeroNodeCRM, "", nil
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, _ := data(test.fakeExec)
-			got := Enabled(data)
+			got := IsEnabled(test.fakeExists, test.fakeRun)
 			if got != test.want {
-				t.Fatalf("Failure in Enabled(), got: %v, want: %v.", got, test.want)
+				t.Fatalf("Failure in isEnabled(), got: %v, want: %v.", got, test.want)
 			}
 		})
 	}
@@ -323,16 +323,14 @@ func TestIsEnabled(t *testing.T) {
 func TestNState(t *testing.T) {
 	tests := []struct {
 		name      string
-		fakeExec  commandlineexecutor.Execute
+		fakeRun   commandlineexecutor.CommandRunner
 		want      map[string]string
 		wantError error
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: exampleXMLData,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return exampleXMLData, "", nil
 			},
 			want: map[string]string{
 				"test-instance-1": "online",
@@ -341,36 +339,29 @@ func TestNState(t *testing.T) {
 		},
 		{
 			name: "ReadFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return "", "", cmpopts.AnyError
 			},
-			want:      nil,
 			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "InvalidXML",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "<>Still Not XML</q>",
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return "<>Still Not XML</q>", "", nil
 			},
-			want:      nil,
 			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "StandByAndShutdown",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `<?xml version="1.0"?>
-					<crm_mon version="2.0.1">
-						<nodes>
-							<node name="test-instance-1" id="1" standby="true" />
-								<node name="test-instance-2" id="2" shutdown="true" />
-						</nodes>
-					</crm_mon>`,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				xml := `<?xml version="1.0"?>
+				<crm_mon version="2.0.1">
+					<nodes>
+        		<node name="test-instance-1" id="1" standby="true" />
+       	 		<node name="test-instance-2" id="2" shutdown="true" />
+    			</nodes>
+				</crm_mon>`
+				return xml, "", nil
 			},
 			want: map[string]string{
 				"test-instance-1": "standby",
@@ -379,16 +370,15 @@ func TestNState(t *testing.T) {
 		},
 		{
 			name: "UncleanAndUnknown",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `<?xml version="1.0"?>
-					<crm_mon version="2.0.1">
-						<nodes>
-							<node name="test-instance-1" id="1" unclean="true" />
-								<node name="test-instance-2" id="2" />
-						</nodes>
-					</crm_mon>`,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				xml := `<?xml version="1.0"?>
+				<crm_mon version="2.0.1">
+					<nodes>
+        		<node name="test-instance-1" id="1" unclean="true" />
+       	 		<node name="test-instance-2" id="2" />
+    			</nodes>
+				</crm_mon>`
+				return xml, "", nil
 			},
 			want: map[string]string{
 				"test-instance-1": "unclean",
@@ -398,14 +388,13 @@ func TestNState(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, gotError := data(test.fakeExec)
-			got, _ := NodeState(data)
+			got, gotError := nState(test.fakeRun)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Fatalf("Failure in NodeState() returned diff (-want +got):\n%s.", diff)
+				t.Fatalf("Failure in nState() returned diff (-want +got):\n%s.", diff)
 			}
 			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
-				t.Fatalf("Failure in NodeState(), gotError: %v, wantError: %v.", gotError, test.wantError)
+				t.Fatalf("Failure in nState(), gotError: %v, wantError: %v.", gotError, test.wantError)
 			}
 		})
 	}
@@ -414,16 +403,14 @@ func TestNState(t *testing.T) {
 func TestRState(t *testing.T) {
 	tests := []struct {
 		name          string
-		fakeExec      commandlineexecutor.Execute
+		fakeRun       commandlineexecutor.CommandRunner
 		wantResources []Resource
 		wantError     error
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: exampleXMLData,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return exampleXMLData, "", nil
 			},
 			wantResources: []Resource{
 				{
@@ -470,19 +457,15 @@ func TestRState(t *testing.T) {
 		},
 		{
 			name: "ReadFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return "", "", cmpopts.AnyError
 			},
 			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "InvalidXML",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "<not xml>",
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return "<not xml>", "", nil
 			},
 			wantError: cmpopts.AnyError,
 		},
@@ -490,14 +473,13 @@ func TestRState(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, gotError := data(test.fakeExec)
-			gotResources, _ := ResourceState(data)
+			gotResources, gotError := rState(test.fakeRun)
 
 			if diff := cmp.Diff(test.wantResources, gotResources); diff != "" {
-				t.Fatalf("Failure in ResourceState() returned diff (-want +got):\n%s.", diff)
+				t.Fatalf("Failure in rState() returned diff (-want +got):\n%s.", diff)
 			}
 			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
-				t.Fatalf("Failure in ResourceState(), gotError: %v, wantError: %v.", gotError, test.wantError)
+				t.Fatalf("Failure in rState(), gotError: %v, wantError: %v.", gotError, test.wantError)
 			}
 		})
 	}
@@ -505,17 +487,15 @@ func TestRState(t *testing.T) {
 
 func TestFailCount(t *testing.T) {
 	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     []ResourceFailCount
-		wantErr  error
+		name    string
+		fakeRun commandlineexecutor.CommandRunner
+		want    []ResourceFailCount
+		wantErr error
 	}{
 		{
 			name: "ResourceWithFailCount",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: exampleXMLData,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return exampleXMLData, "", nil
 			},
 			want: []ResourceFailCount{
 				{
@@ -527,27 +507,21 @@ func TestFailCount(t *testing.T) {
 		},
 		{
 			name: "NoResourceWithFailCount",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: xmlNoResourceWithFailCount,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return xmlNoResourceWithFailCount, "", nil
 			},
 		},
 		{
 			name: "XMLParseFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "<not xml>",
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return "<not xml>", "", nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "CRMMonFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			fakeRun: func(string, string) (string, string, error) {
+				return "", "", cmpopts.AnyError
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -555,13 +529,12 @@ func TestFailCount(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, gotErr := data(test.fakeExec)
-			got, _ := FailCount(data)
+			got, gotErr := FailCount(test.fakeRun)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Fatalf("Failure in fCount(), gotErr: %v, wantErr: %v.", gotErr, test.wantErr)
 			}
 			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Fatalf("Failure in FailCount() returned diff (-want +got):\n%s.", diff)
+				t.Fatalf("Failure in fCount() returned diff (-want +got):\n%s.", diff)
 			}
 
 		})
@@ -570,56 +543,45 @@ func TestFailCount(t *testing.T) {
 
 func TestPaceMakerXMLString(t *testing.T) {
 	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		crmAvail bool
-		want     *string
+		name       string
+		cmdExists  func(string) bool
+		cmdExecute func(string, string) (string, string, error)
+		crmAvail   bool
+		want       *string
 	}{
 		{
-			name: "NilReturn",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
-			crmAvail: false,
-			want:     nil,
+			name:       "NilReturn",
+			cmdExists:  func(string) bool { return false },
+			cmdExecute: func(string, string) (string, string, error) { return "", "", nil },
+			crmAvail:   false,
+			want:       nil,
 		},
 		{
-			name: "CRMAvailable",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: exampleXMLData,
-				}
-			},
-			crmAvail: true,
-			want:     &exampleXMLData,
+			name:       "CRMAvailable",
+			cmdExists:  func(string) bool { return false },
+			cmdExecute: func(string, string) (string, string, error) { return exampleXMLData, "", nil },
+			crmAvail:   true,
+			want:       &exampleXMLData,
 		},
 		{
-			name: "PCSExistsCRMUnavailable",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: xmlNoResourceWithFailCount,
-				}
-			},
-			crmAvail: false,
-			want:     &xmlNoResourceWithFailCount,
+			name:       "PCSExistsCRMUnavailable",
+			cmdExists:  func(string) bool { return true },
+			cmdExecute: func(string, string) (string, string, error) { return xmlNoResourceWithFailCount, "", nil },
+			crmAvail:   false,
+			want:       &xmlNoResourceWithFailCount,
 		},
 		{
-			name: "PCSExistsCRMAvailable",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: exampleXMLData,
-				}
-			},
-			crmAvail: true,
-			want:     &exampleXMLData,
+			name:       "PCSExistsCRMAvailable",
+			cmdExists:  func(string) bool { return true },
+			cmdExecute: func(string, string) (string, string, error) { return exampleXMLData, "", nil },
+			crmAvail:   true,
+			want:       &exampleXMLData,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := XMLString(test.fakeExec, test.crmAvail)
+			got := XMLString(test.cmdExecute, test.cmdExists, test.crmAvail)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Fatalf("Failure in XMLString() returned diff (-want +got):\n%s.", diff)

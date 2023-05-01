@@ -27,7 +27,6 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
@@ -102,8 +101,8 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "EmptyProcessList",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{}
+				executor: func(cmd, args string) (string, string, error) {
+					return "", "", nil
 				},
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
@@ -115,10 +114,8 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "CommandExecutorReturnsError",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						Error: errors.New("could not execute command"),
-					}
+				executor: func(cmd, args string) (string, string, error) {
+					return "", "", errors.New("could not execute command")
 				},
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
@@ -130,10 +127,8 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "ProcessListCreatedSuccessfully",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   3077\n\nsapstart   9999\n",
-					}
+				executor: func(cmd, args string) (string, string, error) {
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   3077\n\nsapstart   9999\n", "", nil
 				},
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
@@ -148,10 +143,8 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "MalformedOutputFromCommand",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   9603\n\nsapstart    9204 sample\n",
-					}
+				executor: func(cmd, args string) (string, string, error) {
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   9603\n\nsapstart    9204 sample\n", "", nil
 				},
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
@@ -181,63 +174,38 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		{
 			name: "EmptyProcessList",
 			params: parameters{
-				config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				cpuMetricPath:        "/sample/test/proc",
-				memoryMetricPath:     "/sample/test/memory",
-				sapInstance:          defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{},
-				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{}
-				},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: ""},
+				runnerForABAPGetWPTable: &fakeRunner{stdOut: ""},
 			},
 			want: nil,
 		},
 		{
 			name: "NilSAPInstance",
 			params: parameters{
-				config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				cpuMetricPath:        "/sample/test/proc",
-				memoryMetricPath:     "/sample/test/memory",
-				sapInstance:          nil,
-				getProcessListParams: commandlineexecutor.Params{},
-				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: defaultSapControlOutput,
-					}
-				},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             nil,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
 			},
 			want: nil,
 		},
 		{
 			name: "ErrorInFetchingABAPProcessList",
 			params: parameters{
-				config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{
-					Executable: "exe",
-					ArgsToSplit: "processlist",
-				},
-				getABAPWPTableParams: commandlineexecutor.Params{
-					Executable: "exe",
-					ArgsToSplit: "abaptable",
-				},
-				executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-					if params.ArgsToSplit == "processlist" {
-						return commandlineexecutor.Result{
-							StdOut: defaultSapControlOutput,
-						}
-					}
-					return commandlineexecutor.Result{
-						Error: errors.New("could not parse ABAPGetWPTable"),
-					}
-				},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
+				runnerForABAPGetWPTable: &fakeRunner{stdOut: "", err: errors.New("could not parse ABAPGetWPTable")},
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
@@ -247,29 +215,13 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		{
 			name: "ProcessListCreatedWithABAPProcesses",
 			params: parameters{
-				config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{
-					Executable:  "exe",
-					ArgsToSplit: "processlist",
-				},
-				getABAPWPTableParams: commandlineexecutor.Params{
-					Executable:  "exe",
-					ArgsToSplit: "abaptable",
-				},
-				executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-					if params.ArgsToSplit == "processlist" {
-						return commandlineexecutor.Result{
-							StdOut: defaultSapControlOutput,
-						}
-					}
-					return commandlineexecutor.Result{
-						StdOut: defaultABAPGetWPTableOuput,
-					}
-				},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
+				runnerForABAPGetWPTable: &fakeRunner{stdOut: defaultABAPGetWPTableOuput},
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
@@ -281,18 +233,12 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		{
 			name: "ProcessListCreatedSuccessfully",
 			params: parameters{
-				config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				cpuMetricPath:        "/sample/test/proc",
-				memoryMetricPath:     "/sample/test/memory",
-				sapInstance:          defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{},
-				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: defaultSapControlOutput,
-					}
-				},
+				config:                  defaultConfig,
+				client:                  &fake.TimeSeriesCreator{},
+				cpuMetricPath:           "/sample/test/proc",
+				memoryMetricPath:        "/sample/test/memory",
+				sapInstance:             defaultSAPInstance,
+				runnerForGetProcessList: &fakeRunner{stdOut: defaultSapControlOutput},
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},

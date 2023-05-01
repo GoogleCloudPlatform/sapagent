@@ -31,7 +31,7 @@ func CollectNetWeaverMetricsFromConfig(params Parameters) WorkloadMetrics {
 
 	netweaver := params.WorkloadConfig.GetValidationNetweaver()
 	for _, m := range netweaver.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}

@@ -23,7 +23,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -190,12 +189,9 @@ func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
 }
 
 func TestCollectReplicationHA(t *testing.T) {
-	fakeExec := func(commandlineexecutor.Params) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: defaultSapControlOutput,
-		}
-	}
-	got := collectReplicationHA(defaultInstanceProperties, fakeExec, commandlineexecutor.Params{})
+	fRunner := &fakeRunner{stdOut: defaultSapControlOutput}
+
+	got := collectReplicationHA(defaultInstanceProperties, fRunner)
 	if len(got) != 10 {
 		t.Errorf("collectReplicationHA(), got: %d want: 10.", len(got))
 	}
@@ -290,17 +286,14 @@ func TestRunHANAQuery(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		fakeExec       commandlineexecutor.Execute
+		fakeRun        runCmdAsUserExitCode
 		wantQueryState queryState
 		wantErr        error
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   successOutput,
-					ExitCode: 0,
-				}
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return successOutput, "", 0, nil
 			},
 			wantQueryState: queryState{
 				state:       0,
@@ -311,11 +304,8 @@ func TestRunHANAQuery(t *testing.T) {
 		},
 		{
 			name: "NonZeroState",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   successOutput,
-					ExitCode: 100,
-				}
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return successOutput, "", 100, nil
 			},
 			wantQueryState: queryState{
 				state:       100,
@@ -325,59 +315,37 @@ func TestRunHANAQuery(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "ExitCodeZeroWithError",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "(overall time 10 usec; server time 10 usec)",
-					StdErr:   "Not Found.",
-					ExitCode: 0,
-					Error:    cmpopts.AnyError,
-				}
+			name: "QueryFailure",
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return "(overall time 10 usec; server time 10 usec)", "Not Found.", 0, cmpopts.AnyError
 			},
-			wantQueryState: queryState{
-				state:       0,
-				overallTime: 10,
-				serverTime:  10,
-			},
-			wantErr: nil,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "ParseOverallTimeFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "(overall time invalid-int; server time 509 usec).",
-					ExitCode: 0,
-				}
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return "(overall time invalid-int; server time 509 usec).", "", 0, nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "ParseServerTimeFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "(overall time 1187 usec; server time invalid-int)",
-					ExitCode: 128,
-				}
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return "(overall time 1187 usec; server time invalid-int)", "", 128, nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "IntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "(overall time 100000000000000000000 usec; server time 10 usec)",
-					ExitCode: 0,
-				}
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return "(overall time 100000000000000000000 usec; server time 10 usec)", "Not Found.", 0, nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "AuthenticationFailed",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdErr:   "* 10: authentication failed SQLSTATE: 28000\n",
-					ExitCode: 3,
-				}
+			fakeRun: func(string, string, string) (string, string, int64, error) {
+				return "", "* 10: authentication failed SQLSTATE: 28000\n", 3, nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -385,7 +353,7 @@ func TestRunHANAQuery(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotQueryState, gotErr := runHANAQuery(defaultInstanceProperties, test.fakeExec)
+			gotQueryState, gotErr := runHANAQuery(defaultInstanceProperties, test.fakeRun)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("runHANAQuery(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
@@ -399,24 +367,19 @@ func TestRunHANAQuery(t *testing.T) {
 }
 
 func TestCollectHANAQueryMetrics(t *testing.T) {
-	fakeExec := func(commandlineexecutor.Params) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut:   "1 row selected (overall time 1187 usec; server time 509 usec)",
-			ExitCode: 0,
-		}
+	fakeRun := func(string, string, string) (string, string, int64, error) {
+		return "1 row selected (overall time 1187 usec; server time 509 usec)", "", 0, nil
 	}
-	got := collectHANAQueryMetrics(defaultInstanceProperties, fakeExec)
+
+	got := collectHANAQueryMetrics(defaultInstanceProperties, fakeRun)
 	if len(got) != 3 {
 		t.Errorf("collectHANAQueryMetrics(), got: %d want: 3.", len(got))
 	}
 }
 
 func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
-	fakeExec := func(commandlineexecutor.Params) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdErr:   "* 10: authentication failed SQLSTATE: 28000\n",
-			ExitCode: 3,
-		}
+	fakeRun := func(string, string, string) (string, string, int64, error) {
+		return "", "* 10: authentication failed SQLSTATE: 28000\n", 3, nil
 	}
 	ip := &InstanceProperties{
 		Config:             defaultConfig,
@@ -425,7 +388,7 @@ func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		got := collectHANAQueryMetrics(ip, fakeExec)
+		got := collectHANAQueryMetrics(ip, fakeRun)
 		switch i {
 		case 0, 1:
 			ts := got[0].GetPoints()[0].GetInterval().GetEndTime()

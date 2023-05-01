@@ -101,26 +101,9 @@ type (
 	}
 )
 
-// Data gets the crm_mon data and parses it into the CRMMon struct.
-func Data() (*CRMMon, error) {
-	return data(commandlineexecutor.ExecuteCommand)
-}
-
-func data(runner commandlineexecutor.Execute) (*CRMMon, error) {
-	result := runner(commandlineexecutor.Params{
-		Executable: "crm_mon",
-		Args:       []string{"--as-xml"},
-	})
-	if result.Error != nil && result.ExecutableFound {
-		log.Logger.Errorw("Command 'crm_mon --as-xml' failed", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
-		return nil, result.Error
-	}
-	return parseCRMMon([]byte(result.StdOut))
-}
-
 // ParseCRMMon parses the XML returned by crm_mon command in to
 // go structs. Accepts the XML content as byte array.
-func parseCRMMon(byteVal []byte) (*CRMMon, error) {
+func ParseCRMMon(byteVal []byte) (*CRMMon, error) {
 	crm := &CRMMon{}
 
 	if err := xml.Unmarshal(byteVal, crm); err != nil {
@@ -132,8 +115,27 @@ func parseCRMMon(byteVal []byte) (*CRMMon, error) {
 
 // Enabled checks if the current instance is part of a Linux pacemaker cluster.
 // Returns a bool indicating whether pacemaker cluster is enabled.
-func Enabled(crm *CRMMon) bool {
-	if crm != nil && len(crm.Nodes) > 0 {
+func Enabled() bool {
+	return IsEnabled(commandlineexecutor.CommandExists, commandlineexecutor.ExpandAndExecuteCommand)
+}
+
+// IsEnabled is a testable version of Enabled.
+func IsEnabled(exists commandlineexecutor.CommandExistsRunner, runner commandlineexecutor.CommandRunner) bool {
+	if !exists("crm_mon") {
+		log.Logger.Debug("Command 'crm_mon' not found.")
+		return false
+	}
+	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
+	if err != nil {
+		log.Logger.Errorw("Command 'crm_mon --as-xml' failed", "stdout", stdOut, "stderr", stdErr, "error", err)
+		return false
+	}
+	crm, err := ParseCRMMon([]byte(stdOut))
+	if err != nil {
+		log.Logger.Errorw("Failed to parse crm_mon's XML Output", "error", err)
+		return false
+	}
+	if len(crm.Nodes) > 0 {
 		log.Logger.Info("Pacemaker cluster is configured on current machine.")
 		return true
 	}
@@ -142,10 +144,22 @@ func Enabled(crm *CRMMon) bool {
 
 // NodeState returns a map with key as node name in the pacemaker cluster,
 // and value as the state string. Returns an error in case of failures.
-func NodeState(crm *CRMMon) (map[string]string, error) {
-	if crm == nil {
-		return nil, nil
+func NodeState() (map[string]string, error) {
+	return nState(commandlineexecutor.ExpandAndExecuteCommand)
+}
+
+// nState is a testable version of NodeState.
+func nState(runner commandlineexecutor.CommandRunner) (map[string]string, error) {
+	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
+	log.Logger.Debugw("Command 'crm_mon --as-xml' returned", "stdout", stdOut, "stderr", stdErr)
+	if err != nil {
+		return nil, err
 	}
+	crm, err := ParseCRMMon([]byte(stdOut))
+	if err != nil {
+		return nil, err
+	}
+
 	ns := make(map[string]string)
 	for _, n := range crm.Nodes {
 		switch {
@@ -166,15 +180,26 @@ func NodeState(crm *CRMMon) (map[string]string, error) {
 
 // ResourceState returns a list of Resource structs with one entry per
 // pacemaker resource. Returns an error in case of failures.
-func ResourceState(crm *CRMMon) ([]Resource, error) {
-	if crm == nil {
-		return nil, nil
+func ResourceState() ([]Resource, error) {
+	return rState(commandlineexecutor.ExpandAndExecuteCommand)
+}
+
+// rState is a testable version of ResourceState.
+func rState(runner commandlineexecutor.CommandRunner) ([]Resource, error) {
+	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
+	log.Logger.Debugw("Command 'crm_mon --as-xml' returned", "stdout", stdOut, "stderr", stdErr)
+	if err != nil {
+		return nil, err
 	}
-	var rs []Resource
+	crm, err := ParseCRMMon([]byte(stdOut))
+	if err != nil {
+		return nil, err
+	}
 	// Concatenate the three separate resource arrays into one array.
 	resources := append(crm.Resources.General, crm.Resources.Group...)
 	resources = append(resources, crm.Resources.Clone...)
 
+	var rs []Resource
 	for _, r := range resources {
 		rInfo := Resource{
 			Name: r.Agent,
@@ -191,10 +216,17 @@ func ResourceState(crm *CRMMon) ([]Resource, error) {
 // pacemaker resource that has a non-zero fail-count.
 // Returns (nil, nil) if none of the resources have fail-count field set.
 // Returns a (nil, error) in case of failures.
-func FailCount(crm *CRMMon) ([]ResourceFailCount, error) {
-	if crm == nil {
-		return nil, nil
+func FailCount(runner commandlineexecutor.CommandRunner) ([]ResourceFailCount, error) {
+	stdOut, stdErr, err := runner("crm_mon", "--as-xml")
+	log.Logger.Debugw("Command 'crm_mon --as-xml' returned", "stdout", stdOut, "stderr", stdErr)
+	if err != nil {
+		return nil, err
 	}
+	crm, err := ParseCRMMon([]byte(stdOut))
+	if err != nil {
+		return nil, err
+	}
+
 	var fc []ResourceFailCount
 	for _, n := range crm.NodeHistory {
 		for _, r := range n.ResourceHistory {
@@ -214,20 +246,14 @@ func FailCount(crm *CRMMon) ([]ResourceFailCount, error) {
 /*
 XMLString obtains a string of encoded XML data describing the pacemaker metrics.
 */
-func XMLString(exec commandlineexecutor.Execute, crmAvailable bool) *string {
+func XMLString(runner commandlineexecutor.CommandRunner, exists commandlineexecutor.CommandExistsRunner, crmAvailable bool) *string {
 	if crmAvailable {
-		result := exec(commandlineexecutor.Params{
-			Executable: "cibadmin",
-			Args:       []string{"--query"},
-		})
-		return &result.StdOut
+		result, _, _ := runner("cibadmin", "--query")
+		return &result
 	}
-	result := exec(commandlineexecutor.Params{
-		Executable: "pcs",
-		Args:       []string{"cluster", "cib"},
-	})
-	if result.Error != nil {
-		return nil
+	if exists("pcs") {
+		result, _, _ := runner("pcs", "cluster cib")
+		return &result
 	}
-	return &result.StdOut
+	return nil
 }

@@ -89,19 +89,9 @@ var (
 			},
 		}
 	}
-	testCommandExecute = func(stdout, stderr string, err error) commandlineexecutor.Execute {
-		return func(commandlineexecutor.Params) commandlineexecutor.Result {
-			exitCode := 0
-			var exitErr *exec.ExitError
-			if err != nil && errors.As(err, &exitErr) {
-				exitCode = exitErr.ExitCode()
-			}
-			return commandlineexecutor.Result{
-				StdOut:   stdout,
-				StdErr:   stderr,
-				Error:    err,
-				ExitCode: exitCode,
-			}
+	testCommandRunner = func(stdout, stderr string, err error) commandlineexecutor.CommandRunnerNoSpace {
+		return func(cmd string, args ...string) (string, string, error) {
+			return stdout, stderr, err
 		}
 	}
 )
@@ -148,7 +138,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 	tests := []struct {
 		name      string
 		metric    *cmpb.OSCommandMetric
-		exec      commandlineexecutor.Execute
+		runner    commandlineexecutor.CommandRunnerNoSpace
 		vendor    string
 		wantLabel string
 		wantValue string
@@ -156,7 +146,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 		{
 			name:      "OSVendor_RHEL_Mismatch",
 			metric:    defaultOSCommandMetric(cmpb.OSVendor_RHEL, cmpb.OutputSource_STDOUT, "bar"),
-			exec:      testCommandExecute("bar", "", nil),
+			runner:    testCommandRunner("bar", "", nil),
 			vendor:    "not_rhel",
 			wantLabel: "",
 			wantValue: "",
@@ -164,7 +154,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 		{
 			name:      "OSVendor_SLES_Mismatch",
 			metric:    defaultOSCommandMetric(cmpb.OSVendor_SLES, cmpb.OutputSource_STDOUT, "bar"),
-			exec:      testCommandExecute("bar", "", nil),
+			runner:    testCommandRunner("bar", "", nil),
 			vendor:    "not_sles",
 			wantLabel: "",
 			wantValue: "",
@@ -172,7 +162,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 		{
 			name:      "OutputSource_StdOut",
 			metric:    defaultOSCommandMetric(cmpb.OSVendor_ALL, cmpb.OutputSource_STDOUT, "bar"),
-			exec:      testCommandExecute("bar", "", nil),
+			runner:    testCommandRunner("bar", "", nil),
 			vendor:    "rhel",
 			wantLabel: "foo",
 			wantValue: "foobar",
@@ -180,7 +170,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 		{
 			name:      "OutputSource_StdErr",
 			metric:    defaultOSCommandMetric(cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, cmpb.OutputSource_STDERR, "bar"),
-			exec:      testCommandExecute("", "bar", nil),
+			runner:    testCommandRunner("", "bar", nil),
 			vendor:    "rhel",
 			wantLabel: "foo",
 			wantValue: "foobar",
@@ -188,7 +178,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 		{
 			name:      "OutputSource_ExitCode",
 			metric:    defaultOSCommandMetric(cmpb.OSVendor_ALL, cmpb.OutputSource_EXIT_CODE, "-1"),
-			exec:      testCommandExecute("", "", &exec.ExitError{}),
+			runner:    testCommandRunner("", "", &exec.ExitError{}),
 			vendor:    "debian",
 			wantLabel: "foo",
 			wantValue: "foobar",
@@ -197,7 +187,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotLabel, gotValue := CollectOSCommandMetric(test.metric, test.exec, test.vendor)
+			gotLabel, gotValue := CollectOSCommandMetric(test.metric, test.runner, test.vendor)
 			if gotLabel != test.wantLabel {
 				t.Errorf("CollectOSCommandMetric() unexpected metric label, got %q want %q", gotLabel, test.wantLabel)
 			}

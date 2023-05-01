@@ -32,7 +32,6 @@ import (
 	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -132,29 +131,17 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
 					return []net.Addr{ip1, ip2}, nil
 				},
-				Execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-					if params.Executable == "gcloud" {
-						return commandlineexecutor.Result{
-							StdOut: "Google Cloud SDK 393.0.0",
-							StdErr: "",
-						}
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					if cmd == "gcloud" {
+						return "Google Cloud SDK 393.0.0", "", nil
 					}
-					if params.Executable == "gsutil" {
-						return commandlineexecutor.Result{
-							StdOut: "gsutil version 5.10",
-							StdErr: "",
-						}
+					if cmd == "gsutil" {
+						return "gsutil version 5.10", "", nil
 					}
-					if params.Executable == "systemctl" {
-						return commandlineexecutor.Result{
-							StdOut: "active",
-							StdErr: "",
-						}
+					if cmd == "systemctl" {
+						return "active", "", nil
 					}
-					return commandlineexecutor.Result{
-						StdOut: "",
-						StdErr: "",
-					}
+					return "", "", nil
 				},
 			},
 			wantLabels: map[string]string{
@@ -268,11 +255,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "sles",
-				Execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: "foobar",
-						StdErr: "",
-					}
+				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
+					return "foobar", "", nil
 				},
 			},
 			wantLabels: map[string]string{},
@@ -327,17 +311,11 @@ func TestCollectSystemMetrics(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	osCaptionExecute = func() commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
-			StdErr: "",
-		}
+	osCaptionExecute = func() (string, string, error) {
+		return "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n", "", nil
 	}
-	osVersionExecute = func() commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n Version=10.0.17763  \n\n",
-			StdErr: "",
-		}
+	osVersionExecute = func() (string, string, error) {
+		return "\n Version=10.0.17763  \n\n", "", nil
 	}
 	cmdExists = func(c string) bool {
 		return true
@@ -345,11 +323,8 @@ func TestCollectSystemMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			agentServiceStatus = func(string) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: test.agentStatus,
-					StdErr: "",
-				}
+			agentServiceStatus = func(string) (string, string, error) {
+				return test.agentStatus, "", nil
 			}
 			labels := make(map[string]string)
 			for k, v := range defaultLabels {
@@ -415,35 +390,24 @@ func TestCollectSystemMetricsErrors(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	defer func(f func() commandlineexecutor.Result) { osCaptionExecute = f }(osCaptionExecute)
-	osCaptionExecute = func() commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "",
-			StdErr: "",
-			Error:  errors.New("Error"),
-		}
+	defer func(f func() (string, string, error)) { osCaptionExecute = f }(osCaptionExecute)
+	osCaptionExecute = func() (string, string, error) {
+		return "", "", errors.New("Error")
 	}
-	defer func(f func() commandlineexecutor.Result) { osVersionExecute = f }(osVersionExecute)
-	osVersionExecute = func() commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "",
-			StdErr: "",
-			Error:  errors.New("Error"),
-		}
+	defer func(f func() (string, string, error)) { osVersionExecute = f }(osVersionExecute)
+	osVersionExecute = func() (string, string, error) {
+		return "", "", errors.New("Error")
 	}
 	defer func(f func(c string) bool) { cmdExists = f }(cmdExists)
 	cmdExists = func(c string) bool {
 		return true
 	}
 
-	defer func(f func(string) commandlineexecutor.Result) { agentServiceStatus = f }(agentServiceStatus)
+	defer func(f func(string) (string, string, error)) { agentServiceStatus = f }(agentServiceStatus)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			agentServiceStatus = func(string) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: test.agentStatus,
-					StdErr: "",
-				}
+			agentServiceStatus = func(string) (string, string, error) {
+				return test.agentStatus, "", nil
 			}
 			labels := make(map[string]string)
 			for k, v := range defaultLabels {

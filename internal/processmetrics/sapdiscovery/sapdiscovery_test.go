@@ -24,8 +24,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -44,27 +44,33 @@ var (
 	No process running.`
 )
 
+type fakeRunner struct {
+	stdOut, stdErr string
+	exitCode       int
+	err            error
+}
+
+func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
+	return f.stdOut, f.stdErr, f.exitCode, f.err
+}
+
 func TestInstances(t *testing.T) {
 	tests := []struct {
 		name                  string
 		fakeReplicationConfig replicationConfig
 		fakeList              listInstances
-		fakeExec              commandlineexecutor.Execute
 		want                  *sapb.SAPInstances
 	}{
 		{
 			name: "NOSAPInstances",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return nil, nil
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			want: &sapb.SAPInstances{},
 		},
 		{
 			name: "SingleHANAStandaloneInstance",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "HDB",
@@ -74,9 +80,6 @@ func TestInstances(t *testing.T) {
 						LDLibraryPath: "/usr/sap/HDB/SYS/exe",
 					},
 				}, nil
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			fakeReplicationConfig: func(user string, sid string, instanceID string) (int, []string, int64, error) {
 				return 0, []string{"gce-1", "gce-2"}, 10, nil
@@ -98,7 +101,7 @@ func TestInstances(t *testing.T) {
 		},
 		{
 			name: "HANAPrimaryInstance",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "HDB",
@@ -108,9 +111,6 @@ func TestInstances(t *testing.T) {
 						LDLibraryPath: "/usr/sap/HDB/SYS/exe",
 					},
 				}, nil
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			fakeReplicationConfig: func(user string, sid string, instanceID string) (int, []string, int64, error) {
 				return 1, []string{"gce-1", "gce-2"}, 15, nil
@@ -132,7 +132,7 @@ func TestInstances(t *testing.T) {
 		},
 		{
 			name: "HANAPathHeterogeneous",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "HSE",
@@ -142,9 +142,6 @@ func TestInstances(t *testing.T) {
 						LDLibraryPath: "/usr/sap/HSE/SYS/exe",
 					},
 				}, nil
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			fakeReplicationConfig: func(user string, sid string, instanceID string) (int, []string, int64, error) {
 				return 1, []string{"gce-1", "gce-2"}, 15, nil
@@ -166,7 +163,7 @@ func TestInstances(t *testing.T) {
 		},
 		{
 			name: "NetweaverInstance",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "DEV",
@@ -176,9 +173,6 @@ func TestInstances(t *testing.T) {
 						LDLibraryPath: "/usr/sap/DEV/SYS/exe",
 					},
 				}, nil
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{
@@ -201,17 +195,14 @@ func TestInstances(t *testing.T) {
 		},
 		{
 			name: "FileReadFailure",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return nil, cmpopts.AnyError
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			want: &sapb.SAPInstances{},
 		},
 		{
 			name: "ReadReplicationConfigFailure",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "HSE",
@@ -221,9 +212,6 @@ func TestInstances(t *testing.T) {
 						LDLibraryPath: "/usr/sap/HSE/SYS/exe",
 					},
 				}, nil
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			fakeReplicationConfig: func(user string, sid string, instanceID string) (int, []string, int64, error) {
 				return 0, nil, 0, cmpopts.AnyError
@@ -244,7 +232,7 @@ func TestInstances(t *testing.T) {
 		},
 		{
 			name: "HANASiteUndefined",
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "HDB",
@@ -254,9 +242,6 @@ func TestInstances(t *testing.T) {
 						LDLibraryPath: "/usr/sap/HDB/SYS/exe",
 					},
 				}, nil
-			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
 			},
 			fakeReplicationConfig: func(user string, sid string, instanceID string) (int, []string, int64, error) {
 				return -1, nil, 0, nil
@@ -279,7 +264,7 @@ func TestInstances(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := instances(test.fakeReplicationConfig, test.fakeList, test.fakeExec, nil)
+			got := instances(test.fakeReplicationConfig, test.fakeList)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("instances() unexpected diff: (-want +got):\n%s", diff)
 			}
@@ -293,7 +278,7 @@ func TestReadReplicationConfig(t *testing.T) {
 		user         string
 		sid          string
 		instanceID   string
-		fakeExec     commandlineexecutor.Execute
+		fakeRunCmd   cmdExitCode
 		wantMode     int
 		wantHAMebers []string
 		wantErr      error
@@ -303,11 +288,8 @@ func TestReadReplicationConfig(t *testing.T) {
 			user:       "hdbadm",
 			sid:        "HDB",
 			instanceID: "00",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "site/1/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n",
-					ExitCode: 15,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "site/1/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n", "", 15, nil
 			},
 			wantMode:     1,
 			wantHAMebers: []string{"gce-1", "gce-2"},
@@ -318,12 +300,8 @@ func TestReadReplicationConfig(t *testing.T) {
 			user:       "hdbadm",
 			sid:        "HDB",
 			instanceID: "00",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "site/1/REPLICATION_MODE=SYNCMEM\nlocal_site_id=1\nsite/1/SITE_NAME=gce-1\nsite/1/PRIMARY_MASTERS=gce-2\n",
-					StdErr:   "",
-					ExitCode: 15,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "site/1/REPLICATION_MODE=SYNCMEM\nlocal_site_id=1\nsite/1/SITE_NAME=gce-1\nsite/1/PRIMARY_MASTERS=gce-2\n", "", 15, nil
 			},
 			wantMode:     2,
 			wantHAMebers: []string{"gce-2", "gce-1"},
@@ -334,11 +312,8 @@ func TestReadReplicationConfig(t *testing.T) {
 			user:       "hdbadm",
 			sid:        "HDB",
 			instanceID: "00",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "local_site_id=0\n",
-					ExitCode: 10,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "local_site_id=0\n", "", 10, nil
 			},
 			wantMode:     0,
 			wantHAMebers: nil,
@@ -349,11 +324,8 @@ func TestReadReplicationConfig(t *testing.T) {
 			user:       "hdbadm",
 			sid:        "HDB",
 			instanceID: "00",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "site/1/REPLICATION_MODE=PRIMARY\nsite/2/SITE_NAME=gce-2\nsite/1/SITE_NAME=gce-1\nlocal_site_id=1\n",
-					ExitCode: 15,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "site/1/REPLICATION_MODE=PRIMARY\nsite/2/SITE_NAME=gce-2\nsite/1/SITE_NAME=gce-1\nlocal_site_id=1\n", "", 15, nil
 			},
 			wantMode:     1,
 			wantHAMebers: []string{"gce-1", "gce-2"},
@@ -361,11 +333,8 @@ func TestReadReplicationConfig(t *testing.T) {
 		},
 		{
 			name: "EmptySiteID",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "local_site_id=\n",
-					ExitCode: 15,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "local_site_id=\n", "", 15, nil
 			},
 			wantMode:     0,
 			wantHAMebers: nil,
@@ -373,11 +342,8 @@ func TestReadReplicationConfig(t *testing.T) {
 		},
 		{
 			name: "EmptyReplicationMode",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "site/2/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n",
-					ExitCode: 15,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "site/2/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n", "", 15, nil
 			},
 			wantMode:     0,
 			wantHAMebers: nil,
@@ -385,11 +351,8 @@ func TestReadReplicationConfig(t *testing.T) {
 		},
 		{
 			name: "EmptySiteName",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "local_site_id=2\nsite/2/SITE_NAME=",
-					ExitCode: 15,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "local_site_id=2\nsite/2/SITE_NAME=", "", 15, nil
 			},
 			wantMode:     0,
 			wantHAMebers: nil,
@@ -397,11 +360,8 @@ func TestReadReplicationConfig(t *testing.T) {
 		},
 		{
 			name: "SiteNamePatternError",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "site/2/REPLICATION_MODE=SYNCMEM\nlocal_site_id=2\nsite/2/SITE",
-					ExitCode: 15,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "site/2/REPLICATION_MODE=SYNCMEM\nlocal_site_id=2\nsite/2/SITE", "", 15, nil
 			},
 			wantMode:     2,
 			wantHAMebers: nil,
@@ -409,22 +369,15 @@ func TestReadReplicationConfig(t *testing.T) {
 		},
 		{
 			name: "CmdFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "abc",
-					StdErr:   "123",
-					ExitCode: 0,
-					Error:    cmpopts.AnyError,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "abc", "123", 0, cmpopts.AnyError
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "InvalidStatusCode",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: 99,
-				}
+			fakeRunCmd: func(user string, executable string, args string) (string, string, int64, error) {
+				return "", "", 99, nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -432,7 +385,7 @@ func TestReadReplicationConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMode, gotHAMembers, _, err := readReplicationConfig(test.user, test.sid, test.instanceID, test.fakeExec)
+			gotMode, gotHAMembers, _, err := readReplicationConfig(test.user, test.sid, test.instanceID, test.fakeRunCmd)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("readReplicationConfig(%s,%s,%s) error, got: %v want: %v.", test.user, test.sid, test.instanceID, err, test.wantErr)
@@ -449,19 +402,18 @@ func TestReadReplicationConfig(t *testing.T) {
 
 func TestListSAPInstances(t *testing.T) {
 	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     []*instanceInfo
-		wantErr  error
+		name       string
+		fakeRunner CommandRunner
+		want       []*instanceInfo
+		wantErr    error
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `LD_LIBRARY_PATH=/usr/sap/DEH/HDB00/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/DEH/HDB00/exe/sapstartsrv pf=/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci -D -u dehadm
-					LD_LIBRARY_PATH=/usr/sap/DEV/ASCS01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm
-					/usr/sap/DEV/D02/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci -D -u devadm`,
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				sapServices := `LD_LIBRARY_PATH=/usr/sap/DEH/HDB00/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/DEH/HDB00/exe/sapstartsrv pf=/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci -D -u dehadm
+				LD_LIBRARY_PATH=/usr/sap/DEV/ASCS01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm
+				/usr/sap/DEV/D02/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci -D -u devadm`
+				return sapServices, "", nil
 			},
 			want: []*instanceInfo{
 				&instanceInfo{
@@ -489,11 +441,10 @@ func TestListSAPInstances(t *testing.T) {
 		},
 		{
 			name: "ERSInstances",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `LD_LIBRARY_PATH=/usr/sap/ED7/ERS12/exe:$LD_LIBRARY_PATH; export LD_LIBRARY_PATH; /usr/sap/ED7/ERS12/exe/sapstartsrv pf=/usr/sap/ED7/SYS/profile/ED7_ERS12_aliders71 -D -u ed7adm
-					LD_LIBRARY_PATH=/usr/sap/FD7/ERS22/exe:$LD_LIBRARY_PATH; export LD_LIBRARY_PATH; /usr/sap/FD7/ERS22/exe/sapstartsrv pf=/usr/sap/FD7/ERS22/profile/FD7_ERS22_aliders71 -D -u fd7adm`,
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				sapServices := `LD_LIBRARY_PATH=/usr/sap/ED7/ERS12/exe:$LD_LIBRARY_PATH; export LD_LIBRARY_PATH; /usr/sap/ED7/ERS12/exe/sapstartsrv pf=/usr/sap/ED7/SYS/profile/ED7_ERS12_aliders71 -D -u ed7adm
+				LD_LIBRARY_PATH=/usr/sap/FD7/ERS22/exe:$LD_LIBRARY_PATH; export LD_LIBRARY_PATH; /usr/sap/FD7/ERS22/exe/sapstartsrv pf=/usr/sap/FD7/ERS22/profile/FD7_ERS22_aliders71 -D -u fd7adm`
+				return sapServices, "", nil
 			},
 			want: []*instanceInfo{
 				&instanceInfo{
@@ -514,10 +465,9 @@ func TestListSAPInstances(t *testing.T) {
 		},
 		{
 			name: "AlphaNumericSID",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `LD_LIBRARY_PATH=/usr/sap/H00/HDB01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/H00/HDB01/exe/sapstartsrv pf=/usr/sap/H00/SYS/profile/H00_HDB01_hana-ha-rh81sap-0-u1670561406-primary -D -u h00adm`,
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				sapServices := `LD_LIBRARY_PATH=/usr/sap/H00/HDB01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/H00/HDB01/exe/sapstartsrv pf=/usr/sap/H00/SYS/profile/H00_HDB01_hana-ha-rh81sap-0-u1670561406-primary -D -u h00adm`
+				return sapServices, "", nil
 			},
 			want: []*instanceInfo{
 				&instanceInfo{
@@ -531,25 +481,21 @@ func TestListSAPInstances(t *testing.T) {
 		},
 		{
 			name: "CommandFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				return "", "", cmpopts.AnyError
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "InvalidSapservicesEntry",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "/Not/SAP/Instance00",
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				return "/Not/SAP/Instance00", "", nil
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := listSAPInstances(test.fakeExec)
+			got, err := listSAPInstances(test.fakeRunner)
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Fatalf("listSAPInstances() = %v, want %v", err, test.wantErr)
 			}
@@ -566,16 +512,12 @@ func TestNetweaverInstances(t *testing.T) {
 	tests := []struct {
 		name     string
 		fakeList listInstances
-		fakeExec commandlineexecutor.Execute
 		want     []*sapb.SAPInstance
 		wantErr  error
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "DEV",
@@ -603,20 +545,14 @@ func TestNetweaverInstances(t *testing.T) {
 		},
 		{
 			name: "listInstanceFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return nil, cmpopts.AnyError
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "HANAInstance",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:          "HDB",
@@ -627,10 +563,7 @@ func TestNetweaverInstances(t *testing.T) {
 		},
 		{
 			name: "ICMInstance",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
-			fakeList: func(commandlineexecutor.Execute) ([]*instanceInfo, error) {
+			fakeList: func(CommandRunner) ([]*instanceInfo, error) {
 				return []*instanceInfo{
 					{
 						Sid:           "PTS",
@@ -660,7 +593,7 @@ func TestNetweaverInstances(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := netweaverInstances(test.fakeList, test.fakeExec)
+			got, err := netweaverInstances(test.fakeList)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Fatalf("Unexpected return from netweaverInstances(), got(%v), want(%v)", err, test.wantErr)
@@ -675,41 +608,35 @@ func TestNetweaverInstances(t *testing.T) {
 
 func TestSAPInitRunning(t *testing.T) {
 	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     bool
-		wantErr  error
+		name       string
+		fakeRunner CommandRunner
+		want       bool
+		wantErr    error
 	}{
 		{
 			name: "sapinitRunning",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: sapInitRunningOutput,
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				return sapInitRunningOutput, "", nil
 			},
 			want: true,
 		},
 		{
 			name: "sapInitStopped",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: sapInitStoppedOutput,
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				return sapInitStoppedOutput, "", nil
 			},
 		},
 		{
 			name: "CmdFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			fakeRunner: func(string, string) (string, string, error) {
+				return "", "", cmpopts.AnyError
 			},
 			wantErr: cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := sapInitRunning(test.fakeExec)
+			got, gotErr := sapInitRunning(test.fakeRunner)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("Unexpected return from sapInitRunning(), got(%v), want(%v)", got, test.wantErr)
@@ -729,7 +656,6 @@ func TestFindPort(t *testing.T) {
 		wantPort     string
 		wantType     sapb.InstanceType
 		wantKind     sapb.InstanceKind
-		fakeExec     commandlineexecutor.Execute
 	}{
 		{
 			name: "SuccessASCS",
@@ -744,9 +670,6 @@ func TestFindPort(t *testing.T) {
 			wantPort:     "8100",
 			wantType:     sapb.InstanceType_NETWEAVER,
 			wantKind:     sapb.InstanceKind_CS,
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
 		},
 		{
 			name: "SuccessD",
@@ -761,47 +684,32 @@ func TestFindPort(t *testing.T) {
 			wantPort:     "50100",
 			wantType:     sapb.InstanceType_NETWEAVER,
 			wantKind:     sapb.InstanceKind_APP,
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
 		},
 		{
 			name:         "ERSInstance",
 			instanceName: "ERS",
 			wantType:     sapb.InstanceType_NETWEAVER,
 			wantKind:     sapb.InstanceKind_ERS,
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
 		},
 		{
 			name:         "HDBInstance",
 			instanceName: "HDB",
 			wantType:     sapb.InstanceType_HANA,
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
 		},
 		{
 			name:         "UnknownInstance",
 			instanceName: "XYZ",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
 		},
 		{
 			name:         "WebDispatcherAsSeperateSID",
 			instanceName: "W01",
 			wantKind:     sapb.InstanceKind_APP,
 			wantType:     sapb.InstanceType_NETWEAVER,
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotPort, gotType, gotKind := findPort(test.inst, test.instanceName, test.fakeExec)
+			gotPort, gotType, gotKind := findPort(test.inst, test.instanceName)
 			if gotPort != test.wantPort || gotType != test.wantType || gotKind != test.wantKind {
 				t.Errorf("findPort() returned unexpected values. got(%v, %v, %v), want(%v, %v, %v)",
 					gotPort, gotType, gotKind, test.wantPort, test.wantType, test.wantKind)
@@ -812,60 +720,51 @@ func TestFindPort(t *testing.T) {
 
 func TestParseHTTPPort(t *testing.T) {
 	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     string
-		wantErr  error
+		name       string
+		fakeRunner sapcontrol.RunnerWithEnv
+
+		want    string
+		wantErr error
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `10.10.2022 21:32:40\nParameterValue\nOK\nPROT=HTTP,PORT=8100`,
-				}
+			fakeRunner: &fakeRunner{
+				stdOut: `10.10.2022 21:32:40\nParameterValue\nOK\nPROT=HTTP,PORT=8100`,
 			},
 			want: "8100",
 		},
 		{
 			name: "SMTPPortConfigured",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `13.10.2022 20:08:39\nParameterValue\nOK\n\nPROT=SMTP,PORT=0,TIMEOUT=120,PROCTIMEOUT=120`,
-				}
+			fakeRunner: &fakeRunner{
+				stdOut: `13.10.2022 20:08:39\nParameterValue\nOK\n\nPROT=SMTP,PORT=0,TIMEOUT=120,PROCTIMEOUT=120`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "HTTPPortNotConfigured",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `13.10.2022 20:13:47\nParameterValue\nFAIL: Invalid parameter`,
-				}
+			fakeRunner: &fakeRunner{
+				stdOut: `13.10.2022 20:13:47\nParameterValue\nFAIL: Invalid parameter`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "CommandFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			fakeRunner: &fakeRunner{
+				err: cmpopts.AnyError,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "HTTPPort0",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `10.10.2022 21:32:40\nParameterValue\nOK\nPROT=HTTP,PORT=0`,
-				}
+			fakeRunner: &fakeRunner{
+				stdOut: `10.10.2022 21:32:40\nParameterValue\nOK\nPROT=HTTP,PORT=0`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotPort, gotErr := parseHTTPPort(commandlineexecutor.Params{}, test.fakeExec)
+			gotPort, gotErr := parseHTTPPort(test.fakeRunner)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("parseHTTPPort() returned error = %v, want %v", gotErr, test.wantErr)
 			}

@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
@@ -40,44 +39,46 @@ var (
 
 func TestCollectForNetweaver(t *testing.T) {
 	tests := []struct {
-		name          string
-		executor      commandlineexecutor.Execute
-		wantCount     int
-		processParams commandlineexecutor.Params
+		name             string
+		executor         commandExecutor
+		sapControlOutput string
+		wantCount        int
 	}{
 		{
-			name:          "EmptyPIDsMap",
-			processParams: commandlineexecutor.Params{},
-			executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
+			name: "EmptyPIDsMap",
+			executor: func(cmd, args string) (string, string, error) {
+				return "", "", nil
 			},
-			wantCount: 0,
+			sapControlOutput: "",
+			wantCount:        0,
 		},
 		{
-			name:          "OnlyMemoryPerProcessMetricAvailable",
-			processParams: commandlineexecutor.Params{},
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultSapControlOutputNetWeaver,
+			name: "OnlyMemoryPerProcessMetricAvailable",
+			executor: func(cmd, args string) (string, string, error) {
+				if cmd == "getconf" {
+					return "100\n", "", nil
 				}
+				return "", "", nil
 			},
-			wantCount: 3,
+			sapControlOutput: defaultSapControlOutputNetWeaver,
+			wantCount:        3,
 		},
 		{
-			name:          "OnlyCPUPerProcessMetricAvailable",
-			processParams: commandlineexecutor.Params{},
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `OK
-					0 name: msg_server
-					0 dispstatus: GREEN
-					0 pid: 111
-					1 name: enserver
-					1 dispstatus: GREEN
-					1 pid: 333
-					`,
+			name: "OnlyCPUPerProcessMetricAvailable",
+			executor: func(cmd, args string) (string, string, error) {
+				if cmd == "getconf" {
+					return "100\n", "", nil
 				}
+				return "", "", nil
 			},
+			sapControlOutput: `OK
+			0 name: msg_server
+			0 dispstatus: GREEN
+			0 pid: 111
+			1 name: enserver
+			1 dispstatus: GREEN
+			1 pid: 333
+			`,
 			wantCount: 1,
 		},
 	}
@@ -85,12 +86,12 @@ func TestCollectForNetweaver(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testNetweaverInstanceProperties := &NetweaverInstanceProperties{
-				Config:                  defaultConfig,
-				Client:                  &fake.TimeSeriesCreator{},
-				Executor:                test.executor,
-				SAPInstance:             defaultSAPInstanceNetWeaver,
-				NewProcHelper:           newProcessWithContextHelperTest,
-				SAPControlProcessParams: test.processParams,
+				Config:                     defaultConfig,
+				Client:                     &fake.TimeSeriesCreator{},
+				Executor:                   test.executor,
+				SAPInstance:                defaultSAPInstanceNetWeaver,
+				NewProcHelper:              newProcessWithContextHelperTest,
+				RunnerForSAPControlProcess: &fakeRunner{stdOut: test.sapControlOutput},
 			}
 			got := testNetweaverInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {

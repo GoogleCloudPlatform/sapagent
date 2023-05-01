@@ -21,67 +21,57 @@ import (
 	"testing"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 )
 
 func TestCollectForSAPControlProcesses(t *testing.T) {
 	tests := []struct {
 		name      string
-		executor  commandlineexecutor.Execute
+		executor  commandExecutor
 		wantCount int
 	}{
 		{
 			name: "EmptyPIDsMap",
-			executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
+			executor: func(cmd, args string) (string, string, error) {
+				return "", "", nil
 			},
 			wantCount: 0,
 		},
 		{
 			name: "OnlyMemoryPerProcessMetricAvailable",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "ps" {
-					return commandlineexecutor.Result{
-						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   111\nsapstart    222\n",
-					}
-				} else if params.Executable == "getconf" {
-					return commandlineexecutor.Result{
-						StdOut: "100\n",
-					}
+			executor: func(cmd, args string) (string, string, error) {
+				if cmd == "ps" {
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   111\nsapstart    222\n", "", nil
 				}
-				return commandlineexecutor.Result{}
+				if cmd == "getconf" {
+					return "100\n", "", nil
+				}
+				return "", "", nil
 			},
 			wantCount: 3,
 		},
 		{
 			name: "OnlyCPUPerProcessMetricAvailable",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "ps" {
-					return commandlineexecutor.Result{
-						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    333\n",
-					}
-				} else if params.Executable == "getconf" {
-					return commandlineexecutor.Result{
-						StdOut: "100\n",
-					}
+			executor: func(cmd, args string) (string, string, error) {
+				if cmd == "ps" {
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    333\n", "", nil
 				}
-				return commandlineexecutor.Result{}
+				if cmd == "getconf" {
+					return "100\n", "", nil
+				}
+				return "", "", nil
 			},
 			wantCount: 1,
 		},
 		{
 			name: "FetchedBothCPUAndMemoryMetricsSuccessfully",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "ps" {
-					return commandlineexecutor.Result{
-						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    444\n",
-					}
-				} else if params.Executable == "getconf" {
-					return commandlineexecutor.Result{
-						StdOut: "100\n",
-					}
+			executor: func(cmd, args string) (string, string, error) {
+				if cmd == "ps" {
+					return "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    444\n", "", nil
 				}
-				return commandlineexecutor.Result{}
+				if cmd == "getconf" {
+					return "100\n", "", nil
+				}
+				return "", "", nil
 			},
 			wantCount: 4,
 		},

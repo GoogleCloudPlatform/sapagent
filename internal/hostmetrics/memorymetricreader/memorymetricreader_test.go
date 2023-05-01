@@ -25,7 +25,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 
 	mstatspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
@@ -33,7 +32,7 @@ import (
 func TestMemoryStats(t *testing.T) {
 	for _, v := range []struct {
 		readFile    func(string) ([]byte, error)
-		wmicExecute func(commandlineexecutor.Params) commandlineexecutor.Result
+		wmicExecute func(cmd string, args ...string) (string, string, error)
 		os          string
 		want        *mstatspb.MemoryStats
 	}{
@@ -70,21 +69,15 @@ func TestMemoryStats(t *testing.T) {
 			want: &mstatspb.MemoryStats{},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				argStr := strings.Join(params.Args, " ")
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
+				argStr := strings.Join(args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
-					return commandlineexecutor.Result{
-						Error: fmt.Errorf("bad arguments for execute command %q", argStr),
-					}
+					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
 				}
 				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
-					return commandlineexecutor.Result{
-						StdOut: "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n",
-					}
+					return "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n", "", nil
 				}
-				return commandlineexecutor.Result{
-					StdOut: "\n\nFreePhysicalMemory=31442364 \n   \n    \n",
-				}
+				return "\n\nFreePhysicalMemory=31442364 \n   \n    \n", "", nil
 			},
 			os: "windows",
 			want: &mstatspb.MemoryStats{
@@ -94,10 +87,8 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: errors.New("error"),
-				}
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
+				return "", "", errors.New("error")
 			},
 			os: "windows",
 			want: &mstatspb.MemoryStats{
@@ -106,21 +97,15 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				argStr := strings.Join(params.Args, " ")
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
+				argStr := strings.Join(args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
-					return commandlineexecutor.Result{
-						Error: fmt.Errorf("bad arguments for execute command %q", argStr),
-					}
+					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
 				}
 				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
-					return commandlineexecutor.Result{
-						StdOut: "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n",
-					}
+					return "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n", "", nil
 				}
-				return commandlineexecutor.Result{
-					Error: errors.New("error"),
-				}
+				return "", "", errors.New("error")
 			},
 			os: "windows",
 			want: &mstatspb.MemoryStats{
@@ -129,19 +114,15 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				argStr := strings.Join(params.Args, " ")
+			wmicExecute: func(cmd string, args ...string) (string, string, error) {
+				argStr := strings.Join(args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
-					return commandlineexecutor.Result{
-						Error: fmt.Errorf("bad arguments for execute command %q", argStr),
-					}
+					return "", "", fmt.Errorf("bad arguments for execute command %q", argStr)
 				}
 				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
-					return commandlineexecutor.Result{
-						StdOut: "\n\nTotalPhysicalMemory=34356005437.123 \n   \n    \n",
-					}
+					return "\n\nTotalPhysicalMemory=34356005437.123 \n   \n    \n", "", nil
 				}
-				return commandlineexecutor.Result{}
+				return "", "", nil
 			},
 			os: "windows",
 			want: &mstatspb.MemoryStats{
@@ -150,10 +131,8 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: errors.New("error"),
-				}
+			wmicExecute: func(string, ...string) (string, string, error) {
+				return "", "", errors.New("error")
 			},
 			os: "windows",
 			want: &mstatspb.MemoryStats{

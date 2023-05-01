@@ -21,7 +21,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 )
 
 var (
@@ -70,21 +69,19 @@ func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
 func TestProcessList(t *testing.T) {
 	tests := []struct {
 		name           string
-		fakeExec       commandlineexecutor.Execute
+		fRunner        RunnerWithEnv
 		wantProcStatus map[int]*ProcessStatus
 		wantExitCode   int
 		wantErr        error
 	}{
 		{
 			name: "SucceedsOneProcess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: hdbdaemon
-					0 description: HDB Daemon
-					0 dispstatus: GREEN
-					0 pid: 1234`,
-					ExitCode: 3,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `0 name: hdbdaemon
+				0 description: HDB Daemon
+				0 dispstatus: GREEN
+				0 pid: 1234`,
+				exitCode: 3,
 			},
 			wantProcStatus: map[int]*ProcessStatus{
 				0: &ProcessStatus{
@@ -99,11 +96,9 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "SucceedsAllProcesses",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   defaultProcessListOutput,
-					ExitCode: 4,
-				}
+			fRunner: &fakeRunner{
+				stdOut:   defaultProcessListOutput,
+				exitCode: 4,
 			},
 			wantProcStatus: map[int]*ProcessStatus{
 				0: &ProcessStatus{
@@ -130,91 +125,75 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "SapControlFails",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
+			fRunner: &fakeRunner{
+				err: cmpopts.AnyError,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "SapControlInvalidExitCode",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: -1,
-				}
+			fRunner: &fakeRunner{
+				exitCode: -1,
 			},
 			wantErr:      cmpopts.AnyError,
 			wantExitCode: -1,
 		},
 		{
 			name: "NameError",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `abc name: msg_server
-					0 description: Message Server
-					0 dispstatus: GREEN`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `abc name: msg_server
+				0 description: Message Server
+				0 dispstatus: GREEN`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "CountMismatch",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: msg_server
-					0 description: Message Server
-					0 dispstatus: GREEN
-					1 dispstatus: GREEN`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `0 name: msg_server
+				0 description: Message Server
+				0 dispstatus: GREEN
+				1 dispstatus: GREEN`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "PidMismatch",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: msg_server
-					0 description: Message Server
-					1 dispstatus: GREEN`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `0 name: msg_server
+				0 description: Message Server
+				1 dispstatus: GREEN`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "NameIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `1000000000000000000000000 name: msg_server
-					0 description: Message Server
-					0 dispstatus: GREEN,
-					0 pid: 1234`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `1000000000000000000000000 name: msg_server
+				0 description: Message Server
+				0 dispstatus: GREEN,
+				0 pid: 1234`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "DispStatusIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: msg_server
-					0 description: Message Server
-					1000000000000000000000000 dispstatus: GREEN,
-					0 pid: 1234`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `0 name: msg_server
+				0 description: Message Server
+				1000000000000000000000000 dispstatus: GREEN,
+				0 pid: 1234`,
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "NoNameEntryForProcess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `1 name: hdbdaemon
-					0 description: HDB Daemon
-					0 dispstatus: GREEN
-					0 pid: 1234`,
-					ExitCode: 3,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `1 name: hdbdaemon
+				0 description: HDB Daemon
+				0 dispstatus: GREEN
+				0 pid: 1234`,
+				exitCode: 3,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -222,7 +201,7 @@ func TestProcessList(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotProcStatus, gotExitCode, gotErr := p.ProcessList(test.fakeExec, commandlineexecutor.Params{})
+			gotProcStatus, gotExitCode, gotErr := p.ProcessList(test.fRunner)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ProcessList(), gotErr: %v wantErr: %v.",
@@ -245,7 +224,7 @@ func TestProcessList(t *testing.T) {
 func TestParseABAPGetWPTable(t *testing.T) {
 	tests := []struct {
 		name              string
-		fakeExec          commandlineexecutor.Execute
+		fRunner           RunnerWithEnv
 		wantProcesses     map[string]int
 		wantBusyProcesses map[string]int
 		wantPIDMap        map[string]string
@@ -253,27 +232,21 @@ func TestParseABAPGetWPTable(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
-					0, DIA, 7488, Wait, , yes, , , 0:24:54,4, , , , ,
-					1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,
-					2, SPO, 7490, Wait, , yes, , , 0:22:11, , , , , ,
-					3, DIA, 7491, Wait, , yes, , , 0:46:38, , , , , ,
-					4, DIA, 7492, Wait, , yes, , , 0:37:05, , , , , ,`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
+				0, DIA, 7488, Wait, , yes, , , 0:24:54,4, , , , ,
+				1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,
+				2, SPO, 7490, Wait, , yes, , , 0:22:11, , , , , ,
+				3, DIA, 7491, Wait, , yes, , , 0:46:38, , , , , ,
+				4, DIA, 7492, Wait, , yes, , , 0:37:05, , , , , ,`,
 			},
 			wantProcesses:     map[string]int{"DIA": 3, "BTC": 1, "SPO": 1},
 			wantBusyProcesses: map[string]int{"DIA": 1},
 			wantPIDMap:        map[string]string{"7488": "DIA", "7489": "BTC", "7490": "SPO", "7491": "DIA", "7492": "DIA"},
 		},
 		{
-			name: "Error",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
+			name:    "Error",
+			fRunner: &fakeRunner{err: cmpopts.AnyError},
 			wantErr: cmpopts.AnyError,
 		},
 	}
@@ -281,19 +254,19 @@ func TestParseABAPGetWPTable(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ParseABAPGetWPTable(test.fakeExec, commandlineexecutor.Params{})
+			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ParseABAPGetWPTable(test.fRunner)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fakeExec, err, test.wantErr)
+				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fRunner, err, test.wantErr)
 			}
 			if diff := cmp.Diff(test.wantProcesses, gotProcessCount); diff != "" {
-				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fakeExec, gotProcessCount, test.wantProcesses)
+				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fRunner, gotProcessCount, test.wantProcesses)
 			}
 			if diff := cmp.Diff(test.wantBusyProcesses, gotBusyProcessCount); diff != "" {
-				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fakeExec, gotBusyProcessCount, test.wantBusyProcesses)
+				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fRunner, gotBusyProcessCount, test.wantBusyProcesses)
 			}
 			if diff := cmp.Diff(test.wantPIDMap, gotPIDMap); diff != "" {
-				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fakeExec, gotPIDMap, test.wantPIDMap)
+				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fRunner, gotPIDMap, test.wantPIDMap)
 			}
 		})
 	}
@@ -302,51 +275,41 @@ func TestParseABAPGetWPTable(t *testing.T) {
 func TestParseQueueStats(t *testing.T) {
 	tests := []struct {
 		name        string
-		fakeExec    commandlineexecutor.Execute
+		fRunner     RunnerWithEnv
 		wantCurrent map[string]int
 		wantPeak    map[string]int
 		wantErr     error
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `Typ, Now, High, Max, Writes, Reads
-					ABAP/NOWP, 0, 8, 14000, 270537, 270537
-					ABAP/DIA, 0, 10, 14000, 534960, 534960
-					ICM/Intern, 0, 7, 6000, 184690, 184690`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `Typ, Now, High, Max, Writes, Reads
+				ABAP/NOWP, 0, 8, 14000, 270537, 270537
+				ABAP/DIA, 0, 10, 14000, 534960, 534960
+				ICM/Intern, 0, 7, 6000, 184690, 184690`,
 			},
 			wantCurrent: map[string]int{"ABAP/NOWP": 0, "ABAP/DIA": 0, "ICM/Intern": 0},
 			wantPeak:    map[string]int{"ABAP/NOWP": 8, "ABAP/DIA": 10, "ICM/Intern": 7},
 		},
 		{
-			name: "Error",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
+			name:    "Error",
+			fRunner: &fakeRunner{err: cmpopts.AnyError},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "CurrentCountIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `ABAP/NOWP, 1000000000000000000000, 8, 14000, 270537, 270537
-					ABAP/DIA, 0, 10, 14000, 534960, 534960`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `ABAP/NOWP, 1000000000000000000000, 8, 14000, 270537, 270537
+				ABAP/DIA, 0, 10, 14000, 534960, 534960`,
 			},
 			wantCurrent: map[string]int{"ABAP/DIA": 0},
 			wantPeak:    map[string]int{"ABAP/DIA": 10},
 		},
 		{
 			name: "PeakCountIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `ABAP/NOWP, 0, 1000000000000000000000, 14000, 270537, 270537
-					ABAP/DIA, 0, 10, 14000, 534960, 534960`,
-				}
+			fRunner: &fakeRunner{
+				stdOut: `ABAP/NOWP, 0, 1000000000000000000000, 14000, 270537, 270537
+				ABAP/DIA, 0, 10, 14000, 534960, 534960`,
 			},
 			wantCurrent: map[string]int{"ABAP/DIA": 0, "ABAP/NOWP": 0},
 			wantPeak:    map[string]int{"ABAP/DIA": 10},
@@ -356,16 +319,16 @@ func TestParseQueueStats(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.ParseQueueStats(test.fakeExec, commandlineexecutor.Params{})
+			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.ParseQueueStats(test.fRunner)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fakeExec, err, test.wantErr)
+				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fRunner, err, test.wantErr)
 			}
 			if diff := cmp.Diff(test.wantCurrent, gotCurrentQueueUsage); diff != "" {
-				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fakeExec, gotCurrentQueueUsage, test.wantCurrent)
+				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fRunner, gotCurrentQueueUsage, test.wantCurrent)
 			}
 			if diff := cmp.Diff(test.wantPeak, gotPeakQueueUsage); diff != "" {
-				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fakeExec, gotPeakQueueUsage, test.wantPeak)
+				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fRunner, gotPeakQueueUsage, test.wantPeak)
 			}
 		})
 	}
@@ -374,17 +337,13 @@ func TestParseQueueStats(t *testing.T) {
 func TestEnqGetLockTable(t *testing.T) {
 	tests := []struct {
 		name         string
-		fakeExec     commandlineexecutor.Execute
+		fRunner      RunnerWithEnv
 		wantEnqLocks []*EnqLock
 		wantErr      error
 	}{
 		{
-			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultEnqTableOutput,
-				}
-			},
+			name:    "Success",
+			fRunner: &fakeRunner{stdOut: defaultEnqTableOutput},
 			wantEnqLocks: []*EnqLock{
 				{
 					LockName:         "USR04",
@@ -403,52 +362,36 @@ func TestEnqGetLockTable(t *testing.T) {
 			},
 		},
 		{
-			name: "Error",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
+			name:    "Error",
+			fRunner: &fakeRunner{err: cmpopts.AnyError},
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "ErroneousOwnerCount",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1ab0, 1, 000, SAP*, SU01, E_USR04, FALSE",
-				}
-			},
+			name:    "ErroneousOwnerCount",
+			fRunner: &fakeRunner{stdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1ab0, 1, 000, SAP*, SU01, E_USR04, FALSE"},
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "ErroneousOwnerCountVB",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 10, 1000000000000000000000, 000, SAP*, SU01, E_USR04, FALSE",
-				}
-			},
+			name:    "ErroneousOwnerCountVB",
+			fRunner: &fakeRunner{stdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 10, 1000000000000000000000, 000, SAP*, SU01, E_USR04, FALSE"},
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "InvalidStatus",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: -1,
-				}
-			},
+			name:    "InvalidStatus",
+			fRunner: &fakeRunner{exitCode: -1},
 			wantErr: cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotEnqList, gotErr := p.EnqGetLockTable(test.fakeExec, commandlineexecutor.Params{})
+			gotEnqList, gotErr := p.EnqGetLockTable(test.fRunner)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("EnqGetLockTable(%v)=%v, want: %v.", test.fakeExec, gotErr, test.wantErr)
+				t.Errorf("EnqGetLockTable(%v)=%v, want: %v.", test.fRunner, gotErr, test.wantErr)
 			}
 			if diff := cmp.Diff(test.wantEnqLocks, gotEnqList); diff != "" {
-				t.Errorf("EnqGetLockTable(%v) mismatch, diff (-want, +got): %v", test.fakeExec, diff)
+				t.Errorf("EnqGetLockTable(%v) mismatch, diff (-want, +got): %v", test.fRunner, diff)
 			}
 		})
 	}
