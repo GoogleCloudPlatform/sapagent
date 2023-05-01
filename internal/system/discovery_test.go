@@ -20,7 +20,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
@@ -28,6 +30,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
@@ -1761,6 +1764,125 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 			}
 			if runnerCalls != test.wantRunnerCalls {
 				t.Errorf("discoverDatabaseSID() runnerCalls = %d, want %d", runnerCalls, test.wantRunnerCalls)
+			}
+		})
+	}
+}
+
+func TestResourceToInsight(t *testing.T) {
+	tests := []struct {
+		name string
+		res  *spb.SapDiscovery_Resource
+		want *workloadmanager.SapDiscoveryResource
+	}{{
+		name: "discoveryResourceToInsightResource",
+		res: &spb.SapDiscovery_Resource{
+			ResourceUri:      "test/uri",
+			ResourceKind:     "test",
+			ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
+			RelatedResources: []string{"other/resource"},
+			UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
+		},
+		want: &workloadmanager.SapDiscoveryResource{
+			ResourceURI:      "test/uri",
+			ResourceKind:     "test",
+			ResourceType:     "COMPUTE",
+			RelatedResources: []string{"other/resource"},
+			UpdateTime:       "2023-05-01T15:45:11Z",
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := insightResourceFromSystemResource(test.res)
+			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
+				t.Errorf("insightResourceFromSystemResource() mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestComponentToInsight(t *testing.T) {
+	tests := []struct {
+		name string
+		comp *spb.SapDiscovery_Component
+		want *workloadmanager.SapDiscoveryComponent
+	}{{
+		name: "discoveryComponentToInsightComponent",
+		comp: &spb.SapDiscovery_Component{
+			HostProject: "test/project",
+			Sid:         "SID",
+			Resources: []*spb.SapDiscovery_Resource{{
+				ResourceUri:      "test/uri",
+				ResourceKind:     "test",
+				ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
+				RelatedResources: []string{"other/resource"},
+				UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
+			}},
+		},
+		want: &workloadmanager.SapDiscoveryComponent{
+			HostProject: "test/project",
+			Sid:         "SID",
+			Resources: []*workloadmanager.SapDiscoveryResource{{
+				ResourceURI:      "test/uri",
+				ResourceKind:     "test",
+				ResourceType:     "COMPUTE",
+				RelatedResources: []string{"other/resource"},
+				UpdateTime:       "2023-05-01T15:45:11Z",
+			}}},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := insightComponentFromSystemComponent(test.comp)
+			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
+				t.Errorf("insightComponentFromSystemComponent() mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDiscoverySystemToInsight(t *testing.T) {
+	tests := []struct {
+		name string
+		sys  *spb.SapDiscovery
+		want *workloadmanager.Insight
+	}{{
+		name: "discoverySystemToInsightSystem",
+		sys: &spb.SapDiscovery{
+			SystemId:   "test-system",
+			UpdateTime: timestamppb.New(time.Unix(1682955911, 0)),
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				HostProject: "test/project",
+				Sid:         "SID",
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      "test/uri",
+					ResourceKind:     "test",
+					ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
+					RelatedResources: []string{"other/resource"},
+					UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
+				}}},
+			DatabaseLayer: &spb.SapDiscovery_Component{},
+		},
+		want: &workloadmanager.Insight{
+			SapDiscovery: &workloadmanager.SapDiscovery{
+				SystemID:   "test-system",
+				UpdateTime: "2023-05-01T15:45:11Z",
+				ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+					HostProject: "test/project",
+					Sid:         "SID",
+					Resources: []*workloadmanager.SapDiscoveryResource{{
+						ResourceURI:      "test/uri",
+						ResourceKind:     "test",
+						ResourceType:     "COMPUTE",
+						RelatedResources: []string{"other/resource"},
+						UpdateTime:       "2023-05-01T15:45:11Z",
+					}}},
+				DatabaseLayer: &workloadmanager.SapDiscoveryComponent{}}},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := insightFromSAPSystem(test.sys)
+			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
+				t.Errorf("insightFromSAPSystem() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}
