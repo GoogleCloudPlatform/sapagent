@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -54,78 +55,58 @@ var (
 		1 pid: 222`
 )
 
-func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
-	return f.stdOut, f.stdErr, f.exitCode, f.err
-}
-
-type (
-	fakeRunner struct {
-		stdOut, stdErr string
-		exitCode       int
-		err            error
-	}
-)
-
 func TestCollectForHANA(t *testing.T) {
 	tests := []struct {
-		name             string
-		executor         commandExecutor
-		sapControlOutput string
-		wantCount        int
+		name      string
+		executor  commandlineexecutor.Execute
+		wantCount int
 	}{
 		{
 			name: "EmptyPIDsMap",
-			executor: func(cmd, args string) (string, string, error) {
-				return "", "", nil
+			executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{}
 			},
-			sapControlOutput: "",
-			wantCount:        0,
+			wantCount: 0,
 		},
 		{
 			name: "OnlyMemoryPerProcessMetricAvailable",
-			executor: func(cmd, args string) (string, string, error) {
-				if cmd == "getconf" {
-					return "100\n", "", nil
+			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultSapControlOutputHANA,
 				}
-				return "", "", nil
 			},
-			sapControlOutput: defaultSapControlOutputHANA,
-			wantCount:        3,
+			wantCount: 3,
 		},
 		{
 			name: "OnlyCPUPerProcessMetricAvailable",
-			executor: func(cmd, args string) (string, string, error) {
-				if cmd == "getconf" {
-					return "100\n", "", nil
+			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `OK
+					0 name: msg_server
+					0 dispstatus: GREEN
+					0 pid: 111
+					1 name: enserver
+					1 dispstatus: GREEN
+					1 pid: 333
+					`,
 				}
-				return "", "", nil
 			},
-			sapControlOutput: `OK
-			0 name: msg_server
-			0 dispstatus: GREEN
-			0 pid: 111
-			1 name: enserver
-			1 dispstatus: GREEN
-			1 pid: 333
-			`,
 			wantCount: 1,
 		},
 		{
 			name: "FetchedBothMemoryAndCPUMetricsSuccessfully",
-			executor: func(cmd, args string) (string, string, error) {
-				if cmd == "getconf" {
-					return "100\n", "", nil
+			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `OK
+					0 name: hdbdaemon
+					0 dispstatus: GREEN
+					0 pid: 444
+					1 name: hdbcompileserver
+					1 dispstatus: GREEN
+					1 pid: 555
+					`,
 				}
-				return "", "", nil
 			},
-			sapControlOutput: `OK
-			0 name: hdbdaemon
-			0 dispstatus: GREEN
-			0 pid: 444
-			1 name: hdbcompileserver
-			1 dispstatus: GREEN
-			1 pid: 555
-			`,
 			wantCount: 8,
 		},
 	}
@@ -137,7 +118,6 @@ func TestCollectForHANA(t *testing.T) {
 				Client:        &fake.TimeSeriesCreator{},
 				Executor:      test.executor,
 				SAPInstance:   defaultSAPInstanceHANA,
-				Runner:        &fakeRunner{stdOut: test.sapControlOutput},
 				NewProcHelper: newProcessWithContextHelperTest,
 			}
 			got := testHanaInstanceProps.Collect(context.Background())

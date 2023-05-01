@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 )
 
 func TestForLinux(t *testing.T) {
@@ -80,29 +81,31 @@ func TestForLinuxError(t *testing.T) {
 
 func TestForWindows(t *testing.T) {
 	inputs := []struct {
-		Command func(string, ...string) (string, string, error)
-		Want    string
+		exec func(commandlineexecutor.Params) commandlineexecutor.Result
+		want string
 	}{
 		{
-			Command: func(executable string, args ...string) (string, string, error) {
-				return "\nsomemapping\r", "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "\nsomemapping\r",
+				}
 			},
-			Want: "somemapping",
+			want: "somemapping",
 		},
 		{
-			Command: func(executable string, args ...string) (string, string, error) {
-				return "", "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{}
 			},
-			Want: "",
+			want: "",
 		},
 	}
-	defer func(f func(executable string, args ...string) (string, string, error)) { executeCommand = f }(executeCommand)
+	defer func(f func(commandlineexecutor.Params) commandlineexecutor.Result) { executeCommand = f }(executeCommand)
 	for i := range inputs {
-		executeCommand = inputs[i].Command
+		executeCommand = inputs[i].exec
 
 		d := PhysicalPathReader{OS: "windows"}
 
-		want := inputs[i].Want
+		want := inputs[i].want
 		got, err := d.ForDeviceName("C:")
 
 		if err != nil {
@@ -117,9 +120,11 @@ func TestForWindows(t *testing.T) {
 
 func TestForWindowsError(t *testing.T) {
 	d := PhysicalPathReader{OS: "windows"}
-	defer func(f func(executable string, args ...string) (string, string, error)) { executeCommand = f }(executeCommand)
-	executeCommand = func(executable string, args ...string) (string, string, error) {
-		return "", "", errors.New("test error")
+	defer func(f func(commandlineexecutor.Params) commandlineexecutor.Result) { executeCommand = f }(executeCommand)
+	executeCommand = func(commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			Error: errors.New("test error"),
+		}
 	}
 
 	if _, err := d.ForDeviceName("C:"); err == nil {

@@ -161,17 +161,16 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 
 	log.Logger.Info("Creating SAP additional metrics collector for sapservices (active and enabled metric).")
 	sapServiceCollector := &sapservice.InstanceProperties{
-		Config:   p.Config,
-		Client:   p.Client,
-		Executor: commandlineexecutor.ExpandAndExecuteCommand,
-		ExitCode: commandlineexecutor.ExitCode,
+		Config:  p.Config,
+		Client:  p.Client,
+		Execute: commandlineexecutor.ExecuteCommand,
 	}
 
 	log.Logger.Info("Creating SAP control processes per process CPU, memory usage metrics collector.")
 	sapStartCollector := &computeresources.SAPControlProcInstanceProperties{
 		Config:   p.Config,
 		Client:   p.Client,
-		Executor: commandlineexecutor.ExpandAndExecuteCommand,
+		Executor: commandlineexecutor.ExecuteCommand,
 	}
 
 	log.Logger.Info("Creating infra migration event metrics collector.")
@@ -201,13 +200,13 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 			hanaComputeresourcesCollector := &computeresources.HanaInstanceProperties{
 				Config:      p.Config,
 				Client:      p.Client,
-				Executor:    commandlineexecutor.ExpandAndExecuteCommand,
+				Executor:    commandlineexecutor.ExecuteCommand,
 				SAPInstance: instance,
-				Runner: &commandlineexecutor.Runner{
-					User:       instance.GetUser(),
-					Executable: instance.GetSapcontrolPath(),
-					Args:       fmt.Sprintf("-nr %s -function GetProcessList -format script", instance.GetInstanceNumber()),
-					Env:        []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
+				ProcessListParams: commandlineexecutor.Params{
+					User:        instance.GetUser(),
+					Executable:  instance.GetSapcontrolPath(),
+					ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", instance.GetInstanceNumber()),
+					Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
 			}
 
@@ -225,19 +224,19 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 			netweaverComputeresourcesCollector := &computeresources.NetweaverInstanceProperties{
 				Config:      p.Config,
 				Client:      p.Client,
-				Executor:    commandlineexecutor.ExpandAndExecuteCommand,
+				Executor:    commandlineexecutor.ExecuteCommand,
 				SAPInstance: instance,
-				RunnerForSAPControlProcess: &commandlineexecutor.Runner{
-					User:       instance.GetUser(),
-					Executable: instance.GetSapcontrolPath(),
-					Args:       fmt.Sprintf("-nr %s -function GetProcessList -format script", instance.GetInstanceNumber()),
-					Env:        []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
+				SAPControlProcessParams: commandlineexecutor.Params{
+					User:        instance.GetUser(),
+					Executable:  instance.GetSapcontrolPath(),
+					ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", instance.GetInstanceNumber()),
+					Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
-				RunnerForABAPProcess: &commandlineexecutor.Runner{
-					User:       instance.GetUser(),
-					Executable: instance.GetSapcontrolPath(),
-					Args:       fmt.Sprintf("-nr %s -function ABAPGetWPTable", instance.GetInstanceNumber()),
-					Env:        []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
+				ABAPProcessParams: commandlineexecutor.Params{
+					User:        instance.GetUser(),
+					Executable:  instance.GetSapcontrolPath(),
+					ArgsToSplit: fmt.Sprintf("-nr %s -function ABAPGetWPTable", instance.GetInstanceNumber()),
+					Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
 			}
 
@@ -266,7 +265,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	return p
 }
 
-// instancesWithCredentials run SAP discovery to detect SAP insatances on this machine and update
+// instancesWithCredentials run SAP discovery to detect SAP instances on this machine and update
 // DB Credentials from configuration into the instances.
 func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAPInstances {
 	// For unit tests we do not want to run sap discovery, caller will pass the SAPInstances.

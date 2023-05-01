@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
@@ -85,8 +86,8 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
 				osVendorID:     "rhel",
-				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
-					return "", "", nil
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{}
 				},
 			},
 			wantLabels: map[string]string{},
@@ -97,8 +98,8 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{},
 				osVendorID:     "rhel",
-				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
-					return "", "", nil
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{}
 				},
 			},
 			wantLabels: map[string]string{},
@@ -137,8 +138,10 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "rhel",
-				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
-					return "bar", "", nil
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: "bar",
+					}
 				},
 			},
 			wantLabels: map[string]string{

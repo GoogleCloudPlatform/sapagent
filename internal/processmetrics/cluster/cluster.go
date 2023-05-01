@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -69,9 +68,9 @@ type (
 		Config      *cnfpb.Configuration
 		Client      cloudmonitoring.TimeSeriesCreator
 	}
-	readPacemakerNodeState     func() (map[string]string, error)
-	readPacemakerResourceState func() ([]pacemaker.Resource, error)
-	readPacemakerFailCount     func(commandlineexecutor.CommandRunner) ([]pacemaker.ResourceFailCount, error)
+	readPacemakerNodeState     func(crm *pacemaker.CRMMon) (map[string]string, error)
+	readPacemakerResourceState func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error)
+	readPacemakerFailCount     func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error)
 )
 
 var (
@@ -95,23 +94,30 @@ var (
 // processmetrics.go. Returns a list of Linux cluster related metrics.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
-	nodeMetrics, _ := collectNodeState(p, pacemaker.NodeState)
+	// we only want to run crm_mon once
+	data, err := pacemaker.Data()
+	if err != nil {
+		// could not collect data from crm_mon
+		log.Logger.Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
+		return metrics
+	}
+	nodeMetrics, _ := collectNodeState(p, pacemaker.NodeState, data)
 	metrics = append(metrics, nodeMetrics...)
-	resourceMetrics, _ := collectResourceState(p, pacemaker.ResourceState)
+	resourceMetrics, _ := collectResourceState(p, pacemaker.ResourceState, data)
 	metrics = append(metrics, resourceMetrics...)
-	failCountMetrics, _ := collectFailCount(p, pacemaker.FailCount)
+	failCountMetrics, _ := collectFailCount(p, pacemaker.FailCount, data)
 	metrics = append(metrics, failCountMetrics...)
 	return metrics
 }
 
 // collectNodeState returns the Linux cluster node state metrics as time series.
 // The integer values are returned as an array for testability.
-func collectNodeState(p *InstanceProperties, read readPacemakerNodeState) ([]*mrpb.TimeSeries, []int) {
+func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
 
 	now := tspb.Now()
-	nodeState, err := read()
+	nodeState, err := read(crm)
 	if err != nil {
 		log.Logger.Errorw("Failure in reading pacemaker node state", log.Error(err))
 		return nil, nil
@@ -132,12 +138,12 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState) ([]*mr
 
 // collectResourceState returns the Linux cluster resource state metrics as time series.
 // The integer values of metric are returned as an array for testability.
-func collectResourceState(p *InstanceProperties, read readPacemakerResourceState) ([]*mrpb.TimeSeries, []int) {
+func collectResourceState(p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
 
 	now := tspb.Now()
-	resourceState, err := read()
+	resourceState, err := read(crm)
 	if err != nil {
 		log.Logger.Errorw("Failure in reading pacemaker resource state", log.Error(err))
 		return nil, nil
@@ -175,12 +181,12 @@ func stateFromString(m map[string]int, val string) int {
 // collectFailCount returns the Linux cluster resource failcounts.
 // The metrics are returned only for resources with a failcount entry in
 // crm_mon history.
-func collectFailCount(p *InstanceProperties, read readPacemakerFailCount) ([]*mrpb.TimeSeries, []int) {
+func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
 
 	now := tspb.Now()
-	resourceFailCounts, err := read(commandlineexecutor.ExpandAndExecuteCommand)
+	resourceFailCounts, err := read(crm)
 	if err != nil {
 		log.Logger.Debugw("Failure reading pacemaker resource fail-count", log.Error(err))
 		return nil, nil

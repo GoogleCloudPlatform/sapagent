@@ -27,7 +27,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -80,12 +79,7 @@ var (
 )
 
 type (
-	// CommandRunner is a function to execute command. Production callers
-	// to pass commandlineexecutor.ExpandAndExecuteCommand while calling
-	// this package's APIs.
-	CommandRunner     func(string, string) (string, string, error)
-	listInstances     func(CommandRunner) ([]*instanceInfo, error)
-	cmdExitCode       func(string, string, string) (string, string, int64, error)
+	listInstances     func(commandlineexecutor.Execute) ([]*instanceInfo, error)
 	replicationConfig func(string, string, string) (int, []string, int64, error)
 	instanceInfo      struct {
 		Sid, InstanceName, Snr, ProfilePath, LDLibraryPath string
@@ -101,22 +95,27 @@ type (
 //
 //	Returns a sapb.SAPInstances which is an array of SAP instances running on the given machine.
 func SAPApplications() *sapb.SAPInstances {
-	return instances(HANAReplicationConfig, listSAPInstances)
+	data, err := pacemaker.Data()
+	if err != nil {
+		// could not collect data from crm_mon
+		log.Logger.Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
+	}
+	return instances(HANAReplicationConfig, listSAPInstances, commandlineexecutor.ExecuteCommand, data)
 }
 
 // instances is a testable version of SAPApplications.
-func instances(hrc replicationConfig, list listInstances) *sapb.SAPInstances {
+func instances(hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute, crmdata *pacemaker.CRMMon) *sapb.SAPInstances {
 	log.Logger.Info("Discovering SAP Applications.")
 	var sapInstances []*sapb.SAPInstance
 
-	hana, err := hanaInstances(hrc, list)
+	hana, err := hanaInstances(hrc, list, exec)
 	if err != nil {
 		log.Logger.Errorw("Unable to discover HANA instances", log.Error(err))
 	} else {
 		sapInstances = hana
 	}
 
-	netweaver, err := netweaverInstances(list)
+	netweaver, err := netweaverInstances(list, exec)
 	if err != nil {
 		log.Logger.Errorw("Unable to discover Netweaver instances", log.Error(err))
 	} else {
@@ -124,15 +123,16 @@ func instances(hrc replicationConfig, list listInstances) *sapb.SAPInstances {
 	}
 	return &sapb.SAPInstances{
 		Instances:          sapInstances,
-		LinuxClusterMember: pacemaker.Enabled(),
+		LinuxClusterMember: pacemaker.Enabled(crmdata),
 	}
 }
 
 // hanaInstances returns list of SAP HANA Instances present on the machine.
 // Returns error in case of failures.
-func hanaInstances(hrc replicationConfig, list listInstances) ([]*sapb.SAPInstance, error) {
+func hanaInstances(hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
 	log.Logger.Info("Discovering SAP HANA instances.")
-	sapServicesEntries, err := list(commandlineexecutor.ExpandAndExecuteCommand)
+
+	sapServicesEntries, err := list(exec)
 	if err != nil {
 		return nil, err
 	}
@@ -184,27 +184,29 @@ func hanaInstances(hrc replicationConfig, list listInstances) ([]*sapb.SAPInstan
 // HANA HA member nodes as array of strings {PRIMARY_NODE, SECONDARY_NODE}.
 // Exit status of systemReplicationStatus.py as int64.
 func HANAReplicationConfig(user, sid, instID string) (site int, HAMembers []string, exitStatus int64, err error) {
-	return readReplicationConfig(user, sid, instID, commandlineexecutor.ExpandAndExecuteCommandAsUserExitCode)
+	return readReplicationConfig(user, sid, instID, commandlineexecutor.ExecuteCommand)
 }
 
 // readReplicationConfig is a testable version of HANAReplicationConfig.
-func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (mode int, HAMembers []string, exitStatus int64, err error) {
+func readReplicationConfig(user, sid, instID string, exec commandlineexecutor.Execute) (mode int, HAMembers []string, exitStatus int64, err error) {
 	cmd := fmt.Sprintf("/usr/sap/%s/%s/HDBSettings.sh", sid, instID)
 	args := "systemReplicationStatus.py --sapcontrol=1 >> /tmp/systemReplicationStatus.log 2>&1; cat /tmp/systemReplicationStatus.log"
-	out, _, exitStatus, err := runCmd(user, cmd, args)
-	if err != nil {
-		log.Logger.Debugw("Failed to get SAP HANA Replication Status", log.Error(err))
-		return 0, nil, 0, err
-	}
+	result := exec(commandlineexecutor.Params{
+		Executable:  cmd,
+		ArgsToSplit: args,
+		User:        user,
+	})
+	// We do not want to check the result Error, error can exist even when the exec was successful.
 
+	exitStatus = int64(result.ExitCode)
 	message, ok := systemReplicationStatus[exitStatus]
 	if !ok {
 		return 0, nil, exitStatus, fmt.Errorf("invalid return code: %d from systemReplicationStatus.py", exitStatus)
 	}
 	log.Logger.Debugw("Tool systemReplicationStatus.py returned", "exitstatus", exitStatus, "message", message)
 
-	log.Logger.Debugw("SAP HANA Replication Config result", "out", out)
-	match := sitePattern.FindStringSubmatch(out)
+	log.Logger.Debugw("SAP HANA Replication Config result", "stdout", result.StdOut)
+	match := sitePattern.FindStringSubmatch(result.StdOut)
 	if len(match) != 2 {
 		log.Logger.Debugw("Error determining SAP HANA Site for instance", "instanceid", instID)
 		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Site for instance: %s", instID)
@@ -225,7 +227,7 @@ func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (mode i
 		log.Logger.Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
 		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance")
 	}
-	match = modePattern.FindStringSubmatch(out)
+	match = modePattern.FindStringSubmatch(result.StdOut)
 	if len(match) < 2 {
 		log.Logger.Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
 		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance: %s", instID)
@@ -238,7 +240,7 @@ func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (mode i
 		log.Logger.Debug("Current SAP HANA node is secondary")
 	}
 
-	haSites := haPattern.FindAllStringSubmatch(out, -1)
+	haSites := haPattern.FindAllStringSubmatch(result.StdOut, -1)
 	if len(haSites) < 1 {
 		log.Logger.Debugw("Error determining SAP HANA HA members for instance", "instanceid", instID)
 		return mode, nil, exitStatus, fmt.Errorf("error determining SAP HANA HA members for instance: %s", instID)
@@ -253,7 +255,7 @@ func readReplicationConfig(user, sid, instID string, runCmd cmdExitCode) (mode i
 		}
 		log.Logger.Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
 	} else {
-		match := primaryMastersPattern.FindStringSubmatch(out)
+		match := primaryMastersPattern.FindStringSubmatch(result.StdOut)
 		if len(match) < 2 {
 			log.Logger.Debugw("Error determining SAP HANA HA - Primary for instance", "instanceid", instID)
 			return mode, nil, exitStatus, fmt.Errorf("error determining SAP HANA HA - Primary for instance: %s", instID)
@@ -280,15 +282,18 @@ func HANASite(mode int) sapb.InstanceSite {
 
 // listSAPInstances returns list of SAP Instances present on the machine.
 // The list is derived from '/usr/sap/sapservices' file.
-func listSAPInstances(runner CommandRunner) ([]*instanceInfo, error) {
+func listSAPInstances(exec commandlineexecutor.Execute) ([]*instanceInfo, error) {
 	var sapServicesEntries []*instanceInfo
-	stdOut, stdErr, err := runner("grep", "'pf=' /usr/sap/sapservices")
-	log.Logger.Debugw("`grep 'pf=' /usr/sap/sapservices` returned", "stdout", stdOut, "stderr", stdErr, "error", err)
-	if err != nil {
-		return nil, err
+	result := exec(commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: "'pf=' /usr/sap/sapservices",
+	})
+	log.Logger.Debugw("`grep 'pf=' /usr/sap/sapservices` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
-	lines := strings.Split(strings.TrimSuffix(stdOut, "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(result.StdOut, "\n"), "\n")
 	for _, line := range lines {
 		path := sapServicesStartsrvPattern.FindStringSubmatch(line)
 		if len(path) != 5 {
@@ -322,11 +327,11 @@ func listSAPInstances(runner CommandRunner) ([]*instanceInfo, error) {
 }
 
 // netweaverInstances returns list of SAP Netweaver instances present on the machine.
-func netweaverInstances(list listInstances) ([]*sapb.SAPInstance, error) {
+func netweaverInstances(list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
 	var instances []*sapb.SAPInstance
 	log.Logger.Info("Discovering SAP NetWeaver instances.")
 
-	sapServicesEntries, err := list(commandlineexecutor.ExpandAndExecuteCommand)
+	sapServicesEntries, err := list(commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +351,7 @@ func netweaverInstances(list listInstances) ([]*sapb.SAPInstance, error) {
 			SapcontrolPath: fmt.Sprintf("%s/sapcontrol", entry.LDLibraryPath),
 		}
 
-		instance.NetweaverHttpPort, instance.Type, instance.Kind = findPort(instance, entry.InstanceName)
+		instance.NetweaverHttpPort, instance.Type, instance.Kind = findPort(instance, entry.InstanceName, exec)
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			instance.NetweaverHealthCheckUrl, instance.ServiceName, err = buildURLAndServiceName(entry.InstanceName, instance.NetweaverHttpPort)
 			if err != nil {
@@ -360,7 +365,7 @@ func netweaverInstances(list listInstances) ([]*sapb.SAPInstance, error) {
 }
 
 // findPort uses the SAP instanceName to find the server HTTP port.
-func findPort(instance *sapb.SAPInstance, instanceName string) (string, sapb.InstanceType, sapb.InstanceKind) {
+func findPort(instance *sapb.SAPInstance, instanceName string, exec commandlineexecutor.Execute) (string, sapb.InstanceType, sapb.InstanceKind) {
 	var (
 		httpPort     string
 		instanceType sapb.InstanceType = sapb.InstanceType_INSTANCE_TYPE_UNDEFINED
@@ -372,7 +377,7 @@ func findPort(instance *sapb.SAPInstance, instanceName string) (string, sapb.Ins
 	case "ASCS", "SCS":
 		instanceType = sapb.InstanceType_NETWEAVER
 		instanceKind = sapb.InstanceKind_CS
-		httpPort, err = serverPortFromSAPProfile(instance, "ms")
+		httpPort, err = serverPortFromSAPProfile(instance, "ms", exec)
 		if err != nil {
 			log.Logger.Debugw("The ms HTTP port not found, set to default: '81<snr>.'", "instancename", instanceName)
 			httpPort = "81" + instance.GetInstanceNumber()
@@ -380,7 +385,7 @@ func findPort(instance *sapb.SAPInstance, instanceName string) (string, sapb.Ins
 	case "J", "JC", "D", "DVEBMGS":
 		instanceType = sapb.InstanceType_NETWEAVER
 		instanceKind = sapb.InstanceKind_APP
-		httpPort, err = serverPortFromSAPProfile(instance, "icm")
+		httpPort, err = serverPortFromSAPProfile(instance, "icm", exec)
 		if err != nil {
 			log.Logger.Debugw("The icm HTTP port not found, set to default: '5<snr>00.'", "instancename", instanceName)
 			httpPort = "5" + instance.GetInstanceNumber() + "00"
@@ -404,19 +409,19 @@ func findPort(instance *sapb.SAPInstance, instanceName string) (string, sapb.Ins
 }
 
 // serverPortFromSAPProfile returns the HTTP port using `sapcontrol -function ParameterValue`.
-func serverPortFromSAPProfile(instance *sapb.SAPInstance, prefix string) (string, error) {
+func serverPortFromSAPProfile(instance *sapb.SAPInstance, prefix string, exec commandlineexecutor.Execute) (string, error) {
 	// Check if any of server_port_0 thru server_port_9 are configured for HTTP.
 	// Reference: "Generic Profile Parameters with Ending _<xx>" section in SAP NetWeaver documentation.
 	// (link: https://help.sap.com/doc/saphelp_nw74/7.4.16/en-us/c4/1839a549b24fef92860134ce6af271/frameset.htm)
 
 	for i := 0; i < 10; i++ {
-		readPortRunner := &commandlineexecutor.Runner{
-			User:       instance.GetUser(),
-			Executable: instance.GetSapcontrolPath(),
-			Args:       fmt.Sprintf("%s -nr %s -function ParameterValue %s/server_port_%d", instance.GetSapcontrolPath(), instance.GetInstanceNumber(), prefix, i),
-			Env:        []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
+		params := commandlineexecutor.Params{
+			User:        instance.GetUser(),
+			Executable:  instance.GetSapcontrolPath(),
+			ArgsToSplit: fmt.Sprintf("%s -nr %s -function ParameterValue %s/server_port_%d", instance.GetSapcontrolPath(), instance.GetInstanceNumber(), prefix, i),
+			Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 		}
-		port, err := parseHTTPPort(readPortRunner)
+		port, err := parseHTTPPort(params, exec)
 		if err != nil {
 			log.Logger.Debugw("Server port is not configured for HTTP", "port", fmt.Sprintf("%s/server_port_%d", prefix, i), "error", err)
 			continue
@@ -428,14 +433,14 @@ func serverPortFromSAPProfile(instance *sapb.SAPInstance, prefix string) (string
 
 // parseHTTPPort parses the output of sapcontrol command for HTTP port.
 // Returns HTTP port on success, error if current parameter is not coonfigured for HTTP.
-func parseHTTPPort(r sapcontrol.RunnerWithEnv) (port string, err error) {
-	stdOut, stdErr, _, err := r.RunWithEnv()
-	log.Logger.Debugw("Sapcontrol returned", "stdout", stdOut, "stderr", stdErr, "error", err)
-	if err != nil {
-		return "", err
+func parseHTTPPort(params commandlineexecutor.Params, exec commandlineexecutor.Execute) (port string, err error) {
+	result := exec(params)
+	log.Logger.Debugw("Sapcontrol returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	if result.Error != nil {
+		return "", result.Error
 	}
 
-	match := netweaverProtocolPortPattern.FindStringSubmatch(stdOut)
+	match := netweaverProtocolPortPattern.FindStringSubmatch(result.StdOut)
 	if len(match) != 3 {
 		return "", fmt.Errorf("the port is not configured for HTTP")
 	}
@@ -448,7 +453,7 @@ func parseHTTPPort(r sapcontrol.RunnerWithEnv) (port string, err error) {
 	return "", fmt.Errorf("the port is not configured for HTTP")
 }
 
-// buildURLAndServiceName builds the healthcheck URLs bases on SAP Instance type.
+// buildURLAndServiceName builds the health check URLs bases on SAP Instance type.
 func buildURLAndServiceName(instanceName, HTTPPort string) (url, serviceName string, err error) {
 	if HTTPPort == "" {
 		return "", "", fmt.Errorf("empty value for HTTP port")
@@ -472,14 +477,17 @@ func buildURLAndServiceName(instanceName, HTTPPort string) (url, serviceName str
 
 // sapInitRunning returns a bool indicating if sapinit is running.
 // Returns an error in case of failures.
-func sapInitRunning(runner CommandRunner) (bool, error) {
-	stdOut, stdErr, err := runner("/usr/sap/hostctrl/exe/sapinit", "status")
-	log.Logger.Debugw("`/usr/sap/hostctrl/exe/sapinit status` returned", "stdout", stdOut, "stderr", stdErr, "error", err)
-	if err != nil {
-		return false, err
+func sapInitRunning(exec commandlineexecutor.Execute) (bool, error) {
+	result := exec(commandlineexecutor.Params{
+		Executable: "/usr/sap/hostctrl/exe/sapinit",
+		Args:       []string{"status"},
+	})
+	log.Logger.Debugw("`/usr/sap/hostctrl/exe/sapinit status` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	if result.Error != nil {
+		return false, result.Error
 	}
 
-	match := sapInitRunningPattern.FindStringSubmatch(stdOut)
+	match := sapInitRunningPattern.FindStringSubmatch(result.StdOut)
 	if match == nil {
 		return false, nil
 	}

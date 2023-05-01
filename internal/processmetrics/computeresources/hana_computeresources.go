@@ -21,8 +21,8 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -35,15 +35,15 @@ const (
 type (
 	// HanaInstanceProperties have the required context for collecting metrics for cpu
 	// memory per process for HANA, Netweaver and SAP Control.
-	// It also implements the InstanceProperiesIntrface for abstraction as defined in the
+	// It also implements the InstanceProperiesInterface for abstraction as defined in the
 	// computreresources.go file.
 	HanaInstanceProperties struct {
-		Config        *cnfpb.Configuration
-		Client        cloudmonitoring.TimeSeriesCreator
-		Executor      commandExecutor
-		SAPInstance   *sapb.SAPInstance
-		Runner        sapcontrol.RunnerWithEnv
-		NewProcHelper newProcessWithContextHelper
+		Config            *cnfpb.Configuration
+		Client            cloudmonitoring.TimeSeriesCreator
+		Executor          commandlineexecutor.Execute
+		SAPInstance       *sapb.SAPInstance
+		ProcessListParams commandlineexecutor.Params
+		NewProcHelper     newProcessWithContextHelper
 	}
 )
 
@@ -51,14 +51,14 @@ type (
 // utilization of SAP HANA Processes.
 func (p *HanaInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	params := parameters{
-		executor:                p.Executor,
-		client:                  p.Client,
-		config:                  p.Config,
-		memoryMetricPath:        hanaMemoryPath,
-		cpuMetricPath:           hanaCPUPath,
-		sapInstance:             p.SAPInstance,
-		newProc:                 p.NewProcHelper,
-		runnerForGetProcessList: p.Runner,
+		executor:             p.Executor,
+		client:               p.Client,
+		config:               p.Config,
+		memoryMetricPath:     hanaMemoryPath,
+		cpuMetricPath:        hanaCPUPath,
+		sapInstance:          p.SAPInstance,
+		newProc:              p.NewProcHelper,
+		getProcessListParams: p.ProcessListParams,
 	}
 	processes := collectProcessesForInstance(params)
 	if len(processes) == 0 {

@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -66,26 +67,21 @@ type (
 		UserCountOwner, UserCountOwnerVB            int64
 		Client, User, Transaction, Object, Backup   string
 	}
-
-	// RunnerWithEnv is an interface that implements commandlineexecutor.Runner for testability.
-	RunnerWithEnv interface {
-		RunWithEnv() (stdOut string, stdErr string, code int, err error)
-	}
 )
 
 // ProcessList uses the SapControl command to build a map describing the statuses
 // of all SAP processes.
-// Parameter is a RunnerWithEnv interface with below example usage for production flow.
+// Parameters are a commandlineexecutor.Execute and commandlineexecutor.Params
 // Example Usage:
 //
-//	runner := &commandlineexecutor.Runner{
-//		User:       "hdbadm",
-//		Executable: "/usr/sap/HDB/HDB00/exe/sapcontrol",
-//		Args:       "-nr 00 -function GetProcessList -format script",
+//	params := commandlineexecutor.Params{
+//		User:        "hdbadm",
+//		Executable:  "/usr/sap/HDB/HDB00/exe/sapcontrol",
+//		ArgsToSplit: "-nr 00 -function GetProcessList -format script",
 //		Env:         []string{"LD_LIBRARY_PATH=/usr/sap/HDB/HDB00/exe/ld_library"},
 //	}
 //	sc := &sapcontrol.Properties{&sapb.SAPInstance{}}
-//	procs, code, err := sc.ProcessList(runner)
+//	procs, code, err := sc.ProcessList(commandlineexecutor.ExecuteCommand, params)
 //
 // Returns:
 //   - A map[int]*ProcessStatus where key is the process index as listed by
@@ -93,31 +89,31 @@ type (
 //     status details.
 //   - The exit status returned by sapcontrol command as int.
 //   - Error if process detection fails, nil otherwise.
-func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, error) {
-	stdOut, _, exitStatus, err := r.RunWithEnv()
-	if err != nil {
-		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(err))
-		return nil, 0, err
+func (p *Properties) ProcessList(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (map[int]*ProcessStatus, int, error) {
+	result := exec(params)
+	if result.Error != nil && !result.ExitStatusParsed {
+		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
+		return nil, 0, result.Error
 	}
 
-	message, ok := sapcontrolStatus[exitStatus]
+	message, ok := sapcontrolStatus[result.ExitCode]
 	if !ok {
-		return nil, exitStatus, fmt.Errorf("invalid sapcontrol return code: %d", exitStatus)
+		return nil, result.ExitCode, fmt.Errorf("invalid sapcontrol return code: %d", result.ExitCode)
 	}
-	log.Logger.Debugw("Sapcontrol returned", "status", exitStatus, "message", message)
+	log.Logger.Debugw("Sapcontrol returned", "status", result.ExitCode, "message", message)
 
-	names := processNameRegex.FindAllStringSubmatch(stdOut, -1)
+	names := processNameRegex.FindAllStringSubmatch(result.StdOut, -1)
 	if len(names) == 0 {
 		expectedFormat := `0 name: <ProcessName>
 		0 dispstatus: <Status>
 		0 pid: <ProcessID>`
-		return nil, 0, fmt.Errorf("output: %q is not in expected format: %q", stdOut, expectedFormat)
+		return nil, 0, fmt.Errorf("output: %q is not in expected format: %q", result.StdOut, expectedFormat)
 	}
 
-	dss := processDisplayStatusRegex.FindAllStringSubmatch(stdOut, -1)
-	pids := processPIDRegex.FindAllStringSubmatch(stdOut, -1)
+	dss := processDisplayStatusRegex.FindAllStringSubmatch(result.StdOut, -1)
+	pids := processPIDRegex.FindAllStringSubmatch(result.StdOut, -1)
 	if len(names) != len(dss) || len(names) != len(pids) {
-		return nil, 0, fmt.Errorf("getProcessList - discrepancy in number of processes: %q", stdOut)
+		return nil, 0, fmt.Errorf("getProcessList - discrepancy in number of processes: %q", result.StdOut)
 	}
 
 	// Pass 1 - initialize the map and create struct values with process name.
@@ -129,7 +125,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 		id, err := strconv.Atoi(n[1])
 		if err != nil {
 			log.Logger.Debugw("Could not parse the name process index", log.Error(err))
-			return nil, exitStatus, err
+			return nil, result.ExitCode, err
 		}
 		processes[id] = &ProcessStatus{Name: n[2]}
 	}
@@ -144,7 +140,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 		id, err := strconv.Atoi(d[1])
 		if err != nil {
 			log.Logger.Debugw("Could not parse the display status process index", log.Error(err))
-			return nil, exitStatus, err
+			return nil, result.ExitCode, err
 		}
 
 		if _, ok := processes[id]; !ok {
@@ -158,14 +154,14 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 	}
 
 	log.Logger.Debugw("Process statuses", "statuses", processes)
-	return processes, exitStatus, nil
+	return processes, result.ExitCode, nil
 }
 
 // ParseABAPGetWPTable runs and parses the output of sapcontrol function ABAPGetWPTable.
 // Returns:
 //   - processes - A map with key->worker_process_type and value->total_process_count.
 //   - busyProcesses - A map with key->worker_process_type and value->busy_process_count.
-func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
+func (p *Properties) ParseABAPGetWPTable(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
 	const (
 		numberOfColumns = 15
 		typeColumn      = 1
@@ -173,16 +169,16 @@ func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProces
 		timeColumn      = 9
 	)
 
-	stdOut, _, _, err := r.RunWithEnv()
-	if err != nil {
-		log.Logger.Debugw("Failed to run ABAPGetWPTable", log.Error(err))
-		return nil, nil, nil, err
+	result := exec(params)
+	if result.Error != nil && !result.ExitStatusParsed {
+		log.Logger.Debugw("Failed to run ABAPGetWPTable", log.Error(result.Error))
+		return nil, nil, nil, result.Error
 	}
 
 	processes = make(map[string]int)
 	busyProcesses = make(map[string]int)
 	processNameToPID = make(map[string]string)
-	lines := strings.Split(stdOut, "\n")
+	lines := strings.Split(result.StdOut, "\n")
 	for _, line := range lines {
 		line = emptyChars.ReplaceAllString(line, "")
 		row := strings.Split(line, ",")
@@ -205,7 +201,7 @@ func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProces
 // Returns:
 //   - currentQueueUsage - A map with key->queue_type and value->current_queue_usage.
 //   - peakQueueUsage - A map with key->queue_type and value->peak_queue_usage.
-func (p *Properties) ParseQueueStats(r RunnerWithEnv) (currentQueueUsage, peakQueueUsage map[string]int, err error) {
+func (p *Properties) ParseQueueStats(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (currentQueueUsage, peakQueueUsage map[string]int, err error) {
 	const (
 		numberOfColumns         = 6
 		typeColumn              = 0
@@ -213,15 +209,15 @@ func (p *Properties) ParseQueueStats(r RunnerWithEnv) (currentQueueUsage, peakQu
 		peakQueueUsageColumn    = 2
 	)
 
-	stdOut, _, _, err := r.RunWithEnv()
-	if err != nil {
-		log.Logger.Debugw("Failed to run GetQueueStatistic", log.Error(err))
-		return nil, nil, err
+	result := exec(params)
+	if result.Error != nil && !result.ExitStatusParsed {
+		log.Logger.Debugw("Failed to run GetQueueStatistic", log.Error(result.Error))
+		return nil, nil, result.Error
 	}
 
 	currentQueueUsage = make(map[string]int)
 	peakQueueUsage = make(map[string]int)
-	lines := strings.Split(stdOut, "\n")
+	lines := strings.Split(result.StdOut, "\n")
 	for _, line := range lines {
 		line = emptyChars.ReplaceAllString(line, "")
 		row := strings.Split(line, ",")
@@ -253,7 +249,7 @@ func (p *Properties) ParseQueueStats(r RunnerWithEnv) (currentQueueUsage, peakQu
 // Returns:
 //   - A slice of EnqLock structs containing lock details.
 //   - Error if sapcontrol fails, nil otherwise.
-func (p *Properties) EnqGetLockTable(r RunnerWithEnv) (EnqLocks []*EnqLock, err error) {
+func (p *Properties) EnqGetLockTable(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (EnqLocks []*EnqLock, err error) {
 	const numberOfColumns = 12
 	const (
 		lockName = iota
@@ -269,19 +265,19 @@ func (p *Properties) EnqGetLockTable(r RunnerWithEnv) (EnqLocks []*EnqLock, err 
 		object
 		backup
 	)
-	stdOut, _, exitStatus, err := r.RunWithEnv()
-	if err != nil {
-		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(err))
-		return nil, err
+	result := exec(params)
+	if result.Error != nil && !result.ExitStatusParsed {
+		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
+		return nil, result.Error
 	}
 
-	message, ok := sapcontrolStatus[exitStatus]
+	message, ok := sapcontrolStatus[result.ExitCode]
 	if !ok {
-		return nil, fmt.Errorf("invalid sapcontrol return code: %d", exitStatus)
+		return nil, fmt.Errorf("invalid sapcontrol return code: %d", result.ExitCode)
 	}
-	log.Logger.Debugw("Sapcontrol returned", "status", exitStatus, "message", message)
+	log.Logger.Debugw("Sapcontrol returned", "status", result.ExitCode, "message", message)
 
-	lines := strings.Split(stdOut, "\n")
+	lines := strings.Split(result.StdOut, "\n")
 	for _, line := range lines {
 		line = emptyChars.ReplaceAllString(line, "")
 		row := strings.Split(line, ",")

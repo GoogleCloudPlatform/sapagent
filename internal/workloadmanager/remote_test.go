@@ -32,6 +32,7 @@ import (
 	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
@@ -49,12 +50,16 @@ func TestCollectMetricsToJSON(t *testing.T) {
 		},
 	}
 	p := Parameters{
-		Config:               c,
-		CommandRunner:        func(cmd string, args string) (string, string, error) { return "", "", nil },
-		CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) { return "", "", nil },
-		ConfigFileReader:     func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
-		OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
-		BackOffs:             defaultBackOffIntervals,
+		Config: c,
+		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+			}
+		},
+		ConfigFileReader: func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
+		OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
+		BackOffs:         defaultBackOffIntervals,
 	}
 	got := strings.TrimSpace(CollectMetricsToJSON(context.Background(), p))
 	if !strings.HasPrefix(got, "{") || !strings.HasSuffix(got, "}") {
@@ -398,14 +403,19 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Parameters{
-				Config:               test.config,
-				CommandRunner:        func(cmd string, args string) (string, string, error) { return "", "", nil },
-				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) { return test.execOutput, "", test.execError },
-				CommandExistsRunner:  func(string) bool { return test.cmdExists },
-				ConfigFileReader:     func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
-				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
-				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
-				BackOffs:             defaultBackOffIntervals,
+				Config: test.config,
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: test.execOutput,
+						StdErr: "",
+						Error:  test.execError,
+					}
+				},
+				Exists:            func(string) bool { return test.cmdExists },
+				ConfigFileReader:  func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
+				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				BackOffs:          defaultBackOffIntervals,
 			}
 
 			want := test.wantCount

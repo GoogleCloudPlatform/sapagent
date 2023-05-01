@@ -40,6 +40,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -190,10 +191,12 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 						},
 					},
 				},
-				OSStatReader:        func(data string) (os.FileInfo, error) { return nil, nil },
-				InstanceInfoReader:  *instanceinfo.New(&fakeDiskMapper{}, defaultGCEService),
-				CommandRunner:       func(string, string) (string, string, error) { return "", "", nil },
-				CommandExistsRunner: func(string) bool { return false },
+				Exists: func(string) bool { return false },
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{}
+				},
+				OSStatReader:       func(data string) (os.FileInfo, error) { return nil, nil },
+				InstanceInfoReader: *instanceinfo.New(&fakeDiskMapper{}, defaultGCEService),
 			},
 			want: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{
 				createTimeSeries(
@@ -255,14 +258,19 @@ func TestCollectMetrics_hasMetrics(t *testing.T) {
 	}
 	want := 5
 	p := Parameters{
-		Config:               &cfgpb.Configuration{},
-		CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
-		CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-		CommandExistsRunner:  func(string) bool { return true },
-		ConfigFileReader:     DefaultTestReader,
-		OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
-		OSType:               "linux",
-		BackOffs:             defaultBackOffIntervals,
+		Config: &cfgpb.Configuration{},
+		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  nil,
+			}
+		},
+		Exists:           func(string) bool { return true },
+		ConfigFileReader: DefaultTestReader,
+		OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
+		OSType:           "linux",
+		BackOffs:         defaultBackOffIntervals,
 	}
 	m := collectMetrics(context.Background(), p, metricOverridePath)
 	got := len(m.Metrics)
@@ -290,20 +298,27 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 			},
 			AgentProperties: &cfgpb.AgentProperties{Version: "1.0"},
 		},
-		CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
-		CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-		ConfigFileReader:     DefaultTestReader,
-		OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
-		CommandExistsRunner:  func(string) bool { return false },
-		OSType:               "windows",
-		InstanceInfoReader:   *instanceinfo.New(defaultDiskMapper, defaultGCEService),
-		BackOffs:             defaultBackOffIntervals,
+		ConfigFileReader: DefaultTestReader,
+		OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
+		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+			}
+		},
+		Exists:             func(string) bool { return false },
+		OSType:             "windows",
+		InstanceInfoReader: *instanceinfo.New(defaultDiskMapper, defaultGCEService),
+		BackOffs:           defaultBackOffIntervals,
 	}
 	wantOSVersion := "microsoft_windows_server_2019_datacenter-10.0.17763"
 	wantTimestamp := &timestamppb.Timestamp{Seconds: now()}
 
-	agentServiceStatus = func(string) (string, string, error) {
-		return "Running", "", nil
+	agentServiceStatus = func(string) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdOut: "Running",
+			StdErr: "",
+		}
 	}
 	cmdExists = func(c string) bool {
 		return true
@@ -313,11 +328,17 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 	netInterfaceAdddrs = func() ([]net.Addr, error) {
 		return []net.Addr{ip1, ip2}, nil
 	}
-	osCaptionExecute = func() (string, string, error) {
-		return "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n", "", nil
+	osCaptionExecute = func() commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
+			StdErr: "",
+		}
 	}
-	osVersionExecute = func() (string, string, error) {
-		return "\n Version=10.0.17763  \n\n", "", nil
+	osVersionExecute = func() commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdOut: "\n\nVersion=10.0.17763  \n\n",
+			StdErr: "",
+		}
 	}
 
 	labels := make(map[string]string)
@@ -348,10 +369,14 @@ func TestCollectMetrics_hasOverrideMetrics(t *testing.T) {
 	}
 	want := 2
 	p := Parameters{
-		Config:               &cfgpb.Configuration{},
-		CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
-		CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-		CommandExistsRunner:  func(string) bool { return true },
+		Config: &cfgpb.Configuration{},
+		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+			}
+		},
+		Exists: func(string) bool { return true },
 		ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
 			file, err := testFS.Open(path)
 			var f io.ReadCloser = file
@@ -494,15 +519,19 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 					}},
-				CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
-				CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-				CommandExistsRunner:  func(string) bool { return true },
-				ConfigFileReader:     DefaultTestReader,
-				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
-				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
-				OSType:               "linux",
-				Remote:               false,
-				BackOffs:             defaultBackOffIntervals,
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+					}
+				},
+				Exists:            func(string) bool { return true },
+				ConfigFileReader:  DefaultTestReader,
+				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				OSType:            "linux",
+				Remote:            false,
+				BackOffs:          defaultBackOffIntervals,
 			},
 			want: true,
 		},
@@ -513,15 +542,19 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 					}},
-				CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
-				CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-				CommandExistsRunner:  func(string) bool { return true },
-				ConfigFileReader:     DefaultTestReader,
-				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
-				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
-				OSType:               "linux",
-				Remote:               true,
-				BackOffs:             defaultBackOffIntervals,
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+					}
+				},
+				Exists:            func(string) bool { return true },
+				ConfigFileReader:  DefaultTestReader,
+				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				OSType:            "linux",
+				Remote:            true,
+				BackOffs:          defaultBackOffIntervals,
 			},
 			want: true,
 		},
@@ -605,15 +638,19 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 					}},
-				CommandRunner:        func(string, string) (string, string, error) { return "", "", nil },
-				CommandRunnerNoSpace: func(string, ...string) (string, string, error) { return "", "", nil },
-				CommandExistsRunner:  func(string) bool { return true },
-				ConfigFileReader:     DefaultTestReader,
-				OSStatReader:         func(data string) (os.FileInfo, error) { return nil, nil },
-				TimeSeriesCreator:    &fake.TimeSeriesCreator{},
-				OSType:               "linux",
-				Remote:               false,
-				BackOffs:             defaultBackOffIntervals,
+				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+					}
+				},
+				Exists:            func(string) bool { return true },
+				ConfigFileReader:  DefaultTestReader,
+				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				OSType:            "linux",
+				Remote:            false,
+				BackOffs:          defaultBackOffIntervals,
 				HeartbeatSpec: &heartbeat.Spec{
 					BeatFunc: func() {
 						lock.Lock()

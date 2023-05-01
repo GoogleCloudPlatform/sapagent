@@ -98,13 +98,10 @@ var (
 		var f io.ReadCloser = file
 		return f, err
 	})
-	commandRunnerNoSpace = commandlineexecutor.CommandRunnerNoSpace(func(exe string, args ...string) (string, string, error) {
-		return commandlineexecutor.ExecuteCommand(exe, args...)
+	execute = commandlineexecutor.Execute(func(params commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.ExecuteCommand(params)
 	})
-	commandRunner = commandlineexecutor.CommandRunner(func(exe string, args string) (string, string, error) {
-		return commandlineexecutor.ExpandAndExecuteCommand(exe, args)
-	})
-	commandExistsRunner = commandlineexecutor.CommandExistsRunner(func(exe string) bool {
+	exists = commandlineexecutor.Exists(func(exe string) bool {
 		return commandlineexecutor.CommandExists(exe)
 	})
 	defaultTokenGetter = workloadmanager.DefaultTokenGetter(func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -139,9 +136,8 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 		WorkloadConfig:        cd.GetWorkloadValidation(),
 		Remote:                true,
 		ConfigFileReader:      configFileReader,
-		CommandRunner:         commandRunner,
-		CommandRunnerNoSpace:  commandRunnerNoSpace,
-		CommandExistsRunner:   commandExistsRunner,
+		Execute:               execute,
+		Exists:                exists,
 		InstanceInfoReader:    *iir,
 		OSStatReader:          osStatReader,
 		DefaultTokenGetter:    defaultTokenGetter,

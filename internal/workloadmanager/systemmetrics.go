@@ -58,7 +58,7 @@ func CollectSystemMetricsFromConfig(params Parameters) WorkloadMetrics {
 		l[m.GetMetricInfo().GetLabel()] = v
 	}
 	for _, m := range system.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
@@ -165,15 +165,21 @@ func linuxOsRelease() string {
 	return strings.ReplaceAll(id, `"`, "") + "-" + strings.ReplaceAll(v, `"`, "")
 }
 
-func wmicOsCaptionExecute() (string, string, error) {
-	return commandlineexecutor.ExecuteCommand("wmic", "Caption/Format:List")
+func wmicOsCaptionExecute() commandlineexecutor.Result {
+	return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+		Executable: "wmic",
+		Args:       []string{"Caption/Format:List"},
+	})
 }
 
-func wmicOsVersion() (string, string, error) {
-	return commandlineexecutor.ExecuteCommand("wmic", "Version/Format:List")
+func wmicOsVersion() commandlineexecutor.Result {
+	return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+		Executable: "wmic",
+		Args:       []string{"Version/Format:List"},
+	})
 }
 
-// Trims all whitespace, replaces space with underscore, and lowercases.
+// Trims all whitespace, replaces space with underscore, and lowercases the output.
 // The function will only return the value portion of the wmic output if there is a key=value format.
 // If the input does not contain a key=value format then the entire input will be returned.
 // Example input: "Caption=Microsoft Windows Server 2019 Datacenter".
@@ -188,15 +194,17 @@ func trimAndSplitWmicOutput(s string) string {
 }
 
 func windowsOsRelease() string {
-	c, ce, cerr := osCaptionExecute()
-	if cerr != nil {
-		log.Logger.Warnw("Could not execute wmic get Caption", "stderr", ce, "error", cerr)
+	cresult := osCaptionExecute()
+	c := cresult.StdOut
+	if cresult.Error != nil {
+		log.Logger.Warnw("Could not execute wmic get Caption", "stderr", cresult.StdErr, "error", cresult.Error)
 		c = ""
 	}
 	c = trimAndSplitWmicOutput(c)
-	v, ve, verr := osVersionExecute()
-	if verr != nil {
-		log.Logger.Warnw("Could not execute wmic get Version", "stderr", ve, "error", verr)
+	vresult := osVersionExecute()
+	v := vresult.StdOut
+	if vresult.Error != nil {
+		log.Logger.Warnw("Could not execute wmic get Version", "stderr", vresult.StdErr, "error", vresult.Error)
 		v = ""
 	}
 	v = trimAndSplitWmicOutput(v)
@@ -210,25 +218,27 @@ func osRelease(runtimeOS string) string {
 	return linuxOsRelease()
 }
 
-func serviceStatus(runtimeOS string) (string, string, error) {
+func serviceStatus(runtimeOS string) commandlineexecutor.Result {
 	if runtimeOS == "windows" {
-		return commandlineexecutor.ExecuteCommand("powershell",
-			"-Command",
-			"(Get-Service",
-			"-Name",
-			"google-cloud-sap-agent).Status")
+		return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+			Executable: "powershell",
+			Args:       []string{"-Command", "(Get-Service", "-Name", "google-cloud-sap-agent).Status"},
+		})
 	}
-	return commandlineexecutor.ExecuteCommand("systemctl", "is-active", "google-cloud-sap-agent")
+	return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+		Executable: "systemctl",
+		Args:       []string{"is-active", "google-cloud-sap-agent"},
+	})
 }
 
 func agentState(runtimeOS string) string {
 	state := "notinstalled"
-	s, _, err := agentServiceStatus(runtimeOS)
-	if err != nil {
-		log.Logger.Warnw("Could not get the agents service status", "error", err)
+	result := agentServiceStatus(runtimeOS)
+	if result.Error != nil {
+		log.Logger.Warnw("Could not get the agents service status", "error", result.Error)
 		return state
 	}
-	s = strings.TrimSpace(s)
+	s := strings.TrimSpace(result.StdOut)
 	if runtimeOS == "windows" && !strings.Contains(s, "Cannot find any service") {
 		state = "notrunning"
 		if strings.HasPrefix(s, "Running") {

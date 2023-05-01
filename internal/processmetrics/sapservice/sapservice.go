@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package sapservice is resposible for collecting metrics for SAP service
+// Package sapservice is responsible for collecting metrics for SAP service
 // statuses using systemctl is-* cmd.
 package sapservice
 
@@ -24,6 +24,7 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -41,23 +42,13 @@ var (
 )
 
 type (
-	// commandExecutor is a function to execute command. Production callers
-	// to pass commandlineexecutor.ExpandAndExecuteCommand while calling
-	// this package's APIs.
-	commandExecutor func(string, string) (string, string, error)
-
-	// exitCode is a function to get the exit code for the error passed in the argument. Production
-	// callers to pass commandlineexecutor.ExitCode while calling
-	// this package's APIs.
-	exitCode func(error) int
-
-	// InstanceProperties has necessary context for Metrics collection.
-	// InstanceProperties implements Collector interface for sapservice.
+	// InstanceProperties has the necessary context for Metrics collection.
+	// InstanceProperties implements the Collector interface for sapservice.
 	InstanceProperties struct {
 		Config   *cnfpb.Configuration
 		Client   cloudmonitoring.TimeSeriesCreator
-		Executor commandExecutor
-		ExitCode exitCode
+		Execute  commandlineexecutor.Execute
+		ExitCode commandlineexecutor.ExitCode
 	}
 )
 
@@ -65,9 +56,9 @@ type (
 // responsible for collecting sap service statuses metric.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
-	isFailedMetrics := queryInstanceState(p, "is-failed", p.Executor)
+	isFailedMetrics := queryInstanceState(p, "is-failed")
 	metrics = append(metrics, isFailedMetrics...)
-	isDisabledMetrics := queryInstanceState(p, "is-enabled", p.Executor)
+	isDisabledMetrics := queryInstanceState(p, "is-enabled")
 	metrics = append(metrics, isDisabledMetrics...)
 	return metrics
 }
@@ -79,21 +70,23 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 //
 // In case of `systemctl is-enabled service` it returns 0 if the specified service is enabled,
 // non-zero otherwise, metric will be sent only in case service is disabled.
-func queryInstanceState(p *InstanceProperties, metric string, executor commandExecutor) []*mrpb.TimeSeries {
+func queryInstanceState(p *InstanceProperties, metric string) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
 	for _, service := range services {
 		command := "systemctl"
 		args := metric + " --quiet " + service
-		_, stderr, err := executor(command, args)
-		exitCode := p.ExitCode(err)
-		if metric == "is-failed" && exitCode != 0 {
+		result := p.Execute(commandlineexecutor.Params{
+			Executable:  command,
+			ArgsToSplit: args,
+		})
+		if metric == "is-failed" && result.ExitCode != 0 && result.ExitStatusParsed {
 			log.Logger.Debugw("No error while executing command, not sending is_failed metric", "command", command, "args", args)
 			continue
-		} else if metric != "is-failed" && err == nil {
+		} else if metric != "is-failed" && result.Error == nil {
 			log.Logger.Debugw("No error while executing command, not sending is_disabled metric", "command", command, "args", args)
 			continue
 		}
-		log.Logger.Debugw("Error while executing command", "command", command, "args", args, "stderr", stderr)
+		log.Logger.Debugw("Error while executing command", "command", command, "args", args, "stderr", result.StdErr)
 		params := timeseries.Params{
 			CloudProp:    p.Config.CloudProperties,
 			MetricType:   metricURL + mPathMap[metric],

@@ -28,6 +28,7 @@ import (
 
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -54,21 +55,17 @@ var (
 )
 
 type (
-	// commandExecutor is a function to execute command. Production callers
-	// to pass commandlineexecutor.ExpandAndExecuteCommand while calling
-	// this package's APIs.
-	commandExecutor func(string, string) (string, string, error)
 	// parameters struct contains the parameters necessary for computeresources package common methods.
 	parameters struct {
-		executor                commandExecutor
-		config                  *cnfpb.Configuration
-		client                  cloudmonitoring.TimeSeriesCreator
-		cpuMetricPath           string
-		memoryMetricPath        string
-		sapInstance             *sapb.SAPInstance
-		newProc                 newProcessWithContextHelper
-		runnerForGetProcessList sapcontrol.RunnerWithEnv
-		runnerForABAPGetWPTable sapcontrol.RunnerWithEnv
+		executor             commandlineexecutor.Execute
+		config               *cnfpb.Configuration
+		client               cloudmonitoring.TimeSeriesCreator
+		cpuMetricPath        string
+		memoryMetricPath     string
+		sapInstance          *sapb.SAPInstance
+		newProc              newProcessWithContextHelper
+		getProcessListParams commandlineexecutor.Params
+		getABAPWPTableParams commandlineexecutor.Params
 	}
 
 	// newProcessWithContextHelper is a strategy which creates a new process type
@@ -100,15 +97,18 @@ func collectControlProcesses(p parameters) []*ProcessInfo {
 	var processInfos []*ProcessInfo
 	cmd := "ps"
 	args := "-e -o comm,pid"
-	stdout, _, err := p.executor(cmd, args)
-	if err != nil {
-		log.Logger.Debugw("Error while executing command", "command", cmd, "args", args, "error", err)
+	result := p.executor(commandlineexecutor.Params{
+		Executable:  cmd,
+		ArgsToSplit: args,
+	})
+	if result.Error != nil {
+		log.Logger.Debugw("Error while executing command", "command", cmd, "args", args, "error", result.Error)
 		return nil
 	}
 
 	process := `\nsapstart.*\n`
 	processNameWithPIDRegex := regexp.MustCompile(process)
-	res := processNameWithPIDRegex.FindAllStringSubmatch(stdout, -1)
+	res := processNameWithPIDRegex.FindAllStringSubmatch(result.StdOut, -1)
 	for _, p := range res {
 		// Removing all new line chars from the string:
 		// `\nhdbindexserver    8921\n` -> `hdbindexserver   8921`.
@@ -133,14 +133,14 @@ func collectProcessesForInstance(p parameters) []*ProcessInfo {
 	}
 
 	sc := &sapcontrol.Properties{p.sapInstance}
-	processes, _, err := sc.ProcessList(p.runnerForGetProcessList)
+	processes, _, err := sc.ProcessList(p.executor, p.getProcessListParams)
 	if err != nil {
 		log.Logger.Error("Error getting ProcessList in computeresources", log.Error(err))
 	}
 
 	var processInfos []*ProcessInfo
-	if p.runnerForABAPGetWPTable != nil {
-		_, _, pidMap, err := sc.ParseABAPGetWPTable(p.runnerForABAPGetWPTable)
+	if p.getABAPWPTableParams.Executable != "" {
+		_, _, pidMap, err := sc.ParseABAPGetWPTable(p.executor, p.getABAPWPTableParams)
 		if err != nil {
 			log.Logger.Error("Error getting ABAP processes from ABAPGetWPTable", log.Error(err))
 		} else {
