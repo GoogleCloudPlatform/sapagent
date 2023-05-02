@@ -95,8 +95,8 @@ type database struct {
 	instance  *cpb.HANAInstance
 }
 
-// Start begins the query goroutines if enabled.
-// Returns true if the query goroutines are started, and false otherwise.
+// Start validates the configuration and creates the database connections.
+// Returns true if the query goroutine is started, and false otherwise.
 func Start(ctx context.Context, params Parameters) bool {
 	cfg := params.Config.GetHanaMonitoringConfiguration()
 	if !cfg.GetEnabled() {
@@ -117,10 +117,18 @@ func Start(ctx context.Context, params Parameters) bool {
 
 	log.Logger.Info("Starting HANA Monitoring.")
 	go usagemetrics.LogActionDaily(usagemetrics.CollectHANAMonitoringMetrics)
+	go createWorkerPool(ctx, params, databases)
+	return true
+}
+
+// createWorkerPool creates a job for each query on each database. If the SID
+// is not present in the config, the database will be queried to populate it.
+func createWorkerPool(ctx context.Context, params Parameters, databases []*database) {
+	cfg := params.Config.GetHanaMonitoringConfiguration()
 	wp := workerpool.New(int(cfg.GetExecutionThreads()))
 	for _, db := range databases {
 		if db.instance.GetSid() == "" {
-			ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(cfg.GetQueryTimeoutSec()))
+			ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
 			sid, err := fetchSID(ctxTimeout, db)
 			cancel()
 			if err != nil {
@@ -152,7 +160,6 @@ func Start(ctx context.Context, params Parameters) bool {
 			})
 		}
 	}
-	return true
 }
 
 // queryAndSend perpetually queries databases and sends results to cloud monitoring.
