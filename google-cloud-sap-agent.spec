@@ -157,6 +157,10 @@ if [ 1 == 2 ]; then
   fi
 fi
 
+# we have /usr/sap as part of ReadWritePaths in the service, it must exist
+if [ ! -d "/usr/sap/" ]; then
+  mkdir /usr/sap
+fi
 
 # link the systemd service and reload the daemon
 # RHEL
