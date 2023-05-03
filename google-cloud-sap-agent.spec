@@ -158,6 +158,8 @@ if [ 1 == 2 ]; then
 fi
 
 # we have /usr/sap as part of ReadWritePaths in the service, it must exist
+# issue a seek in case /usr/sap is auto mounted
+ls /usr/sap > /dev/null 2>&1
 if [ ! -d "/usr/sap/" ]; then
   mkdir /usr/sap
 fi
