@@ -188,6 +188,13 @@ func TestRunCommandAsUserExitCode(t *testing.T) {
 			wantExitCode: 15,
 			wantErr:      nil,
 		},
+		{
+			name: "NoExitCodeDoNotPanic",
+			cmd:  "echo",
+			fakeRun: func(user string, executable string, args string) (string, string, error) {
+				return "", "", fmt.Errorf("exit status no-num")
+			},
+		},
 	}
 
 	for _, test := range tests {
