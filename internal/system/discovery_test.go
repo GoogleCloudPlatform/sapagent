@@ -58,7 +58,29 @@ KEY default
   DATABASE: DEH
 Operation succeed.
 `
-	defaultSID = "ABC"
+	defaultSID                       = "ABC"
+	defaultInstanceNumber            = "00"
+	defaultLandscapeOutputSingleNode = `
+| Host        | Host   | Host   | Failover | Remove | Storage   | Storage   | Failover | Failover | NameServer | NameServer | IndexServer | IndexServer | Host    | Host    | Worker  | Worker  |
+|             | Active | Status | Status   | Status | Config    | Actual    | Config   | Actual   | Config     | Actual     | Config      | Actual      | Config  | Actual  | Config  | Actual  |
+|             |        |        |          |        | Partition | Partition | Group    | Group    | Role       | Role       | Role        | Role        | Roles   | Roles   | Groups  | Groups  |
+| ----------- | ------ | ------ | -------- | ------ | --------- | --------- | -------- | -------- | ---------- | ---------- | ----------- | ----------- | ------- | ------- | ------- | ------- |
+| dru-s4dan   | yes    | info   |          |        |         1 |         0 | default  | default  | master 1   | slave      | worker      | standby     | worker  | standby | default | -       |
+
+overall host status: info
+`
+	defaultLandscapeOutputMultipleNodes = `
+| Host        | Host   | Host   | Failover | Remove | Storage   | Storage   | Failover | Failover | NameServer | NameServer | IndexServer | IndexServer | Host    | Host    | Worker  | Worker  |
+|             | Active | Status | Status   | Status | Config    | Actual    | Config   | Actual   | Config     | Actual     | Config      | Actual      | Config  | Actual  | Config  | Actual  |
+|             |        |        |          |        | Partition | Partition | Group    | Group    | Role       | Role       | Role        | Role        | Roles   | Roles   | Groups  | Groups  |
+| ----------- | ------ | ------ | -------- | ------ | --------- | --------- | -------- | -------- | ---------- | ---------- | ----------- | ----------- | ------- | ------- | ------- | ------- |
+| dru-s4dan   | yes    | info   |          |        |         1 |         0 | default  | default  | master 1   | slave      | worker      | standby     | worker  | standby | default | -       |
+| dru-s4danw1 | yes    | ok     |          |        |         2 |         2 | default  | default  | master 2   | slave      | worker      | slave       | worker  | worker  | default | default |
+| dru-s4danw2 | yes    | ok     |          |        |         3 |         3 | default  | default  | slave      | slave      | worker      | slave       | worker  | worker  | default | default |
+| dru-s4danw3 | yes    | info   |          |        |         0 |         1 | default  | default  | master 3   | master     | standby     | master      | standby | worker  | default | default |
+
+overall host status: info
+`
 )
 
 var (
@@ -1883,6 +1905,125 @@ func TestDiscoverySystemToInsight(t *testing.T) {
 			got := insightFromSAPSystem(test.sys)
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
 				t.Errorf("insightFromSAPSystem() mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDiscoverDBNodes(t *testing.T) {
+	tests := []struct {
+		name           string
+		sid            string
+		instanceNumber string
+		project        string
+		zone           string
+		cmdRunner      commandlineexecutor.CommandRunner
+		gceService     *fake.TestGCE
+		want           []*spb.SapDiscovery_Resource
+	}{{
+		name:           "discoverSingleNode",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		cmdRunner:      func(string, string) (string, string, error) { return defaultLandscapeOutputSingleNode, "", nil },
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "some/compute/instance",
+			}},
+			GetInstanceErr: []error{nil},
+		},
+		want: []*spb.SapDiscovery_Resource{{
+			ResourceUri:  "some/compute/instance",
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+		}},
+	}, {
+		name:           "discoverMultipleNodes",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		cmdRunner:      func(string, string) (string, string, error) { return defaultLandscapeOutputMultipleNodes, "", nil },
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "some/compute/instance",
+			}, {
+				SelfLink: "some/compute/instance2",
+			}, {
+				SelfLink: "some/compute/instance3",
+			}, {
+				SelfLink: "some/compute/instance4",
+			}},
+			GetInstanceErr: []error{nil, nil, nil, nil},
+		},
+		want: []*spb.SapDiscovery_Resource{{
+			ResourceUri:  "some/compute/instance",
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+		}, {
+			ResourceUri:  "some/compute/instance2",
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+		}, {
+			ResourceUri:  "some/compute/instance3",
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+		}, {
+			ResourceUri:  "some/compute/instance4",
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+		}},
+	}, {
+		// TODO b/279601544 - After the commandlineexecutor refactor enable these tests
+		/*
+				name:           "pythonScriptReturnsNonfatalCode",
+				sid:            defaultSID,
+				instanceNumber: defaultInstanceNumber,
+				project:        defaultProjectID,
+				zone:           defaultZone,
+				// Return a nonzero error code less than 2
+				cmdRunner: func(string, string) (string, string, error) { return defaultLandscapeOutputSingleNode, "", someErr },
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						SelfLink: "some/compute/instance",
+					}},
+					GetInstanceErr: []error{nil},
+				},
+				want: []*spb.SapDiscovery_Resource{{
+					ResourceUri:  "some/compute/instance",
+					ResourceType: spb.SapDiscovery_Resource_COMPUTE,
+					ResourceKind: "ComputeInstance",
+				}},
+			}, {
+				name:           "pythonScriptFails",
+				sid:            defaultSID,
+				instanceNumber: defaultInstanceNumber,
+				project:        defaultProjectID,
+				zone:           defaultZone,
+				// Return a nonzero error code greater than 2
+				cmdRunner:      func(string, string) (string, string, error) { return "", "", &exec.ExitError{} },
+				want:           nil,
+			}, {
+		*/
+		name:           "noHostsInOutput",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		cmdRunner:      func(string, string) (string, string, error) { return "", "", nil },
+		gceService:     &fake.TestGCE{},
+		want:           nil,
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d := Discovery{
+				commandRunner: test.cmdRunner,
+				gceService:    test.gceService,
+			}
+			got := d.discoverDBNodes(test.sid, test.instanceNumber, test.project, test.zone)
+			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
+				t.Errorf("discoverDBNodes() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}

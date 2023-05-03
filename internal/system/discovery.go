@@ -42,9 +42,10 @@ import (
 )
 
 var (
-	ipRegex      = regexp.MustCompile(`[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+`)
-	fsMountRegex = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
-	sidRegex     = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9]{2})`)
+	ipRegex         = regexp.MustCompile(`[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+`)
+	fsMountRegex    = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
+	sidRegex        = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9]{2})`)
+	headerLineRegex = regexp.MustCompile(`[^-]+`)
 )
 
 type gceInterface interface {
@@ -157,7 +158,7 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 func runDiscovery(config *cpb.Configuration, d Discovery) {
 	cp := config.GetCloudProperties()
 	if cp == nil {
-		log.Logger.Debug("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
+		log.Logger.Warn("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
 		return
 	}
 
@@ -196,12 +197,28 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 		sapSystems := []*spb.SapDiscovery{}
 
 		for _, app := range sapApps.Instances {
+			var system *spb.SapDiscovery
 			switch app.Type {
 			case sappb.InstanceType_NETWEAVER:
+				log.Logger.Info("Running on NW instance")
+
+				var dbComp *spb.SapDiscovery_Component
+				dbRes := d.discoverAppToDBConnection(cp, app.Sapsid, ir)
+				if len(dbRes) > 0 {
+					// NW instance is connected to a database
+					dbSid, err := d.discoverDatabaseSID(app.Sapsid)
+					if err != nil {
+						log.Logger.Warnw("Encountered error discovering database SID", "error", err)
+						continue
+					}
+					dbComp = &spb.SapDiscovery_Component{
+						Sid:       dbSid,
+						Resources: dbRes,
+					}
+				}
 				// See if a system with the same SID already exists
-				var system *spb.SapDiscovery
 				for _, sys := range sapSystems {
-					if sys.ApplicationLayer.Sid == app.Sapsid {
+					if sys.GetApplicationLayer().GetSid() == app.Sapsid || sys.GetDatabaseLayer().GetSid() == dbComp.Sid {
 						system = sys
 						break
 					}
@@ -214,22 +231,32 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 					Sid:       app.Sapsid,
 					Resources: res,
 				}
+				if dbComp != nil {
+					system.DatabaseLayer = dbComp
+				}
 				system.UpdateTime = timestamppb.Now()
-
-				dbRes := d.discoverAppToDBConnection(cp, app.Sapsid, ir)
-				if len(dbRes) > 0 {
-					// NW instance is connected to a database
-					dbSid, err := d.discoverDatabaseSID(app.Sapsid)
-					if err != nil {
-						log.Logger.Warnw("Encountered error discovering database SID", "error", err)
-						continue
-					}
-					system.DatabaseLayer = &spb.SapDiscovery_Component{
-						Sid:       dbSid,
-						Resources: dbRes,
+			case sappb.InstanceType_HANA:
+				log.Logger.Info("Running on HANA instance")
+				// See if a system with the same SID already exists
+				for _, sys := range sapSystems {
+					if sys.DatabaseLayer.Sid == app.Sapsid {
+						system = sys
+						break
 					}
 				}
+
+				d.discoverDBNodes(app.Sapsid, app.InstanceNumber, cp.ProjectId, cp.Zone)
+				if system == nil {
+					system = &spb.SapDiscovery{}
+					sapSystems = append(sapSystems, system)
+				}
+				system.DatabaseLayer = &spb.SapDiscovery_Component{
+					Sid:       app.Sapsid,
+					Resources: res,
+				}
+				system.UpdateTime = timestamppb.Now()
 			}
+			log.Logger.Infow("Discovered System", "system", system)
 		}
 
 		locationParts := strings.Split(cp.GetZone(), "-")
@@ -237,6 +264,7 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 
 		log.Logger.Info("Sending systems to WLM API")
 		for _, sys := range sapSystems {
+			// Send System to DW API
 			req := &workloadmanager.WriteInsightRequest{
 				Insight: insightFromSAPSystem(sys),
 			}
@@ -245,7 +273,7 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 			d.wlmService.WriteInsight(cp.ProjectId, continent, req)
 		}
 
-		log.Logger.Info("Done discovery")
+		log.Logger.Info("Done SAP System Discovery")
 		// Perform discovery at most every 4 hours.
 		time.Sleep(4 * 60 * 60 * time.Second)
 	}
@@ -678,52 +706,65 @@ func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid strin
 	}
 
 	outLines := strings.Split(stdOut, "\n")
-	var dbHostname string
+	log.Logger.Infof("outLines: %v", outLines)
+	var dbHosts []string
 	for _, l := range outLines {
+		log.Logger.Infow("Examining line", "line", l)
 		t := strings.TrimSpace(l)
 		if strings.Index(t, "ENV") < 0 {
+			log.Logger.Info("No ENV")
 			continue
 		}
 
-		p := strings.Split(t, ":")
-		if len(p) != 3 {
-			continue
+		log.Logger.Infof("Env line: %s", t)
+		// Trim up to the first colon
+		_, hosts, _ := strings.Cut(t, ":")
+		p := strings.Split(hosts, ";")
+		// Each semicolon part contains the pattern <host>:<port>
+		// The first part will contain "ENV : <host>:port"
+		for _, h := range p {
+			log.Logger.Infof("Semicolon part: %s", h)
+			c := strings.Split(h, ":")
+			if len(c) < 2 {
+				continue
+			}
+			dbHosts = append(dbHosts, strings.TrimSpace(c[0]))
 		}
-		dbHostname = strings.TrimSpace(p[1])
-		break
 	}
-	if dbHostname == "" {
+	if len(dbHosts) == 0 {
 		log.Logger.Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
 		return res
 	}
 
-	log.Logger.Infow("Found host", "sid", sid, "hostname", fmt.Sprintf("%q", dbHostname))
+	for _, dbHostname := range dbHosts {
+		log.Logger.Infow("Found host", "sid", sid, "hostname", fmt.Sprintf("%q", dbHostname))
 
-	addrs, err := d.hostResolver(dbHostname)
-	if err != nil {
-		log.Logger.Warn("Error retrieving address, or no address found for host", log.String("sid", sid), log.String("hostname", dbHostname), log.Error(err))
-		return res
-	}
-
-	for _, ip := range addrs {
-		log.Logger.Info("Examining address", log.String("sid", sid), log.String("ip", ip))
-		addressURI, err := d.gceService.GetURIForIP(cp.GetProjectId(), ip)
+		addrs, err := d.hostResolver(dbHostname)
 		if err != nil {
-			log.Logger.Warnw("Error finding URI for IP", "IP", ip, "error", err)
-			continue
+			log.Logger.Warn("Error retrieving address, or no address found for host", log.String("sid", sid), log.String("hostname", dbHostname), log.Error(err))
+			return res
 		}
 
-		switch {
-		case extractFromURI(addressURI, "addresses") != "":
-			aRes := d.discoverAddressFromURI(addressURI)
-			res = append(res, aRes...)
-		case extractFromURI(addressURI, "instances") != "":
-			// IP is assigned to an instance
-			iRes := d.discoverInstanceFromURI(addressURI)
-			res = append(res, iRes...)
-		default:
-			log.Logger.Infow("Unrecognized URI type for IP", "IP", ip, "URI", addressURI)
-			continue
+		for _, ip := range addrs {
+			log.Logger.Info("Examining address", log.String("sid", sid), log.String("ip", ip))
+			addressURI, err := d.gceService.GetURIForIP(cp.GetProjectId(), ip)
+			if err != nil {
+				log.Logger.Warnw("Error finding URI for IP", "IP", ip, "error", err)
+				continue
+			}
+
+			switch {
+			case extractFromURI(addressURI, "addresses") != "":
+				aRes := d.discoverAddressFromURI(addressURI)
+				res = append(res, aRes...)
+			case extractFromURI(addressURI, "instances") != "":
+				// IP is assigned to an instance
+				iRes := d.discoverInstanceFromURI(addressURI)
+				res = append(res, iRes...)
+			default:
+				log.Logger.Infow("Unrecognized URI type for IP", "IP", ip, "URI", addressURI)
+				continue
+			}
 		}
 	}
 	return res
@@ -889,4 +930,63 @@ func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
 	}
 
 	return "", errors.New("No database SID found")
+}
+
+func (d *Discovery) discoverDBNodes(sid, instanceNumber, project, zone string) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
+	if sid == "" || instanceNumber == "" || project == "" || zone == "" {
+		log.Logger.Warn("To discover additional HANA nodes SID, instance number, project, and zone must be provided")
+		return res
+	}
+	sidLower := strings.ToLower(sid)
+	sidUpper := strings.ToUpper(sid)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	scriptPath := fmt.Sprintf("/usr/sap/%s/HDB%s/exe/python_support/landscapeHostConfiguration.py", sidUpper, instanceNumber)
+	command := fmt.Sprintf("-i -u %s python %s", sidAdm, scriptPath)
+	stdOut, stdErr, err := d.commandRunner("sudo", command)
+	// Only 0 and 1 are expected error return codes from this script
+	if err != nil && commandlineexecutor.ExitCode(err) < 2 {
+		log.Logger.Warnw("Error running landscapeHostConfiguration.py", "sid", sid, "error", err, "stdOut", stdOut, "stdErr", stdErr)
+		return res
+	}
+
+	// Example output:
+	// | Host        | Host   | Host   | Failover | Remove | Storage   | Storage   | Failover | Failover | NameServer | NameServer | IndexServer | IndexServer | Host    | Host    | Worker  | Worker  |
+	// |             | Active | Status | Status   | Status | Config    | Actual    | Config   | Actual   | Config     | Actual     | Config      | Actual      | Config  | Actual  | Config  | Actual  |
+	// |             |        |        |          |        | Partition | Partition | Group    | Group    | Role       | Role       | Role        | Role        | Roles   | Roles   | Groups  | Groups  |
+	// | ----------- | ------ | ------ | -------- | ------ | --------- | --------- | -------- | -------- | ---------- | ---------- | ----------- | ----------- | ------- | ------- | ------- | ------- |
+	// | dru-s4dan   | yes    | ok     |          |        |         1 |         1 | default  | default  | master 1   | master     | worker      | master      | worker  | worker  | default | default |
+	// | dru-s4danw1 | yes    | ok     |          |        |         2 |         2 | default  | default  | master 2   | slave      | worker      | slave       | worker  | worker  | default | default |
+	// | dru-s4danw2 | yes    | ok     |          |        |         3 |         3 | default  | default  | slave      | slave      | worker      | slave       | worker  | worker  | default | default |
+	// | dru-s4danw3 | yes    | ignore |          |        |         0 |         0 | default  | default  | master 3   | slave      | standby     | standby     | standby | standby | default | -       |
+	var hosts []string
+	lines := strings.Split(stdOut, "\n")
+	pastHeaders := false
+	for _, line := range lines {
+		log.Logger.Info(line)
+		cols := strings.Split(line, "|")
+		if len(cols) < 2 {
+			log.Logger.Info("Line has too few columns")
+			continue
+		}
+		trimmed := strings.TrimSpace(cols[1])
+		if trimmed == "" {
+			continue
+		}
+		if !pastHeaders {
+			pastHeaders = !headerLineRegex.MatchString(trimmed)
+			continue
+		}
+
+		hosts = append(hosts, trimmed)
+	}
+	log.Logger.Infow("Discovered other hosts", "sid", sid, "hosts", hosts)
+
+	for _, host := range hosts {
+		iRes, _, _ := d.discoverInstance(project, zone, host)
+		res = append(res, iRes...)
+	}
+
+	return res
+
 }
