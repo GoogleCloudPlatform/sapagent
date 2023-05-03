@@ -54,21 +54,26 @@ func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) W
 		"fence_agent":                    true,
 		"fence_agent_compute_api_access": true,
 		"fence_agent_logging_api_access": true,
+		"maintenance_mode_active":        true,
 	}
-	pacemaker := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
-	for _, m := range pacemaker.GetPrimitiveMetrics() {
+	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
+	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
+	for _, m := range pconfig.GetPrimitiveMetrics() {
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
-	for _, m := range pacemaker.GetRscLocationMetrics() {
+	for _, m := range pconfig.GetRscLocationMetrics() {
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
-	for _, m := range pacemaker.GetRscOptionMetrics() {
+	for _, m := range pconfig.GetRscOptionMetrics() {
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
-	for _, m := range pacemaker.GetHanaOperationMetrics() {
+	for _, m := range pconfig.GetHanaOperationMetrics() {
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
-	for _, m := range pacemaker.GetFenceAgentMetrics() {
+	for _, m := range pconfig.GetFenceAgentMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+	for _, m := range pacemaker.GetCibBootstrapOptionMetrics() {
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
 
@@ -77,7 +82,7 @@ func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) W
 		delete(l, label)
 	}
 	// Add OS command metrics to the labels.
-	for _, m := range params.WorkloadConfig.GetValidationPacemaker().GetOsCommandMetrics() {
+	for _, m := range pacemaker.GetOsCommandMetrics() {
 		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
 		if k != "" {
 			l[k] = v

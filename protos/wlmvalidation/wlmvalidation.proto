@@ -72,6 +72,11 @@ enum FenceAgentVariable {
   LOGGING_API_ACCESS = 3;
 }
 
+enum CIBBootstrapOptionVariable {
+  CIB_BOOTSTRAP_OPTION_VARIABLE_UNSPECIFIED = 0;
+  MAINTENANCE_MODE_ACTIVE = 1;
+}
+
 message WorkloadValidation {
   ValidationSystem validation_system = 1;
   ValidationCorosync validation_corosync = 2;
@@ -119,7 +124,8 @@ message ValidationNetweaver {
 
 message ValidationPacemaker {
   PacemakerConfigMetrics config_metrics = 1;
-  repeated configurablemetrics.OSCommandMetric os_command_metrics = 2;
+  repeated CIBBootstrapOptionMetric cib_bootstrap_option_metrics = 2;
+  repeated configurablemetrics.OSCommandMetric os_command_metrics = 3;
 }
 
 message PacemakerConfigMetrics {
@@ -154,6 +160,11 @@ message PacemakerHANAOperationMetric {
 message PacemakerFenceAgentMetric {
   configurablemetrics.MetricInfo metric_info = 1;
   FenceAgentVariable value = 2;
+}
+
+message CIBBootstrapOptionMetric {
+  configurablemetrics.MetricInfo metric_info = 1;
+  CIBBootstrapOptionVariable value = 2;
 }
 
 message ValidationCustom {

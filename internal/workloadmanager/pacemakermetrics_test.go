@@ -194,7 +194,6 @@ func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists 
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
 					"location_preference_set": locationPref,
-					"maintenance_mode_active": "true",
 					"foo":                     "true",
 				},
 			},

@@ -283,6 +283,7 @@ func mapWorkloadValidationMetrics(wlm *wlmpb.WorkloadValidation) metricsMap {
 	iterator(pacemakerConfig.GetHanaOperationMetrics(), mapper)
 	iterator(pacemakerConfig.GetFenceAgentMetrics(), mapper)
 	iterator(pacemakerConfig.GetXpathMetrics(), mapper)
+	iterator(pacemaker.GetCibBootstrapOptionMetrics(), mapper)
 	iterator(pacemaker.GetOsCommandMetrics(), mapper)
 
 	custom := wlm.GetValidationCustom()
@@ -424,6 +425,12 @@ func (v *Validator) validateWorkloadValidation(wlm *wlmpb.WorkloadValidation) {
 
 	pacemaker := wlm.GetValidationPacemaker()
 	v.validatePacemakerConfigMetrics(pacemaker.GetConfigMetrics())
+	for _, m := range pacemaker.GetCibBootstrapOptionMetrics() {
+		validateMetricInfo(v, m)
+		if m.GetValue() == wlmpb.CIBBootstrapOptionVariable_CIB_BOOTSTRAP_OPTION_VARIABLE_UNSPECIFIED {
+			validationFailure(v, m, "CIBBootstrapOptionVariable metric has no value specified")
+		}
+	}
 	v.validateOSCommandMetrics(pacemaker.GetOsCommandMetrics())
 
 	custom := wlm.GetValidationCustom()

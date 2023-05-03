@@ -1779,6 +1779,25 @@ func TestValidate(t *testing.T) {
 			wantCount: 1,
 		},
 		{
+			name: "WorkloadValidation_ValidationPacemaker_CIBBootstrapOptionMetrics_ValueMissing",
+			definition: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationPacemaker: &wlmpb.ValidationPacemaker{
+						CibBootstrapOptionMetrics: []*wlmpb.CIBBootstrapOptionMetric{
+							&wlmpb.CIBBootstrapOptionMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/pacemaker",
+									Label: "foo",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValid: false,
+			wantCount: 1,
+		},
+		{
 			name: "WorkloadValidation_ValidationPacemaker_XPathMetrics_XPathMissing",
 			definition: &cdpb.CollectionDefinition{
 				WorkloadValidation: &wlmpb.WorkloadValidation{

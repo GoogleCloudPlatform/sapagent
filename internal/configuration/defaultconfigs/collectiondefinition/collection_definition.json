@@ -741,6 +741,15 @@
         ],
         "xpath_metrics": []
       },
+      "cib_bootstrap_option_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/pacemaker",
+            "label": "maintenance_mode_active"
+          },
+          "value": "MAINTENANCE_MODE_ACTIVE"
+        }
+      ],
       "os_command_metrics": []
     },
     "validation_custom": {
