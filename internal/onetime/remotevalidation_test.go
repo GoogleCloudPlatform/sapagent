@@ -22,9 +22,15 @@ import (
 	"io/fs"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func TestRemoteValidationHandler(t *testing.T) {
@@ -95,5 +101,31 @@ func TestRemoteValidationHandler(t *testing.T) {
 				t.Errorf("remoteValidationHandler(%v) = %v, want %v", test.remote, got, test.want)
 			}
 		})
+	}
+}
+
+func TestCreateConfiguration(t *testing.T) {
+	project := "test-project"
+	instanceID := "test-instanceid"
+	instanceName := "test-instancename"
+	zone := "test-zone"
+
+	want := &cpb.Configuration{
+		CloudProperties: &iipb.CloudProperties{
+			ProjectId:    project,
+			InstanceId:   instanceID,
+			InstanceName: instanceName,
+			Zone:         zone,
+		},
+		AgentProperties: &cpb.AgentProperties{
+			Name:    configuration.AgentName,
+			Version: configuration.AgentVersion,
+		},
+	}
+
+	r := &RemoteValidation{project: project, instanceid: instanceID, instancename: instanceName, zone: zone}
+	got := r.createConfiguration()
+	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+		t.Errorf("createConfiguration() returned unexpected diff (-want +got):\n%s", diff)
 	}
 }

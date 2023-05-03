@@ -121,13 +121,6 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 		return subcommands.ExitUsageError
 	}
 
-	config := &cpb.Configuration{}
-	config.CloudProperties = &iipb.CloudProperties{}
-	config.CloudProperties.ProjectId = r.project
-	config.CloudProperties.InstanceId = r.instanceid
-	config.CloudProperties.InstanceName = r.instancename
-	config.CloudProperties.Zone = r.zone
-
 	cd, err := collectiondefinition.Load(opts)
 	if err != nil {
 		log.Print(fmt.Sprintf("ERROR: %v", err))
@@ -135,7 +128,7 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 	}
 
 	wlmparams := workloadmanager.Parameters{
-		Config:                config,
+		Config:                r.createConfiguration(),
 		WorkloadConfig:        cd.GetWorkloadValidation(),
 		Remote:                true,
 		ConfigFileReader:      configFileReader,
@@ -152,4 +145,19 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 	}
 	fmt.Println(workloadmanager.CollectMetricsToJSON(ctx, wlmparams))
 	return subcommands.ExitSuccess
+}
+
+func (r *RemoteValidation) createConfiguration() *cpb.Configuration {
+	return &cpb.Configuration{
+		CloudProperties: &iipb.CloudProperties{
+			ProjectId: r.project,
+			InstanceId: r.instanceid,
+			InstanceName: r.instancename,
+			Zone:        r.zone,
+		},
+		AgentProperties: &cpb.AgentProperties{
+			Name: configuration.AgentName,
+			Version: configuration.AgentVersion,
+		},
+	}
 }
