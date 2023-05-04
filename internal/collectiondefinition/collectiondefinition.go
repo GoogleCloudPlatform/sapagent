@@ -222,12 +222,6 @@ func mergeWorkloadValidations(primary, secondary *wlmpb.WorkloadValidation) *wlm
 	}
 
 	pacemaker := secondary.GetValidationPacemaker()
-	pacemakerConfig := pacemaker.GetConfigMetrics()
-	for _, m := range pacemakerConfig.GetXpathMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationPacemaker.ConfigMetrics.XpathMetrics = append(merged.GetValidationPacemaker().GetConfigMetrics().GetXpathMetrics(), m)
-		}
-	}
 	for _, m := range pacemaker.GetOsCommandMetrics() {
 		if ok := shouldMerge(m, existing); ok {
 			merged.ValidationPacemaker.OsCommandMetrics = append(merged.GetValidationPacemaker().GetOsCommandMetrics(), m)
@@ -282,7 +276,6 @@ func mapWorkloadValidationMetrics(wlm *wlmpb.WorkloadValidation) metricsMap {
 	iterator(pacemakerConfig.GetRscOptionMetrics(), mapper)
 	iterator(pacemakerConfig.GetHanaOperationMetrics(), mapper)
 	iterator(pacemakerConfig.GetFenceAgentMetrics(), mapper)
-	iterator(pacemakerConfig.GetXpathMetrics(), mapper)
 	iterator(pacemaker.GetCibBootstrapOptionMetrics(), mapper)
 	iterator(pacemaker.GetOsCommandMetrics(), mapper)
 
@@ -378,7 +371,6 @@ func (v Validator) Valid() bool {
 //   - A metric should always provide accompanying evaluation rule(s).
 //   - An evaluation rule should always provide a value to use if true.
 //   - An OSCommandMetric should always provide a command to run.
-//   - An XPathMetric should always provide an xpath to evaluate.
 func (v *Validator) Validate() {
 	// Reset validation state.
 	v.valid = true
@@ -470,7 +462,6 @@ func (v *Validator) validatePacemakerConfigMetrics(config *wlmpb.PacemakerConfig
 			validationFailure(v, m, "FenceAgentVariable metric has no value specified")
 		}
 	}
-	v.validateXPathMetrics(config.GetXpathMetrics())
 }
 
 // validateEvalMetrics runs a series of validation checks against an EvalMetric slice.
@@ -491,21 +482,6 @@ func (v *Validator) validateOSCommandMetrics(metrics []*cmpb.OSCommandMetric) {
 		// An OSCommandMetric should always provide a command to run.
 		if m.GetCommand() == "" {
 			validationFailure(v, m, "OSCommandMetric has no command to run")
-		}
-
-		// A metric should always provide accompanying evaluation rule(s).
-		validateMetricEvaluation(v, m)
-	}
-}
-
-// validateXpathMetrics runs a series of validation checks against an XPathMetric slice.
-func (v *Validator) validateXPathMetrics(metrics []*cmpb.XPathMetric) {
-	for _, m := range metrics {
-		validateMetricInfo(v, m)
-
-		// An XPathMetric should always provide an xpath to evaluate.
-		if m.GetXpath() == "" {
-			validationFailure(v, m, "XPathMetric has no xpath to evaluate")
 		}
 
 		// A metric should always provide accompanying evaluation rule(s).

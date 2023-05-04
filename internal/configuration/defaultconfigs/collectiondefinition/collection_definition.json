@@ -738,8 +738,7 @@
             },
             "value": "LOGGING_API_ACCESS"
           }
-        ],
-        "xpath_metrics": []
+        ]
       },
       "cib_bootstrap_option_metrics": [
         {

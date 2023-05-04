@@ -134,7 +134,6 @@ message PacemakerConfigMetrics {
   repeated PacemakerRSCOptionMetric rsc_option_metrics = 3;
   repeated PacemakerHANAOperationMetric hana_operation_metrics = 4;
   repeated PacemakerFenceAgentMetric fence_agent_metrics = 5;
-  repeated configurablemetrics.XPathMetric xpath_metrics = 6;
 }
 
 message PacemakerPrimitiveMetric {

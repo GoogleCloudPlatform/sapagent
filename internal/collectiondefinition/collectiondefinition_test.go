@@ -91,30 +91,6 @@ var (
 			},
 		}
 	}
-	createXPathMetric = func(metricType, label, xpath string) *cmpb.XPathMetric {
-		return &cmpb.XPathMetric{
-			MetricInfo: &cmpb.MetricInfo{
-				Type:  metricType,
-				Label: label,
-			},
-			Xpath: xpath,
-			EvalRuleTypes: &cmpb.XPathMetric_AndEvalRules{
-				AndEvalRules: &cmpb.EvalMetricRule{
-					EvalRules: []*cmpb.EvalRule{
-						&cmpb.EvalRule{
-							EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "Contains Text"},
-						},
-					},
-					IfTrue: &cmpb.EvalResult{
-						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
-					},
-					IfFalse: &cmpb.EvalResult{
-						EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
-					},
-				},
-			},
-		}
-	}
 )
 
 func TestFromJSONFile(t *testing.T) {
@@ -595,79 +571,6 @@ func TestMerge(t *testing.T) {
 					ValidationNetweaver: &wlmpb.ValidationNetweaver{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
 							createOSCommandMetric("workload.googleapis.com/sap/validation/netweaver", "foo", "bar", all),
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "WorkloadValidation_ValidationPacemaker_XPathMetrics_Merge",
-			primary: &cdpb.CollectionDefinition{
-				WorkloadValidation: &wlmpb.WorkloadValidation{
-					ValidationPacemaker: &wlmpb.ValidationPacemaker{
-						ConfigMetrics: &wlmpb.PacemakerConfigMetrics{
-							XpathMetrics: []*cmpb.XPathMetric{
-								createXPathMetric("workload.googleapis.com/sap/validation/pacemaker", "xpath", "//some/path[@id=1]"),
-							},
-						},
-					},
-				},
-			},
-			secondary: &cdpb.CollectionDefinition{
-				WorkloadValidation: &wlmpb.WorkloadValidation{
-					ValidationPacemaker: &wlmpb.ValidationPacemaker{
-						ConfigMetrics: &wlmpb.PacemakerConfigMetrics{
-							XpathMetrics: []*cmpb.XPathMetric{
-								createXPathMetric("workload.googleapis.com/sap/validation/pacemaker", "xpath2", "//some/path[@id=2]"),
-							},
-						},
-					},
-				},
-			},
-			want: &cdpb.CollectionDefinition{
-				WorkloadValidation: &wlmpb.WorkloadValidation{
-					ValidationPacemaker: &wlmpb.ValidationPacemaker{
-						ConfigMetrics: &wlmpb.PacemakerConfigMetrics{
-							XpathMetrics: []*cmpb.XPathMetric{
-								createXPathMetric("workload.googleapis.com/sap/validation/pacemaker", "xpath", "//some/path[@id=1]"),
-								createXPathMetric("workload.googleapis.com/sap/validation/pacemaker", "xpath2", "//some/path[@id=2]"),
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "WorkloadValidation_ValidationPacemaker_XPathMetrics_Override",
-			primary: &cdpb.CollectionDefinition{
-				WorkloadValidation: &wlmpb.WorkloadValidation{
-					ValidationPacemaker: &wlmpb.ValidationPacemaker{
-						ConfigMetrics: &wlmpb.PacemakerConfigMetrics{
-							XpathMetrics: []*cmpb.XPathMetric{
-								createXPathMetric("workload.googleapis.com/sap/validation/pacemaker", "xpath", "//some/path[@id=1]"),
-							},
-						},
-					},
-				},
-			},
-			secondary: &cdpb.CollectionDefinition{
-				WorkloadValidation: &wlmpb.WorkloadValidation{
-					ValidationPacemaker: &wlmpb.ValidationPacemaker{
-						ConfigMetrics: &wlmpb.PacemakerConfigMetrics{
-							XpathMetrics: []*cmpb.XPathMetric{
-								createXPathMetric("workload.googleapis.com/sap/validation/pacemaker", "xpath", "//some/path[@id=2]"),
-							},
-						},
-					},
-				},
-			},
-			want: &cdpb.CollectionDefinition{
-				WorkloadValidation: &wlmpb.WorkloadValidation{
-					ValidationPacemaker: &wlmpb.ValidationPacemaker{
-						ConfigMetrics: &wlmpb.PacemakerConfigMetrics{
-							XpathMetrics: []*cmpb.XPathMetric{
-								createXPathMetric("workload.googleapis.com/sap/validation/pacemaker", "xpath", "//some/path[@id=1]"),
-							},
 						},
 					},
 				},
@@ -1788,39 +1691,6 @@ func TestValidate(t *testing.T) {
 								MetricInfo: &cmpb.MetricInfo{
 									Type:  "workload.googleapis.com/sap/validation/pacemaker",
 									Label: "foo",
-								},
-							},
-						},
-					},
-				},
-			},
-			wantValid: false,
-			wantCount: 1,
-		},
-		{
-			name: "WorkloadValidation_ValidationPacemaker_XPathMetrics_XPathMissing",
-			definition: &cdpb.CollectionDefinition{
-				WorkloadValidation: &wlmpb.WorkloadValidation{
-					ValidationPacemaker: &wlmpb.ValidationPacemaker{
-						ConfigMetrics: &wlmpb.PacemakerConfigMetrics{
-							XpathMetrics: []*cmpb.XPathMetric{
-								&cmpb.XPathMetric{
-									MetricInfo: &cmpb.MetricInfo{
-										Type:  "workload.googleapis.com/sap/validation/pacemaker",
-										Label: "foo",
-									},
-									EvalRuleTypes: &cmpb.XPathMetric_AndEvalRules{
-										AndEvalRules: &cmpb.EvalMetricRule{
-											EvalRules: []*cmpb.EvalRule{
-												&cmpb.EvalRule{
-													EvalRuleTypes: &cmpb.EvalRule_OutputContains{OutputContains: "foobar"},
-												},
-											},
-											IfTrue: &cmpb.EvalResult{
-												EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "foobar"},
-											},
-										},
-									},
 								},
 							},
 						},

@@ -52,15 +52,6 @@ message OSCommandMetric {
   }
 }
 
-message XPathMetric {
-  MetricInfo metric_info = 1;
-  string xpath = 2;
-  oneof eval_rule_types {
-    EvalMetricRule and_eval_rules = 3;
-    OrEvalMetricRule or_eval_rules = 4;
-  }
-}
-
 message MetricInfo {
   string min_version = 1;
   string type = 2;
