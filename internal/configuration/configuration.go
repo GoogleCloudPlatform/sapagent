@@ -204,10 +204,10 @@ func validateHANASSLConfig(config *cpb.HANAMonitoringConfiguration) bool {
 			continue
 		}
 		if i.GetHostNameInCertificate() == "" {
-			errs = append(errs, fmt.Sprintf("missing hostname in certificate for HANA instance: %q", i.GetName()))
+			errs = append(errs, fmt.Sprintf("missing hostname in certificate for HANA instance: %#q", i.GetName()))
 		}
 		if i.GetTlsRootCaFile() == "" {
-			errs = append(errs, fmt.Sprintf("missing tls root ca file for HANA instance: %q", i.GetName()))
+			errs = append(errs, fmt.Sprintf("missing tls root ca file for HANA instance: %#q", i.GetName()))
 		}
 	}
 	if len(errs) > 0 {
