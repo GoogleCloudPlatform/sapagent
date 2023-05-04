@@ -84,7 +84,7 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 	hmConfig := prepareConfig(hmMigrationConf, sslEnabled)
 	config.HanaMonitoringConfiguration = hmConfig
 	if !configuration.ValidateQueries(config.GetHanaMonitoringConfiguration().GetQueries()) {
-		log.Print("Queries formed using Old HANA Monitoring Agent Config are not valid. File" + oldConfigPath)
+		logMessageToFileAndConsole("Queries formed using Old HANA Monitoring Agent Config are not valid. File" + oldConfigPath)
 		return subcommands.ExitUsageError
 	}
 	content, err := protojson.Marshal(config)
@@ -99,10 +99,16 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 	if sslEnabled {
 		usagemetrics.Action(usagemetrics.SSLModeOnHANAMonitoring)
 		// TODO: Add link to public documentation for customers once ready
-		log.Print("HANA Monitoring Agent had ssl mode on, hence automatic upgrade was not possible.")
+		msg := `HANA Monitoring Agent had ssl mode on, automatic upgrade could not be completed.
+		Refer <public-doc-upgrade-SSL-troubleshoot-link> for more details.
+		Solution: Add "host_name_in_certificate" and "tls_root_ca_file" for each HANA instance in
+		the config file ` + configuration.LinuxConfigPath + `and restart the agent
+		to start HANA monitoring functionality in the Agent for SAP.
+		`
+		logMessageToFileAndConsole(msg)
 		return subcommands.ExitUsageError
 	}
-	log.Print("Migrated HANA Monitoring Agent Config successfully")
+	logMessageToFileAndConsole("Migrated HANA Monitoring Agent Config successfully")
 	return subcommands.ExitSuccess
 }
 
@@ -233,4 +239,9 @@ func format(s string) string {
 
 	res = doubleQuotes.ReplaceAllString(res, "")
 	return res
+}
+
+func logMessageToFileAndConsole(msg string) {
+	log.Print(msg)
+	log.Logger.Info(msg)
 }
