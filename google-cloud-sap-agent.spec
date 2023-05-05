@@ -181,7 +181,7 @@ systemctl enable %{name}
 systemctl start %{name}
 
 # log usage metrics for install
-timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s INSTALLED || true
+timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s INSTALLED &> /dev/null || true
 
 # next steps instructions
 echo ""
@@ -213,10 +213,7 @@ if [ "$1" = "0" ]; then
       systemctl disable %{name}
   fi
   # log usage metrics for uninstall
-  timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s UNINSTALLED || true
-fi
-if [ "$1" = "1" ]; then
-  VERSION_BEFORE=$(rpm -q %{name})
+  timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s UNINSTALLED &> /dev/null || true
 fi
 
 %postun
@@ -229,7 +226,6 @@ if [ "$1" = "0" ]; then
   rm -fr %{_confdir}
   rm -f /var/log/%{name}*
 else
-  # upgrade
   # log usage metrics for upgrade
-  timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s UPDATED -pv "${VERSION_BEFORE}" || true
+  timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s UPDATED -pv "%{name}-%{VERSION}-%{RELEASE}" &> /dev/null || true
 fi
