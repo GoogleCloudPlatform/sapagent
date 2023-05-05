@@ -104,7 +104,7 @@ func (p *Properties) ProcessList(r RunnerWithEnv) (map[int]*ProcessStatus, int, 
 	if !ok {
 		return nil, exitStatus, fmt.Errorf("invalid sapcontrol return code: %d", exitStatus)
 	}
-	log.Logger.Debugw("Sapcontrol returned", "status", exitStatus, "message", message)
+	log.Logger.Debugw("Sapcontrol GetProcessList", "status", exitStatus, "message", message, "stdout", stdOut)
 
 	names := processNameRegex.FindAllStringSubmatch(stdOut, -1)
 	if len(names) == 0 {
@@ -178,6 +178,8 @@ func (p *Properties) ParseABAPGetWPTable(r RunnerWithEnv) (processes, busyProces
 		log.Logger.Debugw("Failed to run ABAPGetWPTable", log.Error(err))
 		return nil, nil, nil, err
 	}
+
+	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "stdout", stdOut)
 
 	processes = make(map[string]int)
 	busyProcesses = make(map[string]int)
@@ -279,7 +281,7 @@ func (p *Properties) EnqGetLockTable(r RunnerWithEnv) (EnqLocks []*EnqLock, err 
 	if !ok {
 		return nil, fmt.Errorf("invalid sapcontrol return code: %d", exitStatus)
 	}
-	log.Logger.Debugw("Sapcontrol returned", "status", exitStatus, "message", message)
+	log.Logger.Debugw("Sapcontrol EnqGetLockTable", "status", exitStatus, "message", message, "stdout", stdOut)
 
 	lines := strings.Split(stdOut, "\n")
 	for _, line := range lines {
@@ -318,5 +320,6 @@ func (p *Properties) EnqGetLockTable(r RunnerWithEnv) (EnqLocks []*EnqLock, err 
 		EnqLocks = append(EnqLocks, lock)
 	}
 
+	log.Logger.Debugw("EnqLocks successfully parsed", "EnqLocks", EnqLocks)
 	return EnqLocks, nil
 }
