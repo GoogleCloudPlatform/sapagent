@@ -92,10 +92,14 @@ var (
 		BareMetal: false,
 	}
 
-	defaultRunner        = func(string, string) (string, string, error) { return "", "", nil }
-	defaultRunnerNoSpace = func(string, ...string) (string, string, error) { return "", "", nil }
-	defaultExists        = func(string) bool { return true }
-	defaultToxenGetter   = func(context.Context, ...string) (oauth2.TokenSource, error) {
+	defaultExec = func(commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdOut: "",
+			StdErr: "",
+		}
+	}
+	defaultExists      = func(string) bool { return true }
+	defaultToxenGetter = func(context.Context, ...string) (oauth2.TokenSource, error) {
 		return fakeToken{T: &oauth2.Token{AccessToken: defaultCredentials}}, nil
 	}
 	defaultCredGetter = func(context.Context, []byte, ...string) (*google.Credentials, error) {
@@ -333,15 +337,19 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 func TestCheckAPIAccess(t *testing.T) {
 	tests := []struct {
 		name    string
-		runner  commandlineexecutor.CommandRunnerNoSpace
+		exec    commandlineexecutor.Execute
 		args    []string
 		want    bool
 		wantErr error
 	}{
 		{
 			name: "CheckAPIAccessCurlError",
-			runner: func(string, ...string) (string, string, error) {
-				return "", "", errors.New("Could not resolve URL")
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+					Error:  errors.New("Could not resolve URL"),
+				}
 			},
 			args:    []string{},
 			want:    false,
@@ -349,8 +357,11 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessInvalidJSON",
-			runner: func(string, ...string) (string, string, error) {
-				return "<http>Error 403</http>", "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "<http>Error 403</http>",
+					StdErr: "",
+				}
 			},
 			args:    []string{},
 			want:    false,
@@ -358,8 +369,11 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessValidJSONResponseError",
-			runner: func(string, ...string) (string, string, error) {
-				return jsonResponseError, "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: jsonResponseError,
+					StdErr: "",
+				}
 			},
 			args:    []string{},
 			want:    false,
@@ -367,8 +381,11 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessValidJSON",
-			runner: func(string, ...string) (string, string, error) {
-				return jsonHealthyResponse, "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: jsonHealthyResponse,
+					StdErr: "",
+				}
 			},
 			args:    []string{},
 			want:    true,
@@ -376,8 +393,12 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessValidJSONButWithError",
-			runner: func(string, ...string) (string, string, error) {
-				return jsonHealthyResponse, "", errors.New("Could not resolve URL")
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: jsonHealthyResponse,
+					StdErr: "",
+					Error:  errors.New("Could not resolve URL"),
+				}
 			},
 			args:    []string{},
 			want:    false,
@@ -387,7 +408,7 @@ func TestCheckAPIAccess(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := checkAPIAccess(test.runner, test.args...)
+			got, gotErr := checkAPIAccess(test.exec, test.args...)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("checkAPIAccess() returned unexpected metric labels diff (-want +got):\n%s", diff)
@@ -402,14 +423,17 @@ func TestCheckAPIAccess(t *testing.T) {
 
 func TestSetPacemakerAPIAccess(t *testing.T) {
 	tests := []struct {
-		name   string
-		runner commandlineexecutor.CommandRunnerNoSpace
-		want   map[string]string
+		name string
+		exec commandlineexecutor.Execute
+		want map[string]string
 	}{
 		{
 			name: "TestAccessFailures",
-			runner: func(string, ...string) (string, string, error) {
-				return jsonResponseError, "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: jsonResponseError,
+					StdErr: "",
+				}
 			},
 			want: map[string]string{
 				"fence_agent_compute_api_access": "false",
@@ -418,8 +442,12 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 		},
 		{
 			name: "TestAccessErrors",
-			runner: func(string, ...string) (string, string, error) {
-				return "", "", errors.New("Could not resolve URL")
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+					Error:  errors.New("Could not resolve URL"),
+				}
 			},
 			want: map[string]string{
 				"fence_agent_compute_api_access": "false",
@@ -428,8 +456,11 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 		},
 		{
 			name: "TestAccessSuccessful",
-			runner: func(string, ...string) (string, string, error) {
-				return jsonHealthyResponse, "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: jsonHealthyResponse,
+					StdErr: "",
+				}
 			},
 			want: map[string]string{
 				"fence_agent_compute_api_access": "true",
@@ -441,7 +472,7 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			setPacemakerAPIAccess(got, "", "", test.runner)
+			setPacemakerAPIAccess(got, "", "", test.exec)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerAPIAccess() returned unexpected metric labels diff (-want +got):\n%s", diff)
@@ -453,34 +484,51 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 func TestSetPacemakerMaintenanceMode(t *testing.T) {
 	tests := []struct {
 		name         string
-		runner       commandlineexecutor.CommandRunner
+		exec         commandlineexecutor.Execute
 		crmAvailable bool
 		want         map[string]string
 	}{
 		{
-			name:         "TestMaintenanceModeCRMAvailable",
-			runner:       func(string, string) (string, string, error) { return "Maintenance mode ready", "", nil },
+			name: "TestMaintenanceModeCRMAvailable",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Maintenance mode ready",
+					StdErr: "",
+				}
+			},
 			crmAvailable: true,
 			want:         map[string]string{"maintenance_mode_active": "true"},
 		},
 		{
-			name:         "TestMaintenanceModeNotCRMUnavailable",
-			runner:       func(string, string) (string, string, error) { return "Maintenance mode ready", "", nil },
+			name: "TestMaintenanceModeNotCRMUnavailable",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Maintenance mode ready",
+					StdErr: "",
+				}
+			},
 			crmAvailable: false,
 			want:         map[string]string{"maintenance_mode_active": "true"},
 		},
 		{
 			name: "TestMaintenanceModeError",
-			runner: func(string, string) (string, string, error) {
-				return "", "", errors.New("cannot run sh, access denied")
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+					Error:  errors.New("cannot run sh, access denied"),
+				}
 			},
 			crmAvailable: true,
 			want:         map[string]string{"maintenance_mode_active": "false"},
 		},
 		{
 			name: "TestMaintenanceModeNotEnabled",
-			runner: func(string, string) (string, string, error) {
-				return "", "", nil
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+				}
 			},
 			crmAvailable: true,
 			want:         map[string]string{"maintenance_mode_active": "false"},
@@ -490,7 +538,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			setPacemakerMaintenanceMode(got, test.crmAvailable, test.runner)
+			setPacemakerMaintenanceMode(got, test.crmAvailable, test.exec)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerMaintenanceMode() returned unexpected metric labels diff (-want +got):\n%s", diff)
@@ -1099,10 +1147,10 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                 string
-		runner               commandlineexecutor.CommandRunner
-		runnerNoSpace        commandlineexecutor.CommandRunnerNoSpace
-		exists               commandlineexecutor.CommandExistsRunner
+		name string
+
+		exec                 commandlineexecutor.Execute
+		exists               commandlineexecutor.Exists
 		config               *cnfpb.Configuration
 		osStatReader         OSStatReader
 		workloadConfig       *wpb.WorkloadValidation
@@ -1115,8 +1163,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 	}{
 		{
 			name:                 "XMLNotFound",
-			runner:               defaultRunner,
-			runnerNoSpace:        defaultRunnerNoSpace,
+			exec:                 defaultExec,
 			exists:               func(string) bool { return false },
 			config:               defaultPacemakerConfig,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
@@ -1124,9 +1171,13 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
-			name:                 "UnparseableXML",
-			runner:               func(string, string) (string, string, error) { return "Error: Bad XML", "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name: "UnparseableXML",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Error: Bad XML",
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			config:               defaultPacemakerConfig,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
@@ -1134,9 +1185,13 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
-			name:                 "ServiceAccountReadError",
-			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name: "ServiceAccountReadError",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerServiceAccountXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			config:               defaultPacemakerConfig,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
@@ -1145,9 +1200,13 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
-			name:                 "ServiceAccountReadSuccess",
-			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name: "ServiceAccountReadSuccess",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerServiceAccountXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			config:               defaultPacemakerConfig,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
@@ -1158,11 +1217,23 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			locationPref:         "false",
 		},
 		{
-			name:          "CustomWorkloadConfig",
-			runner:        func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace: func(string, ...string) (string, string, error) { return "foobar", "", nil },
-			exists:        defaultExists,
-			config:        defaultPacemakerConfig,
+			name: "CustomWorkloadConfig",
+			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "cibadmin" {
+					return commandlineexecutor.Result{
+						StdOut: pacemakerServiceAccountXML,
+						// StdOut: "foobar",
+						StdErr: "",
+					}
+				}
+				return commandlineexecutor.Result{
+					// StdOut: pacemakerServiceAccountXML,
+					StdOut: "foobar",
+					StdErr: "",
+				}
+			},
+			exists: defaultExists,
+			config: defaultPacemakerConfig,
 			workloadConfig: &wpb.WorkloadValidation{
 				ValidationPacemaker: &wpb.ValidationPacemaker{
 					ConfigMetrics: &wpb.PacemakerConfigMetrics{
@@ -1213,18 +1284,27 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			locationPref:         "false",
 		},
 		{
-			name:   "ProjectID",
-			runner: func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
-				if cmd == "curl" {
-					if args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
-						return jsonHealthyResponse, "", nil
-					} else if args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
+			name: "ProjectID",
+			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "curl" {
+					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
+						return commandlineexecutor.Result{
+							StdOut: jsonHealthyResponse,
+							StdErr: "",
+						}
+					} else if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
 						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"` {
-						return jsonHealthyResponse, "", nil
+						return commandlineexecutor.Result{
+							StdOut: jsonHealthyResponse,
+							StdErr: "",
+						}
 					}
 				}
-				return "", "", nil
+				// TODO I think this will break
+				return commandlineexecutor.Result{
+					StdOut: pacemakerServiceAccountXML,
+					StdErr: "",
+				}
 			},
 			exists:               defaultExists,
 			config:               defaultPacemakerConfig,
@@ -1236,9 +1316,13 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			locationPref:         "false",
 		},
 		{
-			name:                 "LocationPref",
-			runner:               func(string, string) (string, string, error) { return pacemakerClipReferXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name: "LocationPref",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerClipReferXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			config:               defaultPacemakerConfig,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
@@ -1249,9 +1333,13 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			locationPref:         "true",
 		},
 		{
-			name:                 "CloneMetrics",
-			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name: "CloneMetrics",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerCloneXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			config:               defaultPacemakerConfig,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
@@ -1262,9 +1350,13 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			locationPref:         "false",
 		},
 		{
-			name:                 "NilCloudProperties",
-			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name: "NilCloudProperties",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerCloneXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			config:               defaultPacemakerConfigNoCloudProperties,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
@@ -1288,9 +1380,8 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 
 			p := Parameters{
 				Config:                test.config,
-				CommandRunner:         test.runner,
-				CommandRunnerNoSpace:  test.runnerNoSpace,
-				CommandExistsRunner:   test.exists,
+				Execute:               test.exec,
+				Exists:                test.exists,
 				ConfigFileReader:      test.fileReader,
 				DefaultTokenGetter:    test.tokenGetter,
 				JSONCredentialsGetter: test.credGetter,
@@ -1310,9 +1401,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 	tests := []struct {
 		name                 string
 		runtimeOS            string
-		runner               commandlineexecutor.CommandRunner
-		runnerNoSpace        commandlineexecutor.CommandRunnerNoSpace
-		exists               commandlineexecutor.CommandExistsRunner
+		exec                 commandlineexecutor.Execute
+		exists               commandlineexecutor.Exists
 		iir                  *instanceinfo.Reader
 		config               *cnfpb.Configuration
 		mapper               instanceinfo.NetworkInterfaceAddressMapper
@@ -1328,8 +1418,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:                 "TestCollectPacemakerMetricsXMLNotFound",
 			runtimeOS:            "linux",
-			runner:               defaultRunner,
-			runnerNoSpace:        defaultRunnerNoSpace,
+			exec:                 defaultExec,
 			exists:               func(string) bool { return false },
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
@@ -1339,10 +1428,14 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
-			name:                 "TestCollectPacemakerMetricsUnparseableXML",
-			runtimeOS:            "linux",
-			runner:               func(string, string) (string, string, error) { return "Error: Bad XML", "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name:      "TestCollectPacemakerMetricsUnparseableXML",
+			runtimeOS: "linux",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Error: Bad XML",
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
@@ -1352,10 +1445,14 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
-			name:                 "TestCollectPacemakerMetricsServiceAccountReadError",
-			runtimeOS:            "linux",
-			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name:      "TestCollectPacemakerMetricsServiceAccountReadError",
+			runtimeOS: "linux",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerServiceAccountXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
@@ -1366,10 +1463,14 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
-			name:                 "TestCollectPacemakerMetricsServiceAccount",
-			runtimeOS:            "linux",
-			runner:               func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name:      "TestCollectPacemakerMetricsServiceAccount",
+			runtimeOS: "linux",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerServiceAccountXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
@@ -1384,17 +1485,25 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsProjectID",
 			runtimeOS: "linux",
-			runner:    func(string, string) (string, string, error) { return pacemakerServiceAccountXML, "", nil },
-			runnerNoSpace: func(cmd string, args ...string) (string, string, error) {
-				if cmd == "curl" {
-					if args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
-						return jsonHealthyResponse, "", nil
-					} else if args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
+			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "curl" {
+					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
+						return commandlineexecutor.Result{
+							StdOut: jsonHealthyResponse,
+							StdErr: "",
+						}
+					} else if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
 						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"` {
-						return jsonHealthyResponse, "", nil
+						return commandlineexecutor.Result{
+							StdOut: jsonHealthyResponse,
+							StdErr: "",
+						}
 					}
 				}
-				return "", "", nil
+				return commandlineexecutor.Result{
+					StdOut: pacemakerServiceAccountXML,
+					StdErr: "",
+				}
 			},
 			exists:               defaultExists,
 			iir:                  defaultIIR,
@@ -1408,10 +1517,14 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:         "false",
 		},
 		{
-			name:                 "TestCollectPacemakerMetricsLocationPref",
-			runtimeOS:            "linux",
-			runner:               func(string, string) (string, string, error) { return pacemakerClipReferXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name:      "TestCollectPacemakerMetricsLocationPref",
+			runtimeOS: "linux",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerClipReferXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
@@ -1424,10 +1537,14 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:         "true",
 		},
 		{
-			name:                 "TestCollectPacemakerMetricsCloneMetrics",
-			runtimeOS:            "linux",
-			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name:      "TestCollectPacemakerMetricsCloneMetrics",
+			runtimeOS: "linux",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerCloneXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfig,
@@ -1440,10 +1557,14 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:         "false",
 		},
 		{
-			name:                 "TestCollectPacemakerMetricsNilCloudProperties",
-			runtimeOS:            "linux",
-			runner:               func(string, string) (string, string, error) { return pacemakerCloneXML, "", nil },
-			runnerNoSpace:        defaultRunnerNoSpace,
+			name:      "TestCollectPacemakerMetricsNilCloudProperties",
+			runtimeOS: "linux",
+			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerCloneXML,
+					StdErr: "",
+				}
+			},
 			exists:               defaultExists,
 			iir:                  defaultIIR,
 			config:               defaultPacemakerConfigNoCloudProperties,
@@ -1472,11 +1593,17 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	osCaptionExecute = func() (string, string, error) {
-		return "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n", "", nil
+	osCaptionExecute = func() commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
+			StdErr: "",
+		}
 	}
-	osVersionExecute = func() (string, string, error) {
-		return "\n Version=10.0.17763  \n\n", "", nil
+	osVersionExecute = func() commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdOut: "\n Version=10.0.17763  \n\n",
+			StdErr: "",
+		}
 	}
 	cmdExists = func(c string) bool {
 		return true
@@ -1490,9 +1617,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			pch := make(chan WorkloadMetrics)
 			p := Parameters{
 				Config:                test.config,
-				CommandRunner:         test.runner,
-				CommandRunnerNoSpace:  test.runnerNoSpace,
-				CommandExistsRunner:   test.exists,
+				Execute:               test.exec,
+				Exists:                test.exists,
 				ConfigFileReader:      test.fileReader,
 				DefaultTokenGetter:    test.tokenGetter,
 				JSONCredentialsGetter: test.credGetter,

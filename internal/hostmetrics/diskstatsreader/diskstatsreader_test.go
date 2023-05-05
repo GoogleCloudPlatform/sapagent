@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -50,12 +51,12 @@ var (
 
 func TestRead(t *testing.T) {
 	tests := []struct {
-		name   string
-		os     string
-		reader FileReader
-		run    RunCommand
-		ip     *iipb.InstanceProperties
-		want   *statspb.DiskStatsCollection
+		name     string
+		os       string
+		reader   FileReader
+		fakeExec commandlineexecutor.Execute
+		ip       *iipb.InstanceProperties
+		want     *statspb.DiskStatsCollection
 	}{
 		{
 			name: "linuxSingleResult",
@@ -181,12 +182,16 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsSingleResult",
 			os:   "windows",
-			run: func(executable string, args ...string) (string, string, error) {
-				argStr := strings.Join(args, " ")
+			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				argStr := strings.Join(params.Args, " ")
 				if argStr != `-command $(Get-Counter '\PhysicalDisk(0*)\Avg. Disk sec/Read').CounterSamples[0].CookedValue;Write-Host ';';$(Get-Counter '\PhysicalDisk(0*)\Avg. Disk sec/Write').CounterSamples[0].CookedValue;Write-Host ';';$(Get-Counter '\PhysicalDisk(0*)\Current Disk Queue Length').CounterSamples[0].CookedValue` {
-					return "", "", fmt.Errorf("Bad arguments for execute command %q", argStr)
+					return commandlineexecutor.Result{
+						Error: fmt.Errorf("Bad arguments for execute command %q", argStr),
+					}
 				}
-				return "111;\n\r222;\n\r333\n\r", "", nil
+				return commandlineexecutor.Result{
+					StdOut: "111;\n\r222;\n\r333\n\r",
+				}
 			},
 			ip: defaultWindowsInstanceProperties,
 			want: &statspb.DiskStatsCollection{
@@ -203,8 +208,10 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsMultipleResults",
 			os:   "windows",
-			run: func(string, ...string) (string, string, error) {
-				return "111;222;333", "", nil
+			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "111;222;333",
+				}
 			},
 			ip: &iipb.InstanceProperties{
 				Disks: []*iipb.Disk{
@@ -236,8 +243,10 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsNoDiskNumber",
 			os:   "windows",
-			run: func(string, ...string) (string, string, error) {
-				return "111;222;333", "", nil
+			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "111;222;333",
+				}
 			},
 			ip: &iipb.InstanceProperties{
 				Disks: []*iipb.Disk{
@@ -251,8 +260,10 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsBadDiskNumber",
 			os:   "windows",
-			run: func(string, ...string) (string, string, error) {
-				return "111;222;333", "", nil
+			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "111;222;333",
+				}
 			},
 			ip: &iipb.InstanceProperties{
 				Disks: []*iipb.Disk{
@@ -266,8 +277,11 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsErrRunCommand",
 			os:   "windows",
-			run: func(string, ...string) (string, string, error) {
-				return "111;222;333", "", errors.New("Run Command Error")
+			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "111;222;333",
+					Error:  errors.New("Run Command Error"),
+				}
 			},
 			ip:   defaultWindowsInstanceProperties,
 			want: &statspb.DiskStatsCollection{},
@@ -275,8 +289,10 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsBadRunCommandOutput",
 			os:   "windows",
-			run: func(string, ...string) (string, string, error) {
-				return "111222333", "", nil
+			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "111222333",
+				}
 			},
 			ip:   defaultWindowsInstanceProperties,
 			want: &statspb.DiskStatsCollection{},
@@ -284,8 +300,10 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsErrParse",
 			os:   "windows",
-			run: func(string, ...string) (string, string, error) {
-				return "one;two;three", "", nil
+			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "one;two;three",
+				}
 			},
 			ip: defaultWindowsInstanceProperties,
 			want: &statspb.DiskStatsCollection{
@@ -308,7 +326,7 @@ func TestRead(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			r := New(test.os, test.reader, test.run)
+			r := New(test.os, test.reader, test.fakeExec)
 			got := r.Read(test.ip)
 			sortDiskStats := protocmp.SortRepeatedFields(&statspb.DiskStatsCollection{}, "disk_stats")
 			if d := cmp.Diff(test.want, got, protocmp.Transform(), sortDiskStats); d != "" {

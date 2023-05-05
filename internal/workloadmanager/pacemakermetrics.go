@@ -83,7 +83,7 @@ func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) W
 	}
 	// Add OS command metrics to the labels.
 	for _, m := range pacemaker.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
@@ -109,8 +109,8 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	}
 	properties := params.Config.GetCloudProperties()
 	projectID := properties.GetProjectId()
-	crmAvailable := params.CommandExistsRunner("crm")
-	pacemakerXMLString := pacemaker.XMLString(params.CommandRunner, params.CommandExistsRunner, crmAvailable)
+	crmAvailable := params.Exists("crm")
+	pacemakerXMLString := pacemaker.XMLString(params.Execute, crmAvailable)
 
 	if pacemakerXMLString == nil {
 		log.Logger.Debug("No pacemaker xml")
@@ -156,8 +156,8 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	setPacemakerHanaOperations(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHana"))
 	setPacemakerHanaOperations(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHana"))
 
-	setPacemakerAPIAccess(l, projectID, bearerToken, params.CommandRunnerNoSpace)
-	setPacemakerMaintenanceMode(l, crmAvailable, params.CommandRunner)
+	setPacemakerAPIAccess(l, projectID, bearerToken, params.Execute)
+	setPacemakerMaintenanceMode(l, crmAvailable, params.Execute)
 
 	return 1.0, l
 }
@@ -190,8 +190,8 @@ func setPacemakerHanaOperations(l map[string]string, sapHanaOperations []Op) {
 	}
 }
 
-func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken string, runner commandlineexecutor.CommandRunnerNoSpace) {
-	fenceAgentComputeAPIAccess, err := checkAPIAccess(runner,
+func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken string, exec commandlineexecutor.Execute) {
+	fenceAgentComputeAPIAccess, err := checkAPIAccess(exec,
 		"-H",
 		fmt.Sprintf("Authorization: Bearer %s ", bearerToken),
 		fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s?fields=id", projectID))
@@ -199,7 +199,7 @@ func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken st
 		log.Logger.Debugw("Could not obtain fence agent compute API Access", log.Error(err))
 	}
 
-	fenceAgentLoggingAPIAccess, err := checkAPIAccess(runner,
+	fenceAgentLoggingAPIAccess, err := checkAPIAccess(exec,
 		"-H",
 		fmt.Sprintf("Authorization: Bearer %s", bearerToken),
 		"https://logging.googleapis.com/v2/entries:write",
@@ -217,7 +217,7 @@ func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken st
 	l["fence_agent_logging_api_access"] = strconv.FormatBool(fenceAgentLoggingAPIAccess)
 }
 
-func checkAPIAccess(runner commandlineexecutor.CommandRunnerNoSpace, args ...string) (bool, error) {
+func checkAPIAccess(exec commandlineexecutor.Execute, args ...string) (bool, error) {
 	/*
 	   ResponseError encodes a potential response error returned via the pacemaker authorization token
 	   google API check.
@@ -234,15 +234,18 @@ func checkAPIAccess(runner commandlineexecutor.CommandRunnerNoSpace, args ...str
 		ResponseError *ResponseError `json:"error"`
 	}
 
-	response, _, err := runner("curl", args...)
-	if err != nil {
+	result := exec(commandlineexecutor.Params{
+		Executable: "curl",
+		Args:       args,
+	})
+	if result.Error != nil {
 		// Curl failed. We can't conclude anything about the ACL.
-		return false, err
+		return false, result.Error
 	}
 
 	jsonResponse := new(JSONResponse)
 
-	if err := json.Unmarshal([]byte(response), jsonResponse); err != nil {
+	if err := json.Unmarshal([]byte(result.StdOut), jsonResponse); err != nil {
 		// Malformed JSON response.  We can't conclude anything about the ACL
 		return false, err
 	}
@@ -254,18 +257,22 @@ func checkAPIAccess(runner commandlineexecutor.CommandRunnerNoSpace, args ...str
 setPacemakerMaintenanceMode defines the pacemaker maintenance mode label for the metric validation
 collector.
 */
-func setPacemakerMaintenanceMode(l map[string]string, crmAvailable bool, runner commandlineexecutor.CommandRunner) {
-	maintenanceMode := ""
-	stderr := ""
-	err := error(nil)
+func setPacemakerMaintenanceMode(l map[string]string, crmAvailable bool, exec commandlineexecutor.Execute) {
+	result := commandlineexecutor.Result{}
 	if crmAvailable {
-		maintenanceMode, stderr, err = runner("sh", "-c 'crm configure show | grep maintenance | grep true'")
+		result = exec(commandlineexecutor.Params{
+			Executable:  "sh",
+			ArgsToSplit: "-c 'crm configure show | grep maintenance | grep true'",
+		})
 	} else {
-		maintenanceMode, stderr, err = runner("sh", "-c 'pcs property show | grep maintenance | grep true'")
+		result = exec(commandlineexecutor.Params{
+			Executable:  "sh",
+			ArgsToSplit: "-c 'pcs property show | grep maintenance | grep true'",
+		})
 	}
-	log.Logger.Debugw("Pacemaker maintenance mode", "maintenanceMode", maintenanceMode, "stderr", stderr, "err", err)
+	log.Logger.Debugw("Pacemaker maintenance mode", "maintenanceMode", result.StdOut, "stderr", result.StdErr, "err", result.Error)
 	maintenanceModeLabel := "false"
-	if err == nil && maintenanceMode != "" {
+	if result.Error == nil && result.StdOut != "" {
 		maintenanceModeLabel = "true"
 	}
 	l["maintenance_mode_active"] = maintenanceModeLabel

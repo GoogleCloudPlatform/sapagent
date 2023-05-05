@@ -407,8 +407,8 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 	tests := []struct {
 		name       string
 		gceService *fake.TestGCE
-		fakeExists commandlineexecutor.CommandExistsRunner
-		fakeRunner commandlineexecutor.CommandRunner
+		exists     commandlineexecutor.Exists
+		exec       commandlineexecutor.Execute
 		want       []*spb.SapDiscovery_Resource
 		wantFWR    *compute.ForwardingRule
 		wantFR     *spb.SapDiscovery_Resource
@@ -423,8 +423,13 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr"}},
 			GetForwardingRuleErr:  []error{nil},
 		},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		exists: func(string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		want: []*spb.SapDiscovery_Resource{{
 			ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
 			ResourceKind:     "ComputeForwardingRule",
@@ -446,9 +451,14 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 			RelatedResources: []string{"some/compute/address"},
 		},
 	}, {
-		name:       "hasForwardingRulePcs",
-		fakeExists: func(f string) bool { return f == "pcs" },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "hasForwardingRulePcs",
+		exists: func(f string) bool { return f == "pcs" },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetAddressByIPResp: []*compute.Address{{
 				SelfLink: "some/compute/address",
@@ -483,26 +493,43 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 	}, {
 		name:       "noClusterCommands",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return false },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		exists:     func(f string) bool { return false },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 	}, {
 		name:       "discoverClusterCommandError",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return "", "", errors.New("Some command error") },
+		exists:     func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("Some command error"),
+			}
+		},
 	}, {
 		name:       "noVipInClusterConfig",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) {
-			return "line1\nline2", "", nil
+		exists:     func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "line1\nline2",
+				StdErr: "",
+			}
 		},
 	}, {
 		name:       "noAddressInClusterConfig",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) {
-			return "rsc_vip_int-primary IPaddr2\nnot-an-adress", "", nil
+		exists:     func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "rsc_vip_int-primary IPaddr2\nnot-an-adress",
+				StdErr: "",
+			}
 		},
 	}, {
 		name: "errorListingAddresses",
@@ -510,12 +537,22 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 			GetAddressByIPResp: []*compute.Address{nil},
 			GetAddressByIPErr:  []error{errors.New("Some API error")},
 		},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 	}, {
-		name:       "addressNotInUse",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "addressNotInUse",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetAddressByIPResp: []*compute.Address{{SelfLink: "some/compute/address"}},
 			GetAddressByIPErr:  []error{nil},
@@ -526,9 +563,14 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 			ResourceUri:  "some/compute/address",
 		}},
 	}, {
-		name:       "addressUserNotForwardingRule",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "addressUserNotForwardingRule",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetAddressByIPResp: []*compute.Address{{
 				SelfLink: "some/compute/address",
@@ -542,9 +584,14 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 			ResourceUri:  "some/compute/address",
 		}},
 	}, {
-		name:       "errorGettingForwardingRule",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "errorGettingForwardingRule",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetAddressByIPResp: []*compute.Address{{
 				SelfLink: "some/compute/address",
@@ -565,9 +612,9 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.gceService.T = t
 			d := Discovery{
-				gceService:    test.gceService,
-				exists:        test.fakeExists,
-				commandRunner: test.fakeRunner,
+				gceService: test.gceService,
+				exists:     test.exists,
+				execute:    test.exec,
 			}
 			got, fwr, fr := d.discoverClusterForwardingRule(defaultProjectID, defaultZone)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
@@ -593,13 +640,18 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		gceService *fake.TestGCE
 		fwr        *compute.ForwardingRule
 		fr         *spb.SapDiscovery_Resource
-		fakeExists commandlineexecutor.CommandExistsRunner
-		fakeRunner commandlineexecutor.CommandRunner
+		exists     commandlineexecutor.Exists
+		exec       commandlineexecutor.Execute
 		want       []*spb.SapDiscovery_Resource
 	}{{
-		name:       "hasLoadBalancer",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "hasLoadBalancer",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -666,18 +718,28 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
 	}, {
-		name:       "fwrNoBackendService",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "fwrNoBackendService",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{},
 		fwr: &compute.ForwardingRule{
 			SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
 		},
 		fr: &spb.SapDiscovery_Resource{},
 	}, {
-		name:       "bakendServiceNoRegion",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "bakendServiceNoRegion",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{},
 		fwr: &compute.ForwardingRule{
 			BackendService: "projects/test-project/zegion/test-region/backendServices/test-bes",
@@ -686,9 +748,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
 		},
 	}, {
-		name:       "errorGettingBackendService",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "errorGettingBackendService",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{nil},
 			GetRegionalBackendServiceErr:  []error{errors.New("Some API error")},
@@ -700,9 +767,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
 		},
 	}, {
-		name:       "backendGroupNotInstanceGroup",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "backendGroupNotInstanceGroup",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -753,9 +825,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
 	}, {
-		name:       "backendGroupNoZone",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "backendGroupNoZone",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -806,9 +883,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
 	}, {
-		name:       "errorGettingInstanceGroup",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "errorGettingInstanceGroup",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -860,9 +942,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
 	}, {
-		name:       "listInstanceGroupInstancesError",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "listInstanceGroupInstancesError",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -923,9 +1010,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
 	}, {
-		name:       "noInstanceNameInInstancesItem",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "noInstanceNameInInstancesItem",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -987,9 +1079,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
 	}, {
-		name:       "noProjectInInstancesItem",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "noProjectInInstancesItem",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -1051,9 +1148,14 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
 		}},
 	}, {
-		name:       "noZoneInInstancesItem",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return defaultClusterOutput, "", nil },
+		name:   "noZoneInInstancesItem",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetRegionalBackendServiceResp: []*compute.BackendService{{
 				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
@@ -1119,9 +1221,9 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.gceService.T = t
 			d := Discovery{
-				gceService:    test.gceService,
-				commandRunner: test.fakeRunner,
-				exists:        test.fakeExists,
+				gceService: test.gceService,
+				execute:    test.exec,
+				exists:     test.exists,
 			}
 			got := d.discoverLoadBalancerFromForwardingRule(test.fwr, test.fr)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
@@ -1135,15 +1237,20 @@ func TestDiscoverFilestores(t *testing.T) {
 	tests := []struct {
 		name           string
 		gceService     *fake.TestGCE
-		fakeExists     commandlineexecutor.CommandExistsRunner
-		fakeRunner     commandlineexecutor.CommandRunner
+		exists         commandlineexecutor.Exists
+		exec           commandlineexecutor.Execute
 		testIR         *spb.SapDiscovery_Resource
 		want           []*spb.SapDiscovery_Resource
 		wantRelatedRes []string
 	}{{
-		name:       "singleFilestore",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return "127.0.0.1:/vol", "", nil },
+		name:   "singleFilestore",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "127.0.0.1:/vol",
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetFilestoreByIPResp: []*file.ListInstancesResponse{{
 				Instances: []*file.Instance{{Name: "some/filestore/uri"}},
@@ -1159,9 +1266,14 @@ func TestDiscoverFilestores(t *testing.T) {
 		}},
 		wantRelatedRes: []string{"some/filestore/uri"},
 	}, {
-		name:       "multipleFilestore",
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return "127.0.0.1:/vol\n127.0.0.2:/vol", "", nil },
+		name:   "multipleFilestore",
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "127.0.0.1:/vol\n127.0.0.2:/vol",
+				StdErr: "",
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetFilestoreByIPResp: []*file.ListInstancesResponse{{
 				Instances: []*file.Instance{{Name: "some/filestore/uri"}},
@@ -1189,48 +1301,72 @@ func TestDiscoverFilestores(t *testing.T) {
 	}, {
 		name:       "noDF",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return false },
+		exists:     func(f string) bool { return false },
 	}, {
 		name:       "dfErr",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) {
-			return "", "Permission denied", errors.New("Permission denied")
+		exists:     func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "Permission denied",
+				Error:  errors.New("Permission denied"),
+			}
 		},
 	}, {
 		name:       "noFilestoreInMounts",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return "tmpfs", "", nil },
+		exists:     func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "tmpfs",
+				StdErr: "",
+			}
+		},
 	}, {
 		name:       "justIPInMounts",
 		gceService: &fake.TestGCE{},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return "127.0.0.1", "", nil },
+		exists:     func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "127.0.0.1",
+				StdErr: "",
+			}
+		},
 	}, {
 		name: "errGettingFilestore",
 		gceService: &fake.TestGCE{
 			GetFilestoreByIPResp: []*file.ListInstancesResponse{nil},
 			GetFilestoreByIPErr:  []error{errors.New("some error")},
 		},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return "127.0.0.1:/vol", "", nil },
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "127.0.0.1:/vol",
+				StdErr: "",
+			}
+		},
 	}, {
 		name: "noFilestoreFound",
 		gceService: &fake.TestGCE{
 			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
 			GetFilestoreByIPErr:  []error{nil},
 		},
-		fakeExists: func(string) bool { return true },
-		fakeRunner: func(string, string) (string, string, error) { return "127.0.0.1:/vol", "", nil },
+		exists: func(f string) bool { return true },
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "127.0.0.1:/vol",
+				StdErr: "",
+			}
+		},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.gceService.T = t
 			d := Discovery{
-				gceService:    test.gceService,
-				commandRunner: test.fakeRunner,
-				exists:        test.fakeExists,
+				gceService: test.gceService,
+				execute:    test.exec,
+				exists:     test.exists,
 			}
 			got := d.discoverFilestores(defaultProjectID, test.testIR)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
@@ -1250,13 +1386,18 @@ func TestDiscoverFilestores(t *testing.T) {
 func TestDiscoverAppToDBConnection(t *testing.T) {
 	tests := []struct {
 		name         string
-		fakeRunner   func(user, executable string, args ...string) (string, string, error)
+		exec         func(commandlineexecutor.Params) commandlineexecutor.Result
 		fakeResolver func(string) ([]string, error)
 		gceService   *fake.TestGCE
 		want         []*spb.SapDiscovery_Resource
 	}{{
-		name:         "appToDBWithIPAddrToInstance",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "appToDBWithIPAddrToInstance",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
@@ -1323,8 +1464,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
 		}},
 	}, {
-		name:       "appToDBWithIPDirectToInstance",
-		fakeRunner: func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "appToDBWithIPDirectToInstance",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(host string) ([]string, error) {
 			if host == "test-instance" {
 				return []string{"1.2.3.4"}, nil
@@ -1389,8 +1535,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			RelatedResources: []string{"regions/test-region/subnet", "network", "1.2.3.4", "projects/test-project/zones/test-zone/addresses/test-address", "some/compute/disk"},
 		}},
 	}, {
-		name:         "appToDBWithIPToLoadBalancerZonalFwr",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "appToDBWithIPToLoadBalancerZonalFwr",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
@@ -1418,8 +1569,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
 		}},
 	}, {
-		name:         "appToDBWithIPToLoadBalancerRegionalFwr",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "appToDBWithIPToLoadBalancerRegionalFwr",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/regions/test-region/addresses/test-address"},
@@ -1447,8 +1603,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/regions/test-region/forwardingRules/test-fwr",
 		}},
 	}, {
-		name:         "appToDBWithIPToLoadBalancerGlobalFwr",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "appToDBWithIPToLoadBalancerGlobalFwr",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1476,32 +1637,51 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/global/forwardingRules/test-fwr",
 		}},
 	}, {
-		name:       "errGettingUserStore",
-		fakeRunner: func(string, string, ...string) (string, string, error) { return "", "", errors.New("error") },
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "noHostnameInUserstoreOutput",
-		fakeRunner: func(string, string, ...string) (string, string, error) {
-			return "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
-				"",
-				nil
+		name: "errGettingUserStore",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("error"),
+			}
 		},
 		gceService: &fake.TestGCE{},
 	}, {
-		name:       "errGettingUserStore",
-		fakeRunner: func(string, string, ...string) (string, string, error) { return "", "", errors.New("error") },
-		gceService: &fake.TestGCE{},
-	}, {
 		name: "noHostnameInUserstoreOutput",
-		fakeRunner: func(string, string, ...string) (string, string, error) {
-			return "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
-				"",
-				nil
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
+				StdErr: "",
+			}
 		},
 		gceService: &fake.TestGCE{},
 	}, {
-		name:         "appToDBWithIPToFwrUnknownLocation",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "errGettingUserStore",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("error"),
+			}
+		},
+		gceService: &fake.TestGCE{},
+	}, {
+		name: "noHostnameInUserstoreOutput",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
+				StdErr: "",
+			}
+		},
+		gceService: &fake.TestGCE{},
+	}, {
+		name: "appToDBWithIPToFwrUnknownLocation",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1525,38 +1705,65 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/global/addresses/test-address",
 		}},
 	}, {
-		name:       "errGettingUserStore",
-		fakeRunner: func(string, string, ...string) (string, string, error) { return "", "", errors.New("error") },
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "noHostnameInUserstoreOutput",
-		fakeRunner: func(string, string, ...string) (string, string, error) {
-			return "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
-				"",
-				nil
+		name: "errGettingUserStore",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("error"),
+			}
 		},
 		gceService: &fake.TestGCE{},
 	}, {
-		name:         "unableToResolveHost",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "noHostnameInUserstoreOutput",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
+				StdErr: "",
+			}
+		},
+		gceService: &fake.TestGCE{},
+	}, {
+		name: "unableToResolveHost",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return nil, errors.New("error") },
 		gceService:   &fake.TestGCE{},
 	}, {
-		name:         "noAddressesForHost",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "noAddressesForHost",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{}, nil },
 		gceService:   &fake.TestGCE{},
 	}, {
-		name:         "hostNotComputeAddressNotInstance",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "hostNotComputeAddressNotInstance",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"nil"},
 			GetURIForIPErr:  []error{errors.New("No resource found")},
 		},
 	}, {
-		name:         "hostAddressNoUser",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "hostAddressNoUser",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1570,8 +1777,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/global/addresses/test-address",
 		}},
 	}, {
-		name:         "hostAddressUnrecognizedUser",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "hostAddressUnrecognizedUser",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1588,8 +1800,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/global/addresses/test-address",
 		}},
 	}, {
-		name:         "hostAddressFwrUserUnknownLocation",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "hostAddressFwrUserUnknownLocation",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1606,8 +1823,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/global/addresses/test-address",
 		}},
 	}, {
-		name:         "instanceMissingName",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "instanceMissingName",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1624,8 +1846,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/global/addresses/test-address",
 		}},
 	}, {
-		name:         "instanceMissingProject",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "instanceMissingProject",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1642,8 +1869,13 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			ResourceUri:  "projects/test-project/global/addresses/test-address",
 		}},
 	}, {
-		name:         "instanceMissingZone",
-		fakeRunner:   func(string, string, ...string) (string, string, error) { return defaultUserstoreOutput, "", nil },
+		name: "instanceMissingZone",
+		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultUserstoreOutput,
+				StdErr: "",
+			}
+		},
 		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
@@ -1664,9 +1896,9 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.gceService.T = t
 			d := Discovery{
-				gceService:        test.gceService,
-				hostResolver:      test.fakeResolver,
-				userCommandRunner: test.fakeRunner,
+				gceService:   test.gceService,
+				hostResolver: test.fakeResolver,
+				execute:      test.exec,
 			}
 			parent := &spb.SapDiscovery_Resource{ResourceUri: "test/parent/uri"}
 			got := d.discoverAppToDBConnection(defaultCloudProperties, defaultSID, parent)
@@ -1678,99 +1910,128 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 }
 
 func TestDiscoverDatabaseSID(t *testing.T) {
-	var userRunnerCalls int
-	var runnerCalls int
+	var execCalls int
+	var userExecCalls int
 	tests := []struct {
-		name                string
-		testSID             string
-		fakeUserRunner      func(user, executable string, args ...string) (string, string, error)
-		fakeRunner          commandlineexecutor.CommandRunner
-		want                string
-		wantErr             error
-		wantUserRunnerCalls int
-		wantRunnerCalls     int
+		name              string
+		testSID           string
+		exec              commandlineexecutor.Execute
+		want              string
+		wantErr           error
+		wantUserExecCalls int
+		wantExecCalls     int
 	}{{
 		name:    "hdbUserStoreErr",
 		testSID: defaultSID,
-		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
-			userRunnerCalls++
-			return "", "", errors.New("Some err")
+		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			if params.User != "" {
+				userExecCalls++
+			} else {
+				execCalls++
+			}
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("Some err"),
+			}
 		},
-		wantErr:             cmpopts.AnyError,
-		wantUserRunnerCalls: 1,
-		wantRunnerCalls:     0,
+		wantErr:           cmpopts.AnyError,
+		wantUserExecCalls: 1,
+		wantExecCalls:     0,
 	}, {
 		name:    "profileGrepErr",
 		testSID: defaultSID,
-		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
-			userRunnerCalls++
-			return "", "", nil
+		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			if params.User != "" {
+				userExecCalls++
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+				}
+			}
+			execCalls++
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("Some err"),
+			}
 		},
-		fakeRunner: func(string, string) (string, string, error) {
-			runnerCalls++
-			return "", "", errors.New("Some err")
-		},
-		wantErr:             cmpopts.AnyError,
-		wantUserRunnerCalls: 1,
-		wantRunnerCalls:     1,
+		wantErr:           cmpopts.AnyError,
+		wantUserExecCalls: 1,
+		wantExecCalls:     1,
 	}, {
 		name:    "noSIDInGrep",
 		testSID: defaultSID,
-		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
-			userRunnerCalls++
-			return "", "", nil
+		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			if params.User != "" {
+				userExecCalls++
+			} else {
+				execCalls++
+			}
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+			}
 		},
-		fakeRunner: func(string, string) (string, string, error) {
-			runnerCalls++
-			return "", "", nil
-		},
-		wantErr:             cmpopts.AnyError,
-		wantUserRunnerCalls: 1,
-		wantRunnerCalls:     1,
+		wantErr:           cmpopts.AnyError,
+		wantUserExecCalls: 1,
+		wantExecCalls:     1,
 	}, {
 		name:    "sidInUserStore",
 		testSID: defaultSID,
-		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
-			userRunnerCalls++
-			return `KEY default
-			ENV : dnwh75ldbci:30013
-			USER: SAPABAP1
-			DATABASE: DEH
-		Operation succeed.`, "", nil
+		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			if params.User != "" {
+				userExecCalls++
+				return commandlineexecutor.Result{
+					StdOut: `KEY default
+					ENV : dnwh75ldbci:30013
+					USER: SAPABAP1
+					DATABASE: DEH
+				Operation succeed.`,
+					StdErr: "",
+				}
+			}
+			execCalls++
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("Some err"),
+			}
 		},
-		fakeRunner: func(string, string) (string, string, error) {
-			runnerCalls++
-			return "", "", errors.New("Some err")
-		},
-		want:                "DEH",
-		wantErr:             nil,
-		wantUserRunnerCalls: 1,
-		wantRunnerCalls:     0,
+		want:              "DEH",
+		wantErr:           nil,
+		wantUserExecCalls: 1,
+		wantExecCalls:     0,
 	}, {
 		name:    "sidInProfiles",
 		testSID: defaultSID,
-		fakeUserRunner: func(user string, executable string, args ...string) (string, string, error) {
-			userRunnerCalls++
-			return "", "", nil
+		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			if params.User != "" {
+				userExecCalls++
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+				}
+			}
+			execCalls++
+			return commandlineexecutor.Result{
+				StdOut: `
+				grep: /usr/sap/S15/SYS/profile/DEFAULT.PFL: Permission denied
+				/usr/sap/S15/SYS/profile/s:rsdb/dbid = HN1`,
+				StdErr: "",
+			}
 		},
-		fakeRunner: func(string, string) (string, string, error) {
-			runnerCalls++
-			return `
-			grep: /usr/sap/S15/SYS/profile/DEFAULT.PFL: Permission denied
-			/usr/sap/S15/SYS/profile/s:rsdb/dbid = HN1`, "", nil
-		},
-		want:                "HN1",
-		wantErr:             nil,
-		wantUserRunnerCalls: 1,
-		wantRunnerCalls:     1,
+		want:              "HN1",
+		wantErr:           nil,
+		wantUserExecCalls: 1,
+		wantExecCalls:     1,
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			userRunnerCalls = 0
-			runnerCalls = 0
+			userExecCalls = 0
+			execCalls = 0
 			d := Discovery{
-				userCommandRunner: test.fakeUserRunner,
-				commandRunner:     test.fakeRunner,
+				execute: test.exec,
 			}
 			got, gotErr := d.discoverDatabaseSID(test.testSID)
 			if test.want != "" {
@@ -1781,11 +2042,11 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("discoverDatabaseSID() gotErr %q, wantErr %q", gotErr, test.wantErr)
 			}
-			if userRunnerCalls != test.wantUserRunnerCalls {
-				t.Errorf("discoverDatabaseSID() userRunnerCalls = %d, want %d", userRunnerCalls, test.wantUserRunnerCalls)
+			if userExecCalls != test.wantUserExecCalls {
+				t.Errorf("discoverDatabaseSID() userExecCalls = %d, want %d", userExecCalls, test.wantUserExecCalls)
 			}
-			if runnerCalls != test.wantRunnerCalls {
-				t.Errorf("discoverDatabaseSID() runnerCalls = %d, want %d", runnerCalls, test.wantRunnerCalls)
+			if execCalls != test.wantExecCalls {
+				t.Errorf("discoverDatabaseSID() execCalls = %d, want %d", execCalls, test.wantExecCalls)
 			}
 		})
 	}
@@ -1917,7 +2178,7 @@ func TestDiscoverDBNodes(t *testing.T) {
 		instanceNumber string
 		project        string
 		zone           string
-		cmdRunner      commandlineexecutor.CommandRunner
+		execute        commandlineexecutor.Execute
 		gceService     *fake.TestGCE
 		want           []*spb.SapDiscovery_Resource
 	}{{
@@ -1926,7 +2187,11 @@ func TestDiscoverDBNodes(t *testing.T) {
 		instanceNumber: defaultInstanceNumber,
 		project:        defaultProjectID,
 		zone:           defaultZone,
-		cmdRunner:      func(string, string) (string, string, error) { return defaultLandscapeOutputSingleNode, "", nil },
+		execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetInstanceResp: []*compute.Instance{{
 				SelfLink: "some/compute/instance",
@@ -1944,7 +2209,11 @@ func TestDiscoverDBNodes(t *testing.T) {
 		instanceNumber: defaultInstanceNumber,
 		project:        defaultProjectID,
 		zone:           defaultZone,
-		cmdRunner:      func(string, string) (string, string, error) { return defaultLandscapeOutputMultipleNodes, "", nil },
+		execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputMultipleNodes,
+			}
+		},
 		gceService: &fake.TestGCE{
 			GetInstanceResp: []*compute.Instance{{
 				SelfLink: "some/compute/instance",
@@ -2011,15 +2280,17 @@ func TestDiscoverDBNodes(t *testing.T) {
 		instanceNumber: defaultInstanceNumber,
 		project:        defaultProjectID,
 		zone:           defaultZone,
-		cmdRunner:      func(string, string) (string, string, error) { return "", "", nil },
-		gceService:     &fake.TestGCE{},
-		want:           nil,
+		execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{}
+		},
+		gceService: &fake.TestGCE{},
+		want:       nil,
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := Discovery{
-				commandRunner: test.cmdRunner,
-				gceService:    test.gceService,
+				execute:    test.execute,
+				gceService: test.gceService,
 			}
 			got := d.discoverDBNodes(test.sid, test.instanceNumber, test.project, test.zone)
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {

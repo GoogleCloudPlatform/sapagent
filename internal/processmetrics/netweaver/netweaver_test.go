@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -105,215 +106,241 @@ var (
 		4 pid: 555`
 )
 
-type fakeRunner struct {
-	stdOut, stdErr string
-	exitCode       int
-	err            error
-}
-
-func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
-	return f.stdOut, f.stdErr, f.exitCode, f.err
-}
-
 func TestNWAvailabilityValue(t *testing.T) {
 	tests := []struct {
 		name             string
-		fRunner          sapcontrol.RunnerWithEnv
+		fakeExec         commandlineexecutor.Execute
 		wantAvailability int64
 	}{
 		{
 			name: "SapControlFailsTwoProcesses",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: msg_server
-				0 description: Message Server
-				0 dispstatus: GREEN
-				0 pid: 111
-				1 name: enserver
-				1 description: EN Server
-				1 dispstatus: RED
-				1 pid: 222`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: msg_server
+					0 description: Message Server
+					0 dispstatus: GREEN
+					0 pid: 111
+					1 name: enserver
+					1 description: EN Server
+					1 dispstatus: RED
+					1 pid: 222`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlSucceedsAppSrv",
-			fRunner: &fakeRunner{
-				stdOut:   defaultSapControlOutputAppSrv,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   defaultSapControlOutputAppSrv,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlSucceedsJava",
-			fRunner: &fakeRunner{
-				stdOut:   defaultSapControlOutputJava,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   defaultSapControlOutputJava,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlSuccessMsg",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: msg_server
-				0 description: msg_server
-				0 dispstatus: GREEN
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: msg_server
+					0 description: msg_server
+					0 dispstatus: GREEN
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsEnServer",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: enserver
-				0 description: enserver
-				0 dispstatus: RED
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: enserver
+					0 description: enserver
+					0 dispstatus: RED
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlFailEnRepServer",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: enrepserver
-				0 description: enrepserver
-				0 dispstatus: RED
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: enrepserver
+					0 description: enrepserver
+					0 dispstatus: RED
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlSuccessEnRepServer",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: enrepserver
-				0 description: enrepserver
-				0 dispstatus: GREEN
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: enrepserver
+					0 description: enrepserver
+					0 dispstatus: GREEN
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsAppSrv",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: gwrd
-				0 description: GWRD
-				0 dispstatus: RED
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: gwrd
+					0 description: GWRD
+					0 dispstatus: RED
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlFailsJava",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: jcontrol
-				0 description: Java
-				0 dispstatus: RED
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: jcontrol
+					0 description: Java
+					0 dispstatus: RED
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlSuccessJava",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: jstart
-				0 description: Java
-				0 dispstatus: GREEN
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: jstart
+					0 description: Java
+					0 dispstatus: GREEN
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlSuccessAppSrv",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: icman
-				0 description: ICMAN
-				0 dispstatus: GREEN
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: icman
+					0 description: ICMAN
+					0 dispstatus: GREEN
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "InvalidProcess",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: invalidproc
-				0 description: INVALIDPROC
-				0 dispstatus: RED
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: invalidproc
+					0 description: INVALIDPROC
+					0 dispstatus: RED
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlSuccessEnqReplicator",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: enq_replicator
-				0 description: enq_replicator
-				0 dispstatus: GREEN
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: enq_replicator
+					0 description: enq_replicator
+					0 dispstatus: GREEN
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsEnqReplicator",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: enq_replicator
-				0 description: enq_replicator
-				0 dispstatus: RED
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: enq_replicator
+					0 description: enq_replicator
+					0 dispstatus: RED
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlSuccessEnqServer",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: enq_server
-				0 description: enq_server
-				0 dispstatus: GREEN
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: enq_server
+					0 description: enq_server
+					0 dispstatus: GREEN
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsEnqServer",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: enq_server
-				0 description: enq_server
-				0 dispstatus: GRAY
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: enq_server
+					0 description: enq_server
+					0 dispstatus: GRAY
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "WebDispatctherGrey",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: sapwebdisp
-				0 description: sapwebdisp
-				0 dispstatus: GRAY
-				0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: sapwebdisp
+					0 description: sapwebdisp
+					0 dispstatus: GRAY
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "gwrdGrey",
-			fRunner: &fakeRunner{
-				stdOut: `0 name: gwrd
-			0 description: gwrd
-			0 dispstatus: GRAY
-			0 pid: 111`,
-				exitCode: 1,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `0 name: gwrd
+					0 description: gwrd
+					0 dispstatus: GRAY
+					0 pid: 111`,
+					ExitCode: 1,
+				}
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
@@ -324,7 +351,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 			sc := &sapcontrol.Properties{
 				Instance: defaultSAPInstance,
 			}
-			procs, _, err := sc.ProcessList(test.fRunner)
+			procs, _, err := sc.ProcessList(test.fakeExec, commandlineexecutor.Params{})
 			if err != nil {
 				t.Errorf("ProcessList() failed with: %v.", err)
 			}
@@ -371,14 +398,16 @@ func TestNWServiceMetricLabelCount(t *testing.T) {
 
 func TestCollectNetWeaverMetrics(t *testing.T) {
 	var (
-		fRunner = &fakeRunner{
-			stdOut:   defaultSapControlOutputJava,
-			exitCode: 1,
+		fakeExec = func(commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   defaultSapControlOutputJava,
+				ExitCode: 1,
+			}
 		}
 		wantMetricCount = 6
 	)
 
-	metrics := collectNetWeaverMetrics(defaultInstanceProperties, fRunner)
+	metrics := collectNetWeaverMetrics(defaultInstanceProperties, fakeExec, commandlineexecutor.Params{})
 	if len(metrics) != wantMetricCount {
 		t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), wantMetricCount)
 	}
@@ -577,22 +606,26 @@ func TestParseWorkProcessCount(t *testing.T) {
 func TestCollectABAPProcessStatus(t *testing.T) {
 	tests := []struct {
 		name            string
-		fRunner         sapcontrol.RunnerWithEnv
+		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
 	}{
 		{
 			name: "Failure",
-			fRunner: &fakeRunner{
-				err: cmpopts.AnyError,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
 			},
 			wantMetricCount: 0,
 		},
 		{
 			name: "Success",
-			fRunner: &fakeRunner{
-				stdOut: `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
-				0, DIA, 7488, Wait, , yes, , , 0:24:54, 4, , , , ,
-				1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
+					0, DIA, 7488, Wait, , yes, , , 0:24:54, 4, , , , ,
+					1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`,
+				}
 			},
 			wantMetricCount: 3,
 		},
@@ -600,7 +633,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPProcessStatus(defaultInstanceProperties, test.fRunner)
+			got := collectABAPProcessStatus(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)
@@ -612,36 +645,46 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 func TestCollectABAPQueueStats(t *testing.T) {
 	tests := []struct {
 		name            string
-		fRunner         sapcontrol.RunnerWithEnv
+		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
 	}{
 		{
-			name:            "DPMONFailure",
-			fRunner:         &fakeRunner{err: cmpopts.AnyError},
+			name: "DPMONFailure",
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
+			},
 			wantMetricCount: 0,
 		},
 		{
 			name: "DPMonFailsWithStdOut",
-			fRunner: &fakeRunner{
-				stdOut: `ICM/Intern, 0, 7, 6000, 184690, 184690`,
-				err:    cmpopts.AnyError,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `ICM/Intern, 0, 7, 6000, 184690, 184690`,
+					Error:  cmpopts.AnyError,
+				}
 			},
 			wantMetricCount: 0,
 		},
 		{
 			name: "ZeroQueues",
-			fRunner: &fakeRunner{
-				stdOut: "InvalidOutput",
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "InvalidOutput",
+				}
 			},
 			wantMetricCount: 0,
 		},
 		{
 			name: "DPMONSuccess",
-			fRunner: &fakeRunner{
-				stdOut: `Typ, Now, High, Max, Writes, Reads
-				ABAP/NOWP, 0, 8, 14000, 270537, 270537
-				ABAP/DIA, 0, 10, 14000, 534960, 534960
-				ICM/Intern, 0, 7, 6000, 184690, 184690`,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `Typ, Now, High, Max, Writes, Reads
+					ABAP/NOWP, 0, 8, 14000, 270537, 270537
+					ABAP/DIA, 0, 10, 14000, 534960, 534960
+					ICM/Intern, 0, 7, 6000, 184690, 184690`,
+				}
 			},
 			wantMetricCount: 6,
 		},
@@ -649,7 +692,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPQueueStats(defaultInstanceProperties, test.fRunner)
+			got := collectABAPQueueStats(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPQueueStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -664,38 +707,50 @@ var dpmonOutputABAPSessions string
 func TestCollectABAPSessionStats(t *testing.T) {
 	tests := []struct {
 		name            string
-		fRunner         sapcontrol.RunnerWithEnv
+		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
 	}{
 		{
-			name:            "DPMONFailure",
-			fRunner:         &fakeRunner{err: cmpopts.AnyError},
+			name: "DPMONFailure",
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
+			},
 			wantMetricCount: 0,
 		},
 		{
 			name: "DPMonFailsWithStdOut",
-			fRunner: &fakeRunner{
-				stdOut: dpmonOutputABAPSessions,
-				err:    cmpopts.AnyError,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: dpmonOutputABAPSessions,
+					Error:  cmpopts.AnyError,
+				}
 			},
 		},
 		{
 			name: "ZeroSessions",
-			fRunner: &fakeRunner{
-				stdOut: "InvalidOutput",
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "InvalidOutput",
+				}
 			},
 			wantMetricCount: 0,
 		},
 		{
-			name:            "DPMONSuccess",
-			fRunner:         &fakeRunner{stdOut: dpmonOutputABAPSessions},
+			name: "DPMONSuccess",
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: dpmonOutputABAPSessions,
+				}
+			},
 			wantMetricCount: 4,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPSessionStats(defaultInstanceProperties, test.fRunner)
+			got := collectABAPSessionStats(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPSessionStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -710,28 +765,34 @@ var dpmonRFCConnectionsOutput string
 func TestCollectRFCConnections(t *testing.T) {
 	tests := []struct {
 		name            string
-		fRunner         sapcontrol.RunnerWithEnv
+		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
 	}{
 		{
 			name: "DPMONSuccess",
-			fRunner: &fakeRunner{
-				stdOut: dpmonRFCConnectionsOutput,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: dpmonRFCConnectionsOutput,
+				}
 			},
 			wantMetricCount: 4,
 		},
 		{
 			name: "DPMONFailure",
-			fRunner: &fakeRunner{
-				err: cmpopts.AnyError,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
 			},
 			wantMetricCount: 0,
 		},
 		{
 			name: "DPMONFailsWithStdOut",
-			fRunner: &fakeRunner{
-				stdOut: dpmonRFCConnectionsOutput,
-				err:    cmpopts.AnyError,
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: dpmonRFCConnectionsOutput,
+					Error:  cmpopts.AnyError,
+				}
 			},
 			wantMetricCount: 0,
 		},
@@ -739,7 +800,7 @@ func TestCollectRFCConnections(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectRFCConnections(defaultInstanceProperties, test.fRunner)
+			got := collectRFCConnections(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectRFCConnections() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -752,7 +813,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 	tests := []struct {
 		name            string
 		props           *InstanceProperties
-		fRunner         sapcontrol.RunnerWithEnv
+		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
 	}{
 		{
@@ -763,7 +824,11 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 					InstanceId: "ASCS",
 				},
 			},
-			fRunner:         &fakeRunner{stdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE"},
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
+				}
+			},
 			wantMetricCount: 1,
 		},
 		{
@@ -774,7 +839,11 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 					InstanceId: "ASCS",
 				},
 			},
-			fRunner: &fakeRunner{err: cmpopts.AnyError},
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
+			},
 		},
 		{
 			name: "HANAInstance",
@@ -788,7 +857,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectEnqLockMetrics(test.props, test.fRunner)
+			got := collectEnqLockMetrics(test.props, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectEnqLockMetrics()=%d, want: %d.", len(got), test.wantMetricCount)

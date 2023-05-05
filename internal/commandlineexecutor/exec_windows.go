@@ -16,12 +16,11 @@ limitations under the License.
 
 package commandlineexecutor
 
-// Not implemented for windows.
-func executeCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
-	return "", "", nil
-}
+import (
+	"os/exec"
+)
 
-// Not implemented for windows.
-func (r *Runner) platformRunWithEnv() (stdOut, stdErr string, code int, err error) {
-	return "", "", 0, nil
+// setupExeForPlatform is not implemented for windows.
+func setupExeForPlatform(exe *exec.Cmd, params Params) error {
+	return nil
 }

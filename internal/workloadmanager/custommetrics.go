@@ -31,7 +31,7 @@ func CollectCustomMetricsFromConfig(params Parameters) WorkloadMetrics {
 
 	custom := params.WorkloadConfig.GetValidationCustom()
 	for _, m := range custom.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.CommandRunnerNoSpace, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}

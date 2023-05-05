@@ -58,13 +58,16 @@ google-cloud-sap-agent-diskmapping.ps1 is packaged with the gcagent binary and t
 integration tests.
 */
 func forWindows(deviceName string) (string, error) {
-	stdOut, stdErr, err := executeCommand("cmd", "/C", "Powershell", "-File", winPsPath, deviceName)
-	if err != nil {
+	result := executeCommand(commandlineexecutor.Params{
+		Executable: "cmd",
+		Args:       []string{"/C", "Powershell", "-File", winPsPath, deviceName},
+	})
+	if result.Error != nil {
 		log.Logger.Warnw("Could not get disk mapping for device", "name", deviceName)
-		log.Logger.Debugw("Execution error", "executable", winPsPath, "stdout", stdOut, "stderror", stdErr, "error", err)
-		return "", err
+		log.Logger.Debugw("Execution error", "executable", winPsPath, "stdout", result.StdOut, "stderror", result.StdErr, "error", result.Error)
+		return "", result.Error
 	}
-	m := strings.Trim(stdOut, "\r\n")
+	m := strings.Trim(result.StdOut, "\r\n")
 	log.Logger.Debugw("Mapping for device", "name", deviceName, "mapping", m)
 	return m, nil
 }

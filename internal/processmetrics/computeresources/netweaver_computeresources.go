@@ -21,8 +21,8 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -36,13 +36,13 @@ type (
 	// NetweaverInstanceProperties have the required context for collecting metrics for cpu and
 	// memory per process for Netweaver.
 	NetweaverInstanceProperties struct {
-		Config                     *cnfpb.Configuration
-		Client                     cloudmonitoring.TimeSeriesCreator
-		Executor                   commandExecutor
-		SAPInstance                *sapb.SAPInstance
-		NewProcHelper              newProcessWithContextHelper
-		RunnerForSAPControlProcess sapcontrol.RunnerWithEnv
-		RunnerForABAPProcess       sapcontrol.RunnerWithEnv
+		Config                  *cnfpb.Configuration
+		Client                  cloudmonitoring.TimeSeriesCreator
+		Executor                commandlineexecutor.Execute
+		SAPInstance             *sapb.SAPInstance
+		NewProcHelper           newProcessWithContextHelper
+		SAPControlProcessParams commandlineexecutor.Params
+		ABAPProcessParams       commandlineexecutor.Params
 	}
 )
 
@@ -50,15 +50,15 @@ type (
 // utilization of SAP Netweaver processes.
 func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	params := parameters{
-		executor:                p.Executor,
-		client:                  p.Client,
-		config:                  p.Config,
-		memoryMetricPath:        nwMemoryPath,
-		cpuMetricPath:           nwCPUPath,
-		sapInstance:             p.SAPInstance,
-		newProc:                 p.NewProcHelper,
-		runnerForGetProcessList: p.RunnerForSAPControlProcess,
-		runnerForABAPGetWPTable: p.RunnerForABAPProcess,
+		executor:             p.Executor,
+		client:               p.Client,
+		config:               p.Config,
+		memoryMetricPath:     nwMemoryPath,
+		cpuMetricPath:        nwCPUPath,
+		sapInstance:          p.SAPInstance,
+		newProc:              p.NewProcHelper,
+		getProcessListParams: p.SAPControlProcessParams,
+		getABAPWPTableParams: p.ABAPProcessParams,
 	}
 	processes := collectProcessesForInstance(params)
 	if len(processes) == 0 {

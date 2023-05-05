@@ -17,80 +17,31 @@ limitations under the License.
 package commandlineexecutor
 
 import (
-	"bytes"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
-
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
 
-func (r *Runner) platformRunWithEnv() (stdOut, stdErr string, code int, err error) {
-	if !CommandExists(r.Executable) {
-		return "", "", 0, fmt.Errorf("command executable: %s not found", r.Executable)
+// setupExeForPlatform sets up the env and user if provided in the params.
+// returns an error if it could not be setup
+func setupExeForPlatform(exe *exec.Cmd, params Params) error {
+	// set the execution environment if params Env exists
+	if len(params.Env) > 0 {
+		exe.Env = append(exe.Environ(), params.Env...)
 	}
 
-	exe := exec.Command(r.Executable, splitParams(r.Args)...)
-	exe.Env = append(exe.Environ(), r.Env...)
-
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	exe.Stdout = stdout
-	exe.Stderr = stderr
-
-	if r.User != "" {
-		uid, err := getUID(r.User)
+	// if params.User exists run as the user
+	if params.User != "" {
+		uid, err := getUID(params.User)
 		if err != nil {
-			return "", "", 0, err
+			return err
 		}
 		exe.SysProcAttr = &syscall.SysProcAttr{}
 		exe.SysProcAttr.Credential = &syscall.Credential{Uid: uid}
 	}
-
-	log.Logger.Debugw("executing command as user from runner", "executable", r.Executable, "args", r.Args, "user", r.User, "environment", exe.Environ())
-	if err := exe.Run(); err != nil {
-		log.Logger.Debugw("could not execute command", "user", r.User, "executable", r.Executable, "stdout", stdout.String(), "stderr", stderr.String())
-
-		m := exitStatusPattern.FindStringSubmatch(err.Error())
-		if len(m) == 2 {
-			code, err = strconv.Atoi(m[1])
-			if err != nil {
-				log.Logger.Debugw("Failed to get command exit code.", "error", err)
-				return stdout.String(), stderr.String(), 0, err
-			}
-		}
-	}
-
-	log.Logger.Debugw("executed command", "user", r.User, "stdout", stdout.String(), "stderr", stderr.String(), "exitcode", code)
-	return stdout.String(), stderr.String(), code, nil
-}
-
-func executeCommandAsUser(user, executable string, args ...string) (stdOut string, stdErr string, err error) {
-	uid, err := getUID(user)
-	if err != nil {
-		return "", "", err
-	}
-
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	exe := exec.Command(executable, args...)
-	exe.SysProcAttr = &syscall.SysProcAttr{}
-	exe.SysProcAttr.Credential = &syscall.Credential{Uid: uid}
-	exe.Stdout = stdout
-	exe.Stderr = stderr
-
-	log.Logger.Debugw("executing command as user", "executable", executable, "args", args, "user", user, "environment", exe.Environ())
-
-	if err := exe.Run(); err != nil {
-		log.Logger.Debugw("could not execute command", "user", user, "executable", executable, "stdout", stdout.String(), "stderr", stderr.String(), "exitcode", ExitCode(err))
-		return stdout.String(), stderr.String(), err
-	}
-
-	// Exit code can assumed to be 0
-	log.Logger.Debugw("executed command", "user", user, "stdout", stdout.String(), "stderr", stderr.String())
-	return stdout.String(), stderr.String(), nil
+	return nil
 }
 
 /*
@@ -99,13 +50,16 @@ Returns (0, error) in case of failure, and (uid, nil) when successful.
 Note: This is intended for Linux based system only.
 */
 func getUID(user string) (uint32, error) {
-	o, e, err := ExpandAndExecuteCommand("id", fmt.Sprintf("-u %s", user))
-	if err != nil {
-		return 0, fmt.Errorf("getUID failed with: %s. StdErr: %s", err, e)
+	result := ExecuteCommand(Params{
+		Executable:  "id",
+		ArgsToSplit: fmt.Sprintf("-u %s", user),
+	})
+	if result.Error != nil {
+		return 0, fmt.Errorf("getUID failed with: %s. StdErr: %s", result.Error, result.StdErr)
 	}
-	uid, err := strconv.Atoi(strings.TrimSuffix(o, "\n"))
+	uid, err := strconv.Atoi(strings.TrimSuffix(result.StdOut, "\n"))
 	if err != nil {
-		return 0, fmt.Errorf("could not parse UID from StdOut: %s", o)
+		return 0, fmt.Errorf("could not parse UID from StdOut: %s", result.StdOut)
 	}
 	return uint32(uid), nil
 }

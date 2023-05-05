@@ -27,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
@@ -82,9 +83,13 @@ quorum {
 	token:
 	token_retransmits_before_loss_const: 1 2 3
 }`
-	defaultCommandRunner = func(cmd string, args ...string) (string, string, error) {
-		if len(args) < 2 {
-			return "", "", errors.New("not enough arguments")
+	defaultCommandExec = func(params commandlineexecutor.Params) commandlineexecutor.Result {
+		if len(params.Args) < 2 {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("not enough arguments"),
+			}
 		}
 		cases := map[string]string{
 			"totem.token_retransmits_before_loss_const": "5",
@@ -96,9 +101,12 @@ quorum {
 			"totem.fail_recv_const": "1250",
 			"quorum.two_node":       "2",
 		}
-		return cases[args[1]], "", nil
+		return commandlineexecutor.Result{
+			StdOut: cases[params.Args[1]],
+			StdErr: "",
+		}
 	}
-	commandRunnerError = func(cmd string, args ...string) (string, string, error) {
+	commandExecError = func(params commandlineexecutor.Params) commandlineexecutor.Result {
 		cases := map[string]string{
 			"totem.token_retransmits_before_loss_const": "1 2 3",
 			"totem.token":        "Can't get key",
@@ -106,11 +114,18 @@ quorum {
 			"totem.join":         " ",
 			"totem.max_messages": "",
 		}
-		v, ok := cases[args[1]]
+		v, ok := cases[params.Args[1]]
 		if !ok {
-			return "", "", fmt.Errorf("Failed to get value for %s", args[1])
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  fmt.Errorf("Failed to get value for %s", params.Args[1]),
+			}
 		}
-		return v, "", nil
+		return commandlineexecutor.Result{
+			StdOut: v,
+			StdErr: "",
+		}
 	}
 	createWorkloadMetrics = func(labels map[string]string, value float64) WorkloadMetrics {
 		return WorkloadMetrics{
@@ -165,9 +180,14 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				WorkloadConfig:   collectionDefinition.GetWorkloadValidation(),
 				ConfigFileReader: defaultFileReader,
 				osVendorID:       "rhel",
-				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
-					field := args[len(args)-1]
-					return fmt.Sprintf("%s = 999", field), "", nil
+				Execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+					field := params.Args[len(params.Args)-1]
+					return commandlineexecutor.Result{
+						StdOut: fmt.Sprintf("%s = 999", field),
+						StdErr: "",
+					}
+					//  return "foobar", "", nil
+
 				},
 			},
 			wantLabels: map[string]string{
@@ -255,9 +275,6 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "sles",
-				CommandRunnerNoSpace: func(cmd string, args ...string) (string, string, error) {
-					return "foobar", "", nil
-				},
 			},
 			wantLabels: map[string]string{},
 		},
@@ -294,10 +311,10 @@ func TestCollectCorosyncMetrics(t *testing.T) {
 		{
 			name: "linux",
 			params: Parameters{
-				OSType:               "linux",
-				Config:               defaultConfiguration,
-				ConfigFileReader:     defaultFileReader,
-				CommandRunnerNoSpace: defaultCommandRunner,
+				OSType:           "linux",
+				Config:           defaultConfiguration,
+				ConfigFileReader: defaultFileReader,
+				Execute:          defaultCommandExec,
 			},
 			csConfig: validCSConfigFile,
 			wantLabels: map[string]string{
@@ -323,10 +340,10 @@ func TestCollectCorosyncMetrics(t *testing.T) {
 		{
 			name: "linuxFileReaderError",
 			params: Parameters{
-				OSType:               "linux",
-				Config:               defaultConfiguration,
-				ConfigFileReader:     fileReaderError,
-				CommandRunnerNoSpace: defaultCommandRunner,
+				OSType:           "linux",
+				Config:           defaultConfiguration,
+				ConfigFileReader: fileReaderError,
+				Execute:          defaultCommandExec,
 			},
 			csConfig: validCSConfigFile,
 			wantLabels: map[string]string{
@@ -352,10 +369,10 @@ func TestCollectCorosyncMetrics(t *testing.T) {
 		{
 			name: "linuxFileReaderParseErrors",
 			params: Parameters{
-				OSType:               "linux",
-				Config:               defaultConfiguration,
-				ConfigFileReader:     defaultFileReader,
-				CommandRunnerNoSpace: defaultCommandRunner,
+				OSType:           "linux",
+				Config:           defaultConfiguration,
+				ConfigFileReader: defaultFileReader,
+				Execute:          defaultCommandExec,
 			},
 			csConfig: invalidCSConfigFile,
 			wantLabels: map[string]string{
@@ -381,10 +398,10 @@ func TestCollectCorosyncMetrics(t *testing.T) {
 		{
 			name: "linuxCommandRunnerErrors",
 			params: Parameters{
-				OSType:               "linux",
-				Config:               defaultConfiguration,
-				ConfigFileReader:     defaultFileReader,
-				CommandRunnerNoSpace: commandRunnerError,
+				OSType:           "linux",
+				Config:           defaultConfiguration,
+				ConfigFileReader: defaultFileReader,
+				Execute:          commandExecError,
 			},
 			csConfig: validCSConfigFile,
 			wantLabels: map[string]string{
