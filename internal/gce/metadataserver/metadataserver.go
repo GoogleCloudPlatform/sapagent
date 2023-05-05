@@ -108,7 +108,8 @@ func get(uri, queryString string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to make request to metadata server: %v, %s", err, helpString)
 	}
 	req.Header.Add("Metadata-Flavor", "Google")
-	res, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to receive response from metadata server: %v, %s", err, helpString)
 	}
@@ -182,8 +183,7 @@ func parseZone(raw string) string {
 // FetchCloudProperties retrieves the cloud properties using a backoff policy.
 func FetchCloudProperties() *instancepb.CloudProperties {
 	exp := backoff.NewExponentialBackOff()
-	exp.InitialInterval = 5 * time.Second
-	return CloudPropertiesWithRetry(backoff.WithMaxRetries(exp, 2)) // 2 retries (3 total attempts)
+	return CloudPropertiesWithRetry(backoff.WithMaxRetries(exp, 1)) // 1 retry (2 total attempts)
 }
 
 // FetchGCEMaintenanceEvent retrieves information about pending host maintenance events.

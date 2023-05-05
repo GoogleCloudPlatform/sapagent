@@ -17,12 +17,14 @@ limitations under the License.
 package onetime
 
 import (
+	"context"
 	"os"
 	"testing"
 
 	"flag"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
 
 type (
@@ -46,6 +48,46 @@ func (mfw mockedFileWriter) Write(string, []byte, os.FileMode) error {
 
 func (mfw mockedFileWriter) MakeDirs(string, os.FileMode) error {
 	return mfw.errMakeDirs
+}
+
+func TestExecuteMaintenance(t *testing.T) {
+	tests := []struct {
+		name string
+		mm   MaintenanceMode
+		want subcommands.ExitStatus
+		args []any
+	}{
+		{
+			name: "FailLengthArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{},
+		},
+		{
+			name: "FailAssertArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{
+				"test",
+				"test2",
+			},
+		},
+		{
+			name: "SuccessfullyParseArgs",
+			mm:   MaintenanceMode{show: true},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.mm.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			if got != test.want {
+				t.Errorf("Execute(%v, %v)=%v, want %v", test.mm, test.args, got, test.want)
+			}
+		})
+	}
 }
 
 func TestMaintenanceModeHandler(t *testing.T) {

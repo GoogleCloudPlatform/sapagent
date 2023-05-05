@@ -37,7 +37,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -116,7 +115,20 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for snapshot.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp := args[1].(log.Parameters)
+	if len(args) < 3 {
+		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		return subcommands.ExitUsageError
+	}
+	lp, ok := args[1].(log.Parameters)
+	if !ok {
+		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		return subcommands.ExitUsageError
+	}
+	s.cloudProps, ok = args[2].(*ipb.CloudProperties)
+	if !ok {
+		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		return subcommands.ExitUsageError
+	}
 	log.SetupOneTimeLogging(lp, s.Name())
 
 	mc, err := monitoring.NewMetricClient(ctx)
@@ -125,7 +137,6 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
-	s.cloudProps = metadataserver.FetchCloudProperties()
 
 	return s.snapshotHandler(ctx, gce.NewGCEClient, newComputeService)
 }
@@ -147,7 +158,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	}
 
 	log.Logger.Infow("Starting disk snapshot for HANA", "sid", s.sid)
-	configureUsageMetricsForOTE(metadataserver.FetchCloudProperties(), "")
+	configureUsageMetricsForOTE(s.cloudProps, "")
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
 	s.db, err = s.connectToDB(ctx)
 	if err != nil {

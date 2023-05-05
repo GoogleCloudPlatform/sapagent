@@ -264,6 +264,37 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 	}
 }
 
+func TestFetchCloudProperties(t *testing.T) {
+	url := endpoint{
+		uri: cloudPropertiesURI,
+		responseBody: marshalResponse(t, metadataServerResponse{
+			Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+			Instance: instanceInfo{
+				ID:    101,
+				Zone:  "projects/test-project/zones/test-zone",
+				Name:  "test-instance-name",
+				Image: "test-image",
+			},
+		})}
+	want := &instancepb.CloudProperties{
+		ProjectId:        "test-project",
+		NumericProjectId: "1",
+		InstanceId:       "101",
+		Zone:             "test-zone",
+		InstanceName:     "test-instance-name",
+		Image:            "test-image",
+	}
+
+	ts := mockMetadataServer(t, url)
+	defer ts.Close()
+	metadataServerURL = ts.URL
+
+	got := FetchCloudProperties()
+	if d := cmp.Diff(want, got, protocmp.Transform()); d != "" {
+		t.Errorf("FetchCloudProperties() mismatch (-want, +got):\n%s", d)
+	}
+}
+
 func TestFetchGCEMaintenanceEvent(t *testing.T) {
 	endpoint := endpoint{uri: maintenanceEventURI, responseBody: "NONE"}
 

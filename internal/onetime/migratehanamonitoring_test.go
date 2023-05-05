@@ -17,6 +17,7 @@ limitations under the License.
 package onetime
 
 import (
+	"context"
 	_ "embed"
 	"os"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	hmmpb "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -104,6 +106,46 @@ func agentForSAPConf() *cpb.Configuration {
 		},
 	}
 	return conf
+}
+
+func TestExecuteMigrateHANAMonitoring(t *testing.T) {
+	tests := []struct {
+		name    string
+		migrate MigrateHANAMonitoring
+		want    subcommands.ExitStatus
+		args    []any
+	}{
+		{
+			name: "FailLengthArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{},
+		},
+		{
+			name: "FailAssertFirstArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{
+				"test",
+				"test2",
+			},
+		},
+		{
+			name:    "SuccessfullyParseArgs",
+			migrate: MigrateHANAMonitoring{},
+			want:    subcommands.ExitFailure,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.migrate.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			if got != test.want {
+				t.Errorf("Execute(%v, %v)=%v, want %v", test.migrate, test.args, got, test.want)
+			}
+		})
+	}
 }
 
 func TestMigrationHandler(t *testing.T) {

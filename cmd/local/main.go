@@ -58,9 +58,11 @@ func main() {
 	}
 
 	cloudProps := metadataserver.FetchCloudProperties()
-	lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.ProjectId)
+	if cloudProps != nil {
+		lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.ProjectId)
+	}
 
-	rc := int(subcommands.Execute(ctx, nil, lp))
+	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
 	if lp.CloudLoggingClient != nil {
 		log.FlushCloudLog()

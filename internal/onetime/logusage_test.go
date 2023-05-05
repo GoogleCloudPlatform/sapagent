@@ -17,11 +17,14 @@ limitations under the License.
 package onetime
 
 import (
+	"context"
 	"testing"
 
+	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -89,7 +92,7 @@ func TestLogUsageHandler(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.logUsage.logUsageHandler()
+			got := test.logUsage.logUsageHandler(&ipb.CloudProperties{})
 			if got != test.want {
 				t.Errorf("logUsageHandler(%v) got: %v, want: %v", test.logUsage, got, test.want)
 			}
@@ -180,6 +183,60 @@ func TestLogUsageStatus(t *testing.T) {
 			got := l.logUsageStatus(&ipb.CloudProperties{})
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("logUsageStatus(%q, %q, %q) got: %v, want nil", test.status, test.actionID, test.errorID, got)
+			}
+		})
+	}
+}
+
+func TestExecuteLogUsage(t *testing.T) {
+	tests := []struct {
+		name     string
+		logUsage *LogUsage
+		want     subcommands.ExitStatus
+		args     []any
+	}{
+		{
+			name: "FailLengthArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{},
+		},
+		{
+			name: "FailAssertFirstArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{
+				"test",
+				"test2",
+				"test3",
+			},
+		},
+		{
+			name: "FailAssertSecondArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{
+				"test",
+				log.Parameters{},
+				"test3",
+			},
+		},
+		{
+			name: "SuccessfullyParseArgs",
+			logUsage: &LogUsage{
+				usageStatus: "ACTION",
+				usageAction: 1,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.logUsage.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			if got != test.want {
+				t.Errorf("Execute(%v, %v)=%v, want %v", test.logUsage, test.args, got, test.want)
 			}
 		})
 	}

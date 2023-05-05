@@ -23,7 +23,6 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
@@ -62,12 +61,25 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for logusage.
 func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp := args[1].(log.Parameters)
+	if len(args) < 3 {
+		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		return subcommands.ExitUsageError
+	}
+	lp, ok := args[1].(log.Parameters)
+	if !ok {
+		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		return subcommands.ExitUsageError
+	}
+	cloudProps, ok := args[2].(*iipb.CloudProperties)
+	if !ok {
+		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		return subcommands.ExitUsageError
+	}
 	log.SetupOneTimeLogging(lp, l.Name())
-	return l.logUsageHandler()
+	return l.logUsageHandler(cloudProps)
 }
 
-func (l *LogUsage) logUsageHandler() subcommands.ExitStatus {
+func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands.ExitStatus {
 	switch {
 	case l.usageStatus == "":
 		log.Print("A usage status value is required.")
@@ -83,7 +95,7 @@ func (l *LogUsage) logUsageHandler() subcommands.ExitStatus {
 		return subcommands.ExitUsageError
 	}
 
-	if err := l.logUsageStatus(metadataserver.FetchCloudProperties()); err != nil {
+	if err := l.logUsageStatus(cloudProps); err != nil {
 		log.Logger.Warnw("Could not log usage", "error", err)
 	}
 

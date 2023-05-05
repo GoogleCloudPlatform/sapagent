@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
@@ -32,6 +33,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
+	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var defaultSnapshot = Snapshot{
@@ -84,6 +87,57 @@ func TestSnapshotHandler(t *testing.T) {
 			got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
+			}
+		})
+	}
+}
+
+func TestExecuteSnapshot(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		want     subcommands.ExitStatus
+		args     []any
+	}{
+		{
+			name: "FailLengthArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{},
+		},
+		{
+			name: "FailAssertFirstArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{
+				"test",
+				"test2",
+				"test3",
+			},
+		},
+		{
+			name: "FailAssertSecondArgs",
+			want: subcommands.ExitUsageError,
+			args: []any{
+				"test",
+				log.Parameters{},
+				"test3",
+			},
+		},
+		{
+			name:     "SuccessfullyParseArgs",
+			snapshot: Snapshot{},
+			want:     subcommands.ExitFailure,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.snapshot.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			if got != test.want {
+				t.Errorf("Execute(%v, %v)=%v, want %v", test.snapshot, test.args, got, test.want)
 			}
 		})
 	}

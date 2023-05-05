@@ -132,7 +132,7 @@ func createWorkerPool(ctx context.Context, params Parameters, databases []*datab
 			sid, err := fetchSID(ctxTimeout, db)
 			cancel()
 			if err != nil {
-				log.Logger.Errorw("Error while fetching SID for HANA Instance", db.instance.GetHost(), "error", err)
+				log.Logger.Errorw("Error while fetching SID for HANA Instance", "host", db.instance.GetHost(), "error", err)
 			}
 			db.instance.Sid = sid
 		}

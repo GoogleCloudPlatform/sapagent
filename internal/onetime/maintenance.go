@@ -53,7 +53,15 @@ func (m *MaintenanceMode) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for maintenance.
 func (m *MaintenanceMode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp := args[1].(log.Parameters)
+	if len(args) < 2 {
+		log.Logger.Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
+		return subcommands.ExitUsageError
+	}
+	lp, ok := args[1].(log.Parameters)
+	if !ok {
+		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		return subcommands.ExitUsageError
+	}
 	log.SetupOneTimeLogging(lp, m.Name())
 	return m.maintenanceModeHandler(f, maintenance.ModeReader{}, maintenance.ModeWriter{})
 }

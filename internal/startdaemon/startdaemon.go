@@ -38,7 +38,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
@@ -89,6 +88,7 @@ type Daemon struct {
 	configFilePath string
 	lp             log.Parameters
 	config         *cpb.Configuration
+	cloudProps     *iipb.CloudProperties
 }
 
 // Name implements the subcommand interface for startdaemon.
@@ -110,7 +110,21 @@ func (d *Daemon) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for startdaemon.
 func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	d.lp = args[1].(log.Parameters)
+	if len(args) < 3 {
+		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		return subcommands.ExitUsageError
+	}
+	var ok bool
+	d.lp, ok = args[1].(log.Parameters)
+	if !ok {
+		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		return subcommands.ExitUsageError
+	}
+	d.cloudProps, ok = args[2].(*iipb.CloudProperties)
+	if !ok {
+		log.Logger.Errorw("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		return subcommands.ExitUsageError
+	}
 	// Setup demon logging with default config, till we read it from the config file.
 	log.SetupDaemonLogging(d.lp)
 	return d.startdaemonHandler(ctx)
@@ -124,18 +138,24 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 		usagemetrics.Error(usagemetrics.BareMetalCloudPropertiesNotSet)
 		os.Exit(0)
 	}
-	cloudProps := metadataserver.FetchCloudProperties()
-	log.Logger.Infow("Cloud Properties we got from metadata server",
-		"projectid", cloudProps.ProjectId, "projectnumber", cloudProps.NumericProjectId, "instanceid",
-		cloudProps.InstanceId, "zone", cloudProps.Zone, "instancename", cloudProps.InstanceName,
-		"image", cloudProps.Image)
 
-	d.config = configuration.ApplyDefaults(d.config, cloudProps)
+	log.Logger.Infow("Cloud Properties we got from metadata server",
+		"projectid", d.cloudProps.ProjectId,
+		"projectnumber", d.cloudProps.NumericProjectId,
+		"instanceid", d.cloudProps.InstanceId,
+		"zone", d.cloudProps.Zone,
+		"instancename", d.cloudProps.InstanceName,
+		"image", d.cloudProps.Image)
+
+	d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 
 	log.Logger.Infow("Cloud Properties after applying defaults",
-		"projectid", d.config.CloudProperties.ProjectId, "projectnumber", d.config.CloudProperties.NumericProjectId,
-		"instanceid", d.config.CloudProperties.InstanceId, "zone", d.config.CloudProperties.Zone, "instancename",
-		d.config.CloudProperties.InstanceName, "image", d.config.CloudProperties.Image)
+		"projectid", d.config.CloudProperties.ProjectId,
+		"projectnumber", d.config.CloudProperties.NumericProjectId,
+		"instanceid", d.config.CloudProperties.InstanceId,
+		"zone", d.config.CloudProperties.Zone,
+		"instancename", d.config.CloudProperties.InstanceName,
+		"image", d.config.CloudProperties.Image)
 
 	d.lp.LogToCloud = d.config.GetLogToCloud()
 	d.lp.Level = d.config.GetLogLevel()
@@ -144,7 +164,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 		defer d.lp.CloudLoggingClient.Close()
 	}
 	log.SetupDaemonLogging(d.lp)
-	configureUsageMetricsForDaemon(cloudProps)
+	configureUsageMetricsForDaemon(d.config.GetCloudProperties())
 	usagemetrics.Configured()
 	usagemetrics.Started()
 	d.startServices(ctx, runtime.GOOS)
