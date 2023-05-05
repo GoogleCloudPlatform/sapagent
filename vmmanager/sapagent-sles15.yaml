@@ -43,3 +43,18 @@ resourceGroups:
             # Install the Agent for SAP and return an exit code of 100 to indicate that the
             # resource is now in its desired state.
             script: sudo zypper --gpg-auto-import-keys install -y google-cloud-sap-agent && exit 100
+      - id: update-sapagent
+        exec:
+          validate:
+            interpreter: SHELL
+            # If the Agent for SAP is already up-to-date, return an exit code 100 to indicate
+            # that exec resource is already in desired state. In this scenario,
+            # the `enforce` step will not be run.
+            # Otherwise return an exit code of 101 to indicate that exec resource is not in
+            # desired state. In this scenario, the `enforce` step will be run.
+            script: f sudo zypper list-updates -r google-cloud-sap-agent | grep google-cloud-sap-agent; then exit 101; else exit 100; fi
+          enforce:
+            interpreter: SHELL
+            # Update the Agent for SAP and return an exit code of 100 to indicate that the
+            # resource is now in its desired state.
+            script:  sudo zypper --gpg-auto-import-keys update -y google-cloud-sap-agent && exit 100
