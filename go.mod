@@ -1,6 +1,7 @@
 module github.com/GoogleCloudPlatform/sapagent
 
 go 1.20
+
 replace github.com/GoogleCloudPlatform/sapagent/internal => ./internal
 
 replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
@@ -12,6 +13,7 @@ require (
   github.com/SAP/go-hdb v1.1.6
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/gammazero/workerpool v1.1.3
+  github.com/go-yaml/yaml v2.1.0+incompatible
   github.com/golang/protobuf v1.5.3
   github.com/google/go-cmp v0.5.9
   github.com/google/subcommands v1.2.0
@@ -57,4 +59,5 @@ require (
   golang.org/x/text v0.8.0 // indirect
   google.golang.org/appengine v1.6.7 // indirect
   google.golang.org/grpc v1.53.0 // indirect
+  gopkg.in/yaml.v2 v2.4.0 // indirect
 )
