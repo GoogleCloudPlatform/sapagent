@@ -95,7 +95,7 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 		logMessageToFileAndConsole("Queries formed using Old HANA Monitoring Agent Config are not valid. File" + oldConfigPath)
 		return subcommands.ExitUsageError
 	}
-	content, err := protojson.Marshal(config)
+	content, err := protojson.MarshalOptions{Multiline: true}.Marshal(config)
 	if err != nil {
 		return subcommands.ExitFailure
 	}

@@ -36,25 +36,18 @@ var (
 		2 dispstatus: GREEN
 		2 pid: 333`
 
-	defaultEnqTableOutputScript = `OK
-	0 lock_name: USR04
-	0 lock_arg: 000DDIC
-	0 lock_mode: E
-	0 owner: 20230424073648639586000402dnwh75ldbci.....................
-	0 owner_vb: 20230424073648639586000402dnwh75ldbci.....................
-	0 use_count_owner: 0
-	0 use_count_owner_vb: 1
-	0 client: 000
-	0 user: SAP*
-	0 transaction: SU01
-	0 object: E_USR04
-	0 backup: FALSE`
-
 	defaultEnqTableOutput = `
 	OK
 lock_name, lock_arg, lock_mode, owner, owner_vb, use_count_owner, use_count_owner_vb, client, user, transaction, object, backup
 USR04, 000DDIC, E, 20230424073648639586000402dnwh75ldbci....................., 20230424073648639586000402dnwh75ldbci....................., 0, 1, 000, SAP*, SU01, E_USR04, FALSE
 	`
+	multilineEnqTableOutput = `
+	09.05.2023 15:23:12
+	EnqGetLockTable
+	OK
+	lock_name, lock_arg, lock_mode, owner, owner_vb, use_count_owner, use_count_owner_vb, client, user, transaction, object, backup
+	USR04, 001BASIS, E, 20230509120639629460000602dnwh75ldbci....................., 20230509120639629460000602dnwh75ldbci....................., 0, 1, 001, DDIC, SU01, E_USR04, FALSE
+	USR04, 001CALM_USER, E, 20230509120620130684000702dnwh75ldbci....................., 20230509120620130684000702dnwh75ldbci....................., 0, 1, 001, DDIC, SU01, E_USR04, FALSE`
 )
 
 type fakeRunner struct {
@@ -396,6 +389,42 @@ func TestEnqGetLockTable(t *testing.T) {
 					UserCountOwnerVB: 1,
 					Client:           "000",
 					User:             "SAP*",
+					Transaction:      "SU01",
+					Object:           "E_USR04",
+					Backup:           "FALSE",
+				},
+			},
+		},
+		{
+			name: "MultipleLocksSuccess",
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: multilineEnqTableOutput,
+				}
+			},
+			wantEnqLocks: []*EnqLock{
+				{
+					LockName:         "USR04",
+					LockArg:          "001BASIS",
+					LockMode:         "E",
+					Owner:            "20230509120639629460000602dnwh75ldbci.....................",
+					OwnerVB:          "20230509120639629460000602dnwh75ldbci.....................",
+					UserCountOwnerVB: 1,
+					Client:           "001",
+					User:             "DDIC",
+					Transaction:      "SU01",
+					Object:           "E_USR04",
+					Backup:           "FALSE",
+				},
+				{
+					LockName:         "USR04",
+					LockArg:          "001CALM_USER",
+					LockMode:         "E",
+					Owner:            "20230509120620130684000702dnwh75ldbci.....................",
+					OwnerVB:          "20230509120620130684000702dnwh75ldbci.....................",
+					UserCountOwnerVB: 1,
+					Client:           "001",
+					User:             "DDIC",
 					Transaction:      "SU01",
 					Object:           "E_USR04",
 					Backup:           "FALSE",
