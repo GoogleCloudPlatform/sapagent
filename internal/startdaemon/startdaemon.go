@@ -140,26 +140,26 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 	}
 
 	log.Logger.Infow("Cloud Properties we got from metadata server",
-		"projectid", d.cloudProps.ProjectId,
-		"projectnumber", d.cloudProps.NumericProjectId,
-		"instanceid", d.cloudProps.InstanceId,
-		"zone", d.cloudProps.Zone,
-		"instancename", d.cloudProps.InstanceName,
-		"image", d.cloudProps.Image)
+		"projectid", d.cloudProps.GetProjectId(),
+		"projectnumber", d.cloudProps.GetNumericProjectId(),
+		"instanceid", d.cloudProps.GetInstanceId(),
+		"zone", d.cloudProps.GetZone(),
+		"instancename", d.cloudProps.GetInstanceName(),
+		"image", d.cloudProps.GetImage())
 
 	d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 
 	log.Logger.Infow("Cloud Properties after applying defaults",
-		"projectid", d.config.CloudProperties.ProjectId,
-		"projectnumber", d.config.CloudProperties.NumericProjectId,
-		"instanceid", d.config.CloudProperties.InstanceId,
-		"zone", d.config.CloudProperties.Zone,
-		"instancename", d.config.CloudProperties.InstanceName,
-		"image", d.config.CloudProperties.Image)
+		"projectid", d.config.CloudProperties.GetProjectId(),
+		"projectnumber", d.config.CloudProperties.GetNumericProjectId(),
+		"instanceid", d.config.CloudProperties.GetInstanceId(),
+		"zone", d.config.CloudProperties.GetZone(),
+		"instancename", d.config.CloudProperties.GetInstanceName(),
+		"image", d.config.CloudProperties.GetImage())
 
 	d.lp.LogToCloud = d.config.GetLogToCloud()
 	d.lp.Level = d.config.GetLogLevel()
-	d.lp.CloudLoggingClient = log.CloudLoggingClient(ctx, d.config.GetCloudProperties().ProjectId)
+	d.lp.CloudLoggingClient = log.CloudLoggingClient(ctx, d.config.GetCloudProperties().GetProjectId())
 	if d.lp.CloudLoggingClient != nil {
 		defer d.lp.CloudLoggingClient.Close()
 	}

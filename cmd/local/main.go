@@ -59,7 +59,7 @@ func main() {
 
 	cloudProps := metadataserver.FetchCloudProperties()
 	if cloudProps != nil {
-		lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.ProjectId)
+		lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.GetProjectId())
 	}
 
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
