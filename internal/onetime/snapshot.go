@@ -366,7 +366,7 @@ func newComputeService(ctx context.Context) (cs *compute.Service, err error) {
 }
 
 func logErrorToFileAndConsole(msg string, err error) {
-	log.Print(msg + " " + err.Error() + "\n" + "Refer log file at:" + log.GetLogFile())
+	log.Print(msg + " " + err.Error() + "\n" + "Refer to log file at:" + log.GetLogFile())
 	log.Logger.Errorw(msg, "error", err.Error())
 }
 
