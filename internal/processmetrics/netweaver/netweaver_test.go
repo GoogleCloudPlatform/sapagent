@@ -821,7 +821,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 			props: &InstanceProperties{
 				Config: defaultConfig,
 				SAPInstance: &sapb.SAPInstance{
-					InstanceId: "ASCS",
+					InstanceId: "ASCS11",
 				},
 			},
 			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
@@ -836,7 +836,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 			props: &InstanceProperties{
 				Config: defaultConfig,
 				SAPInstance: &sapb.SAPInstance{
-					InstanceId: "ASCS",
+					InstanceId: "ASCS01",
 				},
 			},
 			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
@@ -850,7 +850,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 			props: &InstanceProperties{
 				Config: defaultConfig,
 				SAPInstance: &sapb.SAPInstance{
-					InstanceId: "HDB",
+					InstanceId: "HDB00",
 				},
 			},
 		},

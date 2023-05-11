@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
@@ -409,8 +410,9 @@ func collectRFCConnections(p *InstanceProperties, exec commandlineexecutor.Execu
 
 // collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
 func collectEnqLockMetrics(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
-	if p.SAPInstance.InstanceId != "ASCS" {
-		log.Logger.Debug("The Enq Lock metric is only applicable for application type: ASCS.")
+
+	if !strings.HasPrefix(p.SAPInstance.GetInstanceId(), "ASCS") {
+		log.Logger.Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)
 		return nil
 	}
 	now := tspb.Now()

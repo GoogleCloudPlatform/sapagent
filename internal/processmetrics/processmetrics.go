@@ -352,7 +352,7 @@ func (p *Properties) collectAndSendOnce(ctx context.Context, bo *cloudmonitoring
 		go func(slot int, c Collector) {
 			defer wg.Done()
 			msgs[slot] = c.Collect(ctx) // Each collector writes to its own slot.
-			log.Logger.Debugw("Collected metrics", "type", c, "numberofmetrics", len(msgs[slot]))
+			log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
 		}(i, collector)
 	}
 	log.Logger.Debug("Waiting for collectors to finish.")
