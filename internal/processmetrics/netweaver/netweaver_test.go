@@ -854,6 +854,21 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "ERSInstanceSuccess",
+			props: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					InstanceId: "ERS01",
+				},
+			},
+			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
+				}
+			},
+			wantMetricCount: 1,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

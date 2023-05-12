@@ -411,7 +411,8 @@ func collectRFCConnections(p *InstanceProperties, exec commandlineexecutor.Execu
 // collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
 func collectEnqLockMetrics(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 
-	if !strings.HasPrefix(p.SAPInstance.GetInstanceId(), "ASCS") {
+	instance := p.SAPInstance.GetInstanceId()
+	if !strings.HasPrefix(instance, "ASCS") && !strings.HasPrefix(instance, "ERS") {
 		log.Logger.Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)
 		return nil
 	}
