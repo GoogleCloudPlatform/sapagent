@@ -32,8 +32,8 @@ import (
 
 // LogUsage has args for logusage subcommands.
 type LogUsage struct {
-	usagePriorVersion, usageStatus string
-	usageAction, usageError        int
+	name, version, priorVersion, status string
+	action, usageError                      int
 }
 
 // Name implements the subcommand interface for logusage.
@@ -44,17 +44,21 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 
 // Usage implements the subcommand interface for logusage.
 func (*LogUsage) Usage() string {
-	return "logusage [-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]\n"
+	return "logusage [-name <tool or agent name>] [-version tool or agent version] [-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]\n"
 }
 
 // SetFlags implements the subcommand interface for logusage.
 func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&l.usagePriorVersion, "prior-version", "", "prior installed version")
-	fs.StringVar(&l.usagePriorVersion, "pv", "", "prior installed version")
-	fs.StringVar(&l.usageStatus, "status", "", "usage status value")
-	fs.StringVar(&l.usageStatus, "s", "", "usage status value")
-	fs.IntVar(&l.usageAction, "action", 0, "usage action code")
-	fs.IntVar(&l.usageAction, "a", 0, "usage action code")
+	fs.StringVar(&l.name, "name", configuration.AgentName, "Agent or Tool  name")
+	fs.StringVar(&l.name, "n", configuration.AgentName, "Agent or Tool  name")
+	fs.StringVar(&l.version, "version", configuration.AgentVersion, "Agent or Tool version")
+	fs.StringVar(&l.version, "v", configuration.AgentVersion, "Agent or Tool version")
+	fs.StringVar(&l.priorVersion, "prior-version", "", "prior installed version")
+	fs.StringVar(&l.priorVersion, "pv", "", "prior installed version")
+	fs.StringVar(&l.status, "status", "", "usage status value")
+	fs.StringVar(&l.status, "s", "", "usage status value")
+	fs.IntVar(&l.action, "action", 0, "usage action code")
+	fs.IntVar(&l.action, "a", 0, "usage action code")
 	fs.IntVar(&l.usageError, "error", 0, "usage error code")
 	fs.IntVar(&l.usageError, "e", 0, "usage error code")
 }
@@ -81,16 +85,16 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 
 func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands.ExitStatus {
 	switch {
-	case l.usageStatus == "":
+	case l.status == "":
 		log.Print("A usage status value is required.")
 		return subcommands.ExitUsageError
-	case l.usageStatus == string(usagemetrics.StatusUpdated) && l.usagePriorVersion == "":
+	case l.status == string(usagemetrics.StatusUpdated) && l.priorVersion == "":
 		log.Print("Prior agent version is required.")
 		return subcommands.ExitUsageError
-	case l.usageStatus == string(usagemetrics.StatusError) && l.usageError <= 0:
+	case l.status == string(usagemetrics.StatusError) && l.usageError <= 0:
 		log.Print("For status ERROR, an error code is required.")
 		return subcommands.ExitUsageError
-	case l.usageStatus == string(usagemetrics.StatusAction) && l.usageAction <= 0:
+	case l.status == string(usagemetrics.StatusAction) && l.action <= 0:
 		log.Print("For status ACTION, an action code is required.")
 		return subcommands.ExitUsageError
 	}
@@ -104,8 +108,8 @@ func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands
 
 // logUsageStatus makes a call to the appropriate usage metrics API.
 func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
-	configureUsageMetricsForOTE(cloudProps, l.usagePriorVersion)
-	switch usagemetrics.Status(l.usageStatus) {
+	configureUsageMetricsForOTE(cloudProps, l.name, l.priorVersion)
+	switch usagemetrics.Status(l.status) {
 	case usagemetrics.StatusRunning:
 		usagemetrics.Running()
 	case usagemetrics.StatusStarted:
@@ -125,19 +129,16 @@ func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
 	case usagemetrics.StatusUninstalled:
 		usagemetrics.Uninstalled()
 	case usagemetrics.StatusAction:
-		usagemetrics.Action(l.usageAction)
+		usagemetrics.Action(l.action)
 	default:
-		return fmt.Errorf("logUsageStatus() called with an unknown status: %s", l.usageStatus)
+		return fmt.Errorf("logUsageStatus() called with an unknown status: %s", l.status)
 	}
 	return nil
 }
 
-func configureUsageMetricsForOTE(cp *iipb.CloudProperties, version string) {
-	if version == "" {
-		version = configuration.AgentVersion
-	}
+func configureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string) {
 	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
-		Name:            configuration.AgentName,
+		Name:            name,
 		Version:         version,
 		LogUsageMetrics: true,
 	})

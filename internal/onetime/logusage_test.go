@@ -44,47 +44,47 @@ func TestLogUsageHandler(t *testing.T) {
 		{
 			name: "EmptyUsageStatus",
 			logUsage: &LogUsage{
-				usageStatus: "",
+				status: "",
 			},
 			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "AgentUpdatedWithEmptyPriorVersion",
 			logUsage: &LogUsage{
-				usageStatus:       "UPDATED",
-				usagePriorVersion: "",
+				status:       "UPDATED",
+				priorVersion: "",
 			},
 			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "ErrorWithInvalidErrorCode",
 			logUsage: &LogUsage{
-				usageStatus: "ERROR",
-				usageError:  0,
+				status:     "ERROR",
+				usageError: 0,
 			},
 			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "ErrorWithValidErrorCode",
 			logUsage: &LogUsage{
-				usageStatus: "ERROR",
-				usageError:  1,
+				status:     "ERROR",
+				usageError: 1,
 			},
 			want: subcommands.ExitSuccess,
 		},
 		{
 			name: "ActionWithEmptyActionCode",
 			logUsage: &LogUsage{
-				usageStatus: "ACTION",
-				usageAction: 0,
+				status: "ACTION",
+				action: 0,
 			},
 			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "Success",
 			logUsage: &LogUsage{
-				usageStatus: "ACTION",
-				usageAction: 1,
+				status: "ACTION",
+				action: 1,
 			},
 			want: subcommands.ExitSuccess,
 		},
@@ -176,9 +176,9 @@ func TestLogUsageStatus(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			l := &LogUsage{
-				usageStatus: test.status,
-				usageAction: test.actionID,
-				usageError:  test.errorID,
+				status:     test.status,
+				action:     test.actionID,
+				usageError: test.errorID,
 			}
 			got := l.logUsageStatus(&ipb.CloudProperties{})
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
@@ -221,8 +221,8 @@ func TestExecuteLogUsage(t *testing.T) {
 		{
 			name: "SuccessfullyParseArgs",
 			logUsage: &LogUsage{
-				usageStatus: "ACTION",
-				usageAction: 1,
+				status: "ACTION",
+				action: 1,
 			},
 			want: subcommands.ExitSuccess,
 			args: []any{

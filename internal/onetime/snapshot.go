@@ -158,7 +158,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	}
 
 	log.Logger.Infow("Starting disk snapshot for HANA", "sid", s.sid)
-	configureUsageMetricsForOTE(s.cloudProps, "")
+	configureUsageMetricsForOTE(s.cloudProps, "", "")
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
 	s.db, err = s.connectToDB(ctx)
 	if err != nil {
