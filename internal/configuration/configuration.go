@@ -19,6 +19,7 @@ package configuration
 
 import (
 	_ "embed" // Enable file embedding, see also http://go/go-embed.
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -101,17 +102,28 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	if config == nil {
 		config = &cpb.Configuration{ProvideSapHostAgentMetrics: true, LogToCloud: true}
 	}
-	// always set the agent name and version
+	// Always set the agent name and version.
 	config.AgentProperties = &cpb.AgentProperties{Name: AgentName, Version: AgentVersion}
 
-	cc := config.GetCollectionConfiguration()
-	if cc != nil && cc.GetCollectWorkloadValidationMetrics() == true && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
+	// If the user did not pass cloud properties, set the values read from the metadata server.
+	if config.GetCloudProperties() == nil {
+		config.CloudProperties = cloudProps
+	}
+
+	config.CollectionConfiguration = applyDefaultCollectionConfiguration(config.GetCollectionConfiguration())
+	config.HanaMonitoringConfiguration = applyDefaultHMConfiguration(config.GetHanaMonitoringConfiguration())
+	return config
+}
+
+func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfiguration) *cpb.CollectionConfiguration {
+	cc := configFromFile
+	if cc.GetCollectWorkloadValidationMetrics() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
 		cc.WorkloadValidationMetricsFrequency = 300
 	}
-	if cc != nil && cc.GetCollectProcessMetrics() == true && cc.GetProcessMetricsFrequency() <= 0 {
+	if cc.GetCollectProcessMetrics() && cc.GetProcessMetricsFrequency() <= 0 {
 		cc.ProcessMetricsFrequency = 5
 	}
-	if cc != nil && cc.GetCollectAgentMetrics() && cc.GetAgentMetricsFrequency() <= 0 {
+	if cc.GetCollectAgentMetrics() && cc.GetAgentMetricsFrequency() <= 0 {
 		cc.AgentMetricsFrequency = 60
 	}
 	if cc.GetCollectAgentMetrics() && cc.GetAgentHealthFrequency() <= 0 {
@@ -123,12 +135,11 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	if cc.GetCollectAgentMetrics() && cc.GetMissedHeartbeatThreshold() <= 0 {
 		cc.MissedHeartbeatThreshold = 10
 	}
-	// If the user did not pass cloud properties, set the values read from the metadata server.
-	if config.GetCloudProperties() == nil {
-		config.CloudProperties = cloudProps
-	}
+	return cc
+}
 
-	hmConfig := config.GetHanaMonitoringConfiguration()
+func applyDefaultHMConfiguration(configFromFile *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringConfiguration {
+	hmConfig := configFromFile
 	if hmConfig != nil && hmConfig.GetQueryTimeoutSec() <= 0 {
 		hmConfig.QueryTimeoutSec = 300
 	}
@@ -138,7 +149,7 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	if hmConfig != nil && hmConfig.GetExecutionThreads() <= 0 {
 		hmConfig.ExecutionThreads = 10
 	}
-	return config
+	return hmConfig
 }
 
 // prepareHMConf reads the default HANA Monitoring queries, parses them into a proto,
@@ -230,36 +241,44 @@ func ValidateQueries(queries []*cpb.Query) bool {
 		}
 		queryNames[q.Name] = true
 
-		columnNames := make(map[string]bool)
-		for _, col := range q.GetColumns() {
-			if columnNames[col.Name] {
-				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
-				log.Logger.Errorw("Duplicate column name", "queryName", q.Name, "column", col.Name)
-				return false
-			}
-			columnNames[col.Name] = true
-
-			if col.MetricType == cpb.MetricType_METRIC_UNSPECIFIED || col.ValueType == cpb.ValueType_VALUE_UNSPECIFIED {
-				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
-				log.Logger.Errorw("Required fields for column not set", "queryName", q.Name, "column", col.Name, "metricType", col.MetricType, "valueType", col.ValueType)
-				return false
-			}
-			if col.MetricType == cpb.MetricType_METRIC_LABEL && col.ValueType != cpb.ValueType_VALUE_STRING {
-				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
-				log.Logger.Errorw("Incompatible metric and value type for column", "queryName", q.Name, "column", col.Name, "metricType", col.MetricType, "valueType", col.ValueType)
-				return false
-			}
-			if col.MetricType == cpb.MetricType_METRIC_GAUGE && col.ValueType == cpb.ValueType_VALUE_STRING {
-				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
-				log.Logger.Errorw("Invalid Config, the value type is not supported for GAUGE custom metrics on column", "queryName", q.Name, "valueType", col.ValueType, "column", col.Name)
-				return false
-			}
-			if col.MetricType == cpb.MetricType_METRIC_CUMULATIVE && (col.ValueType == cpb.ValueType_VALUE_STRING || col.ValueType == cpb.ValueType_VALUE_BOOL) {
-				usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
-				log.Logger.Errorw("Invalid Config, the value type is not supported for CUMULATIVE custom metrics on column", "queryName", q.Name, "valueType", col.ValueType, "column", col.Name)
-				return false
-			}
+		if !validateColumns(q) {
+			return false
 		}
 	}
 	return true
+}
+
+func validateColumns(q *cpb.Query) bool {
+	columnNames := make(map[string]bool)
+	for _, col := range q.GetColumns() {
+		if columnNames[col.Name] {
+			usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+			log.Logger.Errorw("Duplicate column name", "queryName", q.Name, "column", col.Name)
+			return false
+		}
+		columnNames[col.Name] = true
+
+		if err := validateColumnTypes(col); err != nil {
+			usagemetrics.Error(usagemetrics.MalformedHANAMonitoringConfigFile)
+			log.Logger.Errorw("Invalid config", "error", err, "queryName", q.Name, "column", col.Name, "metricType", col.MetricType, "valueType", col.ValueType)
+			return false
+		}
+	}
+	return true
+}
+
+func validateColumnTypes(col *cpb.Column) error {
+	if col.MetricType == cpb.MetricType_METRIC_UNSPECIFIED || col.ValueType == cpb.ValueType_VALUE_UNSPECIFIED {
+		return errors.New("required fields for column not set")
+	}
+	if col.MetricType == cpb.MetricType_METRIC_LABEL && col.ValueType != cpb.ValueType_VALUE_STRING {
+		return errors.New("incompatible metric and value type for column")
+	}
+	if col.MetricType == cpb.MetricType_METRIC_GAUGE && col.ValueType == cpb.ValueType_VALUE_STRING {
+		return errors.New("the value type is not supported for GAUGE custom metrics on column")
+	}
+	if col.MetricType == cpb.MetricType_METRIC_CUMULATIVE && (col.ValueType == cpb.ValueType_VALUE_STRING || col.ValueType == cpb.ValueType_VALUE_BOOL) {
+		return errors.New("the value type is not supported for CUMULATIVE custom metrics on column")
+	}
+	return nil
 }

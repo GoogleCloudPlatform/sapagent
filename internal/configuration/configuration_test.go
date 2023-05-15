@@ -184,11 +184,12 @@ func TestApplyDefaults(t *testing.T) {
 			},
 		},
 		{
-			name: "ConfigWithDefaultOvetride",
+			name: "ConfigWithDefaultOverride",
 			configFromFile: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: true,
 					CollectProcessMetrics:            true,
+					CollectAgentMetrics:              true,
 				},
 			},
 			want: &cpb.Configuration{
@@ -197,6 +198,11 @@ func TestApplyDefaults(t *testing.T) {
 					WorkloadValidationMetricsFrequency: 300,
 					CollectProcessMetrics:              true,
 					ProcessMetricsFrequency:            5,
+					CollectAgentMetrics:                true,
+					AgentMetricsFrequency:              60,
+					AgentHealthFrequency:               60,
+					HeartbeatFrequency:                 60,
+					MissedHeartbeatThreshold:           10,
 				},
 				AgentProperties: testAgentProps,
 				CloudProperties: testCloudProps,
