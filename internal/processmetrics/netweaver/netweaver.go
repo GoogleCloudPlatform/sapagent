@@ -430,8 +430,10 @@ func collectEnqLockMetrics(p *InstanceProperties, exec commandlineexecutor.Execu
 			"lock_mode":           lock.LockMode,
 			"user_count_owner":    fmt.Sprintf("%d", lock.UserCountOwner),
 			"user_count_owner_vb": fmt.Sprintf("%d", lock.UserCountOwnerVB),
+			"user":                lock.User,
 			"transaction":         lock.Transaction,
 			"object":              lock.Object,
+			"backup":              lock.Backup,
 		}
 		log.Logger.Debugw("Creating metric with labels",
 			"metric", nwEnqLocksPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", lock.UserCountOwner)
