@@ -36,8 +36,7 @@ func TestRequestHandler_ReturnsXML(t *testing.T) {
 	w := httptest.NewRecorder()
 	requestHandler(w, req)
 	got := w.Body.String()
-
-	want := "<metrics></metrics>"
+	want := metricsXML
 
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("requestHandler returned unexpected diff (-want +got):\n%s\n  want:\n%s\n  got:\n%s", diff, want, got)
@@ -75,6 +74,7 @@ func TestStartSAPHostAgentProvider(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			defer func(s string) { metricsXML = s }(metricsXML)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 			defer cancel()
 			got := StartSAPHostAgentProvider(ctx, test.params)
@@ -113,6 +113,7 @@ func TestCollectHostMetrics_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 	}
 	for _, test := range testData {
 		t.Run(test.name, func(t *testing.T) {
+			defer func(s string) { metricsXML = s }(metricsXML)
 			ctx, cancel := context.WithTimeout(context.Background(), test.timeout)
 			defer cancel()
 			got := 0
