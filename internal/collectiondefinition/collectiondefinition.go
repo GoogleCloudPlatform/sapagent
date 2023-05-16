@@ -175,65 +175,19 @@ func Merge(primary, secondary *cdpb.CollectionDefinition) (merged *cdpb.Collecti
 //
 // Metrics specified in the secondary definition cannot override those in the primary definition.
 func mergeWorkloadValidations(primary, secondary *wlmpb.WorkloadValidation) *wlmpb.WorkloadValidation {
-	merged := proto.Clone(primary).(*wlmpb.WorkloadValidation)
+	merged := &wlmpb.WorkloadValidation{}
 
 	// Construct a map of existing metrics in the primary workload validation definition.
 	existing := mapWorkloadValidationMetrics(primary)
 
 	// Include additional metrics from the secondary definition that do not override primary metrics.
 	log.Logger.Debug("Merging secondary workload validation definition.")
-
-	system := secondary.GetValidationSystem()
-	for _, m := range system.GetOsCommandMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationSystem.OsCommandMetrics = append(merged.GetValidationSystem().GetOsCommandMetrics(), m)
-		}
-	}
-
-	corosync := secondary.GetValidationCorosync()
-	for _, m := range corosync.GetConfigMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationCorosync.ConfigMetrics = append(merged.GetValidationCorosync().GetConfigMetrics(), m)
-		}
-	}
-	for _, m := range corosync.GetOsCommandMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationCorosync.OsCommandMetrics = append(merged.GetValidationCorosync().GetOsCommandMetrics(), m)
-		}
-	}
-
-	hana := secondary.GetValidationHana()
-	for _, m := range hana.GetGlobalIniMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationHana.GlobalIniMetrics = append(merged.GetValidationHana().GetGlobalIniMetrics(), m)
-		}
-	}
-	for _, m := range hana.GetOsCommandMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationHana.OsCommandMetrics = append(merged.GetValidationHana().GetOsCommandMetrics(), m)
-		}
-	}
-
-	netweaver := secondary.GetValidationNetweaver()
-	for _, m := range netweaver.GetOsCommandMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationNetweaver.OsCommandMetrics = append(merged.GetValidationNetweaver().GetOsCommandMetrics(), m)
-		}
-	}
-
-	pacemaker := secondary.GetValidationPacemaker()
-	for _, m := range pacemaker.GetOsCommandMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationPacemaker.OsCommandMetrics = append(merged.GetValidationPacemaker().GetOsCommandMetrics(), m)
-		}
-	}
-
-	custom := secondary.GetValidationCustom()
-	for _, m := range custom.GetOsCommandMetrics() {
-		if ok := shouldMerge(m, existing); ok {
-			merged.ValidationCustom.OsCommandMetrics = append(merged.GetValidationCustom().GetOsCommandMetrics(), m)
-		}
-	}
+	merged.ValidationSystem = mergeSystemValidations(primary.GetValidationSystem(), secondary.GetValidationSystem(), existing)
+	merged.ValidationCorosync = mergeCorosyncValidations(primary.GetValidationCorosync(), secondary.GetValidationCorosync(), existing)
+	merged.ValidationHana = mergeHanaValidations(primary.GetValidationHana(), secondary.GetValidationHana(), existing)
+	merged.ValidationNetweaver = mergeNetweaverValidations(primary.GetValidationNetweaver(), secondary.GetValidationNetweaver(), existing)
+	merged.ValidationPacemaker = mergePacemakerValidations(primary.GetValidationPacemaker(), secondary.GetValidationPacemaker(), existing)
+	merged.ValidationCustom = mergeCustomValidations(primary.GetValidationCustom(), secondary.GetValidationCustom(), existing)
 
 	return merged
 }
@@ -310,6 +264,88 @@ func iterator[M proto.Message](metrics []M, mapper metricInfoMapper) {
 		vendor := osVendor(m)
 		mapper(info, vendor)
 	}
+}
+
+// mergeSystemValidations clones the primary ValidationSystem definition,
+// and appends additional metrics from the secondary definition.
+func mergeSystemValidations(primary, secondary *wlmpb.ValidationSystem, existing metricsMap) *wlmpb.ValidationSystem {
+	merged := proto.Clone(primary).(*wlmpb.ValidationSystem)
+	for _, m := range secondary.GetOsCommandMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.OsCommandMetrics = append(merged.GetOsCommandMetrics(), m)
+		}
+	}
+	return merged
+}
+
+// mergeCorosyncValidations clones the primary ValidationCorosync definition,
+// and appends additional metrics from the secondary definition.
+func mergeCorosyncValidations(primary, secondary *wlmpb.ValidationCorosync, existing metricsMap) *wlmpb.ValidationCorosync {
+	merged := proto.Clone(primary).(*wlmpb.ValidationCorosync)
+	for _, m := range secondary.GetConfigMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.ConfigMetrics = append(merged.GetConfigMetrics(), m)
+		}
+	}
+	for _, m := range secondary.GetOsCommandMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.OsCommandMetrics = append(merged.GetOsCommandMetrics(), m)
+		}
+	}
+	return merged
+}
+
+// mergeHanaValidations clones the primary ValidationHANA definition,
+// and appends additional metrics from the secondary definition.
+func mergeHanaValidations(primary, secondary *wlmpb.ValidationHANA, existing metricsMap) *wlmpb.ValidationHANA {
+	merged := proto.Clone(primary).(*wlmpb.ValidationHANA)
+	for _, m := range secondary.GetGlobalIniMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.GlobalIniMetrics = append(merged.GetGlobalIniMetrics(), m)
+		}
+	}
+	for _, m := range secondary.GetOsCommandMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.OsCommandMetrics = append(merged.GetOsCommandMetrics(), m)
+		}
+	}
+	return merged
+}
+
+// mergeNetweaverValidations clones the primary ValidationNetweaver definition,
+// and appends additional metrics from the secondary definition.
+func mergeNetweaverValidations(primary, secondary *wlmpb.ValidationNetweaver, existing metricsMap) *wlmpb.ValidationNetweaver {
+	merged := proto.Clone(primary).(*wlmpb.ValidationNetweaver)
+	for _, m := range secondary.GetOsCommandMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.OsCommandMetrics = append(merged.GetOsCommandMetrics(), m)
+		}
+	}
+	return merged
+}
+
+// mergePacemakerValidations clones the primary ValidationPacemaker definition,
+// and appends additional metrics from the secondary definition.
+func mergePacemakerValidations(primary, secondary *wlmpb.ValidationPacemaker, existing metricsMap) *wlmpb.ValidationPacemaker {
+	merged := proto.Clone(primary).(*wlmpb.ValidationPacemaker)
+	for _, m := range secondary.GetOsCommandMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.OsCommandMetrics = append(merged.GetOsCommandMetrics(), m)
+		}
+	}
+	return merged
+}
+
+// mergeCustomValidations clones the primary ValidationCustom definition,
+// and appends additional metrics from the secondary definition.
+func mergeCustomValidations(primary, secondary *wlmpb.ValidationCustom, existing metricsMap) *wlmpb.ValidationCustom {
+	merged := proto.Clone(primary).(*wlmpb.ValidationCustom)
+	for _, m := range secondary.GetOsCommandMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.OsCommandMetrics = append(merged.GetOsCommandMetrics(), m)
+		}
+	}
+	return merged
 }
 
 // shouldMerge determines whether a given metric is eligible to be merged into
