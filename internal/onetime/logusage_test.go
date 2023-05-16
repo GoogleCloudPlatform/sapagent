@@ -49,6 +49,13 @@ func TestLogUsageHandler(t *testing.T) {
 			want: subcommands.ExitUsageError,
 		},
 		{
+			name: "UnknownStatus",
+			logUsage: &LogUsage{
+				status: "UNKNOWN",
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
 			name: "AgentUpdatedWithEmptyPriorVersion",
 			logUsage: &LogUsage{
 				status:       "UPDATED",
@@ -239,5 +246,19 @@ func TestExecuteLogUsage(t *testing.T) {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.logUsage, test.args, got, test.want)
 			}
 		})
+	}
+}
+
+func TestSetFlagsLogUsage(t *testing.T) {
+	l := &LogUsage{}
+	fs := flag.NewFlagSet("flags", flag.ExitOnError)
+	l.SetFlags(fs)
+
+	flags := []string{"name", "n", "version", "v", "prior-version", "pv", "status", "s", "action", "a", "error", "e"}
+	for _, flag := range flags {
+		got := fs.Lookup(flag)
+		if got == nil {
+			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
+		}
 	}
 }

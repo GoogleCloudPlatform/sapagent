@@ -33,7 +33,7 @@ import (
 // LogUsage has args for logusage subcommands.
 type LogUsage struct {
 	name, version, priorVersion, status string
-	action, usageError                      int
+	action, usageError                  int
 }
 
 // Name implements the subcommand interface for logusage.
