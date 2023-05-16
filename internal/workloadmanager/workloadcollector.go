@@ -383,19 +383,11 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 	labels := make(map[string]string)
 	var err error
 	for e.scanner.Scan() {
-		if strings.HasPrefix(e.scanner.Text(), "#") {
-			// ignore comments
-			continue
-		}
-		key, value, found := strings.Cut(e.scanner.Text(), ":")
+		key, value, found := parseScannedText(e.scanner.Text())
 		if !found {
-			if e.scanner.Text() != "" {
-				log.Logger.Warnw("Could not parse key, value pair. Expected format: '<key>: <value>'", "text", e.scanner.Text())
-			}
 			continue
 		}
-		value = strings.TrimSpace(value)
-		switch key := strings.TrimSpace(key); key {
+		switch key {
 		case "metric":
 			if metricName != "" {
 				e.tmpMetricName = value
@@ -414,6 +406,21 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 		log.Logger.Warnw("Could not read from the override metrics file", "error", err)
 	}
 	return metricName, metricValue, labels, true
+}
+
+// parseScannedText extracts a key and value pair from a scanned line of text.
+//
+// The expected format for the text string is: '<key>: <value>'.
+func parseScannedText(text string) (key, value string, found bool) {
+	// Ignore empty lines and comments.
+	if text == "" || strings.HasPrefix(text, "#") {
+		return "", "", false
+	}
+	key, value, found = strings.Cut(text, ":")
+	if !found {
+		log.Logger.Warnw("Could not parse key, value pair. Expected format: '<key>: <value>'", "text", text)
+	}
+	return strings.TrimSpace(key), strings.TrimSpace(value), found
 }
 
 func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmonitoring.TimeSeriesCreator, bo *cloudmonitoring.BackOffIntervals) int {
