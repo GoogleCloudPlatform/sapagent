@@ -122,32 +122,44 @@ func (r *Reader) Read(ip *iipb.InstanceProperties) *statspb.DiskStatsCollection 
  */
 func (r *Reader) readDiskStatsForLinux(instanceProps *iipb.InstanceProperties) map[string]*statspb.DiskStats {
 	contents, err := r.fileReader("/proc/diskstats")
-	log.Logger.Debugw("File /proc/diskstats contains the following data", "data", string(contents))
 	if err != nil {
 		log.Logger.Errorw("Could not read data from /proc/diskstats", log.Error(err))
 		return nil
 	}
+	log.Logger.Debugw("File /proc/diskstats contains the following data", "data", string(contents))
 
 	diskStats := make(map[string]*statspb.DiskStats)
 	lines := strings.Split(string(contents), "\n")
 	for _, line := range lines {
-		tl := strings.TrimSpace(line)
+		deviceName, stats, ok := r.parseDiskStatsForLinux(line, instanceProps)
+		if !ok {
+			continue
+		}
+		diskStats[deviceName] = stats
+		log.Logger.Debugw("Disk stats", "diskstats", diskStats[deviceName])
+	}
+
+	return diskStats
+}
+
+func (r *Reader) parseDiskStatsForLinux(line string, ip *iipb.InstanceProperties) (deviceName string, stats *statspb.DiskStats, ok bool) {
+	tl := strings.TrimSpace(line)
 		// Skip comment lines in the file.
 		if strings.HasPrefix(tl, "#") {
-			continue
+			return "", nil, false
 		}
 		tokens := strings.Fields(tl)
 		if len(tokens) < requiredFieldsCount {
 			if len(tokens) > 0 {
 				log.Logger.Warnw("Unexpected disk stats file format in /proc/diskstats", "requiredfieldscount", requiredFieldsCount, "fieldscount", len(tokens))
 			}
-			continue
+			return "", nil, false
 		}
-		deviceName := tokens[posDeviceName]
-		if !deviceMappingExists(deviceName, instanceProps.GetDisks()) {
+		deviceName = tokens[posDeviceName]
+		if !deviceMappingExists(deviceName, ip.GetDisks()) {
 			// These are expected, just logging as debug
 			log.Logger.Debugw("No device mapping found for disk", "devicename", deviceName)
-			continue
+			return "", nil, false
 		}
 		log.Logger.Debugw("Adding disk stats for device", "devicename", deviceName)
 
@@ -176,8 +188,8 @@ func (r *Reader) readDiskStatsForLinux(instanceProps *iipb.InstanceProperties) m
 			log.Logger.Warnw("Could not parse queue length for device", "devicename", deviceName, "error", err)
 			queueLength = metricsformatter.Unavailable
 		}
-
-		diskStats[deviceName] = &statspb.DiskStats{
+	
+		return deviceName, &statspb.DiskStats{
 			DeviceName:                     deviceName,
 			ReadOpsCount:                   readOpsCount,
 			ReadSvcTimeMillis:              readSvcTimeMillis,
@@ -186,11 +198,7 @@ func (r *Reader) readDiskStatsForLinux(instanceProps *iipb.InstanceProperties) m
 			QueueLength:                    queueLength,
 			AverageReadResponseTimeMillis:  r.averageReadResponseTime(deviceName, readSvcTimeMillis, readOpsCount),
 			AverageWriteResponseTimeMillis: r.averageWriteResponseTime(deviceName, writeSvcTimeMillis, writeOpsCount),
-		}
-		log.Logger.Debugw("Disk stats", "diskstats", diskStats[deviceName])
-	}
-
-	return diskStats
+		}, true
 }
 
 // readDiskStatsForWindows obtains disk metrics from the command line.
