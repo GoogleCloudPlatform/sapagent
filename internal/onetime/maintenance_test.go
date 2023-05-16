@@ -50,6 +50,54 @@ func (mfw mockedFileWriter) MakeDirs(string, os.FileMode) error {
 	return mfw.errMakeDirs
 }
 
+func TestSynopsis(t *testing.T) {
+	mm := MaintenanceMode{}
+	want := "configure maintenance mode"
+
+	got := mm.Synopsis()
+	if got != want {
+		t.Errorf("Synopsis()=%v, want %v", got, want)
+	}
+}
+
+func TestSetFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		mm      MaintenanceMode
+		pattern string
+		fs      *flag.FlagSet
+	}{
+		{
+			name:    "HasSidFlag",
+			mm:      MaintenanceMode{},
+			pattern: "sid",
+			fs:      flag.NewFlagSet("sid", flag.ExitOnError),
+		},
+		{
+			name:    "HasEnableFlag",
+			mm:      MaintenanceMode{},
+			pattern: "enable",
+			fs:      flag.NewFlagSet("enable", flag.ExitOnError),
+		},
+		{
+			name:    "HasShowFlag",
+			mm:      MaintenanceMode{},
+			pattern: "show",
+			fs:      flag.NewFlagSet("show", flag.ExitOnError),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.mm.SetFlags(test.fs)
+			got := test.fs.Lookup(test.pattern)
+			if got == nil {
+				t.Errorf("SetupFlags(%v) flag not found %s", test.fs, test.pattern)
+			}
+		})
+	}
+}
+
 func TestExecuteMaintenance(t *testing.T) {
 	tests := []struct {
 		name string
