@@ -295,16 +295,7 @@ func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, param
 		"instance_name": dbName,
 		"sid":           sid,
 	}
-	// The first loop through the columns will add all labels for the metrics.
-	for i, c := range query.GetColumns() {
-		if c.GetMetricType() == cpb.MetricType_METRIC_LABEL {
-			// String type is enforced by the config validator for METRIC_LABEL.
-			// Type asserting to a pointer due to the coupling with sql.Rows.Scan() populating the columns as such.
-			if result, ok := cols[i].(*string); ok {
-				labels[c.GetName()] = *result
-			}
-		}
-	}
+	labels = createLabels(query, cols, labels)
 
 	var metrics []*mrpb.TimeSeries
 	// The second loop will create metrics for each GAUGE and CUMULATIVE type.
@@ -320,6 +311,19 @@ func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, param
 		}
 	}
 	return metrics
+}
+
+func createLabels(query *cpb.Query, cols []any, labels map[string]string) map[string]string {
+	for i, c := range query.GetColumns() {
+		if c.GetMetricType() == cpb.MetricType_METRIC_LABEL {
+			// String type is enforced by the config validator for METRIC_LABEL.
+			// Type asserting to a pointer due to the coupling with sql.Rows.Scan() populating the columns as such.
+			if result, ok := cols[i].(*string); ok {
+				labels[c.GetName()] = *result
+			}
+		}
+	}
+	return labels
 }
 
 // createGaugeMetric builds a cloud monitoring time series with a boolean, int, or float point value for the specified column.
