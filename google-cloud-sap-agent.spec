@@ -130,7 +130,7 @@ if [ 1 == 2 ]; then
       echo "Migration mode here"
       timeout 30 %{_bindir}/google_cloud_sap_agent migratehma;
       if [ $? -eq 0 ]; then
-        cp /usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml %{_confdir}/oldHMAconfiguration.yaml
+        cp /usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml %{_confdir}/backup-of-hanamonitoring-configuration.yaml
         # migration successful, uninstall HANA Monitorig Agent and remove unwanted files
         # TODO: Explore how to remove the package in case of successful migration only.
         if `type "systemctl" > /dev/null 2>&1 && systemctl is-active --quiet google-saphanamonitoring-agent`; then
