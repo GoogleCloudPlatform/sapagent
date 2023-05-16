@@ -130,7 +130,7 @@ func ExecuteCommand(params Params) Result {
 	if exeForPlatform != nil {
 		err = exeForPlatform(exe, params)
 	} else {
-		err = setupExeForPlatform(exe, params)
+		err = setupExeForPlatform(exe, params, ExecuteCommand)
 	}
 	if err != nil {
 		log.Logger.Debugw("Could not setup the executable environment", "executable", params.Executable, "args", args, "error", err)

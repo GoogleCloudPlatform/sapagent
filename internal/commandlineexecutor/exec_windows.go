@@ -21,6 +21,6 @@ import (
 )
 
 // setupExeForPlatform is not implemented for windows.
-func setupExeForPlatform(exe *exec.Cmd, params Params) error {
+func setupExeForPlatform(exe *exec.Cmd, params Params, executeCommand Execute) error {
 	return nil
 }

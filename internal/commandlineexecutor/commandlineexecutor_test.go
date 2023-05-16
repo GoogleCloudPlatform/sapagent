@@ -304,3 +304,58 @@ func TestExecuteWithEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestSetupExeForPlatform(t *testing.T) {
+	tests := []struct {
+		name           string
+		params         Params
+		executeCommand Execute
+		want           error
+	}{
+		{
+			name: "NoUserWithEnv",
+			params: Params{
+				Env: []string{"test-env"},
+			},
+			executeCommand: ExecuteCommand,
+			want:           nil,
+		},
+		{
+			name: "UserNotFound",
+			params: Params{
+				User: "test-user",
+			},
+			executeCommand: ExecuteCommand,
+			want:           cmpopts.AnyError,
+		},
+		{
+			name: "UserFailedToParse",
+			params: Params{
+				User: "test-user",
+			},
+			executeCommand: func(params Params) Result {
+				return Result{}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "UserFound",
+			params: Params{
+				User: "test-user",
+			},
+			executeCommand: func(params Params) Result {
+				return Result{StdOut: "123"}
+			},
+			want: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setDefaults()
+			got := setupExeForPlatform(&exec.Cmd{}, test.params, test.executeCommand)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("setupExeForPlatform(%#v) = %v, want: %v", test.params, got, test.want)
+			}
+		})
+	}
+}
