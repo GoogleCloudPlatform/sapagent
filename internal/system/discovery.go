@@ -724,10 +724,20 @@ func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid strin
 		return res
 	}
 
-	outLines := strings.Split(result.StdOut, "\n")
-	log.Logger.Infof("outLines: %v", outLines)
-	var dbHosts []string
-	for _, l := range outLines {
+	dbHosts := parseDBHosts(result.StdOut)
+	if len(dbHosts) == 0 {
+		log.Logger.Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
+		return res
+	}
+
+	res = d.extractResourcesFromHosts(cp, sid, dbHosts)
+	return res
+}
+
+func parseDBHosts(s string) (dbHosts []string) {
+	lines := strings.Split(s, "\n")
+	log.Logger.Infof("outLines: %v", lines)
+	for _, l := range lines {
 		log.Logger.Infow("Examining line", "line", l)
 		t := strings.TrimSpace(l)
 		if strings.Index(t, "ENV") < 0 {
@@ -750,11 +760,11 @@ func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid strin
 			dbHosts = append(dbHosts, strings.TrimSpace(c[0]))
 		}
 	}
-	if len(dbHosts) == 0 {
-		log.Logger.Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
-		return res
-	}
+	return dbHosts
+}
 
+func (d *Discovery) extractResourcesFromHosts(cp *ipb.CloudProperties, sid string, dbHosts []string) []*spb.SapDiscovery_Resource {
+	var res []*spb.SapDiscovery_Resource
 	for _, dbHostname := range dbHosts {
 		log.Logger.Infow("Found host", "sid", sid, "hostname", fmt.Sprintf("%q", dbHostname))
 
