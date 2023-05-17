@@ -602,53 +602,62 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 func (d *Discovery) discoverCluster() (string, error) {
 	log.Logger.Info("Discovering cluster")
 	if d.exists("crm") {
-		result := d.execute(commandlineexecutor.Params{
-			Executable:  "crm",
-			ArgsToSplit: "config show",
-		})
-		if result.Error != nil {
-			return "", result.Error
-		}
-
-		var addrPrimitiveFound bool
-		for _, l := range strings.Split(result.StdOut, "\n") {
-			if strings.Contains(l, "rsc_vip_int-primary IPaddr2") {
-				addrPrimitiveFound = true
-			}
-			if addrPrimitiveFound && strings.Contains(l, "params ip") {
-				address := ipRegex.FindString(l)
-				if address == "" {
-					return "", errors.New("Unable to locate IP address in crm output: " + result.StdOut)
-				}
-				return address, nil
-			}
-		}
-		return "", errors.New("No address found in pcs cluster config output")
-	} else if d.exists("pcs") {
-		result := d.execute(commandlineexecutor.Params{
-			Executable:  "pcs",
-			ArgsToSplit: "config show",
-		})
-		if result.Error != nil {
-			return "", result.Error
-		}
-
-		var addrPrimitiveFound bool
-		for _, l := range strings.Split(result.StdOut, "\n") {
-			if addrPrimitiveFound && strings.Contains(l, "ip") {
-				address := ipRegex.FindString(l)
-				if address == "" {
-					return "", errors.New("Unable to locate IP address in crm output: " + result.StdOut)
-				}
-				return address, nil
-			}
-			if strings.Contains(l, "rsc_vip_") {
-				addrPrimitiveFound = true
-			}
-		}
-		return "", errors.New("No address found in pcs cluster config output")
+		return d.discoverClusterCRM()
 	}
-	return "", errors.New("No cluster command found")
+	if d.exists("pcs") {
+		return d.discoverClusterPCS()
+	}
+	return "", errors.New("no cluster command found")
+}
+
+func (d *Discovery) discoverClusterCRM() (string, error) {
+	result := d.execute(commandlineexecutor.Params{
+		Executable:  "crm",
+		ArgsToSplit: "config show",
+	})
+	if result.Error != nil {
+		return "", result.Error
+	}
+
+	var addrPrimitiveFound bool
+	for _, l := range strings.Split(result.StdOut, "\n") {
+		if strings.Contains(l, "rsc_vip_int-primary IPaddr2") {
+			addrPrimitiveFound = true
+		}
+		if addrPrimitiveFound && strings.Contains(l, "params ip") {
+			address := ipRegex.FindString(l)
+			if address == "" {
+				return "", errors.New("unable to locate IP address in crm output: " + result.StdOut)
+			}
+			return address, nil
+		}
+	}
+	return "", errors.New("no address found in crm cluster config output")
+}
+
+func (d *Discovery) discoverClusterPCS() (string, error) {
+	result := d.execute(commandlineexecutor.Params{
+		Executable:  "pcs",
+		ArgsToSplit: "config show",
+	})
+	if result.Error != nil {
+		return "", result.Error
+	}
+
+	var addrPrimitiveFound bool
+	for _, l := range strings.Split(result.StdOut, "\n") {
+		if addrPrimitiveFound && strings.Contains(l, "ip") {
+			address := ipRegex.FindString(l)
+			if address == "" {
+				return "", errors.New("unable to locate IP address in pcs output: " + result.StdOut)
+			}
+			return address, nil
+		}
+		if strings.Contains(l, "rsc_vip_") {
+			addrPrimitiveFound = true
+		}
+	}
+	return "", errors.New("no address found in pcs cluster config output")
 }
 
 func (d *Discovery) discoverFilestores(projectID string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
