@@ -374,6 +374,30 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 	}
 }
 
+func TestSynopsisForSnapshot(t *testing.T) {
+	want := "invoke HANA backup using disk snapshots"
+	snapshot := Snapshot{}
+	got := snapshot.Synopsis()
+	if got != want {
+		t.Errorf("Synopsis()=%v, want=%v", got, want)
+	}
+}
+
+func TestSetFlagsForSnapshot(t *testing.T) {
+	snapshot := Snapshot{}
+	fs := flag.NewFlagSet("flags", flag.ExitOnError)
+	flags := []string{"project", "host", "port", "sid", "user", "password", "password-secret",
+		"snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file",
+		"snapshot-description", "send-status-to-monitoring", "csek-key-file", "storage-location"}
+	snapshot.SetFlags(fs)
+	for _, flag := range flags {
+		got := fs.Lookup(flag)
+		if got == nil {
+			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
+		}
+	}
+}
+
 func TestCreateNewHANASnapshot(t *testing.T) {
 	tests := []struct {
 		name     string

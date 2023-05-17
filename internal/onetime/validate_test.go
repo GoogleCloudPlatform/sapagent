@@ -66,6 +66,20 @@ func TestExecuteValidate(t *testing.T) {
 	}
 }
 
+func TestSetFlagsForValidate(t *testing.T) {
+	validate := Validate{}
+	fs := flag.NewFlagSet("flags", flag.ExitOnError)
+	validate.SetFlags(fs)
+	flags := []string{"workloadcollection", "wc"}
+
+	for _, flag := range flags {
+		got := fs.Lookup(flag)
+		if got == nil {
+			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
+		}
+	}
+}
+
 func TestValidateWorkloadCollectionHandler(t *testing.T) {
 	tests := []struct {
 		name string

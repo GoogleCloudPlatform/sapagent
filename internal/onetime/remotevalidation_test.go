@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"testing"
 
+	"flag"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
@@ -101,6 +102,30 @@ func TestRemoteValidationHandler(t *testing.T) {
 				t.Errorf("remoteValidationHandler(%v) = %v, want %v", test.remote, got, test.want)
 			}
 		})
+	}
+}
+
+
+func TestUsageForRemoteValidation(t *testing.T) {
+	want := `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone>\n`
+	rv := RemoteValidation{}
+	got := rv.Usage()
+	if got != want {
+		t.Errorf("Usage() = %v, want %v", got, want)
+	}
+}
+
+
+func TestSetFlagsForRemoteValidation(t *testing.T) {
+	flags := []string{"project", "instance", "zone", "name"}
+	fs := flag.NewFlagSet("flags", flag.ExitOnError)
+	remoteValidation := RemoteValidation{}
+	remoteValidation.SetFlags(fs)
+	for _, flag := range flags {
+		got := fs.Lookup(flag)
+		if got == nil {
+			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
+		}
 	}
 }
 
