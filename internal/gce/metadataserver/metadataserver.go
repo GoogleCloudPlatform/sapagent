@@ -24,7 +24,7 @@ package metadataserver
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -117,7 +117,7 @@ func get(uri, queryString string) ([]byte, error) {
 	if !isStatusSuccess(res.StatusCode) {
 		return nil, fmt.Errorf("unsuccessful response from metadata server: %s, %s", res.Status, helpString)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body from metadata server: %v", err)
 	}

@@ -84,10 +84,7 @@ var (
 		valueEqual := cmp.Equal(a.GetValue().GetDoubleValue(), b.GetValue().GetDoubleValue())
 		startTimeEqual := cmp.Equal(a.GetInterval().GetStartTime(), b.GetInterval().GetStartTime(), protocmp.Transform())
 		endTimeEqual := cmp.Equal(a.GetInterval().GetEndTime(), b.GetInterval().GetEndTime(), protocmp.Transform())
-		aDescriptor0, aDescriptor1 := a.Descriptor()
-		bDescriptor0, bDescriptor1 := b.Descriptor()
-		descriptorEqual := cmp.Equal(aDescriptor0, bDescriptor0) && cmp.Equal(aDescriptor1, bDescriptor1)
-		return valueEqual && startTimeEqual && endTimeEqual && descriptorEqual
+		return valueEqual && startTimeEqual && endTimeEqual
 	})
 
 	resourceComparer = cmp.Comparer(func(a, b *mrpb.MonitoredResource) bool {

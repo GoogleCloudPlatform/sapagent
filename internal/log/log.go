@@ -55,7 +55,6 @@ package log
 
 import (
 	"io"
-	"io/ioutil"
 	"log"
 
 	logging "cloud.google.com/go/logging"
@@ -197,7 +196,7 @@ func SetupLoggingToDiscard() {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(config)
-	writer := zapcore.AddSync(ioutil.Discard)
+	writer := zapcore.AddSync(io.Discard)
 	core := zapcore.NewTee(
 		zapcore.NewCore(fileEncoder, writer, zapcore.ErrorLevel),
 	)

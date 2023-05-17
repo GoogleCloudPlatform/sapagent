@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strconv"
 	"strings"
 
@@ -367,7 +367,7 @@ func getJSONBearerToken(ctx context.Context, serviceAccountJSONFile string, file
 	if err != nil {
 		return "", fmt.Errorf("Could not load credentials file: %#v", err)
 	}
-	jsonData, err := ioutil.ReadAll(jsonStream)
+	jsonData, err := io.ReadAll(jsonStream)
 	if err != nil {
 		return "", fmt.Errorf("could not read JSON data: %#v", err)
 	}
