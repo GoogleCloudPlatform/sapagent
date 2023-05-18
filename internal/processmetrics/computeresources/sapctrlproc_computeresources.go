@@ -53,7 +53,7 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*mrpb.
 		memoryMetricPath: sapCtrlMemoryPath,
 		newProc:          p.NewProcHelper,
 	}
-	processes := collectControlProcesses(params)
+	processes := collectControlProcesses(ctx, params)
 	if len(processes) == 0 {
 		log.Logger.Debug("Cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil

@@ -18,6 +18,7 @@ limitations under the License.
 package cpustatsreader
 
 import (
+	"context"
 	"math"
 	"strconv"
 	"strings"
@@ -51,14 +52,14 @@ func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) 
 }
 
 // The Read method reads CPU metrics from the OS and returns a proto for CpuStats.
-func (r *Reader) Read() *statspb.CpuStats {
+func (r *Reader) Read(ctx context.Context) *statspb.CpuStats {
 	log.Logger.Debug("Reading CPU stats...")
 	var s *statspb.CpuStats
 	switch r.os {
 	case "linux":
 		s = r.readCPUStatsForLinux()
 	case "windows":
-		s = r.readCPUStatsForWindows()
+		s = r.readCPUStatsForWindows(ctx)
 	default:
 		log.Logger.Errorw("Encountered an unexpected OS value", "value", r.os)
 		return nil
@@ -71,12 +72,12 @@ func (r *Reader) Read() *statspb.CpuStats {
 }
 
 // Reads CPU stats for Windows, uses wmic command for the OS values
-func (r *Reader) readCPUStatsForWindows() *statspb.CpuStats {
+func (r *Reader) readCPUStatsForWindows(ctx context.Context) *statspb.CpuStats {
 	s := &statspb.CpuStats{}
 	// Use wmic to get the CPU stats
 	// Note: must use separated arguments so the windows go exec does not escape the entire argument list
 	args := []string{"cpu", "get", "Name,", "MaxClockSpeed,", "NumberOfCores,", "NumberOfLogicalProcessors/Format:List"}
-	result := r.execute(commandlineexecutor.Params{
+	result := r.execute(ctx, commandlineexecutor.Params{
 		Executable: "wmic",
 		Args:       args,
 	})

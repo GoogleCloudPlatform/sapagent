@@ -149,11 +149,11 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 		hostResolver: net.LookupHost,
 	}
 
-	go runDiscovery(config, d)
+	go runDiscovery(ctx, config, d)
 	return true
 }
 
-func runDiscovery(config *cpb.Configuration, d Discovery) {
+func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 	cp := config.GetCloudProperties()
 	if cp == nil {
 		log.Logger.Warn("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
@@ -172,10 +172,10 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 			res = append(res, disks...)
 		}
 
-		fsRes := d.discoverFilestores(cp.GetProjectId(), ir)
+		fsRes := d.discoverFilestores(ctx, cp.GetProjectId(), ir)
 		res = append(res, fsRes...)
 
-		fwrRes, fwr, fr := d.discoverClusterForwardingRule(cp.GetProjectId(), cp.GetZone())
+		fwrRes, fwr, fr := d.discoverClusterForwardingRule(ctx, cp.GetProjectId(), cp.GetZone())
 		res = append(res, fwrRes...)
 
 		if fwr != nil {
@@ -190,7 +190,7 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 			}
 		}
 
-		sapApps := sapdiscovery.SAPApplications()
+		sapApps := sapdiscovery.SAPApplications(ctx)
 
 		sapSystems := []*spb.SapDiscovery{}
 
@@ -201,10 +201,10 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 				log.Logger.Info("Running on NW instance")
 
 				var dbComp *spb.SapDiscovery_Component
-				dbRes := d.discoverAppToDBConnection(cp, app.Sapsid, ir)
+				dbRes := d.discoverAppToDBConnection(ctx, cp, app.Sapsid, ir)
 				if len(dbRes) > 0 {
 					// NW instance is connected to a database
-					dbSid, err := d.discoverDatabaseSID(app.Sapsid)
+					dbSid, err := d.discoverDatabaseSID(ctx, app.Sapsid)
 					if err != nil {
 						log.Logger.Warnw("Encountered error discovering database SID", "error", err)
 						continue
@@ -243,7 +243,7 @@ func runDiscovery(config *cpb.Configuration, d Discovery) {
 					}
 				}
 
-				d.discoverDBNodes(app.Sapsid, app.InstanceNumber, cp.ProjectId, cp.Zone)
+				d.discoverDBNodes(ctx, app.Sapsid, app.InstanceNumber, cp.ProjectId, cp.Zone)
 				if system == nil {
 					system = &spb.SapDiscovery{}
 					sapSystems = append(sapSystems, system)
@@ -406,9 +406,9 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 	return netRes
 }
 
-func (d *Discovery) discoverClusterForwardingRule(projectID, zone string) ([]*spb.SapDiscovery_Resource, *compute.ForwardingRule, *spb.SapDiscovery_Resource) {
+func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID, zone string) ([]*spb.SapDiscovery_Resource, *compute.ForwardingRule, *spb.SapDiscovery_Resource) {
 	var res []*spb.SapDiscovery_Resource
-	lbAddress, err := d.discoverCluster()
+	lbAddress, err := d.discoverCluster(ctx)
 	if err != nil || lbAddress == "" {
 		log.Logger.Warnw("Encountered error discovering cluster address", log.Error(err))
 		return res, nil, nil
@@ -599,19 +599,19 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 	return res
 }
 
-func (d *Discovery) discoverCluster() (string, error) {
+func (d *Discovery) discoverCluster(ctx context.Context) (string, error) {
 	log.Logger.Info("Discovering cluster")
 	if d.exists("crm") {
-		return d.discoverClusterCRM()
+		return d.discoverClusterCRM(ctx)
 	}
 	if d.exists("pcs") {
-		return d.discoverClusterPCS()
+		return d.discoverClusterPCS(ctx)
 	}
 	return "", errors.New("no cluster command found")
 }
 
-func (d *Discovery) discoverClusterCRM() (string, error) {
-	result := d.execute(commandlineexecutor.Params{
+func (d *Discovery) discoverClusterCRM(ctx context.Context) (string, error) {
+	result := d.execute(ctx, commandlineexecutor.Params{
 		Executable:  "crm",
 		ArgsToSplit: "config show",
 	})
@@ -635,8 +635,8 @@ func (d *Discovery) discoverClusterCRM() (string, error) {
 	return "", errors.New("no address found in crm cluster config output")
 }
 
-func (d *Discovery) discoverClusterPCS() (string, error) {
-	result := d.execute(commandlineexecutor.Params{
+func (d *Discovery) discoverClusterPCS(ctx context.Context) (string, error) {
+	result := d.execute(ctx, commandlineexecutor.Params{
 		Executable:  "pcs",
 		ArgsToSplit: "config show",
 	})
@@ -660,7 +660,7 @@ func (d *Discovery) discoverClusterPCS() (string, error) {
 	return "", errors.New("no address found in pcs cluster config output")
 }
 
-func (d *Discovery) discoverFilestores(projectID string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverFilestores(ctx context.Context, projectID string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	log.Logger.Info("Discovering mounted file stores")
 	var res []*spb.SapDiscovery_Resource
 	if !d.exists("df") {
@@ -668,7 +668,7 @@ func (d *Discovery) discoverFilestores(projectID string, parent *spb.SapDiscover
 		return res
 	}
 
-	result := d.execute(commandlineexecutor.Params{
+	result := d.execute(ctx, commandlineexecutor.Params{
 		Executable: "df",
 		Args:       []string{"-h"},
 	})
@@ -707,14 +707,14 @@ func (d *Discovery) discoverFilestores(projectID string, parent *spb.SapDiscover
 	return res
 }
 
-func (d *Discovery) discoverAppToDBConnection(cp *ipb.CloudProperties, sid string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverAppToDBConnection(ctx context.Context, cp *ipb.CloudProperties, sid string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 
 	sidLower := strings.ToLower(sid)
 	sidUpper := strings.ToUpper(sid)
 	sidPath := fmt.Sprintf("/usr/sap/%s/hdbclient/hdbuserstore", sidUpper)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	result := d.execute(commandlineexecutor.Params{
+	result := d.execute(ctx, commandlineexecutor.Params{
 		Executable: sidPath,
 		Args:       []string{"list", "DEFAULT"},
 		User:       sidAdm,
@@ -918,12 +918,12 @@ func (d *Discovery) discoverAddressUsers(addr *compute.Address) []*spb.SapDiscov
 	return res
 }
 
-func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
+func (d *Discovery) discoverDatabaseSID(ctx context.Context, appSID string) (string, error) {
 	sidLower := strings.ToLower(appSID)
 	sidUpper := strings.ToUpper(appSID)
 	sidPath := fmt.Sprintf("/usr/sap/%s/hdbclient/hdbuserstore", sidUpper)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	result := d.execute(commandlineexecutor.Params{
+	result := d.execute(ctx, commandlineexecutor.Params{
 		Executable: sidPath,
 		Args:       []string{"list"},
 		User:       sidAdm,
@@ -945,7 +945,7 @@ func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
 
 	// No DB SID in userstore, check profiles
 	profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/*", sidUpper)
-	result = d.execute(commandlineexecutor.Params{
+	result = d.execute(ctx, commandlineexecutor.Params{
 		Executable:  "sh",
 		ArgsToSplit: `-c 'grep "dbid\|dbms/name" ` + profilePath + `'`,
 	})
@@ -969,7 +969,7 @@ func (d *Discovery) discoverDatabaseSID(appSID string) (string, error) {
 	return "", errors.New("No database SID found")
 }
 
-func (d *Discovery) discoverDBNodes(sid, instanceNumber, project, zone string) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, project, zone string) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	if sid == "" || instanceNumber == "" || project == "" || zone == "" {
 		log.Logger.Warn("To discover additional HANA nodes SID, instance number, project, and zone must be provided")
@@ -980,7 +980,7 @@ func (d *Discovery) discoverDBNodes(sid, instanceNumber, project, zone string) [
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	scriptPath := fmt.Sprintf("/usr/sap/%s/HDB%s/exe/python_support/landscapeHostConfiguration.py", sidUpper, instanceNumber)
 	command := fmt.Sprintf("-i -u %s python %s", sidAdm, scriptPath)
-	result := d.execute(commandlineexecutor.Params{
+	result := d.execute(ctx, commandlineexecutor.Params{
 		Executable:  "sudo",
 		ArgsToSplit: command,
 	})

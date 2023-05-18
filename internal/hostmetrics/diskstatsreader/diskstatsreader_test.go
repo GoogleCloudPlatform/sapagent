@@ -17,6 +17,7 @@ limitations under the License.
 package diskstatsreader
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -182,7 +183,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsSingleResult",
 			os:   "windows",
-			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				argStr := strings.Join(params.Args, " ")
 				if argStr != `-command $(Get-Counter '\PhysicalDisk(0*)\Avg. Disk sec/Read').CounterSamples[0].CookedValue;Write-Host ';';$(Get-Counter '\PhysicalDisk(0*)\Avg. Disk sec/Write').CounterSamples[0].CookedValue;Write-Host ';';$(Get-Counter '\PhysicalDisk(0*)\Current Disk Queue Length').CounterSamples[0].CookedValue` {
 					return commandlineexecutor.Result{
@@ -208,7 +209,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsMultipleResults",
 			os:   "windows",
-			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "111;222;333",
 				}
@@ -243,7 +244,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsNoDiskNumber",
 			os:   "windows",
-			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "111;222;333",
 				}
@@ -260,7 +261,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsBadDiskNumber",
 			os:   "windows",
-			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "111;222;333",
 				}
@@ -277,7 +278,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsErrRunCommand",
 			os:   "windows",
-			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "111;222;333",
 					Error:  errors.New("Run Command Error"),
@@ -289,7 +290,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsBadRunCommandOutput",
 			os:   "windows",
-			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "111222333",
 				}
@@ -300,7 +301,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsErrParse",
 			os:   "windows",
-			fakeExec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "one;two;three",
 				}
@@ -327,7 +328,7 @@ func TestRead(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			r := New(test.os, test.reader, test.fakeExec)
-			got := r.Read(test.ip)
+			got := r.Read(context.Background(), test.ip)
 			sortDiskStats := protocmp.SortRepeatedFields(&statspb.DiskStatsCollection{}, "disk_stats")
 			if d := cmp.Diff(test.want, got, protocmp.Transform(), sortDiskStats); d != "" {
 				t.Errorf("Read() mismatch (-want, +got):\n%s", d)

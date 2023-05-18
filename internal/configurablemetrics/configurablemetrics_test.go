@@ -17,6 +17,7 @@ limitations under the License.
 package configurablemetrics
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os/exec"
@@ -90,7 +91,7 @@ var (
 		}
 	}
 	testCommandExecute = func(stdout, stderr string, err error) commandlineexecutor.Execute {
-		return func(commandlineexecutor.Params) commandlineexecutor.Result {
+		return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			exitCode := 0
 			var exitErr *exec.ExitError
 			if err != nil && errors.As(err, &exitErr) {
@@ -197,7 +198,7 @@ func TestCollectOSCommandMetric(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotLabel, gotValue := CollectOSCommandMetric(test.metric, test.exec, test.vendor)
+			gotLabel, gotValue := CollectOSCommandMetric(context.Background(), test.metric, test.exec, test.vendor)
 			if gotLabel != test.wantLabel {
 				t.Errorf("CollectOSCommandMetric() unexpected metric label, got %q want %q", gotLabel, test.wantLabel)
 			}

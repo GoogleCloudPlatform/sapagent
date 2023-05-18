@@ -18,6 +18,7 @@ limitations under the License.
 package memorymetricreader
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -33,7 +34,7 @@ import (
 func TestMemoryStats(t *testing.T) {
 	for _, v := range []struct {
 		readFile    func(string) ([]byte, error)
-		wmicExecute func(commandlineexecutor.Params) commandlineexecutor.Result
+		wmicExecute func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
 		os          string
 		want        *mstatspb.MemoryStats
 	}{
@@ -70,7 +71,7 @@ func TestMemoryStats(t *testing.T) {
 			want: &mstatspb.MemoryStats{},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				argStr := strings.Join(params.Args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
 					return commandlineexecutor.Result{
@@ -94,7 +95,7 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: errors.New("error"),
 				}
@@ -106,7 +107,7 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				argStr := strings.Join(params.Args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
 					return commandlineexecutor.Result{
@@ -129,7 +130,7 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				argStr := strings.Join(params.Args, " ")
 				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
 					return commandlineexecutor.Result{
@@ -150,7 +151,7 @@ func TestMemoryStats(t *testing.T) {
 			},
 		},
 		{
-			wmicExecute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: errors.New("error"),
 				}
@@ -163,7 +164,7 @@ func TestMemoryStats(t *testing.T) {
 		},
 	} {
 		m := New(v.os, v.readFile, v.wmicExecute)
-		got := m.MemoryStats()
+		got := m.MemoryStats(context.Background())
 		if diff := cmp.Diff(v.want, got, protocmp.Transform()); diff != "" {
 			t.Errorf("MemoryStats for Windows returned unexpected diff (-want +got):\n%s", diff)
 		}

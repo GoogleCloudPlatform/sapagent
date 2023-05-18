@@ -17,6 +17,7 @@ limitations under the License.
 package commandlineexecutor
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -26,7 +27,7 @@ import (
 
 // setupExeForPlatform sets up the env and user if provided in the params.
 // returns an error if it could not be setup
-func setupExeForPlatform(exe *exec.Cmd, params Params, executeCommand Execute) error {
+func setupExeForPlatform(ctx context.Context, exe *exec.Cmd, params Params, executeCommand Execute) error {
 	// set the execution environment if params Env exists
 	if len(params.Env) > 0 {
 		exe.Env = append(exe.Environ(), params.Env...)
@@ -34,7 +35,7 @@ func setupExeForPlatform(exe *exec.Cmd, params Params, executeCommand Execute) e
 
 	// if params.User exists run as the user
 	if params.User != "" {
-		uid, err := getUID(params.User, executeCommand)
+		uid, err := getUID(ctx, params.User, executeCommand)
 		if err != nil {
 			return err
 		}
@@ -49,8 +50,8 @@ getUID takes user string and returns the numeric LINUX UserId and an Error.
 Returns (0, error) in case of failure, and (uid, nil) when successful.
 Note: This is intended for Linux based system only.
 */
-func getUID(user string, executeCommand Execute) (uint32, error) {
-	result := executeCommand(Params{
+func getUID(ctx context.Context, user string, executeCommand Execute) (uint32, error) {
+	result := executeCommand(ctx, Params{
 		Executable:  "id",
 		ArgsToSplit: fmt.Sprintf("-u %s", user),
 	})

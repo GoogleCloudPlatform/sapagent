@@ -17,6 +17,7 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -47,7 +48,7 @@ type InterfaceAddrsGetter func() ([]net.Addr, error)
 // CollectSystemMetricsFromConfig collects the system metrics specified by the
 // WorkloadValidation config and formats the results as a time series to be
 // uploaded to a Collection Storage mechanism.
-func CollectSystemMetricsFromConfig(params Parameters) WorkloadMetrics {
+func CollectSystemMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager System metrics...")
 	t := "workload.googleapis.com/sap/validation/system"
 	l := make(map[string]string)
@@ -58,7 +59,7 @@ func CollectSystemMetricsFromConfig(params Parameters) WorkloadMetrics {
 		l[m.GetMetricInfo().GetLabel()] = v
 	}
 	for _, m := range system.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(ctx, m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
@@ -101,12 +102,12 @@ func networkIPAddrs(params Parameters) string {
 	return strings.Join(v, ",")
 }
 
-// CollectSystemMetrics will collect the systme metrics for Workload Manager and send them to the
+// CollectSystemMetrics will collect the system metrics for Workload Manager and send them to the
 // channel wm
 //
 // This is a legacy collection method that can be removed from the codebase
 // once configurable WLM metric collection is fully implemented.
-func CollectSystemMetrics(params Parameters, wm chan<- WorkloadMetrics) {
+func CollectSystemMetrics(ctx context.Context, params Parameters, wm chan<- WorkloadMetrics) {
 	log.Logger.Info("Collecting Workload Manager System metrics...")
 	gcl := "false"
 	if cmdExists("gcloud") {
@@ -116,7 +117,7 @@ func CollectSystemMetrics(params Parameters, wm chan<- WorkloadMetrics) {
 	if cmdExists("gsutil") {
 		gsu = "true"
 	}
-	l := buildLabelMap(params, gcl, gsu)
+	l := buildLabelMap(ctx, params, gcl, gsu)
 	t := "workload.googleapis.com/sap/validation/system"
 	m := createTimeSeries(t, l, 1, params.Config)
 	wm <- WorkloadMetrics{Metrics: m}
@@ -165,15 +166,15 @@ func linuxOsRelease() string {
 	return strings.ReplaceAll(id, `"`, "") + "-" + strings.ReplaceAll(v, `"`, "")
 }
 
-func wmicOsCaptionExecute() commandlineexecutor.Result {
-	return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+func wmicOsCaptionExecute(ctx context.Context) commandlineexecutor.Result {
+	return commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable: "wmic",
 		Args:       []string{"Caption/Format:List"},
 	})
 }
 
-func wmicOsVersion() commandlineexecutor.Result {
-	return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+func wmicOsVersion(ctx context.Context) commandlineexecutor.Result {
+	return commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable: "wmic",
 		Args:       []string{"Version/Format:List"},
 	})
@@ -193,15 +194,15 @@ func trimAndSplitWmicOutput(s string) string {
 	return strings.ToLower(sp[1])
 }
 
-func windowsOsRelease() string {
-	cresult := osCaptionExecute()
+func windowsOsRelease(ctx context.Context) string {
+	cresult := osCaptionExecute(ctx)
 	c := cresult.StdOut
 	if cresult.Error != nil {
 		log.Logger.Warnw("Could not execute wmic get Caption", "stderr", cresult.StdErr, "error", cresult.Error)
 		c = ""
 	}
 	c = trimAndSplitWmicOutput(c)
-	vresult := osVersionExecute()
+	vresult := osVersionExecute(ctx)
 	v := vresult.StdOut
 	if vresult.Error != nil {
 		log.Logger.Warnw("Could not execute wmic get Version", "stderr", vresult.StdErr, "error", vresult.Error)
@@ -211,29 +212,29 @@ func windowsOsRelease() string {
 	return c + "-" + v
 }
 
-func osRelease(runtimeOS string) string {
+func osRelease(ctx context.Context, runtimeOS string) string {
 	if runtimeOS == "windows" {
-		return windowsOsRelease()
+		return windowsOsRelease(ctx)
 	}
 	return linuxOsRelease()
 }
 
-func serviceStatus(runtimeOS string) commandlineexecutor.Result {
+func serviceStatus(ctx context.Context, runtimeOS string) commandlineexecutor.Result {
 	if runtimeOS == "windows" {
-		return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+		return commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 			Executable: "powershell",
 			Args:       []string{"-Command", "(Get-Service", "-Name", "google-cloud-sap-agent).Status"},
 		})
 	}
-	return commandlineexecutor.ExecuteCommand(commandlineexecutor.Params{
+	return commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable: "systemctl",
 		Args:       []string{"is-active", "google-cloud-sap-agent"},
 	})
 }
 
-func agentState(runtimeOS string) string {
+func agentState(ctx context.Context, runtimeOS string) string {
 	state := "notinstalled"
-	result := agentServiceStatus(runtimeOS)
+	result := agentServiceStatus(ctx, runtimeOS)
 	if result.Error != nil {
 		log.Logger.Warnw("Could not get the agents service status", "error", result.Error)
 		return state
@@ -253,13 +254,13 @@ func agentState(runtimeOS string) string {
 	return state
 }
 
-func buildLabelMap(params Parameters, gcl string, gsu string) map[string]string {
+func buildLabelMap(ctx context.Context, params Parameters, gcl string, gsu string) map[string]string {
 	return map[string]string{
 		"instance_name": params.Config.GetCloudProperties().GetInstanceName(),
-		"os":            osRelease(params.OSType),
+		"os":            osRelease(ctx, params.OSType),
 		"agent":         "gcagent",
 		"agent_version": params.Config.GetAgentProperties().GetVersion(),
-		"agent_state":   agentState(params.OSType),
+		"agent_state":   agentState(ctx, params.OSType),
 		"gcloud":        gcl,
 		"gsutil":        gsu,
 		"network_ips":   netInterfacesValue(),

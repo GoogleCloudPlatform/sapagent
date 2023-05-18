@@ -235,7 +235,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	}
 
 	// Read the latest instance info for this system.
-	params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
+	params.InstanceInfoReader.Read(ctx, params.Config, instanceinfo.NetworkInterfaceAddressMap)
 
 	// Collect all metrics specified by the WLM Validation config.
 	var system, corosync, hana, netweaver, pacemaker, custom WorkloadMetrics
@@ -243,19 +243,19 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	wg.Add(6)
 	go func() {
 		defer wg.Done()
-		system = CollectSystemMetricsFromConfig(params)
+		system = CollectSystemMetricsFromConfig(ctx, params)
 	}()
 	go func() {
 		defer wg.Done()
-		corosync = CollectCorosyncMetricsFromConfig(params)
+		corosync = CollectCorosyncMetricsFromConfig(ctx, params)
 	}()
 	go func() {
 		defer wg.Done()
-		hana = CollectHANAMetricsFromConfig(params)
+		hana = CollectHANAMetricsFromConfig(ctx, params)
 	}()
 	go func() {
 		defer wg.Done()
-		netweaver = CollectNetWeaverMetricsFromConfig(params)
+		netweaver = CollectNetWeaverMetricsFromConfig(ctx, params)
 	}()
 	go func() {
 		defer wg.Done()
@@ -263,7 +263,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	}()
 	go func() {
 		defer wg.Done()
-		custom = CollectCustomMetricsFromConfig(params)
+		custom = CollectCustomMetricsFromConfig(ctx, params)
 	}()
 	wg.Wait()
 
@@ -294,14 +294,14 @@ func collectMetrics(ctx context.Context, params Parameters, metricOverride strin
 		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
 	}
 	// read the instance info
-	params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
+	params.InstanceInfoReader.Read(ctx, params.Config, instanceinfo.NetworkInterfaceAddressMap)
 
 	sch := make(chan WorkloadMetrics)
-	go CollectSystemMetrics(params, sch)
+	go CollectSystemMetrics(ctx, params, sch)
 	cch := make(chan WorkloadMetrics)
-	go CollectCorosyncMetrics(params, cch, csConfigPath)
+	go CollectCorosyncMetrics(ctx, params, cch, csConfigPath)
 	hch := make(chan WorkloadMetrics)
-	go CollectHanaMetrics(params, hch)
+	go CollectHanaMetrics(ctx, params, hch)
 	nch := make(chan WorkloadMetrics)
 	go CollectNetWeaverMetrics(params, nch)
 	pch := make(chan WorkloadMetrics)

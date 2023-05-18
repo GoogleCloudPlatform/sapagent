@@ -192,7 +192,7 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 					},
 				},
 				Exists: func(string) bool { return false },
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 				OSStatReader:       func(data string) (os.FileInfo, error) { return nil, nil },
@@ -259,7 +259,7 @@ func TestCollectMetrics_hasMetrics(t *testing.T) {
 	want := 5
 	p := Parameters{
 		Config: &cfgpb.Configuration{},
-		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -300,7 +300,7 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 		},
 		ConfigFileReader: DefaultTestReader,
 		OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
-		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -314,7 +314,7 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 	wantOSVersion := "microsoft_windows_server_2019_datacenter-10.0.17763"
 	wantTimestamp := &timestamppb.Timestamp{Seconds: now()}
 
-	agentServiceStatus = func(string) commandlineexecutor.Result {
+	agentServiceStatus = func(context.Context, string) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "Running",
 			StdErr: "",
@@ -328,13 +328,13 @@ func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
 	netInterfaceAdddrs = func() ([]net.Addr, error) {
 		return []net.Addr{ip1, ip2}, nil
 	}
-	osCaptionExecute = func() commandlineexecutor.Result {
+	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
 			StdErr: "",
 		}
 	}
-	osVersionExecute = func() commandlineexecutor.Result {
+	osVersionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n\nVersion=10.0.17763  \n\n",
 			StdErr: "",
@@ -370,7 +370,7 @@ func TestCollectMetrics_hasOverrideMetrics(t *testing.T) {
 	want := 2
 	p := Parameters{
 		Config: &cfgpb.Configuration{},
-		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -519,7 +519,7 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 					}},
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
 						StdErr: "",
@@ -542,7 +542,7 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 					}},
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
 						StdErr: "",
@@ -638,7 +638,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 					}},
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
 						StdErr: "",

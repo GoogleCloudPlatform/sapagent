@@ -56,9 +56,9 @@ type (
 // responsible for collecting sap service statuses metric.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
-	isFailedMetrics := queryInstanceState(p, "is-failed")
+	isFailedMetrics := queryInstanceState(ctx, p, "is-failed")
 	metrics = append(metrics, isFailedMetrics...)
-	isDisabledMetrics := queryInstanceState(p, "is-enabled")
+	isDisabledMetrics := queryInstanceState(ctx, p, "is-enabled")
 	metrics = append(metrics, isDisabledMetrics...)
 	return metrics
 }
@@ -70,12 +70,12 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 //
 // In case of `systemctl is-enabled service` it returns 0 if the specified service is enabled,
 // non-zero otherwise, metric will be sent only in case service is disabled.
-func queryInstanceState(p *InstanceProperties, metric string) []*mrpb.TimeSeries {
+func queryInstanceState(ctx context.Context, p *InstanceProperties, metric string) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
 	for _, service := range services {
 		command := "systemctl"
 		args := metric + " --quiet " + service
-		result := p.Execute(commandlineexecutor.Params{
+		result := p.Execute(ctx, commandlineexecutor.Params{
 			Executable:  command,
 			ArgsToSplit: args,
 		})

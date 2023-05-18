@@ -44,7 +44,7 @@ var (
 type (
 	// Execute is a function to execute a command. Production callers
 	// to pass commandlineexecutor.ExecuteCommand while calling this package's APIs.
-	Execute func(params Params) Result
+	Execute func(context.Context, Params) Result
 
 	// Exists is a function to check if a command exists.  Production callers
 	// to pass commandlineexecutor.CommandExists while calling this package's APIs.
@@ -100,7 +100,7 @@ If Env is defined then that environment will be used to execute the command
 The returned Result will contain the standard out, standard error, the exit code and an error if
 one was encountered during execution.
 */
-func ExecuteCommand(params Params) Result {
+func ExecuteCommand(ctx context.Context, params Params) Result {
 	if !exists(params.Executable) {
 		log.Logger.Debugw("Command executable not found", "executable", params.Executable)
 		msg := fmt.Sprintf("Command executable: %q not found.", params.Executable)
@@ -114,8 +114,6 @@ func ExecuteCommand(params Params) Result {
 	if params.Timeout > 0 {
 		timeout = time.Duration(params.Timeout) * time.Second
 	}
-	// TODO Refactor to get the Context through to all ExecuteCommand calls as a parameter
-	ctx := context.Background()
 	tctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	args := params.Args
@@ -130,7 +128,7 @@ func ExecuteCommand(params Params) Result {
 	if exeForPlatform != nil {
 		err = exeForPlatform(exe, params)
 	} else {
-		err = setupExeForPlatform(exe, params, ExecuteCommand)
+		err = setupExeForPlatform(ctx, exe, params, ExecuteCommand)
 	}
 	if err != nil {
 		log.Logger.Debugw("Could not setup the executable environment", "executable", params.Executable, "args", args, "error", err)

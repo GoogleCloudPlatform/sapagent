@@ -55,7 +55,7 @@ func TestCollect(t *testing.T) {
 	}{
 		{
 			name: "CollectMetricsWithFailureExitCodeInIsFailedAndIsDisabled",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if strings.HasPrefix(params.ArgsToSplit, "is-failed") {
 					// a zero exit code will represent an error here
 					return commandlineexecutor.Result{}
@@ -74,7 +74,7 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "CollectMetricsWithFailuresInExitCodeInIsFailed",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
 			exitCode: func(err error) int {
@@ -87,7 +87,7 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "NoMetricsCollectedFromIsFailedAndIsDisabled",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if strings.HasPrefix(params.ArgsToSplit, "is-failed") {
 					// a zero exit code will represent an error here
 					return commandlineexecutor.Result{
@@ -108,7 +108,7 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "CollectMetricsWithFailureInIsDisabled",
-			execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error:            errors.New("unable to execute command"),
 					ExitStatusParsed: true,

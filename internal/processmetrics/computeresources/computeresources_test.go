@@ -102,7 +102,7 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "EmptyProcessList",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 				config:           defaultConfig,
@@ -115,7 +115,7 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "CommandExecutorReturnsError",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						Error: errors.New("could not execute command"),
 					}
@@ -130,7 +130,7 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "ProcessListCreatedSuccessfully",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   3077\n\nsapstart   9999\n",
 					}
@@ -148,7 +148,7 @@ func TestCollectControlProcesses(t *testing.T) {
 		{
 			name: "MalformedOutputFromCommand",
 			params: parameters{
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   9603\n\nsapstart    9204 sample\n",
 					}
@@ -164,7 +164,7 @@ func TestCollectControlProcesses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectControlProcesses(test.params)
+			got := collectControlProcesses(context.Background(), test.params)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("collectControlProcesses(%v) returned unexpected diff (-want +got):\n%s", test.params, diff)
 			}
@@ -188,7 +188,7 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				sapInstance:          defaultSAPInstance,
 				getProcessListParams: commandlineexecutor.Params{},
 				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -204,7 +204,7 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				sapInstance:          nil,
 				getProcessListParams: commandlineexecutor.Params{},
 				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: defaultSapControlOutput,
 					}
@@ -221,14 +221,14 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				memoryMetricPath: "/sample/test/memory",
 				sapInstance:      defaultSAPInstance,
 				getProcessListParams: commandlineexecutor.Params{
-					Executable: "exe",
+					Executable:  "exe",
 					ArgsToSplit: "processlist",
 				},
 				getABAPWPTableParams: commandlineexecutor.Params{
-					Executable: "exe",
+					Executable:  "exe",
 					ArgsToSplit: "abaptable",
 				},
-				executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 					if params.ArgsToSplit == "processlist" {
 						return commandlineexecutor.Result{
 							StdOut: defaultSapControlOutput,
@@ -260,7 +260,7 @@ func TestCollectProcessesForInstance(t *testing.T) {
 					Executable:  "exe",
 					ArgsToSplit: "abaptable",
 				},
-				executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 					if params.ArgsToSplit == "processlist" {
 						return commandlineexecutor.Result{
 							StdOut: defaultSapControlOutput,
@@ -288,7 +288,7 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				sapInstance:          defaultSAPInstance,
 				getProcessListParams: commandlineexecutor.Params{},
 				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: defaultSapControlOutput,
 					}
@@ -303,7 +303,7 @@ func TestCollectProcessesForInstance(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectProcessesForInstance(test.params)
+			got := collectProcessesForInstance(context.Background(), test.params)
 			// Sort by PID since sapcontrol's ProcessList does not guarantee any ordering.
 			sort.Slice(got, func(i, j int) bool { return got[i].PID < got[j].PID })
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {

@@ -17,6 +17,7 @@ limitations under the License.
 package pacemaker
 
 import (
+	"context"
 	"encoding/xml"
 	"testing"
 
@@ -276,7 +277,7 @@ func TestIsEnabled(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: exampleXMLData,
 				}
@@ -285,7 +286,7 @@ func TestIsEnabled(t *testing.T) {
 		},
 		{
 			name: "CRMMonCommandFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -293,7 +294,7 @@ func TestIsEnabled(t *testing.T) {
 		},
 		{
 			name: "InvalidXML",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "<i>Not XML</q>",
 				}
@@ -301,7 +302,7 @@ func TestIsEnabled(t *testing.T) {
 		},
 		{
 			name: "ZeroNodeCRM",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: xmlZeroNodeCRM,
 				}
@@ -311,7 +312,7 @@ func TestIsEnabled(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, _ := data(test.fakeExec)
+			data, _ := data(context.Background(), test.fakeExec)
 			got := Enabled(data)
 			if got != test.want {
 				t.Fatalf("Failure in Enabled(), got: %v, want: %v.", got, test.want)
@@ -329,7 +330,7 @@ func TestNState(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: exampleXMLData,
 				}
@@ -341,7 +342,7 @@ func TestNState(t *testing.T) {
 		},
 		{
 			name: "ReadFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -351,7 +352,7 @@ func TestNState(t *testing.T) {
 		},
 		{
 			name: "InvalidXML",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "<>Still Not XML</q>",
 				}
@@ -361,7 +362,7 @@ func TestNState(t *testing.T) {
 		},
 		{
 			name: "StandByAndShutdown",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `<?xml version="1.0"?>
 					<crm_mon version="2.0.1">
@@ -379,7 +380,7 @@ func TestNState(t *testing.T) {
 		},
 		{
 			name: "UncleanAndUnknown",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `<?xml version="1.0"?>
 					<crm_mon version="2.0.1">
@@ -398,7 +399,7 @@ func TestNState(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, gotError := data(test.fakeExec)
+			data, gotError := data(context.Background(), test.fakeExec)
 			got, _ := NodeState(data)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
@@ -420,7 +421,7 @@ func TestRState(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: exampleXMLData,
 				}
@@ -470,7 +471,7 @@ func TestRState(t *testing.T) {
 		},
 		{
 			name: "ReadFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -479,7 +480,7 @@ func TestRState(t *testing.T) {
 		},
 		{
 			name: "InvalidXML",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "<not xml>",
 				}
@@ -490,7 +491,7 @@ func TestRState(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, gotError := data(test.fakeExec)
+			data, gotError := data(context.Background(), test.fakeExec)
 			gotResources, _ := ResourceState(data)
 
 			if diff := cmp.Diff(test.wantResources, gotResources); diff != "" {
@@ -512,7 +513,7 @@ func TestFailCount(t *testing.T) {
 	}{
 		{
 			name: "ResourceWithFailCount",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: exampleXMLData,
 				}
@@ -527,7 +528,7 @@ func TestFailCount(t *testing.T) {
 		},
 		{
 			name: "NoResourceWithFailCount",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: xmlNoResourceWithFailCount,
 				}
@@ -535,7 +536,7 @@ func TestFailCount(t *testing.T) {
 		},
 		{
 			name: "XMLParseFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "<not xml>",
 				}
@@ -544,7 +545,7 @@ func TestFailCount(t *testing.T) {
 		},
 		{
 			name: "CRMMonFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -555,7 +556,7 @@ func TestFailCount(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, gotErr := data(test.fakeExec)
+			data, gotErr := data(context.Background(), test.fakeExec)
 			got, _ := FailCount(data)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Fatalf("Failure in fCount(), gotErr: %v, wantErr: %v.", gotErr, test.wantErr)
@@ -577,7 +578,7 @@ func TestPaceMakerXMLString(t *testing.T) {
 	}{
 		{
 			name: "NilReturn",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -587,7 +588,7 @@ func TestPaceMakerXMLString(t *testing.T) {
 		},
 		{
 			name: "CRMAvailable",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: exampleXMLData,
 				}
@@ -597,7 +598,7 @@ func TestPaceMakerXMLString(t *testing.T) {
 		},
 		{
 			name: "PCSExistsCRMUnavailable",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: xmlNoResourceWithFailCount,
 				}
@@ -607,7 +608,7 @@ func TestPaceMakerXMLString(t *testing.T) {
 		},
 		{
 			name: "PCSExistsCRMAvailable",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: exampleXMLData,
 				}
@@ -619,7 +620,7 @@ func TestPaceMakerXMLString(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := XMLString(test.fakeExec, test.crmAvail)
+			got := XMLString(context.Background(), test.fakeExec, test.crmAvail)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Fatalf("Failure in XMLString() returned diff (-want +got):\n%s.", diff)

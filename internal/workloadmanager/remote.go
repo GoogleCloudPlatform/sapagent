@@ -72,9 +72,9 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 		wp.Submit(func() {
 			log.Logger.Infow("Collecting metrics from", "instance", inst)
 			if rc.GetRemoteCollectionSsh() != nil {
-				go collectRemoteSSH(params, rc, inst, ch)
+				go collectRemoteSSH(ctx, params, rc, inst, ch)
 			} else if rc.GetRemoteCollectionGcloud() != nil {
-				go collectRemoteGcloud(params, rc, inst, ch)
+				go collectRemoteGcloud(ctx, params, rc, inst, ch)
 			}
 			wm := <-ch
 			// lock so we can update the metricsSent
@@ -129,7 +129,7 @@ func gcloudInstanceName(rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.R
 //   - execute the binary to collect the metrics in JSON format in stdout
 //   - read the stdout and parse errors or JSON into Metrics
 //   - return the metrics from the host to the caller
-func collectRemoteGcloud(params Parameters, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, wm chan<- WorkloadMetrics) {
+func collectRemoteGcloud(ctx context.Context, params Parameters, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, wm chan<- WorkloadMetrics) {
 	var metrics []*mrpb.TimeSeries
 	if !params.Exists("gcloud") {
 		log.Logger.Error("gcloud command not found. Ensure the google cloud SDK is installed and that the gcloud command is in systemd's PATH environment variable: `systemctl show-environment`, `systemctl set-environment PATH=</path:/another/path>")
@@ -143,7 +143,7 @@ func collectRemoteGcloud(params Parameters, rc *cnfpb.WorkloadValidationRemoteCo
 	sshArgs := []string{"compute", "ssh"}
 	sshArgs = appendCommonGcloudArgs(sshArgs, rc, i)
 	sshArgs = append(sshArgs, iName, "--command", "sudo rm -f "+remoteAgentBinary)
-	result := params.Execute(commandlineexecutor.Params{
+	result := params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "gcloud",
 		Args:       sshArgs,
 	})
@@ -156,7 +156,7 @@ func collectRemoteGcloud(params Parameters, rc *cnfpb.WorkloadValidationRemoteCo
 	scpArgs = appendCommonGcloudArgs(scpArgs, rc, i)
 	scpArgs = append(scpArgs, agentBinary, fmt.Sprintf("%s:%s", iName, remoteAgentBinary))
 	log.Logger.Debugw("Sending binary to remote host", "instance", i)
-	result = params.Execute(commandlineexecutor.Params{
+	result = params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "gcloud",
 		Args:       scpArgs,
 	})
@@ -170,7 +170,7 @@ func collectRemoteGcloud(params Parameters, rc *cnfpb.WorkloadValidationRemoteCo
 	sshArgs = []string{"compute", "ssh"}
 	sshArgs = appendCommonGcloudArgs(sshArgs, rc, i)
 	sshArgs = append(sshArgs, iName, "--command", "sudo "+remoteAgentBinary+fmt.Sprintf(" remote -p=%s -z=%s -i=%s -n=%s; rm "+remoteAgentBinary, i.GetProjectId(), i.GetZone(), i.GetInstanceId(), i.GetInstanceName()))
-	result = params.Execute(commandlineexecutor.Params{
+	result = params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "gcloud",
 		Args:       sshArgs,
 	})
@@ -221,7 +221,7 @@ func appendSSHArgs(args []string, rc *cnfpb.WorkloadValidationRemoteCollection, 
 //   - execute the binary to collect the metrics in JSON format in stdout
 //   - read the stdout and parse errors or JSON into Metrics
 //   - return the metrics from the host to the caller
-func collectRemoteSSH(params Parameters, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, wm chan<- WorkloadMetrics) {
+func collectRemoteSSH(ctx context.Context, params Parameters, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, wm chan<- WorkloadMetrics) {
 	projectID := i.ProjectId
 	zone := i.Zone
 	instanceID := i.InstanceId
@@ -233,7 +233,7 @@ func collectRemoteSSH(params Parameters, rc *cnfpb.WorkloadValidationRemoteColle
 	rmArgs = appendSSHArgs(rmArgs, rc, i, false)
 	// append "rm -f remoteAgentBinary"
 	rmArgs = append(rmArgs, "rm -f "+remoteAgentBinary)
-	result := params.Execute(commandlineexecutor.Params{
+	result := params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "scp",
 		Args:       rmArgs,
 	})
@@ -245,7 +245,7 @@ func collectRemoteSSH(params Parameters, rc *cnfpb.WorkloadValidationRemoteColle
 
 	scpArgs := []string{}
 	scpArgs = appendSSHArgs(scpArgs, rc, i, true)
-	result = params.Execute(commandlineexecutor.Params{
+	result = params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "scp",
 		Args:       scpArgs,
 	})
@@ -259,7 +259,7 @@ func collectRemoteSSH(params Parameters, rc *cnfpb.WorkloadValidationRemoteColle
 	sshArgs = appendSSHArgs(sshArgs, rc, i, false)
 	//append "remoteAgentBinary remote -h=false -p=projectID -i=instanceID -n=instanceName -z=zone"
 	sshArgs = append(sshArgs, remoteAgentBinary, "remote", "-h=false", "-p="+projectID+" -i="+instanceID+" -n="+instanceName+" -z="+zone)
-	result = params.Execute(commandlineexecutor.Params{
+	result = params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "ssh",
 		Args:       sshArgs,
 	})

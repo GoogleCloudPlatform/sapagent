@@ -92,7 +92,7 @@ var (
 		BareMetal: false,
 	}
 
-	defaultExec = func(commandlineexecutor.Params) commandlineexecutor.Result {
+	defaultExec = func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "",
 			StdErr: "",
@@ -344,7 +344,7 @@ func TestCheckAPIAccess(t *testing.T) {
 	}{
 		{
 			name: "CheckAPIAccessCurlError",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -357,7 +357,7 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessInvalidJSON",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "<http>Error 403</http>",
 					StdErr: "",
@@ -369,7 +369,7 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessValidJSONResponseError",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: jsonResponseError,
 					StdErr: "",
@@ -381,7 +381,7 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessValidJSON",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: jsonHealthyResponse,
 					StdErr: "",
@@ -393,7 +393,7 @@ func TestCheckAPIAccess(t *testing.T) {
 		},
 		{
 			name: "CheckAPIAccessValidJSONButWithError",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: jsonHealthyResponse,
 					StdErr: "",
@@ -408,7 +408,7 @@ func TestCheckAPIAccess(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := checkAPIAccess(test.exec, test.args...)
+			got, gotErr := checkAPIAccess(context.Background(), test.exec, test.args...)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("checkAPIAccess() returned unexpected metric labels diff (-want +got):\n%s", diff)
@@ -429,7 +429,7 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 	}{
 		{
 			name: "TestAccessFailures",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: jsonResponseError,
 					StdErr: "",
@@ -442,7 +442,7 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 		},
 		{
 			name: "TestAccessErrors",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -456,7 +456,7 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 		},
 		{
 			name: "TestAccessSuccessful",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: jsonHealthyResponse,
 					StdErr: "",
@@ -472,7 +472,7 @@ func TestSetPacemakerAPIAccess(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			setPacemakerAPIAccess(got, "", "", test.exec)
+			setPacemakerAPIAccess(context.Background(), got, "", "", test.exec)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerAPIAccess() returned unexpected metric labels diff (-want +got):\n%s", diff)
@@ -490,7 +490,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 	}{
 		{
 			name: "TestMaintenanceModeCRMAvailable",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "Maintenance mode ready",
 					StdErr: "",
@@ -501,7 +501,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 		},
 		{
 			name: "TestMaintenanceModeNotCRMUnavailable",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "Maintenance mode ready",
 					StdErr: "",
@@ -512,7 +512,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 		},
 		{
 			name: "TestMaintenanceModeError",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -524,7 +524,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 		},
 		{
 			name: "TestMaintenanceModeNotEnabled",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -538,7 +538,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			setPacemakerMaintenanceMode(got, test.crmAvailable, test.exec)
+			setPacemakerMaintenanceMode(context.Background(), got, test.crmAvailable, test.exec)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerMaintenanceMode() returned unexpected metric labels diff (-want +got):\n%s", diff)
@@ -1172,7 +1172,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "UnparseableXML",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "Error: Bad XML",
 					StdErr: "",
@@ -1186,7 +1186,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "ServiceAccountReadError",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerServiceAccountXML,
 					StdErr: "",
@@ -1201,7 +1201,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "ServiceAccountReadSuccess",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerServiceAccountXML,
 					StdErr: "",
@@ -1218,7 +1218,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "CustomWorkloadConfig",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "cibadmin" {
 					return commandlineexecutor.Result{
 						StdOut: pacemakerServiceAccountXML,
@@ -1285,7 +1285,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "ProjectID",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "curl" {
 					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
 						return commandlineexecutor.Result{
@@ -1317,7 +1317,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "LocationPref",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerClipReferXML,
 					StdErr: "",
@@ -1334,7 +1334,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "CloneMetrics",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerCloneXML,
 					StdErr: "",
@@ -1351,7 +1351,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "NilCloudProperties",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerCloneXML,
 					StdErr: "",
@@ -1375,7 +1375,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			defaultIIR.Read(test.config, defaultMapperFunc)
+			defaultIIR.Read(context.Background(), test.config, defaultMapperFunc)
 			want := test.wantPacemakerMetrics(nts, test.wantPacemakerExists, "test-os-version", test.locationPref)
 
 			p := Parameters{
@@ -1430,7 +1430,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsUnparseableXML",
 			runtimeOS: "linux",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "Error: Bad XML",
 					StdErr: "",
@@ -1447,7 +1447,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsServiceAccountReadError",
 			runtimeOS: "linux",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerServiceAccountXML,
 					StdErr: "",
@@ -1465,7 +1465,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsServiceAccount",
 			runtimeOS: "linux",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerServiceAccountXML,
 					StdErr: "",
@@ -1485,7 +1485,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsProjectID",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "curl" {
 					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
 						return commandlineexecutor.Result{
@@ -1519,7 +1519,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsLocationPref",
 			runtimeOS: "linux",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerClipReferXML,
 					StdErr: "",
@@ -1539,7 +1539,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsCloneMetrics",
 			runtimeOS: "linux",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerCloneXML,
 					StdErr: "",
@@ -1559,7 +1559,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		{
 			name:      "TestCollectPacemakerMetricsNilCloudProperties",
 			runtimeOS: "linux",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerCloneXML,
 					StdErr: "",
@@ -1593,13 +1593,13 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	osCaptionExecute = func() commandlineexecutor.Result {
+	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
 			StdErr: "",
 		}
 	}
-	osVersionExecute = func() commandlineexecutor.Result {
+	osVersionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n Version=10.0.17763  \n\n",
 			StdErr: "",
@@ -1611,7 +1611,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.iir.Read(test.config, test.mapper)
+			test.iir.Read(context.Background(), test.config, test.mapper)
 			want := test.wantPacemakerMetrics(nts, test.wantPacemakerExists, test.wantOsVersion, test.locationPref)
 
 			pch := make(chan WorkloadMetrics)

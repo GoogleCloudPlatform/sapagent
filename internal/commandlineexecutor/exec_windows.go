@@ -17,10 +17,11 @@ limitations under the License.
 package commandlineexecutor
 
 import (
+	"context"
 	"os/exec"
 )
 
 // setupExeForPlatform is not implemented for windows.
-func setupExeForPlatform(exe *exec.Cmd, params Params, executeCommand Execute) error {
+func setupExeForPlatform(ctx context.Context, exe *exec.Cmd, params Params, executeCommand Execute) error {
 	return nil
 }

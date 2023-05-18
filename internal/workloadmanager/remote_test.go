@@ -51,7 +51,7 @@ func TestCollectMetricsToJSON(t *testing.T) {
 	}
 	p := Parameters{
 		Config: c,
-		Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -404,7 +404,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			p := Parameters{
 				Config: test.config,
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: test.execOutput,
 						StdErr: "",

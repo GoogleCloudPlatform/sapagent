@@ -17,6 +17,8 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
+
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
@@ -24,14 +26,14 @@ import (
 // CollectCustomMetricsFromConfig collects any custom metrics as specified by
 // the WorkloadValidation config and formats the results as a time series to be
 // uploaded to a Collection Storage mechanism.
-func CollectCustomMetricsFromConfig(params Parameters) WorkloadMetrics {
+func CollectCustomMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager Custom metrics...")
 	t := "workload.googleapis.com/sap/validation/custom"
 	l := make(map[string]string)
 
 	custom := params.WorkloadConfig.GetValidationCustom()
 	for _, m := range custom.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(ctx, m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}

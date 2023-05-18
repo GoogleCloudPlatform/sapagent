@@ -69,8 +69,8 @@ var (
 		var f io.ReadCloser = file
 		return f, err
 	})
-	execute = commandlineexecutor.Execute(func(params commandlineexecutor.Params) commandlineexecutor.Result {
-		return commandlineexecutor.ExecuteCommand(params)
+	execute = commandlineexecutor.Execute(func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.ExecuteCommand(ctx, params)
 	})
 	exists = commandlineexecutor.Exists(func(exe string) bool {
 		return commandlineexecutor.CommandExists(exe)

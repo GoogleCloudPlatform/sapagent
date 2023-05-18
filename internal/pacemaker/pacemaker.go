@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package pacemaker implements Linux Pacemaker cluster related functions.
-// The package implements functions to detect of Pacemeaker HA cluster on the
+// The package implements functions to detect of Pacemaker HA cluster on the
 // machine running sap-agent. Package supports both SUSE and RHEL based images.
 // The goal of the package is to interact with pacemaker via commands and
 // enable sap-agent with this data for WLM metrics and linux cluster related
@@ -23,6 +23,7 @@ limitations under the License.
 package pacemaker
 
 import (
+	"context"
 	"encoding/xml"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -102,12 +103,12 @@ type (
 )
 
 // Data gets the crm_mon data and parses it into the CRMMon struct.
-func Data() (*CRMMon, error) {
-	return data(commandlineexecutor.ExecuteCommand)
+func Data(ctx context.Context) (*CRMMon, error) {
+	return data(ctx, commandlineexecutor.ExecuteCommand)
 }
 
-func data(runner commandlineexecutor.Execute) (*CRMMon, error) {
-	result := runner(commandlineexecutor.Params{
+func data(ctx context.Context, runner commandlineexecutor.Execute) (*CRMMon, error) {
+	result := runner(ctx, commandlineexecutor.Params{
 		Executable: "crm_mon",
 		Args:       []string{"--as-xml"},
 	})
@@ -214,15 +215,15 @@ func FailCount(crm *CRMMon) ([]ResourceFailCount, error) {
 /*
 XMLString obtains a string of encoded XML data describing the pacemaker metrics.
 */
-func XMLString(exec commandlineexecutor.Execute, crmAvailable bool) *string {
+func XMLString(ctx context.Context, exec commandlineexecutor.Execute, crmAvailable bool) *string {
 	if crmAvailable {
-		result := exec(commandlineexecutor.Params{
+		result := exec(ctx, commandlineexecutor.Params{
 			Executable: "cibadmin",
 			Args:       []string{"--query"},
 		})
 		return &result.StdOut
 	}
-	result := exec(commandlineexecutor.Params{
+	result := exec(ctx, commandlineexecutor.Params{
 		Executable: "pcs",
 		Args:       []string{"cluster", "cib"},
 	})

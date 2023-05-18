@@ -18,6 +18,7 @@ limitations under the License.
 package cpustatsreader
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -78,7 +79,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsSuccess",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "\n\r\n\r\nMaxClockSpeed=2200\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4\nNumberOfLogicalProcessors=8\n\r\n\r\n",
 					StdErr: "",
@@ -94,7 +95,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsErrExecuteCommand",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "stdError output",
@@ -106,7 +107,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsNoResults",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
 			want: &statspb.CpuStats{},
@@ -114,7 +115,7 @@ func TestRead(t *testing.T) {
 		{
 			name: "windowsParseErors",
 			os:   "windows",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "\n\r\n\r\nMaxClockSpeed=not-a-float\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4.5\nNumberOfLogicalProcessors=8.5\n\r\n\r\n",
 					StdErr: "",
@@ -134,7 +135,7 @@ func TestRead(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			r := New(test.os, test.reader, test.exec)
-			got := r.Read()
+			got := r.Read(context.Background())
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("Read() returned unexpected diff (-want +got):\n%s", diff)
 			}

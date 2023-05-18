@@ -17,6 +17,7 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -221,7 +222,7 @@ func createHANAWorkloadMetrics(labels map[string]string, value float64) Workload
 	}
 }
 
-func (f *fakeDiskMapper) ForDeviceName(deviceName string) (string, error) {
+func (f *fakeDiskMapper) ForDeviceName(ctx context.Context, deviceName string) (string, error) {
 	return deviceName, f.err
 }
 
@@ -377,14 +378,14 @@ basepath_persistent_memory_volumes = /hana/memory/ISC
 	defaultIIR = instanceinfo.New(defaultDiskMapper, defaultGCEService)
 )
 
-func GlobalINITest1Exec(commandlineexecutor.Params) commandlineexecutor.Result {
+func GlobalINITest1Exec(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 	return commandlineexecutor.Result{
 		StdOut: "",
 		StdErr: "",
 	}
 }
 
-func GlobalINITest2Exec(params commandlineexecutor.Params) commandlineexecutor.Result {
+func GlobalINITest2Exec(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 	if params.Executable == "/bin/sh" {
 		return commandlineexecutor.Result{
 			StdOut: "Global INI contents",
@@ -397,7 +398,7 @@ func GlobalINITest2Exec(params commandlineexecutor.Params) commandlineexecutor.R
 	}
 }
 
-func GlobalINITest3Exec(params commandlineexecutor.Params) commandlineexecutor.Result {
+func GlobalINITest3Exec(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 	if params.Executable == "pidof" {
 		return commandlineexecutor.Result{
 			StdOut: "12345",
@@ -415,7 +416,7 @@ func GlobalINITest3Exec(params commandlineexecutor.Params) commandlineexecutor.R
 	}
 }
 
-func GlobalINITest4Exec(params commandlineexecutor.Params) commandlineexecutor.Result {
+func GlobalINITest4Exec(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 	if params.Executable == "pidof" {
 		return commandlineexecutor.Result{
 			StdOut: "12345",
@@ -463,7 +464,7 @@ func TestHanaProcessOrGlobalINI(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := hanaProcessOrGlobalINI(test.exec)
+			got := hanaProcessOrGlobalINI(context.Background(), test.exec)
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, hanaProcessOrGlobalINI returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -606,7 +607,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoGrep2",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: defaultHanaINI,
 					StdErr: "",
@@ -622,7 +623,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoGrepError",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: defaultHanaINI,
 					StdErr: "",
@@ -638,7 +639,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoBadINIFormat",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "basepath_datavolume /hana/data/ISC",
 					StdErr: "",
@@ -653,7 +654,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoInvalidLSBLKOutput",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{
 						StdOut: "",
@@ -674,7 +675,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoInvalidLSBLKOutput2",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{
 						StdOut: "This is invalid lsblk output",
@@ -695,7 +696,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoInvalidLSBLKOutput3",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{
 						StdOut: DefaultJSONDiskList,
@@ -717,7 +718,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoMatches",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{
 						StdOut: DefaultJSONDiskList,
@@ -738,7 +739,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoSomeMatches",
 			basePathVolume:    "/dev/sdb",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{
 						StdOut: DefaultJSONDiskList,
@@ -764,7 +765,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoDevices",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{
 						StdOut: EmptyJSONDiskList,
@@ -785,7 +786,7 @@ func TestDiskInfo(t *testing.T) {
 			name:              "TestDiskInfoNoChildren",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{
 						StdOut: NoChildrenJSONDiskList,
@@ -806,8 +807,8 @@ func TestDiskInfo(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.iir.Read(test.config, test.mapper)
-			got := diskInfo(test.basePathVolume, test.globalINILocation, test.exec, *test.iir)
+			test.iir.Read(context.Background(), test.config, test.mapper)
+			got := diskInfo(context.Background(), test.basePathVolume, test.globalINILocation, test.exec, *test.iir)
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, diskInfo returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -884,7 +885,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.iir.Read(test.config, test.mapper)
+			test.iir.Read(context.Background(), test.config, test.mapper)
 			setDiskInfoForDevice(test.diskInfo, test.matchedBlockDevice, test.matchedMountPoint, test.matchedSize, *test.iir)
 			got := test.diskInfo
 
@@ -905,7 +906,7 @@ func TestGrepKeyInGlobalINI(t *testing.T) {
 	}{
 		{
 			name: "TestGrepKeyInGlobalINIGrepError",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -918,7 +919,7 @@ func TestGrepKeyInGlobalINI(t *testing.T) {
 		},
 		{
 			name: "TestGrepKeyInGlobalINIGrepNoReturn",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -930,7 +931,7 @@ func TestGrepKeyInGlobalINI(t *testing.T) {
 		},
 		{
 			name: "TestGrepKeyInGlobalINIGrepSuccess",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "disk_location = /dev/sda",
 					StdErr: "",
@@ -944,7 +945,7 @@ func TestGrepKeyInGlobalINI(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := grepKeyInGlobalINI(test.key, test.globalINILocation, test.exec)
+			got := grepKeyInGlobalINI(context.Background(), test.key, test.globalINILocation, test.exec)
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, grepKeyInGlobalINI returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -981,7 +982,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaNoINI",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1004,7 +1005,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaAllLabelsDisabled",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/bin/sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1027,7 +1028,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaAllLabelsEnabled",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/bin/sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1068,7 +1069,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 		{
 			name:      "TestHanaLabelsDisabledFromErrors",
 			runtimeOS: "linux",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/bin/sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1114,13 +1115,13 @@ func TestCollectHanaMetrics(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	osCaptionExecute = func() commandlineexecutor.Result {
+	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
 			StdErr: "",
 		}
 	}
-	osVersionExecute = func() commandlineexecutor.Result {
+	osVersionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n Version=10.0.17763  \n\n",
 			StdErr: "",
@@ -1132,7 +1133,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.iir.Read(test.config, test.mapper)
+			test.iir.Read(context.Background(), test.config, test.mapper)
 			want := test.wantHanaMetrics(nts, test.wantHanaExists, test.wantOsVersion)
 
 			hch := make(chan WorkloadMetrics)
@@ -1143,7 +1144,7 @@ func TestCollectHanaMetrics(t *testing.T) {
 				Execute:            test.exec,
 				OSType:             test.runtimeOS,
 			}
-			go CollectHanaMetrics(p, hch)
+			go CollectHanaMetrics(context.Background(), p, hch)
 			got := <-hch
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -1163,7 +1164,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 	}{
 		{
 			name: "TestHanaDoesNotExist",
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -1176,7 +1177,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "TestHanaNoINI",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/bin/sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1195,7 +1196,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "StatReaderError",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/bin/sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1214,7 +1215,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "TestHanaAllLabelsDisabled",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/bin/sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1246,7 +1247,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		},
 		{
 			name: "TestHanaAllLabelsEnabled",
-			exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/bin/sh" {
 					return commandlineexecutor.Result{
 						StdOut: "/etc/config/this_ini_does_not_exist.ini",
@@ -1313,7 +1314,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			iir := defaultIIR
-			iir.Read(defaultConfig, defaultMapperFunc)
+			iir.Read(context.Background(), defaultConfig, defaultMapperFunc)
 			p := Parameters{
 				Config:             cnf,
 				OSStatReader:       test.osStatReader,
@@ -1326,7 +1327,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			}
 
 			want := createHANAWorkloadMetrics(test.wantLabels, test.wantHanaExists)
-			got := CollectHANAMetricsFromConfig(p)
+			got := CollectHANAMetricsFromConfig(context.Background(), p)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectHANAMetricsFromConfig() returned unexpected diff (-want +got):\n%s", diff)
 			}

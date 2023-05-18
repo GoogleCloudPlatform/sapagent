@@ -17,6 +17,7 @@ limitations under the License.
 package commandlineexecutor
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"testing"
@@ -65,7 +66,7 @@ func TestExecuteCommandWithArgsToSplit(t *testing.T) {
 	for _, test := range input {
 		t.Run(test.name, func(t *testing.T) {
 			setDefaults()
-			result := ExecuteCommand(Params{
+			result := ExecuteCommand(context.Background(), Params{
 				Executable:  test.cmd,
 				ArgsToSplit: test.args,
 			})
@@ -122,7 +123,7 @@ func TestExecuteCommandWithArgs(t *testing.T) {
 	for _, test := range input {
 		t.Run(test.name, func(t *testing.T) {
 			setDefaults()
-			result := ExecuteCommand(Params{
+			result := ExecuteCommand(context.Background(), Params{
 				Executable: test.cmd,
 				Args:       test.args,
 			})
@@ -227,7 +228,7 @@ func TestExecuteCommandAsUser(t *testing.T) {
 			exitCode = test.fakeExitCode
 			run = test.fakeRun
 			exeForPlatform = test.fakeSetupExe
-			result := ExecuteCommand(Params{
+			result := ExecuteCommand(context.Background(), Params{
 				Executable: test.cmd,
 				User:       "test-user",
 			})
@@ -290,7 +291,7 @@ func TestExecuteWithEnv(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			setDefaults()
 
-			result := ExecuteCommand(test.params)
+			result := ExecuteCommand(context.Background(), test.params)
 
 			if !cmp.Equal(result.Error, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ExecuteCommand with env got error: %v, want: %v", result.Error, test.wantErr)
@@ -333,7 +334,7 @@ func TestSetupExeForPlatform(t *testing.T) {
 			params: Params{
 				User: "test-user",
 			},
-			executeCommand: func(params Params) Result {
+			executeCommand: func(context.Context, Params) Result {
 				return Result{}
 			},
 			want: cmpopts.AnyError,
@@ -343,7 +344,7 @@ func TestSetupExeForPlatform(t *testing.T) {
 			params: Params{
 				User: "test-user",
 			},
-			executeCommand: func(params Params) Result {
+			executeCommand: func(context.Context, Params) Result {
 				return Result{StdOut: "123"}
 			},
 			want: nil,
@@ -352,7 +353,7 @@ func TestSetupExeForPlatform(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			setDefaults()
-			got := setupExeForPlatform(&exec.Cmd{}, test.params, test.executeCommand)
+			got := setupExeForPlatform(context.Background(), &exec.Cmd{}, test.params, test.executeCommand)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("setupExeForPlatform(%#v) = %v, want: %v", test.params, got, test.want)
 			}

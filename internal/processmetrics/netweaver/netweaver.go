@@ -86,7 +86,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics := collectNetWeaverMetrics(p, commandlineexecutor.ExecuteCommand, processListParams)
+	metrics := collectNetWeaverMetrics(ctx, p, commandlineexecutor.ExecuteCommand, processListParams)
 
 	metrics = append(metrics, collectHTTPMetrics(p)...)
 
@@ -96,7 +96,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		ArgsToSplit: fmt.Sprintf("-nr %s -function ABAPGetWPTable", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics = append(metrics, collectABAPProcessStatus(p, commandlineexecutor.ExecuteCommand, abapProcessParams)...)
+	metrics = append(metrics, collectABAPProcessStatus(ctx, p, commandlineexecutor.ExecuteCommand, abapProcessParams)...)
 
 	abapQueuesParams := commandlineexecutor.Params{
 		User:        p.SAPInstance.GetUser(),
@@ -104,7 +104,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		ArgsToSplit: fmt.Sprintf("-nr %s -function GetQueueStatistic", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics = append(metrics, collectABAPQueueStats(p, commandlineexecutor.ExecuteCommand, abapQueuesParams)...)
+	metrics = append(metrics, collectABAPQueueStats(ctx, p, commandlineexecutor.ExecuteCommand, abapQueuesParams)...)
 
 	dpmonPath := `/usr/sap/` + p.SAPInstance.GetSapsid() + `/SYS/exe/run/dpmon`
 	command := `-c 'echo q | %s pf=%s v'`
@@ -117,7 +117,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 			"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath(),
 		},
 	}
-	metrics = append(metrics, collectABAPSessionStats(p, commandlineexecutor.ExecuteCommand, abapSessionParams)...)
+	metrics = append(metrics, collectABAPSessionStats(ctx, p, commandlineexecutor.ExecuteCommand, abapSessionParams)...)
 
 	command = `-c 'echo q | %s pf=%s c'`
 	abapRFCParams := commandlineexecutor.Params{
@@ -130,7 +130,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		},
 	}
 
-	metrics = append(metrics, collectRFCConnections(p, commandlineexecutor.ExecuteCommand, abapRFCParams)...)
+	metrics = append(metrics, collectRFCConnections(ctx, p, commandlineexecutor.ExecuteCommand, abapRFCParams)...)
 
 	enqLockParams := commandlineexecutor.Params{
 		User:        p.SAPInstance.GetUser(),
@@ -138,17 +138,17 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		ArgsToSplit: fmt.Sprintf("-nr %s -function EnqGetLockTable", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics = append(metrics, collectEnqLockMetrics(p, commandlineexecutor.ExecuteCommand, enqLockParams)...)
+	metrics = append(metrics, collectEnqLockMetrics(ctx, p, commandlineexecutor.ExecuteCommand, enqLockParams)...)
 
 	return metrics
 }
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
-func collectNetWeaverMetrics(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
-	procs, _, err := sc.ProcessList(exec, params)
+	procs, _, err := sc.ProcessList(ctx, exec, params)
 	if err != nil {
 		log.Logger.Errorw("Error getting ProcessList", log.Error(err))
 		return nil
@@ -292,10 +292,10 @@ func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 }
 
 // collectABAPProcessStatus collects the ABAP worker process status metrics.
-func collectABAPProcessStatus(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
-	processCount, busyProcessCount, _, err := sc.ParseABAPGetWPTable(exec, params)
+	processCount, busyProcessCount, _, err := sc.ParseABAPGetWPTable(ctx, exec, params)
 	if err != nil {
 		log.Logger.Debugw("Command sapcontrol failed", "error", err)
 		return nil
@@ -320,10 +320,10 @@ func collectABAPProcessStatus(p *InstanceProperties, exec commandlineexecutor.Ex
 }
 
 // collectABAPQueueStats collects ABAP Queue utilization metrics using dpmon tool.
-func collectABAPQueueStats(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
-	currentQueueUsage, peakQueueUsage, err := sc.ParseQueueStats(exec, params)
+	currentQueueUsage, peakQueueUsage, err := sc.ParseQueueStats(ctx, exec, params)
 	if err != nil {
 		log.Logger.Debugw("Command sapcontrol failed", "error", err)
 		return nil
@@ -350,10 +350,10 @@ func collectABAPQueueStats(p *InstanceProperties, exec commandlineexecutor.Execu
 }
 
 // collectABAPSessionStats collects ABAP session related metrics using dpmon tool.
-func collectABAPSessionStats(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
 
-	results := exec(params)
+	results := exec(ctx, params)
 	log.Logger.Debugw("DPMON for sessionStat output", "stdout", results.StdOut, "stderr", results.StdErr, "exitcode", results.ExitCode, "error", results.Error)
 	if results.Error != nil {
 		log.Logger.Debugw("DPMON failed", log.Error(results.Error))
@@ -386,10 +386,10 @@ func collectABAPSessionStats(p *InstanceProperties, exec commandlineexecutor.Exe
 }
 
 // collectRFCConnections collects the ABAP RFC connection metrics using dpmon tool.
-func collectRFCConnections(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
 
-	result := exec(params)
+	result := exec(ctx, params)
 	log.Logger.Debugw("DPMON for RFC output", "stdout", result.StdOut, "stderr", result.StdErr, "exitcode", result.ExitCode, "error", result.Error)
 	if result.Error != nil {
 		log.Logger.Debugw("DPMON for RFC failed", log.Error(result.Error))
@@ -409,7 +409,7 @@ func collectRFCConnections(p *InstanceProperties, exec commandlineexecutor.Execu
 }
 
 // collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
-func collectEnqLockMetrics(p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 
 	instance := p.SAPInstance.GetInstanceId()
 	if !strings.HasPrefix(instance, "ASCS") && !strings.HasPrefix(instance, "ERS") {
@@ -418,7 +418,7 @@ func collectEnqLockMetrics(p *InstanceProperties, exec commandlineexecutor.Execu
 	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
-	enqLocks, error := sc.EnqGetLockTable(exec, params)
+	enqLocks, error := sc.EnqGetLockTable(ctx, exec, params)
 	if error != nil {
 		return nil
 	}

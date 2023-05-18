@@ -18,6 +18,7 @@ limitations under the License.
 package instanceinfo
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -31,7 +32,7 @@ import (
 
 // The DiskMapper interface is a wrapper which allows for ease of testing.
 type DiskMapper interface {
-	ForDeviceName(string) (string, error)
+	ForDeviceName(context.Context, string) (string, error)
 }
 
 type gceInterface interface {
@@ -62,7 +63,7 @@ func (r *Reader) InstanceProperties() *instancepb.InstanceProperties {
 }
 
 // Read queries instance information using the compute API and stores the result as instanceProperties.
-func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAddressMapper) {
+func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mapper NetworkInterfaceAddressMapper) {
 	if config.GetBareMetal() {
 		log.Logger.Debug("Bare Metal configured, cannot get instance information from the Compute API")
 		return
@@ -100,7 +101,7 @@ func (r *Reader) Read(config *configpb.Configuration, mapper NetworkInterfaceAdd
 			diskName = s[len(s)-1]
 		}
 
-		mapping, err := r.dm.ForDeviceName(disk.DeviceName)
+		mapping, err := r.dm.ForDeviceName(ctx, disk.DeviceName)
 		if err != nil {
 			log.Logger.Warnw("No mapping for instance disk", "disk", disk, "error", err)
 			mapping = "unknown"

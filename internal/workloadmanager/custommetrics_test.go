@@ -17,6 +17,7 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -86,7 +87,7 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
 				osVendorID:     "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -98,7 +99,7 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{},
 				osVendorID:     "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -138,7 +139,7 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "bar",
 					}
@@ -153,7 +154,7 @@ func TestCollectCustomMetricsFromConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			want := createCustomWorkloadMetrics(test.wantLabels, 1)
-			got := CollectCustomMetricsFromConfig(test.params)
+			got := CollectCustomMetricsFromConfig(context.Background(), test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectCustomMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}

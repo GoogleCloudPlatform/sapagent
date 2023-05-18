@@ -18,6 +18,7 @@ package workloadmanager
 
 import (
 	"bufio"
+	"context"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -30,7 +31,7 @@ const csConfigPath = "/etc/corosync/corosync.conf"
 // CollectCorosyncMetricsFromConfig collects the corosync metrics as specified
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
-func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
+func CollectCorosyncMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager Corosync metrics...")
 	t := "workload.googleapis.com/sap/validation/corosync"
 	l := make(map[string]string)
@@ -40,7 +41,7 @@ func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
 		l[k] = v
 	}
 	for _, m := range corosync.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(ctx, m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
@@ -53,7 +54,7 @@ func CollectCorosyncMetricsFromConfig(params Parameters) WorkloadMetrics {
 CollectCorosyncMetrics collects Corosync metrics for Workload Manager sends them to the wm
 channel
 */
-func CollectCorosyncMetrics(params Parameters, wm chan<- WorkloadMetrics, csConfig string) {
+func CollectCorosyncMetrics(ctx context.Context, params Parameters, wm chan<- WorkloadMetrics, csConfig string) {
 	t := "workload.googleapis.com/sap/validation/corosync"
 	l := map[string]string{}
 	if params.OSType == "windows" {
@@ -66,7 +67,7 @@ func CollectCorosyncMetrics(params Parameters, wm chan<- WorkloadMetrics, csConf
 	for k, v := range readCorosyncConfig(params.ConfigFileReader, csConfig) {
 		l[k] = v
 	}
-	for k, v := range readCorosyncRuntime(params.Execute) {
+	for k, v := range readCorosyncRuntime(ctx, params.Execute) {
 		l[k] = v
 	}
 	wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
@@ -103,7 +104,7 @@ func readCorosyncConfig(reader ConfigFileReader, csConfig string) map[string]str
 readCorosyncRuntime loads Corosync runtime configuration data and converts it to a configuration
 map
 */
-func readCorosyncRuntime(exec commandlineexecutor.Execute) map[string]string {
+func readCorosyncRuntime(ctx context.Context, exec commandlineexecutor.Execute) map[string]string {
 	config := map[string]string{}
 
 	runtimeKeys := []string{
@@ -118,7 +119,7 @@ func readCorosyncRuntime(exec commandlineexecutor.Execute) map[string]string {
 	}
 
 	for _, key := range runtimeKeys {
-		result := exec(commandlineexecutor.Params{
+		result := exec(ctx, commandlineexecutor.Params{
 			Executable: "corosync-cmapctl",
 			Args:       []string{"-g", key},
 		})

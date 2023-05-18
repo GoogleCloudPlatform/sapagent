@@ -17,6 +17,7 @@ limitations under the License.
 package instanceinfo
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestForLinux(t *testing.T) {
 		symLinkCommand = inputs[i].Command
 
 		want := inputs[i].Want
-		got, err := d.ForDeviceName("sda1")
+		got, err := d.ForDeviceName(context.Background(), "sda1")
 
 		if err != nil {
 			t.Errorf(err.Error())
@@ -74,18 +75,18 @@ func TestForLinuxError(t *testing.T) {
 		return "", errors.New("test error")
 	}
 
-	if _, err := d.ForDeviceName("sda1"); err == nil {
+	if _, err := d.ForDeviceName(context.Background(), "sda1"); err == nil {
 		t.Errorf("%#v.ForDeviceName(\"sda1\") did not return an error", d)
 	}
 }
 
 func TestForWindows(t *testing.T) {
 	inputs := []struct {
-		exec func(commandlineexecutor.Params) commandlineexecutor.Result
+		exec func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
 		want string
 	}{
 		{
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "\nsomemapping\r",
 				}
@@ -93,20 +94,22 @@ func TestForWindows(t *testing.T) {
 			want: "somemapping",
 		},
 		{
-			exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
 			want: "",
 		},
 	}
-	defer func(f func(commandlineexecutor.Params) commandlineexecutor.Result) { executeCommand = f }(executeCommand)
+	defer func(f func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result) {
+		executeCommand = f
+	}(executeCommand)
 	for i := range inputs {
 		executeCommand = inputs[i].exec
 
 		d := PhysicalPathReader{OS: "windows"}
 
 		want := inputs[i].want
-		got, err := d.ForDeviceName("C:")
+		got, err := d.ForDeviceName(context.Background(), "C:")
 
 		if err != nil {
 			t.Errorf(err.Error())
@@ -120,14 +123,16 @@ func TestForWindows(t *testing.T) {
 
 func TestForWindowsError(t *testing.T) {
 	d := PhysicalPathReader{OS: "windows"}
-	defer func(f func(commandlineexecutor.Params) commandlineexecutor.Result) { executeCommand = f }(executeCommand)
-	executeCommand = func(commandlineexecutor.Params) commandlineexecutor.Result {
+	defer func(f func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result) {
+		executeCommand = f
+	}(executeCommand)
+	executeCommand = func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			Error: errors.New("test error"),
 		}
 	}
 
-	if _, err := d.ForDeviceName("C:"); err == nil {
+	if _, err := d.ForDeviceName(context.Background(), "C:"); err == nil {
 		t.Errorf("%#v.ForDeviceName(\"C:\") did not return an error", d)
 	}
 }

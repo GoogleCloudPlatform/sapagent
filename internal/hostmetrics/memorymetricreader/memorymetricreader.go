@@ -18,6 +18,7 @@ limitations under the License.
 package memorymetricreader
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -51,12 +52,12 @@ func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) 
 }
 
 // MemoryStats reads metrics from the OS for Memory and returns a MemoryStats.
-func (r *Reader) MemoryStats() *mstatspb.MemoryStats {
+func (r *Reader) MemoryStats(ctx context.Context) *mstatspb.MemoryStats {
 	log.Logger.Debug("Getting memory metrics...")
 	var ms *mstatspb.MemoryStats
 	if r.os == "windows" {
 		log.Logger.Debug("Geting memory stats for Windows")
-		ms = r.readMemoryStatsForWindows()
+		ms = r.readMemoryStatsForWindows(ctx)
 	} else {
 		log.Logger.Debug("Geting memory stats for Linux")
 		ms = r.readMemoryStatsForLinux()
@@ -71,9 +72,9 @@ func (r *Reader) MemoryStats() *mstatspb.MemoryStats {
 }
 
 // readMemoryStatsForWindows Reads memory stats for Windows, uses wmic command for the OS values
-func (r *Reader) readMemoryStatsForWindows() *mstatspb.MemoryStats {
+func (r *Reader) readMemoryStatsForWindows(ctx context.Context) *mstatspb.MemoryStats {
 	ms := &mstatspb.MemoryStats{}
-	result := r.execute(commandlineexecutor.Params{
+	result := r.execute(ctx, commandlineexecutor.Params{
 		Executable: "wmic",
 		Args:       []string{"computersystem", "get", "TotalPhysicalMemory/Format:List"},
 	})
@@ -84,7 +85,7 @@ func (r *Reader) readMemoryStatsForWindows() *mstatspb.MemoryStats {
 		// NOMUTANTS--precision is the same when dividend 1024*1024 is mutated to (1024*1024)-1
 		ms.Total = mbValueFromWmicOutput(result.StdOut, "TotalPhysicalMemory", 1024*1024)
 	}
-	result = r.execute(commandlineexecutor.Params{
+	result = r.execute(ctx, commandlineexecutor.Params{
 		Executable: "wmic",
 		Args:       []string{"OS", "get", "FreePhysicalMemory/Format:List"},
 	})

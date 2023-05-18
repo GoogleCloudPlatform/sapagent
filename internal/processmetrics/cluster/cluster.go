@@ -95,7 +95,7 @@ var (
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
 	// we only want to run crm_mon once
-	data, err := pacemaker.Data()
+	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
 		log.Logger.Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))

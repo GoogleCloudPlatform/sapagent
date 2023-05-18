@@ -118,23 +118,23 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics := collectReplicationHA(p, commandlineexecutor.ExecuteCommand, processListParams)
+	metrics := collectReplicationHA(ctx, p, commandlineexecutor.ExecuteCommand, processListParams)
 
 	// Collect DB Query metrics only if credentials are set and NOT a HANA secondary.
 	if p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "" && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
-		queryMetrics := collectHANAQueryMetrics(p, commandlineexecutor.ExecuteCommand)
+		queryMetrics := collectHANAQueryMetrics(ctx, p, commandlineexecutor.ExecuteCommand)
 		metrics = append(metrics, queryMetrics...)
 	}
 
 	return metrics
 }
 
-func collectReplicationHA(ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params) []*mrpb.TimeSeries {
 	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{ip.SAPInstance}
-	processes, sapControlResult, err := sc.ProcessList(e, p)
+	processes, sapControlResult, err := sc.ProcessList(ctx, e, p)
 	if err != nil {
 		log.Logger.Errorw("Error getting ProcessList", log.Error(err))
 		return nil
@@ -142,7 +142,7 @@ func collectReplicationHA(ip *InstanceProperties, e commandlineexecutor.Execute,
 	metrics, availabilityValue := collectHANAServiceMetrics(ip, processes, now)
 	metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
 
-	haReplicationValue := refreshHAReplicationConfig(ip)
+	haReplicationValue := refreshHAReplicationConfig(ctx, ip)
 	extraLabels := map[string]string{
 		"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
 	}
@@ -179,9 +179,9 @@ func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcont
 
 // collectHANAQueryMetrics collects the query state by running a HANA DB query.
 //   - state : Value is 0 in case of successful query.
-//   - overalltime: Overall time taken by query in micro seconds.
+//   - overall time: Overall time taken by query in micro seconds.
 //   - servertime: Time spent on the server side in micro seconds.
-func collectHANAQueryMetrics(p *InstanceProperties, exec commandlineexecutor.Execute) []*mrpb.TimeSeries {
+func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	if p.HANAQueryFailCount >= maxHANAQueryFailCount {
 		// if HANAQueryFailCount reaches maxHANAQueryFailCount we should not let it
@@ -189,7 +189,7 @@ func collectHANAQueryMetrics(p *InstanceProperties, exec commandlineexecutor.Exe
 		log.Logger.Debugw("Not queryig for HANAQuery Metrics as failcount has reached max allowed fail count.", "instanceid", p.SAPInstance.GetInstanceId(), "failcount", p.HANAQueryFailCount)
 		return nil
 	}
-	queryState, err := runHANAQuery(p, exec)
+	queryState, err := runHANAQuery(ctx, p, exec)
 	if err != nil {
 		log.Logger.Errorw("Error in running query", log.Error(err))
 		// Return a non-zero state in case of query failure.
@@ -207,13 +207,13 @@ func collectHANAQueryMetrics(p *InstanceProperties, exec commandlineexecutor.Exe
 // runHANAQuery runs the hana query and returns the state and time taken in a struct.
 // Uses SAP Instance's hana_db_user, hana_db_password for authentication with the DB.
 // Returns an error in case of failures.
-func runHANAQuery(p *InstanceProperties, exec commandlineexecutor.Execute) (queryState, error) {
+func runHANAQuery(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) (queryState, error) {
 	port := fmt.Sprintf("3%s15", p.SAPInstance.GetInstanceNumber())
 	hdbsql := fmt.Sprintf("/usr/sap/%s/%s/exe/hdbsql", p.SAPInstance.GetSapsid(), p.SAPInstance.GetInstanceId())
 	args := fmt.Sprintf("-n localhost:%s -j -u %s -p %s '%s'",
 		port, p.SAPInstance.GetHanaDbUser(), p.SAPInstance.GetHanaDbPassword(), hanaQuery)
 
-	result := exec(commandlineexecutor.Params{
+	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  hdbsql,
 		ArgsToSplit: args,
 		User:        p.SAPInstance.GetUser(),
@@ -316,8 +316,9 @@ func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicat
 // refreshHAReplicationConfig reads the current HA and replication config.
 // Updates the Site, HanaHaMembers entries in the SAP instance proto.
 // Returns the exit code of systemReplicationStatus.py.
-func refreshHAReplicationConfig(p *InstanceProperties) int64 {
+func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) int64 {
 	mode, haMembers, replicationStatus, err := sapdiscovery.HANAReplicationConfig(
+		ctx,
 		p.SAPInstance.GetUser(),
 		p.SAPInstance.GetSapsid(),
 		p.SAPInstance.GetInstanceId())

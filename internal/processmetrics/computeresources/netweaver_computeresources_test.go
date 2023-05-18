@@ -48,7 +48,7 @@ func TestCollectForNetweaver(t *testing.T) {
 		{
 			name:          "EmptyPIDsMap",
 			processParams: commandlineexecutor.Params{},
-			executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
 			wantCount: 0,
@@ -56,7 +56,7 @@ func TestCollectForNetweaver(t *testing.T) {
 		{
 			name:          "OnlyMemoryPerProcessMetricAvailable",
 			processParams: commandlineexecutor.Params{},
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: defaultSapControlOutputNetWeaver,
 				}
@@ -66,7 +66,7 @@ func TestCollectForNetweaver(t *testing.T) {
 		{
 			name:          "OnlyCPUPerProcessMetricAvailable",
 			processParams: commandlineexecutor.Params{},
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `OK
 					0 name: msg_server

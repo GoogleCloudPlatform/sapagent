@@ -120,7 +120,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
 				osVendorID:     "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -132,7 +132,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{},
 				osVendorID:     "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -172,7 +172,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "rhel",
-				Execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "bar",
 					}
@@ -187,7 +187,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			want := createNetWeaverWorkloadMetrics(test.wantLabels, 0)
-			got := CollectNetWeaverMetricsFromConfig(test.params)
+			got := CollectNetWeaverMetricsFromConfig(context.Background(), test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectNetWeaverMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}

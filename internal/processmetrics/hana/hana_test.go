@@ -190,12 +190,12 @@ func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
 }
 
 func TestCollectReplicationHA(t *testing.T) {
-	fakeExec := func(commandlineexecutor.Params) commandlineexecutor.Result {
+	fakeExec := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: defaultSapControlOutput,
 		}
 	}
-	got := collectReplicationHA(defaultInstanceProperties, fakeExec, commandlineexecutor.Params{})
+	got := collectReplicationHA(context.Background(), defaultInstanceProperties, fakeExec, commandlineexecutor.Params{})
 	if len(got) != 10 {
 		t.Errorf("collectReplicationHA(), got: %d want: 10.", len(got))
 	}
@@ -296,7 +296,7 @@ func TestRunHANAQuery(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   successOutput,
 					ExitCode: 0,
@@ -311,7 +311,7 @@ func TestRunHANAQuery(t *testing.T) {
 		},
 		{
 			name: "NonZeroState",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   successOutput,
 					ExitCode: 100,
@@ -326,7 +326,7 @@ func TestRunHANAQuery(t *testing.T) {
 		},
 		{
 			name: "ExitCodeZeroWithError",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   "(overall time 10 usec; server time 10 usec)",
 					StdErr:   "Not Found.",
@@ -343,7 +343,7 @@ func TestRunHANAQuery(t *testing.T) {
 		},
 		{
 			name: "ParseOverallTimeFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   "(overall time invalid-int; server time 509 usec).",
 					ExitCode: 0,
@@ -353,7 +353,7 @@ func TestRunHANAQuery(t *testing.T) {
 		},
 		{
 			name: "ParseServerTimeFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   "(overall time 1187 usec; server time invalid-int)",
 					ExitCode: 128,
@@ -363,7 +363,7 @@ func TestRunHANAQuery(t *testing.T) {
 		},
 		{
 			name: "IntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   "(overall time 100000000000000000000 usec; server time 10 usec)",
 					ExitCode: 0,
@@ -373,7 +373,7 @@ func TestRunHANAQuery(t *testing.T) {
 		},
 		{
 			name: "AuthenticationFailed",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdErr:   "* 10: authentication failed SQLSTATE: 28000\n",
 					ExitCode: 3,
@@ -385,7 +385,7 @@ func TestRunHANAQuery(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotQueryState, gotErr := runHANAQuery(defaultInstanceProperties, test.fakeExec)
+			gotQueryState, gotErr := runHANAQuery(context.Background(), defaultInstanceProperties, test.fakeExec)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("runHANAQuery(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
@@ -399,20 +399,20 @@ func TestRunHANAQuery(t *testing.T) {
 }
 
 func TestCollectHANAQueryMetrics(t *testing.T) {
-	fakeExec := func(commandlineexecutor.Params) commandlineexecutor.Result {
+	fakeExec := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut:   "1 row selected (overall time 1187 usec; server time 509 usec)",
 			ExitCode: 0,
 		}
 	}
-	got := collectHANAQueryMetrics(defaultInstanceProperties, fakeExec)
+	got := collectHANAQueryMetrics(context.Background(), defaultInstanceProperties, fakeExec)
 	if len(got) != 3 {
 		t.Errorf("collectHANAQueryMetrics(), got: %d want: 3.", len(got))
 	}
 }
 
 func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
-	fakeExec := func(commandlineexecutor.Params) commandlineexecutor.Result {
+	fakeExec := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdErr:   "* 10: authentication failed SQLSTATE: 28000\n",
 			ExitCode: 3,
@@ -425,7 +425,7 @@ func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		got := collectHANAQueryMetrics(ip, fakeExec)
+		got := collectHANAQueryMetrics(context.Background(), ip, fakeExec)
 		switch i {
 		case 0, 1:
 			ts := got[0].GetPoints()[0].GetInterval().GetEndTime()

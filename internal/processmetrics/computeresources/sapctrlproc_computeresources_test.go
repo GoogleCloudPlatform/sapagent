@@ -32,14 +32,14 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 	}{
 		{
 			name: "EmptyPIDsMap",
-			executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
 			wantCount: 0,
 		},
 		{
 			name: "OnlyMemoryPerProcessMetricAvailable",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
 						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   111\nsapstart    222\n",
@@ -55,7 +55,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 		},
 		{
 			name: "OnlyCPUPerProcessMetricAvailable",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
 						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    333\n",
@@ -71,7 +71,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 		},
 		{
 			name: "FetchedBothCPUAndMemoryMetricsSuccessfully",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
 						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    444\n",

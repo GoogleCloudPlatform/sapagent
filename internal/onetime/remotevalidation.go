@@ -98,8 +98,8 @@ var (
 		var f io.ReadCloser = file
 		return f, err
 	})
-	execute = commandlineexecutor.Execute(func(params commandlineexecutor.Params) commandlineexecutor.Result {
-		return commandlineexecutor.ExecuteCommand(params)
+	execute = commandlineexecutor.Execute(func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.ExecuteCommand(ctx, params)
 	})
 	exists = commandlineexecutor.Exists(func(exe string) bool {
 		return commandlineexecutor.CommandExists(exe)
@@ -146,13 +146,13 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 func (r *RemoteValidation) createConfiguration() *cpb.Configuration {
 	return &cpb.Configuration{
 		CloudProperties: &iipb.CloudProperties{
-			ProjectId: r.project,
-			InstanceId: r.instanceid,
+			ProjectId:    r.project,
+			InstanceId:   r.instanceid,
 			InstanceName: r.instancename,
-			Zone:        r.zone,
+			Zone:         r.zone,
 		},
 		AgentProperties: &cpb.AgentProperties{
-			Name: configuration.AgentName,
+			Name:    configuration.AgentName,
 			Version: configuration.AgentVersion,
 		},
 	}

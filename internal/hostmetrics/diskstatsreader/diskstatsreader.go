@@ -18,6 +18,7 @@ limitations under the License.
 package diskstatsreader
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -68,13 +69,13 @@ func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) 
 }
 
 // Read reads disk metrics from the OS and returns a collection of disk stats by device mapping.
-func (r *Reader) Read(ip *iipb.InstanceProperties) *statspb.DiskStatsCollection {
+func (r *Reader) Read(ctx context.Context, ip *iipb.InstanceProperties) *statspb.DiskStatsCollection {
 	var currentDiskStats map[string]*statspb.DiskStats
 	switch r.os {
 	case "linux":
 		currentDiskStats = r.readDiskStatsForLinux(ip)
 	case "windows":
-		currentDiskStats = r.readDiskStatsForWindows(ip)
+		currentDiskStats = r.readDiskStatsForWindows(ctx, ip)
 	default:
 		log.Logger.Errorw("Encountered an unexpected OS value", "value", r.os)
 		return nil
@@ -144,65 +145,65 @@ func (r *Reader) readDiskStatsForLinux(instanceProps *iipb.InstanceProperties) m
 
 func (r *Reader) parseDiskStatsForLinux(line string, ip *iipb.InstanceProperties) (deviceName string, stats *statspb.DiskStats, ok bool) {
 	tl := strings.TrimSpace(line)
-		// Skip comment lines in the file.
-		if strings.HasPrefix(tl, "#") {
-			return "", nil, false
+	// Skip comment lines in the file.
+	if strings.HasPrefix(tl, "#") {
+		return "", nil, false
+	}
+	tokens := strings.Fields(tl)
+	if len(tokens) < requiredFieldsCount {
+		if len(tokens) > 0 {
+			log.Logger.Warnw("Unexpected disk stats file format in /proc/diskstats", "requiredfieldscount", requiredFieldsCount, "fieldscount", len(tokens))
 		}
-		tokens := strings.Fields(tl)
-		if len(tokens) < requiredFieldsCount {
-			if len(tokens) > 0 {
-				log.Logger.Warnw("Unexpected disk stats file format in /proc/diskstats", "requiredfieldscount", requiredFieldsCount, "fieldscount", len(tokens))
-			}
-			return "", nil, false
-		}
-		deviceName = tokens[posDeviceName]
-		if !deviceMappingExists(deviceName, ip.GetDisks()) {
-			// These are expected, just logging as debug
-			log.Logger.Debugw("No device mapping found for disk", "devicename", deviceName)
-			return "", nil, false
-		}
-		log.Logger.Debugw("Adding disk stats for device", "devicename", deviceName)
+		return "", nil, false
+	}
+	deviceName = tokens[posDeviceName]
+	if !deviceMappingExists(deviceName, ip.GetDisks()) {
+		// These are expected, just logging as debug
+		log.Logger.Debugw("No device mapping found for disk", "devicename", deviceName)
+		return "", nil, false
+	}
+	log.Logger.Debugw("Adding disk stats for device", "devicename", deviceName)
 
-		readOpsCount, err := strconv.ParseInt(tokens[posReadOps], 10, 64)
-		if err != nil {
-			log.Logger.Warnw("Could not parse read ops count for device", "devicename", deviceName, "error", err)
-			readOpsCount = metricsformatter.Unavailable
-		}
-		readSvcTimeMillis, err := strconv.ParseInt(tokens[posReadSvcTime], 10, 64)
-		if err != nil {
-			log.Logger.Warnw("Could not parse read svc time for device", "devicename", deviceName, "error", err)
-			readSvcTimeMillis = metricsformatter.Unavailable
-		}
-		writeOpsCount, err := strconv.ParseInt(tokens[posWriteOps], 10, 64)
-		if err != nil {
-			log.Logger.Warnw("Could not parse write ops count for device", "devicename", deviceName, "error", err)
-			writeOpsCount = metricsformatter.Unavailable
-		}
-		writeSvcTimeMillis, err := strconv.ParseInt(tokens[posWriteSvcTime], 10, 64)
-		if err != nil {
-			log.Logger.Warnw("Could not parse write svc time for device", "devicename", deviceName, "error", err)
-			writeSvcTimeMillis = metricsformatter.Unavailable
-		}
-		queueLength, err := strconv.ParseInt(tokens[posQueueLength], 10, 64)
-		if err != nil {
-			log.Logger.Warnw("Could not parse queue length for device", "devicename", deviceName, "error", err)
-			queueLength = metricsformatter.Unavailable
-		}
-	
-		return deviceName, &statspb.DiskStats{
-			DeviceName:                     deviceName,
-			ReadOpsCount:                   readOpsCount,
-			ReadSvcTimeMillis:              readSvcTimeMillis,
-			WriteOpsCount:                  writeOpsCount,
-			WriteSvcTimeMillis:             writeSvcTimeMillis,
-			QueueLength:                    queueLength,
-			AverageReadResponseTimeMillis:  r.averageReadResponseTime(deviceName, readSvcTimeMillis, readOpsCount),
-			AverageWriteResponseTimeMillis: r.averageWriteResponseTime(deviceName, writeSvcTimeMillis, writeOpsCount),
-		}, true
+	readOpsCount, err := strconv.ParseInt(tokens[posReadOps], 10, 64)
+	if err != nil {
+		log.Logger.Warnw("Could not parse read ops count for device", "devicename", deviceName, "error", err)
+		readOpsCount = metricsformatter.Unavailable
+	}
+	readSvcTimeMillis, err := strconv.ParseInt(tokens[posReadSvcTime], 10, 64)
+	if err != nil {
+		log.Logger.Warnw("Could not parse read svc time for device", "devicename", deviceName, "error", err)
+		readSvcTimeMillis = metricsformatter.Unavailable
+	}
+	writeOpsCount, err := strconv.ParseInt(tokens[posWriteOps], 10, 64)
+	if err != nil {
+		log.Logger.Warnw("Could not parse write ops count for device", "devicename", deviceName, "error", err)
+		writeOpsCount = metricsformatter.Unavailable
+	}
+	writeSvcTimeMillis, err := strconv.ParseInt(tokens[posWriteSvcTime], 10, 64)
+	if err != nil {
+		log.Logger.Warnw("Could not parse write svc time for device", "devicename", deviceName, "error", err)
+		writeSvcTimeMillis = metricsformatter.Unavailable
+	}
+	queueLength, err := strconv.ParseInt(tokens[posQueueLength], 10, 64)
+	if err != nil {
+		log.Logger.Warnw("Could not parse queue length for device", "devicename", deviceName, "error", err)
+		queueLength = metricsformatter.Unavailable
+	}
+
+	return deviceName, &statspb.DiskStats{
+		DeviceName:                     deviceName,
+		ReadOpsCount:                   readOpsCount,
+		ReadSvcTimeMillis:              readSvcTimeMillis,
+		WriteOpsCount:                  writeOpsCount,
+		WriteSvcTimeMillis:             writeSvcTimeMillis,
+		QueueLength:                    queueLength,
+		AverageReadResponseTimeMillis:  r.averageReadResponseTime(deviceName, readSvcTimeMillis, readOpsCount),
+		AverageWriteResponseTimeMillis: r.averageWriteResponseTime(deviceName, writeSvcTimeMillis, writeOpsCount),
+	}, true
 }
 
 // readDiskStatsForWindows obtains disk metrics from the command line.
-func (r *Reader) readDiskStatsForWindows(instanceProps *iipb.InstanceProperties) map[string]*statspb.DiskStats {
+func (r *Reader) readDiskStatsForWindows(ctx context.Context, instanceProps *iipb.InstanceProperties) map[string]*statspb.DiskStats {
 	diskStats := make(map[string]*statspb.DiskStats)
 	for _, disk := range instanceProps.GetDisks() {
 		diskNumber, ok := parseWindowsDiskNumber(disk.GetMapping())
@@ -227,7 +228,7 @@ func (r *Reader) readDiskStatsForWindows(instanceProps *iipb.InstanceProperties)
 		args = append(args, "Queue")
 		args = append(args, "Length').CounterSamples[0].CookedValue")
 
-		result := r.execute(commandlineexecutor.Params{
+		result := r.execute(ctx, commandlineexecutor.Params{
 			Executable: "powershell",
 			Args:       args,
 		})

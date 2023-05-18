@@ -20,6 +20,7 @@ package configurablemetrics
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"regexp"
@@ -59,7 +60,7 @@ func BuildMetricMap(metrics []*cmpb.EvalMetric) map[string]string {
 // If a specific os_vendor is supplied for a metric, then the command will only
 // be run if the system is using the same vendor. Otherwise, the metric should
 // be excluded from collection.
-func CollectOSCommandMetric(m *cmpb.OSCommandMetric, exec commandlineexecutor.Execute, vendor string) (label, value string) {
+func CollectOSCommandMetric(ctx context.Context, m *cmpb.OSCommandMetric, exec commandlineexecutor.Execute, vendor string) (label, value string) {
 	osVendor := m.GetOsVendor()
 	switch {
 	case osVendor == cmpb.OSVendor_RHEL && vendor != "rhel":
@@ -70,7 +71,7 @@ func CollectOSCommandMetric(m *cmpb.OSCommandMetric, exec commandlineexecutor.Ex
 		return "", ""
 	}
 
-	result := exec(commandlineexecutor.Params{
+	result := exec(ctx, commandlineexecutor.Params{
 		Executable: m.GetCommand(),
 		Args:       m.GetArgs(),
 	})

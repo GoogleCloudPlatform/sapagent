@@ -270,7 +270,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAPInstances {
 	// For unit tests we do not want to run sap discovery, caller will pass the SAPInstances.
 	if params.SAPInstances == nil {
-		params.SAPInstances = sapdiscovery.SAPApplications()
+		params.SAPInstances = sapdiscovery.SAPApplications(ctx)
 	}
 	for _, instance := range params.SAPInstances.GetInstances() {
 		if instance.GetType() == sapb.InstanceType_HANA {

@@ -114,7 +114,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 	}{
 		{
 			name: "SapControlFailsTwoProcesses",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: msg_server
 					0 description: Message Server
@@ -131,7 +131,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSucceedsAppSrv",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   defaultSapControlOutputAppSrv,
 					ExitCode: 1,
@@ -141,7 +141,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSucceedsJava",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   defaultSapControlOutputJava,
 					ExitCode: 1,
@@ -151,7 +151,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSuccessMsg",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: msg_server
 					0 description: msg_server
@@ -164,7 +164,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlFailsEnServer",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: enserver
 					0 description: enserver
@@ -177,7 +177,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlFailEnRepServer",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: enrepserver
 					0 description: enrepserver
@@ -190,7 +190,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSuccessEnRepServer",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: enrepserver
 					0 description: enrepserver
@@ -203,7 +203,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlFailsAppSrv",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: gwrd
 					0 description: GWRD
@@ -216,7 +216,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlFailsJava",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: jcontrol
 					0 description: Java
@@ -229,7 +229,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSuccessJava",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: jstart
 					0 description: Java
@@ -242,7 +242,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSuccessAppSrv",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: icman
 					0 description: ICMAN
@@ -255,7 +255,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "InvalidProcess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: invalidproc
 					0 description: INVALIDPROC
@@ -268,7 +268,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSuccessEnqReplicator",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: enq_replicator
 					0 description: enq_replicator
@@ -281,7 +281,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlFailsEnqReplicator",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: enq_replicator
 					0 description: enq_replicator
@@ -294,7 +294,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlSuccessEnqServer",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: enq_server
 					0 description: enq_server
@@ -307,7 +307,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "SapControlFailsEnqServer",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: enq_server
 					0 description: enq_server
@@ -320,7 +320,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "WebDispatctherGrey",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: sapwebdisp
 					0 description: sapwebdisp
@@ -333,7 +333,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 		},
 		{
 			name: "gwrdGrey",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: gwrd
 					0 description: gwrd
@@ -351,7 +351,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 			sc := &sapcontrol.Properties{
 				Instance: defaultSAPInstance,
 			}
-			procs, _, err := sc.ProcessList(test.fakeExec, commandlineexecutor.Params{})
+			procs, _, err := sc.ProcessList(context.Background(), test.fakeExec, commandlineexecutor.Params{})
 			if err != nil {
 				t.Errorf("ProcessList() failed with: %v.", err)
 			}
@@ -398,7 +398,7 @@ func TestNWServiceMetricLabelCount(t *testing.T) {
 
 func TestCollectNetWeaverMetrics(t *testing.T) {
 	var (
-		fakeExec = func(commandlineexecutor.Params) commandlineexecutor.Result {
+		fakeExec = func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut:   defaultSapControlOutputJava,
 				ExitCode: 1,
@@ -407,7 +407,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		wantMetricCount = 6
 	)
 
-	metrics := collectNetWeaverMetrics(defaultInstanceProperties, fakeExec, commandlineexecutor.Params{})
+	metrics := collectNetWeaverMetrics(context.Background(), defaultInstanceProperties, fakeExec, commandlineexecutor.Params{})
 	if len(metrics) != wantMetricCount {
 		t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), wantMetricCount)
 	}
@@ -611,7 +611,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 	}{
 		{
 			name: "Failure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -620,7 +620,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		},
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
 					0, DIA, 7488, Wait, , yes, , , 0:24:54, 4, , , , ,
@@ -633,7 +633,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPProcessStatus(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
+			got := collectABAPProcessStatus(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)
@@ -650,7 +650,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 	}{
 		{
 			name: "DPMONFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -659,7 +659,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		},
 		{
 			name: "DPMonFailsWithStdOut",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `ICM/Intern, 0, 7, 6000, 184690, 184690`,
 					Error:  cmpopts.AnyError,
@@ -669,7 +669,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		},
 		{
 			name: "ZeroQueues",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "InvalidOutput",
 				}
@@ -678,7 +678,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		},
 		{
 			name: "DPMONSuccess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `Typ, Now, High, Max, Writes, Reads
 					ABAP/NOWP, 0, 8, 14000, 270537, 270537
@@ -692,7 +692,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPQueueStats(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
+			got := collectABAPQueueStats(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPQueueStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -712,7 +712,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 	}{
 		{
 			name: "DPMONFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -721,7 +721,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 		},
 		{
 			name: "DPMonFailsWithStdOut",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonOutputABAPSessions,
 					Error:  cmpopts.AnyError,
@@ -730,7 +730,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 		},
 		{
 			name: "ZeroSessions",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "InvalidOutput",
 				}
@@ -739,7 +739,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 		},
 		{
 			name: "DPMONSuccess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonOutputABAPSessions,
 				}
@@ -750,7 +750,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPSessionStats(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
+			got := collectABAPSessionStats(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPSessionStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -770,7 +770,7 @@ func TestCollectRFCConnections(t *testing.T) {
 	}{
 		{
 			name: "DPMONSuccess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonRFCConnectionsOutput,
 				}
@@ -779,7 +779,7 @@ func TestCollectRFCConnections(t *testing.T) {
 		},
 		{
 			name: "DPMONFailure",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -788,7 +788,7 @@ func TestCollectRFCConnections(t *testing.T) {
 		},
 		{
 			name: "DPMONFailsWithStdOut",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonRFCConnectionsOutput,
 					Error:  cmpopts.AnyError,
@@ -800,7 +800,7 @@ func TestCollectRFCConnections(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectRFCConnections(defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
+			got := collectRFCConnections(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectRFCConnections() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -824,7 +824,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 					InstanceId: "ASCS11",
 				},
 			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
 				}
@@ -839,7 +839,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 					InstanceId: "ASCS01",
 				},
 			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -862,7 +862,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 					InstanceId: "ERS01",
 				},
 			},
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
 				}
@@ -872,7 +872,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectEnqLockMetrics(test.props, test.fakeExec, commandlineexecutor.Params{})
+			got := collectEnqLockMetrics(context.Background(), test.props, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectEnqLockMetrics()=%d, want: %d.", len(got), test.wantMetricCount)

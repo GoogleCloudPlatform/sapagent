@@ -93,11 +93,11 @@ func newProc(ctx context.Context, fn newProcessWithContextHelper, pid int32) (us
 	return fn(ctx, pid)
 }
 
-func collectControlProcesses(p parameters) []*ProcessInfo {
+func collectControlProcesses(ctx context.Context, p parameters) []*ProcessInfo {
 	var processInfos []*ProcessInfo
 	cmd := "ps"
 	args := "-e -o comm,pid"
-	result := p.executor(commandlineexecutor.Params{
+	result := p.executor(ctx, commandlineexecutor.Params{
 		Executable:  cmd,
 		ArgsToSplit: args,
 	})
@@ -126,21 +126,21 @@ func collectControlProcesses(p parameters) []*ProcessInfo {
 	return processInfos
 }
 
-func collectProcessesForInstance(p parameters) []*ProcessInfo {
+func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessInfo {
 	if p.sapInstance == nil {
 		log.Logger.Error("Error getting ProcessList in computeresources, no sapInstance set.")
 		return nil
 	}
 
 	sc := &sapcontrol.Properties{p.sapInstance}
-	processes, _, err := sc.ProcessList(p.executor, p.getProcessListParams)
+	processes, _, err := sc.ProcessList(ctx, p.executor, p.getProcessListParams)
 	if err != nil {
 		log.Logger.Error("Error getting ProcessList in computeresources", log.Error(err))
 	}
 
 	var processInfos []*ProcessInfo
 	if p.getABAPWPTableParams.Executable != "" {
-		_, _, pidMap, err := sc.ParseABAPGetWPTable(p.executor, p.getABAPWPTableParams)
+		_, _, pidMap, err := sc.ParseABAPGetWPTable(ctx, p.executor, p.getABAPWPTableParams)
 		if err != nil {
 			log.Logger.Error("Error getting ABAP processes from ABAPGetWPTable", log.Error(err))
 		} else {

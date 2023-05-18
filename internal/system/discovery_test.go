@@ -424,7 +424,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 			GetForwardingRuleErr:  []error{nil},
 		},
 		exists: func(string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -453,7 +453,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 	}, {
 		name:   "hasForwardingRulePcs",
 		exists: func(f string) bool { return f == "pcs" },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -494,7 +494,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 		name:       "noClusterCommands",
 		gceService: &fake.TestGCE{},
 		exists:     func(f string) bool { return false },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -504,7 +504,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 		name:       "discoverClusterCommandError",
 		gceService: &fake.TestGCE{},
 		exists:     func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -515,7 +515,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 		name:       "noVipInClusterConfig",
 		gceService: &fake.TestGCE{},
 		exists:     func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "line1\nline2",
 				StdErr: "",
@@ -525,7 +525,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 		name:       "noAddressInClusterConfig",
 		gceService: &fake.TestGCE{},
 		exists:     func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "rsc_vip_int-primary IPaddr2\nnot-an-adress",
 				StdErr: "",
@@ -538,7 +538,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 			GetAddressByIPErr:  []error{errors.New("Some API error")},
 		},
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -547,7 +547,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 	}, {
 		name:   "addressNotInUse",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -565,7 +565,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 	}, {
 		name:   "addressUserNotForwardingRule",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -586,7 +586,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 	}, {
 		name:   "errorGettingForwardingRule",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -616,7 +616,7 @@ func TestDiscoverClusterForwardingRule(t *testing.T) {
 				exists:     test.exists,
 				execute:    test.exec,
 			}
-			got, fwr, fr := d.discoverClusterForwardingRule(defaultProjectID, defaultZone)
+			got, fwr, fr := d.discoverClusterForwardingRule(context.Background(), defaultProjectID, defaultZone)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverClusterForwardingRule() mismatch (-want, +got):\n%s", diff)
 			}
@@ -646,7 +646,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}{{
 		name:   "hasLoadBalancer",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -720,7 +720,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "fwrNoBackendService",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -734,7 +734,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "bakendServiceNoRegion",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -750,7 +750,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "errorGettingBackendService",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -769,7 +769,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "backendGroupNotInstanceGroup",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -827,7 +827,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "backendGroupNoZone",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -885,7 +885,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "errorGettingInstanceGroup",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -944,7 +944,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "listInstanceGroupInstancesError",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -1012,7 +1012,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "noInstanceNameInInstancesItem",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -1081,7 +1081,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "noProjectInInstancesItem",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -1150,7 +1150,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 	}, {
 		name:   "noZoneInInstancesItem",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultClusterOutput,
 				StdErr: "",
@@ -1245,7 +1245,7 @@ func TestDiscoverFilestores(t *testing.T) {
 	}{{
 		name:   "singleFilestore",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "127.0.0.1:/vol",
 				StdErr: "",
@@ -1268,7 +1268,7 @@ func TestDiscoverFilestores(t *testing.T) {
 	}, {
 		name:   "multipleFilestore",
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "127.0.0.1:/vol\n127.0.0.2:/vol",
 				StdErr: "",
@@ -1306,7 +1306,7 @@ func TestDiscoverFilestores(t *testing.T) {
 		name:       "dfErr",
 		gceService: &fake.TestGCE{},
 		exists:     func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "Permission denied",
@@ -1317,7 +1317,7 @@ func TestDiscoverFilestores(t *testing.T) {
 		name:       "noFilestoreInMounts",
 		gceService: &fake.TestGCE{},
 		exists:     func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "tmpfs",
 				StdErr: "",
@@ -1327,7 +1327,7 @@ func TestDiscoverFilestores(t *testing.T) {
 		name:       "justIPInMounts",
 		gceService: &fake.TestGCE{},
 		exists:     func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "127.0.0.1",
 				StdErr: "",
@@ -1340,7 +1340,7 @@ func TestDiscoverFilestores(t *testing.T) {
 			GetFilestoreByIPErr:  []error{errors.New("some error")},
 		},
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "127.0.0.1:/vol",
 				StdErr: "",
@@ -1353,7 +1353,7 @@ func TestDiscoverFilestores(t *testing.T) {
 			GetFilestoreByIPErr:  []error{nil},
 		},
 		exists: func(f string) bool { return true },
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "127.0.0.1:/vol",
 				StdErr: "",
@@ -1368,7 +1368,7 @@ func TestDiscoverFilestores(t *testing.T) {
 				execute:    test.exec,
 				exists:     test.exists,
 			}
-			got := d.discoverFilestores(defaultProjectID, test.testIR)
+			got := d.discoverFilestores(context.Background(), defaultProjectID, test.testIR)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverFilestores() mismatch (-want, +got):\n%s", diff)
 			}
@@ -1386,13 +1386,13 @@ func TestDiscoverFilestores(t *testing.T) {
 func TestDiscoverAppToDBConnection(t *testing.T) {
 	tests := []struct {
 		name         string
-		exec         func(commandlineexecutor.Params) commandlineexecutor.Result
+		exec         func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
 		fakeResolver func(string) ([]string, error)
 		gceService   *fake.TestGCE
 		want         []*spb.SapDiscovery_Resource
 	}{{
 		name: "appToDBWithIPAddrToInstance",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1465,7 +1465,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "appToDBWithIPDirectToInstance",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1536,7 +1536,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "appToDBWithIPToLoadBalancerZonalFwr",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1570,7 +1570,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "appToDBWithIPToLoadBalancerRegionalFwr",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1604,7 +1604,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "appToDBWithIPToLoadBalancerGlobalFwr",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1638,7 +1638,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "errGettingUserStore",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -1648,7 +1648,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService: &fake.TestGCE{},
 	}, {
 		name: "noHostnameInUserstoreOutput",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
 				StdErr: "",
@@ -1657,7 +1657,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService: &fake.TestGCE{},
 	}, {
 		name: "errGettingUserStore",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -1667,7 +1667,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService: &fake.TestGCE{},
 	}, {
 		name: "noHostnameInUserstoreOutput",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
 				StdErr: "",
@@ -1676,7 +1676,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService: &fake.TestGCE{},
 	}, {
 		name: "appToDBWithIPToFwrUnknownLocation",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1706,7 +1706,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "errGettingUserStore",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
@@ -1716,7 +1716,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService: &fake.TestGCE{},
 	}, {
 		name: "noHostnameInUserstoreOutput",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
 				StdErr: "",
@@ -1725,7 +1725,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService: &fake.TestGCE{},
 	}, {
 		name: "unableToResolveHost",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1735,7 +1735,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService:   &fake.TestGCE{},
 	}, {
 		name: "noAddressesForHost",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1745,7 +1745,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		gceService:   &fake.TestGCE{},
 	}, {
 		name: "hostNotComputeAddressNotInstance",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1758,7 +1758,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		},
 	}, {
 		name: "hostAddressNoUser",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1778,7 +1778,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "hostAddressUnrecognizedUser",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1801,7 +1801,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "hostAddressFwrUserUnknownLocation",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1824,7 +1824,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "instanceMissingName",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1847,7 +1847,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "instanceMissingProject",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1870,7 +1870,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		}},
 	}, {
 		name: "instanceMissingZone",
-		exec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultUserstoreOutput,
 				StdErr: "",
@@ -1901,7 +1901,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 				execute:      test.exec,
 			}
 			parent := &spb.SapDiscovery_Resource{ResourceUri: "test/parent/uri"}
-			got := d.discoverAppToDBConnection(defaultCloudProperties, defaultSID, parent)
+			got := d.discoverAppToDBConnection(context.Background(), defaultCloudProperties, defaultSID, parent)
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverAppToDBConnection() mismatch (-want, +got):\n%s", diff)
 			}
@@ -1923,7 +1923,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 	}{{
 		name:    "hdbUserStoreErr",
 		testSID: defaultSID,
-		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			if params.User != "" {
 				userExecCalls++
 			} else {
@@ -1941,7 +1941,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 	}, {
 		name:    "profileGrepErr",
 		testSID: defaultSID,
-		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			if params.User != "" {
 				userExecCalls++
 				return commandlineexecutor.Result{
@@ -1962,7 +1962,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 	}, {
 		name:    "noSIDInGrep",
 		testSID: defaultSID,
-		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			if params.User != "" {
 				userExecCalls++
 			} else {
@@ -1979,7 +1979,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 	}, {
 		name:    "sidInUserStore",
 		testSID: defaultSID,
-		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			if params.User != "" {
 				userExecCalls++
 				return commandlineexecutor.Result{
@@ -2005,7 +2005,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 	}, {
 		name:    "sidInProfiles",
 		testSID: defaultSID,
-		exec: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			if params.User != "" {
 				userExecCalls++
 				return commandlineexecutor.Result{
@@ -2033,7 +2033,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 			d := Discovery{
 				execute: test.exec,
 			}
-			got, gotErr := d.discoverDatabaseSID(test.testSID)
+			got, gotErr := d.discoverDatabaseSID(context.Background(), test.testSID)
 			if test.want != "" {
 				if got != test.want {
 					t.Errorf("discoverDatabaseSID() = %q, want %q", got, test.want)
@@ -2187,7 +2187,7 @@ func TestDiscoverDBNodes(t *testing.T) {
 		instanceNumber: defaultInstanceNumber,
 		project:        defaultProjectID,
 		zone:           defaultZone,
-		execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultLandscapeOutputSingleNode,
 			}
@@ -2209,7 +2209,7 @@ func TestDiscoverDBNodes(t *testing.T) {
 		instanceNumber: defaultInstanceNumber,
 		project:        defaultProjectID,
 		zone:           defaultZone,
-		execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: defaultLandscapeOutputMultipleNodes,
 			}
@@ -2280,7 +2280,7 @@ func TestDiscoverDBNodes(t *testing.T) {
 		instanceNumber: defaultInstanceNumber,
 		project:        defaultProjectID,
 		zone:           defaultZone,
-		execute: func(commandlineexecutor.Params) commandlineexecutor.Result {
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{}
 		},
 		gceService: &fake.TestGCE{},
@@ -2292,7 +2292,7 @@ func TestDiscoverDBNodes(t *testing.T) {
 				execute:    test.execute,
 				gceService: test.gceService,
 			}
-			got := d.discoverDBNodes(test.sid, test.instanceNumber, test.project, test.zone)
+			got := d.discoverDBNodes(context.Background(), test.sid, test.instanceNumber, test.project, test.zone)
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverDBNodes() mismatch (-want, +got):\n%s", diff)
 			}

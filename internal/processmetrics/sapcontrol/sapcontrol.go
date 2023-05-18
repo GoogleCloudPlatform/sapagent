@@ -18,6 +18,7 @@ limitations under the License.
 package sapcontrol
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -89,8 +90,8 @@ type (
 //     status details.
 //   - The exit status returned by sapcontrol command as int.
 //   - Error if process detection fails, nil otherwise.
-func (p *Properties) ProcessList(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (map[int]*ProcessStatus, int, error) {
-	result := exec(params)
+func (p *Properties) ProcessList(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (map[int]*ProcessStatus, int, error) {
+	result := exec(ctx, params)
 	if result.Error != nil && !result.ExitStatusParsed {
 		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
 		return nil, 0, result.Error
@@ -161,7 +162,7 @@ func (p *Properties) ProcessList(exec commandlineexecutor.Execute, params comman
 // Returns:
 //   - processes - A map with key->worker_process_type and value->total_process_count.
 //   - busyProcesses - A map with key->worker_process_type and value->busy_process_count.
-func (p *Properties) ParseABAPGetWPTable(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
+func (p *Properties) ParseABAPGetWPTable(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
 	const (
 		numberOfColumns = 15
 		typeColumn      = 1
@@ -169,7 +170,7 @@ func (p *Properties) ParseABAPGetWPTable(exec commandlineexecutor.Execute, param
 		timeColumn      = 9
 	)
 
-	result := exec(params)
+	result := exec(ctx, params)
 	if result.Error != nil && !result.ExitStatusParsed {
 		log.Logger.Debugw("Failed to run ABAPGetWPTable", log.Error(result.Error))
 		return nil, nil, nil, result.Error
@@ -203,7 +204,7 @@ func (p *Properties) ParseABAPGetWPTable(exec commandlineexecutor.Execute, param
 // Returns:
 //   - currentQueueUsage - A map with key->queue_type and value->current_queue_usage.
 //   - peakQueueUsage - A map with key->queue_type and value->peak_queue_usage.
-func (p *Properties) ParseQueueStats(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (currentQueueUsage, peakQueueUsage map[string]int, err error) {
+func (p *Properties) ParseQueueStats(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (currentQueueUsage, peakQueueUsage map[string]int, err error) {
 	const (
 		numberOfColumns         = 6
 		typeColumn              = 0
@@ -211,7 +212,7 @@ func (p *Properties) ParseQueueStats(exec commandlineexecutor.Execute, params co
 		peakQueueUsageColumn    = 2
 	)
 
-	result := exec(params)
+	result := exec(ctx, params)
 	if result.Error != nil && !result.ExitStatusParsed {
 		log.Logger.Debugw("Failed to run GetQueueStatistic", log.Error(result.Error))
 		return nil, nil, result.Error
@@ -251,7 +252,7 @@ func (p *Properties) ParseQueueStats(exec commandlineexecutor.Execute, params co
 // Returns:
 //   - A slice of EnqLock structs containing lock details.
 //   - Error if sapcontrol fails, nil otherwise.
-func (p *Properties) EnqGetLockTable(exec commandlineexecutor.Execute, params commandlineexecutor.Params) (EnqLocks []*EnqLock, err error) {
+func (p *Properties) EnqGetLockTable(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (EnqLocks []*EnqLock, err error) {
 	const numberOfColumns = 12
 	const (
 		lockName = iota
@@ -267,7 +268,7 @@ func (p *Properties) EnqGetLockTable(exec commandlineexecutor.Execute, params co
 		object
 		backup
 	)
-	result := exec(params)
+	result := exec(ctx, params)
 	if result.Error != nil && !result.ExitStatusParsed {
 		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
 		return nil, result.Error

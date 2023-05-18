@@ -17,6 +17,7 @@ limitations under the License.
 package instanceinfo
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 
@@ -43,9 +44,9 @@ const winPsPath = `C:\\Program Files\Google\google-cloud-sap-agent\google-cloud-
 /*
 ForDeviceName returns the phsyical device name of the disk mapped to "deviceName".
 */
-func (r *PhysicalPathReader) ForDeviceName(deviceName string) (string, error) {
+func (r *PhysicalPathReader) ForDeviceName(ctx context.Context, deviceName string) (string, error) {
 	if r.OS == "windows" {
-		return forWindows(deviceName)
+		return forWindows(ctx, deviceName)
 	}
 	return forLinux(deviceName)
 }
@@ -57,8 +58,8 @@ Note:
 google-cloud-sap-agent-diskmapping.ps1 is packaged with the gcagent binary and tested individually with its own
 integration tests.
 */
-func forWindows(deviceName string) (string, error) {
-	result := executeCommand(commandlineexecutor.Params{
+func forWindows(ctx context.Context, deviceName string) (string, error) {
+	result := executeCommand(ctx, commandlineexecutor.Params{
 		Executable: "cmd",
 		Args:       []string{"/C", "Powershell", "-File", winPsPath, deviceName},
 	})

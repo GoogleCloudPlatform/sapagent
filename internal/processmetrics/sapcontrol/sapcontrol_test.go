@@ -17,6 +17,7 @@ limitations under the License.
 package sapcontrol
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -70,7 +71,7 @@ func TestProcessList(t *testing.T) {
 	}{
 		{
 			name: "SucceedsOneProcess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: hdbdaemon
 					0 description: HDB Daemon
@@ -92,7 +93,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "SucceedsAllProcesses",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut:   defaultProcessListOutput,
 					ExitCode: 4,
@@ -123,7 +124,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "SapControlFails",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -132,7 +133,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "SapControlInvalidExitCode",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					ExitCode: -1,
 				}
@@ -142,7 +143,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "NameError",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `abc name: msg_server
 					0 description: Message Server
@@ -153,7 +154,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "CountMismatch",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: msg_server
 					0 description: Message Server
@@ -165,7 +166,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "PidMismatch",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: msg_server
 					0 description: Message Server
@@ -176,7 +177,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "NameIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `1000000000000000000000000 name: msg_server
 					0 description: Message Server
@@ -188,7 +189,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "DispStatusIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `0 name: msg_server
 					0 description: Message Server
@@ -200,7 +201,7 @@ func TestProcessList(t *testing.T) {
 		},
 		{
 			name: "NoNameEntryForProcess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `1 name: hdbdaemon
 					0 description: HDB Daemon
@@ -215,7 +216,7 @@ func TestProcessList(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotProcStatus, gotExitCode, gotErr := p.ProcessList(test.fakeExec, commandlineexecutor.Params{})
+			gotProcStatus, gotExitCode, gotErr := p.ProcessList(context.Background(), test.fakeExec, commandlineexecutor.Params{})
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ProcessList(), gotErr: %v wantErr: %v.",
@@ -246,7 +247,7 @@ func TestParseABAPGetWPTable(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
 					0, DIA, 7488, Wait, , yes, , , 0:24:54,4, , , , ,
@@ -262,7 +263,7 @@ func TestParseABAPGetWPTable(t *testing.T) {
 		},
 		{
 			name: "Error",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -274,7 +275,7 @@ func TestParseABAPGetWPTable(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ParseABAPGetWPTable(test.fakeExec, commandlineexecutor.Params{})
+			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ParseABAPGetWPTable(context.Background(), test.fakeExec, commandlineexecutor.Params{})
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fakeExec, err, test.wantErr)
@@ -302,7 +303,7 @@ func TestParseQueueStats(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `Typ, Now, High, Max, Writes, Reads
 					ABAP/NOWP, 0, 8, 14000, 270537, 270537
@@ -315,7 +316,7 @@ func TestParseQueueStats(t *testing.T) {
 		},
 		{
 			name: "Error",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -324,7 +325,7 @@ func TestParseQueueStats(t *testing.T) {
 		},
 		{
 			name: "CurrentCountIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `ABAP/NOWP, 1000000000000000000000, 8, 14000, 270537, 270537
 					ABAP/DIA, 0, 10, 14000, 534960, 534960`,
@@ -335,7 +336,7 @@ func TestParseQueueStats(t *testing.T) {
 		},
 		{
 			name: "PeakCountIntegerOverflow",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `ABAP/NOWP, 0, 1000000000000000000000, 14000, 270537, 270537
 					ABAP/DIA, 0, 10, 14000, 534960, 534960`,
@@ -349,7 +350,7 @@ func TestParseQueueStats(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.ParseQueueStats(test.fakeExec, commandlineexecutor.Params{})
+			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.ParseQueueStats(context.Background(), test.fakeExec, commandlineexecutor.Params{})
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fakeExec, err, test.wantErr)
@@ -373,7 +374,7 @@ func TestEnqGetLockTable(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: defaultEnqTableOutput,
 				}
@@ -397,7 +398,7 @@ func TestEnqGetLockTable(t *testing.T) {
 		},
 		{
 			name: "MultipleLocksSuccess",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: multilineEnqTableOutput,
 				}
@@ -433,7 +434,7 @@ func TestEnqGetLockTable(t *testing.T) {
 		},
 		{
 			name: "Error",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
 				}
@@ -442,7 +443,7 @@ func TestEnqGetLockTable(t *testing.T) {
 		},
 		{
 			name: "ErroneousOwnerCount",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1ab0, 1, 000, SAP*, SU01, E_USR04, FALSE",
 				}
@@ -451,7 +452,7 @@ func TestEnqGetLockTable(t *testing.T) {
 		},
 		{
 			name: "ErroneousOwnerCountVB",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 10, 1000000000000000000000, 000, SAP*, SU01, E_USR04, FALSE",
 				}
@@ -460,7 +461,7 @@ func TestEnqGetLockTable(t *testing.T) {
 		},
 		{
 			name: "InvalidStatus",
-			fakeExec: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					ExitCode: -1,
 				}
@@ -471,7 +472,7 @@ func TestEnqGetLockTable(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotEnqList, gotErr := p.EnqGetLockTable(test.fakeExec, commandlineexecutor.Params{})
+			gotEnqList, gotErr := p.EnqGetLockTable(context.Background(), test.fakeExec, commandlineexecutor.Params{})
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("EnqGetLockTable(%v)=%v, want: %v.", test.fakeExec, gotErr, test.wantErr)

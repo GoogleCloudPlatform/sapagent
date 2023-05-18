@@ -83,7 +83,7 @@ func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) W
 	}
 	// Add OS command metrics to the labels.
 	for _, m := range pacemaker.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(ctx, m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
@@ -110,7 +110,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	properties := params.Config.GetCloudProperties()
 	projectID := properties.GetProjectId()
 	crmAvailable := params.Exists("crm")
-	pacemakerXMLString := pacemaker.XMLString(params.Execute, crmAvailable)
+	pacemakerXMLString := pacemaker.XMLString(ctx, params.Execute, crmAvailable)
 
 	if pacemakerXMLString == nil {
 		log.Logger.Debug("No pacemaker xml")
@@ -156,8 +156,8 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	setPacemakerHanaOperations(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHana"))
 	setPacemakerHanaOperations(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHana"))
 
-	setPacemakerAPIAccess(l, projectID, bearerToken, params.Execute)
-	setPacemakerMaintenanceMode(l, crmAvailable, params.Execute)
+	setPacemakerAPIAccess(ctx, l, projectID, bearerToken, params.Execute)
+	setPacemakerMaintenanceMode(ctx, l, crmAvailable, params.Execute)
 
 	return 1.0, l
 }
@@ -190,8 +190,8 @@ func setPacemakerHanaOperations(l map[string]string, sapHanaOperations []Op) {
 	}
 }
 
-func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken string, exec commandlineexecutor.Execute) {
-	fenceAgentComputeAPIAccess, err := checkAPIAccess(exec,
+func setPacemakerAPIAccess(ctx context.Context, l map[string]string, projectID string, bearerToken string, exec commandlineexecutor.Execute) {
+	fenceAgentComputeAPIAccess, err := checkAPIAccess(ctx, exec,
 		"-H",
 		fmt.Sprintf("Authorization: Bearer %s ", bearerToken),
 		fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s?fields=id", projectID))
@@ -199,7 +199,7 @@ func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken st
 		log.Logger.Debugw("Could not obtain fence agent compute API Access", log.Error(err))
 	}
 
-	fenceAgentLoggingAPIAccess, err := checkAPIAccess(exec,
+	fenceAgentLoggingAPIAccess, err := checkAPIAccess(ctx, exec,
 		"-H",
 		fmt.Sprintf("Authorization: Bearer %s", bearerToken),
 		"https://logging.googleapis.com/v2/entries:write",
@@ -217,7 +217,7 @@ func setPacemakerAPIAccess(l map[string]string, projectID string, bearerToken st
 	l["fence_agent_logging_api_access"] = strconv.FormatBool(fenceAgentLoggingAPIAccess)
 }
 
-func checkAPIAccess(exec commandlineexecutor.Execute, args ...string) (bool, error) {
+func checkAPIAccess(ctx context.Context, exec commandlineexecutor.Execute, args ...string) (bool, error) {
 	/*
 	   ResponseError encodes a potential response error returned via the pacemaker authorization token
 	   google API check.
@@ -234,7 +234,7 @@ func checkAPIAccess(exec commandlineexecutor.Execute, args ...string) (bool, err
 		ResponseError *ResponseError `json:"error"`
 	}
 
-	result := exec(commandlineexecutor.Params{
+	result := exec(ctx, commandlineexecutor.Params{
 		Executable: "curl",
 		Args:       args,
 	})
@@ -257,15 +257,15 @@ func checkAPIAccess(exec commandlineexecutor.Execute, args ...string) (bool, err
 setPacemakerMaintenanceMode defines the pacemaker maintenance mode label for the metric validation
 collector.
 */
-func setPacemakerMaintenanceMode(l map[string]string, crmAvailable bool, exec commandlineexecutor.Execute) {
+func setPacemakerMaintenanceMode(ctx context.Context, l map[string]string, crmAvailable bool, exec commandlineexecutor.Execute) {
 	result := commandlineexecutor.Result{}
 	if crmAvailable {
-		result = exec(commandlineexecutor.Params{
+		result = exec(ctx, commandlineexecutor.Params{
 			Executable:  "sh",
 			ArgsToSplit: "-c 'crm configure show | grep maintenance | grep true'",
 		})
 	} else {
-		result = exec(commandlineexecutor.Params{
+		result = exec(ctx, commandlineexecutor.Params{
 			Executable:  "sh",
 			ArgsToSplit: "-c 'pcs property show | grep maintenance | grep true'",
 		})

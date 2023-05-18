@@ -17,6 +17,7 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -83,7 +84,7 @@ quorum {
 	token:
 	token_retransmits_before_loss_const: 1 2 3
 }`
-	defaultCommandExec = func(params commandlineexecutor.Params) commandlineexecutor.Result {
+	defaultCommandExec = func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 		if len(params.Args) < 2 {
 			return commandlineexecutor.Result{
 				StdOut: "",
@@ -106,7 +107,7 @@ quorum {
 			StdErr: "",
 		}
 	}
-	commandExecError = func(params commandlineexecutor.Params) commandlineexecutor.Result {
+	commandExecError = func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 		cases := map[string]string{
 			"totem.token_retransmits_before_loss_const": "1 2 3",
 			"totem.token":        "Can't get key",
@@ -180,7 +181,7 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				WorkloadConfig:   collectionDefinition.GetWorkloadValidation(),
 				ConfigFileReader: defaultFileReader,
 				osVendorID:       "rhel",
-				Execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 					field := params.Args[len(params.Args)-1]
 					return commandlineexecutor.Result{
 						StdOut: fmt.Sprintf("%s = 999", field),
@@ -283,7 +284,7 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			want := createWorkloadMetrics(test.wantLabels, 1.0)
-			got := CollectCorosyncMetricsFromConfig(test.params)
+			got := CollectCorosyncMetricsFromConfig(context.Background(), test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectCorosyncMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}
@@ -430,7 +431,7 @@ func TestCollectCorosyncMetrics(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			cch := make(chan WorkloadMetrics)
 			want := createWorkloadMetrics(test.wantLabels, test.wantValue)
-			go CollectCorosyncMetrics(test.params, cch, test.csConfig)
+			go CollectCorosyncMetrics(context.Background(), test.params, cch, test.csConfig)
 			got := <-cch
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&timestamppb.Timestamp{}, "seconds")); diff != "" {
 				t.Errorf("CollectCorosyncMetrics() returned unexpected diff (-want +got):\n%s", diff)

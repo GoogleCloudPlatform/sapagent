@@ -60,7 +60,7 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries
 		newProc:              p.NewProcHelper,
 		getProcessListParams: p.ProcessListParams,
 	}
-	processes := collectProcessesForInstance(params)
+	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {
 		log.Logger.Debug("Cannot collect CPU and memory per process for hana, empty process list.")
 		return nil

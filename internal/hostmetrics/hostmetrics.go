@@ -131,10 +131,10 @@ func collectHostMetricsOnce(ctx context.Context, params Parameters, readers host
 	log.Logger.Info("Collecting host metrics...")
 	params.HeartbeatSpec.Beat()
 
-	params.InstanceInfoReader.Read(params.Config, instanceinfo.NetworkInterfaceAddressMap)
-	cpuStats := readers.cpusr.Read()
-	diskStats := readers.dsr.Read(params.InstanceInfoReader.InstanceProperties())
-	memoryStats := readers.mmr.MemoryStats()
+	params.InstanceInfoReader.Read(ctx, params.Config, instanceinfo.NetworkInterfaceAddressMap)
+	cpuStats := readers.cpusr.Read(ctx)
+	diskStats := readers.dsr.Read(ctx, params.InstanceInfoReader.InstanceProperties())
+	memoryStats := readers.mmr.MemoryStats(ctx)
 	params.AgentTime.UpdateRefreshTimes()
 
 	var allMetrics []*mpb.Metric

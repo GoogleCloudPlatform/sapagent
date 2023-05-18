@@ -17,6 +17,7 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"net"
@@ -132,7 +133,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
 					return []net.Addr{ip1, ip2}, nil
 				},
-				Execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 					if params.Executable == "gcloud" {
 						return commandlineexecutor.Result{
 							StdOut: "Google Cloud SDK 393.0.0",
@@ -268,7 +269,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "sles",
-				Execute: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "foobar",
 						StdErr: "",
@@ -282,7 +283,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			want := wantSystemMetrics(&timestamppb.Timestamp{Seconds: time.Now().Unix()}, test.wantLabels)
-			got := CollectSystemMetricsFromConfig(test.params)
+			got := CollectSystemMetricsFromConfig(context.Background(), test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectSystemMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}
@@ -327,13 +328,13 @@ func TestCollectSystemMetrics(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	osCaptionExecute = func() commandlineexecutor.Result {
+	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
 			StdErr: "",
 		}
 	}
-	osVersionExecute = func() commandlineexecutor.Result {
+	osVersionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "\n Version=10.0.17763  \n\n",
 			StdErr: "",
@@ -345,7 +346,7 @@ func TestCollectSystemMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			agentServiceStatus = func(string) commandlineexecutor.Result {
+			agentServiceStatus = func(context.Context, string) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: test.agentStatus,
 					StdErr: "",
@@ -362,7 +363,7 @@ func TestCollectSystemMetrics(t *testing.T) {
 				Config: cnf,
 				OSType: test.os,
 			}
-			go CollectSystemMetrics(p, sch)
+			go CollectSystemMetrics(context.Background(), p, sch)
 			got := <-sch
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
@@ -415,16 +416,16 @@ func TestCollectSystemMetricsErrors(t *testing.T) {
 	nts := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
-	defer func(f func() commandlineexecutor.Result) { osCaptionExecute = f }(osCaptionExecute)
-	osCaptionExecute = func() commandlineexecutor.Result {
+	defer func(f func(context.Context) commandlineexecutor.Result) { osCaptionExecute = f }(osCaptionExecute)
+	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "",
 			StdErr: "",
 			Error:  errors.New("Error"),
 		}
 	}
-	defer func(f func() commandlineexecutor.Result) { osVersionExecute = f }(osVersionExecute)
-	osVersionExecute = func() commandlineexecutor.Result {
+	defer func(f func(context.Context) commandlineexecutor.Result) { osVersionExecute = f }(osVersionExecute)
+	osVersionExecute = func(context.Context) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			StdOut: "",
 			StdErr: "",
@@ -436,10 +437,10 @@ func TestCollectSystemMetricsErrors(t *testing.T) {
 		return true
 	}
 
-	defer func(f func(string) commandlineexecutor.Result) { agentServiceStatus = f }(agentServiceStatus)
+	defer func(f func(context.Context, string) commandlineexecutor.Result) { agentServiceStatus = f }(agentServiceStatus)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			agentServiceStatus = func(string) commandlineexecutor.Result {
+			agentServiceStatus = func(context.Context, string) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: test.agentStatus,
 					StdErr: "",
@@ -456,7 +457,7 @@ func TestCollectSystemMetricsErrors(t *testing.T) {
 				Config: cnf,
 				OSType: test.os,
 			}
-			go CollectSystemMetrics(p, sch)
+			go CollectSystemMetrics(context.Background(), p, sch)
 			got := <-sch
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("CollectSystemMetrics(%#v) returned unexpected metric labels diff (-want +got):\n%s", p, diff)

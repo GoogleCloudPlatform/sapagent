@@ -60,7 +60,7 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeS
 		getProcessListParams: p.SAPControlProcessParams,
 		getABAPWPTableParams: p.ABAPProcessParams,
 	}
-	processes := collectProcessesForInstance(params)
+	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {
 		log.Logger.Debug("cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil

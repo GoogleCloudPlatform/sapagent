@@ -63,14 +63,14 @@ func TestCollectForHANA(t *testing.T) {
 	}{
 		{
 			name: "EmptyPIDsMap",
-			executor: func(commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
 			wantCount: 0,
 		},
 		{
 			name: "OnlyMemoryPerProcessMetricAvailable",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: defaultSapControlOutputHANA,
 				}
@@ -79,7 +79,7 @@ func TestCollectForHANA(t *testing.T) {
 		},
 		{
 			name: "OnlyCPUPerProcessMetricAvailable",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `OK
 					0 name: msg_server
@@ -95,7 +95,7 @@ func TestCollectForHANA(t *testing.T) {
 		},
 		{
 			name: "FetchedBothMemoryAndCPUMetricsSuccessfully",
-			executor: func(params commandlineexecutor.Params) commandlineexecutor.Result {
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: `OK
 					0 name: hdbdaemon

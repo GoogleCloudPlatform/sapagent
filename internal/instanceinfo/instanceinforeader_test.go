@@ -17,6 +17,7 @@ limitations under the License.
 package instanceinfo
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -35,7 +36,7 @@ type fakeDiskMapper struct {
 	out string
 }
 
-func (f *fakeDiskMapper) ForDeviceName(deviceName string) (string, error) {
+func (f *fakeDiskMapper) ForDeviceName(ctx context.Context, deviceName string) (string, error) {
 	return f.out, f.err
 }
 
@@ -327,7 +328,7 @@ func TestRead(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			r := New(test.dm, test.gceService)
-			r.Read(test.config, test.mapper)
+			r.Read(context.Background(), test.config, test.mapper)
 			got := r.InstanceProperties()
 
 			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {

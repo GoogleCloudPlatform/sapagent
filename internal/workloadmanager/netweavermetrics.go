@@ -17,6 +17,8 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
+
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
@@ -24,14 +26,14 @@ import (
 // CollectNetWeaverMetricsFromConfig collects the netweaver metrics as
 // specified by the WorkloadValidation config and formats the results as a
 // time series to be uploaded to a Collection Storage mechanism.
-func CollectNetWeaverMetricsFromConfig(params Parameters) WorkloadMetrics {
+func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager NetWeaver metrics...")
 	t := "workload.googleapis.com/sap/validation/netweaver"
 	l := make(map[string]string)
 
 	netweaver := params.WorkloadConfig.GetValidationNetweaver()
 	for _, m := range netweaver.GetOsCommandMetrics() {
-		k, v := configurablemetrics.CollectOSCommandMetric(m, params.Execute, params.osVendorID)
+		k, v := configurablemetrics.CollectOSCommandMetric(ctx, m, params.Execute, params.osVendorID)
 		if k != "" {
 			l[k] = v
 		}
