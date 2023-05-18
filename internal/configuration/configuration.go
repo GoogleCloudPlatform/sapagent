@@ -222,7 +222,7 @@ func validateHANASSLConfig(config *cpb.HANAMonitoringConfiguration) bool {
 		}
 	}
 	if len(errs) > 0 {
-		log.Logger.Errorw("Invalid Config", "err", strings.Join(errs, "\n"))
+		log.Logger.Errorw("Invalid Config", "err", strings.Join(errs, ", "))
 		return false
 	}
 	return true
