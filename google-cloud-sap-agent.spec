@@ -121,7 +121,7 @@ if [ -d "/usr/sap/google-sapnetweavermonitoring-agent/" ]; then
 fi
 
 # TODO enable migration for HMA prior to release
-if [ 1 == 2 ]; then
+# if [ 1 == 2 ]; then
   # migrate HANA Monitoring Agent and remove its contents
   if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
     # migrate
@@ -155,7 +155,7 @@ if [ 1 == 2 ]; then
       fi
     fi
   fi
-fi
+# fi
 
 # we have /usr/sap as part of ReadWritePaths in the service, it must exist
 # issue a seek in case /usr/sap is auto mounted
