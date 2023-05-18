@@ -984,7 +984,9 @@ func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, pr
 		Executable:  "sudo",
 		ArgsToSplit: command,
 	})
-	// Only 0 and 1 are expected error return codes from this script
+	// The commandlineexecutor interface returns an error any time the command
+	// has an exit status != 0. However, only 0 and 1 are considered true
+	// error exit codes for this script.
 	if result.Error != nil && result.ExitCode < 2 {
 		log.Logger.Warnw("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
 		return res

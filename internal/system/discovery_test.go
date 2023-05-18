@@ -2244,37 +2244,44 @@ func TestDiscoverDBNodes(t *testing.T) {
 			ResourceKind: "ComputeInstance",
 		}},
 	}, {
-		// TODO b/279601544 - After the commandlineexecutor refactor enable these tests
-		/*
-				name:           "pythonScriptReturnsNonfatalCode",
-				sid:            defaultSID,
-				instanceNumber: defaultInstanceNumber,
-				project:        defaultProjectID,
-				zone:           defaultZone,
-				// Return a nonzero error code less than 2
-				cmdRunner: func(string, string) (string, string, error) { return defaultLandscapeOutputSingleNode, "", someErr },
-				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						SelfLink: "some/compute/instance",
-					}},
-					GetInstanceErr: []error{nil},
-				},
-				want: []*spb.SapDiscovery_Resource{{
-					ResourceUri:  "some/compute/instance",
-					ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-					ResourceKind: "ComputeInstance",
-				}},
-			}, {
-				name:           "pythonScriptFails",
-				sid:            defaultSID,
-				instanceNumber: defaultInstanceNumber,
-				project:        defaultProjectID,
-				zone:           defaultZone,
-				// Return a nonzero error code greater than 2
-				cmdRunner:      func(string, string) (string, string, error) { return "", "", &exec.ExitError{} },
-				want:           nil,
-			}, {
-		*/
+		name:           "pythonScriptReturnsNonfatalCode",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   defaultLandscapeOutputSingleNode,
+				Error:    cmpopts.AnyError,
+				ExitCode: 3,
+			}
+		},
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "some/compute/instance",
+			}},
+			GetInstanceErr: []error{nil},
+		},
+		want: []*spb.SapDiscovery_Resource{{
+			ResourceUri:  "some/compute/instance",
+			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
+			ResourceKind: "ComputeInstance",
+		}},
+	}, {
+		name:           "pythonScriptFails",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   defaultLandscapeOutputSingleNode,
+				Error:    cmpopts.AnyError,
+				ExitCode: 1,
+			}
+		},
+		want: nil,
+	}, {
 		name:           "noHostsInOutput",
 		sid:            defaultSID,
 		instanceNumber: defaultInstanceNumber,
@@ -2285,6 +2292,50 @@ func TestDiscoverDBNodes(t *testing.T) {
 		},
 		gceService: &fake.TestGCE{},
 		want:       nil,
+	}, {
+		name:           "sidNotProvided",
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
+		want: nil,
+	}, {
+		name:    "instanceNumberNotProvided",
+		sid:     defaultSID,
+		project: defaultProjectID,
+		zone:    defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
+		want: nil,
+	}, {
+		name:           "projectNotProvided",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		zone:           defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
+		want: nil,
+	}, {
+		name:           "zoneNotProvided",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
+		want: nil,
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
