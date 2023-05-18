@@ -28,6 +28,86 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
+// fakeTransport implements http.RoundTripper. It returns errors from the slice
+// until there are none left.
+type fakeTransport struct {
+	errs []error
+}
+
+func (ft *fakeTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	if len(ft.errs) == 0 {
+		return &http.Response{}, nil
+	}
+	err := ft.errs[0]
+	ft.errs = ft.errs[1:]
+	return nil, err
+}
+
+func fakeCallOption(s string) googleapi.CallOption { return fakeDWCallOption(s) }
+
+type fakeDWCallOption string
+
+func (f fakeDWCallOption) Get() (string, string) { return "fakeDWCallOption", string(f) }
+
+func fakeMultiCallOption(s string) googleapi.MultiCallOption { return fakeDWMultiCallOption(s) }
+
+type fakeDWMultiCallOption string
+
+func (f fakeDWMultiCallOption) Get() (string, string) { return "fakeDWMultiCallOption", string(f) }
+
+func (f fakeDWMultiCallOption) GetMulti() (string, []string) {
+	return "fakeDWMultiCallOption", []string{string(f)}
+}
+
+func TestSendRequest(t *testing.T) {
+	testRequest := func(headers http.Header) *http.Request {
+		req, _ := http.NewRequest("", "", nil)
+		req.Header = headers
+		return req
+	}
+
+	tests := []struct {
+		name    string
+		client  *http.Client
+		req     *http.Request
+		wantErr error
+	}{
+		{
+			name:    "ErrorAcceptEncodingHeader",
+			client:  &http.Client{Transport: &fakeTransport{}},
+			req:     testRequest(http.Header{"Accept-Encoding": []string{"custom-encoding"}}),
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "Success",
+			client:  &http.Client{Transport: &fakeTransport{}},
+			req:     testRequest(http.Header{}),
+			wantErr: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, gotErr := sendRequest(context.Background(), test.client, test.req)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("sendRequest() got error %v, want %v", gotErr, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestSetOptions(t *testing.T) {
+	got := make(map[string][]string)
+	setOptions(got, fakeCallOption("value1"), fakeMultiCallOption("value2"))
+	want := map[string][]string{
+		"fakeDWCallOption":      []string{"value1"},
+		"fakeDWMultiCallOption": []string{"value2"},
+	}
+	if !cmp.Equal(got, want) {
+		t.Errorf("setOptions() got %v, want %v", got, want)
+	}
+}
+
 func TestWriteInsightDo(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -70,17 +150,24 @@ func TestWriteInsightDo(t *testing.T) {
 		service: &Service{
 			SendRequest: func(context.Context, *http.Client, *http.Request) (*http.Response, error) {
 				return &http.Response{
-					StatusCode: http.StatusNoContent,
+					StatusCode: http.StatusNotModified,
+					Body:       io.NopCloser(strings.NewReader("{}")),
 				}, nil
 			}},
-		want: &WriteInsightResponse{
-			googleapi.ServerResponse{
-				HTTPStatusCode: http.StatusNoContent,
-			},
-		},
-		wantErr: nil,
+		want:    nil,
+		wantErr: cmpopts.AnyError,
 	}, {
 		name:    "sendRequestErr",
+		request: &WriteInsightRequest{},
+		service: &Service{
+			SendRequest: func(context.Context, *http.Client, *http.Request) (*http.Response, error) {
+				return &http.Response{}, cmpopts.AnyError
+			},
+		},
+		want:    nil,
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:    "checkResponseErr",
 		request: &WriteInsightRequest{},
 		service: &Service{
 			SendRequest: func(context.Context, *http.Client, *http.Request) (*http.Response, error) {
