@@ -127,7 +127,6 @@ fi
     # migrate
     if [ -f "/usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml" ]; then
       # invoking the migration flow
-      echo "Migration mode here"
       timeout 30 %{_bindir}/google_cloud_sap_agent migratehma;
       if [ $? -eq 0 ]; then
         cp /usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml %{_confdir}/backup-of-hanamonitoring-configuration.yaml
