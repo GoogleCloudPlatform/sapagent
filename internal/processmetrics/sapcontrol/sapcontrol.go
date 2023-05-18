@@ -117,6 +117,10 @@ func (p *Properties) ProcessList(ctx context.Context, exec commandlineexecutor.E
 		return nil, 0, fmt.Errorf("getProcessList - discrepancy in number of processes: %q", result.StdOut)
 	}
 
+	return createProcessMap(result, names, dss, pids)
+}
+
+func createProcessMap(result commandlineexecutor.Result, names, dss, pids [][]string) (map[int]*ProcessStatus, int, error) {
 	// Pass 1 - initialize the map and create struct values with process name.
 	processes := make(map[int]*ProcessStatus)
 	for _, n := range names {
