@@ -114,6 +114,7 @@ func ExecuteCommand(ctx context.Context, params Params) Result {
 	if params.Timeout > 0 {
 		timeout = time.Duration(params.Timeout) * time.Second
 	}
+	// Context tctx has a Timeout while running the commands.
 	tctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	args := params.Args
@@ -128,6 +129,7 @@ func ExecuteCommand(ctx context.Context, params Params) Result {
 	if exeForPlatform != nil {
 		err = exeForPlatform(exe, params)
 	} else {
+		// We pass ctx because this calls back into ExecuteCommand which adds the timeout before running the command.
 		err = setupExeForPlatform(ctx, exe, params, ExecuteCommand)
 	}
 	if err != nil {
