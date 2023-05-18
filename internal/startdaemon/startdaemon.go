@@ -196,29 +196,12 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	// sensible NOOPs. Downstream services can safely register and use the provided *Spec
 	// without fear nor penalty.
 	var healthMonitor agentmetrics.HealthMonitor = &heartbeat.NullMonitor{}
+	var err error
 	if d.config.GetCollectionConfiguration().GetCollectAgentMetrics() {
-		heartbeatParams := heartbeat.Parameters{
-			Config: d.config,
-		}
-		heartMonitor, err := heartbeat.NewMonitor(heartbeatParams)
-		healthMonitor = heartMonitor
+		healthMonitor, err = startAgentMetricsService(ctx, d.config)
 		if err != nil {
-			log.Logger.Error("Failed to create heartbeat monitor", log.Error(err))
-			usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
 			return
 		}
-		agentMetricsParams := agentmetrics.Parameters{
-			Config:        d.config,
-			BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
-			HealthMonitor: healthMonitor,
-		}
-		agentmetricsService, err := agentmetrics.NewService(ctx, agentMetricsParams)
-		if err != nil {
-			log.Logger.Error("Failed to create agent metrics service", log.Error(err))
-			usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
-			return
-		}
-		agentmetricsService.Start(ctx)
 	}
 
 	gceService, err := gce.NewGCEClient(ctx)
@@ -292,32 +275,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	})
 
 	// Start the Workload Manager metrics collection
-	cd, err := collectiondefinition.Load(collectiondefinition.LoadOptions{
-		ReadFile: os.ReadFile,
-		OSType:   goos,
-		Version:  configuration.AgentVersion,
-	})
-	if err != nil {
-		// In the event of an error, log the problem that occurred but allow
-		// other agent services to start up.
-		id := usagemetrics.CollectionDefinitionLoadFailure
-		if _, ok := err.(collectiondefinition.ValidationError); ok {
-			id = usagemetrics.CollectionDefinitionValidateFailure
-		}
-		usagemetrics.Error(id)
-		log.Logger.Error(err)
-	} else {
-		wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
-		wlmparams.OSType = goos
-		wlmparams.ConfigFileReader = configFileReader
-		wlmparams.InstanceInfoReader = *instanceInfoReader
-		wlmparams.OSStatReader = osStatReader
-		wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
-		wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
-		wlmparams.DefaultTokenGetter = defaultTokenGetter
-		wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
-		workloadmanager.StartMetricsCollection(ctx, wlmparams)
-	}
+	startWorkloadManagerMetricsCollection(ctx, wlmparams, instanceInfoReader, goos)
 
 	// Start the Process metrics collection
 	pmHeartbeatSpec, err := healthMonitor.Register(processMetricsServiceName)
@@ -355,6 +313,62 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 
 	go usagemetrics.LogRunningDaily()
 	waitForShutdown(ctx, shutdownch)
+}
+
+func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heartbeat.Monitor, error) {
+	var healthMonitor *heartbeat.Monitor
+	heartbeatParams := heartbeat.Parameters{
+		Config: c,
+	}
+	heartMonitor, err := heartbeat.NewMonitor(heartbeatParams)
+	healthMonitor = heartMonitor
+	if err != nil {
+		log.Logger.Error("Failed to create heartbeat monitor", log.Error(err))
+		usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
+		return nil, err
+	}
+	agentMetricsParams := agentmetrics.Parameters{
+		Config:        c,
+		BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
+		HealthMonitor: healthMonitor,
+	}
+	agentmetricsService, err := agentmetrics.NewService(ctx, agentMetricsParams)
+	if err != nil {
+		log.Logger.Error("Failed to create agent metrics service", log.Error(err))
+		usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
+		return nil, err
+	}
+	agentmetricsService.Start(ctx)
+	return healthMonitor, nil
+}
+
+func startWorkloadManagerMetricsCollection(ctx context.Context, wlmparams workloadmanager.Parameters, instanceInfoReader *instanceinfo.Reader, goos string) {
+	cd, err := collectiondefinition.Load(collectiondefinition.LoadOptions{
+		ReadFile: os.ReadFile,
+		OSType:   goos,
+		Version:  configuration.AgentVersion,
+	})
+	if err != nil {
+		// In the event of an error, log the problem that occurred but allow
+		// other agent services to start up.
+		id := usagemetrics.CollectionDefinitionLoadFailure
+		if _, ok := err.(collectiondefinition.ValidationError); ok {
+			id = usagemetrics.CollectionDefinitionValidateFailure
+		}
+		usagemetrics.Error(id)
+		log.Logger.Error(err)
+	} else {
+		wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
+		wlmparams.OSType = goos
+		wlmparams.ConfigFileReader = configFileReader
+		wlmparams.InstanceInfoReader = *instanceInfoReader
+		wlmparams.OSStatReader = osStatReader
+		wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
+		wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
+		wlmparams.DefaultTokenGetter = defaultTokenGetter
+		wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
+		workloadmanager.StartMetricsCollection(ctx, wlmparams)
+	}
 }
 
 // waitForShutdown observes a channel for a shutdown signal, then proceeds to shut down the Agent.
