@@ -160,8 +160,16 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	log.Logger.Infow("Starting disk snapshot for HANA", "sid", s.sid)
 	configureUsageMetricsForOTE(s.cloudProps, "", "")
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
-	s.db, err = s.connectToDB(ctx)
-	if err != nil {
+	dbp := databaseconnector.Params{
+		Username:       s.user,
+		Password:       s.password,
+		PasswordSecret: s.passwordSecret,
+		Host:           s.host,
+		Port:           s.port,
+		GCEService:     s.gceService,
+		Project:        s.project,
+	}
+	if s.db, err = databaseconnector.Connect(ctx, dbp); err != nil {
 		logErrorToFileAndConsole("ERROR: Failed to connect to database", err)
 		return subcommands.ExitFailure
 	}
@@ -200,27 +208,6 @@ func (s *Snapshot) validateParameters(os string) error {
 	}
 	log.Logger.Debug("Parameter validation successful.")
 	return nil
-}
-
-func (s *Snapshot) connectToDB(ctx context.Context) (handle *sql.DB, err error) {
-	if s.password == "" && s.passwordSecret != "" {
-		if s.password, err = s.gceService.GetSecret(ctx, s.project, s.passwordSecret); err != nil {
-			return nil, err
-		}
-		log.Logger.Debug("Read from secret manager successful")
-	}
-	dbp := databaseconnector.Params{
-		Username:  s.user,
-		Password:  s.password,
-		Host:      s.host,
-		Port:      s.port,
-		EnableSSL: false,
-	}
-	if s.db, err = databaseconnector.Connect(dbp); err != nil {
-		return nil, err
-	}
-	log.Logger.Debug("Database connection successful")
-	return s.db, nil
 }
 
 func runQuery(h *sql.DB, q string) (string, error) {

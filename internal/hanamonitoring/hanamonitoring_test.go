@@ -462,7 +462,7 @@ func TestConnectToDatabases(t *testing.T) {
 			want: 0,
 		},
 		{
-			name: "SecretNameFailsToRead",
+			name: "SecretNameFailsToReadNoDBConnection",
 			params: Parameters{
 				Config: &cpb.Configuration{
 					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
@@ -478,7 +478,7 @@ func TestConnectToDatabases(t *testing.T) {
 					GetSecretErr:  []error{errors.New("error")},
 				},
 			},
-			want: 1,
+			want: 0,
 		},
 		{
 			name: "HANAMonitoringConfigNotSet",

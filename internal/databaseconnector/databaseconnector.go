@@ -18,7 +18,9 @@ limitations under the License.
 package databaseconnector
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
@@ -26,27 +28,49 @@ import (
 	_ "github.com/SAP/go-hdb/driver"
 )
 
-// Params is a struct which holds the information required for connecting to a database.
-type Params struct {
-	Username       string
-	Password       string
-	Host           string
-	Port           string
-	EnableSSL      bool
-	HostNameInCert string
-	RootCAFile     string
-}
+type (
+	// Params is a struct which holds the information required for connecting to a database.
+	Params struct {
+		Username       string
+		Password       string
+		PasswordSecret string
+		Host           string
+		Port           string
+		EnableSSL      bool
+		HostNameInCert string
+		RootCAFile     string
+		GCEService     gceInterface
+		Project        string
+	}
+
+	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
+	gceInterface interface {
+		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
+	}
+)
 
 // Connect creates a SQL connection to a HANA database utilizing the go-hdb driver.
-func Connect(p Params) (*sql.DB, error) {
+func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
+	if p.Password == "" && p.PasswordSecret == "" {
+		return nil, fmt.Errorf("Could not attempt to connect to database %s, both password and secret name are empty", p.Host)
+	}
+	if p.Password == "" && p.PasswordSecret != "" {
+		if p.Password, err = p.GCEService.GetSecret(ctx, p.Project, p.PasswordSecret); err != nil {
+			return nil, err
+		}
+		log.Logger.Debug("Read from secret manager successful")
+	}
+
 	dataSource := "hdb://" + p.Username + ":" + p.Password + "@" + p.Host + ":" + p.Port
 	if p.EnableSSL {
 		dataSource = dataSource + "?TLSServerName=" + p.HostNameInCert + "&TLSRootCAFile=" + p.RootCAFile
 	}
+
 	db, err := sql.Open("hdb", dataSource)
 	if err != nil {
 		log.Logger.Errorw("Could not open connection to database.", "username", p.Username, "host", p.Host, "port", p.Port, "err", err)
 		return nil, err
 	}
+	log.Logger.Debug("Database connection successful")
 	return db, nil
 }

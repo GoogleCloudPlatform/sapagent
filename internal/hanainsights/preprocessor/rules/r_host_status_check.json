@@ -1,0 +1,27 @@
+{
+  "name": "Host Status Check",
+  "id": "r_host_status_check",
+  "queries": [
+    {
+      "name": "q_host_status_check",
+      "sql": "select HOST as hostname, HOST_STATUS as status from M_landscape_host_configuration where HOST_STATUS = 'ERROR'",
+      "columns": ["hostname", "status"]
+    }
+  ],
+  "recommendations": [
+    {
+      "name": "Host Status",
+      "description": "Check the status of each host in the SAP HANA environment to see if they are online and working",
+      "trigger": {
+        "lhs": "size(q_host_status_check)",
+        "operation": "GT",
+        "rhs": "0"
+      },
+      "actions": [
+        {
+          "description": "Not all hosts are in a healthy state. Check that all hosts are online with their services started. \nThe following hosts are in an error state: ${q_host_status_check}\n"
+        }
+      ]
+    }
+  ]
+}

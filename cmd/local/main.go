@@ -42,6 +42,7 @@ func registerSubCommands() {
 		&onetime.Snapshot{},
 		&onetime.MigrateHANAMonitoring{},
 		&onetime.Validate{},
+		&onetime.HANAInsights{},
 		subcommands.HelpCommand(),  // Implement "help"
 		subcommands.FlagsCommand(), // Implement "flags"
 	} {

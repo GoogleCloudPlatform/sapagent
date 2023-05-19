@@ -31,7 +31,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -218,48 +217,6 @@ func TestValidateParameters(t *testing.T) {
 			got := test.snapshot.validateParameters(test.os)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateParameters(snapshot=%v, os=%v)=%v, want=%v", test.snapshot, test.os, got, test.want)
-			}
-		})
-	}
-}
-
-func TestConnectToDB(t *testing.T) {
-	tests := []struct {
-		name     string
-		snapshot Snapshot
-		want     error
-	}{
-		{
-			name:     "Password",
-			snapshot: Snapshot{password: "my-pass"},
-		},
-		{
-			name: "PasswordSecret",
-			snapshot: Snapshot{
-				passwordSecret: "my-secret",
-				gceService: &fake.TestGCE{
-					GetSecretResp: []string{"fakePassword"},
-					GetSecretErr:  []error{nil},
-				},
-			},
-		},
-		{
-			name: "GetSecretFailure",
-			snapshot: Snapshot{
-				passwordSecret: "my-secret",
-				gceService: &fake.TestGCE{
-					GetSecretResp: []string{""},
-					GetSecretErr:  []error{cmpopts.AnyError},
-				},
-			},
-			want: cmpopts.AnyError,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			_, got := test.snapshot.connectToDB(context.Background())
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("connectToDB()=%v, want=%v", got, test.want)
 			}
 		})
 	}

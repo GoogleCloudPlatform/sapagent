@@ -259,31 +259,24 @@ func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (
 func connectToDatabases(ctx context.Context, params Parameters) []*database {
 	var databases []*database
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
-		password := i.GetPassword()
-		if password == "" && i.GetSecretName() == "" {
-			log.Logger.Errorf("Both password and secret name are empty, cannot connect to database %s", i.GetName())
-			continue
-		}
-
-		if password == "" && i.GetSecretName() != "" {
-			if secret, err := params.GCEService.GetSecret(ctx, params.Config.GetCloudProperties().GetProjectId(), i.GetSecretName()); err == nil {
-				password = secret
-			}
-		}
 		dbp := databaseconnector.Params{
 			Username:       i.GetUser(),
 			Host:           i.GetHost(),
-			Password:       password,
+			Password:       i.GetPassword(),
+			PasswordSecret: i.GetSecretName(),
 			Port:           i.GetPort(),
 			EnableSSL:      i.GetEnableSsl(),
 			HostNameInCert: i.GetHostNameInCertificate(),
 			RootCAFile:     i.GetTlsRootCaFile(),
+			GCEService:     params.GCEService,
+			Project:        params.Config.GetCloudProperties().GetProjectId(),
 		}
-		if handle, err := databaseconnector.Connect(dbp); err == nil {
-			databases = append(databases, &database{
-				queryFunc: handle.QueryContext,
-				instance:  i})
+		handle, err := databaseconnector.Connect(ctx, dbp)
+		if err != nil {
+			log.Logger.Errorf("Error connecting to database", "name", i.GetName(), "error", err.Error())
+			continue
 		}
+		databases = append(databases, &database{queryFunc: handle.QueryContext, instance: i})
 	}
 	return databases
 }
