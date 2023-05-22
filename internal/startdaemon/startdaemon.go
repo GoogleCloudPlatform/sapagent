@@ -260,38 +260,19 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		QueryClient: &cloudmetricreader.QueryClient{Client: mqc},
 		BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
 	}
-	hmHeartbeatSpec, err := healthMonitor.Register(hostMetricsServiceName)
-	if err != nil {
-		log.Logger.Error("Failed to register host metrics service", log.Error(err))
-		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+
+	// start the Host Metrics Collection
+	if err = startHostMetricsCollection(ctx, d.config, instanceInfoReader, cmr, healthMonitor); err != nil {
 		return
 	}
-	hostmetrics.StartSAPHostAgentProvider(ctx, hostmetrics.Parameters{
-		Config:             d.config,
-		InstanceInfoReader: *instanceInfoReader,
-		CloudMetricReader:  *cmr,
-		AgentTime:          *agenttime.New(agenttime.Clock{}),
-		HeartbeatSpec:      hmHeartbeatSpec,
-	})
 
 	// Start the Workload Manager metrics collection
 	startWorkloadManagerMetricsCollection(ctx, wlmparams, instanceInfoReader, goos)
 
-	// Start the Process metrics collection
-	pmHeartbeatSpec, err := healthMonitor.Register(processMetricsServiceName)
-	if err != nil {
-		log.Logger.Error("Failed to register process metrics service", log.Error(err))
-		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+	// Start Process Metrics Collection
+	if err = startProcessMetricsCollection(ctx, d.config, goos, healthMonitor, gceService); err != nil {
 		return
 	}
-	processmetrics.Start(ctx, processmetrics.Parameters{
-		Config:        d.config,
-		OSType:        goos,
-		MetricClient:  processmetrics.NewMetricClient,
-		BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
-		HeartbeatSpec: pmHeartbeatSpec,
-		GCEService:    gceService,
-	})
 
 	wlmService, err := gce.NewWLMClient(ctx)
 	if err != nil {
@@ -340,6 +321,41 @@ func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heart
 	}
 	agentmetricsService.Start(ctx)
 	return healthMonitor, nil
+}
+
+func startProcessMetricsCollection(ctx context.Context, config *cpb.Configuration, goos string, healthMonitor agentmetrics.HealthMonitor, gceService *gce.GCE) error {
+	pmHeartbeatSpec, err := healthMonitor.Register(processMetricsServiceName)
+	if err != nil {
+		log.Logger.Error("Failed to register process metrics service", log.Error(err))
+		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+		return err
+	}
+	processmetrics.Start(ctx, processmetrics.Parameters{
+		Config:        config,
+		OSType:        goos,
+		MetricClient:  processmetrics.NewMetricClient,
+		BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
+		HeartbeatSpec: pmHeartbeatSpec,
+		GCEService:    gceService,
+	})
+	return nil
+}
+
+func startHostMetricsCollection(ctx context.Context, config *cpb.Configuration, instanceInfoReader *instanceinfo.Reader, cmr *cloudmetricreader.CloudMetricReader, healthMonitor agentmetrics.HealthMonitor) error {
+	hmHeartbeatSpec, err := healthMonitor.Register(hostMetricsServiceName)
+	if err != nil {
+		log.Logger.Error("Failed to register host metrics service", log.Error(err))
+		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+		return err
+	}
+	hostmetrics.StartSAPHostAgentProvider(ctx, hostmetrics.Parameters{
+		Config:             config,
+		InstanceInfoReader: *instanceInfoReader,
+		CloudMetricReader:  *cmr,
+		AgentTime:          *agenttime.New(agenttime.Clock{}),
+		HeartbeatSpec:      hmHeartbeatSpec,
+	})
+	return nil
 }
 
 func startWorkloadManagerMetricsCollection(ctx context.Context, wlmparams workloadmanager.Parameters, instanceInfoReader *instanceinfo.Reader, goos string) {
