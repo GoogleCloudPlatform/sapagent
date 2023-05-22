@@ -240,14 +240,10 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	// Collect all metrics specified by the WLM Validation config.
 	var system, corosync, hana, netweaver, pacemaker, custom WorkloadMetrics
 	var wg sync.WaitGroup
-	wg.Add(6)
+	wg.Add(5)
 	go func() {
 		defer wg.Done()
 		system = CollectSystemMetricsFromConfig(ctx, params)
-	}()
-	go func() {
-		defer wg.Done()
-		corosync = CollectCorosyncMetricsFromConfig(ctx, params)
 	}()
 	go func() {
 		defer wg.Done()
@@ -260,6 +256,11 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	go func() {
 		defer wg.Done()
 		pacemaker = CollectPacemakerMetricsFromConfig(ctx, params)
+		v := 0.0
+		if len(pacemaker.Metrics) > 0 && len(pacemaker.Metrics[0].Points) > 0 {
+			v = pacemaker.Metrics[0].Points[0].GetValue().GetDoubleValue()
+		}
+		corosync = CollectCorosyncMetricsFromConfig(ctx, params, v)
 	}()
 	go func() {
 		defer wg.Done()

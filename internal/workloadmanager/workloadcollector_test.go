@@ -208,7 +208,7 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 				createTimeSeries(
 					"workload.googleapis.com/sap/validation/corosync",
 					map[string]string{"agent": "sapagent"},
-					1.0,
+					0.0,
 					defaultConfiguration,
 				)[0],
 				createTimeSeries(

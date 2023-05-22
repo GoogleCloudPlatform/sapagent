@@ -170,9 +170,10 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 	collectionDefinition.GetWorkloadValidation().GetValidationCorosync().ConfigPath = validCSConfigFile
 
 	tests := []struct {
-		name       string
-		params     Parameters
-		wantLabels map[string]string
+		name         string
+		params       Parameters
+		pacemakerVal float64
+		wantLabels   map[string]string
 	}{
 		{
 			name: "DefaultCollectionDefinition",
@@ -187,10 +188,9 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 						StdOut: fmt.Sprintf("%s = 999", field),
 						StdErr: "",
 					}
-					//  return "foobar", "", nil
-
 				},
 			},
+			pacemakerVal: 1.0,
 			wantLabels: map[string]string{
 				"token":                               "20000",
 				"token_retransmits_before_loss_const": "10",
@@ -217,7 +217,8 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				WorkloadConfig:   &wlmpb.WorkloadValidation{},
 				ConfigFileReader: defaultFileReader,
 			},
-			wantLabels: map[string]string{},
+			pacemakerVal: 1.0,
+			wantLabels:   map[string]string{},
 		},
 		{
 			name: "CorosyncConfigFileReadError",
@@ -231,6 +232,7 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				},
 				ConfigFileReader: fileReaderError,
 			},
+			pacemakerVal: 1.0,
 			wantLabels: map[string]string{
 				"token":                               "",
 				"token_retransmits_before_loss_const": "",
@@ -277,14 +279,33 @@ func TestCollectCorosyncMetricsFromConfig(t *testing.T) {
 				},
 				osVendorID: "sles",
 			},
-			wantLabels: map[string]string{},
+			pacemakerVal: 1.0,
+			wantLabels:   map[string]string{},
+		},
+		{
+			name: "PacemakerInactive",
+			params: Parameters{
+				Config:           defaultConfiguration,
+				WorkloadConfig:   collectionDefinition.GetWorkloadValidation(),
+				ConfigFileReader: defaultFileReader,
+				osVendorID:       "rhel",
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					field := params.Args[len(params.Args)-1]
+					return commandlineexecutor.Result{
+						StdOut: fmt.Sprintf("%s = 999", field),
+						StdErr: "",
+					}
+				},
+			},
+			pacemakerVal: 0.0,
+			wantLabels:   map[string]string{},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			want := createWorkloadMetrics(test.wantLabels, 1.0)
-			got := CollectCorosyncMetricsFromConfig(context.Background(), test.params)
+			want := createWorkloadMetrics(test.wantLabels, test.pacemakerVal)
+			got := CollectCorosyncMetricsFromConfig(context.Background(), test.params, test.pacemakerVal)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectCorosyncMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}
