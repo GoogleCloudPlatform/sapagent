@@ -427,9 +427,13 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 	for _, lock := range enqLocks {
 		extraLabels := map[string]string{
 			"lock_name":           lock.LockName,
+			"lock_arg":            lock.LockArg,
 			"lock_mode":           lock.LockMode,
+			"owner":               lock.Owner,
+			"owner_vb":            lock.OwnerVB,
 			"user_count_owner":    fmt.Sprintf("%d", lock.UserCountOwner),
 			"user_count_owner_vb": fmt.Sprintf("%d", lock.UserCountOwnerVB),
+			"client":              lock.Client,
 			"user":                lock.User,
 			"transaction":         lock.Transaction,
 			"object":              lock.Object,
