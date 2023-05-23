@@ -120,41 +120,38 @@ if [ -d "/usr/sap/google-sapnetweavermonitoring-agent/" ]; then
   rm -fr /var/log/google-sapnetweavermonitoring-agent*  > /dev/null 2>&1
 fi
 
-# TODO enable migration for HMA prior to release
-# if [ 1 == 2 ]; then
-  # migrate HANA Monitoring Agent and remove its contents
-  if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
-    # migrate
-    if [ -f "/usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml" ]; then
-      # invoking the migration flow
-      timeout 30 %{_bindir}/google_cloud_sap_agent migratehma;
-      if [ $? -eq 0 ]; then
-        cp /usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml %{_confdir}/backup-of-hanamonitoring-configuration.yaml
-        # migration successful, uninstall HANA Monitorig Agent and remove unwanted files
-        # TODO: Explore how to remove the package in case of successful migration only.
-        if `type "systemctl" > /dev/null 2>&1 && systemctl is-active --quiet google-saphanamonitoring-agent`; then
-          systemctl stop google-saphanamonitoring-agent
-        fi
-        # if the agent is enabled - disable it
-        if `type "systemctl" > /dev/null 2>&1 && systemctl is-enabled --quiet google-saphanamonitoring-agent`; then
-          systemctl disable google-saphanamonitoring-agent
-        fi
-        # init.d based (RHEL 6) check
-        if [ ! -d "/usr/lib/systemd/system/" ] && [ ! -d "/lib/systemd/system/" ] && [ -d "/etc/init.d" ]; then
-          chkconfig --del google-saphanamonitoring-agent
-          service google-saphanamonitoring-agent stop
-        fi
-        rm -f /lib/systemd/system/google-saphanamonitoring-agent.service
-        rm -f /usr/lib/systemd/system/google-saphanamonitoring-agent.service
-        rm -fr /usr/sap/google-saphanamonitoring-agent
-        # if it's an init.d system
-        rm -f /etc/init.d/google-saphanamonitoring-agent
-        # remove the HANA Monitorig Agent logs
-        rm -fr /var/log/google-saphanamonitoring-agent*  > /dev/null 2>&1
+# migrate HANA Monitoring Agent and remove its contents
+if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
+  # migrate
+  if [ -f "/usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml" ]; then
+    # invoking the migration flow
+    timeout 30 %{_bindir}/google_cloud_sap_agent migratehma;
+    if [ $? -eq 0 ]; then
+      cp /usr/sap/google-saphanamonitoring-agent/conf/configuration.yaml %{_confdir}/backup-of-hanamonitoring-configuration.yaml
+      # migration successful, uninstall HANA Monitorig Agent and remove unwanted files
+      # TODO: Explore how to remove the package in case of successful migration only.
+      if `type "systemctl" > /dev/null 2>&1 && systemctl is-active --quiet google-saphanamonitoring-agent`; then
+        systemctl stop google-saphanamonitoring-agent
       fi
+      # if the agent is enabled - disable it
+      if `type "systemctl" > /dev/null 2>&1 && systemctl is-enabled --quiet google-saphanamonitoring-agent`; then
+        systemctl disable google-saphanamonitoring-agent
+      fi
+      # init.d based (RHEL 6) check
+      if [ ! -d "/usr/lib/systemd/system/" ] && [ ! -d "/lib/systemd/system/" ] && [ -d "/etc/init.d" ]; then
+        chkconfig --del google-saphanamonitoring-agent
+        service google-saphanamonitoring-agent stop
+      fi
+      rm -f /lib/systemd/system/google-saphanamonitoring-agent.service
+      rm -f /usr/lib/systemd/system/google-saphanamonitoring-agent.service
+      rm -fr /usr/sap/google-saphanamonitoring-agent
+      # if it's an init.d system
+      rm -f /etc/init.d/google-saphanamonitoring-agent
+      # remove the HANA Monitorig Agent logs
+      rm -fr /var/log/google-saphanamonitoring-agent*  > /dev/null 2>&1
     fi
   fi
-# fi
+fi
 
 # we have /usr/sap as part of ReadWritePaths in the service, it must exist
 # issue a seek in case /usr/sap is auto mounted
