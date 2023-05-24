@@ -77,7 +77,11 @@ func CollectOSCommandMetric(ctx context.Context, m *cmpb.OSCommandMetric, exec c
 	})
 
 	label = m.GetMetricInfo().GetLabel()
-	value, _ = Evaluate(m, Output{StdOut: result.StdOut, StdErr: result.StdErr, ExitCode: strconv.Itoa(result.ExitCode)})
+	value, _ = Evaluate(m, Output{
+		StdOut:   strings.TrimSpace(result.StdOut),
+		StdErr:   strings.TrimSpace(result.StdErr),
+		ExitCode: strconv.Itoa(result.ExitCode),
+	})
 	return label, value
 }
 

@@ -22,19 +22,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/zieckey/goini"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -44,7 +41,6 @@ import (
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
@@ -76,17 +72,6 @@ var (
 
 	//go:embed test_data/credentials.json
 	defaultCredentials string
-
-	defaultPacemakerConfig = &cnfpb.Configuration{
-		BareMetal: false,
-		CloudProperties: &instancepb.CloudProperties{
-			InstanceId:   "test-instance-id",
-			ProjectId:    "test-project-id",
-			Zone:         "test-zone",
-			InstanceName: "test-instance-name",
-		},
-		AgentProperties: &cnfpb.AgentProperties{Version: "1.0"},
-	}
 
 	defaultPacemakerConfigNoCloudProperties = &cnfpb.Configuration{
 		BareMetal: false,
@@ -847,7 +832,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 	}{
 		{
 			name: "TestSetPacemakerPrimitivesImproperTypes",
-			c:    defaultPacemakerConfig,
+			c:    defaultConfiguration,
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fake-type",
@@ -866,7 +851,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 		},
 		{
 			name: "TestSetPacemakerPrimitivesNoMatch",
-			c:    defaultPacemakerConfig,
+			c:    defaultConfiguration,
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fence_gce",
@@ -880,7 +865,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 		},
 		{
 			name: "TestSetPacemakerPrimitivesBasicMatch1",
-			c:    defaultPacemakerConfig,
+			c:    defaultConfiguration,
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fake-type",
@@ -899,7 +884,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 		},
 		{
 			name: "TestSetPacemakerPrimitivesBasicMatch2",
-			c:    defaultPacemakerConfig,
+			c:    defaultConfiguration,
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fake-type",
@@ -1165,7 +1150,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			name:                 "XMLNotFound",
 			exec:                 defaultExec,
 			exists:               func(string) bool { return false },
-			config:               defaultPacemakerConfig,
+			config:               defaultConfiguration,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			wantPacemakerExists:  float64(0.0),
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
@@ -1179,7 +1164,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				}
 			},
 			exists:               defaultExists,
-			config:               defaultPacemakerConfig,
+			config:               defaultConfiguration,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			wantPacemakerExists:  float64(0.0),
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
@@ -1193,7 +1178,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				}
 			},
 			exists:               defaultExists,
-			config:               defaultPacemakerConfig,
+			config:               defaultConfiguration,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			fileReader:           fileReaderError,
 			wantPacemakerExists:  float64(0.0),
@@ -1208,7 +1193,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				}
 			},
 			exists:               defaultExists,
-			config:               defaultPacemakerConfig,
+			config:               defaultConfiguration,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			fileReader:           defaultFileReader,
 			credGetter:           defaultCredGetter,
@@ -1233,7 +1218,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				}
 			},
 			exists: defaultExists,
-			config: defaultPacemakerConfig,
+			config: defaultConfiguration,
 			workloadConfig: &wpb.WorkloadValidation{
 				ValidationPacemaker: &wpb.ValidationPacemaker{
 					ConfigMetrics: &wpb.PacemakerConfigMetrics{
@@ -1307,7 +1292,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				}
 			},
 			exists:               defaultExists,
-			config:               defaultPacemakerConfig,
+			config:               defaultConfiguration,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			fileReader:           defaultFileReader,
 			credGetter:           defaultCredGetter,
@@ -1324,7 +1309,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				}
 			},
 			exists:               defaultExists,
-			config:               defaultPacemakerConfig,
+			config:               defaultConfiguration,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			fileReader:           defaultFileReader,
 			tokenGetter:          defaultToxenGetter,
@@ -1341,7 +1326,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				}
 			},
 			exists:               defaultExists,
-			config:               defaultPacemakerConfig,
+			config:               defaultConfiguration,
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			fileReader:           defaultFileReader,
 			tokenGetter:          defaultToxenGetter,
@@ -1392,242 +1377,6 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			got := CollectPacemakerMetricsFromConfig(context.Background(), p)
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("CollectPacemakerMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestCollectPacemakerMetrics(t *testing.T) {
-	tests := []struct {
-		name                 string
-		runtimeOS            string
-		exec                 commandlineexecutor.Execute
-		exists               commandlineexecutor.Exists
-		iir                  *instanceinfo.Reader
-		config               *cnfpb.Configuration
-		mapper               instanceinfo.NetworkInterfaceAddressMapper
-		osStatReader         OSStatReader
-		wantOsVersion        string
-		wantPacemakerExists  float64
-		wantPacemakerMetrics func(*timestamppb.Timestamp, float64, string, string) WorkloadMetrics
-		fileReader           ConfigFileReader
-		credGetter           JSONCredentialsGetter
-		tokenGetter          DefaultTokenGetter
-		locationPref         string
-	}{
-		{
-			name:                 "TestCollectPacemakerMetricsXMLNotFound",
-			runtimeOS:            "linux",
-			exec:                 defaultExec,
-			exists:               func(string) bool { return false },
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfig,
-			mapper:               defaultMapperFunc,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(0.0),
-			wantPacemakerMetrics: wantErrorPacemakerMetrics,
-		},
-		{
-			name:      "TestCollectPacemakerMetricsUnparseableXML",
-			runtimeOS: "linux",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "Error: Bad XML",
-					StdErr: "",
-				}
-			},
-			exists:               defaultExists,
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfig,
-			mapper:               defaultMapperFunc,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(0.0),
-			wantPacemakerMetrics: wantErrorPacemakerMetrics,
-		},
-		{
-			name:      "TestCollectPacemakerMetricsServiceAccountReadError",
-			runtimeOS: "linux",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: pacemakerServiceAccountXML,
-					StdErr: "",
-				}
-			},
-			exists:               defaultExists,
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfig,
-			mapper:               defaultMapperFunc,
-			fileReader:           fileReaderError,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(0.0),
-			wantPacemakerMetrics: wantErrorPacemakerMetrics,
-		},
-		{
-			name:      "TestCollectPacemakerMetricsServiceAccount",
-			runtimeOS: "linux",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: pacemakerServiceAccountXML,
-					StdErr: "",
-				}
-			},
-			exists:               defaultExists,
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfig,
-			mapper:               defaultMapperFunc,
-			fileReader:           defaultFileReader,
-			credGetter:           defaultCredGetter,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(1.0),
-			wantPacemakerMetrics: wantDefaultPacemakerMetrics,
-			locationPref:         "false",
-		},
-		{
-			name:      "TestCollectPacemakerMetricsProjectID",
-			runtimeOS: "linux",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "curl" {
-					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
-						return commandlineexecutor.Result{
-							StdOut: jsonHealthyResponse,
-							StdErr: "",
-						}
-					} else if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
-						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"` {
-						return commandlineexecutor.Result{
-							StdOut: jsonHealthyResponse,
-							StdErr: "",
-						}
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: pacemakerServiceAccountXML,
-					StdErr: "",
-				}
-			},
-			exists:               defaultExists,
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfig,
-			mapper:               defaultMapperFunc,
-			fileReader:           defaultFileReader,
-			credGetter:           defaultCredGetter,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(1.0),
-			wantPacemakerMetrics: wantSuccessfulAccessPacemakerMetrics,
-			locationPref:         "false",
-		},
-		{
-			name:      "TestCollectPacemakerMetricsLocationPref",
-			runtimeOS: "linux",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: pacemakerClipReferXML,
-					StdErr: "",
-				}
-			},
-			exists:               defaultExists,
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfig,
-			mapper:               defaultMapperFunc,
-			fileReader:           defaultFileReader,
-			tokenGetter:          defaultToxenGetter,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(1.0),
-			wantPacemakerMetrics: wantCLIPreferPacemakerMetrics,
-			locationPref:         "true",
-		},
-		{
-			name:      "TestCollectPacemakerMetricsCloneMetrics",
-			runtimeOS: "linux",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: pacemakerCloneXML,
-					StdErr: "",
-				}
-			},
-			exists:               defaultExists,
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfig,
-			mapper:               defaultMapperFunc,
-			fileReader:           defaultFileReader,
-			tokenGetter:          defaultToxenGetter,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(1.0),
-			wantPacemakerMetrics: wantCLIPreferPacemakerMetrics,
-			locationPref:         "false",
-		},
-		{
-			name:      "TestCollectPacemakerMetricsNilCloudProperties",
-			runtimeOS: "linux",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: pacemakerCloneXML,
-					StdErr: "",
-				}
-			},
-			exists:               defaultExists,
-			iir:                  defaultIIR,
-			config:               defaultPacemakerConfigNoCloudProperties,
-			mapper:               defaultMapperFunc,
-			wantOsVersion:        "test-os-version",
-			wantPacemakerExists:  float64(0.0),
-			wantPacemakerMetrics: wantNoPropertiesPacemakerMetrics,
-			locationPref:         "false",
-		},
-	}
-
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
-		return ini
-	}
-	ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
-	ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
-	netInterfaceAdddrs = func() ([]net.Addr, error) {
-		return []net.Addr{ip1, ip2}, nil
-	}
-	now = func() int64 {
-		return int64(1660930735)
-	}
-	nts := &timestamppb.Timestamp{
-		Seconds: now(),
-	}
-	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
-			StdErr: "",
-		}
-	}
-	osVersionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n Version=10.0.17763  \n\n",
-			StdErr: "",
-		}
-	}
-	cmdExists = func(c string) bool {
-		return true
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.iir.Read(context.Background(), test.config, test.mapper)
-			want := test.wantPacemakerMetrics(nts, test.wantPacemakerExists, test.wantOsVersion, test.locationPref)
-
-			pch := make(chan WorkloadMetrics)
-			p := Parameters{
-				Config:                test.config,
-				Execute:               test.exec,
-				Exists:                test.exists,
-				ConfigFileReader:      test.fileReader,
-				DefaultTokenGetter:    test.tokenGetter,
-				JSONCredentialsGetter: test.credGetter,
-				OSType:                test.runtimeOS,
-			}
-			go CollectPacemakerMetrics(context.Background(), p, pch)
-			got := <-pch
-			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("CollectPacemakerMetrics returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}
 		})
 	}

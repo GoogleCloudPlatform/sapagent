@@ -49,14 +49,12 @@ type lsblk struct {
 	BlockDevices []lsblkdevice `json:"blockdevices"`
 }
 
-const hanaAPILabel = "workload.googleapis.com/sap/validation/hana"
-
 // CollectHANAMetricsFromConfig collects the HANA metrics as specified
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager HANA metrics...")
-	t := hanaAPILabel
+	t := "workload.googleapis.com/sap/validation/hana"
 	hanaVal := 0.0
 
 	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(ctx, params.Execute)
@@ -66,7 +64,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	if hanaProcessOrGlobalIni == "" || strings.Contains(hanaProcessOrGlobalIni, "cannot access") {
 		// No HANA INI file or processes were identified on the current host.
 		log.Logger.Debug("HANA process and global.ini not found, no HANA")
-		return WorkloadMetrics{Metrics: createTimeSeries(hanaAPILabel, l, hanaVal, params.Config)}
+		return WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
 	}
 	if _, err := params.OSStatReader(globalINILocationVal); err != nil {
 		// Parse out the SID and global.ini location.
@@ -111,84 +109,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	}
 
 	hanaVal = 1.0
-	return WorkloadMetrics{Metrics: createTimeSeries(hanaAPILabel, l, hanaVal, params.Config)}
-}
-
-/*
-CollectHanaMetrics collects SAP HANA metrics for the Workload Manager and sends them to the wm
-channel.
-*/
-func CollectHanaMetrics(ctx context.Context, params Parameters, wm chan<- WorkloadMetrics) {
-	log.Logger.Info("Collecting workload hana metrics...")
-	t := hanaAPILabel
-	hanaVal := 0.0
-
-	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(ctx, params.Execute)
-	globalINILocationVal := globalINILocation(hanaProcessOrGlobalIni)
-
-	l := map[string]string{}
-	if hanaProcessOrGlobalIni == "" || strings.Contains(hanaProcessOrGlobalIni, "cannot access") {
-		// No HANA INI file or processes were identified on the current host.
-		log.Logger.Debug("HANA process and global.ini not found, no HANA")
-		wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
-		return
-	}
-	if _, err := params.OSStatReader(globalINILocationVal); err != nil {
-		// Parse out the SID and global.ini location.
-		// example process output:
-		// /usr/sap/RKT/HDB90/exe/sapstartsrv
-		// pf=/usr/sap/RKT/SYS/profile/RKT_HDB90_sap-hana-vm-hma-rev53-rhel -D -u rktadm
-
-		// The global.ini will be in /usr/sap/[SID]/SYS/global/hdb/custom/config/global.ini
-
-		// If the process is not running then the hanaProcessOrGlobalIni will contain the global.ini
-		// location similar to: /usr/sap/HAR/SYS/global/hdb/custom/config/global.ini
-
-		log.Logger.Debugw("Could not find gobal.ini file", "globalinilocation", globalINILocationVal)
-		wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
-		return
-	}
-
-	l["fast_restart"] = "disabled"
-	if grepKeyInGlobalINI(ctx, "basepath_persistent_memory_volumes", globalINILocationVal, params.Execute) {
-		l["fast_restart"] = "enabled"
-	}
-
-	l["ha_sr_hook_configured"] = "no"
-	if grepKeyInGlobalINI(ctx, "ha_dr_provider_SAPHanaSR", globalINILocationVal, params.Execute) {
-		l["ha_sr_hook_configured"] = "yes"
-	}
-
-	nbresult := params.Execute(ctx, commandlineexecutor.Params{
-		Executable: "cat",
-		Args:       []string{"/proc/sys/kernel/numa_balancing"},
-	})
-	if nbresult.Error != nil {
-		log.Logger.Warnw("cat /proc/sys/kernel/numa_balancing failed", "error", nbresult.Error)
-	} else {
-		l["numa_balancing"] = "disabled"
-		if nbresult.StdOut == "1" {
-			l["numa_balancing"] = "enabled"
-		}
-	}
-
-	hpresult := params.Execute(ctx, commandlineexecutor.Params{
-		Executable: "cat",
-		Args:       []string{"/sys/kernel/mm/transparent_hugepage/enabled"},
-	})
-	if hpresult.Error != nil {
-		log.Logger.Warnw("cat /sys/kernel/mm/transparent_hugepage/enabled failed", "error", hpresult.Error)
-	} else {
-		l["transparent_hugepages"] = "disabled"
-		if strings.Contains(hpresult.StdOut, "[always]") {
-			l["transparent_hugepages"] = "enabled"
-		}
-	}
-
-	setVolumeLabels(l, diskInfo(ctx, "basepath_datavolumes", globalINILocationVal, params.Execute, params.InstanceInfoReader), "data")
-	setVolumeLabels(l, diskInfo(ctx, "basepath_logvolumes", globalINILocationVal, params.Execute, params.InstanceInfoReader), "log")
-	hanaVal = 1.0
-	wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
 }
 
 /*
@@ -222,21 +143,6 @@ func hanaProcessOrGlobalINI(ctx context.Context, exec commandlineexecutor.Execut
 		hanaProcessOrGlobalINI = hpresult.StdOut
 	}
 	return hanaProcessOrGlobalINI
-}
-
-/*
-setVolumeLabels sets volume labels for the workload metric collector.  These volumes may either be
-data disks or logs.
-*/
-func setVolumeLabels(l map[string]string, diskInfo map[string]string, dataOrLog string) {
-	log.Logger.Debugw("diskInfo empty check", "dataorlog", dataOrLog, "isempty", len(diskInfo) == 0)
-	if len(diskInfo) > 0 {
-		log.Logger.Debugw("Found basepath volumes, adding disk_data labels", "basepathvolumes", fmt.Sprintf("basepath_%svolumes", dataOrLog))
-		l["disk_"+dataOrLog+"_type"] = diskInfo["instancedisktype"]
-		l["disk_"+dataOrLog+"_mount"] = diskInfo["mountpoint"]
-		l["disk_"+dataOrLog+"_size"] = diskInfo["size"]
-		l["disk_"+dataOrLog+"_pd_size"] = diskInfo["pdsize"]
-	}
 }
 
 /*
@@ -276,20 +182,6 @@ func globalINILocation(hanaProcessOrGlobalINI string) string {
 	}
 	log.Logger.Debugw("HANA sid and global.ini file", "sid", sid, "globalinilocation", globalINILocation)
 	return globalINILocation
-}
-
-/*
-grepKeyInGlobalINI determines whether or not a given INI file contains a specific key definition
-*/
-func grepKeyInGlobalINI(ctx context.Context, key string, globalIniLocation string, exec commandlineexecutor.Execute) bool {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "grep",
-		ArgsToSplit: key + " " + globalIniLocation,
-	})
-	if result.Error != nil {
-		return false
-	}
-	return len(result.StdOut) > 0
 }
 
 func diskInfo(ctx context.Context, basepathVolume string, globalINILocation string, exec commandlineexecutor.Execute, iir instanceinfo.Reader) map[string]string {

@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net"
 	"os"
 	"strings"
 	"testing"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	compute "google.golang.org/api/compute/v1"
-	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -43,150 +41,12 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // fakeDiskMapper provides a testable fake implementation of the DiskMapper interface
 type fakeDiskMapper struct {
 	err error
 	out string
-}
-
-func wantDefaultHanaMetrics(ts *timestamppb.Timestamp, hanaExists float64, os string) WorkloadMetrics {
-	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
-			Metric: &metricpb.Metric{
-				Type:   "workload.googleapis.com/sap/validation/hana",
-				Labels: map[string]string{},
-			},
-			MetricKind: metricpb.MetricDescriptor_GAUGE,
-			Resource: &monitoredresourcepb.MonitoredResource{
-				Type: "gce_instance",
-				Labels: map[string]string{
-					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
-					"project_id":  "test-project-id",
-				},
-			},
-			Points: []*monitoringresourcepb.Point{{
-				Interval: &cpb.TimeInterval{
-					StartTime: ts,
-					EndTime:   ts,
-				},
-				Value: &cpb.TypedValue{
-					Value: &cpb.TypedValue_DoubleValue{
-						DoubleValue: hanaExists,
-					},
-				},
-			}},
-		}},
-	}
-}
-
-func wantHanaMetricsAllNegative(ts *timestamppb.Timestamp, hanaExists float64, os string) WorkloadMetrics {
-	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
-			Metric: &metricpb.Metric{
-				Type: "workload.googleapis.com/sap/validation/hana",
-				Labels: map[string]string{
-					"fast_restart":          "disabled",
-					"ha_sr_hook_configured": "no",
-					"numa_balancing":        "disabled",
-					"transparent_hugepages": "disabled",
-				},
-			},
-			MetricKind: metricpb.MetricDescriptor_GAUGE,
-			Resource: &monitoredresourcepb.MonitoredResource{
-				Type: "gce_instance",
-				Labels: map[string]string{
-					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
-					"project_id":  "test-project-id",
-				},
-			},
-			Points: []*monitoringresourcepb.Point{{
-				Interval: &cpb.TimeInterval{
-					StartTime: ts,
-					EndTime:   ts,
-				},
-				Value: &cpb.TypedValue{
-					Value: &cpb.TypedValue_DoubleValue{
-						DoubleValue: hanaExists,
-					},
-				},
-			}},
-		}},
-	}
-}
-
-func wantHanaMetricsAllNegativeNoNumaOrHugePage(ts *timestamppb.Timestamp, hanaExists float64, os string) WorkloadMetrics {
-	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
-			Metric: &metricpb.Metric{
-				Type: "workload.googleapis.com/sap/validation/hana",
-				Labels: map[string]string{
-					"fast_restart":          "disabled",
-					"ha_sr_hook_configured": "no",
-				},
-			},
-			MetricKind: metricpb.MetricDescriptor_GAUGE,
-			Resource: &monitoredresourcepb.MonitoredResource{
-				Type: "gce_instance",
-				Labels: map[string]string{
-					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
-					"project_id":  "test-project-id",
-				},
-			},
-			Points: []*monitoringresourcepb.Point{{
-				Interval: &cpb.TimeInterval{
-					StartTime: ts,
-					EndTime:   ts,
-				},
-				Value: &cpb.TypedValue{
-					Value: &cpb.TypedValue_DoubleValue{
-						DoubleValue: hanaExists,
-					},
-				},
-			}},
-		}},
-	}
-}
-
-func wantHanaMetricsAllPositive(ts *timestamppb.Timestamp, hanaExists float64, os string) WorkloadMetrics {
-	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
-			Metric: &metricpb.Metric{
-				Type: "workload.googleapis.com/sap/validation/hana",
-				Labels: map[string]string{
-					"fast_restart":          "enabled",
-					"ha_sr_hook_configured": "yes",
-					"numa_balancing":        "enabled",
-					"transparent_hugepages": "enabled",
-				},
-			},
-			MetricKind: metricpb.MetricDescriptor_GAUGE,
-			Resource: &monitoredresourcepb.MonitoredResource{
-				Type: "gce_instance",
-				Labels: map[string]string{
-					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
-					"project_id":  "test-project-id",
-				},
-			},
-			Points: []*monitoringresourcepb.Point{{
-				Interval: &cpb.TimeInterval{
-					StartTime: ts,
-					EndTime:   ts,
-				},
-				Value: &cpb.TypedValue{
-					Value: &cpb.TypedValue_DoubleValue{
-						DoubleValue: hanaExists,
-					},
-				},
-			}},
-		}},
-	}
 }
 
 func createHANAWorkloadMetrics(labels map[string]string, value float64) WorkloadMetrics {
@@ -308,14 +168,6 @@ basepath_datavolumes = /hana/data/ISC
 basepath_logvolumes = /hana/log/ISC
 basepath_persistent_memory_volumes = /hana/memory/ISC
 `
-	defaultConfig = &configpb.Configuration{
-		BareMetal: false,
-		CloudProperties: &instancepb.CloudProperties{
-			InstanceId: "test-instance-id",
-			ProjectId:  "test-project-id",
-			Zone:       "test-zone",
-		},
-	}
 	defaultDiskMapper = &fakeDiskMapper{err: nil, out: "disk-mapping"}
 	defaultMapperFunc = func() (map[instanceinfo.InterfaceName][]instanceinfo.NetworkAddress, error) {
 		return map[instanceinfo.InterfaceName][]instanceinfo.NetworkAddress{"lo": []instanceinfo.NetworkAddress{instanceinfo.NetworkAddress(defaultNetworkIP)}}, nil
@@ -473,65 +325,6 @@ func TestHanaProcessOrGlobalINI(t *testing.T) {
 	}
 }
 
-func TestSetVolumeLabels(t *testing.T) {
-	tests := []struct {
-		name      string
-		diskInfo  map[string]string
-		dataOrLog string
-		want      map[string]string
-	}{
-		{
-			name: "VolumeLabelTest1",
-			diskInfo: map[string]string{
-				"instancedisktype": "ssd",
-				"mountpoint":       "/dev/sda",
-				"size":             "1024",
-				"pdsize":           "8",
-			},
-			dataOrLog: "data",
-			want: map[string]string{
-				"disk_data_type":    "ssd",
-				"disk_data_mount":   "/dev/sda",
-				"disk_data_size":    "1024",
-				"disk_data_pd_size": "8",
-			},
-		}, {
-			name:      "VolumeLabelTest2",
-			diskInfo:  map[string]string{},
-			dataOrLog: "data",
-			want:      map[string]string{},
-		}, {
-			name: "VolumeLabelTest3",
-			diskInfo: map[string]string{
-				"instancedisktype": "ssd",
-				"mountpoint":       "/dev/sda",
-				"size":             "4096",
-				"pdsize":           "16",
-			},
-			dataOrLog: "log",
-			want: map[string]string{
-				"disk_log_type":    "ssd",
-				"disk_log_mount":   "/dev/sda",
-				"disk_log_size":    "4096",
-				"disk_log_pd_size": "16",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			l := map[string]string{}
-			setVolumeLabels(l, test.diskInfo, test.dataOrLog)
-			got := l
-			want := test.want
-
-			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
-			}
-		})
-	}
-}
-
 func TestGlobalINILocation(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -599,7 +392,7 @@ func TestDiskInfo(t *testing.T) {
 			globalINILocation: "/etc/config/test.ini",
 			exec:              defaultExec,
 			iir:               defaultIIR,
-			config:            defaultConfig,
+			config:            defaultConfiguration,
 			mapper:            defaultMapperFunc,
 			want:              map[string]string{},
 		},
@@ -615,7 +408,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -631,7 +424,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -646,7 +439,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -667,7 +460,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -688,7 +481,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -710,7 +503,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -731,7 +524,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -752,7 +545,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want: map[string]string{
 				"mountpoint":       "/hana/data",
@@ -778,7 +571,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -799,7 +592,7 @@ func TestDiskInfo(t *testing.T) {
 				}
 			},
 			iir:    defaultIIR,
-			config: defaultConfig,
+			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
@@ -836,7 +629,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 			matchedMountPoint:  "/dev/sda",
 			matchedSize:        "1024",
 			iir:                defaultIIR,
-			config:             defaultConfig,
+			config:             defaultConfiguration,
 			mapper:             defaultMapperFunc,
 			want:               map[string]string{},
 		},
@@ -850,7 +643,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 			matchedMountPoint: "test-mount-point",
 			matchedSize:       "1024",
 			iir:               defaultIIR,
-			config:            defaultConfig,
+			config:            defaultConfiguration,
 			mapper:            defaultMapperFunc,
 			want: map[string]string{
 				"mountpoint":       "test-mount-point",
@@ -871,7 +664,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 			matchedMountPoint: "test-mount-point",
 			matchedSize:       "1024",
 			iir:               defaultIIR,
-			config:            defaultConfig,
+			config:            defaultConfiguration,
 			mapper:            defaultMapperFunc,
 			want: map[string]string{
 				"testdiskinfo":     "N/A",
@@ -891,263 +684,6 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, setDiskInfoForDevice returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
-			}
-		})
-	}
-}
-
-func TestGrepKeyInGlobalINI(t *testing.T) {
-	tests := []struct {
-		name              string
-		exec              commandlineexecutor.Execute
-		key               string
-		globalINILocation string
-		want              bool
-	}{
-		{
-			name: "TestGrepKeyInGlobalINIGrepError",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-					Error:  errors.New("Command failed"),
-				}
-			},
-			key:               "disk_location",
-			globalINILocation: "/etc/config/test.ini",
-			want:              false,
-		},
-		{
-			name: "TestGrepKeyInGlobalINIGrepNoReturn",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			},
-			key:               "disk_location",
-			globalINILocation: "/etc/config/test.ini",
-			want:              false,
-		},
-		{
-			name: "TestGrepKeyInGlobalINIGrepSuccess",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "disk_location = /dev/sda",
-					StdErr: "",
-				}
-			},
-			key:               "disk_location",
-			globalINILocation: "/etc/config/test.ini",
-			want:              true,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := grepKeyInGlobalINI(context.Background(), test.key, test.globalINILocation, test.exec)
-
-			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%s failed, grepKeyInGlobalINI returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
-			}
-		})
-	}
-}
-
-func TestCollectHanaMetrics(t *testing.T) {
-	tests := []struct {
-		name            string
-		runtimeOS       string
-		exec            commandlineexecutor.Execute
-		iir             *instanceinfo.Reader
-		config          *configpb.Configuration
-		mapper          instanceinfo.NetworkInterfaceAddressMapper
-		osStatReader    OSStatReader
-		wantOsVersion   string
-		wantHanaExists  float64
-		wantHanaMetrics func(*timestamppb.Timestamp, float64, string) WorkloadMetrics
-	}{
-		{
-			name:            "TestHanaDoesNotExist",
-			runtimeOS:       "linux",
-			exec:            defaultExec,
-			iir:             defaultIIR,
-			config:          defaultConfig,
-			mapper:          defaultMapperFunc,
-			osStatReader:    os.Stat,
-			wantOsVersion:   "test-os-version",
-			wantHanaExists:  float64(0.0),
-			wantHanaMetrics: wantDefaultHanaMetrics,
-		},
-		{
-			name:      "TestHanaNoINI",
-			runtimeOS: "linux",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			},
-			iir:             defaultIIR,
-			config:          defaultConfig,
-			mapper:          defaultMapperFunc,
-			osStatReader:    os.Stat,
-			wantOsVersion:   "test-os-version",
-			wantHanaExists:  float64(0.0),
-			wantHanaMetrics: wantDefaultHanaMetrics,
-		},
-		{
-			name:      "TestHanaAllLabelsDisabled",
-			runtimeOS: "linux",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			},
-			iir:             defaultIIR,
-			config:          defaultConfig,
-			mapper:          defaultMapperFunc,
-			osStatReader:    func(string) (os.FileInfo, error) { return nil, nil },
-			wantOsVersion:   "test-os-version",
-			wantHanaExists:  float64(1.0),
-			wantHanaMetrics: wantHanaMetricsAllNegative,
-		},
-		{
-			name:      "TestHanaAllLabelsEnabled",
-			runtimeOS: "linux",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
-				}
-				if params.Executable == "grep" {
-					return commandlineexecutor.Result{
-						StdOut: "dummy key insert",
-						StdErr: "",
-					}
-				}
-				if params.Executable == "cat" {
-					if params.Args[0] == "/proc/sys/kernel/numa_balancing" {
-						return commandlineexecutor.Result{
-							StdOut: "1",
-							StdErr: "",
-						}
-					}
-					return commandlineexecutor.Result{
-						StdOut: "[always]",
-						StdErr: "",
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			},
-			iir:             defaultIIR,
-			config:          defaultConfig,
-			mapper:          defaultMapperFunc,
-			osStatReader:    func(string) (os.FileInfo, error) { return nil, nil },
-			wantOsVersion:   "test-os-version",
-			wantHanaExists:  float64(1.0),
-			wantHanaMetrics: wantHanaMetricsAllPositive,
-		},
-		{
-			name:      "TestHanaLabelsDisabledFromErrors",
-			runtimeOS: "linux",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
-				}
-				if params.Executable == "cat" {
-					return commandlineexecutor.Result{
-						StdOut: "",
-						StdErr: "",
-						Error:  errors.New("Command failed"),
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			},
-			iir:             defaultIIR,
-			config:          defaultConfig,
-			mapper:          defaultMapperFunc,
-			osStatReader:    func(string) (os.FileInfo, error) { return nil, nil },
-			wantOsVersion:   "test-os-version",
-			wantHanaExists:  float64(1.0),
-			wantHanaMetrics: wantHanaMetricsAllNegativeNoNumaOrHugePage,
-		},
-	}
-
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
-		return ini
-	}
-	ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
-	ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
-	netInterfaceAdddrs = func() ([]net.Addr, error) {
-		return []net.Addr{ip1, ip2}, nil
-	}
-	now = func() int64 {
-		return int64(1660930735)
-	}
-	nts := &timestamppb.Timestamp{
-		Seconds: now(),
-	}
-	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
-			StdErr: "",
-		}
-	}
-	osVersionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n Version=10.0.17763  \n\n",
-			StdErr: "",
-		}
-	}
-	cmdExists = func(c string) bool {
-		return true
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.iir.Read(context.Background(), test.config, test.mapper)
-			want := test.wantHanaMetrics(nts, test.wantHanaExists, test.wantOsVersion)
-
-			hch := make(chan WorkloadMetrics)
-			p := Parameters{
-				Config:             cnf,
-				OSStatReader:       test.osStatReader,
-				InstanceInfoReader: *test.iir,
-				Execute:            test.exec,
-				OSType:             test.runtimeOS,
-			}
-			go CollectHanaMetrics(context.Background(), p, hch)
-			got := <-hch
-			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
 			}
 		})
 	}
@@ -1314,9 +850,9 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			iir := defaultIIR
-			iir.Read(context.Background(), defaultConfig, defaultMapperFunc)
+			iir.Read(context.Background(), defaultConfiguration, defaultMapperFunc)
 			p := Parameters{
-				Config:             cnf,
+				Config:             defaultConfiguration,
 				OSStatReader:       test.osStatReader,
 				InstanceInfoReader: *iir,
 				Execute:            test.exec,

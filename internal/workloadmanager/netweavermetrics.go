@@ -41,13 +41,3 @@ func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) W
 
 	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 0, params.Config)}
 }
-
-/*
-CollectNetWeaverMetrics collects NetWeaver metrics for Workload Manager and sends them to the wm channel.
-*/
-func CollectNetWeaverMetrics(params Parameters, wm chan<- WorkloadMetrics) {
-	log.Logger.Info("Collecting workload netweaver metrics...")
-	t := "workload.googleapis.com/sap/validation/netweaver"
-
-	wm <- WorkloadMetrics{Metrics: createTimeSeries(t, map[string]string{}, 0, params.Config)}
-}

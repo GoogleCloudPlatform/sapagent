@@ -383,6 +383,7 @@ func startWorkloadManagerMetricsCollection(ctx context.Context, wlmparams worklo
 		wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
 		wlmparams.DefaultTokenGetter = defaultTokenGetter
 		wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
+		wlmparams.SetOSReleaseInfo()
 		workloadmanager.StartMetricsCollection(ctx, wlmparams)
 	}
 }

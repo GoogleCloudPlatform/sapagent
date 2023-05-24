@@ -32,12 +32,11 @@ import (
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
-const pacemakerAPILabel = "workload.googleapis.com/sap/validation/pacemaker"
-
 // CollectPacemakerMetricsFromConfig collects the pacemaker metrics as specified
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
+	t := "workload.googleapis.com/sap/validation/pacemaker"
 	// Prune the configurable labels depending on what is defined in the workload config.
 	pruneLabels := map[string]bool{
 		"pcmk_delay_base":                true,
@@ -89,15 +88,7 @@ func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) W
 		}
 	}
 
-	return WorkloadMetrics{Metrics: createTimeSeries(pacemakerAPILabel, l, pacemakerVal, params.Config)}
-}
-
-// CollectPacemakerMetrics collects the pacemaker configuration and runtime metrics from the OS.
-func CollectPacemakerMetrics(ctx context.Context, params Parameters, wm chan<- WorkloadMetrics) {
-	log.Logger.Info("Collecting workload pacemaker metrics...")
-	t := pacemakerAPILabel
-	pacemakerVal, l := collectPacemakerValAndLabels(ctx, params)
-	wm <- WorkloadMetrics{Metrics: createTimeSeries(t, l, pacemakerVal, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(t, l, pacemakerVal, params.Config)}
 }
 
 func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float64, map[string]string) {

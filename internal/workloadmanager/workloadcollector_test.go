@@ -21,7 +21,6 @@ import (
 	"embed"
 	"errors"
 	"io"
-	"net"
 	"os"
 	"reflect"
 	"strings"
@@ -31,12 +30,9 @@ import (
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
-	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
@@ -50,6 +46,18 @@ import (
 )
 
 var (
+	defaultConfiguration = &cfgpb.Configuration{
+		CloudProperties: &iipb.CloudProperties{
+			InstanceName: "test-instance-name",
+			InstanceId:   "test-instance-id",
+			Zone:         "test-zone",
+			ProjectId:    "test-project-id",
+		},
+		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
+		CollectionConfiguration: &cfgpb.CollectionConfiguration{
+			CollectWorkloadValidationMetrics: true,
+		},
+	}
 	//go:embed test_data/metricoverride.yaml
 	sampleOverride string
 	//go:embed test_data/metricoverride.yaml test_data/os-release.txt test_data/os-release-bad.txt test_data/os-release-empty.txt
@@ -249,156 +257,6 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 	}
 }
 
-func TestCollectMetrics_hasMetrics(t *testing.T) {
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
-		return ini
-	}
-	want := 5
-	p := Parameters{
-		Config: &cfgpb.Configuration{},
-		Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  nil,
-			}
-		},
-		Exists:           func(string) bool { return true },
-		ConfigFileReader: DefaultTestReader,
-		OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
-		OSType:           "linux",
-		BackOffs:         defaultBackOffIntervals,
-	}
-	m := collectMetrics(context.Background(), p, metricOverridePath)
-	got := len(m.Metrics)
-	if got != want {
-		t.Errorf("collectMetrics returned unexpected metric count, got: %d, want: %d", got, want)
-	}
-}
-
-func TestCollectMetrics_systemLabelsAppend(t *testing.T) {
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
-		return ini
-	}
-	defaultDiskMapper = &fakeDiskMapper{err: nil, out: "disk-mapping"}
-	defaultNetworkIP = "127.0.0.1"
-	p := Parameters{
-		Config: &cfgpb.Configuration{
-			CloudProperties: &iipb.CloudProperties{
-				InstanceName: "test-instance-name",
-				InstanceId:   "test-instance-id",
-				Zone:         "test-zone",
-				ProjectId:    "test-project-id",
-			},
-			AgentProperties: &cfgpb.AgentProperties{Version: "1.0"},
-		},
-		ConfigFileReader: DefaultTestReader,
-		OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
-		Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-			}
-		},
-		Exists:             func(string) bool { return false },
-		OSType:             "windows",
-		InstanceInfoReader: *instanceinfo.New(defaultDiskMapper, defaultGCEService),
-		BackOffs:           defaultBackOffIntervals,
-	}
-	wantOSVersion := "microsoft_windows_server_2019_datacenter-10.0.17763"
-	wantTimestamp := &timestamppb.Timestamp{Seconds: now()}
-
-	agentServiceStatus = func(context.Context, string) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "Running",
-			StdErr: "",
-		}
-	}
-	cmdExists = func(c string) bool {
-		return true
-	}
-	ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
-	ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
-	netInterfaceAdddrs = func() ([]net.Addr, error) {
-		return []net.Addr{ip1, ip2}, nil
-	}
-	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
-			StdErr: "",
-		}
-	}
-	osVersionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n\nVersion=10.0.17763  \n\n",
-			StdErr: "",
-		}
-	}
-
-	labels := make(map[string]string)
-	for k, v := range defaultLabels {
-		labels[k] = v
-	}
-	labels["os"] = wantOSVersion
-	want := wantSystemMetrics(wantTimestamp, labels)
-	for _, metric := range []string{"corosync", "hana", "netweaver", "pacemaker"} {
-		wantMetric := wantSystemMetrics(wantTimestamp, labels).Metrics[0]
-		wantMetric.Metric.Type = "workload.googleapis.com/sap/validation/" + metric
-		wantMetric.Points[0].Value.Value = &cpb.TypedValue_DoubleValue{DoubleValue: 0}
-		want.Metrics = append(want.Metrics, wantMetric)
-	}
-
-	got := collectMetrics(context.Background(), p, metricOverridePath)
-	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-		t.Errorf("System labels were not properly appended (-want +got):\n%s", diff)
-	}
-}
-
-func TestCollectMetrics_hasOverrideMetrics(t *testing.T) {
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
-		return ini
-	}
-	want := 2
-	p := Parameters{
-		Config: &cfgpb.Configuration{},
-		Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-			}
-		},
-		Exists: func(string) bool { return true },
-		ConfigFileReader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-			file, err := testFS.Open(path)
-			var f io.ReadCloser = file
-			return f, err
-		}),
-		OSStatReader: func(data string) (os.FileInfo, error) {
-			f, err := testFS.Open(data)
-			if err != nil {
-				return nil, err
-			}
-			return f.Stat()
-		},
-		OSType:   "linux",
-		BackOffs: defaultBackOffIntervals,
-	}
-	m := collectMetrics(context.Background(), p, "test_data/metricoverride.yaml")
-	got := len(m.Metrics)
-	if got != want {
-		t.Errorf("collectMetrics_hasOverrideMetrics returned unexpected metric count, got: %d, want: %d", got, want)
-	}
-}
-
 func TestOverrideMetrics(t *testing.T) {
 	tests := []struct {
 		file   string
@@ -515,10 +373,7 @@ func TestStartMetricsCollection(t *testing.T) {
 		{
 			name: "succeedsForLocal",
 			params: Parameters{
-				Config: &cfgpb.Configuration{
-					CollectionConfiguration: &cfgpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: true,
-					}},
+				Config: defaultConfiguration,
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
@@ -538,10 +393,7 @@ func TestStartMetricsCollection(t *testing.T) {
 		{
 			name: "succeedsForRemote",
 			params: Parameters{
-				Config: &cfgpb.Configuration{
-					CollectionConfiguration: &cfgpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: true,
-					}},
+				Config: defaultConfiguration,
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
@@ -573,10 +425,7 @@ func TestStartMetricsCollection(t *testing.T) {
 		{
 			name: "failsDueToOS",
 			params: Parameters{
-				Config: &cfgpb.Configuration{
-					CollectionConfiguration: &cfgpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: true,
-					}},
+				Config:   defaultConfiguration,
 				OSType:   "windows",
 				BackOffs: defaultBackOffIntervals,
 			},
@@ -634,10 +483,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 			got := 0
 			lock := sync.Mutex{}
 			params := Parameters{
-				Config: &cfgpb.Configuration{
-					CollectionConfiguration: &cfgpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: true,
-					}},
+				Config: defaultConfiguration,
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",

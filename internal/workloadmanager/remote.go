@@ -37,7 +37,7 @@ const remoteAgentBinary = "/tmp/google_cloud_sap_agent"
 // JSON representation of them, this is only called on remote instances for metric collection
 // only called through the google_cloud_sap_agent binary using remote mode
 func CollectMetricsToJSON(ctx context.Context, params Parameters) string {
-	wm := collectMetrics(ctx, params, metricOverridePath)
+	wm := collectMetricsFromConfig(ctx, params, metricOverridePath)
 
 	var sb strings.Builder
 	for _, t := range wm.Metrics {

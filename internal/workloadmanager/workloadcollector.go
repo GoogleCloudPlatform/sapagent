@@ -202,7 +202,7 @@ func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 		return
 	}
 	log.Logger.Info("Collecting metrics from this instance")
-	metrics := collectMetrics(ctx, params, metricOverridePath)
+	metrics := collectMetricsFromConfig(ctx, params, metricOverridePath)
 	sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
 }
 
@@ -284,49 +284,6 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	allMetrics = append(allMetrics, netweaver.Metrics...)
 	allMetrics = append(allMetrics, pacemaker.Metrics...)
 	allMetrics = append(allMetrics, custom.Metrics...)
-
-	return WorkloadMetrics{Metrics: allMetrics}
-}
-
-func collectMetrics(ctx context.Context, params Parameters, metricOverride string) WorkloadMetrics {
-	log.Logger.Info("Collecting Workload Manager metrics...")
-	if fileInfo, err := params.OSStatReader(metricOverride); fileInfo != nil && err == nil {
-		log.Logger.Info("Using override metrics from yaml file")
-		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
-	}
-	// read the instance info
-	params.InstanceInfoReader.Read(ctx, params.Config, instanceinfo.NetworkInterfaceAddressMap)
-
-	sch := make(chan WorkloadMetrics)
-	go CollectSystemMetrics(ctx, params, sch)
-	cch := make(chan WorkloadMetrics)
-	go CollectCorosyncMetrics(ctx, params, cch, csConfigPath)
-	hch := make(chan WorkloadMetrics)
-	go CollectHanaMetrics(ctx, params, hch)
-	nch := make(chan WorkloadMetrics)
-	go CollectNetWeaverMetrics(params, nch)
-	pch := make(chan WorkloadMetrics)
-	go CollectPacemakerMetrics(ctx, params, pch)
-
-	sm := <-sch
-	cm := <-cch
-	hm := <-hch
-	nm := <-nch
-	pm := <-pch
-
-	// Append the system metrics to all other metrics
-	appendLabels(cm.Metrics[0].Metric.Labels, sm.Metrics[0].Metric.Labels)
-	appendLabels(hm.Metrics[0].Metric.Labels, sm.Metrics[0].Metric.Labels)
-	appendLabels(nm.Metrics[0].Metric.Labels, sm.Metrics[0].Metric.Labels)
-	appendLabels(pm.Metrics[0].Metric.Labels, sm.Metrics[0].Metric.Labels)
-
-	// concatenate all of the metrics together
-	allMetrics := []*monitoringresourcespb.TimeSeries{}
-	allMetrics = append(allMetrics, sm.Metrics...)
-	allMetrics = append(allMetrics, cm.Metrics...)
-	allMetrics = append(allMetrics, hm.Metrics...)
-	allMetrics = append(allMetrics, nm.Metrics...)
-	allMetrics = append(allMetrics, pm.Metrics...)
 
 	return WorkloadMetrics{Metrics: allMetrics}
 }

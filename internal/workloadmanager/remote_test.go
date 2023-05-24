@@ -29,7 +29,6 @@ import (
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
-	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -37,13 +36,6 @@ import (
 )
 
 func TestCollectMetricsToJSON(t *testing.T) {
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", "test-os")
-		ini.Set("VERSION", "version")
-		return ini
-	}
-
 	c := &cfgpb.Configuration{
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
 			CollectWorkloadValidationMetrics: false,
@@ -60,6 +52,8 @@ func TestCollectMetricsToJSON(t *testing.T) {
 		ConfigFileReader: func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
 		OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
 		BackOffs:         defaultBackOffIntervals,
+		osVendorID:       "test-os",
+		osVersion:        "version",
 	}
 	got := strings.TrimSpace(CollectMetricsToJSON(context.Background(), p))
 	if !strings.HasPrefix(got, "{") || !strings.HasSuffix(got, "}") {

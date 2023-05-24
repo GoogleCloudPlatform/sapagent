@@ -30,7 +30,6 @@ import (
 	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
-	"github.com/zieckey/goini"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -51,16 +50,6 @@ var (
 			ProjectId:    "test-project-id",
 		},
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
-	}
-	defaultLabels = map[string]string{
-		"instance_name": "test-instance-name",
-		"os":            "test-os-version",
-		"agent":         "gcagent",
-		"agent_version": "1.0",
-		"agent_state":   "running",
-		"gcloud":        "true",
-		"gsutil":        "true",
-		"network_ips":   "192.168.0.1,192.168.0.2",
 	}
 )
 
@@ -124,7 +113,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 		{
 			name: "DefaultCollectionDefinition",
 			params: Parameters{
-				Config:         cnf,
+				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
 				osVendorID:     "debian",
 				osVersion:      "11",
@@ -172,7 +161,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 		{
 			name: "SystemValidationMetricsEmpty",
 			params: Parameters{
-				Config:         cnf,
+				Config:         defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{},
 			},
 			wantLabels: map[string]string{},
@@ -180,7 +169,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 		{
 			name: "SystemVariableUnknown",
 			params: Parameters{
-				Config: cnf,
+				Config: defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						SystemMetrics: []*wlmpb.SystemMetric{
@@ -201,7 +190,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 		{
 			name: "OSNameVersionEmpty",
 			params: Parameters{
-				Config:         cnf,
+				Config:         defaultConfiguration,
 				WorkloadConfig: systemMetricOSNameVersion,
 				osVendorID:     "",
 				osVersion:      "",
@@ -213,7 +202,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 		{
 			name: "InterfaceAddrsError",
 			params: Parameters{
-				Config: cnf,
+				Config: defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						SystemMetrics: []*wlmpb.SystemMetric{
@@ -238,7 +227,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 		{
 			name: "OSCommandMetrics_EmptyLabel",
 			params: Parameters{
-				Config: cnf,
+				Config: defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{
 					ValidationSystem: &wlmpb.ValidationSystem{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
@@ -286,181 +275,6 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			got := CollectSystemMetricsFromConfig(context.Background(), test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectSystemMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestCollectSystemMetrics(t *testing.T) {
-	tests := []struct {
-		name          string
-		os            string
-		agentStatus   string
-		wantOsVersion string
-	}{
-		{
-			name:          "linuxHasMetrics",
-			os:            "linux",
-			agentStatus:   "Active: active",
-			wantOsVersion: "test-os-version",
-		},
-		{
-			name:          "windowsHasMetrics",
-			os:            "windows",
-			agentStatus:   "Running",
-			wantOsVersion: "microsoft_windows_server_2019_datacenter-10.0.17763",
-		},
-	}
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		ini.Set("ID", `"test-os"`)
-		ini.Set("VERSION", `"version"`)
-		return ini
-	}
-	ip1, _ := net.ResolveIPAddr("ip", "192.168.0.1")
-	ip2, _ := net.ResolveIPAddr("ip", "192.168.0.2")
-	netInterfaceAdddrs = func() ([]net.Addr, error) {
-		return []net.Addr{ip1, ip2}, nil
-	}
-	now = func() int64 {
-		return int64(1660930735)
-	}
-	nts := &timestamppb.Timestamp{
-		Seconds: now(),
-	}
-	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n\nCaption=Microsoft Windows Server 2019 Datacenter \n   \n    \n",
-			StdErr: "",
-		}
-	}
-	osVersionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "\n Version=10.0.17763  \n\n",
-			StdErr: "",
-		}
-	}
-	cmdExists = func(c string) bool {
-		return true
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			agentServiceStatus = func(context.Context, string) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: test.agentStatus,
-					StdErr: "",
-				}
-			}
-			labels := make(map[string]string)
-			for k, v := range defaultLabels {
-				labels[k] = v
-			}
-			labels["os"] = test.wantOsVersion
-			want := wantSystemMetrics(nts, labels)
-			sch := make(chan WorkloadMetrics)
-			p := Parameters{
-				Config: cnf,
-				OSType: test.os,
-			}
-			go CollectSystemMetrics(context.Background(), p, sch)
-			got := <-sch
-			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
-			}
-		})
-	}
-}
-
-func TestCollectSystemMetricsErrors(t *testing.T) {
-	tests := []struct {
-		name          string
-		os            string
-		agentStatus   string
-		wantOsVersion string
-	}{
-		{
-			name:          "linuxOsReleaseError",
-			os:            "linux",
-			agentStatus:   "Active: active",
-			wantOsVersion: "-",
-		},
-		{
-			name:          "windowsOsReleaseError",
-			os:            "windows",
-			agentStatus:   "Running",
-			wantOsVersion: "-",
-		},
-	}
-	defer func(f func(f string) *goini.INI) { iniParse = f }(iniParse)
-	iniParse = func(f string) *goini.INI {
-		ini := goini.New()
-		return ini
-	}
-	ip1, err := net.ResolveIPAddr("ip", "192.168.0.1")
-	if err != nil {
-		t.Fatalf("Error resolving 192.168.0.1: %v", err)
-	}
-	ip2, err := net.ResolveIPAddr("ip", "192.168.0.2")
-	if err != nil {
-		t.Fatalf("Error resolving 192.168.0.2: %v", err)
-	}
-	defer func(f func() ([]net.Addr, error)) { netInterfaceAdddrs = f }(netInterfaceAdddrs)
-	netInterfaceAdddrs = func() ([]net.Addr, error) {
-		return []net.Addr{ip1, ip2}, nil
-	}
-	defer func(f func() int64) { now = f }(now)
-	now = func() int64 {
-		return int64(1660930735)
-	}
-	nts := &timestamppb.Timestamp{
-		Seconds: now(),
-	}
-	defer func(f func(context.Context) commandlineexecutor.Result) { osCaptionExecute = f }(osCaptionExecute)
-	osCaptionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "",
-			StdErr: "",
-			Error:  errors.New("Error"),
-		}
-	}
-	defer func(f func(context.Context) commandlineexecutor.Result) { osVersionExecute = f }(osVersionExecute)
-	osVersionExecute = func(context.Context) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: "",
-			StdErr: "",
-			Error:  errors.New("Error"),
-		}
-	}
-	defer func(f func(c string) bool) { cmdExists = f }(cmdExists)
-	cmdExists = func(c string) bool {
-		return true
-	}
-
-	defer func(f func(context.Context, string) commandlineexecutor.Result) { agentServiceStatus = f }(agentServiceStatus)
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			agentServiceStatus = func(context.Context, string) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: test.agentStatus,
-					StdErr: "",
-				}
-			}
-			labels := make(map[string]string)
-			for k, v := range defaultLabels {
-				labels[k] = v
-			}
-			labels["os"] = test.wantOsVersion
-			want := wantSystemMetrics(nts, labels)
-			sch := make(chan WorkloadMetrics)
-			p := Parameters{
-				Config: cnf,
-				OSType: test.os,
-			}
-			go CollectSystemMetrics(context.Background(), p, sch)
-			got := <-sch
-			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("CollectSystemMetrics(%#v) returned unexpected metric labels diff (-want +got):\n%s", p, diff)
 			}
 		})
 	}
