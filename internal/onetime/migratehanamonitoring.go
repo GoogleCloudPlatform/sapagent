@@ -106,9 +106,9 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 	}
 	if sslEnabled {
 		usagemetrics.Action(usagemetrics.SSLModeOnHANAMonitoring)
-		// TODO: Add link to public documentation for customers once ready
 		msg := `HANA Monitoring Agent had ssl mode on, automatic upgrade could not be completed.
-		Refer <public-doc-upgrade-SSL-troubleshoot-link> for more details.
+		Refer to https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/operations#upgrading_ssl-enabled_instances 
+		for more details.
 		Solution: Add "host_name_in_certificate" and "tls_root_ca_file" for each HANA instance in
 		the config file ` + configuration.LinuxConfigPath + `and restart the agent
 		to start HANA monitoring functionality in the Agent for SAP.
