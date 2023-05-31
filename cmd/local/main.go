@@ -25,6 +25,7 @@ import (
 	"flag"
 
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -43,6 +44,7 @@ func registerSubCommands() {
 		&onetime.MigrateHANAMonitoring{},
 		&onetime.Validate{},
 		&onetime.HANAInsights{},
+		&backint.Backint{},
 		subcommands.HelpCommand(),  // Implement "help"
 		subcommands.FlagsCommand(), // Implement "flags"
 	} {
