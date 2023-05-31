@@ -1,0 +1,61 @@
+/*
+Copyright 2023 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+syntax = "proto3";
+
+package cloud.partners.sap.gcagent.protos.backint;
+
+
+
+message BackintConfiguration {
+  string bucket = 1;
+  int64 retries = 2;
+  int64 parallel_streams = 3;
+  int64 parallel_size_mb = 4;
+  int64 threads = 5;
+  int64 buffer_size_mb = 6;
+  string encryption_key = 7;
+  bool compress = 8;
+  string kms_key = 9;
+  string service_account = 10;
+  int64 rate_limit_mb = 11;
+  int64 file_read_timeout_ms = 12;
+  bool dump_data = 13;
+  LogLevel log_level = 14;
+  string user_id = 15;
+  Function function = 16;
+  string input_file = 17;
+  string output_file = 18;
+  string param_file = 19;
+  string backup_id = 20;
+  int64 database_object_count = 21;
+  string backup_level = 22;
+}
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  DEBUG = 1;
+  INFO = 2;
+  WARNING = 3;
+  ERROR = 4;
+}
+
+enum Function {
+  FUNCTION_UNSPECIFIED = 0;
+  BACKUP = 1;
+  RESTORE = 2;
+  INQUIRE = 3;
+  DELETE = 4;
+}
