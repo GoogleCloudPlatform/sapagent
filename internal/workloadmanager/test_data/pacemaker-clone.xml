@@ -56,6 +56,7 @@ limitations under the License.
     <resources>
       <primitive class="stonith" id="STONITH-rhel-ha1" type="fence_gce">
         <instance_attributes id="STONITH-rhel-ha1-instance_attributes">
+          <nvpair id="STONITH-rhel-ha1-instance_attributes-instance_name"name="instance_name" value="instanceId"/>
           <nvpair id="STONITH-rhel-ha1-instance_attributes-pcmk_delay_max" name="pcmk_delay_max" value="30"/>
           <nvpair id="STONITH-rhel-ha1-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
           <nvpair id="STONITH-rhel-ha1-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
@@ -70,6 +71,7 @@ limitations under the License.
       </primitive>
       <primitive class="stonith" id="STONITH-rhel-ha2" type="fence_gce">
         <instance_attributes id="STONITH-rhel-ha2-instance_attributes">
+          <nvpair id="STONITH-rhel-ha2-instance_attributes-instance_name"name="instance_name" value="rhel-ha2"/>
           <nvpair id="STONITH-rhel-ha2-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
           <nvpair id="STONITH-rhel-ha2-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
           <nvpair id="STONITH-rhel-ha2-instance_attributes-port" name="port" value="rhel-ha2"/>

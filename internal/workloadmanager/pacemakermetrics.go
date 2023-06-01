@@ -308,8 +308,10 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c 
 			break
 		}
 	}
+	if len(pcmkDelayMax) > 0 {
+		l["pcmk_delay_max"] = strings.Join(pcmkDelayMax, ",")
+	}
 	returnMap["serviceAccountJsonFile"] = serviceAccountJSONFile
-	returnMap["pcmk_delay_max"] = strings.Join(pcmkDelayMax, ",")
 	return returnMap
 }
 

@@ -216,6 +216,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
+					"pcmk_delay_max":                 "instanceId=30",
 					"migration_threshold":            "5000",
 					"fence_agent_compute_api_access": "false",
 					"fence_agent_logging_api_access": "false",
@@ -824,6 +825,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 		c          *cnfpb.Configuration
 		primitives []PrimitiveClass
 		want       map[string]string
+		wantLabels map[string]string
 	}{
 		{
 			name: "TestSetPacemakerPrimitivesImproperTypes",
@@ -844,8 +846,8 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			},
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
-				"pcmk_delay_max":         "",
 			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name: "TestSetPacemakerPrimitivesNoMatch",
@@ -861,8 +863,8 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			},
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
-				"pcmk_delay_max":         "",
 			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name: "TestSetPacemakerPrimitivesBasicMatch1",
@@ -883,8 +885,8 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			},
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path",
-				"pcmk_delay_max":         "",
 			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name: "TestSetPacemakerPrimitivesBasicMatch2",
@@ -912,25 +914,8 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			},
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path2",
-				"pcmk_delay_max":         "",
 			},
-		},
-		{
-			name: "pcmkDelayMaxNoValue",
-			c:    defaultConfiguration,
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "fence_gce",
-					InstanceAttributes: ClusterPropertySet{
-						ID:      "test-instance-name-instance_attributes",
-						NVPairs: []NVPair{},
-					},
-				},
-			},
-			want: map[string]string{
-				"serviceAccountJsonFile": "",
-				"pcmk_delay_max":         "",
-			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name: "pcmkDelayMaxSingleValue",
@@ -967,7 +952,9 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			},
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
-				"pcmk_delay_max":         "test-instance-name-3=30",
+			},
+			wantLabels: map[string]string{
+				"pcmk_delay_max": "test-instance-name-3=30",
 			},
 		},
 		{
@@ -997,17 +984,23 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			},
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
-				"pcmk_delay_max":         "test-instance-name=60,test-instance-name-2=30",
+			},
+			wantLabels: map[string]string{
+				"pcmk_delay_max": "test-instance-name=60,test-instance-name-2=30",
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := setPacemakerPrimitives(map[string]string{}, test.primitives, test.c)
+			gotLabels := map[string]string{}
+			got := setPacemakerPrimitives(gotLabels, test.primitives, test.c)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerPrimitives() returned unexpected return map diff (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(test.wantLabels, gotLabels); diff != "" {
+				t.Errorf("setPacemakerPrimitives() returned unexpected labels diff (-want +got):\n%s", diff)
 			}
 		})
 	}
