@@ -626,10 +626,6 @@ func TestIteratePrimitiveChild(t *testing.T) {
 				ID: "Test",
 				NVPairs: []NVPair{
 					{
-						Name:  "pcmk_delay_max",
-						Value: "0",
-					},
-					{
 						Name:  "pcmk_delay_base",
 						Value: "2",
 					},
@@ -650,7 +646,6 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			instanceName: "instance_node_1",
 			want:         "",
 			wantLabels: map[string]string{
-				"pcmk_delay_max":       "0",
 				"pcmk_delay_base":      "2",
 				"pcmk_reboot_timeout":  "1",
 				"pcmk_monitor_retries": "3",
@@ -679,7 +674,7 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			attribute: ClusterPropertySet{ID: "Test",
 				NVPairs: []NVPair{
 					NVPair{
-						Name:  "pcmk_delay_max",
+						Name:  "pcmk_delay_base",
 						Value: "0",
 					},
 					NVPair{
@@ -695,7 +690,7 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			instanceName: "instance_node_1",
 			want:         "",
 			wantLabels: map[string]string{
-				"pcmk_delay_max": "0",
+				"pcmk_delay_base": "0",
 			},
 		},
 		{
@@ -703,7 +698,7 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			attribute: ClusterPropertySet{ID: "Test",
 				NVPairs: []NVPair{
 					NVPair{
-						Name:  "pcmk_delay_max",
+						Name:  "pcmk_delay_base",
 						Value: "0",
 					},
 					NVPair{
@@ -725,7 +720,7 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			attribute: ClusterPropertySet{ID: "Test",
 				NVPairs: []NVPair{
 					NVPair{
-						Name:  "pcmk_delay_max",
+						Name:  "pcmk_delay_base",
 						Value: "0",
 					},
 					NVPair{
@@ -741,8 +736,8 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			instanceName: "instance_node_1",
 			want:         "external/test/account/path",
 			wantLabels: map[string]string{
-				"pcmk_delay_max": "0",
-				"fence_agent":    "fake-type",
+				"pcmk_delay_base": "0",
+				"fence_agent":     "fake-type",
 			},
 		},
 	}
@@ -847,7 +842,10 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{"serviceAccountJsonFile": ""},
+			want: map[string]string{
+				"serviceAccountJsonFile": "",
+				"pcmk_delay_max":         "",
+			},
 		},
 		{
 			name: "TestSetPacemakerPrimitivesNoMatch",
@@ -861,7 +859,10 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{"serviceAccountJsonFile": ""},
+			want: map[string]string{
+				"serviceAccountJsonFile": "",
+				"pcmk_delay_max":         "",
+			},
 		},
 		{
 			name: "TestSetPacemakerPrimitivesBasicMatch1",
@@ -880,7 +881,10 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{"serviceAccountJsonFile": "external/test/account/path"},
+			want: map[string]string{
+				"serviceAccountJsonFile": "external/test/account/path",
+				"pcmk_delay_max":         "",
+			},
 		},
 		{
 			name: "TestSetPacemakerPrimitivesBasicMatch2",
@@ -906,7 +910,95 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{"serviceAccountJsonFile": "external/test/account/path2"},
+			want: map[string]string{
+				"serviceAccountJsonFile": "external/test/account/path2",
+				"pcmk_delay_max":         "",
+			},
+		},
+		{
+			name: "pcmkDelayMaxNoValue",
+			c:    defaultConfiguration,
+			primitives: []PrimitiveClass{
+				{
+					ClassType: "fence_gce",
+					InstanceAttributes: ClusterPropertySet{
+						ID:      "test-instance-name-instance_attributes",
+						NVPairs: []NVPair{},
+					},
+				},
+			},
+			want: map[string]string{
+				"serviceAccountJsonFile": "",
+				"pcmk_delay_max":         "",
+			},
+		},
+		{
+			name: "pcmkDelayMaxSingleValue",
+			c:    defaultConfiguration,
+			primitives: []PrimitiveClass{
+				{
+					ClassType: "stonith",
+					InstanceAttributes: ClusterPropertySet{
+						ID: "test-instance-name-1-instance_attributes",
+						NVPairs: []NVPair{
+							{Name: "instance_name", Value: "test-instance-name-1"},
+						},
+					},
+				},
+				{
+					ClassType: "stonith",
+					InstanceAttributes: ClusterPropertySet{
+						ID: "test-instance-name-2-instance_attributes",
+						NVPairs: []NVPair{
+							{Name: "pcmk_delay_max", Value: "60"},
+						},
+					},
+				},
+				{
+					ClassType: "stonith",
+					InstanceAttributes: ClusterPropertySet{
+						ID: "test-instance-name-3-instance_attributes",
+						NVPairs: []NVPair{
+							{Name: "instance_name", Value: "test-instance-name-3"},
+							{Name: "pcmk_delay_max", Value: "30"},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"serviceAccountJsonFile": "",
+				"pcmk_delay_max":         "test-instance-name-3=30",
+			},
+		},
+		{
+			name: "pcmkDelayMaxMultipleValues",
+			c:    defaultConfiguration,
+			primitives: []PrimitiveClass{
+				{
+					ClassType: "stonith",
+					InstanceAttributes: ClusterPropertySet{
+						ID: "test-instance-name-instance_attributes",
+						NVPairs: []NVPair{
+							{Name: "instance_name", Value: "test-instance-name"},
+							{Name: "pcmk_delay_max", Value: "60"},
+						},
+					},
+				},
+				{
+					ClassType: "stonith",
+					InstanceAttributes: ClusterPropertySet{
+						ID: "test-instance-name-2-instance_attributes",
+						NVPairs: []NVPair{
+							{Name: "instance_name", Value: "test-instance-name-2"},
+							{Name: "pcmk_delay_max", Value: "30"},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"serviceAccountJsonFile": "",
+				"pcmk_delay_max":         "test-instance-name=60,test-instance-name-2=30",
+			},
 		},
 	}
 

@@ -283,6 +283,7 @@ func setLabelsForRSCNVPairs(l map[string]string, rscOptionNvPairs []NVPair, name
 
 func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c *cnfpb.Configuration) map[string]string {
 	returnMap := map[string]string{}
+	var pcmkDelayMax []string
 	serviceAccountJSONFile := ""
 	properties := c.GetCloudProperties()
 
@@ -290,8 +291,15 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c 
 		idNode := primitive.ID
 		classNode := primitive.Class
 		typeNode := primitive.ClassType
-
 		attribute := primitive.InstanceAttributes
+
+		// Collector for pcmk_delay_max should report the value for each instance
+		// in a HA cluster, rather than just the value for the local instance.
+		v := instanceAttributeValue("pcmk_delay_max", attribute)
+		if v != "" {
+			pcmkDelayMax = append(pcmkDelayMax, v)
+		}
+
 		if typeNode != "fence_gce" && !strings.HasSuffix(attribute.ID, properties.GetInstanceName()+"-instance_attributes") {
 			continue
 		}
@@ -301,7 +309,23 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c 
 		}
 	}
 	returnMap["serviceAccountJsonFile"] = serviceAccountJSONFile
+	returnMap["pcmk_delay_max"] = strings.Join(pcmkDelayMax, ",")
 	return returnMap
+}
+
+func instanceAttributeValue(key string, attribute ClusterPropertySet) string {
+	var instance, value string
+	for _, nvPair := range attribute.NVPairs {
+		if nvPair.Name == "instance_name" {
+			instance = nvPair.Value
+		} else if nvPair.Name == key {
+			value = nvPair.Value
+		}
+	}
+	if instance != "" && value != "" {
+		return instance + "=" + value
+	}
+	return ""
 }
 
 func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, classNode string, typeNode string, idNode string, returnMap map[string]string, instanceName string) string {
@@ -309,11 +333,10 @@ func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, cl
 	fenceAttributes := map[string]string{}
 	portMatchesInstanceName := false
 	serviceAccountPath := ""
-	fenceKeys := map[string]struct{}{
-		"pcmk_delay_max":       {},
-		"pcmk_delay_base":      {},
-		"pcmk_reboot_timeout":  {},
-		"pcmk_monitor_retries": {},
+	fenceKeys := map[string]bool{
+		"pcmk_delay_base":      true,
+		"pcmk_reboot_timeout":  true,
+		"pcmk_monitor_retries": true,
 	}
 
 	for _, nvPair := range attributeChildren {
