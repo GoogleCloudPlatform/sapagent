@@ -46,9 +46,9 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name:    "SuccessfullyParseArgs",
+			name:    "FailParseAndValidateConfig",
 			backint: &Backint{},
-			want:    subcommands.ExitSuccess,
+			want:    subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				log.Parameters{},

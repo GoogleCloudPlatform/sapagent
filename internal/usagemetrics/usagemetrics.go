@@ -79,6 +79,13 @@ const (
 	CollectionDefinitionLoadFailure
 	CollectionDefinitionValidateFailure
 	WLMServiceCreateFailure
+	BackintIncorrectArguments
+	BackintMalformedConfigFile
+	BackintConfigReadFailure
+	BackintBackupFailure
+	BackintRestoreFailure
+	BackintInquireFailure
+	BackintDeleteFailure
 )
 
 // Agent wide action mappings.
@@ -90,6 +97,7 @@ const (
 	CollectHANAMonitoringMetrics
 	HANADiskSnapshot
 	SSLModeOnHANAMonitoring
+	BackintRunning
 )
 
 var (

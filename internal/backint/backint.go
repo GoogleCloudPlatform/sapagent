@@ -19,10 +19,13 @@ package backint
 
 import (
 	"context"
+	"os"
 
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
 // Backint has args for backint subcommands.
@@ -30,7 +33,8 @@ type Backint struct {
 	user, function             string
 	inFile, outFile, paramFile string
 	backupID, backupLevel      string
-	count                      int
+	count                      int64
+	config                     *bpb.BackintConfiguration
 }
 
 // Name implements the subcommand interface for backint.
@@ -61,8 +65,8 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&b.paramFile, "p", "", "Parameter file required for GCS integration")
 	fs.StringVar(&b.backupID, "backupid", "", "Database backup id, only usable if the function (-f) is backup")
 	fs.StringVar(&b.backupID, "s", "", "Database backup id, only usable if the function (-f) is backup")
-	fs.IntVar(&b.count, "count", 0, "Total number of database objects associated to the backup id specified (-s)")
-	fs.IntVar(&b.count, "c", 0, "Total number of database objects associated to the backup id specified (-s)")
+	fs.Int64Var(&b.count, "count", 0, "Total number of database objects associated to the backup id specified (-s)")
+	fs.Int64Var(&b.count, "c", 0, "Total number of database objects associated to the backup id specified (-s)")
 	fs.StringVar(&b.backupLevel, "level", "", "The type of backup, only usable if the function (-f) is backup")
 	fs.StringVar(&b.backupLevel, "l", "", "The type of backup, only usable if the function (-f) is backup")
 }
@@ -79,6 +83,16 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		return subcommands.ExitUsageError
 	}
 	log.SetupOneTimeLogging(lp, b.Name())
+
+	return b.backintHandler(ctx)
+}
+
+func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
+	if ok := b.ParseArgsAndValidateConfig(os.ReadFile); !ok {
+		return subcommands.ExitUsageError
+	}
+	log.Logger.Debugw("Args parsed and config validated", "config", b.config)
+	usagemetrics.Action(usagemetrics.BackintRunning)
 
 	return subcommands.ExitSuccess
 }
