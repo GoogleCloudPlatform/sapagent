@@ -28,7 +28,14 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/snapshot"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/sosreport"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -37,14 +44,15 @@ import (
 func registerSubCommands() {
 	for _, command := range [...]subcommands.Command{
 		&startdaemon.Daemon{},
-		&onetime.LogUsage{},
-		&onetime.MaintenanceMode{},
-		&onetime.RemoteValidation{},
-		&onetime.Snapshot{},
-		&onetime.MigrateHANAMonitoring{},
-		&onetime.Validate{},
-		&onetime.HANAInsights{},
+		&logusage.LogUsage{},
+		&maintenance.MaintenanceMode{},
+		&remotevalidation.RemoteValidation{},
+		&snapshot.Snapshot{},
+		&migratehanamonitoring.MigrateHANAMonitoring{},
+		&validate.Validate{},
+		&hanainsights.HANAInsights{},
 		&backint.Backint{},
+		&sosreport.SOSReport{},
 		subcommands.HelpCommand(),  // Implement "help"
 		subcommands.FlagsCommand(), // Implement "flags"
 	} {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package onetime
+package hanainsights
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
@@ -139,7 +140,7 @@ func TestHANAInsightsHandler(t *testing.T) {
 	tests := []struct {
 		name         string
 		hanainsights HANAInsights
-		fakeNewGCE   gceServiceFunc
+		fakeNewGCE   onetime.GCEServiceFunc
 		want         subcommands.ExitStatus
 	}{
 		{

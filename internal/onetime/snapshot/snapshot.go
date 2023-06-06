@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package onetime
+// Package snapshot implements one time execution mode for snapshot.
+package snapshot
 
 import (
 	"context"
@@ -38,6 +39,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
@@ -158,7 +160,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	}
 
 	log.Logger.Infow("Starting disk snapshot for HANA", "sid", s.sid)
-	configureUsageMetricsForOTE(s.cloudProps, "", "")
+	onetime.ConfigureUsageMetricsForOTE(s.cloudProps, "", "")
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
 	dbp := databaseconnector.Params{
 		Username:       s.user,

@@ -14,8 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package onetime processes subcommand flags for onetime execution in agent for SAP.
-package onetime
+// Package maintenance implements the one time execution mode for managing
+// maintenance mode.
+package maintenance
 
 import (
 	"context"

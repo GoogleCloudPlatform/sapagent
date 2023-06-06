@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package onetime
+package remotevalidation
 
 import (
 	"context"
@@ -105,7 +105,6 @@ func TestRemoteValidationHandler(t *testing.T) {
 	}
 }
 
-
 func TestUsageForRemoteValidation(t *testing.T) {
 	want := `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone>\n`
 	rv := RemoteValidation{}
@@ -114,7 +113,6 @@ func TestUsageForRemoteValidation(t *testing.T) {
 		t.Errorf("Usage() = %v, want %v", got, want)
 	}
 }
-
 
 func TestSetFlagsForRemoteValidation(t *testing.T) {
 	flags := []string{"project", "instance", "zone", "name"}

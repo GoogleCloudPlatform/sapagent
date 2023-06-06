@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package onetime
+// Package migratehanamonitoring implements the one time execution mode for
+// migrating HANA monitoring.
+package migratehanamonitoring
 
 import (
 	"context"
@@ -29,6 +31,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/yamlpb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -101,7 +104,7 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 	}
 	err = write(configuration.LinuxConfigPath, content, 0777)
 	if err != nil {
-		logErrorToFileAndConsole("Could not write Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
+		onetime.LogErrorToFileAndConsole("Could not write Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
 		return subcommands.ExitFailure
 	}
 	if sslEnabled {
@@ -136,13 +139,13 @@ func prepareConfig(hmMigrationConf *hmmpb.HANAMonitoringConfiguration, ssl bool)
 func parseOldConf(read configuration.ReadConfigFile) *hmmpb.HANAMonitoringConfiguration {
 	content, err := read(oldConfigPath)
 	if err != nil {
-		logErrorToFileAndConsole("Could not read old config file"+oldConfigPath, err)
+		onetime.LogErrorToFileAndConsole("Could not read old config file"+oldConfigPath, err)
 		return nil
 	}
 	hmConfigOld := &hmmpb.HANAMonitoringConfiguration{}
 	err = yamlpb.UnmarshalString(string(content), hmConfigOld)
 	if err != nil {
-		logErrorToFileAndConsole("Could not parse to HANA Monitoring migration proto from old config, file"+oldConfigPath, err)
+		onetime.LogErrorToFileAndConsole("Could not parse to HANA Monitoring migration proto from old config, file"+oldConfigPath, err)
 		return nil
 	}
 	return hmConfigOld
@@ -151,13 +154,13 @@ func parseOldConf(read configuration.ReadConfigFile) *hmmpb.HANAMonitoringConfig
 func parseAgentConf(read configuration.ReadConfigFile) *cpb.Configuration {
 	configContent, err := read(configuration.LinuxConfigPath)
 	if err != nil {
-		logErrorToFileAndConsole("Could not read Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
+		onetime.LogErrorToFileAndConsole("Could not read Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
 		return nil
 	}
 	config := &cpb.Configuration{}
 	err = protojson.Unmarshal(configContent, config)
 	if err != nil {
-		logErrorToFileAndConsole("Could not parse Agent for SAP Configuration, file"+configuration.LinuxConfigPath, err)
+		onetime.LogErrorToFileAndConsole("Could not parse Agent for SAP Configuration, file"+configuration.LinuxConfigPath, err)
 		return nil
 	}
 	return config

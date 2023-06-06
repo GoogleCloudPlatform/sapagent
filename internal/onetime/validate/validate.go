@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package onetime
+// Package validate implements the one time execution mode for validate.
+package validate
 
 import (
 	"context"
@@ -25,6 +26,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 )
 
 // Validate implements the subcommand interface.
@@ -76,7 +78,7 @@ func (v *Validate) validateWorkloadCollectionHandler(read collectiondefinition.R
 	log.Logger.Infow("Beginning workload collection validation.", "path", path)
 	cd, err := collectiondefinition.FromJSONFile(read, path)
 	if err != nil {
-		logErrorToFileAndConsole("Failed to load workload collection file.", err)
+		onetime.LogErrorToFileAndConsole("Failed to load workload collection file.", err)
 		return subcommands.ExitFailure
 	}
 
@@ -84,7 +86,7 @@ func (v *Validate) validateWorkloadCollectionHandler(read collectiondefinition.R
 	validator.Validate()
 	if !validator.Valid() {
 		err := collectiondefinition.ValidationError{FailureCount: validator.FailureCount()}
-		logErrorToFileAndConsole("Validation Result: FAILURE", err)
+		onetime.LogErrorToFileAndConsole("Validation Result: FAILURE", err)
 	} else {
 		log.Print("Validation Result: SUCCESS")
 		log.Logger.Info("Validation Result: SUCCESS")

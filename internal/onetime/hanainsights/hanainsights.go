@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package onetime
+// Package hanainsights implements the one time execution mode for HANA
+// insights.
+package hanainsights
 
 import (
 	"context"
@@ -28,13 +30,14 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 )
 
 // HANAInsights has args for hanainsights subcommands.
 type HANAInsights struct {
 	project, host, port, sid       string
 	user, password, passwordSecret string
-	gceService                     gceInterface
+	gceService                     onetime.GCEInterface
 	status                         bool
 	db                             *sql.DB
 }
@@ -92,7 +95,7 @@ func (h *HANAInsights) validateParameters(os string) error {
 	return nil
 }
 
-func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreator gceServiceFunc) subcommands.ExitStatus {
+func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc) subcommands.ExitStatus {
 	var err error
 	if err = h.validateParameters(runtime.GOOS); err != nil {
 		log.Print(err.Error())
@@ -101,7 +104,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 
 	h.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
-		logErrorToFileAndConsole("ERROR: Failed to create GCE service", err)
+		onetime.LogErrorToFileAndConsole("ERROR: Failed to create GCE service", err)
 		return subcommands.ExitFailure
 	}
 
@@ -115,12 +118,12 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		Project:        h.project,
 	}
 	if h.db, err = databaseconnector.Connect(ctx, dbp); err != nil {
-		logErrorToFileAndConsole("ERROR: Failed to connect to database", err)
+		onetime.LogErrorToFileAndConsole("ERROR: Failed to connect to database", err)
 		return subcommands.ExitFailure
 	}
 
 	if err = ruleengine.Run(ctx, h.db); err != nil {
-		logErrorToFileAndConsole("ERROR: Failure in rule engine", err)
+		onetime.LogErrorToFileAndConsole("ERROR: Failure in rule engine", err)
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
