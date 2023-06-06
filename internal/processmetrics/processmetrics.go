@@ -47,8 +47,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/infra"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/netweaver"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapservice"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"

@@ -384,6 +384,7 @@ func startWorkloadManagerMetricsCollection(ctx context.Context, wlmparams worklo
 		wlmparams.DefaultTokenGetter = defaultTokenGetter
 		wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
 		wlmparams.SetOSReleaseInfo()
+		wlmparams.DiscoverNetWeaver(ctx)
 		workloadmanager.StartMetricsCollection(ctx, wlmparams)
 	}
 }

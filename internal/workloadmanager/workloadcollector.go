@@ -39,9 +39,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
@@ -105,8 +107,9 @@ type Parameters struct {
 	InterfaceAddrsGetter  InterfaceAddrsGetter
 	OSReleaseFilePath     string
 	// fields derived from parsing the file specified by OSReleaseFilePath
-	osVendorID string
-	osVersion  string
+	osVendorID       string
+	osVersion        string
+	netweaverPresent float64
 }
 
 // SetOSReleaseInfo parses the OS release file and sets the values for the
@@ -424,4 +427,16 @@ func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configu
 		Float64Value: v,
 	}
 	return []*monitoringresourcespb.TimeSeries{timeseries.BuildFloat64(p)}
+}
+
+// DiscoverNetWeaver updates a field in Parameters struct based on presence of a Netweaver instance.
+func (p *Parameters) DiscoverNetWeaver(ctx context.Context) {
+	log.Logger.Info("Discovering Netweaver instances for Workload Manager Metrics.")
+	for _, instance := range sapdiscovery.SAPApplications(ctx).Instances {
+		if instance.Type == sapb.InstanceType_NETWEAVER {
+			log.Logger.Info("Found Netweaver instance.")
+			p.netweaverPresent = 1
+			break
+		}
+	}
 }

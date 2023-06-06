@@ -39,5 +39,5 @@ func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) W
 		}
 	}
 
-	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 0, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(t, l, params.netweaverPresent, params.Config)}
 }

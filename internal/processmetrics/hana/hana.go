@@ -30,7 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
