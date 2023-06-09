@@ -22,6 +22,7 @@ import (
 	"os"
 
 	"flag"
+	"cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -35,6 +36,7 @@ type Backint struct {
 	backupID, backupLevel      string
 	count                      int64
 	config                     *bpb.BackintConfiguration
+	bucketHandle               *storage.BucketHandle
 }
 
 // Name implements the subcommand interface for backint.
@@ -92,6 +94,13 @@ func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
 		return subcommands.ExitUsageError
 	}
 	log.Logger.Debugw("Args parsed and config validated", "config", b.config)
+
+	handle, ok := b.ConnectToBucket(ctx, storage.NewClient)
+	if !ok {
+		return subcommands.ExitUsageError
+	}
+	log.Logger.Infow("Connected to bucket", "bucket", b.config.GetBucket())
+	b.bucketHandle = handle
 	usagemetrics.Action(usagemetrics.BackintRunning)
 
 	return subcommands.ExitSuccess
