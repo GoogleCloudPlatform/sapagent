@@ -54,3 +54,9 @@ func LogErrorToFileAndConsole(msg string, err error) {
 	log.Print(msg + " " + err.Error() + "\n" + "Refer to log file at:" + log.GetLogFile())
 	log.Logger.Errorw(msg, "error", err.Error())
 }
+
+// LogMessageToFileAndConsole prints out the console message and also to the log file.
+func LogMessageToFileAndConsole(msg string) {
+	log.Print(msg)
+	log.Logger.Info(msg)
+}
