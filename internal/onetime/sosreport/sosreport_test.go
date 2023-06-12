@@ -23,6 +23,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -212,6 +213,13 @@ func (mz mockedZipper) CreateHeader(w *zip.Writer, fh *zip.FileHeader) (io.Write
 	return mockedWriter{err: nil}, nil
 }
 
+func (mz mockedZipper) Close(w *zip.Writer) error {
+	if w == nil {
+		return cmpopts.AnyError
+	}
+	return nil
+}
+
 func fakeExec(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
 	if p.ArgsToSplit == "error" {
 		return commandlineexecutor.Result{
@@ -369,9 +377,16 @@ func TestSOSReportHandler(t *testing.T) {
 			destFilePrefix: "samplefile",
 			ctx:            context.Background(),
 			exec:           fakeExec,
-			fs:             mockedfilesystem{},
-			z:              mockedZipper{},
-			want:           subcommands.ExitSuccess,
+			fs: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{
+						name: "samplefile",
+						mode: 0777,
+					},
+				},
+			},
+			z:    mockedZipper{},
+			want: subcommands.ExitSuccess,
 		},
 	}
 
@@ -642,4 +657,364 @@ func TestWalkAndZip(t *testing.T) {
 	}
 	os.Remove(tmpfile.Name())
 	os.RemoveAll(tmpDir)
+}
+
+func TestNameservertraceAndBackupLog(t *testing.T) {
+	tests := []struct {
+		name     string
+		hanaPath []string
+		sid      string
+		fu       filesystem.FileSystem
+		want     []string
+	}{
+		{
+			name:     "ReadFileError",
+			hanaPath: []string{"failure"},
+			sid:      "DEH",
+			fu:       mockedfilesystem{},
+			want:     nil,
+		},
+		{
+			name:     "NoMatch",
+			hanaPath: []string{"success"},
+			sid:      "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "file1", isDir: true},
+			},
+			},
+			want: []string{},
+		},
+		{
+			name:     "Success",
+			hanaPath: []string{"success"},
+			sid:      "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "backup.log", isDir: false},
+			},
+			},
+			want: []string{path.Join("success/trace", "backup.log")},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := nameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
+			if !cmp.Equal(got, test.want) {
+				t.Errorf("nameServerTracesAndBackupLog(%q, %q, %q)=%q, want %q", test.hanaPath, test.sid, test.fu, got, test.want)
+			}
+		})
+	}
+}
+
+func TestBackintParameterFiles(t *testing.T) {
+	tests := []struct {
+		name       string
+		globalPath string
+		sid        string
+		fu         filesystem.FileSystem
+		want       []string
+	}{
+		{
+			name:       "ReadFileError",
+			globalPath: "failure",
+			sid:        "DEH",
+			fu:         mockedfilesystem{},
+			want:       nil,
+		},
+		{
+			name:       "UnexpectedContent",
+			globalPath: "success",
+			sid:        "DEH",
+			fu: mockedfilesystem{
+				fileContent: `_backup_parameter_file = /usr/sap/file1
+				xyz_backup_parameter_file = /usr/sap/file2
+				abc_backup_parameter_file
+				`,
+			},
+			want: []string{path.Join("success", globalINIFile), "/usr/sap/file1", "/usr/sap/file2"},
+		},
+		{
+			name:       "Success",
+			globalPath: "success",
+			sid:        "DEH",
+			fu: mockedfilesystem{
+				fileContent: `_backup_parameter_file = /usr/sap/file1`,
+			},
+			want: []string{path.Join("success", globalINIFile), "/usr/sap/file1"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := backintParameterFiles(context.Background(), test.globalPath, test.sid, test.fu)
+			if !cmp.Equal(got, test.want) {
+				t.Errorf("backintParameterFiles(%q, %q, %q) = %q, want %q", test.globalPath, test.sid, test.fu, got, test.want)
+			}
+		})
+	}
+}
+
+func TestBackintlogs(t *testing.T) {
+	tests := []struct {
+		name       string
+		globalPath string
+		sid        string
+		fu         filesystem.FileSystem
+		want       []string
+	}{
+		{
+			name:       "ReadDirError",
+			globalPath: "failure",
+			sid:        "DEH",
+			fu:         mockedfilesystem{},
+			want:       nil,
+		},
+		{
+			name:       "NoMatch",
+			globalPath: "success",
+			sid:        "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "file1", isDir: true},
+			},
+			},
+			want: []string{},
+		},
+		{
+			name:       "InstallationLog",
+			globalPath: "success",
+			sid:        "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "installation.log", isDir: false},
+			},
+			},
+			want: []string{path.Join("success", backintGCSPath, "installation.log")},
+		},
+		{
+			name:       "logsFile",
+			globalPath: "success",
+			sid:        "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "logs", isDir: false},
+			}},
+			want: []string{path.Join("success", backintGCSPath, "logs")},
+		},
+		{
+			name:       "Version.txt",
+			globalPath: "success",
+			sid:        "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "VERSION.txt", isDir: false},
+			}},
+			want: []string{path.Join("success", backintGCSPath, "VERSION.txt")},
+		},
+		{
+			name:       "loggingPropertiesFile",
+			globalPath: "success",
+			sid:        "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "logging.properties", isDir: false},
+			}},
+			want: []string{path.Join("success", backintGCSPath, "logging.properties")},
+		},
+	}
+
+	for _, test := range tests {
+		got := backintLogs(context.Background(), test.globalPath, test.sid, test.fu)
+		if !cmp.Equal(got, test.want) {
+			t.Errorf("BackIntLogs(%q, %q, %q) = %q, want %q", test.globalPath, test.sid, test.fu, got, test.want)
+		}
+	}
+}
+
+func TestAgentLogsFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		fu   filesystem.FileSystem
+		want []string
+	}{
+		{
+			name: "ReadDirError",
+			path: "failure",
+			fu:   mockedfilesystem{},
+			want: []string{},
+		},
+		{
+			name: "ReadDirSuccess",
+			path: "success",
+			fu: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{
+						name:  "google-cloud-sap-agent.log",
+						isDir: false,
+					},
+					mockedFileInfo{
+						name:  "google-cloud-dir",
+						isDir: true,
+					},
+				},
+			},
+			want: []string{"success/google-cloud-sap-agent.log"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := agentLogFiles(test.path, test.fu)
+			if !cmp.Equal(got, test.want) {
+				t.Errorf("agentLogFiles(%q) = %v, want %v", test.path, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		dest string
+		fu   filesystem.FileSystem
+		want error
+	}{
+		{
+			name: "MkdirError",
+			src:  "sampleFile",
+			dest: "failure",
+			fu:   mockedfilesystem{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SourceFileOpenError",
+			src:  "failure",
+			dest: "dest",
+			fu:   mockedfilesystem{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "CreateError",
+			src:  "sampleFile",
+			dest: "failure",
+			fu:   mockedfilesystem{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "CopyError",
+			src:  "sampleFile",
+			dest: "failure",
+			fu:   mockedfilesystem{copyErr: cmpopts.AnyError},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "OsStatError",
+			src:  "failure",
+			dest: "destFile",
+			fu:   mockedfilesystem{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "ChmodError",
+			src:  "sampleFile",
+			dest: "failure",
+			fu:   mockedfilesystem{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "CopySuccess",
+			src:  "sampleFile",
+			dest: "destFile",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{
+					name:  "destFile",
+					mode:  0777,
+					isDir: false,
+				},
+			},
+			},
+			want: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := copyFile(test.src, test.dest, test.fu)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("copyFile(%q, %q) = %v, want %v", test.src, test.dest, got, test.want)
+			}
+		})
+	}
+}
+
+func TestZipSource(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		target string
+		fu     filesystem.FileSystem
+		z      zipper.Zipper
+		want   error
+	}{
+		{
+			name:   "CreateError",
+			source: "sampleFile",
+			target: "failure",
+			fu:     mockedfilesystem{},
+			z:      mockedZipper{},
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:   "WalkAndZipError",
+			source: "failure",
+			target: "destFile",
+			fu:     mockedfilesystem{},
+			z:      mockedZipper{},
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:   "CreateError",
+			source: "sampleFile",
+			target: "dest",
+			fu:     mockedfilesystem{},
+			z:      mockedZipper{},
+			want:   nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := zipSource(test.source, test.target, test.fu, test.z)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("zipSource(%q, %q) = %v, want %v", test.source, test.target, got, test.want)
+			}
+		})
+	}
+}
+
+func TestRemoveDestinationFolder(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		fu   filesystem.FileSystem
+		want error
+	}{
+		{
+			name: "ErrorWhileRemoving",
+			path: "failure",
+			fu:   mockedfilesystem{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			path: "success",
+			fu:   mockedfilesystem{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := removeDestinationFolder(test.path, test.fu)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("removeDestinationFolder(%q) = %v, want %v", test.path, got, test.want)
+			}
+		})
+	}
 }

@@ -27,7 +27,9 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -164,6 +166,10 @@ func (h zipperHelper) CreateHeader(w *zip.Writer, zfh *zip.FileHeader) (io.Write
 	return w.CreateHeader(zfh)
 }
 
+func (h zipperHelper) Close(w *zip.Writer) error {
+	return w.Close()
+}
+
 const (
 	destFilePathPrefix  = `/tmp/google-cloud-sap-agent/sos-report-`
 	linuxConfigFilePath = `/etc/google-cloud-sap-agent/configuration.json`
@@ -214,14 +220,14 @@ func (s *SOSReport) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 	return s.sosReportHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})
 }
 
-func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fu filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
+func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
 		onetime.LogErrorToFileAndConsole("Invalid params for collecting SOS Report for Agent for SAP"+errMessage, errors.New(errMessage))
 		return subcommands.ExitUsageError
 	}
 	destFilesPath := destFilePathPrefix + s.hostname + "-" + strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1)
-	if err := fu.MkdirAll(destFilesPath, 0777); err != nil {
+	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
 		onetime.LogErrorToFileAndConsole("Error while making directory: "+destFilesPath, err)
 		return subcommands.ExitFailure
 	}
@@ -236,13 +242,167 @@ func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix str
 	}
 
 	var hasErrors bool
-	hasErrors = extractSystemDBErrors(ctx, destFilesPath, s.hostname, hanaPaths, exec, fu)
-	hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fu) || hasErrors
-	hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fu) || hasErrors
+	hasErrors = extractSystemDBErrors(ctx, destFilesPath, s.hostname, hanaPaths, exec, fs)
+	hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fs) || hasErrors
+	hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fs) || hasErrors
+	reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
+	reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
+	reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.sid, fs)...)
+	reqFilePaths = append(reqFilePaths, agentLogFiles(linuxLogFilesPath, fs)...)
+
+	for _, path := range reqFilePaths {
+		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Copying file %s ...", path))
+		if err := copyFile(path, destFilesPath+path, fs); err != nil {
+			onetime.LogErrorToFileAndConsole("Error while copying file: "+path, err)
+			hasErrors = true
+		}
+	}
+	if err := zipSource(destFilesPath, destFilesPath+".zip", fs, z); err != nil {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while zipping destination folder %s", destFilesPath), err)
+		hasErrors = true
+	}
+	if err := removeDestinationFolder(destFilesPath, fs); err != nil {
+		hasErrors = true
+	}
 	if hasErrors {
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
+}
+
+func copyFile(src, dst string, fs filesystem.FileSystem) error {
+	var err error
+	var srcFD, dstFD *os.File
+	var srcinfo os.FileInfo
+
+	destFolder := path.Dir(dst)
+
+	if err := fs.MkdirAll(destFolder, 0777); err != nil {
+		return err
+	}
+	if srcFD, err = fs.Open(src); err != nil {
+		return err
+	}
+	defer srcFD.Close()
+
+	if dstFD, err = fs.Create(dst); err != nil {
+		return err
+	}
+	defer dstFD.Close()
+
+	if _, err = fs.Copy(dstFD, srcFD); err != nil {
+		return err
+	}
+	if srcinfo, err = fs.Stat(src); err != nil {
+		return err
+	}
+	return fs.Chmod(dst, srcinfo.Mode())
+}
+
+func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper) error {
+	f, err := fs.Create(target)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	writer := z.NewWriter(f)
+	defer z.Close(writer)
+	return fs.WalkAndZip(source, z, writer)
+}
+
+func backintParameterFiles(ctx context.Context, globalPath string, sid string, fs filesystem.FileSystem) []string {
+	backupFiles := regexp.MustCompile(`_backup_parameter_file.*`)
+	res := []string{globalPath + globalINIFile}
+
+	content, err := fs.ReadFile(globalPath + globalINIFile)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole("Error while reading file: "+globalPath+globalINIFile, err)
+		return nil
+	}
+	contentData := string(content)
+	op := backupFiles.FindAllString(contentData, -1)
+	for _, path := range op {
+		pathSplit := strings.Split(path, "=")
+		if len(pathSplit) != 2 {
+			onetime.LogMessageToFileAndConsole("Unexpected output from global.ini content")
+			continue
+		}
+		rfp := strings.TrimSpace(strings.Split(path, "=")[1])
+		res = append(res, rfp)
+	}
+	return res
+}
+
+func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
+	res := []string{}
+	for _, hanaPath := range hanaPaths {
+		fds, err := fs.ReadDir(hanaPath + `/trace`)
+		if err != nil {
+			onetime.LogErrorToFileAndConsole("Error while reading directory: "+hanaPath+"/trace", err)
+			return nil
+		}
+		for _, fd := range fds {
+			if fd.IsDir() {
+				continue
+			}
+			if matchNameServerTraceAndBackup(fd.Name()) {
+				res = append(res, path.Join(hanaPath+"/trace/", fd.Name()))
+			}
+		}
+	}
+	return res
+}
+
+func matchNameServerTraceAndBackup(name string) bool {
+	nameserverTrace := regexp.MustCompile(`nameserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
+	nameserverTopologyJSON := regexp.MustCompile(`nameserver.*topology.*json`)
+	indexServer := regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
+	backuplog := regexp.MustCompile(`backup.log`)
+	backinitlog := regexp.MustCompile(`backinit.log`)
+
+	if nameserverTrace.MatchString(name) || indexServer.MatchString(name) ||
+		backuplog.MatchString(name) || backinitlog.MatchString(name) ||
+		nameserverTopologyJSON.MatchString(name) {
+		return true
+	}
+	return false
+}
+
+func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
+	res := []string{}
+	fds, err := fs.ReadDir(globalPath + backintGCSPath)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole("Error while reading directory: "+globalPath+backintGCSPath, err)
+		return nil
+	}
+	for _, fd := range fds {
+		if fd.IsDir() {
+			continue
+		}
+		switch fd.Name() {
+		case "installation.log", "logs", "VERSION.txt", "logging.properties":
+			res = append(res, path.Join(globalPath, backintGCSPath, fd.Name()))
+		}
+	}
+	return res
+}
+
+func agentLogFiles(linuxLogFilesPath string, fu filesystem.FileSystem) []string {
+	res := []string{}
+	fds, err := fu.ReadDir(linuxLogFilesPath)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole("Error while reading directory: "+linuxLogFilesPath, err)
+		return res
+	}
+	for _, fd := range fds {
+		if fd.IsDir() {
+			continue
+		}
+		if strings.Contains(fd.Name(), "google-cloud-sap-agent") {
+			res = append(res, path.Join(linuxLogFilesPath, fd.Name()))
+		}
+	}
+	return res
 }
 
 func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
@@ -337,4 +497,12 @@ func (s *SOSReport) validateParams() []string {
 		errs = append(errs, "no value provided for hostname")
 	}
 	return errs
+}
+
+func removeDestinationFolder(path string, fu filesystem.FileSystem) error {
+	if err := fu.RemoveAll(path); err != nil {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while removing folder %s", path), err)
+		return err
+	}
+	return nil
 }

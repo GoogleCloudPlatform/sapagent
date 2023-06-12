@@ -30,5 +30,6 @@ type (
 		NewWriter(io.Writer) *zip.Writer
 		FileInfoHeader(fs.FileInfo) (*zip.FileHeader, error)
 		CreateHeader(*zip.Writer, *zip.FileHeader) (io.Writer, error)
+		Close(*zip.Writer) error
 	}
 )
