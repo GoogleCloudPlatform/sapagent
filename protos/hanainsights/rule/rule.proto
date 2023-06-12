@@ -22,9 +22,8 @@ option java_multiple_files = true;
 message Rule {
   string name = 1;
   string id = 2;  // Unique ID of the rule - must be unique across all rules.
-  repeated string categories =
-      3;  // High Availability, performance, cost-saving, supportability,
-          // reliability, etc - Can be enums in implementation.
+  repeated string labels = 3;  // Security, High Availability, performance,
+                               // cost-saving, supportability, reliability, etc.
   string description = 4;
   repeated Query queries = 5;
   repeated Recommendation recommendations = 6;

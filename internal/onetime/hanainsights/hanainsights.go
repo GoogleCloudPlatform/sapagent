@@ -122,9 +122,12 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		return subcommands.ExitFailure
 	}
 
-	if err = ruleengine.Run(ctx, h.db); err != nil {
+	insights, err := ruleengine.Run(ctx, h.db)
+	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failure in rule engine", err)
 		return subcommands.ExitFailure
 	}
+	log.Logger.Infow("Generating HANA insights", insights)
+	// TODO: Generate local HANA insights in markdown and json format.
 	return subcommands.ExitSuccess
 }

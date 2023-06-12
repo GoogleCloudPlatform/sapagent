@@ -1,6 +1,7 @@
 {
   "name": "Host Status Check",
   "id": "r_host_status_check",
+  "labels": ["test-rule"],
   "queries": [
     {
       "name": "q_host_status_check",
@@ -11,9 +12,10 @@
   "recommendations": [
     {
       "name": "Host Status",
+      "id": "r_host_status_check",
       "description": "Check the status of each host in the SAP HANA environment to see if they are online and working",
       "trigger": {
-        "lhs": "size(q_host_status_check)",
+        "lhs": "size(q_host_status_check:hostname)",
         "operation": "GT",
         "rhs": "0"
       },
@@ -21,7 +23,8 @@
         {
           "description": "Not all hosts are in a healthy state. Check that all hosts are online with their services started. \nThe following hosts are in an error state: ${q_host_status_check}\n"
         }
-      ]
+      ],
+      "references": ["PlaceHolder for SAP Note :: http:<SAP Note URL>"]
     }
   ]
 }

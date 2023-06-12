@@ -47,8 +47,9 @@ func TestReadRules(t *testing.T) {
 			files: []string{"rules/r_host_status_check.json"},
 			want: []*rpb.Rule{
 				&rpb.Rule{
-					Name: "Host Status Check",
-					Id:   "r_host_status_check",
+					Name:   "Host Status Check",
+					Id:     "r_host_status_check",
+					Labels: []string{"test-rule"},
 					Queries: []*rpb.Query{
 						&rpb.Query{
 							Name:    "q_host_status_check",
@@ -59,9 +60,10 @@ func TestReadRules(t *testing.T) {
 					Recommendations: []*rpb.Recommendation{
 						&rpb.Recommendation{
 							Name:        "Host Status",
+							Id:          "r_host_status_check",
 							Description: "Check the status of each host in the SAP HANA environment to see if they are online and working",
 							Trigger: &rpb.EvalNode{
-								Lhs:       "size(q_host_status_check)",
+								Lhs:       "size(q_host_status_check:hostname)",
 								Operation: rpb.EvalNode_GT,
 								Rhs:       "0",
 							},
@@ -70,6 +72,7 @@ func TestReadRules(t *testing.T) {
 									Description: "Not all hosts are in a healthy state. Check that all hosts are online with their services started. \nThe following hosts are in an error state: ${q_host_status_check}\n",
 								},
 							},
+							References: []string{"PlaceHolder for SAP Note :: http:<SAP Note URL>"},
 						},
 					},
 				},

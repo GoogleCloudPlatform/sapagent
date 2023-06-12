@@ -22,6 +22,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -33,18 +35,29 @@ type (
 	// queryFunc provides an easily testable translation to the SQL API.
 	queryFunc func(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 
+	// knowledgeBase is a map with key=<query_name:column_name> and value=<slice of string values read from HANA DB>.
 	knowledgeBase map[string][]string
+
+	// validationResult has results of each of the recommendation evaluation.
+	validationResult struct {
+		RecommendationID string
+		Result           bool // True if validation failed, false otherwise.
+	}
+
+	// Insights is a map of rules that evaluated to true with key=<rule-id> and value=<slice of recommendation-ids that evaluated to true>
+	Insights map[string][]validationResult
 )
 
 // Run starts the rule engine execution - reads the rules, executes them and generate results.
-func Run(ctx context.Context, db *sql.DB) error {
+func Run(ctx context.Context, db *sql.DB) (Insights, error) {
 	// Read and pre-process the rules.
 	rules, err := preprocessor.ReadRules(preprocessor.RuleFilenames)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Execute the queries to build knowledge base.
+	insights := make(Insights)
 	for _, rule := range rules {
 		log.Logger.Debugw("Building knowledgebase for rule", "rule", rule.Id)
 		rkb := make(knowledgeBase)
@@ -52,10 +65,13 @@ func Run(ctx context.Context, db *sql.DB) error {
 			log.Logger.Debugw("Error building knowledge base", "rule", rule.Id, "error", err)
 			continue
 		}
+		buildInsights(rule, rkb, insights)
+		log.Logger.Infow("Evaluation completed", "rule", rule.Id)
 	}
-	return nil
+	return insights, nil
 }
 
+// buildKnowledgeBase runs all the queries and generates a result knowledge base for each rule.
 func buildKnowledgeBase(ctx context.Context, db *sql.DB, queries []*rpb.Query, kb knowledgeBase) error {
 	for _, query := range queries {
 		cols := createColumns(len(query.Columns))
@@ -106,4 +122,116 @@ func createColumns(count int) []any {
 		cols[i] = new(string)
 	}
 	return cols
+}
+
+// buildInsights evaluates all the trigger conditions in a rule and updates the insights map.
+func buildInsights(rule *rpb.Rule, kb knowledgeBase, insights Insights) {
+	for _, r := range rule.Recommendations {
+		vr := validationResult{
+			RecommendationID: r.Id,
+		}
+		if evaluateTrigger(r.Trigger, kb) {
+			vr.Result = true
+		}
+		log.Logger.Debugw("Recommendation evaluation result", "rule", rule.Id, "recommendation", r.Id, "result", vr.Result)
+		insights[rule.Id] = append(insights[rule.Id], vr)
+	}
+	log.Logger.Infow("Insights successfully generated", "insights", insights)
+}
+
+// evaluateTrigger recursively evaluates the trigger condition tree and returns boolean result.
+func evaluateTrigger(t *rpb.EvalNode, kb knowledgeBase) bool {
+	if t == nil {
+		return false
+	}
+	if len(t.ChildEvals) == 0 {
+		return compare(t.Lhs, t.Rhs, t.Operation, kb)
+	}
+	switch t.Operation {
+	case rpb.EvalNode_OR:
+		return evaluateOR(t, kb)
+	case rpb.EvalNode_AND:
+		return evaluateAND(t, kb)
+	}
+	return false
+}
+
+func evaluateOR(t *rpb.EvalNode, kb knowledgeBase) bool {
+	for _, c := range t.ChildEvals {
+		if evaluateTrigger(c, kb) {
+			return true
+		}
+	}
+	return false
+}
+
+func evaluateAND(t *rpb.EvalNode, kb knowledgeBase) bool {
+	for _, c := range t.ChildEvals {
+		if !evaluateTrigger(c, kb) {
+			return false
+		}
+	}
+	return true
+}
+
+// compare does the leaf node evaluation of the eval tree.
+func compare(lhs, rhs string, op rpb.EvalNode_EvalType, kb knowledgeBase) bool {
+	// Replace values from knowledge base before comparison
+	var err error
+	if lhs, err = insertFromKB(lhs, kb); err != nil {
+		log.Logger.Error(err)
+		return false
+	}
+	if rhs, err = insertFromKB(rhs, kb); err != nil {
+		log.Logger.Error(err)
+		return false
+	}
+
+	// TODO: strengthen the EQ/NEQ comparisons for numerical values.
+	// Evaluate equality comparisons.
+	switch op {
+	case rpb.EvalNode_UNDEFINED:
+		return false
+	case rpb.EvalNode_EQ:
+		return lhs == rhs
+	case rpb.EvalNode_NEQ:
+		return lhs != rhs
+	}
+
+	// Evaluate float comparisons.
+	var l, r float64
+	if l, err = strconv.ParseFloat(lhs, 64); err != nil {
+		return false
+	}
+	if r, err = strconv.ParseFloat(rhs, 64); err != nil {
+		return false
+	}
+
+	switch op {
+	case rpb.EvalNode_LT:
+		return l < r
+	case rpb.EvalNode_LTE:
+		return l <= r
+	case rpb.EvalNode_GT:
+		return l > r
+	case rpb.EvalNode_GTE:
+		return l >= r
+	}
+	return false
+}
+
+// insertFromKB refers to the knowledgebase and inserts the values where functions are used.
+// Possible functions include: size(query_name:column_name)
+func insertFromKB(s string, kb knowledgeBase) (string, error) {
+	sizePattern := regexp.MustCompile(`^size\(([^)]+)\)$`)
+	match := sizePattern.FindStringSubmatch(s)
+	if len(match) != 2 {
+		// The string does not use size() function, no insertion necessary.
+		return s, nil
+	}
+	k := match[1]
+	if _, ok := kb[k]; ok {
+		return strconv.Itoa(len(kb[k])), nil
+	}
+	return "", fmt.Errorf("could not insert values from knowledge base for function: %s", s)
 }
