@@ -234,6 +234,65 @@ func fakeExec(ctx context.Context, p commandlineexecutor.Params) commandlineexec
 	}
 }
 
+func fakeExecForErrOnly(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
+}
+
+func fakeExecRHEL(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	if strings.Contains(p.ArgsToSplit, `"Red Hat"`) {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+		}
+	}
+	if strings.Contains(p.Executable, `sosreport`) {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+		}
+	}
+	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
+}
+
+func fakeExecSLESHBSuccess(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	if strings.Contains(p.Executable, "hb_report") {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+		}
+	}
+	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
+}
+
+func fakeExecSLESCRMSuccess(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	if strings.Contains(p.Executable, "crm_report") {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+		}
+	}
+	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
+}
+
+func fakeExecSupportConfigSuccess(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	if strings.Contains(p.Executable, "supportconfig") {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+		}
+	}
+	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
+}
+
+func fakeExecSLES(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	if strings.Contains(p.ArgsToSplit, `"SLES"`) {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+		}
+	}
+	if strings.Contains(p.Executable, `hb`) || strings.Contains(p.Executable, `supportconfig`) || strings.Contains(p.Executable, `crm_report`) {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+		}
+	}
+	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
+}
+
 func TestSetFlagsForSOSReport(t *testing.T) {
 	sosrc := SOSReport{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
@@ -1014,6 +1073,175 @@ func TestRemoveDestinationFolder(t *testing.T) {
 			got := removeDestinationFolder(test.path, test.fu)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("removeDestinationFolder(%q) = %v, want %v", test.path, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectPacemakerLogs(t *testing.T) {
+	tests := []struct {
+		name         string
+		ctx          context.Context
+		destFilePath string
+		exec         commandlineexecutor.Execute
+		fs           filesystem.FileSystem
+		want         error
+	}{
+		{
+			name:         "InvalidOS",
+			ctx:          context.Background(),
+			destFilePath: "sample",
+			exec:         fakeExecForErrOnly,
+			fs:           mockedfilesystem{},
+			want:         cmpopts.AnyError,
+		},
+		{
+			name:         "RHELError",
+			ctx:          context.Background(),
+			destFilePath: "failure",
+			exec:         fakeExecRHEL,
+			fs:           mockedfilesystem{},
+			want:         cmpopts.AnyError,
+		},
+		{
+			name:         "SLESError",
+			ctx:          context.Background(),
+			destFilePath: "failure",
+			exec:         fakeExecSLES,
+			fs:           mockedfilesystem{},
+			want:         cmpopts.AnyError,
+		},
+		{
+			name:         "SuccessRHEL",
+			ctx:          context.Background(),
+			destFilePath: "sample",
+			exec:         fakeExecRHEL,
+			fs:           mockedfilesystem{},
+			want:         nil,
+		},
+		{
+			name:         "SuccessSLES",
+			ctx:          context.Background(),
+			destFilePath: "sample",
+			exec:         fakeExecSLES,
+			fs:           mockedfilesystem{},
+			want:         nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := pacemakerLogs(test.ctx, test.destFilePath, test.exec, test.fs)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("collectPacemakerLogs(%q) = %v, want %v", test.destFilePath, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectRHELPacemakerLogs(t *testing.T) {
+	tests := []struct {
+		name          string
+		ctx           context.Context
+		exec          commandlineexecutor.Execute
+		p             commandlineexecutor.Params
+		destFilesPath string
+		fs            filesystem.FileSystem
+		want          error
+	}{
+		{
+			name:          "MkdirError",
+			ctx:           context.Background(),
+			exec:          fakeExec,
+			p:             commandlineexecutor.Params{},
+			destFilesPath: "failure",
+			fs:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "CommandFailure",
+			ctx:           context.Background(),
+			exec:          fakeExec,
+			p:             commandlineexecutor.Params{ArgsToSplit: "error"},
+			destFilesPath: "failure",
+			fs:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "Success",
+			ctx:           context.Background(),
+			exec:          fakeExec,
+			p:             commandlineexecutor.Params{ArgsToSplit: "success"},
+			destFilesPath: "success",
+			fs:            mockedfilesystem{},
+			want:          nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := rhelPacemakerLogs(test.ctx, test.exec, test.destFilesPath, test.fs); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("collectRHELPacemakerLogs(%q) = %v, want %v", test.destFilesPath, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectSLESPacemakerLogs(t *testing.T) {
+	tests := []struct {
+		name          string
+		ctx           context.Context
+		exec          commandlineexecutor.Execute
+		destFilesPath string
+		fs            filesystem.FileSystem
+		want          error
+	}{
+		{
+			name:          "MkdirError",
+			ctx:           context.Background(),
+			exec:          fakeExec,
+			destFilesPath: "failure",
+			fs:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "AllCommandsFailure",
+			ctx:           context.Background(),
+			exec:          fakeExecForErrOnly,
+			destFilesPath: "failure",
+			fs:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "HBReportSuccess",
+			ctx:           context.Background(),
+			exec:          fakeExecSLESHBSuccess,
+			destFilesPath: "success",
+			fs:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "CRMReportSuccess",
+			ctx:           context.Background(),
+			exec:          fakeExecSLESCRMSuccess,
+			destFilesPath: "success",
+			fs:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "SupportConfigSuccess",
+			ctx:           context.Background(),
+			exec:          fakeExecSLES,
+			destFilesPath: "success",
+			fs:            mockedfilesystem{},
+			want:          nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := slesPacemakerLogs(test.ctx, test.exec, test.destFilesPath, test.fs); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("collectSLESPacemakerLogs(%q) = %v, want %v", test.destFilesPath, got, test.want)
 			}
 		})
 	}

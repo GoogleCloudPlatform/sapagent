@@ -171,7 +171,7 @@ func (h zipperHelper) Close(w *zip.Writer) error {
 }
 
 const (
-	destFilePathPrefix  = `/tmp/google-cloud-sap-agent/sos-report-`
+	destFilePathPrefix  = `/tmp/google-cloud-sap-agent/`
 	linuxConfigFilePath = `/etc/google-cloud-sap-agent/configuration.json`
 	linuxLogFilesPath   = `/var/log/`
 	systemDBErrorsFile  = `_SYSTEM_DB_BACKUP_ERROR.txt`
@@ -226,14 +226,13 @@ func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix str
 		onetime.LogErrorToFileAndConsole("Invalid params for collecting SOS Report for Agent for SAP"+errMessage, errors.New(errMessage))
 		return subcommands.ExitUsageError
 	}
-	destFilesPath := destFilePathPrefix + s.hostname + "-" + strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1)
+	destFilesPath := fmt.Sprintf("%ssos-report-%s-%s", destFilePathPrefix, s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
 		onetime.LogErrorToFileAndConsole("Error while making directory: "+destFilesPath, err)
 		return subcommands.ExitFailure
 	}
 	onetime.LogMessageToFileAndConsole("Collecting SOS Report for Agent for SAP...")
 	reqFilePaths := []string{linuxConfigFilePath}
-	onetime.LogMessageToFileAndConsole(fmt.Sprintf("Required file path %v", reqFilePaths))
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.sid)
 
 	hanaPaths := []string{}
@@ -261,9 +260,21 @@ func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix str
 		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while zipping destination folder %s", destFilesPath), err)
 		hasErrors = true
 	}
+
+	// removing the destination directory after zip file is created.
 	if err := removeDestinationFolder(destFilesPath, fs); err != nil {
 		hasErrors = true
 	}
+
+	// collect pacemaker reports using OS Specific commands
+	pacemakerFilesDir := fmt.Sprintf("%spacemaker-%s", destFilePathPrefix, time.Now().UTC().String()[:16])
+
+	err := pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole("Error while collecting pacemaker logs: "+err.Error(), err)
+		hasErrors = true
+	}
+
 	if hasErrors {
 		return subcommands.ExitFailure
 	}
@@ -328,6 +339,7 @@ func backintParameterFiles(ctx context.Context, globalPath string, sid string, f
 			continue
 		}
 		rfp := strings.TrimSpace(strings.Split(path, "=")[1])
+		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", rfp))
 		res = append(res, rfp)
 	}
 	return res
@@ -336,7 +348,7 @@ func backintParameterFiles(ctx context.Context, globalPath string, sid string, f
 func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
 	res := []string{}
 	for _, hanaPath := range hanaPaths {
-		fds, err := fs.ReadDir(hanaPath + `/trace`)
+		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
 		if err != nil {
 			onetime.LogErrorToFileAndConsole("Error while reading directory: "+hanaPath+"/trace", err)
 			return nil
@@ -346,6 +358,7 @@ func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid 
 				continue
 			}
 			if matchNameServerTraceAndBackup(fd.Name()) {
+				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
 				res = append(res, path.Join(hanaPath+"/trace/", fd.Name()))
 			}
 		}
@@ -425,7 +438,7 @@ func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname str
 	onetime.LogMessageToFileAndConsole("Extracting errors from TenantDB files...")
 	var hasErrors bool
 	for _, hanaPath := range hanaPaths {
-		filePath := hanaPath + "/trace/DB_" + sid + "/backup.log"
+		filePath := fmt.Sprintf("%s/trace/DB_%s/backup.log", hanaPath, sid)
 		p := commandlineexecutor.Params{
 			Executable:  "grep",
 			ArgsToSplit: "-w ERROR " + filePath,
@@ -446,7 +459,7 @@ func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostna
 	}
 	var hasErrors bool
 	for _, fd := range fds {
-		logFilePath := globalPath + backintGCSPath + "/logs/" + fd.Name()
+		logFilePath := fmt.Sprintf("%s%s/logs/%s", globalPath, backintGCSPath, fd.Name())
 		p := commandlineexecutor.Params{
 			Executable:  "grep",
 			ArgsToSplit: "-w SEVERE " + logFilePath,
@@ -474,6 +487,89 @@ func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exe
 	if _, err := fu.WriteStringToFile(f, res.StdOut); err != nil {
 		onetime.LogErrorToFileAndConsole("Error while writing to the file", err)
 		return err
+	}
+	return nil
+}
+
+func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) error {
+	rhelParams := commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: `-qE "Red Hat" /etc/os-release`,
+	}
+	if val := checkForLinuxOSType(ctx, exec, rhelParams); val {
+		if err := rhelPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
+			return err
+		}
+		return nil
+	}
+	slesParams := commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: `-qE "SLES" /etc/os-release`,
+	}
+	if val := checkForLinuxOSType(ctx, exec, slesParams); val {
+		if err := slesPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
+			return err
+		}
+		return nil
+	}
+	return errors.New("incompatible os type for collecting pacemaker logs")
+}
+
+func checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, p commandlineexecutor.Params) bool {
+	res := exec(ctx, p)
+	if res.ExitCode != 0 || res.StdErr != "" {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), res.Error)
+		return false
+	}
+	return true
+}
+
+func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
+	// time.Now().UTC() returns current time UTC format with milliseconds precision,
+	// we only need it till first 16 characters to satisfy the hb_report and crm_report command
+	to := time.Now().UTC().GoString()[:16]
+	from := time.Now().UTC().AddDate(0, 0, -3).String()[:16]
+	if err := fu.MkdirAll(destFilesPath, 0777); err != nil {
+		return err
+	}
+	res := exec(ctx, commandlineexecutor.Params{
+		Executable:  "hb_report",
+		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from, to, destFilesPath),
+		Timeout:     3600,
+	})
+	if res.ExitCode != 0 {
+		res := exec(ctx, commandlineexecutor.Params{
+			Executable:  "crm_report",
+			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from, to, destFilesPath),
+			Timeout:     3600,
+		})
+		if res.ExitCode != 0 {
+			return res.Error
+		}
+	}
+	res = exec(ctx, commandlineexecutor.Params{
+		Executable:  "supportconfig",
+		ArgsToSplit: fmt.Sprintf("-bl -R %s", destFilesPath),
+		Timeout:     3600,
+	})
+	if res.ExitCode != 0 {
+		return res.Error
+	}
+	return nil
+}
+
+func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
+	p := commandlineexecutor.Params{
+		Executable:  "sosreport",
+		ArgsToSplit: fmt.Sprintf("--batch --tmp-dir %s", destFilesPath),
+		Timeout:     3600,
+	}
+	if err := fu.MkdirAll(destFilesPath, 0777); err != nil {
+		return err
+	}
+	res := exec(ctx, p)
+	if res.ExitCode != 0 {
+		return res.Error
 	}
 	return nil
 }
