@@ -1,0 +1,36 @@
+{
+  "name": "SAP HANA Internal Support Role Check",
+  "id": "r_sap_hana_internal_support_role",
+  "labels": [
+    "security"
+  ],
+  "queries": [
+    {
+      "name": "q_users_sap_hana_internal_support",
+      "sql": "SELECT COUNT(*) as count FROM SYS.EFFECTIVE_ROLE_GRANTEES WHERE ROLE_NAME = 'SAP_INTERNAL_HANA_SUPPORT'",
+      "columns": ["count"]
+    }
+  ],
+  "recommendations": [
+    {
+      "name": "Users with SAP_INTERNAL_HANA_SUPPORT role",
+      "id": "check_users_with_support_role",
+      "description": "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
+      "trigger": {
+        "lhs": "q_users_sap_hana_internal_support:count",
+        "operation": "GT",
+        "rhs": "0"
+      },
+      "actions": [
+        {
+          "description": "At least one account has the SAP_INTERNAL_HANA_SUPPORT role. This is an internal role that enables low level access to data. It should only be assigned to admin or support at the request of SAP Development and during an active SAP support request."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#predefined-catalog-role-sap_internal_hana_support"
+      ]
+    }
+  ]
+}
+
+
