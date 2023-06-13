@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package backint
+package config
 
 import (
 	"runtime"
@@ -33,10 +33,10 @@ var (
 	readConfigFileError = func(p string) ([]byte, error) {
 		return nil, cmpopts.AnyError
 	}
-	defaultBackint = &Backint{
-		user:      "testUser",
-		paramFile: "testParamsFile",
-		function:  "backup",
+	defaultParameters = &Parameters{
+		User:      "testUser",
+		ParamFile: "testParamsFile",
+		Function:  "backup",
 	}
 	defaultConfigArgsParsed = &bpb.BackintConfiguration{
 		UserId:    "testUser",
@@ -54,80 +54,80 @@ var (
 
 func TestParseArgsAndValidateConfig(t *testing.T) {
 	tests := []struct {
-		name    string
-		backint *Backint
-		read    ReadConfigFile
-		want    *bpb.BackintConfiguration
-		wantOk  bool
+		name   string
+		params *Parameters
+		read   ReadConfigFile
+		want   *bpb.BackintConfiguration
+		wantOk bool
 	}{
 		{
 			name: "NoUser",
-			backint: &Backint{
-				user: "",
+			params: &Parameters{
+				User: "",
 			},
 			wantOk: false,
 		},
 		{
 			name: "NoParamsFile",
-			backint: &Backint{
-				user:      "testUser",
-				paramFile: "",
+			params: &Parameters{
+				User:      "testUser",
+				ParamFile: "",
 			},
 			wantOk: false,
 		},
 		{
 			name: "NoFunction",
-			backint: &Backint{
-				user:      "testUser",
-				paramFile: "testParamsFile",
-				function:  "",
+			params: &Parameters{
+				User:      "testUser",
+				ParamFile: "testParamsFile",
+				Function:  "",
 			},
 			wantOk: false,
 		},
 		{
 			name: "InvalidFunction",
-			backint: &Backint{
-				user:      "testUser",
-				paramFile: "testParamsFile",
-				function:  "testFunction",
+			params: &Parameters{
+				User:      "testUser",
+				ParamFile: "testParamsFile",
+				Function:  "testFunction",
 			},
 			wantOk: false,
 		},
 		{
-			name:    "ParametersReadFileError",
-			backint: defaultBackint,
-			want:    defaultConfigArgsParsed,
-			read:    readConfigFileError,
-			wantOk:  false,
+			name:   "ParametersReadFileError",
+			params: defaultParameters,
+			want:   defaultConfigArgsParsed,
+			read:   readConfigFileError,
+			wantOk: false,
 		},
 		{
-			name:    "ParametersFileEmpty",
-			backint: defaultBackint,
-			want:    defaultConfigArgsParsed,
-			read:    defaultReadConfigFile,
-			wantOk:  false,
+			name:   "ParametersFileEmpty",
+			params: defaultParameters,
+			want:   defaultConfigArgsParsed,
+			read:   defaultReadConfigFile,
+			wantOk: false,
 		},
 		{
-			name:    "ParametersFileMalformed",
-			backint: defaultBackint,
-			want:    defaultConfigArgsParsed,
+			name:   "ParametersFileMalformed",
+			params: defaultParameters,
+			want:   defaultConfigArgsParsed,
 			read: func(p string) ([]byte, error) {
 				return []byte(`test`), nil
 			},
 			wantOk: false,
 		},
 		{
-			name:    "NoBucket",
-			backint: defaultBackint,
-			want:    defaultConfigArgsParsed,
+			name:   "NoBucket",
+			params: defaultParameters,
+			want:   defaultConfigArgsParsed,
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": ""}`), nil
 			},
 			wantOk: false,
 		},
 		{
-			name:    "EncyptionKeyAndKmsKeyDefined",
-			backint: defaultBackint,
+			name:   "EncyptionKeyAndKmsKeyDefined",
+			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:        "testUser",
 				Function:      bpb.Function_BACKUP,
@@ -142,8 +142,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantOk: false,
 		},
 		{
-			name:    "CompressedParallelBackup",
-			backint: defaultBackint,
+			name:   "CompressedParallelBackup",
+			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
 				Function:        bpb.Function_BACKUP,
@@ -158,8 +158,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantOk: false,
 		},
 		{
-			name:    "EncyptedParallelBackupEncryptionKey",
-			backint: defaultBackint,
+			name:   "EncyptedParallelBackupEncryptionKey",
+			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
 				Function:        bpb.Function_BACKUP,
@@ -174,8 +174,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantOk: false,
 		},
 		{
-			name:    "EncyptedParallelBackupKmsKey",
-			backint: defaultBackint,
+			name:   "EncyptedParallelBackupKmsKey",
+			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
 				Function:        bpb.Function_BACKUP,
@@ -190,8 +190,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantOk: false,
 		},
 		{
-			name:    "SuccessfullyParseWithDefaultsApplied",
-			backint: defaultBackint,
+			name:   "SuccessfullyParseWithDefaultsApplied",
+			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:            "testUser",
 				Function:          bpb.Function_BACKUP,
@@ -212,10 +212,10 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 		},
 		{
 			name: "SuccessfullyParseNoDefaults",
-			backint: &Backint{
-				user:      "testUser",
-				paramFile: "testParamsFile",
-				function:  "restore",
+			params: &Parameters{
+				User:      "testUser",
+				ParamFile: "testParamsFile",
+				Function:  "restore",
 			},
 			want: &bpb.BackintConfiguration{
 				UserId:            "testUser",
@@ -240,20 +240,19 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotOk := test.backint.ParseArgsAndValidateConfig(test.read)
-			got := test.backint.config
+			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read)
 			if gotOk != test.wantOk {
-				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.backint, gotOk, test.wantOk)
+				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotOk, test.wantOk)
 			}
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%#v.ParseArgsAndValidateConfig() had unexpected diff (-want +got):\n%s", test.backint, diff)
+				t.Errorf("%#v.ParseArgsAndValidateConfig() had unexpected diff (-want +got):\n%s", test.params, diff)
 			}
 		})
 	}
 }
 
 func TestApplyDefaultMaxThreads(t *testing.T) {
-	backint := Backint{config: &bpb.BackintConfiguration{}}
+	params := Parameters{Config: &bpb.BackintConfiguration{}}
 	want := &bpb.BackintConfiguration{
 		ParallelStreams:   1,
 		BufferSizeMb:      100,
@@ -262,9 +261,9 @@ func TestApplyDefaultMaxThreads(t *testing.T) {
 		Retries:           5,
 		Threads:           64,
 	}
-	backint.applyDefaults(65)
-	got := backint.config
+	params.applyDefaults(65)
+	got := params.Config
 	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-		t.Errorf("%#v.applyDefaults(65) had unexpected diff (-want +got):\n%s", backint, diff)
+		t.Errorf("%#v.applyDefaults(65) had unexpected diff (-want +got):\n%s", params, diff)
 	}
 }

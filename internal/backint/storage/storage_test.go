@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package backint
+package storage
 
 import (
 	"bytes"
@@ -57,16 +57,14 @@ var (
 func TestConnectToBucket(t *testing.T) {
 	tests := []struct {
 		name   string
-		b      *Backint
-		client StorageClient
+		config *bpb.BackintConfiguration
+		client Client
 		want   *storage.BucketHandle
 		wantOk bool
 	}{
 		{
-			name: "ClientCreateFail",
-			b: &Backint{
-				config: &bpb.BackintConfiguration{},
-			},
+			name:   "ClientCreateFail",
+			config: &bpb.BackintConfiguration{},
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return nil, errors.New("client create error")
 			},
@@ -75,10 +73,8 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ClientCreateFailServiceAccount",
-			b: &Backint{
-				config: &bpb.BackintConfiguration{
-					ServiceAccount: "test-account",
-				},
+			config: &bpb.BackintConfiguration{
+				ServiceAccount: "test-account",
 			},
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return nil, errors.New("client create error")
@@ -88,10 +84,8 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectFail",
-			b: &Backint{
-				config: &bpb.BackintConfiguration{
-					Bucket: "fake-bucket",
-				},
+			config: &bpb.BackintConfiguration{
+				Bucket: "fake-bucket",
 			},
 			client: defaultStorageClient,
 			want:   nil,
@@ -99,10 +93,8 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectSuccess",
-			b: &Backint{
-				config: &bpb.BackintConfiguration{
-					Bucket: "test-bucket",
-				},
+			config: &bpb.BackintConfiguration{
+				Bucket: "test-bucket",
 			},
 			client: defaultStorageClient,
 			want:   fakeServer.Client().Bucket("test-bucket"),
@@ -110,11 +102,9 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectSuccessServiceAccount",
-			b: &Backint{
-				config: &bpb.BackintConfiguration{
-					Bucket:         "test-bucket",
-					ServiceAccount: "test-account",
-				},
+			config: &bpb.BackintConfiguration{
+				Bucket:         "test-bucket",
+				ServiceAccount: "test-account",
 			},
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				if opts == nil {
@@ -128,12 +118,12 @@ func TestConnectToBucket(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := test.b.ConnectToBucket(context.Background(), test.client)
+			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.IgnoreUnexported(storage.BucketHandle{})); diff != "" {
-				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.b.config.GetServiceAccount(), test.b.config.GetBucket(), diff)
+				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.config.GetServiceAccount(), test.config.GetBucket(), diff)
 			}
 			if gotOk != test.wantOk {
-				t.Errorf("ConnectToBucket(%v, %v) = %v, want %v", test.b.config.GetServiceAccount(), test.b.config.GetBucket(), gotOk, test.wantOk)
+				t.Errorf("ConnectToBucket(%v, %v) = %v, want %v", test.config.GetServiceAccount(), test.config.GetBucket(), gotOk, test.wantOk)
 			}
 		})
 	}
@@ -141,45 +131,46 @@ func TestConnectToBucket(t *testing.T) {
 
 func TestUpload(t *testing.T) {
 	tests := []struct {
-		name   string
-		b      *Backint
-		src    *bytes.Buffer
-		copier IOFileCopier
-		want   error
+		name string
+		rw   *ReadWriter
+		want error
 	}{
 		{
 			name: "NoHandle",
-			b:    &Backint{},
-			src:  defaultBuffer,
+			rw: &ReadWriter{
+				Reader: defaultBuffer,
+			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "WriteFail",
-			b:    &Backint{bucketHandle: defaultBucketHandle},
-			copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
-				return 0, errors.New("write error")
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				Reader:       defaultBuffer,
+				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					return 0, errors.New("write error")
+				},
 			},
-			src:  defaultBuffer,
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "UploadSuccess",
-			b: &Backint{
-				bucketHandle: defaultBucketHandle,
-				config: &bpb.BackintConfiguration{
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				Config: &bpb.BackintConfiguration{
 					BufferSizeMb: 1,
 				},
+				Copier: io.Copy,
+				Reader: defaultBuffer,
 			},
-			copier: io.Copy,
-			src:    defaultBuffer,
-			want:   nil,
+			want: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.b.Upload(context.Background(), "object.txt", test.src, int64(test.src.Len()), 0, test.copier)
+			got := test.rw.Upload(context.Background())
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("%#v.Upload(%s) = %v, want %v", test.b, test.src, got, test.want)
+				t.Errorf("%#v.Upload() = %v, want %v", test.rw, got, test.want)
 			}
 		})
 	}
@@ -187,46 +178,54 @@ func TestUpload(t *testing.T) {
 
 func TestDownload(t *testing.T) {
 	tests := []struct {
-		name   string
-		b      *Backint
-		copier IOFileCopier
-		dest   io.Writer
-		object string
-		want   error
+		name string
+		rw   *ReadWriter
+		want error
 	}{
 		{
 			name: "NoHandle",
-			b:    &Backint{},
+			rw: &ReadWriter{
+				Writer: defaultBuffer,
+			},
 			want: cmpopts.AnyError,
 		},
 		{
-			name:   "ObjectNotFound",
-			b:      &Backint{bucketHandle: defaultBucketHandle},
-			object: "fake-object.txt",
-			want:   cmpopts.AnyError,
+			name: "ObjectNotFound",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				ObjectName:   "fake-object.txt",
+				Writer:       defaultBuffer,
+			},
+			want: cmpopts.AnyError,
 		},
 		{
 			name: "WriteFail",
-			b:    &Backint{bucketHandle: defaultBucketHandle},
-			copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
-				return 0, errors.New("write error")
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				ObjectName:   "object.txt",
+				Writer:       defaultBuffer,
+				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					return 0, errors.New("write error")
+				},
 			},
-			object: "object.txt",
-			want:   cmpopts.AnyError,
+			want: cmpopts.AnyError,
 		},
 		{
-			name:   "DownloadSuccess",
-			b:      &Backint{bucketHandle: defaultBucketHandle},
-			copier: io.Copy,
-			object: "object.txt",
-			want:   nil,
+			name: "DownloadSuccess",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				ObjectName:   "object.txt",
+				Writer:       defaultBuffer,
+				Copier:       io.Copy,
+			},
+			want: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.b.Download(context.Background(), test.object, defaultBuffer, 0, test.copier)
+			got := test.rw.Download(context.Background())
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("%#v.Download(%s) = %v, want %v", test.b, test.object, got, test.want)
+				t.Errorf("%#v.Download() = %v, want %v", test.rw, got, test.want)
 			}
 		})
 	}

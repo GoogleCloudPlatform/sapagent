@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package backint
+// Package config parses and validates the Backint configuration parameters.
+package config
 
 import (
 	"errors"
@@ -31,57 +32,66 @@ import (
 // ReadConfigFile abstracts os.ReadFile function for testability.
 type ReadConfigFile func(string) ([]byte, error)
 
+// Parameters holds the Backint configuration parameters to validate.
+type Parameters struct {
+	User, Function             string
+	InFile, OutFile, ParamFile string
+	BackupID, BackupLevel      string
+	Count                      int64
+	Config                     *bpb.BackintConfiguration
+}
+
 // ParseArgsAndValidateConfig reads the backint args and params and validates them.
 // If valid, the proto will be populated and defaults will be applied.
-func (b *Backint) ParseArgsAndValidateConfig(read ReadConfigFile) bool {
-	if err := b.parseCommandLineArgs(); err != nil {
+func (p *Parameters) ParseArgsAndValidateConfig(read ReadConfigFile) (*bpb.BackintConfiguration, bool) {
+	if err := p.parseCommandLineArgs(); err != nil {
 		log.Logger.Errorw("Incorrect command line arguments", "error", err)
 		usagemetrics.Error(usagemetrics.BackintIncorrectArguments)
-		return false
+		return p.Config, false
 	}
 
-	if code, err := b.readParametersFile(b.paramFile, read); err != nil {
-		log.Logger.Errorf("Parameters JSON at '%s' has error: %v. Please fix the JSON and restart backint", b.paramFile, err)
+	if code, err := p.readParametersFile(read); err != nil {
+		log.Logger.Errorf("Parameters JSON at '%s' has error: %v. Please fix the JSON and restart backint", p.ParamFile, err)
 		usagemetrics.Error(code)
-		return false
+		return p.Config, false
 	}
 
-	b.applyDefaults(int64(runtime.NumCPU()))
-	return true
+	p.applyDefaults(int64(runtime.NumCPU()))
+	return p.Config, true
 }
 
 // parseCommandLineArgs checks that the necessary CLI arguments are provided.
-func (b *Backint) parseCommandLineArgs() error {
-	if b.user == "" {
+func (p *Parameters) parseCommandLineArgs() error {
+	if p.User == "" {
 		return errors.New("user ID must be provided")
 	}
-	if b.paramFile == "" {
+	if p.ParamFile == "" {
 		return errors.New("parameters file must be provided")
 	}
-	if b.function == "" {
+	if p.Function == "" {
 		return errors.New("function must be provided")
 	}
-	function := bpb.Function(bpb.Function_value[strings.ToUpper(b.function)])
+	function := bpb.Function(bpb.Function_value[strings.ToUpper(p.Function)])
 	if function == bpb.Function_FUNCTION_UNSPECIFIED {
 		return errors.New("function must be one of: [backup, restore, inquire, delete]")
 	}
 
-	b.config = &bpb.BackintConfiguration{
-		UserId:              b.user,
-		InputFile:           b.inFile,
-		OutputFile:          b.outFile,
-		ParamFile:           b.paramFile,
-		BackupId:            b.backupID,
-		DatabaseObjectCount: b.count,
-		BackupLevel:         b.backupLevel,
+	p.Config = &bpb.BackintConfiguration{
+		UserId:              p.User,
+		InputFile:           p.InFile,
+		OutputFile:          p.OutFile,
+		ParamFile:           p.ParamFile,
+		BackupId:            p.BackupID,
+		DatabaseObjectCount: p.Count,
+		BackupLevel:         p.BackupLevel,
 		Function:            function,
 	}
 	return nil
 }
 
-// readParametersFile reads backint configuration from the given file into proto.
-func (b *Backint) readParametersFile(p string, read ReadConfigFile) (int, error) {
-	content, err := read(p)
+// readParametersFile reads backint configuration from the params file into proto.
+func (p *Parameters) readParametersFile(read ReadConfigFile) (int, error) {
+	content, err := read(p.ParamFile)
 	if err != nil {
 		return usagemetrics.BackintConfigReadFailure, err
 	}
@@ -92,12 +102,12 @@ func (b *Backint) readParametersFile(p string, read ReadConfigFile) (int, error)
 	config := &bpb.BackintConfiguration{}
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
-		log.Logger.Errorw("Invalid content in the parameters file", "file", p, "content", string(content))
+		log.Logger.Errorw("Invalid content in the parameters file", "file", p.ParamFile, "content", string(content))
 		return usagemetrics.BackintMalformedConfigFile, err
 	}
-	proto.Merge(b.config, config)
+	proto.Merge(p.Config, config)
 
-	if err := b.validateParameters(); err != nil {
+	if err := p.validateParameters(); err != nil {
 		return usagemetrics.BackintMalformedConfigFile, err
 	}
 
@@ -105,18 +115,18 @@ func (b *Backint) readParametersFile(p string, read ReadConfigFile) (int, error)
 }
 
 // validateParameters ensures parameters from the params file provide a valid configuration.
-func (b *Backint) validateParameters() error {
-	if b.config.GetBucket() == "" {
+func (p *Parameters) validateParameters() error {
+	if p.Config.GetBucket() == "" {
 		return errors.New("bucket must be provided")
 	}
-	if b.config.GetEncryptionKey() != "" && b.config.GetKmsKey() != "" {
+	if p.Config.GetEncryptionKey() != "" && p.Config.GetKmsKey() != "" {
 		return errors.New("only one of encryption_key or kms_key can be provided")
 	}
-	if b.config.GetFunction() == bpb.Function_BACKUP && b.config.GetParallelStreams() > 1 {
-		if b.config.GetCompress() {
+	if p.Config.GetFunction() == bpb.Function_BACKUP && p.Config.GetParallelStreams() > 1 {
+		if p.Config.GetCompress() {
 			return errors.New("compressed parallel backups are not supported - 'parallel_streams' must be set to 1 in order to compress data")
 		}
-		if b.config.GetEncryptionKey() != "" || b.config.GetKmsKey() != "" {
+		if p.Config.GetEncryptionKey() != "" || p.Config.GetKmsKey() != "" {
 			return errors.New("encrypted parallel backups are not supported - 'parallel_streams' must be set to 1 in order to encrypt data")
 		}
 	}
@@ -126,36 +136,36 @@ func (b *Backint) validateParameters() error {
 
 // applyDefaults will apply the default configuration settings to the Backint configuration.
 // The defaults are set only if the values passed are undefined or invalid.
-func (b *Backint) applyDefaults(numCPU int64) {
-	if b.config.GetRetries() <= 0 {
+func (p *Parameters) applyDefaults(numCPU int64) {
+	if p.Config.GetRetries() <= 0 {
 		log.Logger.Warn("retries defaulted to 5")
-		b.config.Retries = 5
+		p.Config.Retries = 5
 	}
-	if b.config.GetParallelStreams() <= 0 {
+	if p.Config.GetParallelStreams() <= 0 {
 		log.Logger.Warn("parallel_streams defaulted to 1")
-		b.config.ParallelStreams = 1
+		p.Config.ParallelStreams = 1
 	}
-	if b.config.GetParallelSizeMb() <= 0 {
+	if p.Config.GetParallelSizeMb() <= 0 {
 		log.Logger.Warn("parallel_size_mb defaulted to 128")
-		b.config.ParallelSizeMb = 128
+		p.Config.ParallelSizeMb = 128
 	}
-	if b.config.GetThreads() <= 0 {
+	if p.Config.GetThreads() <= 0 {
 		if numCPU > 64 {
 			numCPU = 64
 		}
 		log.Logger.Warnf("threads defaulted to %d", numCPU)
-		b.config.Threads = numCPU
+		p.Config.Threads = numCPU
 	}
-	if b.config.GetBufferSizeMb() <= 0 {
+	if p.Config.GetBufferSizeMb() <= 0 {
 		log.Logger.Warn("buffer_size_mb defaulted to 100")
-		b.config.BufferSizeMb = 100
+		p.Config.BufferSizeMb = 100
 	}
-	if b.config.GetRateLimitMb() <= 0 {
+	if p.Config.GetRateLimitMb() <= 0 {
 		log.Logger.Warn("rate_limit_mb defaulted to 0")
-		b.config.RateLimitMb = 0
+		p.Config.RateLimitMb = 0
 	}
-	if b.config.FileReadTimeoutMs <= 0 {
+	if p.Config.FileReadTimeoutMs <= 0 {
 		log.Logger.Warn("file_read_timeout_ms defaulted to 1000")
-		b.config.FileReadTimeoutMs = 1000
+		p.Config.FileReadTimeoutMs = 1000
 	}
 }

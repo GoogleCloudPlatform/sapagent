@@ -22,11 +22,12 @@ import (
 	"os"
 
 	"flag"
-	"cloud.google.com/go/storage"
+	s "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
 // Backint has args for backint subcommands.
@@ -35,8 +36,6 @@ type Backint struct {
 	inFile, outFile, paramFile string
 	backupID, backupLevel      string
 	count                      int64
-	config                     *bpb.BackintConfiguration
-	bucketHandle               *storage.BucketHandle
 }
 
 // Name implements the subcommand interface for backint.
@@ -90,17 +89,27 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 }
 
 func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
-	if ok := b.ParseArgsAndValidateConfig(os.ReadFile); !ok {
-		return subcommands.ExitUsageError
+	p := config.Parameters{
+		User:        b.user,
+		Function:    b.function,
+		InFile:      b.inFile,
+		OutFile:     b.outFile,
+		ParamFile:   b.paramFile,
+		BackupID:    b.backupID,
+		BackupLevel: b.backupLevel,
+		Count:       b.count,
 	}
-	log.Logger.Debugw("Args parsed and config validated", "config", b.config)
-
-	handle, ok := b.ConnectToBucket(ctx, storage.NewClient)
+	config, ok := p.ParseArgsAndValidateConfig(os.ReadFile)
 	if !ok {
 		return subcommands.ExitUsageError
 	}
-	log.Logger.Infow("Connected to bucket", "bucket", b.config.GetBucket())
-	b.bucketHandle = handle
+	log.Logger.Debugw("Args parsed and config validated", "config", config)
+
+	_, ok = storage.ConnectToBucket(ctx, s.NewClient, config)
+	if !ok {
+		return subcommands.ExitUsageError
+	}
+	log.Logger.Infow("Connected to bucket", "bucket", config.GetBucket())
 	usagemetrics.Action(usagemetrics.BackintRunning)
 
 	return subcommands.ExitSuccess
