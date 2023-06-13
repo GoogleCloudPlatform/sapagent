@@ -239,7 +239,7 @@ func fakeExecForErrOnly(ctx context.Context, p commandlineexecutor.Params) comma
 }
 
 func fakeExecRHEL(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
-	if strings.Contains(p.ArgsToSplit, `"Red Hat"`) {
+	if strings.Contains(p.ArgsToSplit, `rhel`) {
 		return commandlineexecutor.Result{
 			ExitCode: 0,
 		}
@@ -280,7 +280,7 @@ func fakeExecSupportConfigSuccess(ctx context.Context, p commandlineexecutor.Par
 }
 
 func fakeExecSLES(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
-	if strings.Contains(p.ArgsToSplit, `"SLES"`) {
+	if strings.Contains(p.ArgsToSplit, `SLES`) {
 		return commandlineexecutor.Result{
 			ExitCode: 0,
 		}

@@ -259,6 +259,8 @@ func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix str
 	if err := zipSource(destFilesPath, destFilesPath+".zip", fs, z); err != nil {
 		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while zipping destination folder %s", destFilesPath), err)
 		hasErrors = true
+	} else {
+		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath)))
 	}
 
 	// removing the destination directory after zip file is created.
@@ -268,11 +270,14 @@ func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix str
 
 	// collect pacemaker reports using OS Specific commands
 	pacemakerFilesDir := fmt.Sprintf("%spacemaker-%s", destFilePathPrefix, time.Now().UTC().String()[:16])
-
+	pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, " ", "-")
+	pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, ":", "-")
 	err := pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("Error while collecting pacemaker logs: "+err.Error(), err)
 		hasErrors = true
+	} else {
+		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir))
 	}
 
 	if hasErrors {
@@ -476,7 +481,7 @@ func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exe
 	res := exec(ctx, params)
 	if res.ExitCode != 0 && res.StdErr != "" {
 		onetime.LogErrorToFileAndConsole("Error while executing command", errors.New(res.StdErr))
-		return res.Error
+		return errors.New(res.StdErr)
 	}
 	f, err := fu.OpenFile(destFilesPath+"/"+hostname+opFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
@@ -494,7 +499,7 @@ func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exe
 func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) error {
 	rhelParams := commandlineexecutor.Params{
 		Executable:  "grep",
-		ArgsToSplit: `-qE "Red Hat" /etc/os-release`,
+		ArgsToSplit: "-qE rhel /etc/os-release",
 	}
 	if val := checkForLinuxOSType(ctx, exec, rhelParams); val {
 		if err := rhelPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
@@ -504,7 +509,7 @@ func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineex
 	}
 	slesParams := commandlineexecutor.Params{
 		Executable:  "grep",
-		ArgsToSplit: `-qE "SLES" /etc/os-release`,
+		ArgsToSplit: "-qE SLES /etc/os-release",
 	}
 	if val := checkForLinuxOSType(ctx, exec, slesParams); val {
 		if err := slesPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
@@ -518,7 +523,7 @@ func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineex
 func checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, p commandlineexecutor.Params) bool {
 	res := exec(ctx, p)
 	if res.ExitCode != 0 || res.StdErr != "" {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), res.Error)
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), errors.New(res.StdErr))
 		return false
 	}
 	return true
@@ -544,7 +549,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 			Timeout:     3600,
 		})
 		if res.ExitCode != 0 {
-			return res.Error
+			return errors.New(res.StdErr)
 		}
 	}
 	res = exec(ctx, commandlineexecutor.Params{
@@ -553,7 +558,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 		Timeout:     3600,
 	})
 	if res.ExitCode != 0 {
-		return res.Error
+		return errors.New(res.StdErr)
 	}
 	return nil
 }
@@ -569,7 +574,7 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	}
 	res := exec(ctx, p)
 	if res.ExitCode != 0 {
-		return res.Error
+		return errors.New(res.StdErr)
 	}
 	return nil
 }
