@@ -38,14 +38,14 @@ type (
 	// knowledgeBase is a map with key=<query_name:column_name> and value=<slice of string values read from HANA DB>.
 	knowledgeBase map[string][]string
 
-	// validationResult has results of each of the recommendation evaluation.
-	validationResult struct {
+	// ValidationResult has results of each of the recommendation evaluation.
+	ValidationResult struct {
 		RecommendationID string
 		Result           bool // True if validation failed, false otherwise.
 	}
 
 	// Insights is a map of rules that evaluated to true with key=<rule-id> and value=<slice of recommendation-ids that evaluated to true>
-	Insights map[string][]validationResult
+	Insights map[string][]ValidationResult
 )
 
 // Run starts the rule engine execution - reads the rules, executes them and generate results.
@@ -127,7 +127,7 @@ func createColumns(count int) []any {
 // buildInsights evaluates all the trigger conditions in a rule and updates the insights map.
 func buildInsights(rule *rpb.Rule, kb knowledgeBase, insights Insights) {
 	for _, r := range rule.Recommendations {
-		vr := validationResult{
+		vr := ValidationResult{
 			RecommendationID: r.Id,
 		}
 		if evaluateTrigger(r.Trigger, kb) {

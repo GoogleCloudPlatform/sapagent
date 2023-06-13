@@ -58,6 +58,25 @@ var (
 			CollectWorkloadValidationMetrics: true,
 		},
 	}
+
+	defaultConfigurationDBMetrics = &cfgpb.Configuration{
+		CloudProperties: &iipb.CloudProperties{
+			InstanceName: "test-instance-name",
+			InstanceId:   "test-instance-id",
+			Zone:         "test-zone",
+			ProjectId:    "test-project-id",
+		},
+		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
+		CollectionConfiguration: &cfgpb.CollectionConfiguration{
+			CollectWorkloadValidationMetrics: true,
+			HanaMetricsConfig: &cfgpb.HANAMetricsConfig{
+				HanaDbUser:     "SYSTEM",
+				HanaDbPassword: "dummy-pass",
+				Hostname:       "test-hostname",
+				Port:           "30015",
+			},
+		},
+	}
 	//go:embed test_data/metricoverride.yaml
 	sampleOverride string
 	//go:embed test_data/metricoverride.yaml test_data/os-release.txt test_data/os-release-bad.txt test_data/os-release-empty.txt
@@ -406,6 +425,26 @@ func TestStartMetricsCollection(t *testing.T) {
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				OSType:            "linux",
 				Remote:            true,
+				BackOffs:          defaultBackOffIntervals,
+			},
+			want: true,
+		},
+		{
+			name: "succeedsForLocalWithDBMetrics",
+			params: Parameters{
+				Config: defaultConfigurationDBMetrics,
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+					}
+				},
+				Exists:            func(string) bool { return true },
+				ConfigFileReader:  DefaultTestReader,
+				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				OSType:            "linux",
+				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 			},
 			want: true,

@@ -195,9 +195,9 @@ func TestBuildInsights(t *testing.T) {
 	}
 
 	want := make(Insights)
-	want["abc"] = []validationResult{
-		validationResult{RecommendationID: "my-recommendation-1", Result: true},
-		validationResult{RecommendationID: "my-recommendation-2", Result: false},
+	want["abc"] = []ValidationResult{
+		ValidationResult{RecommendationID: "my-recommendation-1", Result: true},
+		ValidationResult{RecommendationID: "my-recommendation-2", Result: false},
 	}
 
 	got := make(Insights)

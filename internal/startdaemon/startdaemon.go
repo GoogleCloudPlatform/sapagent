@@ -233,6 +233,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		Execute:           execute,
 		Exists:            exists,
 		HeartbeatSpec:     wlmHeartbeatSpec,
+		GCEService:        gceService,
 	}
 	if d.config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.

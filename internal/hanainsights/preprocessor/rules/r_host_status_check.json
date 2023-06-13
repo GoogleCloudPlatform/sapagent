@@ -12,7 +12,7 @@
   "recommendations": [
     {
       "name": "Host Status",
-      "id": "r_host_status_check",
+      "id": "r_host_status_offline",
       "description": "Check the status of each host in the SAP HANA environment to see if they are online and working",
       "trigger": {
         "lhs": "size(q_host_status_check:hostname)",

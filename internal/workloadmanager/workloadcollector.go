@@ -86,6 +86,10 @@ type metricEmitter struct {
 	tmpMetricName string
 }
 
+type gceInterface interface {
+	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
+}
+
 /*
 Parameters holds the parameters for all of the Collect* function calls.
 */
@@ -106,10 +110,11 @@ type Parameters struct {
 	HeartbeatSpec         *heartbeat.Spec
 	InterfaceAddrsGetter  InterfaceAddrsGetter
 	OSReleaseFilePath     string
+	netweaverPresent      float64
+	GCEService            gceInterface
 	// fields derived from parsing the file specified by OSReleaseFilePath
-	osVendorID       string
-	osVersion        string
-	netweaverPresent float64
+	osVendorID string
+	osVersion  string
 }
 
 // SetOSReleaseInfo parses the OS release file and sets the values for the
@@ -163,16 +168,24 @@ func currentTime() int64 {
 
 func start(ctx context.Context, params Parameters) {
 	log.Logger.Info("Starting collection of Workload Manager metrics")
-	st := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
-	if st <= 0 {
-		// default back to 5 minutes
-		st = time.Duration(5) * time.Minute
+	cmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
+	if cmf <= 0 {
+		// default it to 5 minutes
+		cmf = time.Duration(5) * time.Minute
 	}
+	configurableMetricsTicker := time.NewTicker(cmf)
+	defer configurableMetricsTicker.Stop()
+
+	dbmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsFrequency()) * time.Second
+	if dbmf <= 0 {
+				// default it to 1 hour
+		dbmf = time.Duration(3600) * time.Second
+	}
+	databaseMetricTicker := time.NewTicker(dbmf)
+	defer databaseMetricTicker.Stop()
 
 	heartbeatTicker := params.HeartbeatSpec.CreateTicker()
-	collectTicker := time.NewTicker(st)
 	defer heartbeatTicker.Stop()
-	defer collectTicker.Stop()
 
 	// Do not wait for the first tick and start metric collection immediately.
 	select {
@@ -181,6 +194,7 @@ func start(ctx context.Context, params Parameters) {
 		return
 	default:
 		collectWorkloadMetricsOnce(ctx, params)
+		collectDBMetricsOnce(ctx, params)
 	}
 
 	for {
@@ -190,8 +204,10 @@ func start(ctx context.Context, params Parameters) {
 			return
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
-		case <-collectTicker.C:
+		case <-configurableMetricsTicker.C:
 			collectWorkloadMetricsOnce(ctx, params)
+		case <-databaseMetricTicker.C:
+			collectDBMetricsOnce(ctx, params)
 		}
 	}
 }

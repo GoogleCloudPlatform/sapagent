@@ -60,7 +60,7 @@ func TestReadRules(t *testing.T) {
 					Recommendations: []*rpb.Recommendation{
 						&rpb.Recommendation{
 							Name:        "Host Status",
-							Id:          "r_host_status_check",
+							Id:          "r_host_status_offline",
 							Description: "Check the status of each host in the SAP HANA environment to see if they are online and working",
 							Trigger: &rpb.EvalNode{
 								Lhs:       "size(q_host_status_check:hostname)",
