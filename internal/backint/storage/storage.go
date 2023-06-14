@@ -52,6 +52,7 @@ type ReadWriter struct {
 	bytesWritten     int64
 	lastBytesWritten int64
 	lastLog          time.Time
+	firstLog         time.Time
 	LogDelay         time.Duration
 }
 
@@ -96,6 +97,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) error {
 	writer := rw.BucketHandle.Object(rw.ObjectName).NewWriter(ctx)
 	writer.ChunkSize = int(rw.Config.GetBufferSizeMb()) * 1024 * 1024
 	rw.lastLog = time.Now()
+	rw.firstLog = time.Now()
 	rw.bytesWritten = 0
 	rw.lastBytesWritten = 0
 
@@ -107,7 +109,8 @@ func (rw *ReadWriter) Upload(ctx context.Context) error {
 	if err := writer.Close(); err != nil {
 		return err
 	}
-	log.Logger.Infow("Upload success", "bucket", rw.Config.GetBucket(), "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes)
+	avgTransferSpeedMBps := float64(bytesWritten) / time.Since(rw.firstLog).Seconds() / 1024 / 1024
+	log.Logger.Infow("Upload success", "bucket", rw.Config.GetBucket(), "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return nil
 }
 
@@ -124,6 +127,7 @@ func (rw *ReadWriter) Download(ctx context.Context) error {
 	}
 	defer reader.Close()
 	rw.lastLog = time.Now()
+	rw.firstLog = time.Now()
 	rw.bytesWritten = 0
 	rw.lastBytesWritten = 0
 
@@ -132,7 +136,8 @@ func (rw *ReadWriter) Download(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Logger.Infow("Download success", "bucket", rw.Config.GetBucket(), "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes)
+	avgTransferSpeedMBps := float64(bytesWritten) / time.Since(rw.firstLog).Seconds() / 1024 / 1024
+	log.Logger.Infow("Download success", "bucket", rw.Config.GetBucket(), "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return nil
 }
 
