@@ -107,8 +107,8 @@ type Rule struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name   string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Id     string   `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`         // Unique ID of the rule - must be unique across all rules.
+	Name   string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`     // Optional
+	Id     string   `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`         // Required: Unique ID of the rule - must be unique across all rules.
 	Labels []string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty"` // Security, High Availability, performance,
 	// cost-saving, supportability, reliability, etc.
 	Description     string            `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
@@ -195,11 +195,11 @@ type Query struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name               string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // unique within this rule
+	Name               string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` //  Required: Unique within this rule and global knowledgebase.
 	Description        string   `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	DependentOnQueries []string `protobuf:"bytes,3,rep,name=dependent_on_queries,json=dependentOnQueries,proto3" json:"dependent_on_queries,omitempty"` // names of the queries that must be run prior to this.
 	Sql                string   `protobuf:"bytes,4,opt,name=sql,proto3" json:"sql,omitempty"`                                                           // SQL query
-	Columns            []string `protobuf:"bytes,5,rep,name=columns,proto3" json:"columns,omitempty"`
+	Columns            []string `protobuf:"bytes,5,rep,name=columns,proto3" json:"columns,omitempty"`                                                   // Required: Used to build knowledgebase
 }
 
 func (x *Query) Reset() {
@@ -274,13 +274,13 @@ type Recommendation struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name         string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Id           string    `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	Description  string    `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Name         string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`               // Optional
+	Id           string    `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`                   // Required: used to uniquely identify a recoomendation.
+	Description  string    `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"` // Optional
 	Trigger      *EvalNode `protobuf:"bytes,4,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	Actions      []*Action `protobuf:"bytes,5,rep,name=actions,proto3" json:"actions,omitempty"`
-	ForceTrigger bool      `protobuf:"varint,6,opt,name=force_trigger,json=forceTrigger,proto3" json:"force_trigger,omitempty"`
-	References   []string  `protobuf:"bytes,7,rep,name=references,proto3" json:"references,omitempty"`
+	ForceTrigger bool      `protobuf:"varint,6,opt,name=force_trigger,json=forceTrigger,proto3" json:"force_trigger,omitempty"` // Optional - for internal testing
+	References   []string  `protobuf:"bytes,7,rep,name=references,proto3" json:"references,omitempty"`                          // Optional
 }
 
 func (x *Recommendation) Reset() {

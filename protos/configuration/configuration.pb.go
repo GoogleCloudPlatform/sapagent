@@ -825,7 +825,7 @@ type HANAMetricsConfig struct {
 	HanaDbUser               string `protobuf:"bytes,1,opt,name=hana_db_user,json=hanaDbUser,proto3" json:"hana_db_user,omitempty"`
 	HanaDbPassword           string `protobuf:"bytes,2,opt,name=hana_db_password,json=hanaDbPassword,proto3" json:"hana_db_password,omitempty"`
 	HanaDbPasswordSecretName string `protobuf:"bytes,3,opt,name=hana_db_password_secret_name,json=hanaDbPasswordSecretName,proto3" json:"hana_db_password_secret_name,omitempty"`
-	Hostname                 string `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"` // default: localhost
+	Hostname                 string `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Port                     string `protobuf:"bytes,5,opt,name=port,proto3" json:"port,omitempty"`
 }
 

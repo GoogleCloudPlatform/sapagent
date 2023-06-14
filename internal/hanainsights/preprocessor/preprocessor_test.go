@@ -44,35 +44,35 @@ func TestReadRules(t *testing.T) {
 		},
 		{
 			name:  "SingleRuleSuccess",
-			files: []string{"rules/r_host_status_check.json"},
+			files: []string{"rules/r_sap_hana_internal_support_role.json"},
 			want: []*rpb.Rule{
 				&rpb.Rule{
-					Name:   "Host Status Check",
-					Id:     "r_host_status_check",
-					Labels: []string{"test-rule"},
+					Name:   "SAP HANA Internal Support Role Check",
+					Id:     "r_sap_hana_internal_support_role",
+					Labels: []string{"security"},
 					Queries: []*rpb.Query{
 						&rpb.Query{
-							Name:    "q_host_status_check",
-							Sql:     "select HOST as hostname, HOST_STATUS as status from M_landscape_host_configuration where HOST_STATUS = 'ERROR'",
-							Columns: []string{"hostname", "status"},
+							Name:    "q_users_sap_hana_internal_support",
+							Sql:     "SELECT COUNT(*) as count FROM SYS.EFFECTIVE_ROLE_GRANTEES WHERE ROLE_NAME = 'SAP_INTERNAL_HANA_SUPPORT'",
+							Columns: []string{"count"},
 						},
 					},
 					Recommendations: []*rpb.Recommendation{
 						&rpb.Recommendation{
-							Name:        "Host Status",
-							Id:          "r_host_status_offline",
-							Description: "Check the status of each host in the SAP HANA environment to see if they are online and working",
+							Name:        "Users with SAP_INTERNAL_HANA_SUPPORT role",
+							Id:          "check_users_with_support_role",
+							Description: "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
 							Trigger: &rpb.EvalNode{
-								Lhs:       "size(q_host_status_check:hostname)",
+								Lhs:       "q_users_sap_hana_internal_support:count",
 								Operation: rpb.EvalNode_GT,
 								Rhs:       "0",
 							},
 							Actions: []*rpb.Action{
 								&rpb.Action{
-									Description: "Not all hosts are in a healthy state. Check that all hosts are online with their services started. \nThe following hosts are in an error state: ${q_host_status_check}\n",
+									Description: "At least one account has the SAP_INTERNAL_HANA_SUPPORT role. This is an internal role that enables low level access to data. It should only be assigned to admin or support at the request of SAP Development and during an active SAP support request.",
 								},
 							},
-							References: []string{"PlaceHolder for SAP Note :: http:<SAP Note URL>"},
+							References: []string{"SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#predefined-catalog-role-sap_internal_hana_support"},
 						},
 					},
 				},

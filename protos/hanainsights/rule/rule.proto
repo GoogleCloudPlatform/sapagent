@@ -20,8 +20,9 @@ package third_party_sapagent_protos_rules;
 option java_multiple_files = true;
 
 message Rule {
-  string name = 1;
-  string id = 2;  // Unique ID of the rule - must be unique across all rules.
+  string name = 1;  // Optional
+  string id =
+      2;  // Required: Unique ID of the rule - must be unique across all rules.
   repeated string labels = 3;  // Security, High Availability, performance,
                                // cost-saving, supportability, reliability, etc.
   string description = 4;
@@ -30,22 +31,22 @@ message Rule {
 }
 
 message Query {
-  string name = 1;  // unique within this rule
+  string name = 1;  //  Required: Unique within this rule and global knowledgebase.
   string description = 2;
   repeated string dependent_on_queries =
       3;           // names of the queries that must be run prior to this.
   string sql = 4;  // SQL query
-  repeated string columns = 5;
+  repeated string columns = 5;  // Required: Used to build knowledgebase
 }
 
 message Recommendation {
-  string name = 1;
-  string id = 2;
-  string description = 3;
+  string name = 1;  // Optional
+  string id = 2;    // Required: used to uniquely identify a recoomendation.
+  string description = 3;  // Optional
   EvalNode trigger = 4;
   repeated Action actions = 5;
-  bool force_trigger = 6;
-  repeated string references = 7;
+  bool force_trigger = 6;          // Optional - for internal testing
+  repeated string references = 7;  // Optional
 }
 
 message EvalNode {
