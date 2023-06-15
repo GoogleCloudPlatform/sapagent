@@ -42,6 +42,7 @@ message BackintConfiguration {
   string backup_id = 20;
   int64 database_object_count = 21;
   string backup_level = 22;
+  int64 log_delay_sec = 23;
 }
 
 enum LogLevel {

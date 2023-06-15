@@ -132,7 +132,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	rw.lastBytesWritten = 0
 
 	if rw.LogDelay <= 0 {
-		log.Logger.Warnf("LogDelay defaulted to %f seconds", DefaultLogDelay.Seconds())
+		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
 		rw.LogDelay = DefaultLogDelay
 	}
 	if rw.ChunkSizeMb == 0 {
@@ -170,7 +170,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	rw.lastBytesWritten = 0
 
 	if rw.LogDelay <= 0 {
-		log.Logger.Warnf("LogDelay defaulted to %f seconds", DefaultLogDelay.Seconds())
+		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
 		rw.LogDelay = DefaultLogDelay
 	}
 

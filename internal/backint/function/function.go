@@ -130,7 +130,7 @@ func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHan
 		ChunkSizeMb:  config.GetBufferSizeMb(),
 		ObjectName:   object,
 		TotalBytes:   fileSize,
-		LogDelay:     storage.DefaultLogDelay,
+		LogDelay:     time.Duration(config.GetLogDelaySec()) * time.Second,
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {
@@ -142,9 +142,13 @@ func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHan
 }
 
 // split performs a custom split on spaces based on the following SAP HANA Backint specifications:
+//
 // * Parameters may be quoted with double quotation marks ".
+//
 // * Parameters containing a space must be quoted with double quotation marks.
+//
 // * If a parameter contains a double quote, the double quote must be escaped with a backslash.
+//
 // * A backslash escapes double quotes only. A backslash in a parameter value must not be escaped.
 func split(s string) []string {
 	var result []string
