@@ -100,6 +100,10 @@ const (
 	HANADiskSnapshot
 	SSLModeOnHANAMonitoring
 	BackintRunning
+	BackintBackupStarted
+	BackintRestoreStarted
+	BackintInquireStarted
+	BackintDeleteStarted
 )
 
 var (

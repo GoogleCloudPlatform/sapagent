@@ -25,6 +25,7 @@ import (
 	s "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/function"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -89,6 +90,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 }
 
 func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
+	log.Logger.Info("Backint starting")
 	p := config.Parameters{
 		User:        b.user,
 		Function:    b.function,
@@ -105,12 +107,17 @@ func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
 	}
 	log.Logger.Debugw("Args parsed and config validated", "config", config)
 
-	_, ok = storage.ConnectToBucket(ctx, s.NewClient, config)
+	bucketHandle, ok := storage.ConnectToBucket(ctx, s.NewClient, config)
 	if !ok {
 		return subcommands.ExitUsageError
 	}
 	log.Logger.Infow("Connected to bucket", "bucket", config.GetBucket())
-	usagemetrics.Action(usagemetrics.BackintRunning)
 
+	usagemetrics.Action(usagemetrics.BackintRunning)
+	if ok := function.Execute(ctx, config, bucketHandle); !ok {
+		return subcommands.ExitUsageError
+	}
+
+	log.Logger.Info("Backint finished")
 	return subcommands.ExitSuccess
 }
