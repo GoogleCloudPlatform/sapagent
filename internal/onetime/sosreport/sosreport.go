@@ -49,6 +49,7 @@ type (
 		instanceNums           string
 		instanceNumsAfterSplit []string
 		hostname               string
+		pacemakerDiagnosis     bool
 	}
 
 	fileSystemHelper struct{}
@@ -203,6 +204,7 @@ func (s *SOSReport) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.sid, "sid", "", "SAP System Identifier")
 	fs.StringVar(&s.instanceNums, "instance-numbers", "", "Instance numbers")
 	fs.StringVar(&s.hostname, "hostname", "", "Hostname")
+	fs.BoolVar(&s.pacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 }
 
 // Execute implements the subcommand interface for SOS report collection.
@@ -268,16 +270,18 @@ func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix str
 		hasErrors = true
 	}
 
-	// collect pacemaker reports using OS Specific commands
-	pacemakerFilesDir := fmt.Sprintf("%spacemaker-%s", destFilePathPrefix, time.Now().UTC().String()[:16])
-	pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, " ", "-")
-	pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, ":", "-")
-	err := pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
-	if err != nil {
-		onetime.LogErrorToFileAndConsole("Error while collecting pacemaker logs: "+err.Error(), err)
-		hasErrors = true
-	} else {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir))
+	if s.pacemakerDiagnosis {
+		// collect pacemaker reports using OS Specific commands
+		pacemakerFilesDir := fmt.Sprintf("%spacemaker-%s", destFilePathPrefix, time.Now().UTC().String()[:16])
+		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, " ", "-")
+		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, ":", "-")
+		err := pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
+		if err != nil {
+			onetime.LogErrorToFileAndConsole("Error while collecting pacemaker logs: "+err.Error(), err)
+			hasErrors = true
+		} else {
+			onetime.LogMessageToFileAndConsole(fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir))
+		}
 	}
 
 	if hasErrors {
@@ -497,6 +501,7 @@ func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exe
 }
 
 func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) error {
+
 	rhelParams := commandlineexecutor.Params{
 		Executable:  "grep",
 		ArgsToSplit: "-qE rhel /etc/os-release",
@@ -532,20 +537,20 @@ func checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, 
 func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
 	// time.Now().UTC() returns current time UTC format with milliseconds precision,
 	// we only need it till first 16 characters to satisfy the hb_report and crm_report command
-	to := time.Now().UTC().GoString()[:16]
+	to := time.Now().UTC().String()[:16]
 	from := time.Now().UTC().AddDate(0, 0, -3).String()[:16]
 	if err := fu.MkdirAll(destFilesPath, 0777); err != nil {
 		return err
 	}
 	res := exec(ctx, commandlineexecutor.Params{
 		Executable:  "hb_report",
-		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from, to, destFilesPath),
+		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from[:10], to[:10], destFilesPath),
 		Timeout:     3600,
 	})
 	if res.ExitCode != 0 {
 		res := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
-			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from, to, destFilesPath),
+			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from[:10], to[:10], destFilesPath),
 			Timeout:     3600,
 		})
 		if res.ExitCode != 0 {

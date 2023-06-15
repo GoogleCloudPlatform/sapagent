@@ -429,9 +429,10 @@ func TestSOSReportHandler(t *testing.T) {
 		{
 			name: "Success",
 			sosr: &SOSReport{
-				sid:          "DEH",
-				instanceNums: "00 11",
-				hostname:     "sample_host",
+				sid:                "DEH",
+				instanceNums:       "00 11",
+				hostname:           "sample_host",
+				pacemakerDiagnosis: true,
 			},
 			destFilePrefix: "samplefile",
 			ctx:            context.Background(),
