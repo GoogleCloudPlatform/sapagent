@@ -28,9 +28,9 @@ import (
 	"time"
 
 	s "cloud.google.com/go/storage"
-	"github.com/GoogleCloudPlatform/sapagent/internal/backint/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
@@ -125,18 +125,20 @@ func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHan
 	rw := storage.ReadWriter{
 		Reader:       f,
 		Copier:       io.Copy,
-		Config:       config,
 		BucketHandle: bucketHandle,
+		BucketName:   config.GetBucket(),
+		ChunkSizeMb:  config.GetBufferSizeMb(),
 		ObjectName:   object,
 		TotalBytes:   fileSize,
 		LogDelay:     storage.DefaultLogDelay,
 	}
-	if err := rw.Upload(ctx); err != nil {
-		log.Logger.Errorw("Error uploading file", "bucket", rw.Config.GetBucket(), "file", fileName, "obj", object, "err", err)
+	bytesWritten, err := rw.Upload(ctx)
+	if err != nil {
+		log.Logger.Errorw("Error uploading file", "bucket", config.GetBucket(), "file", fileName, "obj", object, "err", err)
 		return "#ERROR " + fileName
 	}
-	log.Logger.Infow("File uploaded", "bucket", rw.Config.GetBucket(), "file", fileName, "obj", object)
-	return "#SAVED " + externalBackupID + " " + fileName + " " + strconv.FormatInt(fileSize, 10)
+	log.Logger.Infow("File uploaded", "bucket", config.GetBucket(), "file", fileName, "obj", object)
+	return "#SAVED " + externalBackupID + " " + fileName + " " + strconv.FormatInt(bytesWritten, 10)
 }
 
 // split performs a custom split on spaces based on the following SAP HANA Backint specifications:

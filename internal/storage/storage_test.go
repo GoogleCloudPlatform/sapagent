@@ -22,6 +22,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
@@ -39,7 +40,7 @@ var (
 				BucketName: "test-bucket",
 				Name:       "object.txt",
 			},
-			Content: []byte("test content"),
+			Content: defaultContent,
 		},
 	})
 	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
@@ -51,7 +52,8 @@ var (
 	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 		return fakeServer.Client(), nil
 	}
-	defaultBuffer = bytes.NewBufferString("test data")
+	defaultBuffer  = bytes.NewBufferString("test data")
+	defaultContent = []byte("test content")
 )
 
 func TestConnectToBucket(t *testing.T) {
@@ -118,7 +120,7 @@ func TestConnectToBucket(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config)
+			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config.GetServiceAccount(), test.config.GetBucket(), test.config.GetBufferSizeMb())
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.IgnoreUnexported(storage.BucketHandle{})); diff != "" {
 				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.config.GetServiceAccount(), test.config.GetBucket(), diff)
 			}
@@ -131,16 +133,17 @@ func TestConnectToBucket(t *testing.T) {
 
 func TestUpload(t *testing.T) {
 	tests := []struct {
-		name string
-		rw   *ReadWriter
-		want error
+		name      string
+		rw        *ReadWriter
+		want      int64
+		wantError error
 	}{
 		{
 			name: "NoHandle",
 			rw: &ReadWriter{
 				Reader: defaultBuffer,
 			},
-			want: cmpopts.AnyError,
+			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "WriteFail",
@@ -151,25 +154,28 @@ func TestUpload(t *testing.T) {
 					return 0, errors.New("write error")
 				},
 			},
-			want: cmpopts.AnyError,
+			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "UploadSuccess",
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
-				Config: &bpb.BackintConfiguration{
-					BufferSizeMb: 1,
-				},
-				Copier: io.Copy,
-				Reader: defaultBuffer,
+				ChunkSizeMb:  1,
+				Copier:       io.Copy,
+				Reader:       defaultBuffer,
+				LogDelay:     time.Nanosecond,
 			},
-			want: nil,
+			want:      int64(defaultBuffer.Len()),
+			wantError: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.rw.Upload(context.Background())
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+			got, gotError := test.rw.Upload(context.Background())
+			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
+				t.Errorf("%#v.Upload() = %v, want %v", test.rw, gotError, test.wantError)
+			}
+			if got != test.want {
 				t.Errorf("%#v.Upload() = %v, want %v", test.rw, got, test.want)
 			}
 		})
@@ -178,16 +184,17 @@ func TestUpload(t *testing.T) {
 
 func TestDownload(t *testing.T) {
 	tests := []struct {
-		name string
-		rw   *ReadWriter
-		want error
+		name      string
+		rw        *ReadWriter
+		want      int64
+		wantError error
 	}{
 		{
 			name: "NoHandle",
 			rw: &ReadWriter{
 				Writer: defaultBuffer,
 			},
-			want: cmpopts.AnyError,
+			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "ObjectNotFound",
@@ -196,7 +203,7 @@ func TestDownload(t *testing.T) {
 				ObjectName:   "fake-object.txt",
 				Writer:       defaultBuffer,
 			},
-			want: cmpopts.AnyError,
+			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "WriteFail",
@@ -208,7 +215,7 @@ func TestDownload(t *testing.T) {
 					return 0, errors.New("write error")
 				},
 			},
-			want: cmpopts.AnyError,
+			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "DownloadSuccess",
@@ -217,14 +224,19 @@ func TestDownload(t *testing.T) {
 				ObjectName:   "object.txt",
 				Writer:       defaultBuffer,
 				Copier:       io.Copy,
+				LogDelay:     time.Nanosecond,
 			},
-			want: nil,
+			want:      int64(len(defaultContent)),
+			wantError: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.rw.Download(context.Background())
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+			got, gotError := test.rw.Download(context.Background())
+			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
+				t.Errorf("%#v.Download() = %v, want %v", test.rw, gotError, test.wantError)
+			}
+			if got != test.want {
 				t.Errorf("%#v.Download() = %v, want %v", test.rw, got, test.want)
 			}
 		})

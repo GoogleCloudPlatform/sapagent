@@ -26,8 +26,8 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/function"
-	"github.com/GoogleCloudPlatform/sapagent/internal/backint/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 )
 
@@ -107,7 +107,7 @@ func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
 	}
 	log.Logger.Debugw("Args parsed and config validated", "config", config)
 
-	bucketHandle, ok := storage.ConnectToBucket(ctx, s.NewClient, config)
+	bucketHandle, ok := storage.ConnectToBucket(ctx, s.NewClient, config.GetServiceAccount(), config.GetBucket(), config.GetParallelStreams())
 	if !ok {
 		return subcommands.ExitUsageError
 	}
