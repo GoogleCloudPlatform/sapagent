@@ -1,14 +1,14 @@
 {
-  "name": "Knowledgebase",
   "id": "knowledgebase",
+  "description": "Knowledgebase which contains queries which are frequently used in rules.",
   "labels": [
-    "Internal"
+    "internal"
   ],
   "queries": [
     {
       "name": "q_hana_version",
-      "sql": "SELECT VERSION FROM SYS.M_DATABASE",
-      "columns": ["version"]
+      "sql": "SELECT VERSION, substr_before (version, '.') as major, trim (LEADING '0' FROM  substring(substr_before(substr_after(substr_after (version, '.'), '.'),'.'), 2, 1)) as sps, trim (LEADING '0' FROM substring(substr_before(substr_after(substr_after (version, '.'), '.'),'.'), 2, 3)) as revision, CASE when substr_before(substr_after(substr_after (substr_after (version, '.'), '.'),'.'),'.') = '00' then '0' else trim (LEADING '0' FROM substr_before(substr_after(substr_after (substr_after (version, '.'), '.'),'.'),'.')) END as patch FROM M_DATABASE",
+      "columns": ["version", "major", "sps", "revision", "build"]
     },
     {
       "name": "q_hana_nodes",
@@ -19,6 +19,11 @@
       "name": "q_largest_schema",
       "sql": "SELECT SCHEMA_NAME as schema, SUM(DISK_SIZE) / 1024 / 1024 / 1024 AS size FROM M_TABLE_PERSISTENCE_STATISTICS GROUP  BY SCHEMA_NAME ORDER BY SIZE DESC LIMIT 1",
       "columns": ["schema", "size"]
+    },
+    {
+      "name": "q_system_usage",
+      "sql": "SELECT VALUE as value from M_INIFILE_CONTENTS  WHERE FILE_NAME = 'global.ini' SECTION = 'system_information' AND KEY = 'usage'",
+      "columns": ["value"]
     }
   ]
 }

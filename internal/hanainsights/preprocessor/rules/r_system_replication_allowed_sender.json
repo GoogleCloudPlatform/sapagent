@@ -1,0 +1,47 @@
+{
+  "id": "r_system_replication_allowed_sender",
+  "description": "Check if system replication is configued with allowed_sender if the listen interface is global",
+  "labels": [
+    "Security"
+  ],
+  "queries": [
+    {
+      "name": "q_listeninterface",
+      "sql": "SELECT VALUE as value FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' SECTION = 'system_replication_communication' AND KEY = 'listeninterface'",
+      "columns": ["value"]
+    },
+    {
+      "name": "q_allowed_sender",
+      "sql": "SELECT VALUE as value from  M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' SECTION = 'system_replication_communication' AND KEY = 'allowed_sender'",
+      "columns": ["value"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_listeninterface_allowed_sender",
+      "trigger":{
+          "operation": "AND",
+          "child_evals": [
+            {
+              "lhs": "q_listeninterface:value",
+              "operation": "EQ",
+              "rhs": ".global"
+            },
+            {
+              "lhs": "count(q_allowed_sender)",
+              "operation": "LT",
+              "rhs": "1"
+            }
+        ]
+      },
+      "actions": [
+        {
+          "description": "System replication is configured insecurely. When running system replication over the global network, HANA should be configured to restrict system replication to only certain IP addresses and hosts. This can be done by configuring the global.ini file and setting the system_replication_communication.allowed_sender parameter. The value of this parameter should be a comma-separated list of IP addresses or host names."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/eccef06eabe545e68d5019bcb6d8e342.html#host-name-resolution-in-system-replication"
+      ]
+    }
+  ]
+}

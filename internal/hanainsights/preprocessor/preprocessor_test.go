@@ -47,9 +47,9 @@ func TestReadRules(t *testing.T) {
 			files: []string{"rules/r_sap_hana_internal_support_role.json"},
 			want: []*rpb.Rule{
 				&rpb.Rule{
-					Name:   "SAP HANA Internal Support Role Check",
-					Id:     "r_sap_hana_internal_support_role",
-					Labels: []string{"security"},
+					Id:          "r_sap_hana_internal_support_role",
+					Description: "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
+					Labels:      []string{"security"},
 					Queries: []*rpb.Query{
 						&rpb.Query{
 							Name:    "q_users_sap_hana_internal_support",
@@ -59,9 +59,7 @@ func TestReadRules(t *testing.T) {
 					},
 					Recommendations: []*rpb.Recommendation{
 						&rpb.Recommendation{
-							Name:        "Users with SAP_INTERNAL_HANA_SUPPORT role",
-							Id:          "check_users_with_support_role",
-							Description: "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
+							Id: "rec_check_users_with_support_role",
 							Trigger: &rpb.EvalNode{
 								Lhs:       "q_users_sap_hana_internal_support:count",
 								Operation: rpb.EvalNode_GT,

@@ -1,6 +1,6 @@
 {
-  "name": "SAP HANA Internal Support Role Check",
   "id": "r_sap_hana_internal_support_role",
+  "description": "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
   "labels": [
     "security"
   ],
@@ -13,9 +13,7 @@
   ],
   "recommendations": [
     {
-      "name": "Users with SAP_INTERNAL_HANA_SUPPORT role",
-      "id": "check_users_with_support_role",
-      "description": "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
+      "id": "rec_check_users_with_support_role",
       "trigger": {
         "lhs": "q_users_sap_hana_internal_support:count",
         "operation": "GT",
@@ -32,5 +30,3 @@
     }
   ]
 }
-
-
