@@ -93,3 +93,103 @@ func TestReadRules(t *testing.T) {
 	}
 
 }
+
+func TestSortTopologically(t *testing.T) {
+	tests := []struct {
+		name    string
+		queries []*rpb.Query
+		want    []*rpb.Query
+		wantErr error
+	}{
+		{
+			name: "NoDependentQueries",
+			queries: []*rpb.Query{
+				&rpb.Query{
+					Name:        "sampleQuery1",
+					Description: "Sample Query 1",
+					Sql:         "sample_sql",
+					Columns:     []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+				},
+			},
+			want: []*rpb.Query{
+				&rpb.Query{
+					Name:        "sampleQuery1",
+					Description: "Sample Query 1",
+					Sql:         "sample_sql",
+					Columns:     []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "SimpleGraphWithDependentQueries",
+			queries: []*rpb.Query{
+				&rpb.Query{
+					Name:        "sampleQuery1",
+					Description: "Sample Query 1",
+					Sql:         "sample_sql",
+					Columns:     []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+				},
+				&rpb.Query{
+					Name:               "sampleQuery2",
+					Description:        "Sample Query 2",
+					Sql:                "sample_sql",
+					DependentOnQueries: []string{"sampleQuery1"},
+					Columns:            []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+				},
+			},
+			want: []*rpb.Query{
+				&rpb.Query{
+					Name:        "sampleQuery1",
+					Description: "Sample Query 1",
+					Sql:         "sample_sql",
+					Columns:     []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+				},
+				&rpb.Query{
+					Name:               "sampleQuery2",
+					Description:        "Sample Query 2",
+					Sql:                "sample_sql",
+					DependentOnQueries: []string{"sampleQuery1"},
+					Columns:            []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "CyclicDependency",
+			queries: []*rpb.Query{
+				&rpb.Query{
+					Name:               "sampleQuery1",
+					Description:        "Sample Query 1",
+					Sql:                "sample_sql",
+					DependentOnQueries: []string{"sampleQuery2"},
+				},
+				&rpb.Query{
+					Name:               "sampleQuery2",
+					Description:        "Sample Query 2",
+					Sql:                "sample_sql",
+					DependentOnQueries: []string{"sampleQuery3"},
+				},
+				&rpb.Query{
+					Name:               "sampleQuery3",
+					Description:        "Sample Query 3",
+					Sql:                "sample_sql",
+					DependentOnQueries: []string{"sampleQuery1"},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, gotErr := QueryExecutionOrder(tc.queries)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("SortTopologically(%v)=%v want: %v", tc.queries, gotErr, tc.wantErr)
+			}
+			if !cmp.Equal(got, tc.want, protocmp.Transform()) {
+				t.Errorf("SortTopologically(%v)=%v want: %v", tc.queries, got, tc.want)
+			}
+		})
+	}
+}

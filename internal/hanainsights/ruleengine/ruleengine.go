@@ -61,6 +61,12 @@ func Run(ctx context.Context, db *sql.DB) (Insights, error) {
 	for _, rule := range rules {
 		log.Logger.Debugw("Building knowledgebase for rule", "rule", rule.Id)
 		rkb := make(knowledgeBase)
+		orderedQueries, err := preprocessor.QueryExecutionOrder(rule.Queries)
+		if err != nil {
+			log.Logger.Warnf("Error ordering queries", "rule", rule.Id, "error", err)
+			continue
+		}
+		rule.Queries = orderedQueries
 		if err := buildKnowledgeBase(ctx, db, rule.Queries, rkb); err != nil {
 			log.Logger.Debugw("Error building knowledge base", "rule", rule.Id, "error", err)
 			continue
