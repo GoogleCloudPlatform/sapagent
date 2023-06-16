@@ -20,11 +20,18 @@ import (
 	"context"
 	"testing"
 
+	metricpb "google.golang.org/genproto/googleapis/api/metric"
+	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 )
 
-func TestProcessInsightsAndSend(t *testing.T) {
+func TestProcessInsights(t *testing.T) {
 	params := Parameters{
 		Config:            defaultConfigurationDBMetrics,
 		TimeSeriesCreator: &fake.TimeSeriesCreator{},
@@ -32,18 +39,47 @@ func TestProcessInsightsAndSend(t *testing.T) {
 	}
 
 	insights := make(ruleengine.Insights)
-	insights["metric"] = []ruleengine.ValidationResult{
+	insights["rule_id"] = []ruleengine.ValidationResult{
 		ruleengine.ValidationResult{
-			RecommendationID: "recommendation-1",
+			RecommendationID: "recommendation_1",
 			Result:           true,
 		},
 		ruleengine.ValidationResult{
-			RecommendationID: "recommendation-2",
+			RecommendationID: "recommendation_2",
 		},
 	}
 
-	got := processInsightsAndSend(context.Background(), params, insights)
-	if got != 2 {
-		t.Errorf("processInsightsAndSend()=%d, want: 2", got)
+	want := WorkloadMetrics{
+		Metrics: []*mrpb.TimeSeries{{
+			Metric: &metricpb.Metric{
+				Type: "workload.googleapis.com/sap/validation/hanasecurity",
+				Labels: map[string]string{
+					"rule_id_recommendation_1": "false",
+					"rule_id_recommendation_2": "true",
+				},
+			},
+			MetricKind: metricpb.MetricDescriptor_GAUGE,
+			Resource: &monitoredresourcepb.MonitoredResource{
+				Type: "gce_instance",
+				Labels: map[string]string{
+					"instance_id": "test-instance-id",
+					"zone":        "test-zone",
+					"project_id":  "test-project-id",
+				},
+			},
+			Points: []*mrpb.Point{{
+				Interval: &cpb.TimeInterval{},
+				Value: &cpb.TypedValue{
+					Value: &cpb.TypedValue_DoubleValue{
+						DoubleValue: 1,
+					},
+				},
+			}},
+		}},
+	}
+
+	got := processInsights(context.Background(), params, insights)
+	if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
+		t.Errorf("processInsights() failure diff (-want +got):\n%s", diff)
 	}
 }

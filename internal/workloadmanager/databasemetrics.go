@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -55,29 +54,19 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) {
 		log.Logger.Error(err)
 		return
 	}
-	processInsightsAndSend(ctx, params, insights)
+	metrics := processInsights(ctx, params, insights)
+	sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
 }
 
-func processInsightsAndSend(ctx context.Context, params Parameters, insights ruleengine.Insights) int {
-	var labels map[string]string
-	ts := []*monitoringresourcespb.TimeSeries{}
+func processInsights(ctx context.Context, params Parameters, insights ruleengine.Insights) WorkloadMetrics {
+	labels := make(map[string]string)
+	mPath := metricTypePrefix + "hanasecurity"
 
 	for ruleID, evalResults := range insights {
-		mPath := fmt.Sprintf("%sinsights/%s", metricTypePrefix, ruleID)
 		for _, evalResult := range evalResults {
-			if evalResult.Result {
-				labels = map[string]string{"recommendation": evalResult.RecommendationID}
-			}
-			ts = append(ts, createTimeSeries(mPath, labels, boolToFloat(evalResult.Result), params.Config)...)
+			// Create label - ruleID-recommendationID : TRUE|FALSE
+			labels[ruleID+"_"+evalResult.RecommendationID] = fmt.Sprintf("%t", !evalResult.Result)
 		}
 	}
-	metrics := WorkloadMetrics{Metrics: ts}
-	return sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
-}
-
-func boolToFloat(b bool) float64 {
-	if b {
-		return 1
-	}
-	return 0
+	return WorkloadMetrics{Metrics: createTimeSeries(mPath, labels, 1.0, params.Config)}
 }
