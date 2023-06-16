@@ -18,7 +18,9 @@ limitations under the License.
 package system
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -27,9 +29,11 @@ import (
 	"time"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	logging "cloud.google.com/go/logging"
 	"golang.org/x/exp/slices"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
@@ -62,6 +66,11 @@ type gceInterface interface {
 	GetURIForIP(project, ip string) (string, error)
 }
 
+type cloudLogInterface interface {
+	Log(e logging.Entry)
+	Flush() error
+}
+
 type wlmInterface interface {
 	WriteInsight(project, location string, writeInsightRequest *workloadmanager.WriteInsightRequest) error
 }
@@ -72,11 +81,12 @@ type (
 
 // Discovery is a type used to perform SAP System discovery operations.
 type Discovery struct {
-	gceService   gceInterface
-	wlmService   wlmInterface
-	exists       commandlineexecutor.Exists
-	execute      commandlineexecutor.Execute
-	hostResolver func(string) ([]string, error)
+	gceService        gceInterface
+	wlmService        wlmInterface
+	cloudLogInterface cloudLogInterface
+	exists            commandlineexecutor.Exists
+	execute           commandlineexecutor.Execute
+	hostResolver      func(string) ([]string, error)
 }
 
 func extractFromURI(uri, field string) string {
@@ -134,7 +144,7 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 
 // StartSAPSystemDiscovery Initializes the discovery object and starts the discovery subroutine.
 // Returns true if the discovery goroutine is started, and false otherwise.
-func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface, wlmService wlmInterface) bool {
+func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface, wlmService wlmInterface, cloudLogService cloudLogInterface) bool {
 	// Start SAP system discovery only if sap_system_discovery is enabled.
 	if !config.GetCollectionConfiguration().GetSapSystemDiscovery() {
 		log.Logger.Info("Not starting SAP system discovery.")
@@ -142,11 +152,12 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 	}
 
 	d := Discovery{
-		gceService:   gceService,
-		wlmService:   wlmService,
-		exists:       commandlineexecutor.CommandExists,
-		execute:      commandlineexecutor.ExecuteCommand,
-		hostResolver: net.LookupHost,
+		gceService:        gceService,
+		wlmService:        wlmService,
+		cloudLogInterface: cloudLogService,
+		exists:            commandlineexecutor.CommandExists,
+		execute:           commandlineexecutor.ExecuteCommand,
+		hostResolver:      net.LookupHost,
 	}
 
 	go runDiscovery(ctx, config, d)
@@ -154,6 +165,9 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 }
 
 func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
+	// Ensure any messages left in the buffer get written
+	defer d.cloudLogInterface.Flush()
+
 	cp := config.GetCloudProperties()
 	if cp == nil {
 		log.Logger.Warn("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
@@ -198,7 +212,6 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 			var system *spb.SapDiscovery
 			switch app.Type {
 			case sappb.InstanceType_NETWEAVER:
-				log.Logger.Info("Running on NW instance")
 
 				var dbComp *spb.SapDiscovery_Component
 				dbRes := d.discoverAppToDBConnection(ctx, cp, app.Sapsid, ir)
@@ -234,7 +247,6 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 				}
 				system.UpdateTime = timestamppb.Now()
 			case sappb.InstanceType_HANA:
-				log.Logger.Info("Running on HANA instance")
 				// See if a system with the same SID already exists
 				for _, sys := range sapSystems {
 					if sys.DatabaseLayer.Sid == app.Sapsid {
@@ -254,7 +266,6 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 				}
 				system.UpdateTime = timestamppb.Now()
 			}
-			log.Logger.Infow("Discovered System", "system", system)
 		}
 
 		locationParts := strings.Split(cp.GetZone(), "-")
@@ -262,11 +273,14 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 
 		log.Logger.Info("Sending systems to WLM API")
 		for _, sys := range sapSystems {
+			err := d.writeToCloudLogging(sys)
+			if err != nil {
+				log.Logger.Warnw("Encountered error writing to cloud logging", "error", err)
+			}
 			// Send System to DW API
 			req := &workloadmanager.WriteInsightRequest{
 				Insight: insightFromSAPSystem(sys),
 			}
-			log.Logger.Infow("Sending write insight request", "request", req)
 
 			d.wlmService.WriteInsight(cp.ProjectId, continent, req)
 		}
@@ -1030,5 +1044,25 @@ func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, pr
 	}
 
 	return res
+}
 
+func (d *Discovery) writeToCloudLogging(sys *spb.SapDiscovery) error {
+	s, err := protojson.Marshal(sys)
+	if err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	json.Indent(&buf, s, "", "  ")
+
+	payload := make(map[string]string)
+	payload["type"] = "SapDiscovery"
+	payload["discovery"] = buf.String()
+
+	d.cloudLogInterface.Log(logging.Entry{
+		Timestamp: time.Now(),
+		Severity:  logging.Info,
+		Payload:   payload,
+	})
+
+	return nil
 }

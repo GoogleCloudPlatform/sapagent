@@ -23,6 +23,7 @@ import (
 	"time"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
@@ -31,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
+	logfake "github.com/GoogleCloudPlatform/sapagent/internal/log/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
@@ -103,9 +105,10 @@ func resourceLess(a, b *spb.SapDiscovery_Resource) bool {
 
 func TestStartSAPSystemDiscovery(t *testing.T) {
 	tests := []struct {
-		name   string
-		config *cpb.Configuration
-		want   bool
+		name    string
+		config  *cpb.Configuration
+		testLog *logfake.TestCloudLogging
+		want    bool
 	}{{
 		name: "succeeds",
 		config: &cpb.Configuration{
@@ -114,6 +117,9 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 			},
 			CloudProperties: defaultCloudProperties,
 		},
+		testLog: &logfake.TestCloudLogging{
+			FlushErr: []error{nil},
+		},
 		want: true,
 	}, {
 		name: "failsDueToConfig",
@@ -121,6 +127,9 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 			CollectionConfiguration: &cpb.CollectionConfiguration{
 				SapSystemDiscovery: false,
 			},
+		},
+		testLog: &logfake.TestCloudLogging{
+			FlushErr: []error{nil},
 		},
 		want: false,
 	}}
@@ -132,7 +141,7 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 				GetInstanceErr:  []error{errors.New("Instance not found")},
 			}
 
-			got := StartSAPSystemDiscovery(context.Background(), test.config, gceService, nil)
+			got := StartSAPSystemDiscovery(context.Background(), test.config, gceService, nil, test.testLog)
 			if got != test.want {
 				t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", test.config, got, test.want)
 			}
@@ -2347,6 +2356,54 @@ func TestDiscoverDBNodes(t *testing.T) {
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverDBNodes() mismatch (-want, +got):\n%s", diff)
 			}
+		})
+	}
+}
+
+func TestWriteToCloudLogging(t *testing.T) {
+	tests := []struct {
+		name         string
+		system       *spb.SapDiscovery
+		logInterface *logfake.TestCloudLogging
+	}{{
+		name:   "writeEmptySystem",
+		system: &spb.SapDiscovery{},
+		logInterface: &logfake.TestCloudLogging{
+			ExpectedLogEntries: []logging.Entry{{
+				Severity: logging.Info,
+				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+			}},
+		},
+	}, {
+		name: "writeFullSystem",
+		system: &spb.SapDiscovery{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "APP",
+				HostProject: "test/project",
+				Resources: []*spb.SapDiscovery_Resource{
+					{ResourceUri: "some/compute/instance", ResourceKind: "ComputeInstance", ResourceType: spb.SapDiscovery_Resource_COMPUTE},
+				},
+			},
+			DatabaseLayer: &spb.SapDiscovery_Component{Sid: "DAT", HostProject: "test/project", Resources: []*spb.SapDiscovery_Resource{
+				{ResourceUri: "some/compute/instance", ResourceKind: "ComputeInstance", ResourceType: spb.SapDiscovery_Resource_COMPUTE},
+			},
+			},
+		},
+		logInterface: &logfake.TestCloudLogging{
+			ExpectedLogEntries: []logging.Entry{{
+				Severity: logging.Info,
+				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+			}},
+		},
+	}}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.logInterface.T = t
+			d := Discovery{
+				cloudLogInterface: test.logInterface,
+			}
+			d.writeToCloudLogging(test.system)
 		})
 	}
 }

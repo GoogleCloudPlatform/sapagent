@@ -283,7 +283,9 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	}
 
 	// Start SAP System Discovery
-	system.StartSAPSystemDiscovery(ctx, d.config, gceService, wlmService)
+	logClient := log.CloudLoggingClient(ctx, d.config.GetCloudProperties().ProjectId)
+	defer logClient.Close()
+	system.StartSAPSystemDiscovery(ctx, d.config, gceService, wlmService, logClient.Logger("google-cloud-sap-agent"))
 
 	// Start HANA Monitoring
 	hanamonitoring.Start(ctx, hanamonitoring.Parameters{
