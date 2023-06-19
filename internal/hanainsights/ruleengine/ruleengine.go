@@ -227,12 +227,12 @@ func compare(lhs, rhs string, op rpb.EvalNode_EvalType, kb knowledgeBase) bool {
 }
 
 // insertFromKB refers to the knowledgebase and inserts the values where functions are used.
-// Possible functions include: size(query_name:column_name)
+// Possible functions include: count(query_name:column_name)
 func insertFromKB(s string, kb knowledgeBase) (string, error) {
-	sizePattern := regexp.MustCompile(`^size\(([^)]+)\)$`)
-	match := sizePattern.FindStringSubmatch(s)
+	countPattern := regexp.MustCompile(`^count\(([^)]+)\)$`)
+	match := countPattern.FindStringSubmatch(s)
 	if len(match) != 2 {
-		// The string does not use size() function, no insertion necessary.
+		// The string does not use count() function, no insertion necessary.
 		return s, nil
 	}
 	k := match[1]

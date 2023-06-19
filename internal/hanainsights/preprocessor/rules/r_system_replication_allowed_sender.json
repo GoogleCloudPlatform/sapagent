@@ -2,7 +2,7 @@
   "id": "r_system_replication_allowed_sender",
   "description": "Check if system replication is configued with allowed_sender if the listen interface is global",
   "labels": [
-    "Security"
+    "security"
   ],
   "queries": [
     {

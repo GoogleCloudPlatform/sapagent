@@ -156,12 +156,12 @@ func TestInsertFromKB(t *testing.T) {
 		},
 		{
 			name: "InsertSuzeFunction",
-			s:    "size(my_query:my_col)",
+			s:    "count(my_query:my_col)",
 			want: "5",
 		},
 		{
 			name:    "ValueNotFound",
-			s:       "size(my_query:your_column)",
+			s:       "count(my_query:your_column)",
 			wantErr: cmpopts.AnyError,
 		},
 	}
@@ -298,11 +298,11 @@ func TestCompare(t *testing.T) {
 	}{
 		{
 			name: "InvalidLHS",
-			lhs:  "size(a)",
+			lhs:  "count(a)",
 		},
 		{
 			name: "InvalidRHS",
-			rhs:  "size(a)",
+			rhs:  "count(a)",
 		},
 		{
 			name: "InvalidOp",

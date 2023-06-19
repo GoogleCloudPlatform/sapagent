@@ -31,7 +31,12 @@ var (
 	rulesDir embed.FS
 
 	// RuleFilenames has list of filenames containing rule definitions.
-	RuleFilenames = []string{"rules/r_sap_hana_internal_support_role.json"}
+	RuleFilenames = []string{
+		"rules/r_sap_hana_internal_support_role.json",
+		"rules/r_dev_privs_in_prod.json",
+		"rules/r_system_replication_allowed_sender.json",
+		"rules/r_vulnerability_cve_2019_0357.json",
+	}
 )
 
 // ReadRules reads the rules, pre-processes them.
