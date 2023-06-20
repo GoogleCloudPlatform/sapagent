@@ -386,3 +386,14 @@ func TestCompare(t *testing.T) {
 		})
 	}
 }
+
+func TestCopy(t *testing.T) {
+	want := make(knowledgeBase)
+	want["sample_query:sample_col"] = []string{"1", "2", "3", "4", "5"}
+	want["sample_quey1:sample_col1"] = []string{"1", "2", "3"}
+
+	got := deepCopy(want)
+	if !cmp.Equal(got, want) {
+		t.Errorf("copy(%v)=%v want: %v", want, got, want)
+	}
+}

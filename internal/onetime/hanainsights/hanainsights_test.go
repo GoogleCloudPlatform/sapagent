@@ -158,6 +158,7 @@ func TestHANAInsightsHandler(t *testing.T) {
 			name:         "runEngine",
 			hanainsights: defaultHANAInsights,
 			fakeNewGCE:   func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			want:         subcommands.ExitFailure,
 		},
 	}
 	for _, test := range tests {

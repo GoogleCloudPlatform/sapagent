@@ -49,6 +49,7 @@ type (
 )
 
 // Run starts the rule engine execution - reads the rules, executes them and generate results.
+// TODO: Increase the unit test coverage for ruleengine.go
 func Run(ctx context.Context, db *sql.DB) (Insights, error) {
 	// Read and pre-process the rules.
 	rules, err := preprocessor.ReadRules(preprocessor.RuleFilenames)
@@ -56,16 +57,26 @@ func Run(ctx context.Context, db *sql.DB) (Insights, error) {
 		return nil, err
 	}
 
+	// gkb is the global knowledge base which has frequently accessed data from other queries.
+	gkb := make(knowledgeBase)
+
 	// Execute the queries to build knowledge base.
 	insights := make(Insights)
 	for _, rule := range rules {
 		log.Logger.Debugw("Building knowledgebase for rule", "rule", rule.Id)
-		rkb := make(knowledgeBase)
 		orderedQueries, err := preprocessor.QueryExecutionOrder(rule.Queries)
 		if err != nil {
 			log.Logger.Warnf("Error ordering queries", "rule", rule.Id, "error", err)
 			continue
 		}
+		if rule.Id == "knowledgebase" {
+			if err := buildKnowledgeBase(ctx, db, orderedQueries, gkb); err != nil {
+				log.Logger.Errorw("Error building global knowledge base", "rule", rule.Id, "error", err)
+				return nil, err
+			}
+			continue
+		}
+		rkb := deepCopy(gkb)
 		rule.Queries = orderedQueries
 		if err := buildKnowledgeBase(ctx, db, rule.Queries, rkb); err != nil {
 			log.Logger.Debugw("Error building knowledge base", "rule", rule.Id, "error", err)
@@ -75,6 +86,14 @@ func Run(ctx context.Context, db *sql.DB) (Insights, error) {
 		log.Logger.Infow("Evaluation completed", "rule", rule.Id)
 	}
 	return insights, nil
+}
+
+func deepCopy(gkb knowledgeBase) knowledgeBase {
+	rkb := make(knowledgeBase)
+	for k, v := range gkb {
+		rkb[k] = append(rkb[k], v...)
+	}
+	return rkb
 }
 
 // buildKnowledgeBase runs all the queries and generates a result knowledge base for each rule.
