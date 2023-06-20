@@ -340,7 +340,8 @@ func TestCollectCPUPerProcess(t *testing.T) {
 				cpuMetricPath:    "/sample/test/proc",
 				memoryMetricPath: "/sample/test/memory",
 			},
-			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
+			// For 64-bit systems, pid_max is 2^22. Set to max int32 to ensure it does not exist.
+			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "2147483647"}},
 			wantCount:   0,
 		},
 		{
