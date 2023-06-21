@@ -1584,3 +1584,56 @@ func TestSetPacemakerHanaOperations(t *testing.T) {
 		})
 	}
 }
+
+func TestPacemakerHanaTopology(t *testing.T) {
+	tests := []struct {
+		name string
+		ops  []Op
+		want map[string]string
+	}{
+		{
+			name: "monitorPrimitiveNotFound",
+			ops: []Op{
+				{
+					Name:    "start",
+					Timeout: "0",
+				},
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "monitorPrimitiveFound",
+			ops: []Op{
+				{
+					Name:    "start",
+					Timeout: "1",
+				},
+				{
+					Name:    "stop",
+					Timeout: "2",
+				},
+				{
+					Name:     "monitor",
+					Timeout:  "600",
+					Interval: "30",
+				},
+			},
+			want: map[string]string{
+				"saphanatopology_monitor_timeout":  "600",
+				"saphanatopology_monitor_interval": "30",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+
+			pacemakerHanaTopology(got, test.ops)
+
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("pacemakerHanaTopology() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

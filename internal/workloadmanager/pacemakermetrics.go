@@ -39,21 +39,23 @@ func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) W
 	t := "workload.googleapis.com/sap/validation/pacemaker"
 	// Prune the configurable labels depending on what is defined in the workload config.
 	pruneLabels := map[string]bool{
-		"pcmk_delay_base":                true,
-		"pcmk_delay_max":                 true,
-		"pcmk_monitor_retries":           true,
-		"pcmk_reboot_timeout":            true,
-		"location_preference_set":        true,
-		"migration_threshold":            true,
-		"resource_stickiness":            true,
-		"saphana_start_timeout":          true,
-		"saphana_stop_timeout":           true,
-		"saphana_promote_timeout":        true,
-		"saphana_demote_timeout":         true,
-		"fence_agent":                    true,
-		"fence_agent_compute_api_access": true,
-		"fence_agent_logging_api_access": true,
-		"maintenance_mode_active":        true,
+		"pcmk_delay_base":                  true,
+		"pcmk_delay_max":                   true,
+		"pcmk_monitor_retries":             true,
+		"pcmk_reboot_timeout":              true,
+		"location_preference_set":          true,
+		"migration_threshold":              true,
+		"resource_stickiness":              true,
+		"saphana_start_timeout":            true,
+		"saphana_stop_timeout":             true,
+		"saphana_promote_timeout":          true,
+		"saphana_demote_timeout":           true,
+		"fence_agent":                      true,
+		"fence_agent_compute_api_access":   true,
+		"fence_agent_logging_api_access":   true,
+		"maintenance_mode_active":          true,
+		"saphanatopology_monitor_interval": true,
+		"saphanatopology_monitor_timeout":  true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -149,6 +151,10 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	setPacemakerAPIAccess(ctx, l, projectID, bearerToken, params.Execute)
 	setPacemakerMaintenanceMode(ctx, l, crmAvailable, params.Execute)
+
+	// This will get any <primitive> with type=SAPHanaTopology, these can be under <clone> or <master>.
+	pacemakerHanaTopology(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHanaTopology"))
+	pacemakerHanaTopology(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHanaTopology"))
 
 	return 1.0, l
 }
@@ -364,6 +370,16 @@ func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, cl
 	}
 
 	return serviceAccountPath
+}
+
+func pacemakerHanaTopology(l map[string]string, sapHanaOperations []Op) {
+	for _, sapHanaOperation := range sapHanaOperations {
+		if sapHanaOperation.Name == "monitor" {
+			l["saphanatopology_monitor_interval"] = sapHanaOperation.Interval
+			l["saphanatopology_monitor_timeout"] = sapHanaOperation.Timeout
+			return
+		}
+	}
 }
 
 func getDefaultBearerToken(ctx context.Context, tokenGetter DefaultTokenGetter) (string, error) {
