@@ -26,6 +26,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -160,6 +161,59 @@ func createProcessMap(result commandlineexecutor.Result, names, dss, pids [][]st
 
 	log.Logger.Debugw("Process statuses", "statuses", processes)
 	return processes, result.ExitCode, nil
+}
+
+// ClientInterface contains API methods and has been created for easy testing of the API
+type ClientInterface interface {
+	GetProcessList() ([]sapcontrolclient.OSProcess, error)
+}
+
+// GetProcessList uses the SapControl web API to build a map describing the statuses
+// of all SAP processes.
+// Parameter is a ClientInterface
+// Example Usage:
+//
+//	scdc := sapcontrolclient.New("02") // returns a Client that implements ClientInterface
+//	scp := &sapcontrol.Properties{&sapb.SAPInstance{}}
+//	processes, err := scp.GetProcessList(scdc)
+//
+// Returns:
+//   - A map[int]*ProcessStatus where key is the process index according to the process position
+//     in the returned process list, and the value is an ProcessStatus struct containing process
+//     status details.
+//   - Error if sapcontrolclient.GetProcessList fails, nil otherwise.
+func (p *Properties) GetProcessList(c ClientInterface) (map[int]*ProcessStatus, error) {
+	processes, err := c.GetProcessList()
+	if err != nil {
+		log.Logger.Debugw("Failed to get SAP Process Status via API call", log.Error(err))
+		return nil, err
+	}
+	log.Logger.Debugw("Sapcontrol GetProcessList", "API response", processes)
+
+	return createProcessMapFromAPIResp(processes)
+}
+
+func createProcessMapFromAPIResp(resp []sapcontrolclient.OSProcess) (map[int]*ProcessStatus, error) {
+	processes := make(map[int]*ProcessStatus)
+	for i, p := range resp {
+		if p.Name == "" || p.Dispstatus == "" || p.Pid == 0 {
+			continue
+		}
+		// Sample p.Dispstatus := "SAPControl-GREEN". We want to extract only the status "GREEN".
+		splitDs := strings.Split(p.Dispstatus, "-")
+		if len(splitDs) != 2 {
+			continue
+		}
+		processes[i] = &ProcessStatus{
+			Name:          p.Name,
+			DisplayStatus: splitDs[1],
+			PID:           fmt.Sprintf("%d", p.Pid),
+			IsGreen:       strings.ToUpper(splitDs[1]) == "GREEN",
+		}
+	}
+
+	log.Logger.Debugw("Process statuses", "statuses", processes)
+	return processes, nil
 }
 
 // ParseABAPGetWPTable runs and parses the output of sapcontrol function ABAPGetWPTable.

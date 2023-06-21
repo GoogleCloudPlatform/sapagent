@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 )
 
 var (
@@ -231,6 +232,142 @@ func TestProcessList(t *testing.T) {
 			diff := cmp.Diff(test.wantProcStatus, gotProcStatus, cmp.AllowUnexported(ProcessStatus{}))
 			if diff != "" {
 				t.Errorf("ProcessList(), diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+type fakeSAPClient struct {
+	processes []sapcontrolclient.OSProcess
+	err       error
+}
+
+func newFakeSAPClient(processes []sapcontrolclient.OSProcess, err error) fakeSAPClient {
+	return fakeSAPClient{
+		processes: processes,
+		err:       err,
+	}
+}
+
+func (c fakeSAPClient) GetProcessList() ([]sapcontrolclient.OSProcess, error) {
+	return c.processes, c.err
+}
+
+func TestCreateProcessMapFromAPIResp(t *testing.T) {
+	tests := []struct {
+		name           string
+		respProcesses  []sapcontrolclient.OSProcess
+		wantProcStatus map[int]*ProcessStatus
+		wantErr        error
+	}{
+		{
+			name: "SucceedsAllProcesses",
+			respProcesses: []sapcontrolclient.OSProcess{
+				{"hdbdaemon", "SAPControl-GREEN", 9609},
+				{"hdbcompileserver", "SAPControl-GREEN", 9972},
+				{"hdbindexserver", "SAPControl-GREEN", 10013},
+				{"hdbnameserver", "SAPControl-GREEN", 9642},
+				{"hdbpreprocessor", "SAPControl-GREEN", 9975},
+			},
+			wantProcStatus: map[int]*ProcessStatus{
+				0: &ProcessStatus{Name: "hdbdaemon", DisplayStatus: "GREEN", IsGreen: true, PID: "9609"},
+				1: &ProcessStatus{Name: "hdbcompileserver", DisplayStatus: "GREEN", IsGreen: true, PID: "9972"},
+				2: &ProcessStatus{Name: "hdbindexserver", DisplayStatus: "GREEN", IsGreen: true, PID: "10013"},
+				3: &ProcessStatus{Name: "hdbnameserver", DisplayStatus: "GREEN", IsGreen: true, PID: "9642"},
+				4: &ProcessStatus{Name: "hdbpreprocessor", DisplayStatus: "GREEN", IsGreen: true, PID: "9975"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NoNameForProcess",
+			respProcesses: []sapcontrolclient.OSProcess{
+				{"", "SAPControl-GREEN", 9609},
+				{"hdbcompileserver", "SAPControl-GREEN", 9972},
+			},
+			wantProcStatus: map[int]*ProcessStatus{
+				1: &ProcessStatus{Name: "hdbcompileserver", DisplayStatus: "GREEN", IsGreen: true, PID: "9972"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NoPIDForProcess",
+			respProcesses: []sapcontrolclient.OSProcess{
+				{"hdbdaemon", "SAPControl-GREEN", 9609},
+				{"hdbcompileserver", "SAPControl-GREEN", 0},
+			},
+			wantProcStatus: map[int]*ProcessStatus{
+				0: &ProcessStatus{Name: "hdbdaemon", DisplayStatus: "GREEN", IsGreen: true, PID: "9609"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NoDispstatus",
+			respProcesses: []sapcontrolclient.OSProcess{
+				{"hdbdaemon", "SAPControl-GREEN", 9609},
+				{"hdbcompileserver", "", 9972},
+			},
+			wantProcStatus: map[int]*ProcessStatus{
+				0: &ProcessStatus{Name: "hdbdaemon", DisplayStatus: "GREEN", IsGreen: true, PID: "9609"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "WrongFormatDispstatus",
+			respProcesses: []sapcontrolclient.OSProcess{
+				{"hdbdaemon", "SAP-Control-GREEN", 9609},
+				{"hdbcompileserver", "SAPControl-GREEN", 9972},
+			},
+			wantProcStatus: map[int]*ProcessStatus{
+				1: &ProcessStatus{Name: "hdbcompileserver", DisplayStatus: "GREEN", IsGreen: true, PID: "9972"},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotProcStatus, gotErr := createProcessMapFromAPIResp(test.respProcesses)
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("createProcessMapFromAPIResp(%v), gotErr: %v wantErr: %v.", test.respProcesses, gotErr, test.wantErr)
+			}
+
+			if diff := cmp.Diff(test.wantProcStatus, gotProcStatus); diff != "" {
+				t.Errorf("createProcessMapFromAPIResp(%v) returned unexpected diff (-want +got):\n%v \ngot : %v", test.respProcesses, diff, gotProcStatus)
+			}
+		})
+	}
+}
+
+func TestGetProcessList(t *testing.T) {
+	tests := []struct {
+		name           string
+		fakeSAPClient  ClientInterface
+		wantProcStatus map[int]*ProcessStatus
+		wantErr        error
+	}{
+		{
+			name:           "FakeCall",
+			fakeSAPClient:  newFakeSAPClient([]sapcontrolclient.OSProcess{}, nil),
+			wantProcStatus: map[int]*ProcessStatus{},
+			wantErr:        nil,
+		},
+		{
+			name:           "Error",
+			fakeSAPClient:  newFakeSAPClient(nil, cmpopts.AnyError),
+			wantProcStatus: nil,
+			wantErr:        cmpopts.AnyError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := Properties{}
+			gotProcStatus, gotErr := p.GetProcessList(test.fakeSAPClient)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("GetProcessList(%v), gotErr: %v wantErr: %v.", test.fakeSAPClient, gotErr, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantProcStatus, gotProcStatus); diff != "" {
+				t.Errorf("Properties.GetProcessList(%v) returned unexpected diff (-want +got):\n%v \ngot : %v", test.fakeSAPClient, diff, gotProcStatus)
 			}
 		})
 	}
