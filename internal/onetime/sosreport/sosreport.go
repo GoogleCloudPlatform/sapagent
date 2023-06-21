@@ -218,7 +218,7 @@ func (s *SOSReport) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, s.Name())
+	onetime.SetupOneTimeLogging(lp, s.Name())
 	return s.sosReportHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})
 }
 

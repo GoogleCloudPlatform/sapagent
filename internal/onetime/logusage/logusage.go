@@ -26,6 +26,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -81,7 +82,7 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, l.Name())
+	onetime.SetupOneTimeLogging(lp, l.Name())
 	return l.logUsageHandler(cloudProps)
 }
 

@@ -25,35 +25,36 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 )
 
-// MaintenanceMode  has args for maintenance subcommands.
-type MaintenanceMode struct {
+// Mode has args for maintenance subcommands.
+type Mode struct {
 	sid          string
 	enable, show bool
 }
 
 // Name implements the subcommand interface for maintenance.
-func (*MaintenanceMode) Name() string { return "maintenance" }
+func (*Mode) Name() string { return "maintenance" }
 
 // Synopsis implements the subcommand interface for maintenance.
-func (*MaintenanceMode) Synopsis() string { return "configure maintenance mode" }
+func (*Mode) Synopsis() string { return "configure maintenance mode" }
 
 // Usage implements the subcommand interface for maintenance.
-func (*MaintenanceMode) Usage() string {
+func (*Mode) Usage() string {
 	return "maintenance [-enable=true|false -sid=<SAP System Identifier>] [show]\n"
 }
 
 // SetFlags implements the subcommand interface for maintenance.
-func (m *MaintenanceMode) SetFlags(fs *flag.FlagSet) {
+func (m *Mode) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&m.sid, "sid", "", "SAP System Identifier")
 	fs.BoolVar(&m.enable, "enable", false, "Enable maintenance mode for SID")
 	fs.BoolVar(&m.show, "show", false, "Show maintenance mode status")
 }
 
 // Execute implements the subcommand interface for maintenance.
-func (m *MaintenanceMode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+func (m *Mode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 2 {
 		log.Logger.Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -63,11 +64,11 @@ func (m *MaintenanceMode) Execute(ctx context.Context, f *flag.FlagSet, args ...
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, m.Name())
+	onetime.SetupOneTimeLogging(lp, m.Name())
 	return m.maintenanceModeHandler(f, maintenance.ModeReader{}, maintenance.ModeWriter{})
 }
 
-func (m *MaintenanceMode) maintenanceModeHandler(fs *flag.FlagSet, fr maintenance.FileReader, fw maintenance.FileWriter) subcommands.ExitStatus {
+func (m *Mode) maintenanceModeHandler(fs *flag.FlagSet, fr maintenance.FileReader, fw maintenance.FileWriter) subcommands.ExitStatus {
 	if m.show {
 		res, err := maintenance.ReadMaintenanceMode(fr)
 		if err != nil {

@@ -71,18 +71,6 @@ var level string
 var logfile string
 var cloudCore *CloudCore
 
-const (
-	// LinuxDaemonLogPath is the log path for daemon mode features on linux.
-	LinuxDaemonLogPath = `/var/log/google-cloud-sap-agent.log`
-	// WindowsDaemonLogPath is the log path for daemon mode features on windows.
-	WindowsDaemonLogPath = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent.log`
-
-	// LinuxOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
-	LinuxOneTimeLogPrefix = `/var/log/google-cloud-sap-agent-`
-	// WindowsOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
-	WindowsOneTimeLogPrefix = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-`
-)
-
 type (
 	// Parameters for setting up logging
 	Parameters struct {
@@ -103,29 +91,6 @@ func init() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 	Logger = logger.Sugar()
-}
-
-// SetupDaemonLogging creates logging config for the agent's daemon mode.
-func SetupDaemonLogging(params Parameters) Parameters {
-	params.LogFileName = LinuxDaemonLogPath
-	if params.OSType == "windows" {
-		params.LogFileName = WindowsDaemonLogPath
-	}
-	params.CloudLogName = "google-cloud-sap-agent"
-	SetupLogging(params)
-	return params
-}
-
-// SetupOneTimeLogging creates logging config for the agent's one time execution.
-func SetupOneTimeLogging(params Parameters, subcommandName string) Parameters {
-	prefix := LinuxOneTimeLogPrefix
-	if params.OSType == "windows" {
-		prefix = WindowsOneTimeLogPrefix
-	}
-	params.LogFileName = prefix + subcommandName + ".log"
-	params.CloudLogName = "google-cloud-sap-agent-" + subcommandName
-	SetupLogging(params)
-	return params
 }
 
 // SetupLogging uses the agent configuration to set up the file Logger.

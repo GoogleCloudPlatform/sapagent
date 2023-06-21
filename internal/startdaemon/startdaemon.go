@@ -126,7 +126,13 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		return subcommands.ExitUsageError
 	}
 	// Setup demon logging with default config, till we read it from the config file.
-	log.SetupDaemonLogging(d.lp)
+	d.lp.CloudLogName = `google-cloud-sap-agent`
+	d.lp.LogFileName = `/var/log/google-cloud-sap-agent.log`
+	if d.lp.OSType == "windows" {
+		d.lp.LogFileName = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent.log`
+	}
+	log.SetupLogging(d.lp)
+
 	return d.startdaemonHandler(ctx)
 }
 
@@ -146,7 +152,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 	if d.lp.CloudLoggingClient != nil {
 		defer d.lp.CloudLoggingClient.Close()
 	}
-	log.SetupDaemonLogging(d.lp)
+	log.SetupLogging(d.lp)
 
 	log.Logger.Infow("Agent version currently running", "version", configuration.AgentVersion)
 

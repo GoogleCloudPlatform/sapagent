@@ -76,7 +76,7 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, h.Name())
+	onetime.SetupOneTimeLogging(lp, h.Name())
 
 	return h.hanaInsightsHandler(ctx, gce.NewGCEClient)
 }

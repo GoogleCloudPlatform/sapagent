@@ -27,6 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/function"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 )
@@ -84,7 +85,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, b.Name())
+	onetime.SetupOneTimeLogging(lp, b.Name())
 
 	return b.backintHandler(ctx)
 }

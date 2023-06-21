@@ -72,7 +72,7 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, m.Name())
+	onetime.SetupOneTimeLogging(lp, m.Name())
 	return m.migrationHandler(f, os.ReadFile, os.WriteFile)
 }
 

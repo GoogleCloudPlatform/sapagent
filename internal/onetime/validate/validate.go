@@ -62,7 +62,7 @@ func (v *Validate) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, v.Name())
+	onetime.SetupOneTimeLogging(lp, v.Name())
 	return v.validateHandler()
 }
 

@@ -51,7 +51,7 @@ func (mfw mockedFileWriter) MakeDirs(string, os.FileMode) error {
 }
 
 func TestSynopsis(t *testing.T) {
-	mm := MaintenanceMode{}
+	mm := Mode{}
 	want := "configure maintenance mode"
 
 	got := mm.Synopsis()
@@ -63,25 +63,25 @@ func TestSynopsis(t *testing.T) {
 func TestSetFlags(t *testing.T) {
 	tests := []struct {
 		name    string
-		mm      MaintenanceMode
+		mm      Mode
 		pattern string
 		fs      *flag.FlagSet
 	}{
 		{
 			name:    "HasSidFlag",
-			mm:      MaintenanceMode{},
+			mm:      Mode{},
 			pattern: "sid",
 			fs:      flag.NewFlagSet("sid", flag.ExitOnError),
 		},
 		{
 			name:    "HasEnableFlag",
-			mm:      MaintenanceMode{},
+			mm:      Mode{},
 			pattern: "enable",
 			fs:      flag.NewFlagSet("enable", flag.ExitOnError),
 		},
 		{
 			name:    "HasShowFlag",
-			mm:      MaintenanceMode{},
+			mm:      Mode{},
 			pattern: "show",
 			fs:      flag.NewFlagSet("show", flag.ExitOnError),
 		},
@@ -101,7 +101,7 @@ func TestSetFlags(t *testing.T) {
 func TestExecuteMaintenance(t *testing.T) {
 	tests := []struct {
 		name string
-		mm   MaintenanceMode
+		mm   Mode
 		want subcommands.ExitStatus
 		args []any
 	}{
@@ -120,7 +120,7 @@ func TestExecuteMaintenance(t *testing.T) {
 		},
 		{
 			name: "SuccessfullyParseArgs",
-			mm:   MaintenanceMode{show: true},
+			mm:   Mode{show: true},
 			want: subcommands.ExitSuccess,
 			args: []any{
 				"test",
@@ -138,10 +138,10 @@ func TestExecuteMaintenance(t *testing.T) {
 	}
 }
 
-func TestMaintenanceModeHandler(t *testing.T) {
+func TestModeHandler(t *testing.T) {
 	tests := []struct {
 		name string
-		mm   MaintenanceMode
+		mm   Mode
 		fs   *flag.FlagSet
 		mfr  mockedFileReader
 		mfw  mockedFileWriter
@@ -149,40 +149,40 @@ func TestMaintenanceModeHandler(t *testing.T) {
 	}{
 		{
 			name: "ShowFileReadFailure",
-			mm:   MaintenanceMode{show: true},
+			mm:   Mode{show: true},
 			mfr:  mockedFileReader{err: os.ErrPermission},
 			want: subcommands.ExitFailure,
 		},
 		{
 			name: "ShowWithNoSIDInMaintenance",
-			mm:   MaintenanceMode{show: true},
+			mm:   Mode{show: true},
 			want: subcommands.ExitSuccess,
 		},
 		{
 			name: "ShowWithSIDInMaintenance",
-			mm:   MaintenanceMode{show: true},
+			mm:   Mode{show: true},
 			mfr:  mockedFileReader{data: []byte(`{"sids":["deh"]}`)},
 			want: subcommands.ExitSuccess,
 		},
 		{
 			name: "EnableFalseEmptySID",
-			mm:   MaintenanceMode{enable: false},
+			mm:   Mode{enable: false},
 			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "EnableTrueEmptySID",
-			mm:   MaintenanceMode{enable: true},
+			mm:   Mode{enable: true},
 			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "UpdateMMFailure",
-			mm:   MaintenanceMode{enable: true, sid: "deh"},
+			mm:   Mode{enable: true, sid: "deh"},
 			mfw:  mockedFileWriter{errMakeDirs: cmpopts.AnyError},
 			want: subcommands.ExitFailure,
 		},
 		{
 			name: "UpdateMMSuccess",
-			mm:   MaintenanceMode{enable: true, sid: "deh"},
+			mm:   Mode{enable: true, sid: "deh"},
 			want: subcommands.ExitSuccess,
 		},
 	}

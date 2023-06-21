@@ -131,7 +131,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
-	log.SetupOneTimeLogging(lp, s.Name())
+	onetime.SetupOneTimeLogging(lp, s.Name())
 
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {

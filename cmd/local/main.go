@@ -45,7 +45,7 @@ func registerSubCommands() {
 	for _, command := range [...]subcommands.Command{
 		&startdaemon.Daemon{},
 		&logusage.LogUsage{},
-		&maintenance.MaintenanceMode{},
+		&maintenance.Mode{},
 		&remotevalidation.RemoteValidation{},
 		&snapshot.Snapshot{},
 		&migratehanamonitoring.MigrateHANAMonitoring{},
