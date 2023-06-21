@@ -28,6 +28,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -122,7 +123,13 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		return subcommands.ExitFailure
 	}
 
-	insights, err := ruleengine.Run(ctx, h.db)
+	rules, err := preprocessor.ReadRules(preprocessor.RuleFilenames)
+	if err != nil {
+		log.Logger.Errorw("Failure to read HANA rules", "error", err)
+		return subcommands.ExitFailure
+	}
+
+	insights, err := ruleengine.Run(ctx, h.db, rules)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failure in rule engine", err)
 		return subcommands.ExitFailure

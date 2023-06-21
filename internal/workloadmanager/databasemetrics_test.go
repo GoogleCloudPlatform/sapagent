@@ -24,8 +24,10 @@ import (
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
@@ -42,10 +44,10 @@ func TestProcessInsights(t *testing.T) {
 	insights["rule_id"] = []ruleengine.ValidationResult{
 		ruleengine.ValidationResult{
 			RecommendationID: "recommendation_1",
-			Result:           true,
 		},
 		ruleengine.ValidationResult{
 			RecommendationID: "recommendation_2",
+			Result:           true,
 		},
 	}
 
@@ -81,5 +83,43 @@ func TestProcessInsights(t *testing.T) {
 	got := processInsights(context.Background(), params, insights)
 	if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 		t.Errorf("processInsights() failure diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestCollectDBMetricsOnce(t *testing.T) {
+	tests := []struct {
+		name   string
+		params Parameters
+		want   error
+	}{
+		{
+			name:   "HANAMetricsConfigNotSet",
+			params: Parameters{},
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:   "NoHANAInsightsRules",
+			params: Parameters{HANAInsightRules: []*rpb.Rule{}},
+			want:   cmpopts.AnyError,
+		},
+		{
+			name: "HANAMetricsConfigSet",
+			params: Parameters{
+				Config: defaultConfigurationDBMetrics,
+				HANAInsightRules: []*rpb.Rule{
+					&rpb.Rule{},
+				},
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := collectDBMetricsOnce(context.Background(), test.params)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("collectDBMetricsOnce(%v)=%v, want: %v", test.params, got, test.want)
+			}
+		})
 	}
 }

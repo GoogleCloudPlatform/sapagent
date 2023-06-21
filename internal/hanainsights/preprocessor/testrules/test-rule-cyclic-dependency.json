@@ -1,0 +1,16 @@
+{
+  "id": "test-rule-cyclic-dependency",
+  "labels": ["test"],
+  "queries": [
+    {
+      "name": "sampleQuery1",
+      "sql": "sample_sql",
+      "dependentonquries": ["sampleQuery2"]
+    },
+    {
+      "name": "sampleQuery2",
+      "sql": "sample_sql",
+      "dependentonquries": ["sampleQuery1"]
+    }
+  ]
+}

@@ -26,13 +26,17 @@ import (
 )
 
 // collectDBMetricsOnce  returns the result of metric collection using the HANA Insights module.
-func collectDBMetricsOnce(ctx context.Context, params Parameters) {
+func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	if params.Config.GetCollectionConfiguration().GetHanaMetricsConfig() == nil {
 		log.Logger.Debug("Cannot collect database metrics without DB credentials.")
-		return
+		return fmt.Errorf("Cannot collect database metrics without DB credentials")
 	}
 
 	// TODO: Implement remote mode for database metrics
+	if len(params.HANAInsightRules) == 0 {
+		log.Logger.Debug("HANA Insights rules not found")
+		return fmt.Errorf("HANA Insights rules not found")
+	}
 
 	log.Logger.Info("Collecting Workload Manager Database metrics...")
 	dpb := databaseconnector.Params{
@@ -47,15 +51,17 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) {
 	db, err := databaseconnector.Connect(ctx, dpb)
 	if err != nil {
 		log.Logger.Error(err)
-		return
+		return err
 	}
-	insights, err := ruleengine.Run(ctx, db)
+
+	insights, err := ruleengine.Run(ctx, db, params.HANAInsightRules)
 	if err != nil {
 		log.Logger.Error(err)
-		return
+		return err
 	}
 	metrics := processInsights(ctx, params, insights)
 	sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
+	return nil
 }
 
 func processInsights(ctx context.Context, params Parameters, insights ruleengine.Insights) WorkloadMetrics {
@@ -65,7 +71,7 @@ func processInsights(ctx context.Context, params Parameters, insights ruleengine
 	for ruleID, evalResults := range insights {
 		for _, evalResult := range evalResults {
 			// Create label - ruleID-recommendationID : TRUE|FALSE
-			labels[ruleID+"_"+evalResult.RecommendationID] = fmt.Sprintf("%t", !evalResult.Result)
+			labels[ruleID+"_"+evalResult.RecommendationID] = fmt.Sprintf("%t", evalResult.Result)
 		}
 	}
 	return WorkloadMetrics{Metrics: createTimeSeries(mPath, labels, 1.0, params.Config)}

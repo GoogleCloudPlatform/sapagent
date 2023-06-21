@@ -36,6 +36,7 @@ import (
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -43,6 +44,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
@@ -112,6 +114,7 @@ type Parameters struct {
 	OSReleaseFilePath     string
 	netweaverPresent      float64
 	GCEService            gceInterface
+	HANAInsightRules      []*rpb.Rule
 	// fields derived from parsing the file specified by OSReleaseFilePath
 	osVendorID string
 	osVersion  string
@@ -178,7 +181,7 @@ func start(ctx context.Context, params Parameters) {
 
 	dbmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsFrequency()) * time.Second
 	if dbmf <= 0 {
-				// default it to 1 hour
+		// default it to 1 hour
 		dbmf = time.Duration(3600) * time.Second
 	}
 	databaseMetricTicker := time.NewTicker(dbmf)
@@ -454,5 +457,13 @@ func (p *Parameters) DiscoverNetWeaver(ctx context.Context) {
 			p.netweaverPresent = 1
 			break
 		}
+	}
+}
+
+// ReadHANAInsightsRules reads the HANA Insights rules.
+func (p *Parameters) ReadHANAInsightsRules() {
+	var err error
+	if p.HANAInsightRules, err = preprocessor.ReadRules(preprocessor.RuleFilenames); err != nil {
+		log.Logger.Errorw("Error Reading HANA Insights rules", "error", err)
 	}
 }

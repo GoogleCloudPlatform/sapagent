@@ -25,7 +25,6 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
@@ -48,44 +47,38 @@ type (
 	Insights map[string][]ValidationResult
 )
 
-// Run starts the rule engine execution - reads the rules, executes them and generate results.
-// TODO: Increase the unit test coverage for ruleengine.go
-func Run(ctx context.Context, db *sql.DB) (Insights, error) {
-	// Read and pre-process the rules.
-	rules, err := preprocessor.ReadRules(preprocessor.RuleFilenames)
-	if err != nil {
-		return nil, err
-	}
-
-	// gkb is the global knowledge base which has frequently accessed data from other queries.
-	gkb := make(knowledgeBase)
+// Run starts the rule engine execution - executes the rules and generate insights.
+func Run(ctx context.Context, db *sql.DB, rules []*rpb.Rule) (Insights, error) {
+	// gkb is the global knowledge base with frequently accessed data.
+	gkb := buildGlobalKnowledgeBase(ctx, db, rules)
 
 	// Execute the queries to build knowledge base.
 	insights := make(Insights)
 	for _, rule := range rules {
 		log.Logger.Debugw("Building knowledgebase for rule", "rule", rule.Id)
-		orderedQueries, err := preprocessor.QueryExecutionOrder(rule.Queries)
-		if err != nil {
-			log.Logger.Warnf("Error ordering queries", "rule", rule.Id, "error", err)
-			continue
-		}
-		if rule.Id == "knowledgebase" {
-			if err := buildKnowledgeBase(ctx, db, orderedQueries, gkb); err != nil {
-				log.Logger.Errorw("Error building global knowledge base", "rule", rule.Id, "error", err)
-				return nil, err
-			}
-			continue
-		}
 		rkb := deepCopy(gkb)
-		rule.Queries = orderedQueries
 		if err := buildKnowledgeBase(ctx, db, rule.Queries, rkb); err != nil {
 			log.Logger.Debugw("Error building knowledge base", "rule", rule.Id, "error", err)
 			continue
 		}
 		buildInsights(rule, rkb, insights)
-		log.Logger.Infow("Evaluation completed", "rule", rule.Id)
+		log.Logger.Debugw("Evaluation completed", "rule", rule.Id)
 	}
+	log.Logger.Infow("HANA Insights", "insights", insights)
 	return insights, nil
+}
+
+func buildGlobalKnowledgeBase(ctx context.Context, db *sql.DB, rules []*rpb.Rule) knowledgeBase {
+	gkb := make(knowledgeBase)
+	for _, rule := range rules {
+		if rule.Id == "knowledgebase" {
+			if err := buildKnowledgeBase(ctx, db, rule.Queries, gkb); err != nil {
+				log.Logger.Errorw("Error building global knowledge base", "rule", rule.Id, "error", err)
+			}
+			break
+		}
+	}
+	return gkb
 }
 
 func deepCopy(gkb knowledgeBase) knowledgeBase {

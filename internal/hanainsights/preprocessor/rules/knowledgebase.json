@@ -17,8 +17,8 @@
     },
     {
       "name": "q_largest_schema",
-      "sql": "SELECT SCHEMA_NAME as schema, SUM(DISK_SIZE) / 1024 / 1024 / 1024 AS size FROM M_TABLE_PERSISTENCE_STATISTICS GROUP  BY SCHEMA_NAME ORDER BY SIZE DESC LIMIT 1",
-      "columns": ["schema", "size"]
+      "sql": "SELECT SCHEMA_NAME as schema, CAST(SUM(DISK_SIZE) / 1024 / 1024 / 1024 as varchar) as size, SUM(DISK_SIZE) / 1024 / 1024 / 1024 as cmpsize FROM M_TABLE_PERSISTENCE_STATISTICS GROUP BY SCHEMA_NAME ORDER BY CMPSIZE DESC LIMIT 1",
+      "columns": ["schema", "size", "cmpsize"]
     },
     {
       "name": "q_system_usage",

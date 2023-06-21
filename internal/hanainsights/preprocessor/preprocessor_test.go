@@ -49,6 +49,11 @@ func TestReadRules(t *testing.T) {
 			},
 		},
 		{
+			name:    "RuleWithCyclicDependency",
+			files:   []string{"testrules/test-rule-cyclic-dependency.json"},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name:  "SingleRuleSuccess",
 			files: []string{"rules/r_sap_hana_internal_support_role.json"},
 			want: []*rpb.Rule{
@@ -191,10 +196,10 @@ func TestQueryExecutionOrder(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, gotErr := QueryExecutionOrder(tc.queries)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("SortTopologically(%v)=%v want: %v", tc.queries, gotErr, tc.wantErr)
+				t.Errorf("QueryExecutionOrder(%v)=%v want: %v", tc.queries, gotErr, tc.wantErr)
 			}
 			if !cmp.Equal(got, tc.want, protocmp.Transform()) {
-				t.Errorf("SortTopologically(%v)=%v want: %v", tc.queries, got, tc.want)
+				t.Errorf("QueryExecutionOrder(%v)=%v want: %v", tc.queries, got, tc.want)
 			}
 		})
 	}

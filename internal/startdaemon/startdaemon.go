@@ -394,6 +394,7 @@ func startWorkloadManagerMetricsCollection(ctx context.Context, wlmparams worklo
 		wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
 		wlmparams.SetOSReleaseInfo()
 		wlmparams.DiscoverNetWeaver(ctx)
+		wlmparams.ReadHANAInsightsRules()
 		workloadmanager.StartMetricsCollection(ctx, wlmparams)
 	}
 }

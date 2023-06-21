@@ -42,7 +42,12 @@ var (
 	}
 )
 
-// ReadRules reads the rules, pre-processes them.
+// ReadRules returns preprocessed rules ready for execution by rule engine.
+// Pre-processing includes:
+//   - Read json and marshall it to protos.
+//   - Validate the rule syntax.
+//   - Order the rules starting global rules(knowledgebase.json) first.
+//   - Within each rule, queries are ordered for a successful execution.
 func ReadRules(files []string) ([]*rpb.Rule, error) {
 	var rules []*rpb.Rule
 
@@ -63,21 +68,24 @@ func ReadRules(files []string) ([]*rpb.Rule, error) {
 			log.Logger.Warnf("Skipping rule: ", "id", rule.GetId(), "err", err.Error())
 			continue
 		}
+
+		if rule.Queries, err = QueryExecutionOrder(rule.Queries); err != nil {
+			log.Logger.Errorf("Error ordering queries", "rule", rule.Id, "error", err)
+			continue
+		}
 		rules = append(rules, rule)
 	}
-
-	log.Logger.Debugw("All rules to be executed by the engine", "rules", rules)
+	log.Logger.Debugw("Pre-processed rules", "rules", rules)
 	return rules, nil
 }
 
 // validateRule checks if a rule is valid or not.
 func validateRule(rule *rpb.Rule, ruleIds map[string]bool) error {
 	if _, ok := ruleIds[rule.GetId()]; ok {
-		return fmt.Errorf("rule with ruleID %s already exists", rule.GetId())
+		return fmt.Errorf("rule with ruleID %s already exists - ruleID must be unique", rule.GetId())
 	}
 	ruleIds[rule.GetId()] = true
-	err := validateQueries(rule.GetQueries())
-	return err
+	return validateQueries(rule.GetQueries())
 }
 
 // validateQueries checks if each query in a rule is valid.
