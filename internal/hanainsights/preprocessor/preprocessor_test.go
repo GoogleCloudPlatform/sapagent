@@ -39,8 +39,14 @@ func TestReadRules(t *testing.T) {
 		},
 		{
 			name:    "InvalidFileContent",
-			files:   []string{"rules/test/test-rule-invalid.json"},
+			files:   []string{"testrules/test-rule-invalid.json"},
 			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "InvalidQueryInARule",
+			files: []string{
+				"testrules/test-invalid-query-rule.json",
+			},
 		},
 		{
 			name:  "SingleRuleSuccess",
@@ -94,7 +100,7 @@ func TestReadRules(t *testing.T) {
 
 }
 
-func TestSortTopologically(t *testing.T) {
+func TestQueryExecutionOrder(t *testing.T) {
 	tests := []struct {
 		name    string
 		queries []*rpb.Query
@@ -189,6 +195,120 @@ func TestSortTopologically(t *testing.T) {
 			}
 			if !cmp.Equal(got, tc.want, protocmp.Transform()) {
 				t.Errorf("SortTopologically(%v)=%v want: %v", tc.queries, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateRule(t *testing.T) {
+	tests := []struct {
+		name    string
+		ruleIds map[string]bool
+		rule    *rpb.Rule
+		wantErr error
+	}{
+		{
+			name:    "DuplicateRuleId",
+			ruleIds: map[string]bool{"r_sap_hana_internal_support_role": true},
+			rule:    &rpb.Rule{Id: "r_sap_hana_internal_support_role"},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "QueryWithNoName",
+			ruleIds: map[string]bool{},
+			rule: &rpb.Rule{
+				Id: "r_sap_hana_internal_support_role", Queries: []*rpb.Query{
+					&rpb.Query{
+						Name:    "",
+						Sql:     "sample_sql",
+						Columns: []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "QueryWithEmptySQL",
+			ruleIds: map[string]bool{},
+			rule: &rpb.Rule{
+				Id: "r_sap_hana_internal_support_role", Queries: []*rpb.Query{
+					&rpb.Query{
+						Name:    "sampleQuery1",
+						Sql:     "",
+						Columns: []string{"sampleColumn1", "sampleColumn2", "sampleColumn3"},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "QueryWithNoColumns",
+			ruleIds: map[string]bool{},
+			rule: &rpb.Rule{
+				Id: "r_sap_hana_internal_support_role", Queries: []*rpb.Query{
+					&rpb.Query{
+						Name: "sampleQuery1",
+						Sql:  "sample_sql",
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "DuplicateQueryName",
+			ruleIds: map[string]bool{},
+			rule: &rpb.Rule{
+				Id: "r_sap_hana_internal_support_role",
+				Queries: []*rpb.Query{
+					&rpb.Query{
+						Name:    "sampleQuery1",
+						Sql:     "select sampleColumn1 from table",
+						Columns: []string{"sampleColumn1"},
+					},
+					&rpb.Query{
+						Name:    "sampleQuery1",
+						Sql:     "select sampleColumn1 from table",
+						Columns: []string{"sampleColumn1"},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "InvalidColumnQuery",
+			ruleIds: map[string]bool{},
+			rule: &rpb.Rule{
+				Id: "r_sap_hana_internal_support_role", Queries: []*rpb.Query{
+					&rpb.Query{
+						Name:    "sampleQuery1",
+						Sql:     "sample_sql",
+						Columns: []string{"sampleColumn1"},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "ValidQuery",
+			ruleIds: map[string]bool{},
+			rule: &rpb.Rule{
+				Id: "r_sap_hana_internal_support_role", Queries: []*rpb.Query{
+					&rpb.Query{
+						Name:    "sampleQuery1",
+						Sql:     "select sample_column from table",
+						Columns: []string{"sample_column"},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := validateRule(tc.rule, tc.ruleIds)
+			if !cmp.Equal(got, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("validateRule(%v, %v)=%v want: %v", tc.rule, tc.ruleIds, got, tc.wantErr)
 			}
 		})
 	}

@@ -8,7 +8,7 @@
     {
       "name": "q_hana_version",
       "sql": "SELECT VERSION, substr_before (version, '.') as major, trim (LEADING '0' FROM  substring(substr_before(substr_after(substr_after (version, '.'), '.'),'.'), 2, 1)) as sps, trim (LEADING '0' FROM substring(substr_before(substr_after(substr_after (version, '.'), '.'),'.'), 2, 3)) as revision, CASE when substr_before(substr_after(substr_after (substr_after (version, '.'), '.'),'.'),'.') = '00' then '0' else trim (LEADING '0' FROM substr_before(substr_after(substr_after (substr_after (version, '.'), '.'),'.'),'.')) END as patch FROM M_DATABASE",
-      "columns": ["version", "major", "sps", "revision", "build"]
+      "columns": ["version", "major", "sps", "revision", "patch"]
     },
     {
       "name": "q_hana_nodes",
@@ -22,7 +22,7 @@
     },
     {
       "name": "q_system_usage",
-      "sql": "SELECT VALUE as value from M_INIFILE_CONTENTS  WHERE FILE_NAME = 'global.ini' SECTION = 'system_information' AND KEY = 'usage'",
+      "sql": "SELECT VALUE as value from M_INIFILE_CONTENTS  WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_information' AND KEY = 'usage'",
       "columns": ["value"]
     }
   ]

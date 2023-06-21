@@ -1,0 +1,13 @@
+{
+  "id": "test-rule-invalid-query",
+  "labels": [
+    "internal"
+  ],
+  "queries": [
+    {
+      "name": "",
+      "sql": "",
+      "columns": ["version", "major", "sps", "revision", "patch"]
+    }
+  ]
+}

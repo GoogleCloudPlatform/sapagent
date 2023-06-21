@@ -20,6 +20,8 @@ package preprocessor
 import (
 	"embed"
 	"errors"
+	"fmt"
+	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -27,7 +29,7 @@ import (
 )
 
 var (
-	//go:embed rules/*.json
+	//go:embed rules/*.json testrules/*.json
 	rulesDir embed.FS
 
 	// RuleFilenames has list of filenames containing rule definitions.
@@ -44,6 +46,7 @@ var (
 func ReadRules(files []string) ([]*rpb.Rule, error) {
 	var rules []*rpb.Rule
 
+	ruleIds := make(map[string]bool)
 	for _, filename := range files {
 		rule := &rpb.Rule{}
 		c, err := rulesDir.ReadFile(filename)
@@ -55,12 +58,47 @@ func ReadRules(files []string) ([]*rpb.Rule, error) {
 			log.Logger.Infow("Could not unmarshal rule from", "filename", filename)
 			return nil, err
 		}
-		// TODO: Validate required entries in rules.
+		err = validateRule(rule, ruleIds)
+		if err != nil {
+			log.Logger.Warnf("Skipping rule: ", "id", rule.GetId(), "err", err.Error())
+			continue
+		}
 		rules = append(rules, rule)
 	}
 
 	log.Logger.Debugw("All rules to be executed by the engine", "rules", rules)
 	return rules, nil
+}
+
+// validateRule checks if a rule is valid or not.
+func validateRule(rule *rpb.Rule, ruleIds map[string]bool) error {
+	if _, ok := ruleIds[rule.GetId()]; ok {
+		return fmt.Errorf("rule with ruleID %s already exists", rule.GetId())
+	}
+	ruleIds[rule.GetId()] = true
+	err := validateQueries(rule.GetQueries())
+	return err
+}
+
+// validateQueries checks if each query in a rule is valid.
+func validateQueries(queries []*rpb.Query) error {
+	queryName := make(map[string]bool)
+	for _, q := range queries {
+		if q.GetName() == "" || q.GetSql() == "" || len(q.GetColumns()) == 0 {
+			return fmt.Errorf("invalid query Name: %s, SQL %s, columns %v", q.GetName(), q.GetSql(), q.GetColumns())
+		}
+
+		if _, ok := queryName[q.GetName()]; ok {
+			return fmt.Errorf("query with name %s already exists", q.GetName())
+		}
+		queryName[q.GetName()] = true
+		for _, col := range q.GetColumns() {
+			if !strings.Contains(q.GetSql(), col) {
+				return fmt.Errorf("column %s does not exist in the query %s", col, q.GetSql())
+			}
+		}
+	}
+	return nil
 }
 
 // QueryExecutionOrder sorts the interdependent rule queries to produce an ordered list which is used
