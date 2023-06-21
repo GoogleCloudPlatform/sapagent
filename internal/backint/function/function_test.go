@@ -41,8 +41,17 @@ var (
 			},
 			Content: []byte("test content"),
 		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
+				// The backup object name is in the format <userID>/<fileName>/<externalBackupID>.bak
+				Name: "test@TST/object.txt/12345.bak",
+			},
+			Content: []byte("test content"),
+		},
 	})
 	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
+	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST"}
 	fakeFile            = func() *os.File {
 		f, _ := os.Open("fake-file.txt")
 		return f
@@ -94,9 +103,28 @@ func TestExecute(t *testing.T) {
 				OutputFile: t.TempDir() + "/output.txt",
 				Function:   bpb.Function_BACKUP,
 			},
-			input: "#SOFTWAREID \"backint 1.50\"",
-
-			want: true,
+			input: `#SOFTWAREID "backint 1.50"`,
+			want:  true,
+		},
+		{
+			name: "InquireFailed",
+			config: &bpb.BackintConfiguration{
+				InputFile:  t.TempDir() + "/input.txt",
+				OutputFile: t.TempDir() + "/output.txt",
+				Function:   bpb.Function_INQUIRE,
+			},
+			input: "#SOFTWAREID",
+			want:  false,
+		},
+		{
+			name: "InquireSuccess",
+			config: &bpb.BackintConfiguration{
+				InputFile:  t.TempDir() + "/input.txt",
+				OutputFile: t.TempDir() + "/output.txt",
+				Function:   bpb.Function_INQUIRE,
+			},
+			input: `#SOFTWAREID "backint 1.50"`,
+			want:  true,
 		},
 	}
 	for _, test := range tests {
@@ -136,7 +164,7 @@ func TestBackup(t *testing.T) {
 		},
 		{
 			name:  "FormattedSoftwareID",
-			input: bytes.NewBufferString("#SOFTWAREID \"backint 1.50\""),
+			input: bytes.NewBufferString(`#SOFTWAREID "backint 1.50"`),
 			want:  nil,
 		},
 		{
@@ -223,6 +251,114 @@ func TestBackupFile(t *testing.T) {
 	}
 }
 
+func TestInquire(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      io.Reader
+		want       error
+		wantPrefix string
+	}{
+		{
+			name:  "ScannerError",
+			input: fakeFile(),
+			want:  cmpopts.AnyError,
+		},
+		{
+			name:  "MalformedSoftwareID",
+			input: bytes.NewBufferString("#SOFTWAREID"),
+			want:  cmpopts.AnyError,
+		},
+		{
+			name:       "FormattedSoftwareID",
+			input:      bytes.NewBufferString(`#SOFTWAREID "backint 1.50"`),
+			wantPrefix: "#SOFTWAREID",
+			want:       nil,
+		},
+		{
+			name:       "AllObjectsWithPrefix",
+			input:      bytes.NewBufferString(`#NULL "/object.txt"`),
+			wantPrefix: "#BACKUP",
+			want:       nil,
+		},
+		{
+			name:  "MalformedExternalBackupID",
+			input: bytes.NewBufferString("#EBID"),
+			want:  cmpopts.AnyError,
+		},
+		{
+			name:       "FormattedExternalBackupID",
+			input:      bytes.NewBufferString(`#EBID "12345" "/object.txt"`),
+			wantPrefix: "#BACKUP",
+			want:       nil,
+		},
+		{
+			name:  "EmptyInput",
+			input: bytes.NewBufferString(""),
+			want:  nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			output := bytes.NewBufferString("")
+			got := inquire(context.Background(), defaultConfig, defaultBucketHandle, test.input, output)
+			if !strings.HasPrefix(output.String(), test.wantPrefix) {
+				t.Errorf("inquire() = %s, wantPrefix: %s", output.String(), test.wantPrefix)
+			}
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("inquire() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestInquireFiles(t *testing.T) {
+	tests := []struct {
+		name             string
+		bucket           *storage.BucketHandle
+		prefix           string
+		fileName         string
+		externalBackupID string
+		wantPrefix       string
+	}{
+		{
+			name:       "NoBucketNoParameters",
+			wantPrefix: "#ERROR",
+		},
+		{
+			name:             "NoBucketWithParameters",
+			fileName:         "/test.txt",
+			externalBackupID: "12345",
+			wantPrefix:       "#ERROR",
+		},
+		{
+			name:       "NoObjectsFound",
+			bucket:     defaultBucketHandle,
+			prefix:     "fake-object.txt",
+			wantPrefix: "#NOTFOUND",
+		},
+		{
+			name:       "ObjectFoundBadObjectName",
+			bucket:     defaultBucketHandle,
+			prefix:     "object.txt",
+			wantPrefix: "#ERROR",
+		},
+		{
+			name:       "ObjectFoundNoError",
+			bucket:     defaultBucketHandle,
+			prefix:     "test@TST/object.txt/12345.bak",
+			wantPrefix: "#BACKUP",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID)
+			if !strings.HasPrefix(string(got), test.wantPrefix) {
+				t.Errorf("inquireFiles(%s, %s, %s) = %s, wantPrefix: %s", test.prefix, test.fileName, test.externalBackupID, got, test.wantPrefix)
+			}
+		})
+	}
+}
+
 func TestSplit(t *testing.T) {
 	tests := []struct {
 		name string
@@ -246,13 +382,13 @@ func TestSplit(t *testing.T) {
 		},
 		{
 			name: "ParameterWithSpaces",
-			s:    "\"Hello World\"",
-			want: []string{"\"Hello World\""},
+			s:    `"Hello World"`,
+			want: []string{`"Hello World"`},
 		},
 		{
 			name: "ParameterWithDoubleQuote",
-			s:    "\\\"Hello",
-			want: []string{"\\\"Hello"},
+			s:    `"\"Hello"`,
+			want: []string{`"\"Hello"`},
 		},
 	}
 	for _, test := range tests {

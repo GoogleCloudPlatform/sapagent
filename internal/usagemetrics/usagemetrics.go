@@ -104,6 +104,10 @@ const (
 	BackintRestoreStarted
 	BackintInquireStarted
 	BackintDeleteStarted
+	BackintBackupFinished
+	BackintRestoreFinished
+	BackintInquireFinished
+	BackintDeleteFinished
 )
 
 var (

@@ -20,11 +20,14 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
+	"sort"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
@@ -182,6 +185,31 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	avgTransferSpeedMBps := float64(bytesWritten) / time.Since(rw.firstLog).Seconds() / 1024 / 1024
 	log.Logger.Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return bytesWritten, nil
+}
+
+// ListObjects returns all objects in the bucket with the given prefix sorted by latest creation.
+// The prefix can be empty and can contain multiple folders separated by forward slashes.
+// Errors are returned if no handle is defined or if there are iteration issues.
+func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix string) ([]*storage.ObjectAttrs, error) {
+	if bucketHandle == nil {
+		return nil, errors.New("no bucket defined")
+	}
+
+	var result []*storage.ObjectAttrs
+	it := bucketHandle.Objects(ctx, &storage.Query{Prefix: prefix})
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error while iterating objects for prefix: %s, err: %v", prefix, err)
+		}
+		result = append(result, attrs)
+	}
+
+	sort.Slice(result, func(i, j int) bool { return result[i].Created.After(result[j].Created) })
+	return result, nil
 }
 
 // Read wraps io.Reader to provide upload progress updates.

@@ -56,6 +56,14 @@ var (
 	defaultContent = []byte("test content")
 )
 
+func objectAttrs(object *storage.ObjectHandle) []*storage.ObjectAttrs {
+	var attrs []*storage.ObjectAttrs
+	if attr, err := object.Attrs(context.Background()); err == nil {
+		attrs = append(attrs, attr)
+	}
+	return attrs
+}
+
 func TestConnectToBucket(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -238,6 +246,47 @@ func TestDownload(t *testing.T) {
 			}
 			if got != test.want {
 				t.Errorf("%#v.Download() = %v, want %v", test.rw, got, test.want)
+			}
+		})
+	}
+}
+
+func TestListObjects(t *testing.T) {
+	tests := []struct {
+		name      string
+		bucket    *storage.BucketHandle
+		prefix    string
+		want      []*storage.ObjectAttrs
+		wantError error
+	}{
+		{
+			name:      "NoHandle",
+			want:      nil,
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name:      "PrefixNotFound",
+			bucket:    defaultBucketHandle,
+			prefix:    "fake-object.txt",
+			want:      nil,
+			wantError: nil,
+		},
+		{
+			name:      "PrefixFound",
+			bucket:    defaultBucketHandle,
+			prefix:    "object.txt",
+			want:      objectAttrs(fakeServer.Client().Bucket("test-bucket").Object("object.txt")),
+			wantError: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, gotError := ListObjects(context.Background(), test.bucket, test.prefix)
+			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
+				t.Errorf("ListObjects(%s) = %v, want %v", test.prefix, gotError, test.wantError)
+			}
+			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+				t.Errorf("ListObjects(%s) had unexpected diff (-want +got):\n%s", test.prefix, diff)
 			}
 		})
 	}

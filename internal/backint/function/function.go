@@ -23,11 +23,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	s "cloud.google.com/go/storage"
+	store "cloud.google.com/go/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -35,9 +36,12 @@ import (
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
+// backintRFC3339Millis is a reference for timestamps to Backint specifications.
+const backintRFC3339Millis = "2006-01-02T15:04:05.999Z07:00"
+
 // Execute opens the input file and creates the output file then selects which Backint function
 // to execute based on the configuration. Issues with file operations or config will return false.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.BucketHandle) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle) bool {
 	log.Logger.Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	inFile, err := os.Open(config.GetInputFile())
 	if err != nil {
@@ -62,6 +66,17 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			return false
 		}
 		log.Logger.Infow("BACKUP finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+		usagemetrics.Action(usagemetrics.BackintBackupFinished)
+	case bpb.Function_INQUIRE:
+		log.Logger.Infow("INQUIRE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+		usagemetrics.Action(usagemetrics.BackintInquireStarted)
+		if err := inquire(ctx, config, bucketHandle, inFile, outFile); err != nil {
+			log.Logger.Errorw("INQUIRE failed", "err", err)
+			usagemetrics.Error(usagemetrics.BackintInquireFailure)
+			return false
+		}
+		log.Logger.Infow("INQUIRE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+		usagemetrics.Action(usagemetrics.BackintInquireFinished)
 	default:
 		log.Logger.Errorw("Unsupported Backint function", "function", config.GetFunction().String())
 		return false
@@ -71,19 +86,15 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // backup uploads pipes and files based on each line of the input. Results for each upload are
 // written to the output. Issues with file operations will return errors.
-func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.BucketHandle, input io.Reader, output io.Writer) error {
+func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "#SOFTWAREID") {
-			s := split(line)
-			if len(s) < 2 {
-				return fmt.Errorf("malformed backup input line, got: %s, want: #SOFTWAREID <backint_version> <software_version>", line)
+			if err := parseSoftwareVersion(line, output); err != nil {
+				return err
 			}
-			log.Logger.Infow("Version information", "backint", strings.Trim(s[1], `"`), configuration.AgentName, configuration.AgentVersion)
-			output.Write([]byte(fmt.Sprintf(`"#SOFTWAREID %s "Google %s %s"`, s[1], configuration.AgentName, configuration.AgentVersion) + "\n"))
-		}
-		if strings.HasPrefix(line, "#PIPE") || strings.HasPrefix(line, "#FILE") {
+		} else if strings.HasPrefix(line, "#PIPE") || strings.HasPrefix(line, "#FILE") {
 			s := split(line)
 			if len(s) < 2 {
 				return fmt.Errorf("malformed backup input line, got: %s, want: #<type> <file_name> <max_size>", line)
@@ -107,14 +118,14 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 	return nil
 }
 
-func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.BucketHandle, fileType, fileName string, fileSize int64) string {
+func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, fileType, fileName string, fileSize int64) string {
 	// TODO: If type is #FILE and parallel_streams > 1, chunk the file and upload in parallel.
 	log.Logger.Infow("Backing up file", "fileType", fileType, "fileName", fileName, "fileSize", fileSize)
-	fileNameTrim := strings.Trim(fileName, "\"")
+	fileNameTrim := strings.Trim(fileName, `"`)
 	f, err := os.Open(fileNameTrim)
 	if err != nil {
 		log.Logger.Errorw("Error opening backup file", "fileName", fileName, "err", err)
-		return "#ERROR " + fileName
+		return fmt.Sprintf("#ERROR %q", fileNameTrim)
 	}
 	defer f.Close()
 
@@ -135,10 +146,86 @@ func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHan
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {
 		log.Logger.Errorw("Error uploading file", "bucket", config.GetBucket(), "file", fileName, "obj", object, "err", err)
-		return "#ERROR " + fileName
+		return fmt.Sprintf("#ERROR %q", fileNameTrim)
 	}
 	log.Logger.Infow("File uploaded", "bucket", config.GetBucket(), "file", fileName, "obj", object)
-	return "#SAVED " + externalBackupID + " " + fileName + " " + strconv.FormatInt(bytesWritten, 10)
+	return fmt.Sprintf("#SAVED %q %q %s", externalBackupID, fileNameTrim, strconv.FormatInt(bytesWritten, 10))
+}
+
+// inquire queries the bucket for objects based on each line of the input. Results for each
+// inquiry are written to the output. Issues with file operations will return errors.
+func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+	scanner := bufio.NewScanner(input)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#SOFTWAREID") {
+			if err := parseSoftwareVersion(line, output); err != nil {
+				return err
+			}
+		} else if strings.HasPrefix(line, "#NULL") {
+			s := split(line)
+			// File name is an optional parameter for #NULL.
+			fileName := ""
+			if len(s) > 1 {
+				fileName = strings.Trim(s[1], `"`)
+			}
+			prefix := config.GetUserId() + fileName
+			output.Write(inquireFiles(ctx, bucketHandle, prefix, fileName, ""))
+		} else if strings.HasPrefix(line, "#EBID") {
+			s := split(line)
+			if len(s) < 3 {
+				return fmt.Errorf("malformed inquire input line, got: %s, want: #EBID <external_backup_id> <file_name>", line)
+			}
+			externalBackupID := strings.Trim(s[1], `"`)
+			fileName := strings.Trim(s[2], `"`)
+			prefix := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
+			output.Write(inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID))
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// inquireFiles queries the bucket with the specified prefix and returns all
+// objects found according to SAP HANA formatting specifications.
+func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID string) []byte {
+	var result []byte
+	log.Logger.Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
+	objects, err := storage.ListObjects(ctx, bucketHandle, prefix)
+	if err != nil {
+		log.Logger.Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID)
+		result = []byte("#ERROR")
+	} else if len(objects) == 0 {
+		log.Logger.Warnw("No objects found", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
+		result = []byte("#NOTFOUND")
+	}
+	// If there was an error or no objects were found, append the optional parameters and return.
+	if len(result) > 0 {
+		if externalBackupID != "" {
+			result = append(result, fmt.Sprintf(" %q", externalBackupID)...)
+		}
+		if fileName != "" {
+			result = append(result, fmt.Sprintf(" %q", fileName)...)
+		}
+		return append(result, "\n"...)
+	}
+
+	for _, object := range objects {
+		// The backup object name is in the format <userID>/<fileName>/<externalBackupID>.bak
+		externalBackupID := strings.TrimSuffix(filepath.Base(object.Name), ".bak")
+		dirs := strings.SplitN(filepath.Dir(object.Name), "/", 2)
+		if len(dirs) < 2 {
+			log.Logger.Errorw("Unexpected object name, cannot generate original file name", "name", object.Name)
+			result = append(result, fmt.Sprintf("#ERROR %q %q\n", externalBackupID, object.Name)...)
+			continue
+		}
+		fileName := dirs[1]
+		log.Logger.Infow("Found object", "name", object.Name, "externalBackupID", externalBackupID, "fileName", fileName)
+		result = append(result, fmt.Sprintf("#BACKUP %q %q %q\n", externalBackupID, fileName, object.Created.Format(backintRFC3339Millis))...)
+	}
+	return result
 }
 
 // split performs a custom split on spaces based on the following SAP HANA Backint specifications:
@@ -170,4 +257,15 @@ func split(s string) []string {
 		}
 	}
 	return append(result, s[start:])
+}
+
+// parseSoftwareVersion writes the Backint and agent software versions to the output.
+func parseSoftwareVersion(line string, output io.Writer) error {
+	s := split(line)
+	if len(s) < 2 {
+		return fmt.Errorf("malformed input line, got: %s, want: #SOFTWAREID <backint_version> <software_version>", line)
+	}
+	log.Logger.Infow("Version information", "backint", strings.Trim(s[1], `"`), configuration.AgentName, configuration.AgentVersion)
+	output.Write([]byte(fmt.Sprintf(`#SOFTWAREID %s "Google %s %s"`, s[1], configuration.AgentName, configuration.AgentVersion) + "\n"))
+	return nil
 }
