@@ -298,10 +298,11 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c 
 		classNode := primitive.Class
 		typeNode := primitive.ClassType
 		attribute := primitive.InstanceAttributes
+		instanceName := instanceNameFromPrimitiveID(idNode)
 
 		// Collector for pcmk_delay_max should report the value for each instance
 		// in a HA cluster, rather than just the value for the local instance.
-		v := instanceAttributeValue("pcmk_delay_max", attribute)
+		v := instanceAttributeValue("pcmk_delay_max", attribute, instanceName)
 		if v != "" {
 			pcmkDelayMax = append(pcmkDelayMax, v)
 		}
@@ -321,17 +322,28 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c 
 	return returnMap
 }
 
-func instanceAttributeValue(key string, attribute ClusterPropertySet) string {
-	var instance, value string
-	for _, nvPair := range attribute.NVPairs {
-		if nvPair.Name == "instance_name" {
-			instance = nvPair.Value
-		} else if nvPair.Name == key {
-			value = nvPair.Value
-		}
+// instanceNameFromPrimitiveID extracts the instance name from a Primitive ID.
+//
+// The ID string is expected in the following format: "prefix-instanceName".
+// An instance name may itself contain '-' characters.
+func instanceNameFromPrimitiveID(id string) string {
+	if _, instanceName, ok := strings.Cut(id, "-"); ok {
+		return instanceName
 	}
-	if instance != "" && value != "" {
-		return instance + "=" + value
+	return ""
+}
+
+// instanceAttributeValue extracts the value of a given instance attribute key.
+//
+// The return value is formatted as: "instance=value".
+func instanceAttributeValue(key string, attribute ClusterPropertySet, instance string) string {
+	if instance == "" {
+		return ""
+	}
+	for _, nvPair := range attribute.NVPairs {
+		if nvPair.Name == key && strings.HasSuffix(nvPair.ID, fmt.Sprintf("%s-instance_attributes-%s", instance, key)) {
+			return instance + "=" + nvPair.Value
+		}
 	}
 	return ""
 }

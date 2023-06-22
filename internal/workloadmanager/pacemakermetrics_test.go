@@ -140,12 +140,46 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 	}
 }
 
+func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
+	return WorkloadMetrics{
+		Metrics: []*monitoringresourcepb.TimeSeries{{
+			Metric: &metricpb.Metric{
+				Type: "workload.googleapis.com/sap/validation/pacemaker",
+				Labels: map[string]string{
+					"pcmk_delay_max": "vm1=45",
+				},
+			},
+			MetricKind: metricpb.MetricDescriptor_GAUGE,
+			Resource: &monitoredresourcepb.MonitoredResource{
+				Type: "gce_instance",
+				Labels: map[string]string{
+					"instance_id": "test-instance-id",
+					"zone":        "test-zone",
+					"project_id":  "test-project-id",
+				},
+			},
+			Points: []*monitoringresourcepb.Point{{
+				Interval: &cpb.TimeInterval{
+					StartTime: ts,
+					EndTime:   ts,
+				},
+				Value: &cpb.TypedValue{
+					Value: &cpb.TypedValue_DoubleValue{
+						DoubleValue: pacemakerExists,
+					},
+				},
+			}},
+		}},
+	}
+}
+
 func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
 		Metrics: []*monitoringresourcepb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
+					"pcmk_delay_max":                 "vm1=45",
 					"fence_agent_compute_api_access": "false",
 					"fence_agent_logging_api_access": "false",
 					"location_preference_set":        locationPref,
@@ -216,7 +250,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
-					"pcmk_delay_max":                 "instanceId=30",
+					"pcmk_delay_max":                 "instanceName=30",
 					"migration_threshold":            "5000",
 					"fence_agent_compute_api_access": "false",
 					"fence_agent_logging_api_access": "false",
@@ -290,6 +324,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
+					"pcmk_delay_max":                 "vm1=45",
 					"fence_agent_compute_api_access": "true",
 					"fence_agent_logging_api_access": "true",
 					"location_preference_set":        locationPref,
@@ -923,29 +958,39 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "stonith",
+					ID:        "STONITH-instance-name-1",
 					InstanceAttributes: ClusterPropertySet{
-						ID: "test-instance-name-1-instance_attributes",
+						ID:      "STONITH-instance-name-1-instance_attributes",
+						NVPairs: []NVPair{},
+					},
+				},
+				{
+					ClassType: "stonith",
+					ID:        "invalid",
+					InstanceAttributes: ClusterPropertySet{
+						ID: "STONITH-instance-name-2-instance_attributes",
 						NVPairs: []NVPair{
-							{Name: "instance_name", Value: "test-instance-name-1"},
+							{ID: "STONITH-instance-name-2-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "60"},
 						},
 					},
 				},
 				{
 					ClassType: "stonith",
+					ID:        "STONITH-instance-name-3",
 					InstanceAttributes: ClusterPropertySet{
-						ID: "test-instance-name-2-instance_attributes",
+						ID: "STONITH-instance-name-3-instance_attributes",
 						NVPairs: []NVPair{
-							{Name: "pcmk_delay_max", Value: "60"},
+							{ID: "STONITH-invalid-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "90"},
 						},
 					},
 				},
 				{
 					ClassType: "stonith",
+					ID:        "STONITH-instance-name-4",
 					InstanceAttributes: ClusterPropertySet{
-						ID: "test-instance-name-3-instance_attributes",
+						ID: "STONITH-instance-name-4-instance_attributes",
 						NVPairs: []NVPair{
-							{Name: "instance_name", Value: "test-instance-name-3"},
-							{Name: "pcmk_delay_max", Value: "30"},
+							{ID: "STONITH-instance-name-4-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "30"},
 						},
 					},
 				},
@@ -954,7 +999,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"pcmk_delay_max": "test-instance-name-3=30",
+				"pcmk_delay_max": "instance-name-4=30",
 			},
 		},
 		{
@@ -963,21 +1008,21 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "stonith",
+					ID:        "STONITH-instance-name-1",
 					InstanceAttributes: ClusterPropertySet{
-						ID: "test-instance-name-instance_attributes",
+						ID: "STONITH-instance-name-1-instance_attributes",
 						NVPairs: []NVPair{
-							{Name: "instance_name", Value: "test-instance-name"},
-							{Name: "pcmk_delay_max", Value: "60"},
+							{ID: "STONITH-instance-name-1-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "60"},
 						},
 					},
 				},
 				{
 					ClassType: "stonith",
+					ID:        "STONITH-instance-name-2",
 					InstanceAttributes: ClusterPropertySet{
-						ID: "test-instance-name-2-instance_attributes",
+						ID: "STONITH-instance-name-2-instance_attributes",
 						NVPairs: []NVPair{
-							{Name: "instance_name", Value: "test-instance-name-2"},
-							{Name: "pcmk_delay_max", Value: "30"},
+							{ID: "STONITH-instance-name-2-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "30"},
 						},
 					},
 				},
@@ -986,7 +1031,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"pcmk_delay_max": "test-instance-name=60,test-instance-name-2=30",
+				"pcmk_delay_max": "instance-name-1=60,instance-name-2=30",
 			},
 		},
 	}
@@ -1267,7 +1312,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			workloadConfig:       collectionDefinition.GetWorkloadValidation(),
 			fileReader:           fileReaderError,
 			wantPacemakerExists:  float64(0.0),
-			wantPacemakerMetrics: wantErrorPacemakerMetrics,
+			wantPacemakerMetrics: wantServiceAccountErrorPacemakerMetrics,
 		},
 		{
 			name: "ServiceAccountReadSuccess",
@@ -1292,12 +1337,10 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				if params.Executable == "cibadmin" {
 					return commandlineexecutor.Result{
 						StdOut: pacemakerServiceAccountXML,
-						// StdOut: "foobar",
 						StdErr: "",
 					}
 				}
 				return commandlineexecutor.Result{
-					// StdOut: pacemakerServiceAccountXML,
 					StdOut: "foobar",
 					StdErr: "",
 				}
