@@ -24,12 +24,15 @@ import (
 	"flag"
 	s "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/backup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
-	"github.com/GoogleCloudPlatform/sapagent/internal/backint/function"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/delete"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
 // Backint has args for backint subcommands.
@@ -87,10 +90,10 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 	}
 	onetime.SetupOneTimeLogging(lp, b.Name())
 
-	return b.backintHandler(ctx)
+	return b.backintHandler(ctx, s.NewClient)
 }
 
-func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
+func (b *Backint) backintHandler(ctx context.Context, client storage.Client) subcommands.ExitStatus {
 	log.Logger.Info("Backint starting")
 	p := config.Parameters{
 		User:        b.user,
@@ -108,17 +111,48 @@ func (b *Backint) backintHandler(ctx context.Context) subcommands.ExitStatus {
 	}
 	log.Logger.Debugw("Args parsed and config validated", "config", config)
 
-	bucketHandle, ok := storage.ConnectToBucket(ctx, s.NewClient, config.GetServiceAccount(), config.GetBucket(), config.GetParallelStreams())
+	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket(), config.GetParallelStreams())
 	if !ok {
 		return subcommands.ExitUsageError
 	}
 	log.Logger.Infow("Connected to bucket", "bucket", config.GetBucket())
 
 	usagemetrics.Action(usagemetrics.BackintRunning)
-	if ok := function.Execute(ctx, config, bucketHandle); !ok {
+	if ok := run(ctx, config, bucketHandle); !ok {
 		return subcommands.ExitUsageError
 	}
 
 	log.Logger.Info("Backint finished")
 	return subcommands.ExitSuccess
+}
+
+// run opens the input file and creates the output file then selects which Backint function
+// to execute based on the configuration. Issues with file operations or config will return false.
+func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.BucketHandle) bool {
+	usagemetrics.Action(usagemetrics.BackintRunning)
+	log.Logger.Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	inFile, err := os.Open(config.GetInputFile())
+	if err != nil {
+		log.Logger.Errorw("Error opening input file", "fileName", config.GetInputFile(), "err", err)
+		return false
+	}
+	defer inFile.Close()
+	outFile, err := os.Create(config.GetOutputFile())
+	if err != nil {
+		log.Logger.Errorw("Error opening output file", "fileName", config.GetOutputFile(), "err", err)
+		return false
+	}
+	defer outFile.Close()
+
+	switch config.GetFunction() {
+	case bpb.Function_BACKUP:
+		return backup.Execute(ctx, config, bucketHandle, inFile, outFile)
+	case bpb.Function_INQUIRE:
+		return inquire.Execute(ctx, config, bucketHandle, inFile, outFile)
+	case bpb.Function_DELETE:
+		return delete.Execute(ctx, config, bucketHandle, inFile, outFile)
+	default:
+		log.Logger.Errorw("Unsupported Backint function", "function", config.GetFunction().String())
+		return false
+	}
 }
