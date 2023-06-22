@@ -126,6 +126,27 @@ func TestExecute(t *testing.T) {
 			input: `#SOFTWAREID "backint 1.50"`,
 			want:  true,
 		},
+		{
+			name: "DeleteFailed",
+			config: &bpb.BackintConfiguration{
+				InputFile:  t.TempDir() + "/input.txt",
+				OutputFile: t.TempDir() + "/output.txt",
+				Function:   bpb.Function_DELETE,
+			},
+			input: "#SOFTWAREID",
+			want:  false,
+		},
+		{
+			name: "DeleteSuccess",
+			config: &bpb.BackintConfiguration{
+				InputFile:  t.TempDir() + "/input.txt",
+				OutputFile: t.TempDir() + "/output.txt",
+				Function:   bpb.Function_DELETE,
+			},
+			bucket: defaultBucketHandle,
+			input:  `#SOFTWAREID "backint 1.50"`,
+			want:   true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -354,6 +375,79 @@ func TestInquireFiles(t *testing.T) {
 			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID)
 			if !strings.HasPrefix(string(got), test.wantPrefix) {
 				t.Errorf("inquireFiles(%s, %s, %s) = %s, wantPrefix: %s", test.prefix, test.fileName, test.externalBackupID, got, test.wantPrefix)
+			}
+		})
+	}
+}
+
+func TestDelete(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      io.Reader
+		bucket     *storage.BucketHandle
+		want       error
+		wantPrefix string
+	}{
+		{
+			name:   "NoBucket",
+			bucket: nil,
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:   "ScannerError",
+			bucket: defaultBucketHandle,
+			input:  fakeFile(),
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:   "MalformedSoftwareID",
+			input:  bytes.NewBufferString("#SOFTWAREID"),
+			bucket: defaultBucketHandle,
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:       "FormattedSoftwareID",
+			input:      bytes.NewBufferString(`#SOFTWAREID "backint 1.50"`),
+			bucket:     defaultBucketHandle,
+			wantPrefix: "#SOFTWAREID",
+			want:       nil,
+		},
+		{
+			name:   "MalformedExternalBackupID",
+			input:  bytes.NewBufferString("#EBID"),
+			bucket: defaultBucketHandle,
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:       "ObjectNotFound",
+			input:      bytes.NewBufferString("#EBID 12345 /fake-object.txt"),
+			bucket:     defaultBucketHandle,
+			wantPrefix: "#NOTFOUND",
+			want:       nil,
+		},
+		{
+			name:       "ObjectDeleted",
+			input:      bytes.NewBufferString("#EBID 12345 /object.txt"),
+			bucket:     defaultBucketHandle,
+			wantPrefix: "#DELETED",
+			want:       nil,
+		},
+		{
+			name:   "EmptyInput",
+			input:  bytes.NewBufferString(""),
+			bucket: defaultBucketHandle,
+			want:   nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			output := bytes.NewBufferString("")
+			got := delete(context.Background(), defaultConfig, test.bucket, test.input, output)
+			if !strings.HasPrefix(output.String(), test.wantPrefix) {
+				t.Errorf("delete() = %s, wantPrefix: %s", output.String(), test.wantPrefix)
+			}
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("delete() = %v, want %v", got, test.want)
 			}
 		})
 	}

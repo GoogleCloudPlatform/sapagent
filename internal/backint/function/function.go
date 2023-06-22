@@ -20,6 +20,7 @@ package function
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -77,6 +78,16 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 		}
 		log.Logger.Infow("INQUIRE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 		usagemetrics.Action(usagemetrics.BackintInquireFinished)
+	case bpb.Function_DELETE:
+		log.Logger.Infow("DELETE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+		usagemetrics.Action(usagemetrics.BackintDeleteStarted)
+		if err := delete(ctx, config, bucketHandle, inFile, outFile); err != nil {
+			log.Logger.Errorw("DELETE failed", "err", err)
+			usagemetrics.Error(usagemetrics.BackintDeleteFailure)
+			return false
+		}
+		log.Logger.Infow("DELETE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+		usagemetrics.Action(usagemetrics.BackintDeleteFinished)
 	default:
 		log.Logger.Errorw("Unsupported Backint function", "function", config.GetFunction().String())
 		return false
@@ -226,6 +237,47 @@ func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix,
 		result = append(result, fmt.Sprintf("#BACKUP %q %q %q\n", externalBackupID, fileName, object.Created.Format(backintRFC3339Millis))...)
 	}
 	return result
+}
+
+// delete deletes objects in the bucket based on each line of the input. Results for each
+// deletion are written to the output. Issues with file operations will return errors.
+func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+	if bucketHandle == nil {
+		return errors.New("no bucket defined")
+	}
+	scanner := bufio.NewScanner(input)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#SOFTWAREID") {
+			if err := parseSoftwareVersion(line, output); err != nil {
+				return err
+			}
+		} else if strings.HasPrefix(line, "#EBID") {
+			s := split(line)
+			if len(s) < 3 {
+				return fmt.Errorf("malformed delete input line, got: %s, want: #EBID <external_backup_id> <file_name>", line)
+			}
+			externalBackupID := strings.Trim(s[1], `"`)
+			fileName := strings.Trim(s[2], `"`)
+			object := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
+			log.Logger.Infow("Deleting object", "object", object)
+			err := bucketHandle.Object(object).Delete(ctx)
+			if err == store.ErrObjectNotExist {
+				log.Logger.Errorw("Object not found", "object", object, "err", err)
+				output.Write([]byte(fmt.Sprintf("#NOTFOUND %q %q\n", externalBackupID, fileName)))
+			} else if err != nil {
+				log.Logger.Errorw("Error deleting object", "object", object, "err", err)
+				output.Write([]byte(fmt.Sprintf("#ERROR %q %q\n", externalBackupID, fileName)))
+			} else {
+				log.Logger.Infow("Object deleted", "object", object)
+				output.Write([]byte(fmt.Sprintf("#DELETED %q %q\n", externalBackupID, fileName)))
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // split performs a custom split on spaces based on the following SAP HANA Backint specifications:
