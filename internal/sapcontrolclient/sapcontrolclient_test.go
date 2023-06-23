@@ -49,7 +49,7 @@ var (
 	//go:embed testdata/getprocesslist/one_process.txt
 	oneProcessListResponse string
 
-	emptyProcessListResponse string = `<?xml version="1.0" encoding="UTF-8"?>
+	emptyResponse string = `<?xml version="1.0" encoding="UTF-8"?>
 		</SOAP-ENV:Envelope>`
 
 	//go:embed testdata/getprocesslist/no_pid.txt
@@ -57,6 +57,12 @@ var (
 
 	//go:embed testdata/getprocesslist/no_name.txt
 	noNameProcessListResponse string
+
+	//go:embed testdata/abapgetwptable/all_work_processes.txt
+	workProcessResponse string
+
+	//go:embed testdata/fault_response.txt
+	faultResponse string
 )
 
 // NewSapControl returns a new mock for sapcontrol.
@@ -148,7 +154,7 @@ func TestGetProcessList(t *testing.T) {
 		},
 		{
 			name:         "EmptyResponse",
-			fakeResponse: emptyProcessListResponse,
+			fakeResponse: emptyResponse,
 			wantErr:      cmpopts.AnyError,
 		},
 	}
@@ -165,6 +171,52 @@ func TestGetProcessList(t *testing.T) {
 
 			if diff := cmp.Diff(test.wantProcStatus, gotProcesses); diff != "" {
 				t.Errorf("GetProcessList() returned unexpected diff (-want +got):\n%v", diff)
+			}
+		})
+	}
+}
+
+func TestABAPGetWPTable(t *testing.T) {
+	tests := []struct {
+		name            string
+		fakeResponse    string
+		wantWorkProcess []WorkProcess
+		wantErr         error
+	}{
+		{
+			name:         "SuccessAllWorkProcess",
+			fakeResponse: workProcessResponse,
+			wantWorkProcess: []WorkProcess{
+				{0, "DIA", 12723, "Run", "4", ""},
+				{1, "DIA", 12724, "Wait", "", ""},
+				{2, "DIA", 12725, "Wait", "", ""},
+				{3, "UPD", 12733, "Wait", "", ""},
+				{4, "BTC", 12734, "Wait", "", ""},
+				{5, "BTC", 12739, "Wait", "", ""},
+				{6, "SPO", 12740, "Wait", "", ""},
+				{7, "UP2", 12741, "Wait", "", ""},
+			},
+			wantErr: nil,
+		},
+		{
+			name:         "Fault",
+			fakeResponse: faultResponse,
+			wantErr:      cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setupSAPMocks(t, test.fakeResponse)
+			c := setupClient(t)
+			gotWorkProcesses, gotErr := c.ABAPGetWPTable()
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("ABAPGetWPTable(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
+			}
+
+			if diff := cmp.Diff(test.wantWorkProcess, gotWorkProcesses); diff != "" {
+				t.Errorf("ABAPGetWPTable() returned unexpected diff (-want +got):\n%v", diff)
 			}
 		})
 	}

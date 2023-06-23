@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:SAPControl="urn:SAPControl" xmlns:SAPCCMS="urn:SAPCCMS" xmlns:SAPHostControl="urn:SAPHostControl" xmlns:SAPLandscapeService="urn:SAPLandscapeService" xmlns:SAPMetricService="urn:SAPMetricService" xmlns:SAPOscol="urn:SAPOscol" xmlns:SAPDSR="urn:SAPDSR">
+    <SOAP-ENV:Body>
+      <SAPControl:ABAPGetWPTableResponse>
+        <workprocess>
+          <item><No>0</No><Typ>DIA</Typ><Pid>12723</Pid><Status>Run</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:00:23</Cpu><Time>4</Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+          <item><No>1</No><Typ>DIA</Typ><Pid>12724</Pid><Status>Wait</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:00:23</Cpu><Time></Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+          <item><No>2</No><Typ>DIA</Typ><Pid>12725</Pid><Status>Wait</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:00:41</Cpu><Time></Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+          <item><No>3</No><Typ>UPD</Typ><Pid>12733</Pid><Status>Wait</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:00:08</Cpu><Time></Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+          <item><No>4</No><Typ>BTC</Typ><Pid>12734</Pid><Status>Wait</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:00:09</Cpu><Time></Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+          <item><No>5</No><Typ>BTC</Typ><Pid>12739</Pid><Status>Wait</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:00:34</Cpu><Time></Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+          <item><No>6</No><Typ>SPO</Typ><Pid>12740</Pid><Status>Wait</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:02:35</Cpu><Time></Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+          <item><No>7</No><Typ>UP2</Typ><Pid>12741</Pid><Status>Wait</Status><Reason></Reason><Start>yes</Start><Err></Err><Sem></Sem><Cpu>0:00:07</Cpu><Time></Time><Program></Program><Client></Client><User></User><Action></Action><Table></Table></item>
+        </workprocess>
+      </SAPControl:ABAPGetWPTableResponse>
+    </SOAP-ENV:Body>
+  </SOAP-ENV:Envelope>

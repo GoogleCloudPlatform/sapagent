@@ -39,8 +39,7 @@ type (
 
 	// GetProcessListResponse struct for GetProcessList soap response body.
 	GetProcessListResponse struct {
-		XMLName xml.Name `xml:"SAPControl GetProcessListResponse"`
-
+		XMLName   xml.Name    `xml:"SAPControl GetProcessListResponse"`
 		Processes []OSProcess `xml:"process>item,omitempty"`
 	}
 
@@ -50,6 +49,27 @@ type (
 		Name       string `xml:"name,omitempty"`
 		Dispstatus string `xml:"dispstatus,omitempty"`
 		Pid        int64  `xml:"pid,omitempty"`
+	}
+
+	// ABAPGetWPTableRequest struct for ABAPGetWPTable soap request body.
+	ABAPGetWPTableRequest struct {
+		XMLName xml.Name `xml:"urn:SAPControl ABAPGetWPTable"`
+	}
+
+	// ABAPGetWPTableResponse struct for ABAPGetWPTable soap response body.
+	ABAPGetWPTableResponse struct {
+		XMLName       xml.Name      `xml:"SAPControl ABAPGetWPTableResponse"`
+		WorkProcesses []WorkProcess `xml:"workprocess>item"`
+	}
+
+	// WorkProcess struct for ABAPGetWPTable soap response body content.
+	WorkProcess struct {
+		No   int64  `xml:"No,omitempty"`
+		Type string `xml:"Typ,omitempty"`
+		Pid  int64  `xml:"Pid,omitempty"`
+		Status string `xml:"Status,omitempty"`
+		Time string `xml:"Time,omitempty"`
+		User   string `xml:"User,omitempty"`
 	}
 )
 
@@ -79,10 +99,22 @@ func (c Client) call(request, response any) error {
 func (c Client) GetProcessList() ([]OSProcess, error) {
 	res := &GetProcessListResponse{}
 	if err := c.call(&GetProcessListRequest{}, res); err != nil {
-		log.Logger.Debugw("Failed to get SAP Process Status via API call", log.Error(err))
 		return nil, err
 	}
 	log.Logger.Debugw("Sapcontrol GetProcessList", "API response", res.Processes)
-
 	return res.Processes, nil
+}
+
+// ABAPGetWPTable performs ABAPGetWPTable soap request.
+// Returns:
+//   - ABAPGetWPTable API call response as a list of WorkProcess structs.
+//   - Error if Client.call fails, nil otherwise.
+func (c Client) ABAPGetWPTable() ([]WorkProcess, error) {
+	res := &ABAPGetWPTableResponse{}
+	if err := c.call(&ABAPGetWPTableRequest{}, res); err != nil {
+		return nil, err
+	}
+
+	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "API Response", res.WorkProcesses)
+	return res.WorkProcesses, nil
 }
