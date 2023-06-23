@@ -191,6 +191,10 @@ func TestBuildInsights(t *testing.T) {
 				Id:      "my-recommendation-2",
 				Trigger: &rpb.EvalNode{Lhs: "1", Rhs: "0", Operation: rpb.EvalNode_EQ},
 			},
+			&rpb.Recommendation{
+				Id:           "my-recommendation-3",
+				ForceTrigger: true,
+			},
 		},
 	}
 
@@ -198,6 +202,7 @@ func TestBuildInsights(t *testing.T) {
 	want["abc"] = []ValidationResult{
 		ValidationResult{RecommendationID: "my-recommendation-1", Result: true},
 		ValidationResult{RecommendationID: "my-recommendation-2", Result: false},
+		ValidationResult{RecommendationID: "my-recommendation-3", Result: true},
 	}
 
 	got := make(Insights)

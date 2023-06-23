@@ -148,7 +148,7 @@ func buildInsights(rule *rpb.Rule, kb knowledgeBase, insights Insights) {
 		vr := ValidationResult{
 			RecommendationID: r.Id,
 		}
-		if evaluateTrigger(r.Trigger, kb) {
+		if r.GetForceTrigger() || evaluateTrigger(r.Trigger, kb) {
 			vr.Result = true
 		}
 		log.Logger.Debugw("Recommendation evaluation result", "rule", rule.Id, "recommendation", r.Id, "result", vr.Result)
