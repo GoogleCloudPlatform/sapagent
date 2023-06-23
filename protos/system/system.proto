@@ -61,17 +61,45 @@ message SapDiscovery {
       // Undefined resource type.
       RESOURCE_TYPE_UNSPECIFIED = 0;
       // This is a compute resource.
-      COMPUTE = 1;
+      RESOURCE_TYPE_COMPUTE = 1;
       // This a storage resource.
-      STORAGE = 2;
+      RESOURCE_TYPE_STORAGE = 2;
       // This is a network resource.
-      NETWORK = 3;
+      RESOURCE_TYPE_NETWORK = 3;
     }
     // The type of this resource.
     ResourceType resource_type = 1;
 
+    // Different kinds of resources in the SAP System.
+    enum ResourceKind {
+      // Unspecified resource kind.
+      RESOURCE_KIND_UNSPECIFIED = 0;
+      // This is a compute instance.
+      RESOURCE_KIND_INSTANCE = 1;
+      // This is a compute disk.
+      RESOURCE_KIND_DISK = 2;
+      // This is a compute address.
+      RESOURCE_KIND_ADDRESS = 3;
+      // This is a filestore instance.
+      RESOURCE_KIND_FILESTORE = 4;
+      // This is a compute health check.
+      RESOURCE_KIND_HEALTH_CHECK = 5;
+      // This is a compute forwarding rule.
+      RESOURCE_KIND_FORWARDING_RULE = 6;
+      // This is a compute backend service.
+      RESOURCE_KIND_BACKEND_SERVICE = 7;
+      // This is a compute subnetwork.
+      RESOURCE_KIND_SUBNETWORK = 8;
+      // This is a compute network.
+      RESOURCE_KIND_NETWORK = 9;
+      // This is a public accessible IP Address.
+      RESOURCE_KIND_PUBLIC_ADDRESS = 10;
+      // This is a compute instance group.
+      RESOURCE_KIND_INSTANCE_GROUP = 11;
+    }
+
     // ComputeInstance, ComputeDisk, VPC, Bare Metal server, etc.
-    string resource_kind = 2;
+    ResourceKind resource_kind = 2;
 
     // URI of the resource, includes project, location, and name.
     string resource_uri = 3;

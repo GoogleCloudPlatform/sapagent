@@ -231,17 +231,32 @@ type SapDiscoveryResource struct {
 	RelatedResources []string `json:"relatedResources,omitempty"`
 	// ResourceKind: ComputeInstance, ComputeDisk, VPC, Bare Metal server,
 	// etc.
+	//
+	// Possible values:
+	//   "RESOURCE_KIND_UNSPECIFIED" - Undefined resource kind.
+	//   "RESOURCE_KIND_INSTANCE" - This is a compute instance.
+	//   "RESOURCE_KIND_DISK" - This is a compute disk.
+	//   "RESOURCE_KIND_ADDRESS" - This is a compute address.
+	//   "RESOURCE_KIND_FILESTORE" - This is a compute filestore instance.
+	//   "RESOURCE_KIND_HEALTH_CHECK" - This is a compute health check.
+	//   "RESOURCE_KIND_FORWARDING_RULE" - This is a compute forwarding rule.
+	//   "RESOURCE_KIND_BACKEND_SERVICE" - This is a backend service.
+	//   "RESOURCE_KIND_SUBNETWORK" - This is a compute subnetwork.
+	//   "RESOURCE_KIND_NETWORK" - This is a compute network.
+	//   "RESOURCE_KIND_PUBLIC_ADDRESS" - This is a public accessible IP address.
+	//   "RESOURCE_KIND_INSTANCE_GROUP" - This is a compute instance group.
 	ResourceKind string `json:"resourceKind,omitempty"`
 	// ResourceType: The type of this resource.
 	//
 	// Possible values:
 	//   "RESOURCE_TYPE_UNSPECIFIED" - Undefined resource type.
-	//   "COMPUTE" - This is a compute resource.
-	//   "STORAGE" - This a storage resource.
-	//   "NETWORK" - This is a network resource.
+	//   "RESOURCE_TYPE_COMPUTE" - This is a compute resource.
+	//   "RESOURCE_TYPE_STORAGE" - This a storage resource.
+	//   "RESOURCE_TYPE_NETWORK" - This is a network resource.
 	ResourceType string `json:"resourceType,omitempty"`
 	// ResourceURI: URI of the resource, includes project, location, and
 	// name.
+	//   "RESOURCE_KIND_INSTANCE_GROUP" - This is a compute instance group.
 	ResourceURI string `json:"resourceUri,omitempty"`
 	// UpdateTime: Unix timestamp of when this resource last had its
 	// discovery data updated.
@@ -303,7 +318,7 @@ type WriteInsightResponse struct {
 	googleapi.ServerResponse `json:"-"`
 }
 
-// LINT.ThenChange (//depot/google3/google/cloud/workloadmanager/datawarehouse/v1/data_collect_service.proto)
+
 
 // WriteInsightCall represents a call to send insight data to the WLM API.
 type WriteInsightCall struct {

@@ -104,7 +104,7 @@ func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadma
 
 	return &workloadmanager.SapDiscoveryResource{
 		RelatedResources: r.RelatedResources,
-		ResourceKind:     r.ResourceKind,
+		ResourceKind:     r.ResourceKind.String(),
 		ResourceType:     r.ResourceType.String(),
 		ResourceURI:      r.ResourceUri,
 		UpdateTime:       r.UpdateTime.AsTime().Format(time.RFC3339),
@@ -305,8 +305,8 @@ func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*s
 	}
 
 	ir := &spb.SapDiscovery_Resource{
-		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-		ResourceKind: "ComputeInstance",
+		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 		ResourceUri:  ci.SelfLink,
 		UpdateTime:   timestamppb.Now(),
 	}
@@ -340,8 +340,8 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, 
 		}
 
 		dr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-			ResourceKind: "ComputeDisk",
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 			ResourceUri:  cd.SelfLink,
 			UpdateTime:   timestamppb.Now(),
 		}
@@ -359,8 +359,8 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 	// Get Network related resources
 	for _, net := range ci.NetworkInterfaces {
 		sr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-			ResourceKind: "ComputeSubnetwork",
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
 			ResourceUri:  net.Subnetwork,
 			UpdateTime:   timestamppb.Now(),
 		}
@@ -368,8 +368,8 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 		ir.RelatedResources = append(ir.RelatedResources, sr.ResourceUri)
 
 		nr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-			ResourceKind: "ComputeNetwork",
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
 			ResourceUri:  net.Network,
 			UpdateTime:   timestamppb.Now(),
 		}
@@ -380,8 +380,8 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 		// Examine assigned IP addresses
 		for _, ac := range net.AccessConfigs {
 			ar := &spb.SapDiscovery_Resource{
-				ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-				ResourceKind: "PublicAddress",
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
 				UpdateTime:   timestamppb.Now(),
 				ResourceUri:  ac.NatIP,
 			}
@@ -408,8 +408,8 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 			continue
 		}
 		ar := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-			ResourceKind: "ComputeAddress",
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 			ResourceUri:  addr.SelfLink,
 			UpdateTime:   timestamppb.Now(),
 		}
@@ -442,8 +442,8 @@ func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID
 	}
 
 	ar := &spb.SapDiscovery_Resource{
-		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-		ResourceKind: "ComputeAddress",
+		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 		ResourceUri:  addr.SelfLink,
 		UpdateTime:   timestamppb.Now(),
 	}
@@ -468,8 +468,8 @@ func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID
 	}
 
 	fr := &spb.SapDiscovery_Resource{
-		ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
-		ResourceKind:     "ComputeForwardingRule",
+		ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+		ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
 		ResourceUri:      fwr.SelfLink,
 		RelatedResources: []string{ar.ResourceUri},
 		UpdateTime:       timestamppb.Now(),
@@ -507,8 +507,8 @@ func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.Forwardi
 	}
 
 	bsr := &spb.SapDiscovery_Resource{
-		ResourceType:     spb.SapDiscovery_Resource_COMPUTE,
-		ResourceKind:     "ComputeBackendService",
+		ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+		ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 		ResourceUri:      bs.SelfLink,
 		UpdateTime:       timestamppb.Now(),
 		RelatedResources: []string{fr.ResourceUri},
@@ -549,8 +549,8 @@ func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *s
 			continue
 		}
 		igr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-			ResourceKind: "ComputeInstanceGroup",
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:  ig.SelfLink,
 			UpdateTime:   timestamppb.Now(),
 		}
@@ -707,8 +707,8 @@ func (d *Discovery) discoverFilestores(ctx context.Context, projectID string, pa
 		}
 		for _, i := range fs.Instances {
 			fsr := &spb.SapDiscovery_Resource{
-				ResourceType:     spb.SapDiscovery_Resource_STORAGE,
-				ResourceKind:     "ComputeFilestore",
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:      i.Name,
 				RelatedResources: []string{parent.ResourceUri},
 				UpdateTime:       timestamppb.Now(),
@@ -857,8 +857,8 @@ func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.SapDisco
 	}
 
 	fr := &spb.SapDiscovery_Resource{
-		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-		ResourceKind: "ComputeForwardingRule",
+		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
 		ResourceUri:  fwr.SelfLink,
 		UpdateTime:   timestamppb.Now(),
 	}
@@ -885,8 +885,8 @@ func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.SapDiscover
 	// IP is assigned to an address
 	log.Logger.Info("Address found")
 	ar := &spb.SapDiscovery_Resource{
-		ResourceType: spb.SapDiscovery_Resource_COMPUTE,
-		ResourceKind: "ComputeAddress",
+		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 		ResourceUri:  addressURI,
 		UpdateTime:   timestamppb.Now(),
 	}
