@@ -55,6 +55,12 @@ type (
 		Instance *sapb.SAPInstance
 	}
 
+	// ClientInterface contains API methods and has been created for easy testing of the SAPControl APIs
+	ClientInterface interface {
+		GetProcessList() ([]sapcontrolclient.OSProcess, error)
+		ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error)
+	}
+
 	// ProcessStatus has the sap process status.
 	ProcessStatus struct {
 		Name          string
@@ -163,11 +169,6 @@ func createProcessMap(result commandlineexecutor.Result, names, dss, pids [][]st
 	return processes, result.ExitCode, nil
 }
 
-// ClientInterface contains API methods and has been created for easy testing of the API
-type ClientInterface interface {
-	GetProcessList() ([]sapcontrolclient.OSProcess, error)
-}
-
 // GetProcessList uses the SapControl web API to build a map describing the statuses
 // of all SAP processes.
 // Parameter is a ClientInterface
@@ -255,6 +256,40 @@ func (p *Properties) ParseABAPGetWPTable(ctx context.Context, exec commandlineex
 	}
 
 	log.Logger.Debugw("Found ABAP Processes", "processcount", processes, "busyprocesses", busyProcesses, "pidMap", processNameToPID)
+	return processes, busyProcesses, processNameToPID, nil
+}
+
+// ABAPGetWPTable uses the sapcontrolclient package to run the ABAPGetWPTable SAPControl function.
+// Returns:
+//   - processes - A map with key->worker_process_type and value->total_process_count.
+//   - busyProcesses - A map with key->worker_process_type and value->busy_process_count.
+//   - processNameToPID - A map with key->pid and value->worker_process_type.
+func (p *Properties) ABAPGetWPTable(c ClientInterface) (map[string]int, map[string]int, map[string]string, error) {
+	wp, err := c.ABAPGetWPTable()
+	if err != nil {
+		log.Logger.Debugw("Failed to run ABAPGetWPTable API call", log.Error(err))
+		return nil, nil, nil, err
+	}
+
+	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "API Response", wp)
+	return processABAPGetWPTableResponse(wp)
+}
+
+// processABAPGetWPTableResponse processes the WorkProcess list returned by the ABAPGetWPTable SAPControl function.
+func processABAPGetWPTableResponse(wp []sapcontrolclient.WorkProcess) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
+	processes = make(map[string]int)
+	busyProcesses = make(map[string]int)
+	processNameToPID = make(map[string]string)
+	for _, p := range wp {
+		workProcessType := p.Type
+		processes[workProcessType]++
+		processNameToPID[strconv.FormatInt(p.Pid, 10)] = workProcessType
+		if p.Status != "Wait" {
+			busyProcesses[workProcessType]++
+		}
+	}
+
+	log.Logger.Debugw("Found ABAP Processes", "count", processes, "busy", busyProcesses, "pidMap", processNameToPID)
 	return processes, busyProcesses, processNameToPID, nil
 }
 

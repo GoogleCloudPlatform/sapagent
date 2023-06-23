@@ -238,19 +238,25 @@ func TestProcessList(t *testing.T) {
 }
 
 type fakeSAPClient struct {
-	processes []sapcontrolclient.OSProcess
-	err       error
+	processes     []sapcontrolclient.OSProcess
+	workProcesses []sapcontrolclient.WorkProcess
+	err           error
 }
 
-func newFakeSAPClient(processes []sapcontrolclient.OSProcess, err error) fakeSAPClient {
+func newFakeSAPClient(processes []sapcontrolclient.OSProcess, workProcesses []sapcontrolclient.WorkProcess, err error) fakeSAPClient {
 	return fakeSAPClient{
-		processes: processes,
-		err:       err,
+		processes:     processes,
+		workProcesses: workProcesses,
+		err:           err,
 	}
 }
 
 func (c fakeSAPClient) GetProcessList() ([]sapcontrolclient.OSProcess, error) {
 	return c.processes, c.err
+}
+
+func (c fakeSAPClient) ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error) {
+	return c.workProcesses, c.err
 }
 
 func TestCreateProcessMapFromAPIResp(t *testing.T) {
@@ -347,14 +353,16 @@ func TestGetProcessList(t *testing.T) {
 		wantErr        error
 	}{
 		{
-			name:           "FakeCall",
-			fakeSAPClient:  newFakeSAPClient([]sapcontrolclient.OSProcess{}, nil),
-			wantProcStatus: map[int]*ProcessStatus{},
-			wantErr:        nil,
+			name:          "FakeCall",
+			fakeSAPClient: newFakeSAPClient([]sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}}, nil, nil),
+			wantProcStatus: map[int]*ProcessStatus{
+				0: &ProcessStatus{Name: "hdbdaemon", DisplayStatus: "GREEN", IsGreen: true, PID: "9609"},
+			},
+			wantErr: nil,
 		},
 		{
 			name:           "Error",
-			fakeSAPClient:  newFakeSAPClient(nil, cmpopts.AnyError),
+			fakeSAPClient:  newFakeSAPClient(nil, nil, cmpopts.AnyError),
 			wantProcStatus: nil,
 			wantErr:        cmpopts.AnyError,
 		},
@@ -425,6 +433,73 @@ func TestParseABAPGetWPTable(t *testing.T) {
 			}
 			if diff := cmp.Diff(test.wantPIDMap, gotPIDMap); diff != "" {
 				t.Errorf("ParseABAPGetWPTable(%v)=%v, want: %v.", test.fakeExec, gotPIDMap, test.wantPIDMap)
+			}
+		})
+	}
+}
+
+func TestABAPGetWPTable(t *testing.T) {
+	tests := []struct {
+		name              string
+		wp                []sapcontrolclient.WorkProcess
+		wantProcesses     map[string]int
+		wantBusyProcesses map[string]int
+		wantPIDMap        map[string]string
+		wantErr           error
+	}{
+		{
+			name:              "SuccessOneWorkProcess",
+			wp:                []sapcontrolclient.WorkProcess{{0, "DIA", 7488, "Run", "4", ""}},
+			wantProcesses:     map[string]int{"DIA": 1},
+			wantBusyProcesses: map[string]int{"DIA": 1},
+			wantPIDMap:        map[string]string{"7488": "DIA"},
+			wantErr:           nil,
+		},
+		{
+			name: "SuccessAllWorkProcess",
+			wp: []sapcontrolclient.WorkProcess{
+				{0, "DIA", 7488, "Run", "4", ""},
+				{1, "BTC", 7489, "Wait", "", ""},
+				{2, "SPO", 7490, "Wait", "", ""},
+				{3, "DIA", 7491, "Wait", "", ""},
+				{4, "DIA", 7492, "Wait", "", ""},
+			},
+			wantProcesses:     map[string]int{"DIA": 3, "BTC": 1, "SPO": 1},
+			wantBusyProcesses: map[string]int{"DIA": 1},
+			wantPIDMap:        map[string]string{"7488": "DIA", "7489": "BTC", "7490": "SPO", "7491": "DIA", "7492": "DIA"},
+			wantErr:           nil,
+		},
+		{
+			name:              "Error",
+			wp:                nil,
+			wantProcesses:     nil,
+			wantBusyProcesses: nil,
+			wantPIDMap:        nil,
+			wantErr:           cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := Properties{}
+			var respErr error = nil
+			if test.wp == nil {
+				respErr = cmpopts.AnyError
+			}
+			fakeSAPClient := newFakeSAPClient([]sapcontrolclient.OSProcess{}, test.wp, respErr)
+			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ABAPGetWPTable(fakeSAPClient)
+
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("ABAPGetWPTable(%v)=%v, want: %v.", fakeSAPClient, err, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantProcesses, gotProcessCount); diff != "" {
+				t.Errorf("ABAPGetWPTable(%v) work process count mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
+			}
+			if diff := cmp.Diff(test.wantBusyProcesses, gotBusyProcessCount); diff != "" {
+				t.Errorf("ABAPGetWPTable(%v) busy work process count mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
+			}
+			if diff := cmp.Diff(test.wantPIDMap, gotPIDMap); diff != "" {
+				t.Errorf("ABAPGetWPTable(%v) PID map mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
 			}
 		})
 	}
