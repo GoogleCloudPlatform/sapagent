@@ -55,7 +55,7 @@ func TestReadRules(t *testing.T) {
 		},
 		{
 			name:  "SingleRuleSuccess",
-			files: []string{"rules/r_sap_hana_internal_support_role.json"},
+			files: []string{"rules/security/r_sap_hana_internal_support_role.json"},
 			want: []*rpb.Rule{
 				&rpb.Rule{
 					Id:          "r_sap_hana_internal_support_role",

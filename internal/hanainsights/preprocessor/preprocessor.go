@@ -29,16 +29,16 @@ import (
 )
 
 var (
-	//go:embed rules/*.json testrules/*.json
+	//go:embed rules/*.json testrules/*.json rules/security/*.json
 	rulesDir embed.FS
 
 	// RuleFilenames has list of filenames containing rule definitions.
 	RuleFilenames = []string{
 		"rules/knowledgebase.json",
-		"rules/r_sap_hana_internal_support_role.json",
-		"rules/r_dev_privs_in_prod.json",
-		"rules/r_system_replication_allowed_sender.json",
-		"rules/r_vulnerability_cve_2019_0357.json",
+		"rules/security/r_sap_hana_internal_support_role.json",
+		"rules/security/r_dev_privs_in_prod.json",
+		"rules/security/r_system_replication_allowed_sender.json",
+		"rules/security/r_vulnerability_cve_2019_0357.json",
 	}
 )
 
