@@ -64,12 +64,30 @@ type (
 
 	// WorkProcess struct for ABAPGetWPTable soap response body content.
 	WorkProcess struct {
-		No   int64  `xml:"No,omitempty"`
-		Type string `xml:"Typ,omitempty"`
-		Pid  int64  `xml:"Pid,omitempty"`
+		No     int64  `xml:"No,omitempty"`
+		Type   string `xml:"Typ,omitempty"`
+		Pid    int64  `xml:"Pid,omitempty"`
 		Status string `xml:"Status,omitempty"`
-		Time string `xml:"Time,omitempty"`
+		Time   string `xml:"Time,omitempty"`
 		User   string `xml:"User,omitempty"`
+	}
+
+	// GetQueueStatisticRequest struct for GetQueueStatistic soap request body.
+	GetQueueStatisticRequest struct {
+		XMLName xml.Name `xml:"urn:SAPControl GetQueueStatistic"`
+	}
+
+	// GetQueueStatisticResponse struct for GetQueueStatistic soap response body.
+	GetQueueStatisticResponse struct {
+		XMLName xml.Name           `xml:"SAPControl GetQueueStatisticResponse"`
+		Queues  []TaskHandlerQueue `xml:"queue>item"`
+	}
+
+	// TaskHandlerQueue struct for GetQueueStatistic response with valid Now and High entries.
+	TaskHandlerQueue struct {
+		Type string `xml:"Typ,omitempty"`
+		Now  int64  `xml:"Now,omitempty"`
+		High int64  `xml:"High,omitempty"`
 	}
 )
 
@@ -101,7 +119,7 @@ func (c Client) GetProcessList() ([]OSProcess, error) {
 	if err := c.call(&GetProcessListRequest{}, res); err != nil {
 		return nil, err
 	}
-	log.Logger.Debugw("Sapcontrol GetProcessList", "API response", res.Processes)
+	log.Logger.Debugw("Sapcontrol GetProcessList", "apiResponse", res.Processes)
 	return res.Processes, nil
 }
 
@@ -115,6 +133,19 @@ func (c Client) ABAPGetWPTable() ([]WorkProcess, error) {
 		return nil, err
 	}
 
-	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "API Response", res.WorkProcesses)
+	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "apiResponse", res.WorkProcesses)
 	return res.WorkProcesses, nil
+}
+
+// GetQueueStatistic performs GetQueueStatistic soap request.
+// Returns:
+//   - GetQueueStatistic API call response as a list of TaskHandlerQueue structs.
+//   - Error if Client.call fails, nil otherwise.
+func (c Client) GetQueueStatistic() ([]TaskHandlerQueue, error) {
+	res := &GetQueueStatisticResponse{}
+	if err := c.call(&GetQueueStatisticRequest{}, res); err != nil {
+		return nil, err
+	}
+	log.Logger.Debugw("Sapcontrol GetQueueStatistic", "apiResponse", res.Queues)
+	return res.Queues, nil
 }

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:SAPControl="urn:SAPControl" xmlns:SAPCCMS="urn:SAPCCMS" xmlns:SAPHostControl="urn:SAPHostControl" xmlns:SAPLandscapeService="urn:SAPLandscapeService" xmlns:SAPMetricService="urn:SAPMetricService" xmlns:SAPOscol="urn:SAPOscol" xmlns:SAPDSR="urn:SAPDSR">
+    <SOAP-ENV:Body>
+      <SAPControl:GetQueueStatisticResponse>
+        <queue>
+          <item><Typ>ABAP/NOWP</Typ><Now>7</Now><High>2</High><Max>14000</Max><Writes>753221</Writes><Reads>753221</Reads></item>
+          <item><Typ>ABAP/DIA</Typ><Now>0</Now><High>5</High><Max>14000</Max><Writes>1537418</Writes><Reads>1537418</Reads></item>
+          <item><Typ>ABAP/UPD</Typ><Now>0</Now><High>2</High><Max>14000</Max><Writes>12135</Writes><Reads>12135</Reads></item>
+          <item><Typ>ABAP/ENQ</Typ><Now>0</Now><High>0</High><Max>14000</Max><Writes>0</Writes><Reads>0</Reads></item>
+          <item><Typ>ABAP/BTC</Typ><Now>0</Now><High>2</High><Max>14000</Max><Writes>98620</Writes><Reads>98620</Reads></item>
+          <item><Typ>ABAP/SPO</Typ><Now>0</Now><High>4</High><Max>14000</Max><Writes>133651</Writes><Reads>133651</Reads></item>
+          <item><Typ>ABAP/UP2</Typ><Now>0</Now><High>1</High><Max>14000</Max><Writes>12132</Writes><Reads>12132</Reads></item>
+          <item><Typ>ICM/Intern</Typ><Now>0</Now><High>1</High><Max>6000</Max><Writes>121694</Writes><Reads>121694</Reads></item>
+        </queue>
+      </SAPControl:GetQueueStatisticResponse>
+    </SOAP-ENV:Body>
+  </SOAP-ENV:Envelope>

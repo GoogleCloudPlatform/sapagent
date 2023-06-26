@@ -35,14 +35,17 @@ type request struct {
 
 type simpleResponse struct {
 	XMLName xml.Name `xml:"TestResponse"`
+	Success bool     `xml:"Success"`
+}
 
-	Success bool `xml:"Success"`
+type integerResponse struct {
+	XMLName xml.Name `xml:"TestResponse"`
+	Pid     int64    `xml:"Pid"`
 }
 
 type complexResponse struct {
 	XMLName xml.Name `xml:"TestResponse"`
-
-	Content content `xml:"Content"`
+	Content content  `xml:"Content"`
 }
 
 type content struct {
@@ -94,6 +97,30 @@ var httpResponses = map[string]*httpResponseXML{
 		</soap:Envelope>`,
 		httpStatusCode: http.StatusOK,
 	},
+	"integerOverflowResponse": &httpResponseXML{
+		XMLResp: `<?xml version="1.0" encoding="utf-8"?>
+		<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+			<soap:Body>
+				<TestResponse>
+					<Name>Integer Overflow</Name>
+					<Pid>1000000000000000000000</Pid>
+			</TestResponse>
+			</soap:Body>
+		</soap:Envelope>`,
+		httpStatusCode: http.StatusOK,
+	},
+	"invalidIntResponse": &httpResponseXML{
+		XMLResp: `<?xml version="1.0" encoding="utf-8"?>
+		<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+			<soap:Body>
+				<TestResponse>
+					<Name>Integer Overflow</Name>
+					<Pid>This is not an integer.</Pid>
+			</TestResponse>
+			</soap:Body>
+		</soap:Envelope>`,
+		httpStatusCode: http.StatusOK,
+	},
 	"httpErrorResponse": &httpResponseXML{
 		XMLResp:        `Bad Request`,
 		httpStatusCode: http.StatusBadRequest,
@@ -101,6 +128,7 @@ var httpResponses = map[string]*httpResponseXML{
 }
 
 type errWriter struct{}
+
 func (errWriter) Write(p []byte) (n int, err error) { return 0, fmt.Errorf("unwritable") }
 
 // Test marshaling the request envelope with fakeEncoder.
@@ -213,6 +241,24 @@ func TestCall(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			// Test performing soap.call unsuccessful unmarshaling for response with integer overflow.
+			desc:         "integerOverflowError",
+			httpHandler:  writeHTTPResponse(httpResponses["integerOverflowResponse"]),
+			req:          &request{},
+			respBody:     &integerResponse{},
+			wantRespBody: &integerResponse{},
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			// Test performing soap.call unsuccessful unmarshaling for response with wrong field type.
+			desc:         "invalidFieldTypeError",
+			httpHandler:  writeHTTPResponse(httpResponses["invalidIntResponse"]),
+			req:          &request{},
+			respBody:     &integerResponse{},
+			wantRespBody: &integerResponse{},
+			wantErr:      cmpopts.AnyError,
+		},
+		{
 			// Test performing soap.call unsuccessful marshaling for invalid request.
 			desc:         "marshalError",
 			httpHandler:  writeHTTPResponse(httpResponses["complexResponse"]),
@@ -254,6 +300,7 @@ func TestCall(t *testing.T) {
 			gotErr := client.Call(req, test.respBody)
 			opts := []cmp.Option{
 				cmpopts.IgnoreFields(simpleResponse{}, "XMLName"),
+				cmpopts.IgnoreFields(integerResponse{}, "XMLName"),
 				cmpopts.IgnoreFields(complexResponse{}, "XMLName"),
 			}
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {

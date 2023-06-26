@@ -63,6 +63,9 @@ var (
 
 	//go:embed testdata/fault_response.txt
 	faultResponse string
+
+	//go:embed testdata/getqueuestatistic/all_queues.txt
+	taskQueueResponse string
 )
 
 // NewSapControl returns a new mock for sapcontrol.
@@ -184,7 +187,7 @@ func TestABAPGetWPTable(t *testing.T) {
 		wantErr         error
 	}{
 		{
-			name:         "SuccessAllWorkProcess",
+			name:         "SuccessWorkProcess",
 			fakeResponse: workProcessResponse,
 			wantWorkProcess: []WorkProcess{
 				{0, "DIA", 12723, "Run", "4", ""},
@@ -217,6 +220,52 @@ func TestABAPGetWPTable(t *testing.T) {
 
 			if diff := cmp.Diff(test.wantWorkProcess, gotWorkProcesses); diff != "" {
 				t.Errorf("ABAPGetWPTable() returned unexpected diff (-want +got):\n%v", diff)
+			}
+		})
+	}
+}
+
+func TestGetQueueStatistic(t *testing.T) {
+	tests := []struct {
+		name           string
+		fakeResponse   string
+		wantTaskQueues []TaskHandlerQueue
+		wantErr        error
+	}{
+		{
+			name:         "SuccessTaskQueues",
+			fakeResponse: taskQueueResponse,
+			wantTaskQueues: []TaskHandlerQueue{
+				{Type: "ABAP/NOWP", Now: 7, High: 2},
+				{Type: "ABAP/DIA", High: 5},
+				{Type: "ABAP/UPD", High: 2},
+				{Type: "ABAP/ENQ"},
+				{Type: "ABAP/BTC", High: 2},
+				{Type: "ABAP/SPO", High: 4},
+				{Type: "ABAP/UP2", High: 1},
+				{Type: "ICM/Intern", High: 1},
+			},
+			wantErr: nil,
+		},
+		{
+			name:         "Fault",
+			fakeResponse: faultResponse,
+			wantErr:      cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setupSAPMocks(t, test.fakeResponse)
+			c := setupClient(t)
+			gotTaskQueues, gotErr := c.GetQueueStatistic()
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("GetQueueStatistic(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
+			}
+
+			if diff := cmp.Diff(test.wantTaskQueues, gotTaskQueues); diff != "" {
+				t.Errorf("GetQueueStatistic() returned unexpected diff (-want +got):\n%v", diff)
 			}
 		})
 	}
