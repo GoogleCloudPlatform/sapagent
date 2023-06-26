@@ -240,13 +240,15 @@ func TestProcessList(t *testing.T) {
 type fakeSAPClient struct {
 	processes     []sapcontrolclient.OSProcess
 	workProcesses []sapcontrolclient.WorkProcess
+	taskQueues    []sapcontrolclient.TaskHandlerQueue
 	err           error
 }
 
-func newFakeSAPClient(processes []sapcontrolclient.OSProcess, workProcesses []sapcontrolclient.WorkProcess, err error) fakeSAPClient {
+func newFakeSAPClient(processes []sapcontrolclient.OSProcess, wp []sapcontrolclient.WorkProcess, tq []sapcontrolclient.TaskHandlerQueue, err error) fakeSAPClient {
 	return fakeSAPClient{
 		processes:     processes,
-		workProcesses: workProcesses,
+		workProcesses: wp,
+		taskQueues:    tq,
 		err:           err,
 	}
 }
@@ -259,7 +261,11 @@ func (c fakeSAPClient) ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error) 
 	return c.workProcesses, c.err
 }
 
-func TestCreateProcessMapFromAPIResp(t *testing.T) {
+func (c fakeSAPClient) GetQueueStatistic() ([]sapcontrolclient.TaskHandlerQueue, error) {
+	return c.taskQueues, c.err
+}
+
+func TestGetProcessList(t *testing.T) {
 	tests := []struct {
 		name           string
 		respProcesses  []sapcontrolclient.OSProcess
@@ -328,41 +334,9 @@ func TestCreateProcessMapFromAPIResp(t *testing.T) {
 			},
 			wantErr: nil,
 		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			gotProcStatus, gotErr := createProcessMapFromAPIResp(test.respProcesses)
-
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("createProcessMapFromAPIResp(%v), gotErr: %v wantErr: %v.", test.respProcesses, gotErr, test.wantErr)
-			}
-
-			if diff := cmp.Diff(test.wantProcStatus, gotProcStatus); diff != "" {
-				t.Errorf("createProcessMapFromAPIResp(%v) returned unexpected diff (-want +got):\n%v \ngot : %v", test.respProcesses, diff, gotProcStatus)
-			}
-		})
-	}
-}
-
-func TestGetProcessList(t *testing.T) {
-	tests := []struct {
-		name           string
-		fakeSAPClient  ClientInterface
-		wantProcStatus map[int]*ProcessStatus
-		wantErr        error
-	}{
-		{
-			name:          "FakeCall",
-			fakeSAPClient: newFakeSAPClient([]sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}}, nil, nil),
-			wantProcStatus: map[int]*ProcessStatus{
-				0: &ProcessStatus{Name: "hdbdaemon", DisplayStatus: "GREEN", IsGreen: true, PID: "9609"},
-			},
-			wantErr: nil,
-		},
 		{
 			name:           "Error",
-			fakeSAPClient:  newFakeSAPClient(nil, nil, cmpopts.AnyError),
+			respProcesses:  nil,
 			wantProcStatus: nil,
 			wantErr:        cmpopts.AnyError,
 		},
@@ -370,12 +344,17 @@ func TestGetProcessList(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotProcStatus, gotErr := p.GetProcessList(test.fakeSAPClient)
+			var respErr error = nil
+			if test.respProcesses == nil {
+				respErr = cmpopts.AnyError
+			}
+			fakeSAPClient := newFakeSAPClient(test.respProcesses, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{}, respErr)
+			gotProcStatus, gotErr := p.GetProcessList(fakeSAPClient)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("GetProcessList(%v), gotErr: %v wantErr: %v.", test.fakeSAPClient, gotErr, test.wantErr)
+				t.Errorf("GetProcessList(%v), gotErr: %v wantErr: %v.", fakeSAPClient, gotErr, test.wantErr)
 			}
 			if diff := cmp.Diff(test.wantProcStatus, gotProcStatus); diff != "" {
-				t.Errorf("Properties.GetProcessList(%v) returned unexpected diff (-want +got):\n%v \ngot : %v", test.fakeSAPClient, diff, gotProcStatus)
+				t.Errorf("Properties.GetProcessList(%v) returned unexpected diff (-want +got):\n%v \ngot : %v", fakeSAPClient, diff, gotProcStatus)
 			}
 		})
 	}
@@ -486,7 +465,7 @@ func TestABAPGetWPTable(t *testing.T) {
 			if test.wp == nil {
 				respErr = cmpopts.AnyError
 			}
-			fakeSAPClient := newFakeSAPClient([]sapcontrolclient.OSProcess{}, test.wp, respErr)
+			fakeSAPClient := newFakeSAPClient([]sapcontrolclient.OSProcess{}, test.wp, []sapcontrolclient.TaskHandlerQueue{}, respErr)
 			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ABAPGetWPTable(fakeSAPClient)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
@@ -572,6 +551,54 @@ func TestParseQueueStats(t *testing.T) {
 			}
 			if diff := cmp.Diff(test.wantPeak, gotPeakQueueUsage); diff != "" {
 				t.Errorf("ParseQueueStats(%v)=%v, want: %v.", test.fakeExec, gotPeakQueueUsage, test.wantPeak)
+			}
+		})
+	}
+}
+
+func TestGetQueueStatistic(t *testing.T) {
+	tests := []struct {
+		name        string
+		taskQueues  []sapcontrolclient.TaskHandlerQueue
+		wantCurrent map[string]int64
+		wantPeak    map[string]int64
+		wantErr     error
+	}{
+		{
+			name: "Success",
+			taskQueues: []sapcontrolclient.TaskHandlerQueue{
+				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
+			},
+			wantCurrent: map[string]int64{"ABAP/NOWP": 0, "ABAP/DIA": 0, "ICM/Intern": 0},
+			wantPeak:    map[string]int64{"ABAP/NOWP": 8, "ABAP/DIA": 10, "ICM/Intern": 7},
+		},
+		{
+			name:        "Error",
+			taskQueues:  nil,
+			wantCurrent: nil,
+			wantPeak:    nil,
+			wantErr:     cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := Properties{}
+			var respErr error = nil
+			if test.taskQueues == nil {
+				respErr = cmpopts.AnyError
+			}
+			fakeSAPClient := newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, test.taskQueues, respErr)
+			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.GetQueueStatistic(fakeSAPClient)
+
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("GetQueueStatistic(%v)=%v, want: %v.", fakeSAPClient, err, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantCurrent, gotCurrentQueueUsage); diff != "" {
+				t.Errorf("GetQueueStatistic(%v) Current queue usage mismatch, diff (-want, +got): %v", fakeSAPClient, diff)
+			}
+			if diff := cmp.Diff(test.wantPeak, gotPeakQueueUsage); diff != "" {
+				t.Errorf("GetQueueStatistic(%v) Peak queue usage mismatch, diff (-want, +got): %v", fakeSAPClient, diff)
 			}
 		})
 	}

@@ -59,6 +59,7 @@ type (
 	ClientInterface interface {
 		GetProcessList() ([]sapcontrolclient.OSProcess, error)
 		ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error)
+		GetQueueStatistic() ([]sapcontrolclient.TaskHandlerQueue, error)
 	}
 
 	// ProcessStatus has the sap process status.
@@ -335,6 +336,33 @@ func (p *Properties) ParseQueueStats(ctx context.Context, exec commandlineexecut
 			continue
 		}
 		peakQueueUsage[queue] = peakVal
+	}
+
+	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
+	return currentQueueUsage, peakQueueUsage, nil
+}
+
+// GetQueueStatistic performs GetQueueStatistic soap request.
+// Returns:
+//   - currentQueueUsage - A map with key->queue_type and value->current_queue_usage.
+//   - peakQueueUsage - A map with key->queue_type and value->peak_queue_usage.
+func (p *Properties) GetQueueStatistic(c ClientInterface) (map[string]int64, map[string]int64, error) {
+	tq, err := c.GetQueueStatistic()
+	if err != nil {
+		log.Logger.Debugw("Failed to run GetQueueStatistic API call", log.Error(err))
+		return nil, nil, err
+	}
+	return processGetQueueStatisticResponse(tq)
+}
+
+// processGetQueueStatisticResponse processes the TaskHandlerQueue list returned by the GetQueueStatistic SAPControl function.
+func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQueue) (map[string]int64, map[string]int64, error) {
+	currentQueueUsage := make(map[string]int64)
+	peakQueueUsage := make(map[string]int64)
+	for _, q := range taskQueues {
+		queue, current, peak := q.Type, q.Now, q.High
+		currentQueueUsage[queue] = current
+		peakQueueUsage[queue] = peak
 	}
 
 	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
