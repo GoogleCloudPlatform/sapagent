@@ -76,7 +76,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			prefix := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
 			output.Write(inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID))
 		} else {
-			log.Logger.Infow("Input line did not contain a specified prefix", "line", line)
+			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
 	if err := scanner.Err(); err != nil {

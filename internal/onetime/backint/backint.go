@@ -28,6 +28,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/delete"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -151,6 +152,8 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.
 		return inquire.Execute(ctx, config, bucketHandle, inFile, outFile)
 	case bpb.Function_DELETE:
 		return delete.Execute(ctx, config, bucketHandle, inFile, outFile)
+	case bpb.Function_RESTORE:
+		return restore.Execute(ctx, config, bucketHandle, inFile, outFile)
 	default:
 		log.Logger.Errorw("Unsupported Backint function", "function", config.GetFunction().String())
 		return false

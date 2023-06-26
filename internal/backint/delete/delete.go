@@ -80,7 +80,7 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 				output.Write([]byte(fmt.Sprintf("#DELETED %q %q\n", externalBackupID, fileName)))
 			}
 		} else {
-			log.Logger.Infow("Input line did not contain a specified prefix", "line", line)
+			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
 	if err := scanner.Err(); err != nil {

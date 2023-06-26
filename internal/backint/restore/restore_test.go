@@ -1,0 +1,239 @@
+/*
+Copyright 2023 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package restore
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	s "cloud.google.com/go/storage"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+)
+
+var (
+	fakeServer = fakestorage.NewServer([]fakestorage.Object{
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
+				Name:       "object.txt",
+			},
+			Content: []byte("test content"),
+		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
+				// The backup object name is in the format <userID>/<fileName>/<externalBackupID>.bak
+				Name:    "test@TST/object.txt/12345.bak",
+				Created: time.UnixMilli(12345),
+			},
+			Content: []byte("test content 1"),
+		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
+				Name:       "test@TST/object.txt/1234567890.bak",
+				Created:    time.UnixMilli(1234567890),
+			},
+			Content: []byte("test content 2"),
+		},
+	})
+	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
+	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST"}
+	fakeFile            = func() *os.File {
+		f, _ := os.Open("fake-file.txt")
+		return f
+	}
+)
+
+func TestRestore(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		destName  string
+		wantError error
+		want      string
+	}{
+		{
+			name:      "MalformedSoftwareID",
+			input:     "#SOFTWAREID",
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name:      "FormattedSoftwareID",
+			input:     `#SOFTWAREID "backint 1.50"`,
+			want:      fmt.Sprintf(`#SOFTWAREID "backint 1.50" "Google %s %s"`+"\n", configuration.AgentName, configuration.AgentVersion),
+			wantError: nil,
+		},
+		{
+			name:      "MalformedNull",
+			input:     "#NULL",
+			wantError: cmpopts.AnyError,
+		},
+		// There are 2 objects in the fake bucket with the same user ID and filename.
+		// This test case will restore the latest created.
+		{
+			name:      "FormattedNull",
+			input:     `#NULL "/object.txt"`,
+			destName:  t.TempDir() + "/object.txt",
+			want:      `#RESTORED "1234567890" "/object.txt"` + "\n",
+			wantError: nil,
+		},
+		{
+			name:      "MalformedExternalBackupID",
+			input:     "#EBID",
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name:      "FormattedExternalBackupID",
+			input:     `#EBID "12345" "/object.txt"`,
+			destName:  t.TempDir() + "/object.txt",
+			want:      `#RESTORED "12345" "/object.txt"` + "\n",
+			wantError: nil,
+		},
+		{
+			name:      "EmptyInput",
+			input:     "",
+			wantError: nil,
+		},
+		{
+			name:      "NoSpecifiedPrefix",
+			input:     "#TEST",
+			wantError: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.destName != "" {
+				f, err := os.Create(test.destName)
+				if err != nil {
+					t.Fatalf("os.Create(%v) failed: %v", test.destName, err)
+				}
+				defer f.Close()
+				// Add the destName to the input so Backint can restore to the correct file.
+				test.input += fmt.Sprintf(" %s", test.destName)
+			}
+
+			input := bytes.NewBufferString(test.input)
+			output := bytes.NewBufferString("")
+			got := restore(context.Background(), defaultConfig, defaultBucketHandle, input, output)
+			if output.String() != test.want {
+				t.Errorf("restore() = %s, want: %s", output.String(), test.want)
+			}
+			if !cmp.Equal(got, test.wantError, cmpopts.EquateErrors()) {
+				t.Errorf("restore() = %v, want: %v", got, test.wantError)
+			}
+		})
+	}
+}
+
+func TestRestoreScannerError(t *testing.T) {
+	want := cmpopts.AnyError
+	got := restore(context.Background(), defaultConfig, defaultBucketHandle, fakeFile(), bytes.NewBufferString(""))
+	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
+		t.Errorf("restore() = %v, want: %v", got, want)
+	}
+}
+
+func TestRestoreFile(t *testing.T) {
+	tests := []struct {
+		name             string
+		bucket           *s.BucketHandle
+		copier           storage.IOFileCopier
+		fileName         string
+		destName         string
+		externalBackupID string
+		wantPrefix       string
+	}{
+		{
+			name:       "NoBucketNoParameters",
+			wantPrefix: "#ERROR",
+		},
+		{
+			name:             "NoBucketWithParameters",
+			fileName:         "/test.txt",
+			externalBackupID: "12345",
+			wantPrefix:       "#ERROR",
+		},
+		{
+			name:       "NoObjectsFound",
+			bucket:     defaultBucketHandle,
+			fileName:   "fake-object.txt",
+			wantPrefix: "#NOTFOUND",
+		},
+		{
+			name:       "ErrorOpeningDest",
+			bucket:     defaultBucketHandle,
+			fileName:   "/object.txt",
+			wantPrefix: "#ERROR",
+		},
+		{
+			name:   "DownloadFail",
+			bucket: defaultBucketHandle,
+			copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+				return 0, errors.New("copy error")
+			},
+			fileName:   "/object.txt",
+			destName:   t.TempDir() + "/object.txt",
+			wantPrefix: "#ERROR",
+		},
+		{
+			name:       "SuccessfulRestore",
+			bucket:     defaultBucketHandle,
+			copier:     io.Copy,
+			fileName:   "/object.txt",
+			destName:   t.TempDir() + "/object.txt",
+			wantPrefix: "#RESTORED",
+		},
+		{
+			name:             "SuccessfulRestoreWithEBID",
+			bucket:           defaultBucketHandle,
+			copier:           io.Copy,
+			externalBackupID: "12345",
+			fileName:         "/object.txt",
+			destName:         t.TempDir() + "/object.txt",
+			wantPrefix:       "#RESTORED",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.destName != "" {
+				f, err := os.Create(test.destName)
+				if err != nil {
+					t.Fatalf("os.Create(%v) failed: %v", test.destName, err)
+				}
+				defer f.Close()
+			}
+
+			got := restoreFile(context.Background(), defaultConfig, test.bucket, test.copier, test.fileName, test.destName, test.externalBackupID)
+			if !strings.HasPrefix(string(got), test.wantPrefix) {
+				t.Errorf("restoreFile(%s, %s) = %s, wantPrefix: %s", test.fileName, test.externalBackupID, got, test.wantPrefix)
+			}
+		})
+	}
+}

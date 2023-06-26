@@ -290,6 +290,27 @@ func TestRun(t *testing.T) {
 			input:  `#SOFTWAREID "backint 1.50"`,
 			want:   true,
 		},
+		{
+			name: "RestoreFailed",
+			config: &bpb.BackintConfiguration{
+				InputFile:  t.TempDir() + "/input.txt",
+				OutputFile: t.TempDir() + "/output.txt",
+				Function:   bpb.Function_RESTORE,
+			},
+			input: "#SOFTWAREID",
+			want:  false,
+		},
+		{
+			name: "RestoreSuccess",
+			config: &bpb.BackintConfiguration{
+				InputFile:  t.TempDir() + "/input.txt",
+				OutputFile: t.TempDir() + "/output.txt",
+				Function:   bpb.Function_RESTORE,
+			},
+			bucket: defaultBucketHandle,
+			input:  `#SOFTWAREID "backint 1.50"`,
+			want:   true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
