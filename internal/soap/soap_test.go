@@ -125,6 +125,12 @@ var httpResponses = map[string]*httpResponseXML{
 		XMLResp:        `Bad Request`,
 		httpStatusCode: http.StatusBadRequest,
 	},
+	"emptyResponse": &httpResponseXML{
+		XMLResp: `<?xml version="1.0" encoding="utf-8"?>
+		<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+		</soap:Envelope>`,
+		httpStatusCode: http.StatusOK,
+	},
 }
 
 type errWriter struct{}
@@ -283,6 +289,15 @@ func TestCall(t *testing.T) {
 			// Test client.call successful parsing for HTTP error response.
 			desc:         "httpErrorResponse",
 			httpHandler:  writeHTTPResponse(httpResponses["httpErrorResponse"]),
+			req:          &request{},
+			respBody:     &complexResponse{},
+			wantRespBody: &complexResponse{},
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			// Test client.call empty response.
+			desc:         "emptyResponse",
+			httpHandler:  writeHTTPResponse(httpResponses["emptyResponse"]),
 			req:          &request{},
 			respBody:     &complexResponse{},
 			wantRespBody: &complexResponse{},

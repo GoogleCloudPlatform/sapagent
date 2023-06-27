@@ -46,12 +46,6 @@ var (
 	//go:embed testdata/getprocesslist/all_processes.txt
 	processListResponse string
 
-	//go:embed testdata/getprocesslist/one_process.txt
-	oneProcessListResponse string
-
-	emptyResponse string = `<?xml version="1.0" encoding="UTF-8"?>
-		</SOAP-ENV:Envelope>`
-
 	//go:embed testdata/getprocesslist/no_pid.txt
 	noPidProcessListResponse string
 
@@ -115,12 +109,6 @@ func TestGetProcessList(t *testing.T) {
 		wantErr        error
 	}{
 		{
-			name:           "SucceedsOneProcess",
-			fakeResponse:   oneProcessListResponse,
-			wantProcStatus: []OSProcess{OSProcess{"hdbdaemon", "SAPControl-GREEN", 9609}},
-			wantErr:        nil,
-		},
-		{
 			name:         "SucceedsAllProcesses",
 			fakeResponse: processListResponse,
 			wantProcStatus: []OSProcess{
@@ -154,11 +142,6 @@ func TestGetProcessList(t *testing.T) {
 			fakeResponse:   noNameProcessListResponse,
 			wantProcStatus: []OSProcess{OSProcess{"hdbdaemon", "SAPControl-GREEN", 9609}, OSProcess{"", "SAPControl-GREEN", 9972}},
 			wantErr:        nil,
-		},
-		{
-			name:         "EmptyResponse",
-			fakeResponse: emptyResponse,
-			wantErr:      cmpopts.AnyError,
 		},
 	}
 
