@@ -544,13 +544,13 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	}
 	res := exec(ctx, commandlineexecutor.Params{
 		Executable:  "hb_report",
-		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from[:10], to[:10], destFilesPath),
+		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath + "/report"),
 		Timeout:     3600,
 	})
 	if res.ExitCode != 0 {
 		res := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
-			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s --tmp-dir %s", from[:10], to[:10], destFilesPath),
+			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath + "/report"),
 			Timeout:     3600,
 		})
 		if res.ExitCode != 0 {
@@ -578,8 +578,19 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 		return err
 	}
 	res := exec(ctx, p)
-	if res.ExitCode != 0 {
-		return errors.New(res.StdErr)
+	if res.ExitCode != 0 && res.StdErr != "" {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while executing command %s", p.Executable), errors.New(res.StdErr))
+		// if sosreport is unsuccessful in collecting pacemaker data, we will fallback to crm_report
+		from := time.Now().UTC().AddDate(0, 0, -3).String()[:16]
+		to := time.Now().UTC().String()[:16]
+		crmRes := exec(ctx, commandlineexecutor.Params{
+			Executable:  "crm_report",
+			ArgsToSplit: fmt.Sprintf("-S -f '%s' -t '%s' --dest %s", from, to, destFilesPath+"/report"),
+			Timeout:     3600,
+		})
+		if crmRes.ExitCode != 0 {
+			return errors.New(crmRes.StdErr)
+		}
 	}
 	return nil
 }

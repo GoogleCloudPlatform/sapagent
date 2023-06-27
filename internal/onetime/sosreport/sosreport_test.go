@@ -1169,6 +1169,15 @@ func TestCollectRHELPacemakerLogs(t *testing.T) {
 			want:          cmpopts.AnyError,
 		},
 		{
+			name:          "AllCommandsFailure",
+			ctx:           context.Background(),
+			exec:          fakeExecForErrOnly,
+			p:             commandlineexecutor.Params{ArgsToSplit: "failure"},
+			destFilesPath: "success",
+			fs:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
 			name:          "Success",
 			ctx:           context.Background(),
 			exec:          fakeExec,
