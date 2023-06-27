@@ -28,7 +28,7 @@
               "rhs": ".global"
             },
             {
-              "lhs": "count(q_allowed_sender)",
+              "lhs": "count(q_allowed_sender:value)",
               "operation": "LT",
               "rhs": "1"
             }

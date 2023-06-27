@@ -4,13 +4,15 @@
   "queries": [
     {
       "name": "sampleQuery1",
-      "sql": "sample_sql",
-      "dependentonquries": ["sampleQuery2"]
+      "sql": "select sample_column from sample_table",
+      "columns": ["sample_column"],
+      "dependent_on_queries": ["sampleQuery2"]
     },
     {
       "name": "sampleQuery2",
-      "sql": "sample_sql",
-      "dependentonquries": ["sampleQuery1"]
+      "sql": "select sample_column from sample_table",
+      "columns": ["sample_column"],
+      "dependent_on_queries": ["sampleQuery1"]
     }
   ]
 }

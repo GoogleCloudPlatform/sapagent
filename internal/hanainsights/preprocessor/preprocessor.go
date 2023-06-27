@@ -21,6 +21,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -40,6 +41,11 @@ var (
 		"rules/security/r_system_replication_allowed_sender.json",
 		"rules/security/r_vulnerability_cve_2019_0357.json",
 	}
+
+	// CountPattern regex is used to identify possible matches in the trigger condition using count()
+	// function on the knowledge base which returns the size of slice read from the HANA DB by a query
+	// for a column.
+	CountPattern = regexp.MustCompile(`^count\(([^)]+)\)$`)
 )
 
 // ReadRules returns preprocessed rules ready for execution by rule engine.
@@ -52,6 +58,7 @@ func ReadRules(files []string) ([]*rpb.Rule, error) {
 	var rules []*rpb.Rule
 
 	ruleIds := make(map[string]bool)
+	globalKBKeys := make(map[string]bool)
 	for _, filename := range files {
 		rule := &rpb.Rule{}
 		c, err := rulesDir.ReadFile(filename)
@@ -63,7 +70,10 @@ func ReadRules(files []string) ([]*rpb.Rule, error) {
 			log.Logger.Infow("Could not unmarshal rule from", "filename", filename)
 			return nil, err
 		}
-		err = validateRule(rule, ruleIds)
+		if rule.GetId() == "knowledgebase" {
+			globalKBKeys = buildQueryNameToCols(rule)
+		}
+		err = validateRule(rule, ruleIds, globalKBKeys)
 		if err != nil {
 			log.Logger.Warnf("Skipping rule: ", "id", rule.GetId(), "err", err.Error())
 			continue
@@ -79,13 +89,26 @@ func ReadRules(files []string) ([]*rpb.Rule, error) {
 	return rules, nil
 }
 
-// validateRule checks if a rule is valid or not.
-func validateRule(rule *rpb.Rule, ruleIds map[string]bool) error {
+// validateRule checks if a rule is valid or not. The following validations are ran to ensure validity:
+//
+//   - Each rule must have a unique Id.
+//
+//   - Each query should have a non-empty name, sql query and slice representing the expected columns.
+//
+//   - Each column should have the same name in the slice as it is in the query.
+//
+//   - Each recommendation should have a unique Id.
+//
+//   - The trigger condition should be valid for each recommendation.
+func validateRule(rule *rpb.Rule, ruleIds map[string]bool, globalKBKeys map[string]bool) error {
 	if _, ok := ruleIds[rule.GetId()]; ok {
 		return fmt.Errorf("rule with ruleID %s already exists - ruleID must be unique", rule.GetId())
 	}
 	ruleIds[rule.GetId()] = true
-	return validateQueries(rule.GetQueries())
+	if err := validateQueries(rule.GetQueries()); err != nil {
+		return err
+	}
+	return validateRecommendations(rule.GetRecommendations(), buildQueryNameToCols(rule), globalKBKeys)
 }
 
 // validateQueries checks if each query in a rule is valid.
@@ -104,6 +127,49 @@ func validateQueries(queries []*rpb.Query) error {
 			if !strings.Contains(q.GetSql(), col) {
 				return fmt.Errorf("column %s does not exist in the query %s", col, q.GetSql())
 			}
+		}
+	}
+	return nil
+}
+
+// validateRecommendations checks if the recommendations to a rule are valid or not.
+func validateRecommendations(recs []*rpb.Recommendation, queryNameToCols map[string]bool, globalKBKeys map[string]bool) error {
+	recsIds := make(map[string]bool)
+	for _, r := range recs {
+		if _, ok := recsIds[r.GetId()]; ok {
+			return fmt.Errorf("recommendation with ID %s already exists", r.GetId())
+		}
+		recsIds[r.GetId()] = true
+		if err := validateTriggerCondition(r.GetTrigger(), queryNameToCols, globalKBKeys); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateTriggerCondition(node *rpb.EvalNode, queryNameToCols map[string]bool, globalKBKeys map[string]bool) error {
+	if node == nil {
+		return nil
+	}
+	if len(node.GetChildEvals()) == 0 {
+		// a leaf node should have a trigger condition evaluated i.e lhs, rhs and operation.
+		if node.GetLhs() == "" || node.GetRhs() == "" || node.GetOperation() == rpb.EvalNode_UNDEFINED {
+			return fmt.Errorf("invalid eval node with lhs: %s, rhs: %s, operation: %s", node.GetLhs(), node.GetRhs(), node.GetOperation().String())
+		}
+		if !matchTriggerKeys(node.GetLhs(), queryNameToCols, globalKBKeys) {
+			return fmt.Errorf("invalid lhs condition in the trigger condition lhs: %s", node.GetLhs())
+		}
+		if !matchTriggerKeys(node.GetRhs(), queryNameToCols, globalKBKeys) {
+			return fmt.Errorf("invalid rhs condition in the trigger condition rhs: %s", node.GetRhs())
+		}
+		return nil
+	}
+	if node.GetOperation() != rpb.EvalNode_OR && node.GetOperation() != rpb.EvalNode_AND {
+		return fmt.Errorf("invalid eval node operation: %s, in case of trigger condition having multiple child evals, allowed operations are AND|OR", node.GetOperation().String())
+	}
+	for _, child := range node.GetChildEvals() {
+		if err := validateTriggerCondition(child, queryNameToCols, globalKBKeys); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -208,4 +274,33 @@ func prepareQueryNameToQuery(queries []*rpb.Query) map[string]*rpb.Query {
 		queryNameToQuery[q.GetName()] = q
 	}
 	return queryNameToQuery
+}
+
+// In order to check trigger conditions, we need to ensure that each key prepared for accessing
+// knowledge base is valid. Key is of the form `queryname:columnname`.
+// buildQueryNameToCols prepares a map for each query and column combination to make it easy to
+// key validation.
+func buildQueryNameToCols(rule *rpb.Rule) map[string]bool {
+	queryNameToCols := make(map[string]bool)
+	for _, q := range rule.GetQueries() {
+		for _, col := range q.GetColumns() {
+			queryNameToCols[q.GetName()+":"+col] = true
+		}
+	}
+	return queryNameToCols
+}
+
+func matchTriggerKeys(cond string, queryNameToCols map[string]bool, globalKBKeys map[string]bool) bool {
+	match := CountPattern.FindStringSubmatch(cond)
+	if len(match) != 2 {
+		return true
+	}
+	key := match[1]
+	if _, ok := queryNameToCols[key]; ok {
+		return true
+	}
+	if _, ok := globalKBKeys[key]; ok {
+		return true
+	}
+	return false
 }

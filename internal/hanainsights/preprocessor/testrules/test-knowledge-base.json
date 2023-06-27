@@ -1,0 +1,14 @@
+{
+  "id": "knowledgebase",
+  "description": "Knowledgebase which contains queries which are frequently used in rules.",
+  "labels": [
+    "internal"
+  ],
+  "queries": [
+    {
+      "name": "q_system_usage",
+      "sql": "SELECT VALUE as value from M_INIFILE_CONTENTS  WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_information' AND KEY = 'usage'",
+      "columns": ["value"]
+    }
+  ]
+}

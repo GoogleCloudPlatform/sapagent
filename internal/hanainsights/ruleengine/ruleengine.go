@@ -22,9 +22,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
@@ -241,7 +241,7 @@ func compare(lhs, rhs string, op rpb.EvalNode_EvalType, kb knowledgeBase) bool {
 // insertFromKB refers to the knowledgebase and inserts the values where functions are used.
 // Possible functions include: count(query_name:column_name)
 func insertFromKB(s string, kb knowledgeBase) (string, error) {
-	countPattern := regexp.MustCompile(`^count\(([^)]+)\)$`)
+	countPattern := preprocessor.CountPattern
 	match := countPattern.FindStringSubmatch(s)
 	if len(match) != 2 {
 		// The string does not use count() function, no insertion necessary.
