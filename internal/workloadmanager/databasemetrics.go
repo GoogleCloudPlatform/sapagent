@@ -60,6 +60,10 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 		return err
 	}
 	metrics := processInsights(ctx, params, insights)
+
+	system := CollectSystemMetricsFromConfig(ctx, params)
+	appendLabels(metrics.Metrics[0].Metric.Labels, system.Metrics[0].Metric.Labels)
+
 	sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
 	return nil
 }
