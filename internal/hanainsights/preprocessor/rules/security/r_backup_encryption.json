@@ -1,0 +1,32 @@
+{
+  "id": "r_backup_encryption",
+  "description": "Validates the encryption status of data and log backups.",
+  "labels": [
+    "security"
+  ],
+  "queries": [
+    {
+      "name": "q_backup_encryption",
+      "sql": "SELECT IS_ENCRYPTION_ACTIVE FROM M_ENCRYPTION_OVERVIEW WHERE SCOPE = 'BACKUP'",
+      "columns": ["IS_ENCRYPTION_ACTIVE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_backup_encryption",
+      "trigger": {
+        "lhs": "q_backup_encryption:IS_ENCRYPTION_ACTIVE",
+        "operation": "EQ",
+        "rhs": "FALSE"
+      },
+      "actions": [
+        {
+          "description": "Data and Log backups are not encrypted. It is recommended to protect backups from unauthorized access. When backup encryption is enabled, the backup data is transferred encrypted to the backup location, both for file-based backups and for backups created using third-party backup tools."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/4fe29514fd584807ac9f2a04f6754767/edf132427f0043b08769774512504858.html, https://help.sap.com/docs/SAP_HANA_PLATFORM/b3ee5778bc2e4a089d3299b82ec762a7/e5c51c31ecaf4b7188a76776ba3c0797.html,SAP Note 2444090 - FAQ: SAP HANA Backup Encryption,https://me.sap.com/notes/2444090"
+      ]
+    }
+  ]
+}
