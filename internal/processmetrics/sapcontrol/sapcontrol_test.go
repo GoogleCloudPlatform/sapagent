@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 )
 
 var (
@@ -237,34 +238,6 @@ func TestProcessList(t *testing.T) {
 	}
 }
 
-type fakeSAPClient struct {
-	processes     []sapcontrolclient.OSProcess
-	workProcesses []sapcontrolclient.WorkProcess
-	taskQueues    []sapcontrolclient.TaskHandlerQueue
-	err           error
-}
-
-func newFakeSAPClient(processes []sapcontrolclient.OSProcess, wp []sapcontrolclient.WorkProcess, tq []sapcontrolclient.TaskHandlerQueue, err error) fakeSAPClient {
-	return fakeSAPClient{
-		processes:     processes,
-		workProcesses: wp,
-		taskQueues:    tq,
-		err:           err,
-	}
-}
-
-func (c fakeSAPClient) GetProcessList() ([]sapcontrolclient.OSProcess, error) {
-	return c.processes, c.err
-}
-
-func (c fakeSAPClient) ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error) {
-	return c.workProcesses, c.err
-}
-
-func (c fakeSAPClient) GetQueueStatistic() ([]sapcontrolclient.TaskHandlerQueue, error) {
-	return c.taskQueues, c.err
-}
-
 func TestGetProcessList(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -348,7 +321,7 @@ func TestGetProcessList(t *testing.T) {
 			if test.respProcesses == nil {
 				respErr = cmpopts.AnyError
 			}
-			fakeSAPClient := newFakeSAPClient(test.respProcesses, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{}, respErr)
+			fakeSAPClient := sapcontrolclienttest.Fake{Processes: test.respProcesses, ErrGetProcessList: respErr}
 			gotProcStatus, gotErr := p.GetProcessList(fakeSAPClient)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("GetProcessList(%v), gotErr: %v wantErr: %v.", fakeSAPClient, gotErr, test.wantErr)
@@ -465,7 +438,7 @@ func TestABAPGetWPTable(t *testing.T) {
 			if test.wp == nil {
 				respErr = cmpopts.AnyError
 			}
-			fakeSAPClient := newFakeSAPClient([]sapcontrolclient.OSProcess{}, test.wp, []sapcontrolclient.TaskHandlerQueue{}, respErr)
+			fakeSAPClient := sapcontrolclienttest.Fake{WorkProcesses: test.wp, ErrABAPGetWPTable: respErr}
 			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ABAPGetWPTable(fakeSAPClient)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
@@ -588,7 +561,7 @@ func TestGetQueueStatistic(t *testing.T) {
 			if test.taskQueues == nil {
 				respErr = cmpopts.AnyError
 			}
-			fakeSAPClient := newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, test.taskQueues, respErr)
+			fakeSAPClient := sapcontrolclienttest.Fake{TaskQueues: test.taskQueues, ErrGetQueueStatistic: respErr}
 			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.GetQueueStatistic(fakeSAPClient)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {

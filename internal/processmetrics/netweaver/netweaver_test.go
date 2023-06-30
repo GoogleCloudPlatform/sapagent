@@ -31,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -106,34 +107,6 @@ var (
 		4 dispstatus: GREEN
 		4 pid: 555`
 )
-
-type fakeSAPClient struct {
-	processes     []sapcontrolclient.OSProcess
-	workProcesses []sapcontrolclient.WorkProcess
-	taskQueues    []sapcontrolclient.TaskHandlerQueue
-	err           error
-}
-
-func newFakeSAPClient(processes []sapcontrolclient.OSProcess, wp []sapcontrolclient.WorkProcess, tq []sapcontrolclient.TaskHandlerQueue, err error) fakeSAPClient {
-	return fakeSAPClient{
-		processes:     processes,
-		workProcesses: wp,
-		taskQueues:    tq,
-		err:           err,
-	}
-}
-
-func (c fakeSAPClient) GetProcessList() ([]sapcontrolclient.OSProcess, error) {
-	return c.processes, c.err
-}
-
-func (c fakeSAPClient) ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error) {
-	return c.workProcesses, c.err
-}
-
-func (c fakeSAPClient) GetQueueStatistic() ([]sapcontrolclient.TaskHandlerQueue, error) {
-	return c.taskQueues, c.err
-}
 
 func TestNWAvailabilityValue(t *testing.T) {
 	tests := []struct {
@@ -429,7 +402,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 	tests := []struct {
 		name             string
 		fakeExec         commandlineexecutor.Execute
-		fakeClient       fakeSAPClient
+		fakeClient       sapcontrolclienttest.Fake
 		wantMetricCount  int
 		useSAPControlAPI bool
 	}{
@@ -454,19 +427,20 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		},
 		{
 			name: "SuccessWebmethod",
-			fakeClient: newFakeSAPClient([]sapcontrolclient.OSProcess{
+			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
 				{"hdbdaemon", "SAPControl-GREEN", 9609},
 				{"hdbcompileserver", "SAPControl-GREEN", 9972},
 				{"hdbindexserver", "SAPControl-GREEN", 10013},
 				{"hdbnameserver", "SAPControl-GREEN", 9642},
 				{"hdbpreprocessor", "SAPControl-GREEN", 9975},
-			}, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{}, nil),
+			},
+			},
 			wantMetricCount:  6,
 			useSAPControlAPI: true,
 		},
 		{
 			name:             "FailureWebmethod",
-			fakeClient:       newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{}, cmpopts.AnyError),
+			fakeClient:       sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
 			wantMetricCount:  0,
 			useSAPControlAPI: true,
 		},
@@ -677,7 +651,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 	tests := []struct {
 		name             string
 		fakeExec         commandlineexecutor.Execute
-		fakeClient       fakeSAPClient
+		fakeClient       sapcontrolclienttest.Fake
 		wantMetricCount  int
 		useSAPControlAPI bool
 	}{
@@ -703,16 +677,16 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		},
 		{
 			name:             "FailureWebmethod",
-			fakeClient:       newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{}, cmpopts.AnyError),
+			fakeClient:       sapcontrolclienttest.Fake{ErrABAPGetWPTable: cmpopts.AnyError},
 			wantMetricCount:  0,
 			useSAPControlAPI: true,
 		},
 		{
 			name: "SuccessWebmethod",
-			fakeClient: newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{
+			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
 				{0, "DIA", 7488, "Run", "4", ""},
 				{1, "BTC", 7489, "Wait", "", ""},
-			}, []sapcontrolclient.TaskHandlerQueue{}, nil),
+			}},
 			wantMetricCount:  3,
 			useSAPControlAPI: true,
 		},
@@ -734,7 +708,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 	tests := []struct {
 		name             string
 		fakeExec         commandlineexecutor.Execute
-		fakeClient       fakeSAPClient
+		fakeClient       sapcontrolclienttest.Fake
 		wantMetricCount  int
 		useSAPControlAPI bool
 	}{
@@ -780,27 +754,27 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		},
 		{
 			name:             "DPMONFailureWebmethod",
-			fakeClient:       newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{}, cmpopts.AnyError),
+			fakeClient:       sapcontrolclienttest.Fake{ErrGetQueueStatistic: cmpopts.AnyError},
 			wantMetricCount:  0,
 			useSAPControlAPI: true,
 		},
 		{
 			name:             "DPMonFailsWithTasksWebmethod",
-			fakeClient:       newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{{"ICM/Intern", 0, 7}}, cmpopts.AnyError),
+			fakeClient:       sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{{"ICM/Intern", 0, 7}}, ErrGetQueueStatistic: cmpopts.AnyError},
 			wantMetricCount:  0,
 			useSAPControlAPI: true,
 		},
 		{
 			name:             "ZeroQueuesWebmethod",
-			fakeClient:       newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{}, nil),
+			fakeClient:       sapcontrolclienttest.Fake{},
 			wantMetricCount:  0,
 			useSAPControlAPI: true,
 		},
 		{
 			name: "DPMONSuccessWebmethod",
-			fakeClient: newFakeSAPClient([]sapcontrolclient.OSProcess{}, []sapcontrolclient.WorkProcess{}, []sapcontrolclient.TaskHandlerQueue{
+			fakeClient: sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{
 				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
-			}, nil),
+			}},
 			wantMetricCount:  6,
 			useSAPControlAPI: true,
 		},
