@@ -45,10 +45,15 @@ type (
 
 	// Insights is a map of rules that evaluated to true with key=<rule-id> and value=<slice of recommendation-ids that evaluated to true>
 	Insights map[string][]ValidationResult
+
+	// SQLDBHandle is responsible for providing testable *sql.DB implemented methods.
+	SQLDBHandle interface {
+		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	}
 )
 
 // Run starts the rule engine execution - executes the rules and generate insights.
-func Run(ctx context.Context, db *sql.DB, rules []*rpb.Rule) (Insights, error) {
+func Run(ctx context.Context, db SQLDBHandle, rules []*rpb.Rule) (Insights, error) {
 	// gkb is the global knowledge base with frequently accessed data.
 	gkb := buildGlobalKnowledgeBase(ctx, db, rules)
 
@@ -68,7 +73,7 @@ func Run(ctx context.Context, db *sql.DB, rules []*rpb.Rule) (Insights, error) {
 	return insights, nil
 }
 
-func buildGlobalKnowledgeBase(ctx context.Context, db *sql.DB, rules []*rpb.Rule) knowledgeBase {
+func buildGlobalKnowledgeBase(ctx context.Context, db SQLDBHandle, rules []*rpb.Rule) knowledgeBase {
 	gkb := make(knowledgeBase)
 	for _, rule := range rules {
 		if rule.Id == "knowledgebase" {
@@ -90,7 +95,7 @@ func deepCopy(gkb knowledgeBase) knowledgeBase {
 }
 
 // buildKnowledgeBase runs all the queries and generates a result knowledge base for each rule.
-func buildKnowledgeBase(ctx context.Context, db *sql.DB, queries []*rpb.Query, kb knowledgeBase) error {
+func buildKnowledgeBase(ctx context.Context, db SQLDBHandle, queries []*rpb.Query, kb knowledgeBase) error {
 	for _, query := range queries {
 		cols := createColumns(len(query.Columns))
 		rows, err := QueryDatabase(ctx, db.QueryContext, query.Sql)

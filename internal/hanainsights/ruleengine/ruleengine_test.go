@@ -17,6 +17,8 @@ limitations under the License.
 package ruleengine
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"testing"
@@ -26,6 +28,27 @@ import (
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 )
+
+func fakeQueryExec(context.Context, string, ...any) (*sql.Rows, error) {
+	return &sql.Rows{}, nil
+}
+
+func fakeQueryExecError(context.Context, string, ...any) (*sql.Rows, error) {
+	return nil, cmpopts.AnyError
+}
+
+type (
+	fakeSQLDB struct {
+		err error
+	}
+)
+
+func (fdb *fakeSQLDB) QueryContext(context.Context, string, ...any) (*sql.Rows, error) {
+	if fdb.err != nil {
+		return nil, fdb.err
+	}
+	return &sql.Rows{}, nil
+}
 
 func TestAddRow(t *testing.T) {
 	cols := createColumns(2)
@@ -400,5 +423,51 @@ func TestCopy(t *testing.T) {
 	got := deepCopy(want)
 	if !cmp.Equal(got, want) {
 		t.Errorf("copy(%v)=%v want: %v", want, got, want)
+	}
+}
+
+func TestQueryDatabase(t *testing.T) {
+	tests := []struct {
+		name          string
+		sql           string
+		testQueryFunc queryFunc
+		want          error
+	}{
+		{
+			name: "EmptySQLQuery",
+			sql:  "",
+			want: cmpopts.AnyError,
+		},
+		{
+			name:          "QueryError",
+			sql:           "sample_sql",
+			testQueryFunc: fakeQueryExecError,
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "QuerySuccess",
+			sql:           "sample_sql",
+			testQueryFunc: fakeQueryExec,
+			want:          nil,
+		},
+	}
+	for _, test := range tests {
+		_, got := QueryDatabase(context.Background(), test.testQueryFunc, test.sql)
+		if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+			t.Errorf("QueryDatabase()=%v want: %v", got, test.want)
+		}
+	}
+}
+
+func TestRun(t *testing.T) {
+	var want error
+	rules := []*rpb.Rule{
+		&rpb.Rule{Id: "abc", Queries: []*rpb.Query{&rpb.Query{}}, Recommendations: []*rpb.Recommendation{&rpb.Recommendation{}}},
+		&rpb.Rule{Id: "knowledgebase", Queries: []*rpb.Query{&rpb.Query{}}},
+	}
+	fdb := &fakeSQLDB{err: nil}
+	_, got := Run(context.Background(), fdb, rules)
+	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
+		t.Errorf("Run()=%v want: %v", got, want)
 	}
 }
