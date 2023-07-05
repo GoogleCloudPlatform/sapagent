@@ -70,6 +70,12 @@ var (
 		SAPInstance: defaultSAPInstance,
 	}
 
+	defaultAPIInstanceProperties = &InstanceProperties{
+		Config:           defaultConfig,
+		SAPInstance:      defaultSAPInstance,
+		UseSAPControlAPI: true,
+	}
+
 	defaultSapControlOutputAppSrv = `OK
 		0 name: msg_server
 		0 dispstatus: GREEN
@@ -448,10 +454,16 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			useSAPControlAPI = test.useSAPControlAPI
-			metrics := collectNetWeaverMetrics(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
-			if len(metrics) != test.wantMetricCount {
-				t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
+			if test.useSAPControlAPI {
+				metrics := collectNetWeaverMetrics(context.Background(), defaultAPIInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+				if len(metrics) != test.wantMetricCount {
+					t.Errorf("collectNetWeaverMetrics() metric count mismatch using webmethod, got: %v want: %v.", len(metrics), test.wantMetricCount)
+				}
+			} else {
+				metrics := collectNetWeaverMetrics(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+				if len(metrics) != test.wantMetricCount {
+					t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
+				}
 			}
 		})
 	}
@@ -694,11 +706,18 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			useSAPControlAPI = test.useSAPControlAPI
-			got := collectABAPProcessStatus(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			if test.useSAPControlAPI {
+				got := collectABAPProcessStatus(context.Background(), defaultAPIInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
 
-			if len(got) != test.wantMetricCount {
-				t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)
+				if len(got) != test.wantMetricCount {
+					t.Errorf("collectABAPProcessStatus produced unexpected number of metrics using webmethod, got: %v want: %v.", len(got), test.wantMetricCount)
+				}
+			} else {
+				got := collectABAPProcessStatus(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+
+				if len(got) != test.wantMetricCount {
+					t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)
+				}
 			}
 		})
 	}
@@ -782,11 +801,18 @@ func TestCollectABAPQueueStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			useSAPControlAPI = test.useSAPControlAPI
-			got := collectABAPQueueStats(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			if test.useSAPControlAPI {
+				got := collectABAPQueueStats(context.Background(), defaultAPIInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
 
-			if len(got) != test.wantMetricCount {
-				t.Errorf("collectABAPQueueStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
+				if len(got) != test.wantMetricCount {
+					t.Errorf("collectABAPQueueStats() unexpected metric count using webmethod, got: %d, want: %d.", len(got), test.wantMetricCount)
+				}
+			} else {
+				got := collectABAPQueueStats(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+
+				if len(got) != test.wantMetricCount {
+					t.Errorf("collectABAPQueueStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
+				}
 			}
 		})
 	}

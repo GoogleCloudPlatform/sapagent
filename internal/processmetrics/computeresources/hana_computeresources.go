@@ -23,6 +23,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -44,6 +45,8 @@ type (
 		SAPInstance       *sapb.SAPInstance
 		ProcessListParams commandlineexecutor.Params
 		NewProcHelper     newProcessWithContextHelper
+		SAPControlClient  sapcontrol.ClientInterface
+		UseSAPControlAPI  bool
 	}
 )
 
@@ -59,6 +62,8 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries
 		sapInstance:          p.SAPInstance,
 		newProc:              p.NewProcHelper,
 		getProcessListParams: p.ProcessListParams,
+		SAPControlClient:     p.SAPControlClient,
+		useSAPControlAPI:      p.UseSAPControlAPI,
 	}
 	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {

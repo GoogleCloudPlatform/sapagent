@@ -24,10 +24,14 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
@@ -47,6 +51,11 @@ var (
 	defaultABAPGetWPTableOuput = `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
 	0, DIA, 7488, Wait, , yes, , , 0:24:54, 4, , , , ,
 	1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`
+
+	defaultGetProcessListResponse = []sapcontrolclient.OSProcess{
+		{"hdbdaemon", "SAPControl-GREEN", 111},
+		{"hdbcompileserver", "SAPControl-GREEN", 222},
+	}
 )
 
 const (
@@ -174,12 +183,13 @@ func TestCollectControlProcesses(t *testing.T) {
 
 func TestCollectProcessesForInstance(t *testing.T) {
 	tests := []struct {
-		name   string
-		params parameters
-		want   []*ProcessInfo
+		name       string
+		params     parameters
+		fakeClient sapcontrolclienttest.Fake
+		want       []*ProcessInfo
 	}{
 		{
-			name: "EmptyProcessList",
+			name: "EmptyProcessListCommandLine",
 			params: parameters{
 				config:               defaultConfig,
 				client:               &fake.TimeSeriesCreator{},
@@ -195,7 +205,20 @@ func TestCollectProcessesForInstance(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "NilSAPInstance",
+			name: "EmptyProcessListWebmethod",
+			params: parameters{
+				config:           defaultConfig,
+				client:           &fake.TimeSeriesCreator{},
+				cpuMetricPath:    "/sample/test/proc",
+				memoryMetricPath: "/sample/test/memory",
+				sapInstance:      defaultSAPInstance,
+				SAPControlClient: sapcontrolclienttest.Fake{},
+				useSAPControlAPI: true,
+			},
+			want: nil,
+		},
+		{
+			name: "NilSAPInstanceCommandLine",
 			params: parameters{
 				config:               defaultConfig,
 				client:               &fake.TimeSeriesCreator{},
@@ -209,6 +232,19 @@ func TestCollectProcessesForInstance(t *testing.T) {
 						StdOut: defaultSapControlOutput,
 					}
 				},
+			},
+			want: nil,
+		},
+		{
+			name: "NilSAPInstanceWebmethod",
+			params: parameters{
+				config:           defaultConfig,
+				client:           &fake.TimeSeriesCreator{},
+				cpuMetricPath:    "/sample/test/proc",
+				memoryMetricPath: "/sample/test/memory",
+				sapInstance:      nil,
+				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse},
+				useSAPControlAPI: true,
 			},
 			want: nil,
 		},
@@ -238,6 +274,22 @@ func TestCollectProcessesForInstance(t *testing.T) {
 						Error: errors.New("could not parse ABAPGetWPTable"),
 					}
 				},
+			},
+			want: []*ProcessInfo{
+				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
+				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
+			},
+		},
+		{
+			name: "ErrorInFetchingABAPProcessListWebmethod",
+			params: parameters{
+				config:           defaultConfig,
+				client:           &fake.TimeSeriesCreator{},
+				cpuMetricPath:    "/sample/test/proc",
+				memoryMetricPath: "/sample/test/memory",
+				sapInstance:      defaultSAPInstance,
+				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse, ErrABAPGetWPTable: errors.New("could not parse ABAPGetWPTable")},
+				useSAPControlAPI: true,
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
@@ -279,6 +331,30 @@ func TestCollectProcessesForInstance(t *testing.T) {
 			},
 		},
 		{
+			name: "ProcessListCreatedWithABAPProcessesWebmethod",
+			params: parameters{
+				config:           defaultConfig,
+				client:           &fake.TimeSeriesCreator{},
+				cpuMetricPath:    "/sample/test/proc",
+				memoryMetricPath: "/sample/test/memory",
+				sapInstance:      defaultSAPInstance,
+				SAPControlClient: sapcontrolclienttest.Fake{
+					Processes: defaultGetProcessListResponse,
+					WorkProcesses: []sapcontrolclient.WorkProcess{
+						{0, "DIA", 7488, "Run", "4", ""},
+						{1, "BTC", 7489, "Wait", "", ""},
+					},
+				},
+				useSAPControlAPI: true,
+			},
+			want: []*ProcessInfo{
+				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
+				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
+				&ProcessInfo{Name: "DIA", PID: "7488"},
+				&ProcessInfo{Name: "BTC", PID: "7489"},
+			},
+		},
+		{
 			name: "ProcessListCreatedSuccessfully",
 			params: parameters{
 				config:               defaultConfig,
@@ -299,6 +375,35 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
 			},
 		},
+		{
+			name: "ProcessListCreatedSuccessfullyWebmethod",
+			params: parameters{
+				config:           defaultConfig,
+				client:           &fake.TimeSeriesCreator{},
+				cpuMetricPath:    "/sample/test/proc",
+				memoryMetricPath: "/sample/test/memory",
+				sapInstance:      defaultSAPInstance,
+				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse},
+				useSAPControlAPI: true,
+			},
+			want: []*ProcessInfo{
+				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
+				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
+			},
+		},
+		{
+			name: "ErrorInGettingProcessListWebmethod",
+			params: parameters{
+				config:           defaultConfig,
+				client:           &fake.TimeSeriesCreator{},
+				cpuMetricPath:    "/sample/test/proc",
+				memoryMetricPath: "/sample/test/memory",
+				sapInstance:      defaultSAPInstance,
+				SAPControlClient: sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
+				useSAPControlAPI: true,
+			},
+			want: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -307,7 +412,7 @@ func TestCollectProcessesForInstance(t *testing.T) {
 			// Sort by PID since sapcontrol's ProcessList does not guarantee any ordering.
 			sort.Slice(got, func(i, j int) bool { return got[i].PID < got[j].PID })
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("collectProcessesForInstance(%v) returned unexpected diff (-want +got):\n%s", test.params, diff)
+				t.Errorf("collectProcessesForInstance(%v, %v) returned unexpected diff (-want +got):\n%s", test.params, test, diff)
 			}
 		})
 	}

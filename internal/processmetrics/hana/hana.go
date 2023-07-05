@@ -52,6 +52,7 @@ type (
 		Config             *cnfpb.Configuration
 		Client             cloudmonitoring.TimeSeriesCreator
 		HANAQueryFailCount int64
+		UseSAPControlAPI   bool
 	}
 )
 

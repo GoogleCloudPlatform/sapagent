@@ -22,6 +22,8 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -57,9 +59,11 @@ var (
 
 func TestCollectForHANA(t *testing.T) {
 	tests := []struct {
-		name      string
-		executor  commandlineexecutor.Execute
-		wantCount int
+		name            string
+		executor        commandlineexecutor.Execute
+		useSAPControlAPI bool
+		fakeClient      sapcontrolclienttest.Fake
+		wantCount       int
 	}{
 		{
 			name: "EmptyPIDsMap",
@@ -69,11 +73,28 @@ func TestCollectForHANA(t *testing.T) {
 			wantCount: 0,
 		},
 		{
+			name:            "EmptyPIDsMapWebmethod",
+			useSAPControlAPI: true,
+			fakeClient:      sapcontrolclienttest.Fake{},
+			wantCount:       0,
+		},
+		{
 			name: "OnlyMemoryPerProcessMetricAvailable",
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: defaultSapControlOutputHANA,
 				}
+			},
+			wantCount: 3,
+		},
+		{
+			name:            "OnlyMemoryPerProcessMetricAvailableWebmethod",
+			useSAPControlAPI: true,
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"hdbdaemon", "SAPControl-GREEN", 111},
+					{"hdbcompileserver", "SAPControl-GREEN", 222},
+				},
 			},
 			wantCount: 3,
 		},
@@ -94,6 +115,17 @@ func TestCollectForHANA(t *testing.T) {
 			wantCount: 1,
 		},
 		{
+			name:            "OnlyCPUPerProcessMetricAvailableWebmethod",
+			useSAPControlAPI: true,
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"msg_server", "SAPControl-GREEN", 111},
+					{"enserver", "SAPControl-GREEN", 333},
+				},
+			},
+			wantCount: 1,
+		},
+		{
 			name: "FetchedBothMemoryAndCPUMetricsSuccessfully",
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -109,16 +141,29 @@ func TestCollectForHANA(t *testing.T) {
 			},
 			wantCount: 8,
 		},
+		{
+			name:            "FetchedBothMemoryAndCPUMetricsSuccessfullyWebmethod",
+			useSAPControlAPI: true,
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"hdbdaemon", "SAPControl-GREEN", 444},
+					{"hdbcompileserver", "SAPControl-GREEN", 555},
+				},
+			},
+			wantCount: 8,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testHanaInstanceProps := &HanaInstanceProperties{
-				Config:        defaultConfig,
-				Client:        &fake.TimeSeriesCreator{},
-				Executor:      test.executor,
-				SAPInstance:   defaultSAPInstanceHANA,
-				NewProcHelper: newProcessWithContextHelperTest,
+				Config:           defaultConfig,
+				Client:           &fake.TimeSeriesCreator{},
+				Executor:         test.executor,
+				SAPInstance:      defaultSAPInstanceHANA,
+				NewProcHelper:    newProcessWithContextHelperTest,
+				SAPControlClient: test.fakeClient,
+				UseSAPControlAPI:  test.useSAPControlAPI,
 			}
 			got := testHanaInstanceProps.Collect(context.Background())
 			if len(got) != test.wantCount {

@@ -22,6 +22,8 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
@@ -40,10 +42,12 @@ var (
 
 func TestCollectForNetweaver(t *testing.T) {
 	tests := []struct {
-		name          string
-		executor      commandlineexecutor.Execute
-		wantCount     int
-		processParams commandlineexecutor.Params
+		name             string
+		executor         commandlineexecutor.Execute
+		useSAPControlAPI bool
+		fakeClient       sapcontrolclienttest.Fake
+		wantCount        int
+		processParams    commandlineexecutor.Params
 	}{
 		{
 			name:          "EmptyPIDsMap",
@@ -54,12 +58,29 @@ func TestCollectForNetweaver(t *testing.T) {
 			wantCount: 0,
 		},
 		{
+			name:             "EmptyPIDsMapWebmethod",
+			useSAPControlAPI: true,
+			fakeClient:       sapcontrolclienttest.Fake{},
+			wantCount:        0,
+		},
+		{
 			name:          "OnlyMemoryPerProcessMetricAvailable",
 			processParams: commandlineexecutor.Params{},
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: defaultSapControlOutputNetWeaver,
 				}
+			},
+			wantCount: 3,
+		},
+		{
+			name:             "OnlyMemoryPerProcessMetricAvailableWebmethod",
+			useSAPControlAPI: true,
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"hdbdaemon", "SAPControl-GREEN", 111},
+					{"hdbcompileserver", "SAPControl-GREEN", 222},
+				},
 			},
 			wantCount: 3,
 		},
@@ -80,6 +101,17 @@ func TestCollectForNetweaver(t *testing.T) {
 			},
 			wantCount: 1,
 		},
+		{
+			name:             "OnlyCPUPerProcessMetricAvailableWebmethod",
+			useSAPControlAPI: true,
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"msg_server", "SAPControl-GREEN", 111},
+					{"enserver", "SAPControl-GREEN", 333},
+				},
+			},
+			wantCount: 1,
+		},
 	}
 
 	for _, test := range tests {
@@ -91,7 +123,10 @@ func TestCollectForNetweaver(t *testing.T) {
 				SAPInstance:             defaultSAPInstanceNetWeaver,
 				NewProcHelper:           newProcessWithContextHelperTest,
 				SAPControlProcessParams: test.processParams,
+				SAPControlClient:        test.fakeClient,
+				UseSAPControlAPI:        test.useSAPControlAPI,
 			}
+
 			got := testNetweaverInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() = %d , want %d", len(got), test.wantCount)

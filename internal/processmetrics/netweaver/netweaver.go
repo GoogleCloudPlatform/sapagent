@@ -44,9 +44,10 @@ import (
 type (
 	// InstanceProperties struct has necessary context for Metrics collection.
 	InstanceProperties struct {
-		SAPInstance *sapb.SAPInstance
-		Config      *cnfpb.Configuration
-		Client      cloudmonitoring.TimeSeriesCreator
+		SAPInstance      *sapb.SAPInstance
+		Config           *cnfpb.Configuration
+		Client           cloudmonitoring.TimeSeriesCreator
+		UseSAPControlAPI bool
 	}
 )
 
@@ -73,11 +74,6 @@ const (
 	nwABAPRFCPath              = "/sap/nw/abap/rfc"
 	nwEnqLocksPath             = "/sap/nw/enq/locks/usercountowner"
 )
-
-// useSAPControlAPI is set to true if we want to obtain metrics using the SAPControl API,
-// and false if we want to get metrics using the command line interface.
-// It will be removed once migration from command line to web interface is complete.
-var useSAPControlAPI = false
 
 var (
 	msWorkProcess = regexp.MustCompile(`LB=([0-9]+)`)
@@ -160,7 +156,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, exec co
 		err   error
 		procs map[int]*sapcontrol.ProcessStatus
 	)
-	if useSAPControlAPI {
+	if p.UseSAPControlAPI {
 		procs, err = sc.GetProcessList(scc)
 		if err != nil {
 			log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
@@ -320,7 +316,7 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec c
 		processCount     map[string]int
 		busyProcessCount map[string]int
 	)
-	if useSAPControlAPI {
+	if p.UseSAPControlAPI {
 		processCount, busyProcessCount, _, err = sc.ABAPGetWPTable(scc)
 		if err != nil {
 			log.Logger.Debugw("Sapcontrol web method failed", "error", err)
@@ -361,7 +357,7 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, exec comm
 		currentQueueUsage map[string]int64
 		peakQueueUsage    map[string]int64
 	)
-	if useSAPControlAPI {
+	if p.UseSAPControlAPI {
 		currentQueueUsage, peakQueueUsage, errAPI = sc.GetQueueStatistic(scc)
 		if errAPI != nil {
 			log.Logger.Debugw("Sapcontrol web method failed", "error", errAPI)

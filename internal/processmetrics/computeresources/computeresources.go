@@ -66,6 +66,8 @@ type (
 		newProc              newProcessWithContextHelper
 		getProcessListParams commandlineexecutor.Params
 		getABAPWPTableParams commandlineexecutor.Params
+		SAPControlClient     sapcontrol.ClientInterface
+		useSAPControlAPI     bool
 	}
 
 	// newProcessWithContextHelper is a strategy which creates a new process type
@@ -132,20 +134,39 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 		return nil
 	}
 
+	var (
+		processes    map[int]*sapcontrol.ProcessStatus
+		err          error
+		processInfos []*ProcessInfo
+	)
 	sc := &sapcontrol.Properties{p.sapInstance}
-	processes, _, err := sc.ProcessList(ctx, p.executor, p.getProcessListParams)
-	if err != nil {
-		log.Logger.Error("Error getting ProcessList in computeresources", log.Error(err))
-	}
-
-	var processInfos []*ProcessInfo
-	if p.getABAPWPTableParams.Executable != "" {
-		_, _, pidMap, err := sc.ParseABAPGetWPTable(ctx, p.executor, p.getABAPWPTableParams)
+	if p.useSAPControlAPI {
+		scc := p.SAPControlClient
+		processes, err = sc.GetProcessList(scc)
 		if err != nil {
-			log.Logger.Error("Error getting ABAP processes from ABAPGetWPTable", log.Error(err))
+			log.Logger.Error("Error performing GetProcessList web method in computeresources", log.Error(err))
+		}
+		_, _, pidMap, errABAP := sc.ABAPGetWPTable(scc)
+		if errABAP != nil {
+			log.Logger.Debugw("Error getting ABAP processes from ABAPGetWPTable web method", log.Error(err))
 		} else {
 			for pid, proc := range pidMap {
 				processInfos = append(processInfos, &ProcessInfo{Name: proc, PID: pid})
+			}
+		}
+	} else {
+		processes, _, err = sc.ProcessList(ctx, p.executor, p.getProcessListParams)
+		if err != nil {
+			log.Logger.Error("Error getting ProcessList in computeresources", log.Error(err))
+		}
+		if p.getABAPWPTableParams.Executable != "" {
+			_, _, pidMap, errABAP := sc.ParseABAPGetWPTable(ctx, p.executor, p.getABAPWPTableParams)
+			if errABAP != nil {
+				log.Logger.Error("Error getting ABAP processes from ABAPGetWPTable", log.Error(err))
+			} else {
+				for pid, proc := range pidMap {
+					processInfos = append(processInfos, &ProcessInfo{Name: proc, PID: pid})
+				}
 			}
 		}
 	}

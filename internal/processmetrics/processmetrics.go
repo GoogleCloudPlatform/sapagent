@@ -48,6 +48,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/netweaver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapservice"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
@@ -94,6 +95,12 @@ const (
 	bufferSize       = 10000
 	minimumFrequency = 5
 )
+
+// mainUseSAPControlAPI is set to true if we want to obtain metrics using the SAPControl API,
+// and false if we want to get metrics using the command line interface.
+// It will be removed once migration from command line to web interface is complete.
+// This variable is used to initialize `UseSAPControlAPI` in instance properties.
+var mainUseSAPControlAPI = false
 
 /*
 Start starts collection if collect_process_metrics config option is enabled
@@ -208,6 +215,8 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 					ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", instance.GetInstanceNumber()),
 					Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
+				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
+				UseSAPControlAPI: mainUseSAPControlAPI,
 			}
 
 			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
@@ -216,6 +225,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Config:             p.Config,
 				Client:             p.Client,
 				HANAQueryFailCount: 0,
+				UseSAPControlAPI:   mainUseSAPControlAPI,
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 		}
@@ -238,13 +248,16 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 					ArgsToSplit: fmt.Sprintf("-nr %s -function ABAPGetWPTable", instance.GetInstanceNumber()),
 					Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
+				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
+				UseSAPControlAPI: mainUseSAPControlAPI,
 			}
 
 			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)
 			netweaverCollector := &netweaver.InstanceProperties{
-				SAPInstance: instance,
-				Config:      p.Config,
-				Client:      p.Client,
+				SAPInstance:      instance,
+				Config:           p.Config,
+				Client:           p.Client,
+				UseSAPControlAPI: mainUseSAPControlAPI,
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
 		}
