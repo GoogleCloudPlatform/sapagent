@@ -1,6 +1,6 @@
 {
   "id": "r_dev_privs_in_prod",
-  "description": "Check for users with DEVELOPMENT priveldges in Production environment",
+  "description": "Check for users with DEVELOPMENT privileges in Production environment",
   "labels": [
     "security"
   ],
