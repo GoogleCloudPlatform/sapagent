@@ -84,7 +84,7 @@ func TestReadRules(t *testing.T) {
 					},
 					Recommendations: []*rpb.Recommendation{
 						&rpb.Recommendation{
-							Id: "rec_development_prod_users",
+							Id: "rec_1",
 							Trigger: &rpb.EvalNode{
 								Operation: rpb.EvalNode_AND,
 								ChildEvals: []*rpb.EvalNode{
@@ -123,7 +123,7 @@ func TestReadRules(t *testing.T) {
 					},
 					Recommendations: []*rpb.Recommendation{
 						&rpb.Recommendation{
-							Id: "rec_check_users_with_support_role",
+							Id: "rec_1",
 							Trigger: &rpb.EvalNode{
 								Lhs:       "q_users_sap_hana_internal_support:count",
 								Operation: rpb.EvalNode_GT,

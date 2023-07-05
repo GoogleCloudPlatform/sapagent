@@ -561,7 +561,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 func TestReadHANAInsightsRules(t *testing.T) {
 	params := Parameters{Config: defaultConfiguration}
 	params.ReadHANAInsightsRules()
-	if len(params.HANAInsightRules) != 5 {
-		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(params.HANAInsightRules), 5)
+	if len(params.HANAInsightRules) != 13 {
+		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(params.HANAInsightRules), 13)
 	}
 }

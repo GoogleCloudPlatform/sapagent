@@ -13,7 +13,7 @@
   ],
   "recommendations": [
     {
-      "id": "rec_backup_encryption",
+      "id": "rec_1",
       "trigger": {
         "lhs": "q_backup_encryption:IS_ENCRYPTION_ACTIVE",
         "operation": "EQ",

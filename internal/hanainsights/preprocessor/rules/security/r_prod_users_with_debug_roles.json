@@ -13,7 +13,7 @@
   ],
   "recommendations": [
     {
-      "id": "rec_users_with_debug_roles",
+      "id": "rec_1",
       "trigger":{
           "operation": "AND",
           "child_evals": [

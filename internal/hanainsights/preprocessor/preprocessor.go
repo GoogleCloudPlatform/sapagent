@@ -40,6 +40,14 @@ var (
 		"rules/security/r_dev_privs_in_prod.json",
 		"rules/security/r_system_replication_allowed_sender.json",
 		"rules/security/r_vulnerability_cve_2019_0357.json",
+		"rules/security/r_backup_encryption.json",
+		"rules/security/r_log_encryption.json",
+		"rules/security/r_password_poilcy_force_first_password_change.json",
+		"rules/security/r_password_poilcy_minimal_password_length.json",
+		"rules/security/r_password_poilcy_password_expire_warning_time.json",
+		"rules/security/r_password_poilcy_password_layout.json",
+		"rules/security/r_persistance_encryption.json",
+		"rules/security/r_prod_users_with_debug_roles.json",
 	}
 
 	// CountPattern regex is used to identify possible matches in the trigger condition using count()

@@ -13,7 +13,7 @@
   ],
   "recommendations": [
     {
-      "id": "rec_check_users_with_support_role",
+      "id": "rec_1",
       "trigger": {
         "lhs": "q_users_sap_hana_internal_support:count",
         "operation": "GT",

@@ -9,7 +9,7 @@
   ],
   "recommendations": [
     {
-      "id": "rec_development_prod_users",
+      "id": "rec_1",
       "trigger":{
           "operation": "AND",
           "child_evals": [
