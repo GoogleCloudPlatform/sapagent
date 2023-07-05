@@ -28,6 +28,7 @@ import (
 	store "cloud.google.com/go/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
@@ -49,9 +50,6 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 // delete deletes objects in the bucket based on each line of the input. Results for each
 // deletion are written to the output. Issues with file operations will return errors.
 func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
-	if bucketHandle == nil {
-		return errors.New("no bucket defined")
-	}
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -68,8 +66,8 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 			fileName := strings.Trim(s[2], `"`)
 			object := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
 			log.Logger.Infow("Deleting object", "object", object)
-			err := bucketHandle.Object(object).Delete(ctx)
-			if err == store.ErrObjectNotExist {
+			err := storage.DeleteObject(ctx, bucketHandle, object)
+			if errors.Is(err, store.ErrObjectNotExist) {
 				log.Logger.Errorw("Object not found", "object", object, "err", err)
 				output.Write([]byte(fmt.Sprintf("#NOTFOUND %q %q\n", externalBackupID, fileName)))
 			} else if err != nil {

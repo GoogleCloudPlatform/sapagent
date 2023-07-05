@@ -59,4 +59,5 @@ enum Function {
   RESTORE = 2;
   INQUIRE = 3;
   DELETE = 4;
+  DIAGNOSE = 5;
 }

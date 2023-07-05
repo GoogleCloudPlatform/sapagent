@@ -147,16 +147,6 @@ func TestBackintHandler(t *testing.T) {
 			want: subcommands.ExitUsageError,
 		},
 		{
-			name: "FailNoInputFile",
-			backint: &Backint{
-				user:      "test@TST",
-				function:  "backup",
-				paramFile: defaultParametersFile(t).Name(),
-			},
-			client: defaultStorageClient,
-			want:   subcommands.ExitUsageError,
-		},
-		{
 			name: "SuccessfulBackup",
 			backint: &Backint{
 				user:      "test@TST",
@@ -310,6 +300,16 @@ func TestRun(t *testing.T) {
 			bucket: defaultBucketHandle,
 			input:  `#SOFTWAREID "backint 1.50"`,
 			want:   true,
+		},
+		{
+			name: "DiagnoseFailed",
+			config: &bpb.BackintConfiguration{
+				InputFile:  t.TempDir() + "/input.txt",
+				OutputFile: t.TempDir() + "/output.txt",
+				Function:   bpb.Function_DIAGNOSE,
+			},
+			bucket: nil,
+			want:   false,
 		},
 	}
 	for _, test := range tests {

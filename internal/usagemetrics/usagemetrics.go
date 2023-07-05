@@ -88,6 +88,7 @@ const (
 	BackintDeleteFailure
 	SOSReportCollectionUsageError
 	SOSReportCollectionExitFailure
+	BackintDiagnoseFailure
 )
 
 // Agent wide action mappings.
@@ -108,6 +109,8 @@ const (
 	BackintRestoreFinished
 	BackintInquireFinished
 	BackintDeleteFinished
+	BackintDiagnoseStarted
+	BackintDiagnoseFinished
 )
 
 var (

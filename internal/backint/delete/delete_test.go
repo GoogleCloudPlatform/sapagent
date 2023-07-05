@@ -66,9 +66,11 @@ func TestDelete(t *testing.T) {
 		wantPrefix string
 	}{
 		{
-			name:   "NoBucket",
-			bucket: nil,
-			want:   cmpopts.AnyError,
+			name:       "NoBucket",
+			input:      bytes.NewBufferString("#EBID 12345 /object.txt"),
+			bucket:     nil,
+			wantPrefix: "#ERROR",
+			want:       nil,
 		},
 		{
 			name:   "ScannerError",

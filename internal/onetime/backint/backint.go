@@ -27,6 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/backup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/delete"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/diagnose"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -52,7 +53,7 @@ func (*Backint) Synopsis() string { return "backup, restore, inquire, or delete 
 
 // Usage implements the subcommand interface for backint.
 func (*Backint) Usage() string {
-	return `backint -user=<DBNAME@SID> -function=<backup|restore|inquire|delete>
+	return `backint -user=<DBNAME@SID> -function=<backup|restore|inquire|delete|diagnose>
 	-paramfile=<path-to-file> [-input=<path-to-file>] [-output=<path-to-file>]
 	[-backupid=<database-backup-id>] [-count=<number-of-objects>] [-level=<backup-level>]
 `
@@ -154,6 +155,8 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.
 		return delete.Execute(ctx, config, bucketHandle, inFile, outFile)
 	case bpb.Function_RESTORE:
 		return restore.Execute(ctx, config, bucketHandle, inFile, outFile)
+	case bpb.Function_DIAGNOSE:
+		return diagnose.Execute(ctx, config, bucketHandle, outFile)
 	default:
 		log.Logger.Errorw("Unsupported Backint function", "function", config.GetFunction().String())
 		return false

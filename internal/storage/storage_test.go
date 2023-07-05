@@ -291,3 +291,37 @@ func TestListObjects(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteObject(t *testing.T) {
+	tests := []struct {
+		name   string
+		bucket *storage.BucketHandle
+		object string
+		want   error
+	}{
+		{
+			name: "NoHandle",
+			want: cmpopts.AnyError,
+		},
+		{
+			name:   "FileNotFound",
+			bucket: defaultBucketHandle,
+			object: "fake-object.txt",
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:   "FileDeleted",
+			bucket: defaultBucketHandle,
+			object: "object.txt",
+			want:   nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := DeleteObject(context.Background(), test.bucket, test.object)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("DeleteObject(%s) = %v, want %v", test.object, got, test.want)
+			}
+		})
+	}
+}

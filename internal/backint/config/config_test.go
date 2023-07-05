@@ -204,6 +204,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				Retries:           5,
 				Threads:           defaultThreads(),
 				RateLimitMb:       0,
+				InputFile:         "/dev/stdin",
+				OutputFile:        "/dev/stdout",
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "rate_limit_mb": -1}`), nil
@@ -216,6 +218,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				User:      "testUser",
 				ParamFile: "testParamsFile",
 				Function:  "restore",
+				InFile:    "/input.txt",
+				OutFile:   "/output.txt",
 			},
 			want: &bpb.BackintConfiguration{
 				UserId:            "testUser",
@@ -231,6 +235,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				RateLimitMb:       200,
 				Compress:          true,
 				KmsKey:            "testKey",
+				InputFile:         "/input.txt",
+				OutputFile:        "/output.txt",
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 2, "buffer_size_mb": 200, "file_read_timeout_ms": 2000, "parallel_size_mb": 228, "retries": 25, "threads": 2, "rate_limit_mb": 200}`), nil
@@ -260,6 +266,8 @@ func TestApplyDefaultMaxThreads(t *testing.T) {
 		ParallelSizeMb:    128,
 		Retries:           5,
 		Threads:           64,
+		InputFile:         "/dev/stdin",
+		OutputFile:        "/dev/stdout",
 	}
 	params.applyDefaults(65)
 	got := params.Config

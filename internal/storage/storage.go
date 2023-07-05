@@ -212,6 +212,14 @@ func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix
 	return result, nil
 }
 
+// DeleteObject deletes the specified object from the bucket.
+func DeleteObject(ctx context.Context, bucketHandle *storage.BucketHandle, objectName string) error {
+	if bucketHandle == nil {
+		return errors.New("no bucket defined")
+	}
+	return bucketHandle.Object(objectName).Delete(ctx)
+}
+
 // Read wraps io.Reader to provide upload progress updates.
 func (rw *ReadWriter) Read(p []byte) (n int, err error) {
 	n, err = rw.Reader.Read(p)

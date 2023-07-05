@@ -73,7 +73,7 @@ func (p *Parameters) parseCommandLineArgs() error {
 	}
 	function := bpb.Function(bpb.Function_value[strings.ToUpper(p.Function)])
 	if function == bpb.Function_FUNCTION_UNSPECIFIED {
-		return errors.New("function must be one of: [backup, restore, inquire, delete]")
+		return errors.New("function must be one of: [backup, restore, inquire, delete, diagnose]")
 	}
 
 	p.Config = &bpb.BackintConfiguration{
@@ -167,5 +167,13 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 	if p.Config.FileReadTimeoutMs <= 0 {
 		log.Logger.Warn("file_read_timeout_ms defaulted to 1000")
 		p.Config.FileReadTimeoutMs = 1000
+	}
+	if p.Config.GetInputFile() == "" {
+		log.Logger.Warn("input_file defaulted to /dev/stdin")
+		p.Config.InputFile = "/dev/stdin"
+	}
+	if p.Config.GetOutputFile() == "" {
+		log.Logger.Warn("input_file defaulted to /dev/stdout")
+		p.Config.OutputFile = "/dev/stdout"
 	}
 }
