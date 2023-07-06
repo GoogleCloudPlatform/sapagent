@@ -61,8 +61,6 @@ import (
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 // Logger used for logging structured messages
@@ -77,7 +75,7 @@ type (
 		LogToCloud         bool
 		CloudLoggingClient *logging.Client
 		OSType             string
-		Level              cpb.Configuration_LogLevel
+		Level              zapcore.Level
 		SubCommandName     string
 		LogFileName        string
 		CloudLogName       string
@@ -95,6 +93,7 @@ func init() {
 
 // SetupLogging uses the agent configuration to set up the file Logger.
 func SetupLogging(params Parameters) {
+	level = params.Level.String()
 	logfile = params.LogFileName
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -106,34 +105,20 @@ func SetupLogging(params Parameters) {
 		MaxBackups: 3,
 	})
 
-	defaultLogLevel := zapcore.InfoLevel
-	switch params.Level {
-	case cpb.Configuration_DEBUG:
-		defaultLogLevel = zapcore.DebugLevel
-	case cpb.Configuration_INFO:
-		defaultLogLevel = zapcore.InfoLevel
-	case cpb.Configuration_WARNING:
-		defaultLogLevel = zapcore.WarnLevel
-	case cpb.Configuration_ERROR:
-		defaultLogLevel = zapcore.ErrorLevel
-	default:
-	}
-	level = defaultLogLevel.String()
-
 	var core zapcore.Core
 	// if logging to Cloud Logging then add the file based logging + cloud logging, else just file logging
 	if params.LogToCloud && params.CloudLoggingClient != nil {
 		cloudCore = &CloudCore{
 			GoogleCloudLogger: params.CloudLoggingClient.Logger(params.CloudLogName),
-			LogLevel:          defaultLogLevel,
+			LogLevel:          params.Level,
 		}
 		core = zapcore.NewTee(
-			zapcore.NewCore(fileEncoder, fileLogWriter, defaultLogLevel),
+			zapcore.NewCore(fileEncoder, fileLogWriter, params.Level),
 			cloudCore,
 		)
 	} else {
 		core = zapcore.NewTee(
-			zapcore.NewCore(fileEncoder, fileLogWriter, defaultLogLevel),
+			zapcore.NewCore(fileEncoder, fileLogWriter, params.Level),
 		)
 	}
 	coreLogger := zap.New(core, zap.AddCaller())

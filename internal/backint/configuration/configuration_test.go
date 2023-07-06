@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package config
+package configuration
 
 import (
 	"runtime"
@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"go.uber.org/zap/zapcore"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
@@ -273,5 +274,48 @@ func TestApplyDefaultMaxThreads(t *testing.T) {
 	got := params.Config
 	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 		t.Errorf("%#v.applyDefaults(65) had unexpected diff (-want +got):\n%s", params, diff)
+	}
+}
+
+func TestLogLevelToZapcore(t *testing.T) {
+	tests := []struct {
+		name  string
+		level bpb.LogLevel
+		want  zapcore.Level
+	}{
+		{
+			name:  "INFO",
+			level: bpb.LogLevel_INFO,
+			want:  zapcore.InfoLevel,
+		},
+		{
+			name:  "DEBUG",
+			level: bpb.LogLevel_DEBUG,
+			want:  zapcore.DebugLevel,
+		},
+		{
+			name:  "WARNING",
+			level: bpb.LogLevel_WARNING,
+			want:  zapcore.WarnLevel,
+		},
+		{
+			name:  "ERROR",
+			level: bpb.LogLevel_ERROR,
+			want:  zapcore.ErrorLevel,
+		},
+		{
+			name:  "UNKNOWN",
+			level: bpb.LogLevel_LOG_LEVEL_UNSPECIFIED,
+			want:  zapcore.InfoLevel,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := LogLevelToZapcore(test.level)
+			if got != test.want {
+				t.Errorf("LogLevelToZapcore(%v) = %v, want: %v", test.level, got, test.want)
+			}
+		})
 	}
 }

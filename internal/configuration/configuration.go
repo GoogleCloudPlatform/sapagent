@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
@@ -93,6 +94,23 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
 	return config
+}
+
+// LogLevelToZapcore returns the zapcore equivalent of the configuration log level.
+func LogLevelToZapcore(level cpb.Configuration_LogLevel) zapcore.Level {
+	switch level {
+	case cpb.Configuration_DEBUG:
+		return zapcore.DebugLevel
+	case cpb.Configuration_INFO:
+		return zapcore.InfoLevel
+	case cpb.Configuration_WARNING:
+		return zapcore.WarnLevel
+	case cpb.Configuration_ERROR:
+		return zapcore.ErrorLevel
+	default:
+		log.Logger.Warnw("Unsupported log level, defaulting to INFO", "level", level.String())
+		return zapcore.InfoLevel
+	}
 }
 
 // ApplyDefaults will apply the default configuration settings to the configuration passed.

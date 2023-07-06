@@ -25,7 +25,7 @@ import (
 	s "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/backup"
-	"github.com/GoogleCloudPlatform/sapagent/internal/backint/config"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/delete"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/diagnose"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
@@ -92,12 +92,12 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 	}
 	onetime.SetupOneTimeLogging(lp, b.Name())
 
-	return b.backintHandler(ctx, s.NewClient)
+	return b.backintHandler(ctx, lp, s.NewClient)
 }
 
-func (b *Backint) backintHandler(ctx context.Context, client storage.Client) subcommands.ExitStatus {
+func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client storage.Client) subcommands.ExitStatus {
 	log.Logger.Info("Backint starting")
-	p := config.Parameters{
+	p := configuration.Parameters{
 		User:        b.user,
 		Function:    b.function,
 		InFile:      b.inFile,
@@ -112,6 +112,8 @@ func (b *Backint) backintHandler(ctx context.Context, client storage.Client) sub
 		return subcommands.ExitUsageError
 	}
 	log.Logger.Debugw("Args parsed and config validated", "config", config)
+	lp.Level = configuration.LogLevelToZapcore(config.GetLogLevel())
+	onetime.SetupOneTimeLogging(lp, b.Name())
 
 	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket(), config.GetParallelStreams())
 	if !ok {

@@ -25,6 +25,7 @@ import (
 	"flag"
 
 	"github.com/google/subcommands"
+	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
@@ -37,8 +38,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/sosreport"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
-
-	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 func registerSubCommands() {
@@ -66,7 +65,7 @@ func main() {
 	ctx := context.Background()
 	lp := log.Parameters{
 		OSType: runtime.GOOS,
-		Level:  cpb.Configuration_INFO,
+		Level:  zapcore.InfoLevel,
 	}
 
 	cloudProps := metadataserver.FetchCloudProperties()

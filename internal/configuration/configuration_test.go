@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"go.uber.org/zap/zapcore"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -832,6 +833,49 @@ func TestValidateHANASSLConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if got := validateHANASSLConfig(test.conf); got != test.want {
 				t.Errorf("validateHANASSLConfig() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestLogLevelToZapcore(t *testing.T) {
+	tests := []struct {
+		name  string
+		level cpb.Configuration_LogLevel
+		want  zapcore.Level
+	}{
+		{
+			name:  "INFO",
+			level: cpb.Configuration_INFO,
+			want:  zapcore.InfoLevel,
+		},
+		{
+			name:  "DEBUG",
+			level: cpb.Configuration_DEBUG,
+			want:  zapcore.DebugLevel,
+		},
+		{
+			name:  "WARNING",
+			level: cpb.Configuration_WARNING,
+			want:  zapcore.WarnLevel,
+		},
+		{
+			name:  "ERROR",
+			level: cpb.Configuration_ERROR,
+			want:  zapcore.ErrorLevel,
+		},
+		{
+			name:  "UNKNOWN",
+			level: cpb.Configuration_UNDEFINED,
+			want:  zapcore.InfoLevel,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := LogLevelToZapcore(test.level)
+			if got != test.want {
+				t.Errorf("LogLevelToZapcore(%v) = %v, want: %v", test.level, got, test.want)
 			}
 		})
 	}

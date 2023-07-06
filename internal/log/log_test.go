@@ -18,6 +18,9 @@ package log
 
 import (
 	"testing"
+
+	logging "cloud.google.com/go/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestSetupLoggingToDiscard(t *testing.T) {
@@ -47,5 +50,25 @@ func TestSetupLoggingForTest(t *testing.T) {
 	got = GetLogFile()
 	if got != wantLogFile {
 		t.Errorf("TestSetupLoggingForTest() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
+	}
+}
+
+func TestSetupLogging(t *testing.T) {
+	wantLevel := "warn"
+	wantLogFile := "log-file"
+	SetupLogging(Parameters{
+		Level:              zapcore.WarnLevel,
+		LogFileName:        "log-file",
+		LogToCloud:         true,
+		CloudLoggingClient: &logging.Client{},
+	})
+	got := GetLevel()
+	if got != wantLevel {
+		t.Errorf("TestSetupLogging() level is incorrect, got: %s, want: %s", got, wantLevel)
+	}
+
+	got = GetLogFile()
+	if got != wantLogFile {
+		t.Errorf("TestSetupLogging() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
 	}
 }

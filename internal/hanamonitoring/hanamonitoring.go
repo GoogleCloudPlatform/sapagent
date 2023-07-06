@@ -273,7 +273,7 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 		}
 		handle, err := databaseconnector.Connect(ctx, dbp)
 		if err != nil {
-			log.Logger.Errorf("Error connecting to database", "name", i.GetName(), "error", err.Error())
+			log.Logger.Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
 			continue
 		}
 		databases = append(databases, &database{queryFunc: handle.QueryContext, instance: i})

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package config parses and validates the Backint configuration parameters.
-package config
+// Package configuration parses and validates the Backint configuration parameters.
+package configuration
 
 import (
 	"errors"
@@ -24,6 +24,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
@@ -58,6 +59,23 @@ func (p *Parameters) ParseArgsAndValidateConfig(read ReadConfigFile) (*bpb.Backi
 
 	p.applyDefaults(int64(runtime.NumCPU()))
 	return p.Config, true
+}
+
+// LogLevelToZapcore returns the zapcore equivalent of the configuration log level.
+func LogLevelToZapcore(level bpb.LogLevel) zapcore.Level {
+	switch level {
+	case bpb.LogLevel_DEBUG:
+		return zapcore.DebugLevel
+	case bpb.LogLevel_INFO:
+		return zapcore.InfoLevel
+	case bpb.LogLevel_WARNING:
+		return zapcore.WarnLevel
+	case bpb.LogLevel_ERROR:
+		return zapcore.ErrorLevel
+	default:
+		log.Logger.Warnw("Unsupported log level, defaulting to INFO", "level", level.String())
+		return zapcore.InfoLevel
+	}
 }
 
 // parseCommandLineArgs checks that the necessary CLI arguments are provided.
