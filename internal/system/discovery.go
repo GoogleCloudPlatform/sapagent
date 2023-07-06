@@ -121,6 +121,21 @@ func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *work
 		iComp.Resources = append(iComp.Resources, insightResourceFromSystemResource(r))
 	}
 
+	switch x := comp.Properties.(type) {
+	case *spb.SapDiscovery_Component_ApplicationProperties_:
+		iComp.ApplicationProperties = &workloadmanager.SapDiscoveryComponentApplicationProperties{
+			ApplicationType: x.ApplicationProperties.GetApplicationType().String(),
+			AscsURI:         x.ApplicationProperties.GetAscsUri(),
+			NfsURI:          x.ApplicationProperties.GetNfsUri(),
+		}
+	case *spb.SapDiscovery_Component_DatabaseProperties_:
+		iComp.DatabaseProperties = &workloadmanager.SapDiscoveryComponentDatabaseProperties{
+			DatabaseType:       x.DatabaseProperties.GetDatabaseType().String(),
+			PrimaryInstanceURI: x.DatabaseProperties.GetPrimaryInstanceUri(),
+			SharedNfsURI:       x.DatabaseProperties.GetSharedNfsUri(),
+		}
+	}
+
 	return iComp
 }
 
@@ -131,12 +146,10 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 	}
 	if sys.ApplicationLayer != nil {
 		iDiscovery.ApplicationLayer = insightComponentFromSystemComponent(sys.ApplicationLayer)
-		iDiscovery.ApplicationLayer.ApplicationType = sys.ApplicationLayer.GetApplicationType()
 
 	}
 	if sys.DatabaseLayer != nil {
 		iDiscovery.DatabaseLayer = insightComponentFromSystemComponent(sys.DatabaseLayer)
-		iDiscovery.DatabaseLayer.DatabaseType = sys.DatabaseLayer.GetDatabaseType()
 	}
 
 	return &workloadmanager.Insight{SapDiscovery: iDiscovery}
@@ -223,8 +236,9 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 						continue
 					}
 					dbComp = &spb.SapDiscovery_Component{
-						Sid:       dbSid,
-						Resources: dbRes,
+						Sid:        dbSid,
+						Resources:  dbRes,
+						Properties: &spb.SapDiscovery_Component_DatabaseProperties_{DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{}},
 					}
 				}
 				// See if a system with the same SID already exists
@@ -241,6 +255,13 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 				system.ApplicationLayer = &spb.SapDiscovery_Component{
 					Sid:       app.Sapsid,
 					Resources: res,
+					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+					}},
+				}
+				err := d.discoverASCS(ctx, app.Sapsid, system.GetApplicationLayer(), cp)
+				if err != nil {
+					log.Logger.Warnw("Error discovering ascs", "error", err)
 				}
 				if dbComp != nil {
 					system.DatabaseLayer = dbComp
@@ -263,6 +284,11 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 				system.DatabaseLayer = &spb.SapDiscovery_Component{
 					Sid:       app.Sapsid,
 					Resources: res,
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						},
+					},
 				}
 				system.UpdateTime = timestamppb.Now()
 			}
@@ -1065,4 +1091,75 @@ func (d *Discovery) writeToCloudLogging(sys *spb.SapDiscovery) error {
 	})
 
 	return nil
+}
+
+func (d *Discovery) discoverASCS(ctx context.Context, sid string, appComp *spb.SapDiscovery_Component, cp *ipb.CloudProperties) error {
+	switch appComp.Properties.(type) {
+	case *spb.SapDiscovery_Component_DatabaseProperties_:
+		return errors.New("cannot use database component to store ASCS information")
+
+	default:
+		log.Logger.Info("Component has no properties.")
+		appComp.Properties = &spb.SapDiscovery_Component_ApplicationProperties_{ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{}}
+
+	}
+	// The ASCS of a Netweaver server is identified by the entry "rdisp/mshost" in the DEFAULT.PFL
+	profilePath := fmt.Sprintf("/sapmnt/%s/profile/DEFAULT.PFL", sid)
+	p := commandlineexecutor.Params{
+		Executable: "grep",
+		Args:       []string{"rdisp/mshost", profilePath},
+	}
+	res := d.execute(ctx, p)
+	if res.Error != nil {
+		log.Logger.Warnw("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return res.Error
+	}
+
+	var ascsHost string
+	lines := strings.Split(res.StdOut, "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, "=")
+		if len(parts) < 2 {
+			continue
+		}
+
+		ascsHost = strings.TrimSpace(parts[1])
+		break
+	}
+
+	if ascsHost == "" {
+		return errors.New("no ASCS found in default profile")
+	}
+
+	ascsURI, err := d.resolveHostToResource(ascsHost, cp)
+	if err != nil {
+		log.Logger.Warnw("Error resolving host to resource", "host", ascsHost, "error", err)
+		return err
+	}
+	appComp.GetApplicationProperties().AscsUri = ascsURI
+
+	log.Logger.Infow("Discovered ASCS URI", "ascsURI", ascsURI)
+	return nil
+}
+
+func (d *Discovery) resolveHostToResource(host string, cp *ipb.CloudProperties) (string, error) {
+	if host == "" {
+		return "", errors.New("host cannot be empty")
+	}
+
+	addrs, err := d.hostResolver(host)
+	if err != nil {
+		log.Logger.Warnw("Error resolving host", "host", host, "error", err)
+		return "", err
+	}
+	for _, ip := range addrs {
+		addressURI, err := d.gceService.GetURIForIP(cp.GetProjectId(), ip)
+		if err != nil {
+			log.Logger.Warnw("Error finding URI for IP", "IP", ip, "error", err)
+			continue
+		}
+		return addressURI, nil
+	}
+
+	return "", errors.New("unable to resolve host to resource")
 }

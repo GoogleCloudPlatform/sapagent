@@ -2099,10 +2099,17 @@ func TestComponentToInsight(t *testing.T) {
 		comp *spb.SapDiscovery_Component
 		want *workloadmanager.SapDiscoveryComponent
 	}{{
-		name: "discoveryComponentToInsightComponent",
+		name: "discoveryApplicationComponentToInsightComponent",
 		comp: &spb.SapDiscovery_Component{
 			HostProject: "test/project",
 			Sid:         "SID",
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+				ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+					ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+					AscsUri:         "ascs/uri",
+					NfsUri:          "nfs/uri",
+				},
+			},
 			Resources: []*spb.SapDiscovery_Resource{{
 				ResourceUri:      "test/uri",
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -2114,6 +2121,46 @@ func TestComponentToInsight(t *testing.T) {
 		want: &workloadmanager.SapDiscoveryComponent{
 			HostProject: "test/project",
 			Sid:         "SID",
+			ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
+				ApplicationType: "NETWEAVER",
+				AscsURI:         "ascs/uri",
+				NfsURI:          "nfs/uri",
+			},
+			Resources: []*workloadmanager.SapDiscoveryResource{{
+				ResourceURI:      "test/uri",
+				ResourceKind:     "RESOURCE_KIND_INSTANCE",
+				ResourceType:     "RESOURCE_TYPE_COMPUTE",
+				RelatedResources: []string{"other/resource"},
+				UpdateTime:       "2023-05-01T15:45:11Z",
+			}}},
+	}, {
+		name: "discoveryDatabaseComponentToInsightComponent",
+		comp: &spb.SapDiscovery_Component{
+			HostProject: "test/project",
+			Sid:         "SID",
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+				DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					DatabaseType:       spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					PrimaryInstanceUri: "primary/uri",
+					SharedNfsUri:       "shared/uri",
+				},
+			},
+			Resources: []*spb.SapDiscovery_Resource{{
+				ResourceUri:      "test/uri",
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{"other/resource"},
+				UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
+			}},
+		},
+		want: &workloadmanager.SapDiscoveryComponent{
+			HostProject: "test/project",
+			Sid:         "SID",
+			DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
+				DatabaseType:       "HANA",
+				PrimaryInstanceURI: "primary/uri",
+				SharedNfsURI:       "shared/uri",
+			},
 			Resources: []*workloadmanager.SapDiscoveryResource{{
 				ResourceURI:      "test/uri",
 				ResourceKind:     "RESOURCE_KIND_INSTANCE",
@@ -2404,6 +2451,137 @@ func TestWriteToCloudLogging(t *testing.T) {
 				cloudLogInterface: test.logInterface,
 			}
 			d.writeToCloudLogging(test.system)
+		})
+	}
+}
+
+func TestDiscoverASCS(t *testing.T) {
+	tests := []struct {
+		name         string
+		comp         *spb.SapDiscovery_Component
+		cp           *instancepb.CloudProperties
+		execute      commandlineexecutor.Execute
+		resolver     func(string) ([]string, error)
+		gceInterface *fake.TestGCE
+		wantErr      error
+		wantComp     *spb.SapDiscovery_Component
+	}{{
+		name: "discoverASCS",
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some extra line\nrdisp/mshost = some-test-ascs ",
+			}
+		},
+		resolver: func(string) ([]string, error) {
+			return []string{"1.2.3.4"}, nil
+		},
+		gceInterface: &fake.TestGCE{
+			GetURIForIPResp: []string{"some/resource/uri"},
+			GetURIForIPErr:  []error{nil},
+		},
+		wantErr: nil,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{
+				AscsUri: "some/resource/uri",
+			}},
+		},
+	}, {
+		name: "errorWhenPassedDatabaseProperties",
+		comp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+	}, {
+		name: "errorExecutingCommand",
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{Error: errors.New("Error running command"), ExitCode: 1}
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
+		},
+	}, {
+		name: "noHostInProfile",
+		comp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some extra line\nrno host in output",
+			}
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+	}, {
+		name: "emptyHostInProfile",
+		comp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some extra line\nrdisp/mshost = ",
+			}
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+	}, {
+		name: "hostResolutionError",
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some extra line\nrdisp/mshost = some-test-ascs ",
+			}
+		},
+		resolver: func(string) ([]string, error) {
+			return nil, errors.New("host resolution error")
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
+		},
+	}, {
+		name: "hostResolutionError",
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some extra line\nrdisp/mshost = some-test-ascs ",
+			}
+		},
+		resolver: func(string) ([]string, error) {
+			return nil, errors.New("host resolution error")
+		},
+		gceInterface: &fake.TestGCE{
+			GetURIForIPResp: []string{""},
+			GetURIForIPErr:  []error{errors.New("error finding resource for IP")},
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d := Discovery{
+				execute:      test.execute,
+				hostResolver: test.resolver,
+				gceService:   test.gceInterface,
+			}
+			gotErr := d.discoverASCS(context.Background(), defaultSID, test.comp, test.cp)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Unexpected error from discoverASCS (got, want), (%s, %s)", gotErr, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantComp, test.comp, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverASCS() mismatch (-want, +got):\n%s", diff)
+			}
 		})
 	}
 }

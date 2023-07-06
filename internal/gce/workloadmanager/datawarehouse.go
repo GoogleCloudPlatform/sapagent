@@ -167,12 +167,44 @@ type SapDiscovery struct {
 	NullFields []string `json:"-"`
 }
 
+// SapDiscoveryComponentApplicationProperties is a set of properties describing an SAP Application layer.
+type SapDiscoveryComponentApplicationProperties struct {
+	// Type of the application. Netweaver, etc.
+	//
+	// Possible values:
+	//   "APPLICATION_TYPE_UNSPECIFIED" - Undefined application type.
+	//   "NETWEAVER" - Netweaver application.
+	ApplicationType string `json:"applicationType,omitempty"`
+	// Resource URI of the recognized ASCS host of the application.
+	AscsURI string `json:"ascURI,omitempty"`
+	// Resource URI of the recognized shared NFS of the application.
+	// May be empty if the application server has only a single node.
+	NfsURI string `json:"nfs,omitempty"`
+}
+
+// SapDiscoveryComponentDatabaseProperties is a set of properties describing an SAP Database layer.
+type SapDiscoveryComponentDatabaseProperties struct {
+	// Type of the database. HANA, DB2, etc.
+	//
+	// Possible values:
+	//   "DATABASE_TYPE_UNSPECIFIED" - Undefined database type.
+	//   "HANA" - SAP HANA
+	// 	 "MAXDB" - SAP MaxDB
+	//   "DB2" - IBM DB2
+	DatabaseType string `json:"databaseType,omitempty"`
+	// URI of the recognized primary instance of the database.
+	PrimaryInstanceURI string `json:"primaryInstanceURI,omitempty"`
+	// URI of the recognized shared NFS of the database.
+	// May be empty if the database has only a single node.
+	SharedNfsURI string `json:"sharedNfsURI,omitempty"`
+}
+
 // SapDiscoveryComponent is an organized set of SAP System resources.
 type SapDiscoveryComponent struct {
 	// ApplicationType: The component is a SAP application.
-	ApplicationType string `json:"applicationType,omitempty"`
+	ApplicationProperties *SapDiscoveryComponentApplicationProperties `json:"applicationProperties,omitempty"`
 	// DatabaseType: The component is a SAP database.
-	DatabaseType string `json:"databaseType,omitempty"`
+	DatabaseProperties *SapDiscoveryComponentDatabaseProperties `json:"databaseProperties,omitempty"`
 	// HostProject: Pantheon Project in which the resources reside.
 	HostProject string `json:"hostProject,omitempty"`
 	// Resources: The resources in a component.
@@ -257,7 +289,7 @@ type SapDiscoveryResource struct {
 	// ResourceURI: URI of the resource, includes project, location, and
 	// name.
 	//   "RESOURCE_KIND_INSTANCE_GROUP" - This is a compute instance group.
-	ResourceURI string `json:"resourceUri,omitempty"`
+	ResourceURI string `json:"resourceURI,omitempty"`
 	// UpdateTime: Unix timestamp of when this resource last had its
 	// discovery data updated.
 	UpdateTime string `json:"updateTime,omitempty"`

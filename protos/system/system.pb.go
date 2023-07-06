@@ -182,6 +182,112 @@ func (SapDiscovery_Resource_ResourceKind) EnumDescriptor() ([]byte, []int) {
 	return file_system_system_proto_rawDescGZIP(), []int{0, 1, 1}
 }
 
+// The type of application running in the system.
+type SapDiscovery_Component_ApplicationProperties_ApplicationType int32
+
+const (
+	// Unspecified application type
+	SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED SapDiscovery_Component_ApplicationProperties_ApplicationType = 0
+	// SAP Netweaver
+	SapDiscovery_Component_ApplicationProperties_NETWEAVER SapDiscovery_Component_ApplicationProperties_ApplicationType = 1
+)
+
+// Enum value maps for SapDiscovery_Component_ApplicationProperties_ApplicationType.
+var (
+	SapDiscovery_Component_ApplicationProperties_ApplicationType_name = map[int32]string{
+		0: "APPLICATION_TYPE_UNSPECIFIED",
+		1: "NETWEAVER",
+	}
+	SapDiscovery_Component_ApplicationProperties_ApplicationType_value = map[string]int32{
+		"APPLICATION_TYPE_UNSPECIFIED": 0,
+		"NETWEAVER":                    1,
+	}
+)
+
+func (x SapDiscovery_Component_ApplicationProperties_ApplicationType) Enum() *SapDiscovery_Component_ApplicationProperties_ApplicationType {
+	p := new(SapDiscovery_Component_ApplicationProperties_ApplicationType)
+	*p = x
+	return p
+}
+
+func (x SapDiscovery_Component_ApplicationProperties_ApplicationType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SapDiscovery_Component_ApplicationProperties_ApplicationType) Descriptor() protoreflect.EnumDescriptor {
+	return file_system_system_proto_enumTypes[2].Descriptor()
+}
+
+func (SapDiscovery_Component_ApplicationProperties_ApplicationType) Type() protoreflect.EnumType {
+	return &file_system_system_proto_enumTypes[2]
+}
+
+func (x SapDiscovery_Component_ApplicationProperties_ApplicationType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SapDiscovery_Component_ApplicationProperties_ApplicationType.Descriptor instead.
+func (SapDiscovery_Component_ApplicationProperties_ApplicationType) EnumDescriptor() ([]byte, []int) {
+	return file_system_system_proto_rawDescGZIP(), []int{0, 2, 0, 0}
+}
+
+// The type of Database running in the system.
+type SapDiscovery_Component_DatabaseProperties_DatabaseType int32
+
+const (
+	// Unspecified database type.
+	SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED SapDiscovery_Component_DatabaseProperties_DatabaseType = 0
+	// SAP HANA
+	SapDiscovery_Component_DatabaseProperties_HANA SapDiscovery_Component_DatabaseProperties_DatabaseType = 1
+	// SAP MaxDB
+	SapDiscovery_Component_DatabaseProperties_MAXDB SapDiscovery_Component_DatabaseProperties_DatabaseType = 2
+	// IBM DB2
+	SapDiscovery_Component_DatabaseProperties_DB2 SapDiscovery_Component_DatabaseProperties_DatabaseType = 3
+)
+
+// Enum value maps for SapDiscovery_Component_DatabaseProperties_DatabaseType.
+var (
+	SapDiscovery_Component_DatabaseProperties_DatabaseType_name = map[int32]string{
+		0: "DATABASE_TYPE_UNSPECIFIED",
+		1: "HANA",
+		2: "MAXDB",
+		3: "DB2",
+	}
+	SapDiscovery_Component_DatabaseProperties_DatabaseType_value = map[string]int32{
+		"DATABASE_TYPE_UNSPECIFIED": 0,
+		"HANA":                      1,
+		"MAXDB":                     2,
+		"DB2":                       3,
+	}
+)
+
+func (x SapDiscovery_Component_DatabaseProperties_DatabaseType) Enum() *SapDiscovery_Component_DatabaseProperties_DatabaseType {
+	p := new(SapDiscovery_Component_DatabaseProperties_DatabaseType)
+	*p = x
+	return p
+}
+
+func (x SapDiscovery_Component_DatabaseProperties_DatabaseType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SapDiscovery_Component_DatabaseProperties_DatabaseType) Descriptor() protoreflect.EnumDescriptor {
+	return file_system_system_proto_enumTypes[3].Descriptor()
+}
+
+func (SapDiscovery_Component_DatabaseProperties_DatabaseType) Type() protoreflect.EnumType {
+	return &file_system_system_proto_enumTypes[3]
+}
+
+func (x SapDiscovery_Component_DatabaseProperties_DatabaseType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SapDiscovery_Component_DatabaseProperties_DatabaseType.Descriptor instead.
+func (SapDiscovery_Component_DatabaseProperties_DatabaseType) EnumDescriptor() ([]byte, []int) {
+	return file_system_system_proto_rawDescGZIP(), []int{0, 2, 1, 0}
+}
+
 // The schema of SAP system discovery data.
 type SapDiscovery struct {
 	state         protoimpl.MessageState
@@ -437,11 +543,11 @@ type SapDiscovery_Component struct {
 
 	// The resources in a component.
 	Resources []*SapDiscovery_Resource `protobuf:"bytes,1,rep,name=resources,proto3" json:"resources,omitempty"`
-	// Types that are assignable to Type:
+	// Types that are assignable to Properties:
 	//
-	//	*SapDiscovery_Component_ApplicationType
-	//	*SapDiscovery_Component_DatabaseType
-	Type isSapDiscovery_Component_Type `protobuf_oneof:"type"`
+	//	*SapDiscovery_Component_ApplicationProperties_
+	//	*SapDiscovery_Component_DatabaseProperties_
+	Properties isSapDiscovery_Component_Properties `protobuf_oneof:"properties"`
 	// Pantheon Project in which the resources reside.
 	HostProject string `protobuf:"bytes,4,opt,name=host_project,json=hostProject,proto3" json:"host_project,omitempty"`
 	// The sap identifier,
@@ -488,25 +594,25 @@ func (x *SapDiscovery_Component) GetResources() []*SapDiscovery_Resource {
 	return nil
 }
 
-func (m *SapDiscovery_Component) GetType() isSapDiscovery_Component_Type {
+func (m *SapDiscovery_Component) GetProperties() isSapDiscovery_Component_Properties {
 	if m != nil {
-		return m.Type
+		return m.Properties
 	}
 	return nil
 }
 
-func (x *SapDiscovery_Component) GetApplicationType() string {
-	if x, ok := x.GetType().(*SapDiscovery_Component_ApplicationType); ok {
-		return x.ApplicationType
+func (x *SapDiscovery_Component) GetApplicationProperties() *SapDiscovery_Component_ApplicationProperties {
+	if x, ok := x.GetProperties().(*SapDiscovery_Component_ApplicationProperties_); ok {
+		return x.ApplicationProperties
 	}
-	return ""
+	return nil
 }
 
-func (x *SapDiscovery_Component) GetDatabaseType() string {
-	if x, ok := x.GetType().(*SapDiscovery_Component_DatabaseType); ok {
-		return x.DatabaseType
+func (x *SapDiscovery_Component) GetDatabaseProperties() *SapDiscovery_Component_DatabaseProperties {
+	if x, ok := x.GetProperties().(*SapDiscovery_Component_DatabaseProperties_); ok {
+		return x.DatabaseProperties
 	}
-	return ""
+	return nil
 }
 
 func (x *SapDiscovery_Component) GetHostProject() string {
@@ -523,23 +629,159 @@ func (x *SapDiscovery_Component) GetSid() string {
 	return ""
 }
 
-type isSapDiscovery_Component_Type interface {
-	isSapDiscovery_Component_Type()
+type isSapDiscovery_Component_Properties interface {
+	isSapDiscovery_Component_Properties()
 }
 
-type SapDiscovery_Component_ApplicationType struct {
+type SapDiscovery_Component_ApplicationProperties_ struct {
 	// The component is a SAP application.
-	ApplicationType string `protobuf:"bytes,2,opt,name=application_type,json=applicationType,proto3,oneof"`
+	ApplicationProperties *SapDiscovery_Component_ApplicationProperties `protobuf:"bytes,2,opt,name=application_properties,json=applicationProperties,proto3,oneof"`
 }
 
-type SapDiscovery_Component_DatabaseType struct {
+type SapDiscovery_Component_DatabaseProperties_ struct {
 	// The component is a SAP database.
-	DatabaseType string `protobuf:"bytes,3,opt,name=database_type,json=databaseType,proto3,oneof"`
+	DatabaseProperties *SapDiscovery_Component_DatabaseProperties `protobuf:"bytes,3,opt,name=database_properties,json=databaseProperties,proto3,oneof"`
 }
 
-func (*SapDiscovery_Component_ApplicationType) isSapDiscovery_Component_Type() {}
+func (*SapDiscovery_Component_ApplicationProperties_) isSapDiscovery_Component_Properties() {}
 
-func (*SapDiscovery_Component_DatabaseType) isSapDiscovery_Component_Type() {}
+func (*SapDiscovery_Component_DatabaseProperties_) isSapDiscovery_Component_Properties() {}
+
+// A set of properties describing an SAP Application layer.
+type SapDiscovery_Component_ApplicationProperties struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Type of the application. Netweaver, etc.
+	ApplicationType SapDiscovery_Component_ApplicationProperties_ApplicationType `protobuf:"varint,1,opt,name=application_type,json=applicationType,proto3,enum=cloud.partners.sap.system.SapDiscovery_Component_ApplicationProperties_ApplicationType" json:"application_type,omitempty"`
+	// Resource URI of the recognized ASCS host of the application.
+	AscsUri string `protobuf:"bytes,2,opt,name=ascs_uri,json=ascsUri,proto3" json:"ascs_uri,omitempty"`
+	// Resource URI of the recognized shared NFS of the application.
+	// May be empty if the application server has only a single node.
+	NfsUri string `protobuf:"bytes,3,opt,name=nfs_uri,json=nfsUri,proto3" json:"nfs_uri,omitempty"`
+}
+
+func (x *SapDiscovery_Component_ApplicationProperties) Reset() {
+	*x = SapDiscovery_Component_ApplicationProperties{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_system_system_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SapDiscovery_Component_ApplicationProperties) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SapDiscovery_Component_ApplicationProperties) ProtoMessage() {}
+
+func (x *SapDiscovery_Component_ApplicationProperties) ProtoReflect() protoreflect.Message {
+	mi := &file_system_system_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SapDiscovery_Component_ApplicationProperties.ProtoReflect.Descriptor instead.
+func (*SapDiscovery_Component_ApplicationProperties) Descriptor() ([]byte, []int) {
+	return file_system_system_proto_rawDescGZIP(), []int{0, 2, 0}
+}
+
+func (x *SapDiscovery_Component_ApplicationProperties) GetApplicationType() SapDiscovery_Component_ApplicationProperties_ApplicationType {
+	if x != nil {
+		return x.ApplicationType
+	}
+	return SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED
+}
+
+func (x *SapDiscovery_Component_ApplicationProperties) GetAscsUri() string {
+	if x != nil {
+		return x.AscsUri
+	}
+	return ""
+}
+
+func (x *SapDiscovery_Component_ApplicationProperties) GetNfsUri() string {
+	if x != nil {
+		return x.NfsUri
+	}
+	return ""
+}
+
+// A set of properties describing an SAP Database layer.
+type SapDiscovery_Component_DatabaseProperties struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Type of the database. HANA, DB2, etc.
+	DatabaseType SapDiscovery_Component_DatabaseProperties_DatabaseType `protobuf:"varint,1,opt,name=database_type,json=databaseType,proto3,enum=cloud.partners.sap.system.SapDiscovery_Component_DatabaseProperties_DatabaseType" json:"database_type,omitempty"`
+	// URI of the recognized primary instance of the database.
+	PrimaryInstanceUri string `protobuf:"bytes,2,opt,name=primary_instance_uri,json=primaryInstanceUri,proto3" json:"primary_instance_uri,omitempty"`
+	// URI of the recognized shared NFS of the database.
+	// May be empty if the database has only a single node.
+	SharedNfsUri string `protobuf:"bytes,3,opt,name=shared_nfs_uri,json=sharedNfsUri,proto3" json:"shared_nfs_uri,omitempty"`
+}
+
+func (x *SapDiscovery_Component_DatabaseProperties) Reset() {
+	*x = SapDiscovery_Component_DatabaseProperties{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_system_system_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SapDiscovery_Component_DatabaseProperties) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SapDiscovery_Component_DatabaseProperties) ProtoMessage() {}
+
+func (x *SapDiscovery_Component_DatabaseProperties) ProtoReflect() protoreflect.Message {
+	mi := &file_system_system_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SapDiscovery_Component_DatabaseProperties.ProtoReflect.Descriptor instead.
+func (*SapDiscovery_Component_DatabaseProperties) Descriptor() ([]byte, []int) {
+	return file_system_system_proto_rawDescGZIP(), []int{0, 2, 1}
+}
+
+func (x *SapDiscovery_Component_DatabaseProperties) GetDatabaseType() SapDiscovery_Component_DatabaseProperties_DatabaseType {
+	if x != nil {
+		return x.DatabaseType
+	}
+	return SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED
+}
+
+func (x *SapDiscovery_Component_DatabaseProperties) GetPrimaryInstanceUri() string {
+	if x != nil {
+		return x.PrimaryInstanceUri
+	}
+	return ""
+}
+
+func (x *SapDiscovery_Component_DatabaseProperties) GetSharedNfsUri() string {
+	if x != nil {
+		return x.SharedNfsUri
+	}
+	return ""
+}
 
 var File_system_system_proto protoreflect.FileDescriptor
 
@@ -549,7 +791,7 @@ var file_system_system_proto_rawDesc = []byte{
 	0x74, 0x6e, 0x65, 0x72, 0x73, 0x2e, 0x73, 0x61, 0x70, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d,
 	0x1a, 0x1f, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75,
 	0x66, 0x2f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x22, 0xe9, 0x0c, 0x0a, 0x0c, 0x53, 0x61, 0x70, 0x44, 0x69, 0x73, 0x63, 0x6f, 0x76, 0x65,
+	0x6f, 0x22, 0xe2, 0x12, 0x0a, 0x0c, 0x53, 0x61, 0x70, 0x44, 0x69, 0x73, 0x63, 0x6f, 0x76, 0x65,
 	0x72, 0x79, 0x12, 0x4c, 0x0a, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x0b, 0x32, 0x30, 0x2e, 0x63, 0x6c, 0x6f, 0x75, 0x64, 0x2e, 0x70, 0x61, 0x72,
 	0x74, 0x6e, 0x65, 0x72, 0x73, 0x2e, 0x73, 0x61, 0x70, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d,
@@ -636,23 +878,70 @@ var file_system_system_proto_rawDesc = []byte{
 	0x53, 0x4f, 0x55, 0x52, 0x43, 0x45, 0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x50, 0x55, 0x42, 0x4c,
 	0x49, 0x43, 0x5f, 0x41, 0x44, 0x44, 0x52, 0x45, 0x53, 0x53, 0x10, 0x0a, 0x12, 0x20, 0x0a, 0x1c,
 	0x52, 0x45, 0x53, 0x4f, 0x55, 0x52, 0x43, 0x45, 0x5f, 0x4b, 0x49, 0x4e, 0x44, 0x5f, 0x49, 0x4e,
-	0x53, 0x54, 0x41, 0x4e, 0x43, 0x45, 0x5f, 0x47, 0x52, 0x4f, 0x55, 0x50, 0x10, 0x0b, 0x1a, 0xec,
-	0x01, 0x0a, 0x09, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x12, 0x4e, 0x0a, 0x09,
+	0x53, 0x54, 0x41, 0x4e, 0x43, 0x45, 0x5f, 0x47, 0x52, 0x4f, 0x55, 0x50, 0x10, 0x0b, 0x1a, 0xe5,
+	0x07, 0x0a, 0x09, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x12, 0x4e, 0x0a, 0x09,
 	0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32,
 	0x30, 0x2e, 0x63, 0x6c, 0x6f, 0x75, 0x64, 0x2e, 0x70, 0x61, 0x72, 0x74, 0x6e, 0x65, 0x72, 0x73,
 	0x2e, 0x73, 0x61, 0x70, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e, 0x53, 0x61, 0x70, 0x44,
 	0x69, 0x73, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x79, 0x2e, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
-	0x65, 0x52, 0x09, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x73, 0x12, 0x2b, 0x0a, 0x10,
-	0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x74, 0x79, 0x70, 0x65,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x0f, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x54, 0x79, 0x70, 0x65, 0x12, 0x25, 0x0a, 0x0d, 0x64, 0x61, 0x74,
-	0x61, 0x62, 0x61, 0x73, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09,
-	0x48, 0x00, 0x52, 0x0c, 0x64, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x54, 0x79, 0x70, 0x65,
-	0x12, 0x21, 0x0a, 0x0c, 0x68, 0x6f, 0x73, 0x74, 0x5f, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74,
-	0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x68, 0x6f, 0x73, 0x74, 0x50, 0x72, 0x6f, 0x6a,
-	0x65, 0x63, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x73, 0x69, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x03, 0x73, 0x69, 0x64, 0x42, 0x06, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x62, 0x06, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x65, 0x52, 0x09, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x73, 0x12, 0x80, 0x01, 0x0a,
+	0x16, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x70, 0x72, 0x6f,
+	0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x47, 0x2e,
+	0x63, 0x6c, 0x6f, 0x75, 0x64, 0x2e, 0x70, 0x61, 0x72, 0x74, 0x6e, 0x65, 0x72, 0x73, 0x2e, 0x73,
+	0x61, 0x70, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e, 0x53, 0x61, 0x70, 0x44, 0x69, 0x73,
+	0x63, 0x6f, 0x76, 0x65, 0x72, 0x79, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74,
+	0x2e, 0x41, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x70,
+	0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x48, 0x00, 0x52, 0x15, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x12,
+	0x77, 0x0a, 0x13, 0x64, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x5f, 0x70, 0x72, 0x6f, 0x70,
+	0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x44, 0x2e, 0x63,
+	0x6c, 0x6f, 0x75, 0x64, 0x2e, 0x70, 0x61, 0x72, 0x74, 0x6e, 0x65, 0x72, 0x73, 0x2e, 0x73, 0x61,
+	0x70, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e, 0x53, 0x61, 0x70, 0x44, 0x69, 0x73, 0x63,
+	0x6f, 0x76, 0x65, 0x72, 0x79, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x2e,
+	0x44, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69,
+	0x65, 0x73, 0x48, 0x00, 0x52, 0x12, 0x64, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x50, 0x72,
+	0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x12, 0x21, 0x0a, 0x0c, 0x68, 0x6f, 0x73, 0x74,
+	0x5f, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b,
+	0x68, 0x6f, 0x73, 0x74, 0x50, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x73,
+	0x69, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x73, 0x69, 0x64, 0x1a, 0x94, 0x02,
+	0x0a, 0x15, 0x41, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x72, 0x6f,
+	0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x12, 0x82, 0x01, 0x0a, 0x10, 0x61, 0x70, 0x70, 0x6c,
+	0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0e, 0x32, 0x57, 0x2e, 0x63, 0x6c, 0x6f, 0x75, 0x64, 0x2e, 0x70, 0x61, 0x72, 0x74, 0x6e,
+	0x65, 0x72, 0x73, 0x2e, 0x73, 0x61, 0x70, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e, 0x53,
+	0x61, 0x70, 0x44, 0x69, 0x73, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x79, 0x2e, 0x43, 0x6f, 0x6d, 0x70,
+	0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x41, 0x70, 0x70, 0x6c,
+	0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x54, 0x79, 0x70, 0x65, 0x52, 0x0f, 0x61, 0x70, 0x70,
+	0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x54, 0x79, 0x70, 0x65, 0x12, 0x19, 0x0a, 0x08,
+	0x61, 0x73, 0x63, 0x73, 0x5f, 0x75, 0x72, 0x69, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
+	0x61, 0x73, 0x63, 0x73, 0x55, 0x72, 0x69, 0x12, 0x17, 0x0a, 0x07, 0x6e, 0x66, 0x73, 0x5f, 0x75,
+	0x72, 0x69, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x6e, 0x66, 0x73, 0x55, 0x72, 0x69,
+	0x22, 0x42, 0x0a, 0x0f, 0x41, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x54,
+	0x79, 0x70, 0x65, 0x12, 0x20, 0x0a, 0x1c, 0x41, 0x50, 0x50, 0x4c, 0x49, 0x43, 0x41, 0x54, 0x49,
+	0x4f, 0x4e, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46,
+	0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x0d, 0x0a, 0x09, 0x4e, 0x45, 0x54, 0x57, 0x45, 0x41, 0x56,
+	0x45, 0x52, 0x10, 0x01, 0x1a, 0xb1, 0x02, 0x0a, 0x12, 0x44, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73,
+	0x65, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x12, 0x76, 0x0a, 0x0d, 0x64,
+	0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0e, 0x32, 0x51, 0x2e, 0x63, 0x6c, 0x6f, 0x75, 0x64, 0x2e, 0x70, 0x61, 0x72, 0x74, 0x6e,
+	0x65, 0x72, 0x73, 0x2e, 0x73, 0x61, 0x70, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e, 0x53,
+	0x61, 0x70, 0x44, 0x69, 0x73, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x79, 0x2e, 0x43, 0x6f, 0x6d, 0x70,
+	0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x2e, 0x44, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x50, 0x72,
+	0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x44, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73,
+	0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x0c, 0x64, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x54,
+	0x79, 0x70, 0x65, 0x12, 0x30, 0x0a, 0x14, 0x70, 0x72, 0x69, 0x6d, 0x61, 0x72, 0x79, 0x5f, 0x69,
+	0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x75, 0x72, 0x69, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x12, 0x70, 0x72, 0x69, 0x6d, 0x61, 0x72, 0x79, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e,
+	0x63, 0x65, 0x55, 0x72, 0x69, 0x12, 0x24, 0x0a, 0x0e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x5f,
+	0x6e, 0x66, 0x73, 0x5f, 0x75, 0x72, 0x69, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x73,
+	0x68, 0x61, 0x72, 0x65, 0x64, 0x4e, 0x66, 0x73, 0x55, 0x72, 0x69, 0x22, 0x4b, 0x0a, 0x0c, 0x44,
+	0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x1d, 0x0a, 0x19, 0x44,
+	0x41, 0x54, 0x41, 0x42, 0x41, 0x53, 0x45, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x55, 0x4e, 0x53,
+	0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04, 0x48, 0x41,
+	0x4e, 0x41, 0x10, 0x01, 0x12, 0x09, 0x0a, 0x05, 0x4d, 0x41, 0x58, 0x44, 0x42, 0x10, 0x02, 0x12,
+	0x07, 0x0a, 0x03, 0x44, 0x42, 0x32, 0x10, 0x03, 0x42, 0x0c, 0x0a, 0x0a, 0x70, 0x72, 0x6f, 0x70,
+	0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -667,31 +956,39 @@ func file_system_system_proto_rawDescGZIP() []byte {
 	return file_system_system_proto_rawDescData
 }
 
-var file_system_system_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_system_system_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_system_system_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_system_system_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_system_system_proto_goTypes = []interface{}{
-	(SapDiscovery_Resource_ResourceType)(0), // 0: cloud.partners.sap.system.SapDiscovery.Resource.ResourceType
-	(SapDiscovery_Resource_ResourceKind)(0), // 1: cloud.partners.sap.system.SapDiscovery.Resource.ResourceKind
-	(*SapDiscovery)(nil),                    // 2: cloud.partners.sap.system.SapDiscovery
-	(*SapDiscovery_Metadata)(nil),           // 3: cloud.partners.sap.system.SapDiscovery.Metadata
-	(*SapDiscovery_Resource)(nil),           // 4: cloud.partners.sap.system.SapDiscovery.Resource
-	(*SapDiscovery_Component)(nil),          // 5: cloud.partners.sap.system.SapDiscovery.Component
-	(*timestamp.Timestamp)(nil),             // 6: google.protobuf.Timestamp
+	(SapDiscovery_Resource_ResourceType)(0),                           // 0: cloud.partners.sap.system.SapDiscovery.Resource.ResourceType
+	(SapDiscovery_Resource_ResourceKind)(0),                           // 1: cloud.partners.sap.system.SapDiscovery.Resource.ResourceKind
+	(SapDiscovery_Component_ApplicationProperties_ApplicationType)(0), // 2: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.ApplicationType
+	(SapDiscovery_Component_DatabaseProperties_DatabaseType)(0),       // 3: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.DatabaseType
+	(*SapDiscovery)(nil),                                              // 4: cloud.partners.sap.system.SapDiscovery
+	(*SapDiscovery_Metadata)(nil),                                     // 5: cloud.partners.sap.system.SapDiscovery.Metadata
+	(*SapDiscovery_Resource)(nil),                                     // 6: cloud.partners.sap.system.SapDiscovery.Resource
+	(*SapDiscovery_Component)(nil),                                    // 7: cloud.partners.sap.system.SapDiscovery.Component
+	(*SapDiscovery_Component_ApplicationProperties)(nil),              // 8: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties
+	(*SapDiscovery_Component_DatabaseProperties)(nil),                 // 9: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties
+	(*timestamp.Timestamp)(nil),                                       // 10: google.protobuf.Timestamp
 }
 var file_system_system_proto_depIdxs = []int32{
-	3, // 0: cloud.partners.sap.system.SapDiscovery.metadata:type_name -> cloud.partners.sap.system.SapDiscovery.Metadata
-	5, // 1: cloud.partners.sap.system.SapDiscovery.database_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
-	5, // 2: cloud.partners.sap.system.SapDiscovery.application_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
-	6, // 3: cloud.partners.sap.system.SapDiscovery.update_time:type_name -> google.protobuf.Timestamp
-	0, // 4: cloud.partners.sap.system.SapDiscovery.Resource.resource_type:type_name -> cloud.partners.sap.system.SapDiscovery.Resource.ResourceType
-	1, // 5: cloud.partners.sap.system.SapDiscovery.Resource.resource_kind:type_name -> cloud.partners.sap.system.SapDiscovery.Resource.ResourceKind
-	6, // 6: cloud.partners.sap.system.SapDiscovery.Resource.update_time:type_name -> google.protobuf.Timestamp
-	4, // 7: cloud.partners.sap.system.SapDiscovery.Component.resources:type_name -> cloud.partners.sap.system.SapDiscovery.Resource
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	5,  // 0: cloud.partners.sap.system.SapDiscovery.metadata:type_name -> cloud.partners.sap.system.SapDiscovery.Metadata
+	7,  // 1: cloud.partners.sap.system.SapDiscovery.database_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
+	7,  // 2: cloud.partners.sap.system.SapDiscovery.application_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
+	10, // 3: cloud.partners.sap.system.SapDiscovery.update_time:type_name -> google.protobuf.Timestamp
+	0,  // 4: cloud.partners.sap.system.SapDiscovery.Resource.resource_type:type_name -> cloud.partners.sap.system.SapDiscovery.Resource.ResourceType
+	1,  // 5: cloud.partners.sap.system.SapDiscovery.Resource.resource_kind:type_name -> cloud.partners.sap.system.SapDiscovery.Resource.ResourceKind
+	10, // 6: cloud.partners.sap.system.SapDiscovery.Resource.update_time:type_name -> google.protobuf.Timestamp
+	6,  // 7: cloud.partners.sap.system.SapDiscovery.Component.resources:type_name -> cloud.partners.sap.system.SapDiscovery.Resource
+	8,  // 8: cloud.partners.sap.system.SapDiscovery.Component.application_properties:type_name -> cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties
+	9,  // 9: cloud.partners.sap.system.SapDiscovery.Component.database_properties:type_name -> cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties
+	2,  // 10: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.application_type:type_name -> cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.ApplicationType
+	3,  // 11: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.database_type:type_name -> cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.DatabaseType
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_system_system_proto_init() }
@@ -748,18 +1045,42 @@ func file_system_system_proto_init() {
 				return nil
 			}
 		}
+		file_system_system_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SapDiscovery_Component_ApplicationProperties); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_system_system_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SapDiscovery_Component_DatabaseProperties); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	file_system_system_proto_msgTypes[3].OneofWrappers = []interface{}{
-		(*SapDiscovery_Component_ApplicationType)(nil),
-		(*SapDiscovery_Component_DatabaseType)(nil),
+		(*SapDiscovery_Component_ApplicationProperties_)(nil),
+		(*SapDiscovery_Component_DatabaseProperties_)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_system_system_proto_rawDesc,
-			NumEnums:      2,
-			NumMessages:   4,
+			NumEnums:      4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

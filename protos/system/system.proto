@@ -114,11 +114,50 @@ message SapDiscovery {
   message Component {
     // The resources in a component.
     repeated Resource resources = 1;
-    oneof type {
+
+    // A set of properties describing an SAP Application layer.
+    message ApplicationProperties {
+      // The type of application running in the system.
+      enum ApplicationType {
+        // Unspecified application type
+        APPLICATION_TYPE_UNSPECIFIED = 0;
+        // SAP Netweaver
+        NETWEAVER = 1;
+      }
+      // Type of the application. Netweaver, etc.
+      ApplicationType application_type = 1;
+      // Resource URI of the recognized ASCS host of the application.
+      string ascs_uri = 2;
+      // Resource URI of the recognized shared NFS of the application.
+      // May be empty if the application server has only a single node.
+      string nfs_uri = 3;
+    }
+    // A set of properties describing an SAP Database layer.
+    message DatabaseProperties {
+      // The type of Database running in the system.
+      enum DatabaseType {
+        // Unspecified database type.
+        DATABASE_TYPE_UNSPECIFIED = 0;
+        // SAP HANA
+        HANA = 1;
+        // SAP MaxDB
+        MAXDB = 2;
+        // IBM DB2
+        DB2 = 3;
+      }
+      // Type of the database. HANA, DB2, etc.
+      DatabaseType database_type = 1;
+      // URI of the recognized primary instance of the database.
+      string primary_instance_uri = 2;
+      // URI of the recognized shared NFS of the database.
+      // May be empty if the database has only a single node.
+      string shared_nfs_uri = 3;
+    }
+    oneof properties {
       // The component is a SAP application.
-      string application_type = 2;
+      ApplicationProperties application_properties = 2;
       // The component is a SAP database.
-      string database_type = 3;
+      DatabaseProperties database_properties = 3;
     }
     // Pantheon Project in which the resources reside.
     string host_project = 4;
