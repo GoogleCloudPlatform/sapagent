@@ -48,6 +48,9 @@ var (
 		"rules/security/r_password_poilcy_password_layout.json",
 		"rules/security/r_persistance_encryption.json",
 		"rules/security/r_prod_users_with_debug_roles.json",
+		"rules/security/r_password_policy_last_used_passwords.json",
+		"rules/security/r_password_policy_maximum_invalid_connect_attempts.json",
+		"rules/security/r_password_policy_password_lock_time.json",
 	}
 
 	// CountPattern regex is used to identify possible matches in the trigger condition using count()
