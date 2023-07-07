@@ -19,6 +19,7 @@ package diagnose
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -73,6 +74,7 @@ var (
 			},
 		},
 	}
+	defaultRemoveFunc = func(name string) error { return nil }
 )
 
 // defaultExecute utilizes a closure to write the input line by line
@@ -112,8 +114,8 @@ func TestExecute(t *testing.T) {
 				oneGB = prevOneGB
 				sixteenGB = prevSixteenGB
 			}(oneGB, sixteenGB)
-			oneGB = 1
-			sixteenGB = 16
+			oneGB /= 8
+			sixteenGB = oneGB
 
 			got := Execute(context.Background(), defaultConfig, test.bucketHandle, bytes.NewBufferString(""))
 			if got != test.want {
@@ -178,16 +180,30 @@ func TestCreateFiles(t *testing.T) {
 
 func TestRemoveFiles(t *testing.T) {
 	tests := []struct {
-		name string
-		opts diagnoseOptions
-		want bool
+		name   string
+		opts   diagnoseOptions
+		remove removeFunc
+		want   bool
 	}{
 		{
-			name: "FailRemoveLocal",
+			name: "FailNonTmpFolder",
 			opts: diagnoseOptions{
 				files: []*diagnoseFile{
 					{fileName: "/"},
 				},
+			},
+			remove: defaultRemoveFunc,
+			want:   false,
+		},
+		{
+			name: "FailRemoveLocal",
+			opts: diagnoseOptions{
+				files: []*diagnoseFile{
+					{fileName: "/tmp/object.txt"},
+				},
+			},
+			remove: func(name string) error {
+				return errors.New("remove error")
 			},
 			want: false,
 		},
@@ -195,21 +211,28 @@ func TestRemoveFiles(t *testing.T) {
 			name: "FailRemoveBucket",
 			opts: diagnoseOptions{
 				files: []*diagnoseFile{
-					{fileName: "object.txt"},
+					{fileName: "/tmp/object.txt"},
 				},
 				bucketHandle: &store.BucketHandle{},
 			},
-			want: false,
+			remove: defaultRemoveFunc,
+			want:   false,
 		},
 		{
 			name: "Success",
-			opts: defaultOptions,
-			want: true,
+			opts: diagnoseOptions{
+				bucketHandle: defaultBucketHandle,
+				files: []*diagnoseFile{
+					{fileName: "/tmp/object.txt"},
+				},
+			},
+			remove: defaultRemoveFunc,
+			want:   true,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := removeFiles(context.Background(), test.opts)
+			got := removeFiles(context.Background(), test.opts, test.remove)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("removeFiles(%#v) = %v, want: %v", test.opts, got, test.want)
 			}

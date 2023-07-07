@@ -56,6 +56,9 @@ type diagnoseFile struct {
 // executeFunc abstracts the execution of each of the Backint functions.
 type executeFunc func(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool
 
+// removeFunc abstracts removing a file from the file system.
+type removeFunc func(name string) error
+
 // diagnoseOptions holds options for performing the requested diagnostic operation.
 type diagnoseOptions struct {
 	config       *bpb.BackintConfiguration
@@ -93,7 +96,7 @@ func diagnose(ctx context.Context, config *bpb.BackintConfiguration, bucketHandl
 		return fmt.Errorf("createFiles error: %v", err)
 	}
 	opts := diagnoseOptions{config: config, bucketHandle: bucketHandle, output: output, files: files}
-	defer removeFiles(ctx, opts)
+	defer removeFiles(ctx, opts, os.Remove)
 
 	opts.execute = backup.Execute
 	if err := diagnoseBackup(ctx, opts); err != nil {
@@ -150,11 +153,16 @@ func createFiles(ctx context.Context, fileName1, fileName2 string, fileSize1, fi
 
 // removeFiles cleans up the local and bucket files used for diagnostics.
 // Returns true if all files were deleted and false if there was a deletion error.
-func removeFiles(ctx context.Context, opts diagnoseOptions) bool {
+func removeFiles(ctx context.Context, opts diagnoseOptions, remove removeFunc) bool {
 	log.Logger.Infow("Cleaning up files created for diagnostics.")
 	allFilesDeleted := true
 	for _, file := range opts.files {
-		if err := os.Remove(file.fileName); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if !strings.HasPrefix(file.fileName, "/tmp/") {
+			log.Logger.Errorw(`File not located in "/tmp/", cannot remove`, "file", file.fileName)
+			allFilesDeleted = false
+			continue
+		}
+		if err := remove(file.fileName); err != nil && !errors.Is(err, os.ErrNotExist) {
 			log.Logger.Errorw("Failed to remove local file", "file", file.fileName, "err", err)
 			allFilesDeleted = false
 		}
@@ -321,18 +329,18 @@ func performDiagnostic(ctx context.Context, opts diagnoseOptions) ([][]string, e
 	lines := strings.Split(outTrim, "\n")
 	wantLines := strings.Split(opts.want, "\n")
 	if len(lines) != len(wantLines) {
-		return nil, fmt.Errorf("unexpected number of output lines, got: %d, want: %d", len(lines), len(wantLines))
+		return nil, fmt.Errorf("unexpected number of output lines for input: %s, got: %d, want: %d", opts.input, len(lines), len(wantLines))
 	}
 
 	var splitLines [][]string
 	for i, line := range lines {
 		wantSplit := parse.Split(wantLines[i])
 		if !strings.HasPrefix(line, wantSplit[0]) {
-			return nil, fmt.Errorf("malformed output line, got: %s, want prefix: %s", line, wantSplit[0])
+			return nil, fmt.Errorf("malformed output line for input: %s, got: %s, want prefix: %s", opts.input, line, wantSplit[0])
 		}
 		s := parse.Split(line)
 		if len(s) != len(wantSplit) {
-			return nil, fmt.Errorf("malformed output line, got: %s, want format: %s", line, wantLines[i])
+			return nil, fmt.Errorf("malformed output line for input: %s, got: %s, want format: %s", opts.input, line, wantLines[i])
 		}
 		splitLines = append(splitLines, s)
 	}
