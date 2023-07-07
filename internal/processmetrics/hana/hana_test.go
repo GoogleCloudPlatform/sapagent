@@ -25,6 +25,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
@@ -64,6 +66,12 @@ var (
 	defaultInstanceProperties = &InstanceProperties{
 		Config:      defaultConfig,
 		SAPInstance: defaultSAPInstance,
+	}
+
+	defaultAPIInstanceProperties = &InstanceProperties{
+		Config:           defaultConfig,
+		SAPInstance:      defaultSAPInstance,
+		UseSAPControlAPI: true,
 	}
 
 	defaultSapControlOutput = `OK
@@ -190,16 +198,90 @@ func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
 }
 
 func TestCollectReplicationHA(t *testing.T) {
-	fakeExec := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-		return commandlineexecutor.Result{
-			StdOut: defaultSapControlOutput,
-		}
-	}
-	got := collectReplicationHA(context.Background(), defaultInstanceProperties, fakeExec, commandlineexecutor.Params{})
-	if len(got) != 10 {
-		t.Errorf("collectReplicationHA(), got: %d want: 10.", len(got))
+	tests := []struct {
+		name             string
+		fakeExec         commandlineexecutor.Execute
+		fakeClient       sapcontrolclienttest.Fake
+		wantMetricCount  int
+		instanceProperties *InstanceProperties
+	}{
+		{
+			name: "SuccessCommandLine",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultSapControlOutput,
+				}
+			},
+			wantMetricCount: 10,
+			instanceProperties: defaultInstanceProperties,
+		},
+		{
+			name: "SuccessWebmethod",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultSapControlOutput,
+				}
+			},
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"hdbdaemon", "SAPControl-GREEN", 9609},
+					{"hdbcompileserver", "SAPControl-GREEN", 9972},
+					{"hdbindexserver", "SAPControl-GREEN", 10013},
+					{"hdbnameserver", "SAPControl-GREEN", 9642},
+					{"hdbpreprocessor", "SAPControl-GREEN", 9975},
+					{"hdbwebdispatcher", "SAPControl-GREEN", 666},
+					{"hdbxsengine", "SAPControl-GREEN", 777},
+				},
+			},
+			wantMetricCount:  10,
+			instanceProperties: defaultAPIInstanceProperties,
+		},
+		{
+			name:       "FailureWebmethodGetProcessList",
+			fakeClient: sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultSapControlOutput,
+				}
+			},
+			wantMetricCount:  2,
+			instanceProperties: defaultAPIInstanceProperties,
+		},
+		{
+			name: "FailureWebmethodExitStatus",
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
+			},
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}},
+			},
+			wantMetricCount:  3,
+			instanceProperties: defaultAPIInstanceProperties,
+		},
+		{
+			name: "FailureWebmethod",
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
+			},
+			fakeClient:       sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
+			wantMetricCount:  1,
+			instanceProperties: defaultAPIInstanceProperties,
+			
+		},
 	}
 
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			metrics := collectReplicationHA(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			if len(metrics) != test.wantMetricCount {
+				t.Errorf("collectReplicationHA() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
+			}
+		})
+	}
 }
 
 func TestHaAvailabilityValue(t *testing.T) {

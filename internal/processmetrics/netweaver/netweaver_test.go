@@ -406,11 +406,12 @@ func TestNWServiceMetricLabelCount(t *testing.T) {
 
 func TestCollectNetWeaverMetrics(t *testing.T) {
 	tests := []struct {
-		name             string
-		fakeExec         commandlineexecutor.Execute
-		fakeClient       sapcontrolclienttest.Fake
-		wantMetricCount  int
-		useSAPControlAPI bool
+		name               string
+		fakeExec           commandlineexecutor.Execute
+		fakeClient         sapcontrolclienttest.Fake
+		wantMetricCount    int
+		useSAPControlAPI   bool
+		instanceProperties *InstanceProperties
 	}{
 		{
 			name: "SuccessCommandLine",
@@ -420,7 +421,8 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			wantMetricCount: 6,
+			wantMetricCount:    6,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
 			name: "FailureCommandLine",
@@ -429,7 +431,8 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 					Error: cmpopts.AnyError,
 				}
 			},
-			wantMetricCount: 0,
+			wantMetricCount:    0,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
 			name: "SuccessWebmethod",
@@ -441,29 +444,22 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 				{"hdbpreprocessor", "SAPControl-GREEN", 9975},
 			},
 			},
-			wantMetricCount:  6,
-			useSAPControlAPI: true,
+			wantMetricCount:    6,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
-			name:             "FailureWebmethod",
-			fakeClient:       sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
-			wantMetricCount:  0,
-			useSAPControlAPI: true,
+			name:               "FailureWebmethod",
+			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
+			wantMetricCount:    0,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.useSAPControlAPI {
-				metrics := collectNetWeaverMetrics(context.Background(), defaultAPIInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
-				if len(metrics) != test.wantMetricCount {
-					t.Errorf("collectNetWeaverMetrics() metric count mismatch using webmethod, got: %v want: %v.", len(metrics), test.wantMetricCount)
-				}
-			} else {
-				metrics := collectNetWeaverMetrics(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
-				if len(metrics) != test.wantMetricCount {
-					t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
-				}
+			metrics := collectNetWeaverMetrics(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			if len(metrics) != test.wantMetricCount {
+				t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
 			}
 		})
 	}
@@ -661,11 +657,12 @@ func TestParseWorkProcessCount(t *testing.T) {
 
 func TestCollectABAPProcessStatus(t *testing.T) {
 	tests := []struct {
-		name             string
-		fakeExec         commandlineexecutor.Execute
-		fakeClient       sapcontrolclienttest.Fake
-		wantMetricCount  int
-		useSAPControlAPI bool
+		name               string
+		fakeExec           commandlineexecutor.Execute
+		fakeClient         sapcontrolclienttest.Fake
+		wantMetricCount    int
+		useSAPControlAPI   bool
+		instanceProperties *InstanceProperties
 	}{
 		{
 			name: "FailureCommandLine",
@@ -674,7 +671,8 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 					Error: cmpopts.AnyError,
 				}
 			},
-			wantMetricCount: 0,
+			wantMetricCount:    0,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
 			name: "SuccessCommandLine",
@@ -685,13 +683,14 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 					1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`,
 				}
 			},
-			wantMetricCount: 3,
+			wantMetricCount:    3,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
-			name:             "FailureWebmethod",
-			fakeClient:       sapcontrolclienttest.Fake{ErrABAPGetWPTable: cmpopts.AnyError},
-			wantMetricCount:  0,
-			useSAPControlAPI: true,
+			name:               "FailureWebmethod",
+			fakeClient:         sapcontrolclienttest.Fake{ErrABAPGetWPTable: cmpopts.AnyError},
+			wantMetricCount:    0,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
 			name: "SuccessWebmethod",
@@ -699,25 +698,17 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 				{0, "DIA", 7488, "Run", "4", ""},
 				{1, "BTC", 7489, "Wait", "", ""},
 			}},
-			wantMetricCount:  3,
-			useSAPControlAPI: true,
+			wantMetricCount:    3,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.useSAPControlAPI {
-				got := collectABAPProcessStatus(context.Background(), defaultAPIInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			got := collectABAPProcessStatus(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
 
-				if len(got) != test.wantMetricCount {
-					t.Errorf("collectABAPProcessStatus produced unexpected number of metrics using webmethod, got: %v want: %v.", len(got), test.wantMetricCount)
-				}
-			} else {
-				got := collectABAPProcessStatus(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
-
-				if len(got) != test.wantMetricCount {
-					t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)
-				}
+			if len(got) != test.wantMetricCount {
+				t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)
 			}
 		})
 	}
@@ -725,11 +716,12 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 
 func TestCollectABAPQueueStats(t *testing.T) {
 	tests := []struct {
-		name             string
-		fakeExec         commandlineexecutor.Execute
-		fakeClient       sapcontrolclienttest.Fake
-		wantMetricCount  int
-		useSAPControlAPI bool
+		name               string
+		fakeExec           commandlineexecutor.Execute
+		fakeClient         sapcontrolclienttest.Fake
+		wantMetricCount    int
+		useSAPControlAPI   bool
+		instanceProperties *InstanceProperties
 	}{
 		{
 			name: "DPMONFailureCommandLine",
@@ -738,7 +730,8 @@ func TestCollectABAPQueueStats(t *testing.T) {
 					Error: cmpopts.AnyError,
 				}
 			},
-			wantMetricCount: 0,
+			wantMetricCount:    0,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
 			name: "DPMonFailsWithStdOutCommandLine",
@@ -748,7 +741,8 @@ func TestCollectABAPQueueStats(t *testing.T) {
 					Error:  cmpopts.AnyError,
 				}
 			},
-			wantMetricCount: 0,
+			wantMetricCount:    0,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
 			name: "ZeroQueuesCommandLine",
@@ -757,7 +751,8 @@ func TestCollectABAPQueueStats(t *testing.T) {
 					StdOut: "InvalidOutput",
 				}
 			},
-			wantMetricCount: 0,
+			wantMetricCount:    0,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
 			name: "DPMONSuccessCommandLine",
@@ -769,50 +764,43 @@ func TestCollectABAPQueueStats(t *testing.T) {
 					ICM/Intern, 0, 7, 6000, 184690, 184690`,
 				}
 			},
-			wantMetricCount: 6,
+			wantMetricCount:    6,
+			instanceProperties: defaultInstanceProperties,
 		},
 		{
-			name:             "DPMONFailureWebmethod",
-			fakeClient:       sapcontrolclienttest.Fake{ErrGetQueueStatistic: cmpopts.AnyError},
-			wantMetricCount:  0,
-			useSAPControlAPI: true,
+			name:               "DPMONFailureWebmethod",
+			fakeClient:         sapcontrolclienttest.Fake{ErrGetQueueStatistic: cmpopts.AnyError},
+			wantMetricCount:    0,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
-			name:             "DPMonFailsWithTasksWebmethod",
-			fakeClient:       sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{{"ICM/Intern", 0, 7}}, ErrGetQueueStatistic: cmpopts.AnyError},
-			wantMetricCount:  0,
-			useSAPControlAPI: true,
+			name:               "DPMonFailsWithTasksWebmethod",
+			fakeClient:         sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{{"ICM/Intern", 0, 7}}, ErrGetQueueStatistic: cmpopts.AnyError},
+			wantMetricCount:    0,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
-			name:             "ZeroQueuesWebmethod",
-			fakeClient:       sapcontrolclienttest.Fake{},
-			wantMetricCount:  0,
-			useSAPControlAPI: true,
+			name:               "ZeroQueuesWebmethod",
+			fakeClient:         sapcontrolclienttest.Fake{},
+			wantMetricCount:    0,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
 			name: "DPMONSuccessWebmethod",
 			fakeClient: sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{
 				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
 			}},
-			wantMetricCount:  6,
-			useSAPControlAPI: true,
+			wantMetricCount:    6,
+			instanceProperties: defaultAPIInstanceProperties,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.useSAPControlAPI {
-				got := collectABAPQueueStats(context.Background(), defaultAPIInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			got := collectABAPQueueStats(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
 
-				if len(got) != test.wantMetricCount {
-					t.Errorf("collectABAPQueueStats() unexpected metric count using webmethod, got: %d, want: %d.", len(got), test.wantMetricCount)
-				}
-			} else {
-				got := collectABAPQueueStats(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
-
-				if len(got) != test.wantMetricCount {
-					t.Errorf("collectABAPQueueStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
-				}
+			if len(got) != test.wantMetricCount {
+				t.Errorf("collectABAPQueueStats() unexpected metric count using webmethod, got: %d, want: %d.", len(got), test.wantMetricCount)
 			}
 		})
 	}

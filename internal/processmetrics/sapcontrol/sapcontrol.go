@@ -99,18 +99,10 @@ type (
 //   - The exit status returned by sapcontrol command as int.
 //   - Error if process detection fails, nil otherwise.
 func (p *Properties) ProcessList(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (map[int]*ProcessStatus, int, error) {
-	result := exec(ctx, params)
-	if result.Error != nil && !result.ExitStatusParsed {
-		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
-		return nil, 0, result.Error
+	result, exitCode, err := ExecProcessList(ctx, exec, params)
+	if err != nil {
+		return nil, exitCode, err
 	}
-
-	message, ok := sapcontrolStatus[result.ExitCode]
-	if !ok {
-		return nil, result.ExitCode, fmt.Errorf("invalid sapcontrol return code: %d", result.ExitCode)
-	}
-	log.Logger.Debugw("Sapcontrol GetProcessList", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
-
 	names := processNameRegex.FindAllStringSubmatch(result.StdOut, -1)
 	if len(names) == 0 {
 		expectedFormat := `0 name: <ProcessName>
@@ -126,6 +118,39 @@ func (p *Properties) ProcessList(ctx context.Context, exec commandlineexecutor.E
 	}
 
 	return createProcessMap(result, names, dss, pids)
+}
+
+// ExecProcessList uses the SAPControl command to obtain the process list result.
+// Parameters are a commandlineexecutor.Execute and commandlineexecutor.Params
+// Example Usage:
+//
+//	params := commandlineexecutor.Params{
+//		User:        "hdbadm",
+//		Executable:  "/usr/sap/HDB/HDB00/exe/sapcontrol",
+//		ArgsToSplit: "-nr 00 -function GetProcessList -format script",
+//		Env:         []string{"LD_LIBRARY_PATH=/usr/sap/HDB/HDB00/exe/ld_library"},
+//	}
+//	sc := &sapcontrol.Properties{&sapb.SAPInstance{}}
+//	result, exitStatus, err := sc.ExecProcessList(commandlineexecutor.ExecuteCommand, params)
+//
+// Returns:
+//   - A commandlineexecutor.Result struct containing the result of the SAPControl command execution.
+//   - The exit status returned by sapcontrol command as int.
+//   - Error if process detection fails, nil otherwise.
+func ExecProcessList(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (commandlineexecutor.Result, int, error) {
+	result := exec(ctx, params)
+	if result.Error != nil && !result.ExitStatusParsed {
+		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
+		return result, 0, result.Error
+	}
+
+	message, ok := sapcontrolStatus[result.ExitCode]
+	if !ok {
+		return result, result.ExitCode, fmt.Errorf("invalid sapcontrol return code: %d", result.ExitCode)
+	}
+	log.Logger.Debugw("Sapcontrol ExitStatusProcessList", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
+
+	return result, result.ExitCode, nil
 }
 
 func createProcessMap(result commandlineexecutor.Result, names, dss, pids [][]string) (map[int]*ProcessStatus, int, error) {

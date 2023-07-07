@@ -30,6 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 
@@ -113,13 +114,15 @@ var (
 // Collect is HANA implementation of Collector interface from processmetrics.go.
 // Returns a list of HANA related metrics.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
+
 	processListParams := commandlineexecutor.Params{
 		User:        p.SAPInstance.GetUser(),
 		Executable:  p.SAPInstance.GetSapcontrolPath(),
 		ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics := collectReplicationHA(ctx, p, commandlineexecutor.ExecuteCommand, processListParams)
+	metrics := collectReplicationHA(ctx, p, commandlineexecutor.ExecuteCommand, processListParams, scc)
 
 	// Collect DB Query metrics only if credentials are set and NOT a HANA secondary.
 	if p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "" && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
@@ -130,18 +133,36 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	return metrics
 }
 
-func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{ip.SAPInstance}
-	processes, sapControlResult, err := sc.ProcessList(ctx, e, p)
-	if err != nil {
-		log.Logger.Errorw("Error getting ProcessList", log.Error(err))
-		return nil
+	var (
+		err               error
+		sapControlResult  int
+		processes         map[int]*sapcontrol.ProcessStatus
+		metrics           []*mrpb.TimeSeries
+		availabilityValue int64
+	)
+	if ip.UseSAPControlAPI {
+		processes, err = sc.GetProcessList(scc)
+		if err != nil {
+			log.Logger.Errorw("Error executing GetProcessList SAPControl API", log.Error(err))
+		}
+	} else {
+		processes, sapControlResult, err = sc.ProcessList(ctx, e, p)
+		if err != nil {
+			log.Logger.Errorw("Error getting ProcessList", log.Error(err))
+			return nil
+		}
 	}
-	metrics, availabilityValue := collectHANAServiceMetrics(ip, processes, now)
-	metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
+
+	if err == nil {
+		// If GetProcessList via command line or API didn't return an error.
+		metrics, availabilityValue = collectHANAServiceMetrics(ip, processes, now)
+		metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
+	}
 
 	haReplicationValue := refreshHAReplicationConfig(ctx, ip)
 	extraLabels := map[string]string{
@@ -149,6 +170,13 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e command
 	}
 	metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
 
+	if ip.UseSAPControlAPI {
+		_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
+		if err != nil {
+			log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
+			return metrics
+		}
+	}
 	haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
 	metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))
 
