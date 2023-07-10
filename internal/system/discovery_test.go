@@ -35,6 +35,7 @@ import (
 	logfake "github.com/GoogleCloudPlatform/sapagent/internal/log/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
@@ -2581,6 +2582,173 @@ func TestDiscoverASCS(t *testing.T) {
 			}
 			if diff := cmp.Diff(test.wantComp, test.comp, protocmp.Transform()); diff != "" {
 				t.Errorf("discoverASCS() mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDiscoverAppNFS(t *testing.T) {
+	tests := []struct {
+		name         string
+		app          *sappb.SAPInstance
+		comp         *spb.SapDiscovery_Component
+		cp           *instancepb.CloudProperties
+		execute      commandlineexecutor.Execute
+		gceInterface *fake.TestGCE
+		wantErr      error
+		wantComp     *spb.SapDiscovery_Component
+	}{{
+		name: "discoverAppNFS",
+		app: &sappb.SAPInstance{
+			Sapsid: defaultSID,
+		},
+		comp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{
+				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+			}},
+		},
+		cp: defaultCloudProperties,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		gceInterface: &fake.TestGCE{
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/resource/uri"}}}},
+			GetFilestoreByIPErr:  []error{nil},
+		},
+		wantErr: nil,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+				&spb.SapDiscovery_Component_ApplicationProperties{
+					ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+					NfsUri:          "some/resource/uri",
+				}}},
+	}, {
+		name: "discoverAppNFSWithEmptyProperties",
+		app: &sappb.SAPInstance{
+			Sapsid: defaultSID,
+		},
+		comp: &spb.SapDiscovery_Component{},
+		cp:   defaultCloudProperties,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		gceInterface: &fake.TestGCE{
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/resource/uri"}}}},
+			GetFilestoreByIPErr:  []error{nil},
+		},
+		wantErr: nil,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+				&spb.SapDiscovery_Component_ApplicationProperties{
+					NfsUri: "some/resource/uri",
+				}}},
+	}, {
+		name: "errorWhenPassedDatabaseProperties",
+		app: &sappb.SAPInstance{
+			Sapsid: defaultSID,
+		},
+		comp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+		},
+	}, {
+		name: "errorExecutingCommand",
+		app: &sappb.SAPInstance{
+			Sapsid: defaultSID,
+		},
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{Error: errors.New("Error running command"), ExitCode: 1}
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
+		},
+	}, {
+		name: "noNFSInMounts",
+		app: &sappb.SAPInstance{
+			Sapsid: defaultSID,
+		},
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				// StdOut: "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
+				StdOut:   "some extra line\n/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
+		},
+	}, {
+		name: "errorFindingNFSByIP",
+		app: &sappb.SAPInstance{
+			Sapsid: defaultSID,
+		},
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		gceInterface: &fake.TestGCE{
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{nil},
+			GetFilestoreByIPErr:  []error{errors.New("some error")},
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
+		},
+	}, {
+		name: "noNFSFoundByIP",
+		app: &sappb.SAPInstance{
+			Sapsid: defaultSID,
+		},
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		gceInterface: &fake.TestGCE{
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
+			GetFilestoreByIPErr:  []error{nil},
+		},
+		wantErr: cmpopts.AnyError,
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+
+			d := Discovery{
+				execute:    test.execute,
+				gceService: test.gceInterface,
+			}
+			gotErr := d.discoverAppNFS(context.Background(), test.app, test.comp, test.cp)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Unexpected error from discoverAppNFS (got, want), (%s, %s)", gotErr, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantComp, test.comp, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverAppNFS() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}

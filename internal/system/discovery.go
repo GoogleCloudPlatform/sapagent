@@ -1099,7 +1099,6 @@ func (d *Discovery) discoverASCS(ctx context.Context, sid string, appComp *spb.S
 		return errors.New("cannot use database component to store ASCS information")
 
 	default:
-		log.Logger.Info("Component has no properties.")
 		appComp.Properties = &spb.SapDiscovery_Component_ApplicationProperties_{ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{}}
 
 	}
@@ -1162,4 +1161,54 @@ func (d *Discovery) resolveHostToResource(host string, cp *ipb.CloudProperties) 
 	}
 
 	return "", errors.New("unable to resolve host to resource")
+}
+
+func (d *Discovery) discoverAppNFS(ctx context.Context, app *sappb.SAPInstance, appComp *spb.SapDiscovery_Component, cp *ipb.CloudProperties) error {
+	switch appComp.Properties.(type) {
+	case *spb.SapDiscovery_Component_DatabaseProperties_:
+		return errors.New("cannot use database component to store app NFS information")
+
+	case *spb.SapDiscovery_Component_ApplicationProperties_:
+		// Preserve existing properties if present
+
+	default:
+		appComp.Properties = &spb.SapDiscovery_Component_ApplicationProperties_{ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{}}
+
+	}
+	// The primary NFS of a Netweaver server is identified as the one that is mounted to the /sapmnt/<SID> directory.
+	p := commandlineexecutor.Params{
+		Executable: "df",
+		Args:       []string{"-h"},
+	}
+	res := d.execute(ctx, p)
+	if res.Error != nil {
+		log.Logger.Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return res.Error
+	}
+
+	mntPath := fmt.Sprintf("/sapmnt/%s", app.Sapsid)
+	lines := strings.Split(res.StdOut, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, mntPath) {
+			matches := fsMountRegex.FindStringSubmatch(line)
+			if len(matches) < 2 {
+				continue
+			}
+
+			address := matches[1]
+			fs, err := d.gceService.GetFilestoreByIP(cp.GetProjectId(), "-", address)
+			if err != nil {
+				log.Logger.Errorw("Error retrieving filestore by IP", "error", err)
+				continue
+			} else if len(fs.Instances) == 0 {
+				log.Logger.Warnw("No filestore found with IP", "address", address)
+				continue
+			}
+
+			appComp.GetApplicationProperties().NfsUri = fs.Instances[0].Name
+			return nil
+		}
+	}
+
+	return errors.New("no NFS found")
 }
