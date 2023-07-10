@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -42,6 +43,14 @@ var (
 			},
 			Content: defaultContent,
 		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName:  "test-bucket",
+				Name:        "compressed-object.txt",
+				ContentType: compressedContentType,
+			},
+			Content: defaultCompressedContent(),
+		},
 	})
 	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
 	defaultFileCopier   = func(dst io.Writer, src io.Reader) (written int64, err error) { return 1, nil }
@@ -52,7 +61,6 @@ var (
 	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 		return fakeServer.Client(), nil
 	}
-	defaultBuffer  = bytes.NewBufferString("test data")
 	defaultContent = []byte("test content")
 )
 
@@ -62,6 +70,20 @@ func objectAttrs(object *storage.ObjectHandle) []*storage.ObjectAttrs {
 		attrs = append(attrs, attr)
 	}
 	return attrs
+}
+
+func defaultBuffer() *bytes.Buffer {
+	return bytes.NewBufferString("test data")
+}
+
+func defaultCompressedContent() []byte {
+	compressedContent := bytes.NewBufferString("")
+	gzipWriter := gzip.NewWriter(compressedContent)
+	if _, err := io.Copy(gzipWriter, bytes.NewBuffer(defaultContent)); err != nil {
+		return nil
+	}
+	gzipWriter.Close()
+	return compressedContent.Bytes()
 }
 
 func TestConnectToBucket(t *testing.T) {
@@ -149,7 +171,7 @@ func TestUpload(t *testing.T) {
 		{
 			name: "NoHandle",
 			rw: &ReadWriter{
-				Reader: defaultBuffer,
+				Reader: defaultBuffer(),
 			},
 			wantError: cmpopts.AnyError,
 		},
@@ -157,10 +179,22 @@ func TestUpload(t *testing.T) {
 			name: "WriteFail",
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
-				Reader:       defaultBuffer,
+				Reader:       defaultBuffer(),
 				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
 					return 0, errors.New("write error")
 				},
+			},
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name: "CompressWriteFail",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				Reader:       defaultBuffer(),
+				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					return 0, errors.New("write error")
+				},
+				Compress: true,
 			},
 			wantError: cmpopts.AnyError,
 		},
@@ -170,10 +204,23 @@ func TestUpload(t *testing.T) {
 				BucketHandle: defaultBucketHandle,
 				ChunkSizeMb:  1,
 				Copier:       io.Copy,
-				Reader:       defaultBuffer,
+				Reader:       defaultBuffer(),
 				LogDelay:     time.Nanosecond,
 			},
-			want:      int64(defaultBuffer.Len()),
+			want:      int64(defaultBuffer().Len()),
+			wantError: nil,
+		},
+		{
+			name: "CompressUploadSuccess",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				ChunkSizeMb:  1,
+				Copier:       io.Copy,
+				Reader:       defaultBuffer(),
+				LogDelay:     time.Nanosecond,
+				Compress:     true,
+			},
+			want:      int64(defaultBuffer().Len()),
 			wantError: nil,
 		},
 	}
@@ -200,7 +247,7 @@ func TestDownload(t *testing.T) {
 		{
 			name: "NoHandle",
 			rw: &ReadWriter{
-				Writer: defaultBuffer,
+				Writer: defaultBuffer(),
 			},
 			wantError: cmpopts.AnyError,
 		},
@@ -209,7 +256,7 @@ func TestDownload(t *testing.T) {
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
 				ObjectName:   "fake-object.txt",
-				Writer:       defaultBuffer,
+				Writer:       defaultBuffer(),
 			},
 			wantError: cmpopts.AnyError,
 		},
@@ -218,7 +265,19 @@ func TestDownload(t *testing.T) {
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
 				ObjectName:   "object.txt",
-				Writer:       defaultBuffer,
+				Writer:       defaultBuffer(),
+				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					return 0, errors.New("write error")
+				},
+			},
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name: "DecompressWriteFail",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				ObjectName:   "compressed-object.txt",
+				Writer:       defaultBuffer(),
 				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
 					return 0, errors.New("write error")
 				},
@@ -230,7 +289,19 @@ func TestDownload(t *testing.T) {
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
 				ObjectName:   "object.txt",
-				Writer:       defaultBuffer,
+				Writer:       defaultBuffer(),
+				Copier:       io.Copy,
+				LogDelay:     time.Nanosecond,
+			},
+			want:      int64(len(defaultContent)),
+			wantError: nil,
+		},
+		{
+			name: "DecompressDownloadSuccess",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				ObjectName:   "compressed-object.txt",
+				Writer:       defaultBuffer(),
 				Copier:       io.Copy,
 				LogDelay:     time.Nanosecond,
 			},

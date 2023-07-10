@@ -18,6 +18,7 @@ limitations under the License.
 package storage
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -37,6 +38,8 @@ const DefaultLogDelay = time.Minute
 
 // DefaultChunkSizeMb provides a default chunk size when uploading data.
 const DefaultChunkSizeMb = 16
+
+const compressedContentType = "application/gzip"
 
 // IOFileCopier abstracts copying data from an io.Reader to an io.Writer.
 type IOFileCopier func(dst io.Writer, src io.Reader) (written int64, err error)
@@ -82,6 +85,10 @@ type ReadWriter struct {
 
 	// If LogDelay is not set, it will be defaulted to DefaultLogDelay.
 	LogDelay time.Duration
+
+	// Compress enables client side compression with gzip for uploads.
+	// Downloads will decompress automatically based on the file's content type.
+	Compress bool
 
 	bytesWritten     int64
 	lastBytesWritten int64
@@ -143,10 +150,26 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	}
 
 	log.Logger.Infow("Upload starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
-	bytesWritten, err := rw.Copier(writer, rw)
-	if err != nil {
-		return 0, err
+	var bytesWritten int64
+	var err error
+	if rw.Compress {
+		log.Logger.Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
+		writer.ObjectAttrs.ContentType = compressedContentType
+		gzipWriter := gzip.NewWriter(writer)
+		if bytesWritten, err = rw.Copier(gzipWriter, rw); err != nil {
+			return 0, err
+		}
+		// Closing the gzip writer flushes data to the underlying writer and writes the gzip footer.
+		// The underlying writer must be closed after this call to flush its buffer to the bucket.
+		if err := gzipWriter.Close(); err != nil {
+			return 0, err
+		}
+	} else {
+		if bytesWritten, err = rw.Copier(writer, rw); err != nil {
+			return 0, err
+		}
 	}
+
 	if err := writer.Close(); err != nil {
 		return 0, err
 	}
@@ -178,10 +201,25 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	}
 
 	log.Logger.Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
-	bytesWritten, err := rw.Copier(rw, reader)
-	if err != nil {
-		return 0, err
+	var bytesWritten int64
+	if reader.Attrs.ContentType == compressedContentType {
+		log.Logger.Infow("Compressed file detected, decompressing during download", "bucket", rw.BucketName, "object", rw.ObjectName)
+		gzipReader, err := gzip.NewReader(reader)
+		if err != nil {
+			return 0, err
+		}
+		if bytesWritten, err = rw.Copier(rw, gzipReader); err != nil {
+			return 0, err
+		}
+		if err := gzipReader.Close(); err != nil {
+			return 0, err
+		}
+	} else {
+		if bytesWritten, err = rw.Copier(rw, reader); err != nil {
+			return 0, err
+		}
 	}
+
 	avgTransferSpeedMBps := float64(bytesWritten) / time.Since(rw.firstLog).Seconds() / 1024 / 1024
 	log.Logger.Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return bytesWritten, nil

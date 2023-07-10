@@ -109,6 +109,7 @@ func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHan
 		ObjectName:   object,
 		TotalBytes:   fileSize,
 		LogDelay:     time.Duration(config.GetLogDelaySec()) * time.Second,
+		Compress:     config.GetCompress(),
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {
