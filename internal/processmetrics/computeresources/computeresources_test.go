@@ -66,6 +66,7 @@ type (
 	fakeUsageReader struct {
 		wantErrMemoryUsage      error
 		wantErrForCPUUsageStats error
+		wantErrForIOPStats      error
 	}
 )
 
@@ -79,6 +80,9 @@ func newProcessWithContextHelperTest(ctx context.Context, pid int32) (usageReade
 	}
 	if pid == 333 {
 		return fakeUsageReader{wantErrMemoryUsage: errors.New("could not get memory usage stats")}, nil
+	}
+	if pid == 444 {
+		return fakeUsageReader{wantErrForIOPStats: errors.New("could not get IOP stats")}, nil
 	}
 	return fakeUsageReader{}, nil
 }
@@ -100,6 +104,16 @@ func (ur fakeUsageReader) MemoryInfoWithContext(ctx context.Context) (*process.M
 		Swap: 6000000,
 	}
 	return op, nil
+}
+
+func (ur fakeUsageReader) IOCountersWithContext(ctx context.Context) (*process.IOCountersStat, error) {
+	if ur.wantErrForIOPStats != nil {
+		return nil, ur.wantErrForIOPStats
+	}
+	return &process.IOCountersStat{
+		ReadBytes:  12000,
+		WriteBytes: 24000,
+	}, nil
 }
 
 func TestCollectControlProcesses(t *testing.T) {
@@ -619,5 +633,108 @@ func TestCollectMemoryPerProcessLabels(t *testing.T) {
 	got := collectMemoryPerProcess(context.Background(), params, processList)[0].GetMetric().GetLabels()
 	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
+	}
+}
+
+func TestCollectIOPSPerProcess(t *testing.T) {
+	tests := []struct {
+		name        string
+		params      parameters
+		processList []*ProcessInfo
+		wantCount   int
+	}{
+		{
+			name: "FetchIOPSMetricSuccessfully",
+			params: parameters{
+				config:               defaultConfig,
+				client:               &fake.TimeSeriesCreator{},
+				iopsReadsMetricPath:  "/sample/test/iops_reads",
+				iopsWritesMetricPath: "/sample/test/iops_writes",
+				lastValue: map[string]*process.IOCountersStat{
+					"hdbdindexserver:9023": &process.IOCountersStat{
+						ReadCount:  50,
+						WriteCount: 500,
+					},
+				},
+				newProc: newProcessWithContextHelperTest,
+			},
+			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
+			wantCount:   2,
+		},
+		{
+			name: "ErrorInCreatingNewProcess",
+			params: parameters{
+				config:               defaultConfig,
+				client:               &fake.TimeSeriesCreator{},
+				iopsReadsMetricPath:  "/sample/test/iops_reads",
+				iopsWritesMetricPath: "/sample/test/iops_writes",
+				newProc:              newProcessWithContextHelperTest,
+			},
+			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
+			wantCount:   0,
+		},
+		{
+			name: "InvalidPID",
+			params: parameters{
+				config:               defaultConfig,
+				client:               &fake.TimeSeriesCreator{},
+				iopsReadsMetricPath:  "/sample/test/iops_reads",
+				iopsWritesMetricPath: "/sample/test/iops_writes",
+				newProc:              newProcessWithContextHelperTest,
+			},
+			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "abc"}},
+			wantCount:   0,
+		},
+		{
+			name: "ErrorInFetchingIOPSMetric",
+			params: parameters{
+				config:               defaultConfig,
+				client:               &fake.TimeSeriesCreator{},
+				iopsReadsMetricPath:  "/sample/test/iops_reads",
+				iopsWritesMetricPath: "/sample/test/iops_writes",
+				lastValue: map[string]*process.IOCountersStat{
+					"hdbdindexserver:444": &process.IOCountersStat{
+						ReadCount:  50,
+						WriteCount: 500,
+					},
+				},
+				newProc: newProcessWithContextHelperTest,
+			},
+			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "444"}},
+			wantCount:   0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := collectIOPSPerProcess(context.Background(), test.params, test.processList)
+			if len(got) != test.wantCount {
+				t.Errorf("collectIOPSPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
+			}
+		})
+	}
+}
+
+func TestCollectIOPSPerProcessValues(t *testing.T) {
+	params := parameters{
+		config:               defaultConfig,
+		client:               &fake.TimeSeriesCreator{},
+		iopsReadsMetricPath:  "/sample/test/iops_reads",
+		iopsWritesMetricPath: "/sample/test/iops_writes",
+		lastValue: map[string]*process.IOCountersStat{
+			"hdbdindexserver:9023": &process.IOCountersStat{
+				ReadBytes:  10000,
+				WriteBytes: 20000,
+			},
+		},
+		newProc: newProcessWithContextHelperTest,
+	}
+	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
+	got := collectIOPSPerProcess(context.Background(), params, processList)
+	want := []float64{0.4, 0.8}
+	for i, item := range got {
+		if item.GetPoints()[0].GetValue().GetDoubleValue() != want[i] {
+			t.Errorf("collectIOPSPerProcess(%v, %v) = %v, want %v", params, processList, item.GetPoints()[0].GetValue().GetDoubleValue(), want[i])
+		}
 	}
 }

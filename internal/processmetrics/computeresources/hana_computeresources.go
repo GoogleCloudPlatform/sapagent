@@ -20,6 +20,7 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -29,8 +30,10 @@ import (
 )
 
 const (
-	hanaCPUPath    = "/sap/hana/cpu/utilization"
-	hanaMemoryPath = "/sap/hana/memory/utilization"
+	hanaCPUPath        = "/sap/hana/cpu/utilization"
+	hanaMemoryPath     = "/sap/hana/memory/utilization"
+	hanaIOPSReadsPath  = "/sap/hana/iops/reads"
+	hanaIOPSWritesPath = "/sap/hana/iops/writes"
 )
 
 type (
@@ -44,6 +47,7 @@ type (
 		Executor          commandlineexecutor.Execute
 		SAPInstance       *sapb.SAPInstance
 		ProcessListParams commandlineexecutor.Params
+		LastValue         map[string]*process.IOCountersStat
 		NewProcHelper     newProcessWithContextHelper
 		SAPControlClient  sapcontrol.ClientInterface
 		UseSAPControlAPI  bool
@@ -59,16 +63,22 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries
 		config:               p.Config,
 		memoryMetricPath:     hanaMemoryPath,
 		cpuMetricPath:        hanaCPUPath,
+		iopsReadsMetricPath:  hanaIOPSReadsPath,
+		iopsWritesMetricPath: hanaIOPSWritesPath,
+		lastValue:            p.LastValue,
 		sapInstance:          p.SAPInstance,
 		newProc:              p.NewProcHelper,
 		getProcessListParams: p.ProcessListParams,
 		SAPControlClient:     p.SAPControlClient,
-		useSAPControlAPI:      p.UseSAPControlAPI,
+		useSAPControlAPI:     p.UseSAPControlAPI,
 	}
 	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {
 		log.Logger.Debug("Cannot collect CPU and memory per process for hana, empty process list.")
 		return nil
 	}
-	return append(collectCPUPerProcess(ctx, params, processes), collectMemoryPerProcess(ctx, params, processes)...)
+	res := collectCPUPerProcess(ctx, params, processes)
+	res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
+	res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
+	return res
 }

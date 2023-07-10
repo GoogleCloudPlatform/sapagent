@@ -37,6 +37,7 @@ import (
 	"time"
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -217,6 +218,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				},
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				UseSAPControlAPI: mainUseSAPControlAPI,
+				LastValue: make(map[string]*process.IOCountersStat),
 			}
 
 			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
@@ -250,6 +252,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				},
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				UseSAPControlAPI: mainUseSAPControlAPI,
+				LastValue: make(map[string]*process.IOCountersStat),
 			}
 
 			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)

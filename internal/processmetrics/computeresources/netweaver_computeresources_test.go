@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
@@ -48,6 +49,7 @@ func TestCollectForNetweaver(t *testing.T) {
 		fakeClient       sapcontrolclienttest.Fake
 		wantCount        int
 		processParams    commandlineexecutor.Params
+		lastValue        map[string]*process.IOCountersStat
 	}{
 		{
 			name:          "EmptyPIDsMap",
@@ -55,12 +57,14 @@ func TestCollectForNetweaver(t *testing.T) {
 			executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
+			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 0,
 		},
 		{
 			name:             "EmptyPIDsMapWebmethod",
 			useSAPControlAPI: true,
 			fakeClient:       sapcontrolclienttest.Fake{},
+			lastValue:        make(map[string]*process.IOCountersStat),
 			wantCount:        0,
 		},
 		{
@@ -71,6 +75,7 @@ func TestCollectForNetweaver(t *testing.T) {
 					StdOut: defaultSapControlOutputNetWeaver,
 				}
 			},
+			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 3,
 		},
 		{
@@ -82,6 +87,7 @@ func TestCollectForNetweaver(t *testing.T) {
 					{"hdbcompileserver", "SAPControl-GREEN", 222},
 				},
 			},
+			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 3,
 		},
 		{
@@ -99,6 +105,7 @@ func TestCollectForNetweaver(t *testing.T) {
 					`,
 				}
 			},
+			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 1,
 		},
 		{
@@ -110,6 +117,7 @@ func TestCollectForNetweaver(t *testing.T) {
 					{"enserver", "SAPControl-GREEN", 333},
 				},
 			},
+			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 1,
 		},
 	}
@@ -121,6 +129,7 @@ func TestCollectForNetweaver(t *testing.T) {
 				Client:                  &fake.TimeSeriesCreator{},
 				Executor:                test.executor,
 				SAPInstance:             defaultSAPInstanceNetWeaver,
+				LastValue:               test.lastValue,
 				NewProcHelper:           newProcessWithContextHelperTest,
 				SAPControlProcessParams: test.processParams,
 				SAPControlClient:        test.fakeClient,

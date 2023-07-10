@@ -20,6 +20,7 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -29,8 +30,10 @@ import (
 )
 
 const (
-	nwCPUPath    = "/sap/nw/cpu/utilization"
-	nwMemoryPath = "/sap/nw/memory/utilization"
+	nwCPUPath       = "/sap/nw/cpu/utilization"
+	nwMemoryPath    = "/sap/nw/memory/utilization"
+	nwIOPSReadsPath = "/sap/nw/iops/reads"
+	nwIOPSWritePath = "/sap/nw/iops/writes"
 )
 
 type (
@@ -46,6 +49,7 @@ type (
 		ABAPProcessParams       commandlineexecutor.Params
 		SAPControlClient        sapcontrol.ClientInterface
 		UseSAPControlAPI        bool
+		LastValue               map[string]*process.IOCountersStat
 	}
 )
 
@@ -58,6 +62,9 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeS
 		config:               p.Config,
 		memoryMetricPath:     nwMemoryPath,
 		cpuMetricPath:        nwCPUPath,
+		iopsReadsMetricPath:  nwIOPSReadsPath,
+		iopsWritesMetricPath: nwIOPSWritePath,
+		lastValue:            p.LastValue,
 		sapInstance:          p.SAPInstance,
 		newProc:              p.NewProcHelper,
 		getProcessListParams: p.SAPControlProcessParams,
@@ -70,5 +77,8 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeS
 		log.Logger.Debug("cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil
 	}
-	return append(collectCPUPerProcess(ctx, params, processes), collectMemoryPerProcess(ctx, params, processes)...)
+	res := collectCPUPerProcess(ctx, params, processes)
+	res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
+	res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
+	return res
 }
