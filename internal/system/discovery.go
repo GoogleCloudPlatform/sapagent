@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -289,6 +290,9 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 							DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						},
 					},
+				}
+				if err := d.discoverDatabaseNFS(ctx, system.GetDatabaseLayer(), cp); err != nil {
+					log.Logger.Warnw("Unable to discover database NFS", "error", err)
 				}
 				system.UpdateTime = timestamppb.Now()
 			}
@@ -1186,7 +1190,8 @@ func (d *Discovery) discoverAppNFS(ctx context.Context, app *sappb.SAPInstance, 
 		return res.Error
 	}
 
-	mntPath := fmt.Sprintf("/sapmnt/%s", app.Sapsid)
+	mntPath := filepath.Join("/sapmnt", app.Sapsid)
+	// mntPath := fmt.Sprintf("/sapmnt/%s", app.Sapsid)
 	lines := strings.Split(res.StdOut, "\n")
 	for _, line := range lines {
 		if strings.Contains(line, mntPath) {
@@ -1211,4 +1216,54 @@ func (d *Discovery) discoverAppNFS(ctx context.Context, app *sappb.SAPInstance, 
 	}
 
 	return errors.New("no NFS found")
+}
+
+func (d *Discovery) discoverDatabaseNFS(ctx context.Context, dbComp *spb.SapDiscovery_Component, cp *ipb.CloudProperties) error {
+	switch dbComp.Properties.(type) {
+	case *spb.SapDiscovery_Component_ApplicationProperties_:
+		return errors.New("cannot use application component to store database NFS information")
+
+	case *spb.SapDiscovery_Component_DatabaseProperties_:
+		// Preserve existing properties if present
+
+	default:
+		dbComp.Properties = &spb.SapDiscovery_Component_DatabaseProperties_{DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{}}
+
+	}
+	// The primary NFS of a Netweaver server is identified as the one that is mounted to the /sapmnt/<SID> directory.
+	p := commandlineexecutor.Params{
+		Executable: "df",
+		Args:       []string{"-h"},
+	}
+	res := d.execute(ctx, p)
+	if res.Error != nil {
+		log.Logger.Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return res.Error
+	}
+
+	mntPath := "/hana/shared"
+	lines := strings.Split(res.StdOut, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, mntPath) {
+			matches := fsMountRegex.FindStringSubmatch(line)
+			if len(matches) < 2 {
+				continue
+			}
+
+			address := matches[1]
+			fs, err := d.gceService.GetFilestoreByIP(cp.GetProjectId(), "-", address)
+			if err != nil {
+				log.Logger.Errorw("Error retrieving filestore by IP", "error", err)
+				continue
+			} else if len(fs.Instances) == 0 {
+				log.Logger.Warnw("No filestore found with IP", "address", address)
+				continue
+			}
+
+			log.Logger.Infow("Discovered primary DB NFS", "address", address, "nfs", fs.Instances[0].Name)
+			dbComp.GetDatabaseProperties().SharedNfsUri = fs.Instances[0].Name
+			return nil
+		}
+	}
+	return errors.New("unable to identify main database NFS")
 }

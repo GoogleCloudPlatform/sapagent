@@ -2753,3 +2753,96 @@ func TestDiscoverAppNFS(t *testing.T) {
 		})
 	}
 }
+
+func TestDiscoverDatabaseNFS(t *testing.T) {
+	tests := []struct {
+		name         string
+		comp         *spb.SapDiscovery_Component
+		execute      func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		gceInterface *fake.TestGCE
+		wantComp     *spb.SapDiscovery_Component
+		wantErr      error
+	}{{
+		name: "discoverDatabaseNFS",
+		comp: &spb.SapDiscovery_Component{Properties: &spb.SapDiscovery_Component_DatabaseProperties_{&spb.SapDiscovery_Component_DatabaseProperties{
+			DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+		}}},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /hana/shared",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		gceInterface: &fake.TestGCE{
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/nfs/uri"}}}},
+			GetFilestoreByIPErr:  []error{nil},
+		},
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+				&spb.SapDiscovery_Component_DatabaseProperties{
+					DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					SharedNfsUri: "some/nfs/uri",
+				}},
+		},
+		wantErr: nil,
+	}, {
+		name: "noComponentProperties",
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /hana/shared",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		gceInterface: &fake.TestGCE{
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/nfs/uri"}}}},
+			GetFilestoreByIPErr:  []error{nil},
+		},
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+				&spb.SapDiscovery_Component_DatabaseProperties{
+					SharedNfsUri: "some/nfs/uri",
+				}},
+		},
+		wantErr: nil,
+	}, {
+		name: "wrongComponentProperties",
+		comp: &spb.SapDiscovery_Component{},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /hana/shared",
+				StdErr:   "",
+				ExitCode: 0,
+			}
+		},
+		gceInterface: &fake.TestGCE{
+			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/nfs/uri"}}}},
+			GetFilestoreByIPErr:  []error{nil},
+		},
+		wantComp: &spb.SapDiscovery_Component{
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+				&spb.SapDiscovery_Component_DatabaseProperties{
+					SharedNfsUri: "some/nfs/uri",
+				}},
+		},
+		wantErr: nil,
+	}}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d := Discovery{
+				execute:    test.execute,
+				gceService: test.gceInterface,
+			}
+			gotErr := d.discoverDatabaseNFS(context.Background(), test.comp, defaultCloudProperties)
+			if diff := cmp.Diff(test.wantComp, test.comp, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverDatabaseNFS() mismatch (-want, +got):\n%s", diff)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Unexpected error from discoverDatabaseNFS (got, want), (%s, %s)", gotErr, test.wantErr)
+			}
+		})
+	}
+}
