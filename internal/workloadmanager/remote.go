@@ -80,7 +80,14 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 			// lock so we can update the metricsSent
 			mu.Lock()
 			defer mu.Unlock()
-			metricsSent += sendMetrics(ctx, wm, inst.GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
+			metricsSent += sendMetrics(ctx, sendMetricsParams{
+				wm:                wm,
+				cp: params.Config.GetCloudProperties(),
+				bareMetal:         params.Config.GetBareMetal(),
+				timeSeriesCreator: params.TimeSeriesCreator,
+				backOffIntervals:  params.BackOffs,
+				wlmService:        params.WLMService,
+			})
 		})
 	}
 	wp.StopWait()

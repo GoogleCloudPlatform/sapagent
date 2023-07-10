@@ -37,6 +37,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	wlm "github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -58,7 +59,18 @@ var (
 			CollectWorkloadValidationMetrics: true,
 		},
 	}
-
+	bmConfiguration = &cfgpb.Configuration{
+		BareMetal: true,
+		CloudProperties: &iipb.CloudProperties{
+			ProjectId: "bm-project-id",
+			InstanceId: "bm-instance-id",
+			Region: "us-central1",
+		},
+		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
+		CollectionConfiguration: &cfgpb.CollectionConfiguration{
+			CollectWorkloadValidationMetrics: true,
+		},
+	}
 	defaultConfigurationDBMetrics = &cfgpb.Configuration{
 		CloudProperties: &iipb.CloudProperties{
 			InstanceName: "test-instance-name",
@@ -86,6 +98,14 @@ var (
 		return io.NopCloser(strings.NewReader(data)), nil
 	})
 )
+
+type testWLMInterface struct {
+	err error
+}
+
+func (t *testWLMInterface) WriteInsight(project string, location string, req *wlm.WriteInsightRequest) error {
+	return t.err
+}
 
 func TestSetOSReleaseInfo(t *testing.T) {
 	defaultFileReader := ConfigFileReader(func(path string) (io.ReadCloser, error) {
@@ -323,41 +343,86 @@ func TestOverrideMetrics(t *testing.T) {
 func TestSendMetrics(t *testing.T) {
 	tests := []struct {
 		name            string
-		client          cloudmonitoring.TimeSeriesCreator
-		workLoadMetrics WorkloadMetrics
+		params          sendMetricsParams
 		wantMetricCount int
 	}{
 		{
-			name:            "succeedsWithZeroMetrics",
-			client:          &fake.TimeSeriesCreator{},
-			workLoadMetrics: WorkloadMetrics{},
+			name: "succeedsWithZeroMetrics",
+			params: sendMetricsParams{
+				wm:                WorkloadMetrics{},
+				cp: defaultConfiguration.GetCloudProperties(),
+				timeSeriesCreator: &fake.TimeSeriesCreator{},
+				backOffIntervals:  defaultBackOffIntervals,
+				wlmService:        &testWLMInterface{},
+			},
 			wantMetricCount: 0,
 		},
 		{
-			name:   "succeedsWithMetrics",
-			client: &fake.TimeSeriesCreator{},
-			workLoadMetrics: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
-				Metric:   &metricpb.Metric{},
-				Resource: &monitoredresourcepb.MonitoredResource{},
-				Points:   []*monitoringresourcespb.Point{},
-			}}},
+			name: "succeedsWithMetrics",
+			params: sendMetricsParams{
+				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+					Metric:   &metricpb.Metric{},
+					Resource: &monitoredresourcepb.MonitoredResource{},
+					Points:   []*monitoringresourcespb.Point{},
+				}}},
+				cp: defaultConfiguration.GetCloudProperties(),
+				timeSeriesCreator: &fake.TimeSeriesCreator{},
+				backOffIntervals:  defaultBackOffIntervals,
+				wlmService:        &testWLMInterface{},
+			},
 			wantMetricCount: 1,
 		},
 		{
-			name:   "failsWithMetrics",
-			client: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
-			workLoadMetrics: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
-				Metric:   &metricpb.Metric{},
-				Resource: &monitoredresourcepb.MonitoredResource{},
-				Points:   []*monitoringresourcespb.Point{},
-			}}},
+			name: "succeedsBareMetal",
+			params: sendMetricsParams{
+				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+					Metric:   &metricpb.Metric{},
+					Resource: &monitoredresourcepb.MonitoredResource{},
+					Points:   []*monitoringresourcespb.Point{},
+				}}},
+				cp: bmConfiguration.GetCloudProperties(),
+				bareMetal: true,
+				timeSeriesCreator: &fake.TimeSeriesCreator{},
+				backOffIntervals:  defaultBackOffIntervals,
+				wlmService:        &testWLMInterface{},
+			},
+			wantMetricCount: 1,
+		},
+		{
+			name: "failsSendToCloudMonitoring",
+			params: sendMetricsParams{
+				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+					Metric:   &metricpb.Metric{},
+					Resource: &monitoredresourcepb.MonitoredResource{},
+					Points:   []*monitoringresourcespb.Point{},
+				}}},
+				cp: defaultConfiguration.GetCloudProperties(),
+				timeSeriesCreator: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
+				backOffIntervals:  defaultBackOffIntervals,
+				wlmService:        &testWLMInterface{},
+			},
+			wantMetricCount: 0,
+		},
+		{
+			name: "failsSendToDataWarehouse",
+			params: sendMetricsParams{
+				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+					Metric:   &metricpb.Metric{},
+					Resource: &monitoredresourcepb.MonitoredResource{},
+					Points:   []*monitoringresourcespb.Point{},
+				}}},
+				cp: defaultConfiguration.GetCloudProperties(),
+				timeSeriesCreator: &fake.TimeSeriesCreator{},
+				backOffIntervals:  defaultBackOffIntervals,
+				wlmService:        &testWLMInterface{err: cmpopts.AnyError},
+			},
 			wantMetricCount: 0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := sendMetrics(context.Background(), test.workLoadMetrics, "test-project", &test.client, defaultBackOffIntervals)
+			got := sendMetrics(context.Background(), test.params)
 			if got != test.wantMetricCount {
 				t.Errorf("sendMetrics returned unexpected metric count for %s, got: %d, want: %d",
 					test.name, got, test.wantMetricCount)
@@ -406,6 +471,7 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:            "linux",
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
+				WLMService:        &testWLMInterface{},
 			},
 			want: true,
 		},
@@ -426,6 +492,7 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:            "linux",
 				Remote:            true,
 				BackOffs:          defaultBackOffIntervals,
+				WLMService:        &testWLMInterface{},
 			},
 			want: true,
 		},
@@ -446,6 +513,7 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:            "linux",
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
+				WLMService:        &testWLMInterface{},
 			},
 			want: true,
 		},
@@ -456,17 +524,19 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: false,
 					}},
-				OSType:   "linux",
-				BackOffs: defaultBackOffIntervals,
+				OSType:     "linux",
+				BackOffs:   defaultBackOffIntervals,
+				WLMService: &testWLMInterface{},
 			},
 			want: false,
 		},
 		{
 			name: "failsDueToOS",
 			params: Parameters{
-				Config:   defaultConfiguration,
-				OSType:   "windows",
-				BackOffs: defaultBackOffIntervals,
+				Config:     defaultConfiguration,
+				OSType:     "windows",
+				BackOffs:   defaultBackOffIntervals,
+				WLMService: &testWLMInterface{},
 			},
 			want: false,
 		},
@@ -536,6 +606,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				OSType:            "linux",
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
+				WLMService:        &testWLMInterface{},
 				HeartbeatSpec: &heartbeat.Spec{
 					BeatFunc: func() {
 						lock.Lock()

@@ -64,7 +64,14 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	system := CollectSystemMetricsFromConfig(ctx, params)
 	appendLabels(metrics.Metrics[0].Metric.Labels, system.Metrics[0].Metric.Labels)
 
-	sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
+	sendMetrics(ctx, sendMetricsParams{
+		wm:                metrics,
+		cp:                params.Config.GetCloudProperties(),
+		bareMetal:         params.Config.GetBareMetal(),
+		timeSeriesCreator: params.TimeSeriesCreator,
+		backOffIntervals:  params.BackOffs,
+		wlmService:        params.WLMService,
+	})
 	return nil
 }
 

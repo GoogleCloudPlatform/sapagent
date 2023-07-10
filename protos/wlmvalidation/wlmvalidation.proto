@@ -21,6 +21,16 @@ import "configurablemetrics/configurablemetrics.proto";
 
 
 
+enum SapValidationType {
+  SAP_VALIDATION_TYPE_UNSPECIFIED = 0;
+  SYSTEM = 1;
+  COROSYNC = 2;
+  HANA = 3;
+  NETWEAVER = 4;
+  PACEMAKER = 5;
+  CUSTOM = 6;
+}
+
 enum SystemVariable {
   SYSTEM_VARIABLE_UNSPECIFIED = 0;
   INSTANCE_NAME = 1;

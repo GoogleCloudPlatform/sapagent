@@ -224,6 +224,12 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return
 	}
+	wlmService, err := gce.NewWLMClient(ctx)
+	if err != nil {
+		log.Logger.Errorw("Error creating WLM Client", "error", err)
+		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)
+		return
+	}
 
 	wlmHeartbeatSpec, err := healthMonitor.Register(workloadManagerServiceName)
 	if err != nil {
@@ -240,6 +246,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		Exists:            exists,
 		HeartbeatSpec:     wlmHeartbeatSpec,
 		GCEService:        gceService,
+		WLMService:        wlmService,
 	}
 	if d.config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.
@@ -278,13 +285,6 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 
 	// Start Process Metrics Collection
 	if err = startProcessMetricsCollection(ctx, d.config, goos, healthMonitor, gceService); err != nil {
-		return
-	}
-
-	wlmService, err := gce.NewWLMClient(ctx)
-	if err != nil {
-		log.Logger.Errorw("Error creating WLM Client", "error", err)
-		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)
 		return
 	}
 

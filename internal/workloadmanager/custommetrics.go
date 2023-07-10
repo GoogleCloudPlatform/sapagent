@@ -23,12 +23,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
 
+const sapValidationCustom = "workload.googleapis.com/sap/validation/custom"
+
 // CollectCustomMetricsFromConfig collects any custom metrics as specified by
 // the WorkloadValidation config and formats the results as a time series to be
 // uploaded to a Collection Storage mechanism.
 func CollectCustomMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager Custom metrics...")
-	t := "workload.googleapis.com/sap/validation/custom"
 	l := make(map[string]string)
 
 	custom := params.WorkloadConfig.GetValidationCustom()
@@ -39,5 +40,5 @@ func CollectCustomMetricsFromConfig(ctx context.Context, params Parameters) Work
 		}
 	}
 
-	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationCustom, l, 1, params.Config)}
 }

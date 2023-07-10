@@ -410,6 +410,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				BackOffs:          defaultBackOffIntervals,
+				WLMService:        &testWLMInterface{},
 			}
 
 			want := test.wantCount

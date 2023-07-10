@@ -38,6 +38,7 @@ func TestProcessInsights(t *testing.T) {
 		Config:            defaultConfigurationDBMetrics,
 		TimeSeriesCreator: &fake.TimeSeriesCreator{},
 		BackOffs:          defaultBackOffIntervals,
+		WLMService:        &testWLMInterface{},
 	}
 
 	insights := make(ruleengine.Insights)
@@ -110,6 +111,8 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 					&rpb.Rule{},
 				},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				BackOffs:          defaultBackOffIntervals,
+				WLMService:        &testWLMInterface{},
 			},
 		},
 	}

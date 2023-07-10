@@ -34,7 +34,7 @@ import (
 	htransport "google.golang.org/api/transport/http"
 )
 
-const basePath = "https://autopush-workloadmanager-datawarehouse.sandbox.googleapis.com/v1/"
+const basePath = "https://workloadmanager-datawarehouse.googleapis.com/v1/"
 const mtlsBasePath = "https://workloadmanager.mtls.googleapis.com/v1alpha1/"
 
 type (
@@ -115,10 +115,14 @@ func (s *Service) userAgent() string {
 // runs.
 
 type Insight struct {
+	// SapValidation: The insights data for the sap workload validation.
+	SapValidation *SapValidation `json:"sapValidation,omitempty"`
 	// SapDiscovery: The insights data for sap system discovery. This is a
 	// copy of SAP System proto and should get updated whenever that one
 	// changes.
 	SapDiscovery *SapDiscovery `json:"sapDiscovery,omitempty"`
+	// InstanceID: The instance id where the insight is generated from.
+	InstanceID string `json:"instanceId,omitempty"`
 	// SentTime: Output only. [Output only] Create time stamp
 	SentTime string `json:"sentTime,omitempty"`
 	// ForceSendFields is a list of field names (e.g. "SapDiscovery") to
@@ -308,6 +312,31 @@ type SapDiscoveryResource struct {
 	// non-empty value. This may be used to include null fields in Patch
 	// requests.
 	NullFields []string `json:"-"`
+}
+
+// SapValidation describes the schema of SAP workloads validation related data.
+type SapValidation struct {
+	// ValidationDetail: A list of SAP validation metrics data.
+	ValidationDetails []*ValidationDetail `json:"validationDetails,omitempty"`
+}
+
+// ValidationDetail describes the SAP validation metrics.
+type ValidationDetail struct {
+	// SapValidationType: The different SAP systems.
+	//
+	// Possible values:
+	//   "SAP_VALIDATION_TYPE_UNSPECIFIED" - Unspecified type.
+	//   "SYSTEM" - The SAP system named SYSTEM.
+	//   "COROSYNC" - The SAP system named COROSYNC.
+	//   "PACEMAKER" - The SAP system named PACEMAKER.
+	//   "HANA" - The SAP system named HANA.
+	//   "NETWEAVER" - The SAP system named NETWEAVER.
+	//
+	// Additional validation types (e.g. CUSTOM) are currently not supported in
+	// DW. Submission of these types from the Agent will default to UNSPECIFIED.
+	SapValidationType string `json:"sapValidationType,omitempty"`
+	// Details: The k/v pairs of metrics data.
+	Details map[string]string `json:"details,omitempty"`
 }
 
 // WriteInsightRequest is a request for sending the data insights.

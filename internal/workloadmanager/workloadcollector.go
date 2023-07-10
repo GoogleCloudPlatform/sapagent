@@ -36,6 +36,7 @@ import (
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	wlm "github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
@@ -44,6 +45,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
@@ -92,6 +94,10 @@ type gceInterface interface {
 	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
 }
 
+type wlmInterface interface {
+	WriteInsight(project, location string, writeInsightRequest *wlm.WriteInsightRequest) error
+}
+
 /*
 Parameters holds the parameters for all of the Collect* function calls.
 */
@@ -115,6 +121,7 @@ type Parameters struct {
 	netweaverPresent      float64
 	GCEService            gceInterface
 	HANAInsightRules      []*rpb.Rule
+	WLMService            wlmInterface
 	// fields derived from parsing the file specified by OSReleaseFilePath
 	osVendorID string
 	osVersion  string
@@ -156,6 +163,16 @@ func (p *Parameters) SetOSReleaseInfo() {
 	if vf := strings.Fields(version); len(vf) > 0 {
 		p.osVersion = strings.ReplaceAll(strings.TrimSpace(vf[0]), `"`, "")
 	}
+}
+
+// sendMetricsParams defines the set of paramaters required to call sendMetrics
+type sendMetricsParams struct {
+	wm                WorkloadMetrics
+	cp                *ipb.CloudProperties
+	bareMetal         bool
+	timeSeriesCreator cloudmonitoring.TimeSeriesCreator
+	backOffIntervals  *cloudmonitoring.BackOffIntervals
+	wlmService        wlmInterface
 }
 
 var (
@@ -225,7 +242,14 @@ func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 	}
 	log.Logger.Info("Collecting metrics from this instance")
 	metrics := collectMetricsFromConfig(ctx, params, metricOverridePath)
-	sendMetrics(ctx, metrics, params.Config.GetCloudProperties().GetProjectId(), &params.TimeSeriesCreator, params.BackOffs)
+	sendMetrics(ctx, sendMetricsParams{
+		wm:                metrics,
+		cp:                params.Config.GetCloudProperties(),
+		bareMetal:         params.Config.GetBareMetal(),
+		timeSeriesCreator: params.TimeSeriesCreator,
+		backOffIntervals:  params.BackOffs,
+		wlmService:        params.WLMService,
+	})
 }
 
 // StartMetricsCollection continuously collects Workload Manager metrics for SAP workloads.
@@ -403,13 +427,14 @@ func parseScannedText(text string) (key, value string, found bool) {
 	return strings.TrimSpace(key), strings.TrimSpace(value), found
 }
 
-func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmonitoring.TimeSeriesCreator, bo *cloudmonitoring.BackOffIntervals) int {
-	if wm.Metrics == nil || len(wm.Metrics) == 0 {
+func sendMetrics(ctx context.Context, params sendMetricsParams) int {
+	if params.wm.Metrics == nil || len(params.wm.Metrics) == 0 {
 		log.Logger.Info("No metrics to send to Cloud Monitoring")
 		return 0
 	}
+
 	// debugging metric data being sent
-	for _, m := range wm.Metrics {
+	for _, m := range params.wm.Metrics {
 		if len(m.GetPoints()) == 0 {
 			log.Logger.Debugw("  Metric has no point data", "metric", m.GetMetric().GetType())
 			continue
@@ -419,17 +444,35 @@ func sendMetrics(ctx context.Context, wm WorkloadMetrics, p string, mc *cloudmon
 			log.Logger.Debugw("    Label", "key", k, "value", v)
 		}
 	}
-	log.Logger.Infow("Sending metrics to Cloud Monitoring...", "number", len(wm.Metrics))
+
+	log.Logger.Infow("Sending metrics to Cloud Monitoring...", "number", len(params.wm.Metrics))
 	request := monitoringpb.CreateTimeSeriesRequest{
-		Name:       fmt.Sprintf("projects/%s", p),
-		TimeSeries: wm.Metrics}
-	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, *mc, &request, bo); err != nil {
+		Name:       fmt.Sprintf("projects/%s", params.cp.GetProjectId()),
+		TimeSeries: params.wm.Metrics,
+	}
+	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, params.timeSeriesCreator, &request, params.backOffIntervals); err != nil {
 		log.Logger.Errorw("Failed to send metrics to Cloud Monitoring", "error", err)
-		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure) // Workload metrics collection failure
+		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
 		return 0
 	}
-	log.Logger.Infow("Sent metrics to Cloud Monitoring.", "number", len(wm.Metrics))
-	return len(wm.Metrics)
+	log.Logger.Infow("Sent metrics to Cloud Monitoring.", "number", len(params.wm.Metrics))
+
+	log.Logger.Debugw("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
+	// Send request to global endpoint. Ex: "us-central1-a" -> "us"
+	location := params.cp.GetZone()
+	if params.bareMetal {
+		location = params.cp.GetRegion()
+	}
+	location = strings.Split(location, "-")[0]
+	req := createWriteInsightRequest(params.wm, params.cp.GetInstanceId())
+	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
+		log.Logger.Debugw("Failed to send metrics to Data Warehouse", "error", err)
+		// Do not log a usagemetrics error until this is the primary data pipeline.
+		return 0
+	}
+	log.Logger.Debugw("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
+
+	return len(params.wm.Metrics)
 }
 
 func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configuration) []*monitoringresourcespb.TimeSeries {
@@ -465,5 +508,42 @@ func (p *Parameters) ReadHANAInsightsRules() {
 	var err error
 	if p.HANAInsightRules, err = preprocessor.ReadRules(preprocessor.RuleFilenames); err != nil {
 		log.Logger.Errorw("Error Reading HANA Insights rules", "error", err)
+	}
+}
+
+// createWriteInsightRequest converts a WorkloadMetrics time series into a WriteInsightRequest.
+func createWriteInsightRequest(wm WorkloadMetrics, instanceID string) *wlm.WriteInsightRequest {
+	validations := []*wlm.ValidationDetail{}
+	for _, m := range wm.Metrics {
+		t := wlmpb.SapValidationType_SAP_VALIDATION_TYPE_UNSPECIFIED
+		switch m.GetMetric().GetType() {
+		case sapValidationSystem:
+			t = wlmpb.SapValidationType_SYSTEM
+		case sapValidationCorosync:
+			t = wlmpb.SapValidationType_COROSYNC
+		case sapValidationHANA:
+			t = wlmpb.SapValidationType_HANA
+		case sapValidationNetweaver:
+			t = wlmpb.SapValidationType_NETWEAVER
+		case sapValidationPacemaker:
+			t = wlmpb.SapValidationType_PACEMAKER
+		case sapValidationCustom:
+			// Data Warehouse does not support this validation type.
+			// TODO: Add support once new validation types are enabled.
+			t = wlmpb.SapValidationType_SAP_VALIDATION_TYPE_UNSPECIFIED
+		}
+		validations = append(validations, &wlm.ValidationDetail{
+			SapValidationType: t.String(),
+			Details:           m.GetMetric().GetLabels(),
+		})
+	}
+
+	return &wlm.WriteInsightRequest{
+		Insight: &wlm.Insight{
+			InstanceID: instanceID,
+			SapValidation: &wlm.SapValidation{
+				ValidationDetails: validations,
+			},
+		},
 	}
 }

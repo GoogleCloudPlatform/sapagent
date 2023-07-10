@@ -28,8 +28,12 @@ import (
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
-// OSReleaseFilePath lists the location of the os-release file in the Linux system.
-const OSReleaseFilePath = "/etc/os-release"
+const (
+	// OSReleaseFilePath lists the location of the os-release file in the Linux system.
+	OSReleaseFilePath = "/etc/os-release"
+
+	sapValidationSystem = "workload.googleapis.com/sap/validation/system"
+)
 
 // InterfaceAddrsGetter satisfies the function signature for net.InterfaceAddrs().
 type InterfaceAddrsGetter func() ([]net.Addr, error)
@@ -39,7 +43,6 @@ type InterfaceAddrsGetter func() ([]net.Addr, error)
 // uploaded to a Collection Storage mechanism.
 func CollectSystemMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager System metrics...")
-	t := "workload.googleapis.com/sap/validation/system"
 	l := make(map[string]string)
 
 	system := params.WorkloadConfig.GetValidationSystem()
@@ -54,7 +57,7 @@ func CollectSystemMetricsFromConfig(ctx context.Context, params Parameters) Work
 		}
 	}
 
-	return WorkloadMetrics{Metrics: createTimeSeries(t, l, 1, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationSystem, l, 1, params.Config)}
 }
 
 // collectSystemVariable collects and returns the metric value for a given system metric variable.

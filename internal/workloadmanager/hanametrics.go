@@ -30,6 +30,8 @@ import (
 	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
+const sapValidationHANA = "workload.googleapis.com/sap/validation/hana"
+
 type lsblkdevicechild struct {
 	Name       string
 	Type       string
@@ -54,7 +56,6 @@ type lsblk struct {
 // be uploaded to a Collection Storage mechanism.
 func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager HANA metrics...")
-	t := "workload.googleapis.com/sap/validation/hana"
 	hanaVal := 0.0
 
 	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(ctx, params.Execute)
@@ -64,7 +65,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	if hanaProcessOrGlobalIni == "" || strings.Contains(hanaProcessOrGlobalIni, "cannot access") {
 		// No HANA INI file or processes were identified on the current host.
 		log.Logger.Debug("HANA process and global.ini not found, no HANA")
-		return WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
+		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 	if _, err := params.OSStatReader(globalINILocationVal); err != nil {
 		// Parse out the SID and global.ini location.
@@ -78,7 +79,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		// location similar to: /usr/sap/HAR/SYS/global/hdb/custom/config/global.ini
 
 		log.Logger.Debugw("Could not find gobal.ini file", "globalinilocation", globalINILocationVal)
-		return WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
+		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 
 	hana := params.WorkloadConfig.GetValidationHana()
@@ -109,7 +110,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	}
 
 	hanaVal = 1.0
-	return WorkloadMetrics{Metrics: createTimeSeries(t, l, hanaVal, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 }
 
 /*

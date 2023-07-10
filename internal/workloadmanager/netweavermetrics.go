@@ -23,12 +23,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
 
+const sapValidationNetweaver = "workload.googleapis.com/sap/validation/netweaver"
+
 // CollectNetWeaverMetricsFromConfig collects the netweaver metrics as
 // specified by the WorkloadValidation config and formats the results as a
 // time series to be uploaded to a Collection Storage mechanism.
 func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager NetWeaver metrics...")
-	t := "workload.googleapis.com/sap/validation/netweaver"
 	l := make(map[string]string)
 
 	netweaver := params.WorkloadConfig.GetValidationNetweaver()
@@ -39,5 +40,5 @@ func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) W
 		}
 	}
 
-	return WorkloadMetrics{Metrics: createTimeSeries(t, l, params.netweaverPresent, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, params.netweaverPresent, params.Config)}
 }
