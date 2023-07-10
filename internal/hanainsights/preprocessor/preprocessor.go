@@ -46,7 +46,7 @@ var (
 		"rules/security/r_password_policy_minimal_password_length.json",
 		"rules/security/r_password_policy_password_expire_warning_time.json",
 		"rules/security/r_password_policy_password_layout.json",
-		"rules/security/r_persistance_encryption.json",
+		"rules/security/r_persistence_encryption.json",
 		"rules/security/r_prod_users_with_debug_roles.json",
 		"rules/security/r_password_policy_last_used_passwords.json",
 		"rules/security/r_password_policy_maximum_invalid_connect_attempts.json",

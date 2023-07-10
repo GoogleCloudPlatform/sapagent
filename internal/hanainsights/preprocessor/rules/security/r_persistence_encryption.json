@@ -1,12 +1,12 @@
 {
-  "id": "r_persistance_encryption",
+  "id": "r_persistence_encryption",
   "description": "Validates the encryption status of the persistent (data) volume.",
   "labels": [
     "security"
   ],
   "queries": [
     {
-      "name": "q_persistance_encryption",
+      "name": "q_persistence_encryption",
       "sql": "SELECT IS_ENCRYPTION_ACTIVE FROM M_ENCRYPTION_OVERVIEW WHERE SCOPE = 'PERSISTENCE'",
       "columns": ["IS_ENCRYPTION_ACTIVE"]
     }
@@ -15,13 +15,13 @@
     {
       "id": "rec_1",
       "trigger": {
-        "lhs": "q_persistance_encryption:IS_ENCRYPTION_ACTIVE",
+        "lhs": "q_persistence_encryption:IS_ENCRYPTION_ACTIVE",
         "operation": "EQ",
         "rhs": "FALSE"
       },
       "actions": [
         {
-          "description": "Database Data is not encrypted. It is recommended to protect data saved to disk from unauthorized access at operating system level, the SAP HANA database supports data encryption in the persistence layer."
+          "description": "Database data is not encrypted. It is recommended to protect data saved to disk from unauthorized access at operating system level. The SAP HANA database supports data encryption in the persistence layer."
         }
       ],
       "references": [
