@@ -1,6 +1,6 @@
 {
   "id": "r_prod_users_with_debug_roles",
-  "description": "Checks if the privileges DEBUG or ATTACH DEBUGGER assigned to any user for any object in the system.",
+  "description": "Checks if the privileges DEBUG or ATTACH DEBUGGER are assigned to any user for any object in the system.",
   "labels": [
     "security"
   ],
