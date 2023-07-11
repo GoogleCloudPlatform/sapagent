@@ -228,7 +228,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				ParamFile:         "testParamsFile",
 				Bucket:            "testBucket",
 				ParallelStreams:   2,
-				BufferSizeMb:      200,
+				BufferSizeMb:      250,
 				FileReadTimeoutMs: 2000,
 				ParallelSizeMb:    228,
 				Retries:           25,
@@ -240,7 +240,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				OutputFile:        "/output.txt",
 			},
 			read: func(p string) ([]byte, error) {
-				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 2, "buffer_size_mb": 200, "file_read_timeout_ms": 2000, "parallel_size_mb": 228, "retries": 25, "threads": 2, "rate_limit_mb": 200}`), nil
+				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 2, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "parallel_size_mb": 228, "retries": 25, "threads": 2, "rate_limit_mb": 200}`), nil
 			},
 			wantOk: true,
 		},

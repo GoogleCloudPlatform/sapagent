@@ -178,6 +178,10 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		log.Logger.Warn("buffer_size_mb defaulted to 100")
 		p.Config.BufferSizeMb = 100
 	}
+	if p.Config.GetBufferSizeMb() > 250 {
+		log.Logger.Warn("buffer_size_mb capped to 250")
+		p.Config.BufferSizeMb = 250
+	}
 	if p.Config.GetRateLimitMb() <= 0 {
 		log.Logger.Warn("rate_limit_mb defaulted to 0")
 		p.Config.RateLimitMb = 0
