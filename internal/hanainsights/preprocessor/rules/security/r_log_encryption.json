@@ -21,7 +21,7 @@
       },
       "actions": [
         {
-          "description": "Database logs are not encrypted. It is recommended to protect logs saved to disk from unauthorized access at operating system level, the SAP HANA database supports encryption in the persistence layer."
+          "description": "Database logs are not encrypted. It is recommended to protect logs saved to disk from unauthorized access at operating system level. The SAP HANA database supports encryption in the persistence layer."
         }
       ],
       "references": [
