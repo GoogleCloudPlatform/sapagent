@@ -57,6 +57,9 @@ var (
 	// function on the knowledge base which returns the size of slice read from the HANA DB by a query
 	// for a column.
 	CountPattern = regexp.MustCompile(`^count\(([^)]+)\)$`)
+
+	// KnowledgeBasePattern matches the knowledge base scalar referencing functions of the form query_name:column_name.
+	KnowledgeBasePattern = regexp.MustCompile(`^(\w+):(\w+)$`)
 )
 
 // ReadRules returns preprocessed rules ready for execution by rule engine.

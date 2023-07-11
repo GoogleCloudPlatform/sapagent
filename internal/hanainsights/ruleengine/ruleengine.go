@@ -110,7 +110,7 @@ func buildKnowledgeBase(ctx context.Context, db SQLDBHandle, queries []*rpb.Quer
 			}
 			addRow(cols, query, kb)
 		}
-		log.Logger.Infow("Knowledge base built successfully", "query", query.Sql, "result", cols, "knowledgebase", kb)
+		log.Logger.Debugw("Knowledge base built successfully", "query", query.Sql, "result", cols, "knowledgebase", kb)
 	}
 	return nil
 }
@@ -159,7 +159,7 @@ func buildInsights(rule *rpb.Rule, kb knowledgeBase, insights Insights) {
 		log.Logger.Debugw("Recommendation evaluation result", "rule", rule.Id, "recommendation", r.Id, "result", vr.Result)
 		insights[rule.Id] = append(insights[rule.Id], vr)
 	}
-	log.Logger.Infow("Insights successfully generated", "insights", insights)
+	log.Logger.Debugw("Insights successfully generated", "insights", insights)
 }
 
 // evaluateTrigger recursively evaluates the trigger condition tree and returns boolean result.
@@ -210,6 +210,7 @@ func compare(lhs, rhs string, op rpb.EvalNode_EvalType, kb knowledgeBase) bool {
 		return false
 	}
 
+	log.Logger.Debugw("Comparison parameters", "lhs", lhs, "rhs", rhs, "op", op)
 	// TODO: strengthen the EQ/NEQ comparisons for numerical values.
 	// Evaluate equality comparisons.
 	switch op {
@@ -243,18 +244,35 @@ func compare(lhs, rhs string, op rpb.EvalNode_EvalType, kb knowledgeBase) bool {
 	return false
 }
 
-// insertFromKB refers to the knowledgebase and inserts the values where functions are used.
-// Possible functions include: count(query_name:column_name)
+// insertFromKB  checks if the string uses a set of predefined functions to access the knowledgebase.
+// For these cases return the values from knowledgebase.
+// Possible functions include:
+//   - query_name:column_name -> scalar value from KB
+//   - count(query_name:column_name) -> length of a slice from KB
 func insertFromKB(s string, kb knowledgeBase) (string, error) {
-	countPattern := preprocessor.CountPattern
-	match := countPattern.FindStringSubmatch(s)
-	if len(match) != 2 {
-		// The string does not use count() function, no insertion necessary.
-		return s, nil
+	// Check if the string has count() function.
+	match := preprocessor.CountPattern.FindStringSubmatch(s)
+	if len(match) == 2 {
+		log.Logger.Debugw("Processing count() function on knowledge base.")
+		k := match[1]
+		if _, ok := kb[k]; ok {
+			return strconv.Itoa(len(kb[k])), nil
+		}
+		return "", fmt.Errorf("could not insert count from knowledge base for: %s", s)
 	}
-	k := match[1]
-	if _, ok := kb[k]; ok {
-		return strconv.Itoa(len(kb[k])), nil
+
+	// Check if string has knowledge base insertion.
+	match = preprocessor.KnowledgeBasePattern.FindStringSubmatch(s)
+	if len(match) == 3 {
+		log.Logger.Debugw("Processing value insertion from knowledge base.")
+		// Access knowledgebase using key query_name:column_name.
+		k := match[1] + ":" + match[2]
+		if _, ok := kb[k]; ok && len(kb[k]) == 1 {
+			// We expect at most one value when this function is used.
+			return kb[k][0], nil
+		}
+		return "", fmt.Errorf("could not insert values from knowledge base for function: %s", s)
 	}
-	return "", fmt.Errorf("could not insert values from knowledge base for function: %s", s)
+	// If no function was found, no insertion needed - return the literal.
+	return s, nil
 }

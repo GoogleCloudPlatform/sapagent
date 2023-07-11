@@ -165,6 +165,7 @@ func TestEvaluateTrigger(t *testing.T) {
 func TestInsertFromKB(t *testing.T) {
 	kb := make(knowledgeBase)
 	kb["my_query:my_col"] = []string{"1", "2", "3", "4", "5"}
+	kb["my_query:my_col1"] = []string{"9"}
 
 	tests := []struct {
 		name    string
@@ -178,13 +179,28 @@ func TestInsertFromKB(t *testing.T) {
 			want: "100",
 		},
 		{
-			name: "InsertSuzeFunction",
+			name: "InsertSizeFunction",
 			s:    "count(my_query:my_col)",
 			want: "5",
 		},
 		{
 			name:    "ValueNotFound",
 			s:       "count(my_query:your_column)",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ScalarInsertion",
+			s:    "my_query:my_col1",
+			want: "9",
+		},
+		{
+			name:    "ScalarInsertionKeyNotFound",
+			s:       "my_query:my_col2",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "ScalarInsertionInvalidValues",
+			s:       "my_query:my_col",
 			wantErr: cmpopts.AnyError,
 		},
 	}
