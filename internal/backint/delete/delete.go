@@ -24,8 +24,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	store "cloud.google.com/go/storage"
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -50,6 +52,8 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 // delete deletes objects in the bucket based on each line of the input. Results for each
 // deletion are written to the output. Issues with file operations will return errors.
 func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+	wp := workerpool.New(int(config.GetThreads()))
+	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -65,22 +69,27 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 			externalBackupID := strings.Trim(s[1], `"`)
 			fileName := strings.Trim(s[2], `"`)
 			object := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
-			log.Logger.Infow("Deleting object", "object", object)
-			err := storage.DeleteObject(ctx, bucketHandle, object)
-			if errors.Is(err, store.ErrObjectNotExist) {
-				log.Logger.Errorw("Object not found", "object", object, "err", err)
-				output.Write([]byte(fmt.Sprintf("#NOTFOUND %q %q\n", externalBackupID, fileName)))
-			} else if err != nil {
-				log.Logger.Errorw("Error deleting object", "object", object, "err", err)
-				output.Write([]byte(fmt.Sprintf("#ERROR %q %q\n", externalBackupID, fileName)))
-			} else {
-				log.Logger.Infow("Object deleted", "object", object)
-				output.Write([]byte(fmt.Sprintf("#DELETED %q %q\n", externalBackupID, fileName)))
-			}
+			wp.Submit(func() {
+				log.Logger.Infow("Deleting object", "object", object)
+				err := storage.DeleteObject(ctx, bucketHandle, object)
+				mu.Lock()
+				defer mu.Unlock()
+				if errors.Is(err, store.ErrObjectNotExist) {
+					log.Logger.Errorw("Object not found", "object", object, "err", err)
+					output.Write([]byte(fmt.Sprintf("#NOTFOUND %q %q\n", externalBackupID, fileName)))
+				} else if err != nil {
+					log.Logger.Errorw("Error deleting object", "object", object, "err", err)
+					output.Write([]byte(fmt.Sprintf("#ERROR %q %q\n", externalBackupID, fileName)))
+				} else {
+					log.Logger.Infow("Object deleted", "object", object)
+					output.Write([]byte(fmt.Sprintf("#DELETED %q %q\n", externalBackupID, fileName)))
+				}
+			})
 		} else {
 			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
+	wp.StopWait()
 	if err := scanner.Err(); err != nil {
 		return err
 	}

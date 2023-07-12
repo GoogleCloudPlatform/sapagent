@@ -24,8 +24,10 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	store "cloud.google.com/go/storage"
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -50,6 +52,8 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 // inquire queries the bucket for objects based on each line of the input. Results for each
 // inquiry are written to the output. Issues with file operations will return errors.
 func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+	wp := workerpool.New(int(config.GetThreads()))
+	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -65,7 +69,12 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 				fileName = strings.Trim(s[1], `"`)
 			}
 			prefix := config.GetUserId() + fileName
-			output.Write(inquireFiles(ctx, bucketHandle, prefix, fileName, ""))
+			wp.Submit(func() {
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "")
+				mu.Lock()
+				defer mu.Unlock()
+				output.Write([]byte(out))
+			})
 		} else if strings.HasPrefix(line, "#EBID") {
 			s := parse.Split(line)
 			if len(s) < 3 {
@@ -74,11 +83,17 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			externalBackupID := strings.Trim(s[1], `"`)
 			fileName := strings.Trim(s[2], `"`)
 			prefix := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
-			output.Write(inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID))
+			wp.Submit(func() {
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID)
+				mu.Lock()
+				defer mu.Unlock()
+				output.Write([]byte(out))
+			})
 		} else {
 			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
+	wp.StopWait()
 	if err := scanner.Err(); err != nil {
 		return err
 	}

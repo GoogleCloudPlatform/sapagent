@@ -25,9 +25,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	store "cloud.google.com/go/storage"
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -52,6 +54,8 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 // backup uploads pipes and files based on each line of the input. Results for each upload are
 // written to the output. Issues with file operations will return errors.
 func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+	wp := workerpool.New(int(config.GetThreads()))
+	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -74,11 +78,18 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 					return fmt.Errorf("could not convert file size to int for backup input line: %s", line)
 				}
 			}
-			output.Write([]byte(backupFile(ctx, config, bucketHandle, fileType, fileName, int64(fileSize)) + "\n"))
+			// TODO: If type is #FILE and parallel_streams > 1, chunk the file and upload in parallel.
+			wp.Submit(func() {
+				out := backupFile(ctx, config, bucketHandle, fileType, fileName, int64(fileSize)) + "\n"
+				mu.Lock()
+				defer mu.Unlock()
+				output.Write([]byte(out))
+			})
 		} else {
 			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
+	wp.StopWait()
 	if err := scanner.Err(); err != nil {
 		return err
 	}
@@ -86,7 +97,6 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 }
 
 func backupFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, fileType, fileName string, fileSize int64) string {
-	// TODO: If type is #FILE and parallel_streams > 1, chunk the file and upload in parallel.
 	log.Logger.Infow("Backing up file", "fileType", fileType, "fileName", fileName, "fileSize", fileSize)
 	fileNameTrim := strings.Trim(fileName, `"`)
 	f, err := os.Open(fileNameTrim)

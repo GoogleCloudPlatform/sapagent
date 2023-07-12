@@ -25,9 +25,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	store "cloud.google.com/go/storage"
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -52,6 +54,8 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 // restore downloads files from the bucket based on each line of the input. Results for each
 // restore are written to the output. Issues with file operations will return errors.
 func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+	wp := workerpool.New(int(config.GetThreads()))
+	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -70,7 +74,12 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			if len(s) > 2 {
 				destName = strings.Trim(s[2], `"`)
 			}
-			output.Write(restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, ""))
+			wp.Submit(func() {
+				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, "")
+				mu.Lock()
+				defer mu.Unlock()
+				output.Write([]byte(out))
+			})
 		} else if strings.HasPrefix(line, "#EBID") {
 			s := parse.Split(line)
 			if len(s) < 3 {
@@ -83,11 +92,17 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			if len(s) > 3 {
 				destName = strings.Trim(s[3], `"`)
 			}
-			output.Write(restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, externalBackupID))
+			wp.Submit(func() {
+				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, externalBackupID)
+				mu.Lock()
+				defer mu.Unlock()
+				output.Write([]byte(out))
+			})
 		} else {
 			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
+	wp.StopWait()
 	if err := scanner.Err(); err != nil {
 		return err
 	}
