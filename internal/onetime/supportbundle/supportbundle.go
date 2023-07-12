@@ -182,24 +182,24 @@ const (
 	backintGCSPath      = `/opt/backint/backint-gcs`
 )
 
-// Name implements the subcommand interface for collecting SOS report collection for support team.
+// Name implements the subcommand interface for collecting support bundle report collection for support team.
 func (*SupportBundle) Name() string {
 	return "supportbundle"
 }
 
-// Synopsis implements the subcommand interface for SOS report collection for support team.
+// Synopsis implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Synopsis() string {
 	return "collect support bundle of Agent for SAP for the support team"
 }
 
-// Usage implements the subcommand interface for SOS report collection for support team.
+// Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
 	return `supportbundle [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"
 	`
 }
 
-// SetFlags implements the subcommand interface for SOS report collection.
+// SetFlags implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.sid, "sid", "", "SAP System Identifier")
 	fs.StringVar(&s.instanceNums, "instance-numbers", "", "Instance numbers")
@@ -207,7 +207,7 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.pacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 }
 
-// Execute implements the subcommand interface for SOS report collection.
+// Execute implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 2 {
 		log.Logger.Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
@@ -219,21 +219,21 @@ func (s *SupportBundle) Execute(ctx context.Context, fs *flag.FlagSet, args ...a
 		return subcommands.ExitUsageError
 	}
 	onetime.SetupOneTimeLogging(lp, s.Name())
-	return s.sosReportHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})
+	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})
 }
 
-func (s *SupportBundle) sosReportHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
+func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
-		onetime.LogErrorToFileAndConsole("Invalid params for collecting SOS Report for Agent for SAP"+errMessage, errors.New(errMessage))
+		onetime.LogErrorToFileAndConsole("Invalid params for collecting support bundle Report for Agent for SAP"+errMessage, errors.New(errMessage))
 		return subcommands.ExitUsageError
 	}
-	destFilesPath := fmt.Sprintf("%ssos-report-%s-%s", destFilePathPrefix, s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
+	destFilesPath := fmt.Sprintf("%ssupportbundle-%s-%s", destFilePathPrefix, s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
 		onetime.LogErrorToFileAndConsole("Error while making directory: "+destFilesPath, err)
 		return subcommands.ExitFailure
 	}
-	onetime.LogMessageToFileAndConsole("Collecting SOS Report for Agent for SAP...")
+	onetime.LogMessageToFileAndConsole("Collecting Support Bundle Report for Agent for SAP...")
 	reqFilePaths := []string{linuxConfigFilePath}
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.sid)
 

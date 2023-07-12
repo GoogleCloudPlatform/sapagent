@@ -452,7 +452,7 @@ func TestSOSReportHandler(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.sosr.sosReportHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z)
+			got := test.sosr.supportBundleHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z)
 			if got != test.want {
 				t.Errorf("sosReportHandler() = %v, want %v", got, test.want)
 			}
