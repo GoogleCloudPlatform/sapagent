@@ -392,20 +392,22 @@ func TestParseABAPGetWPTable(t *testing.T) {
 
 func TestABAPGetWPTable(t *testing.T) {
 	tests := []struct {
-		name              string
-		wp                []sapcontrolclient.WorkProcess
-		wantProcesses     map[string]int
-		wantBusyProcesses map[string]int
-		wantPIDMap        map[string]string
-		wantErr           error
+		name               string
+		wp                 []sapcontrolclient.WorkProcess
+		wantProcesses      map[string]int
+		wantBusyProcesses  map[string]int
+		wantBusyPercentage map[string]int
+		wantPIDMap         map[string]string
+		wantErr            error
 	}{
 		{
-			name:              "SuccessOneWorkProcess",
-			wp:                []sapcontrolclient.WorkProcess{{0, "DIA", 7488, "Run", "4", ""}},
-			wantProcesses:     map[string]int{"DIA": 1},
-			wantBusyProcesses: map[string]int{"DIA": 1},
-			wantPIDMap:        map[string]string{"7488": "DIA"},
-			wantErr:           nil,
+			name:               "SuccessOneWorkProcess",
+			wp:                 []sapcontrolclient.WorkProcess{{0, "DIA", 7488, "Run", "4", ""}},
+			wantProcesses:      map[string]int{"DIA": 1, "Total": 1},
+			wantBusyProcesses:  map[string]int{"DIA": 1, "Total": 1},
+			wantBusyPercentage: map[string]int{"DIA": 100, "Total": 100},
+			wantPIDMap:         map[string]string{"7488": "DIA"},
+			wantErr:            nil,
 		},
 		{
 			name: "SuccessAllWorkProcess",
@@ -416,18 +418,20 @@ func TestABAPGetWPTable(t *testing.T) {
 				{3, "DIA", 7491, "Wait", "", ""},
 				{4, "DIA", 7492, "Wait", "", ""},
 			},
-			wantProcesses:     map[string]int{"DIA": 3, "BTC": 1, "SPO": 1},
-			wantBusyProcesses: map[string]int{"DIA": 1},
-			wantPIDMap:        map[string]string{"7488": "DIA", "7489": "BTC", "7490": "SPO", "7491": "DIA", "7492": "DIA"},
-			wantErr:           nil,
+			wantProcesses:      map[string]int{"DIA": 3, "BTC": 1, "SPO": 1, "Total": 5},
+			wantBusyProcesses:  map[string]int{"DIA": 1, "Total": 1},
+			wantBusyPercentage: map[string]int{"DIA": 33, "BTC": 0, "SPO": 0, "Total": 20},
+			wantPIDMap:         map[string]string{"7488": "DIA", "7489": "BTC", "7490": "SPO", "7491": "DIA", "7492": "DIA"},
+			wantErr:            nil,
 		},
 		{
-			name:              "Error",
-			wp:                nil,
-			wantProcesses:     nil,
-			wantBusyProcesses: nil,
-			wantPIDMap:        nil,
-			wantErr:           cmpopts.AnyError,
+			name:               "Error",
+			wp:                 nil,
+			wantProcesses:      nil,
+			wantBusyProcesses:  nil,
+			wantBusyPercentage: nil,
+			wantPIDMap:         nil,
+			wantErr:            cmpopts.AnyError,
 		},
 	}
 
@@ -439,7 +443,7 @@ func TestABAPGetWPTable(t *testing.T) {
 				respErr = cmpopts.AnyError
 			}
 			fakeSAPClient := sapcontrolclienttest.Fake{WorkProcesses: test.wp, ErrABAPGetWPTable: respErr}
-			gotProcessCount, gotBusyProcessCount, gotPIDMap, err := p.ABAPGetWPTable(fakeSAPClient)
+			gotProcessCount, gotBusyProcessCount, gotBusyPercentage, gotPIDMap, err := p.ABAPGetWPTable(fakeSAPClient)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ABAPGetWPTable(%v)=%v, want: %v.", fakeSAPClient, err, test.wantErr)
@@ -449,6 +453,9 @@ func TestABAPGetWPTable(t *testing.T) {
 			}
 			if diff := cmp.Diff(test.wantBusyProcesses, gotBusyProcessCount); diff != "" {
 				t.Errorf("ABAPGetWPTable(%v) busy work process count mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
+			}
+			if diff := cmp.Diff(test.wantBusyPercentage, gotBusyPercentage); diff != "" {
+				t.Errorf("ABAPGetWPTable(%v) busy work process percentage mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
 			}
 			if diff := cmp.Diff(test.wantPIDMap, gotPIDMap); diff != "" {
 				t.Errorf("ABAPGetWPTable(%v) PID map mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)

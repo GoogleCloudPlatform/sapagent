@@ -68,6 +68,7 @@ const (
 	nwMSWorkProcessesPath      = "/sap/nw/ms/wp"
 	nwABAPProcBusyPath         = "/sap/nw/abap/proc/busy"
 	nwABAPProcCountPath        = "/sap/nw/abap/proc/count"
+	nwABAPProcUtilPath         = "/sap/nw/abap/proc/utilization"
 	nwABAPProcQueueCurrentPath = "/sap/nw/abap/queue/current"
 	nwABAPProcQueuePeakPath    = "/sap/nw/abap/queue/peak"
 	nwABAPSessionsPath         = "/sap/nw/abap/sessions"
@@ -315,9 +316,10 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec c
 		err              error
 		processCount     map[string]int
 		busyProcessCount map[string]int
+		busyPercentage   map[string]int
 	)
 	if p.UseSAPControlAPI {
-		processCount, busyProcessCount, _, err = sc.ABAPGetWPTable(scc)
+		processCount, busyProcessCount, busyPercentage, _, err = sc.ABAPGetWPTable(scc)
 		if err != nil {
 			log.Logger.Debugw("Sapcontrol web method failed", "error", err)
 			return nil
@@ -341,8 +343,15 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec c
 	for k, v := range busyProcessCount {
 		extraLabels := map[string]string{"abap_process": k}
 		log.Logger.Debugw("Creating metric for abap_process",
-			"metric", nwABAPProcCountPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
+			"metric", nwABAPProcBusyPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPProcBusyPath, extraLabels, now, int64(v)))
+	}
+
+	for k, v := range busyPercentage {
+		extraLabels := map[string]string{"abap_process": k}
+		log.Logger.Debugw("Creating metric for abap_process",
+			"metric", nwABAPProcUtilPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
+		metrics = append(metrics, createMetrics(p, nwABAPProcUtilPath, extraLabels, now, int64(v)))
 	}
 	log.Logger.Debugw("Time taken to collect metrics in collectABAPProcessStatus()", "time", time.Since(now.AsTime()))
 	return metrics

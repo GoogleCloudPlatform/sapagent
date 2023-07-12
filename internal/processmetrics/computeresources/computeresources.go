@@ -152,7 +152,7 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 		if err != nil {
 			log.Logger.Error("Error performing GetProcessList web method in computeresources", log.Error(err))
 		}
-		_, _, pidMap, errABAP := sc.ABAPGetWPTable(scc)
+		_, _, _, pidMap, errABAP := sc.ABAPGetWPTable(scc)
 		if errABAP != nil {
 			log.Logger.Debugw("Error getting ABAP processes from ABAPGetWPTable web method", log.Error(err))
 		} else {

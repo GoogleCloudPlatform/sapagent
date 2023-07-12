@@ -698,7 +698,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 				{0, "DIA", 7488, "Run", "4", ""},
 				{1, "BTC", 7489, "Wait", "", ""},
 			}},
-			wantMetricCount:    3,
+			wantMetricCount:    8,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 	}

@@ -290,11 +290,11 @@ func (p *Properties) ParseABAPGetWPTable(ctx context.Context, exec commandlineex
 //   - processes - A map with key->worker_process_type and value->total_process_count.
 //   - busyProcesses - A map with key->worker_process_type and value->busy_process_count.
 //   - processNameToPID - A map with key->pid and value->worker_process_type.
-func (p *Properties) ABAPGetWPTable(c ClientInterface) (map[string]int, map[string]int, map[string]string, error) {
+func (p *Properties) ABAPGetWPTable(c ClientInterface) (map[string]int, map[string]int, map[string]int, map[string]string, error) {
 	wp, err := c.ABAPGetWPTable()
 	if err != nil {
 		log.Logger.Debugw("Failed to run ABAPGetWPTable API call", log.Error(err))
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "API Response", wp)
@@ -302,21 +302,31 @@ func (p *Properties) ABAPGetWPTable(c ClientInterface) (map[string]int, map[stri
 }
 
 // processABAPGetWPTableResponse processes the WorkProcess list returned by the ABAPGetWPTable SAPControl function.
-func processABAPGetWPTableResponse(wp []sapcontrolclient.WorkProcess) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
+func processABAPGetWPTableResponse(wp []sapcontrolclient.WorkProcess) (processes, busyProcesses, busyProcessPercentage map[string]int, processNameToPID map[string]string, err error) {
 	processes = make(map[string]int)
 	busyProcesses = make(map[string]int)
 	processNameToPID = make(map[string]string)
+	busyProcessPercentage = make(map[string]int)
 	for _, p := range wp {
 		workProcessType := p.Type
 		processes[workProcessType]++
+		processes["Total"]++
 		processNameToPID[strconv.FormatInt(p.Pid, 10)] = workProcessType
 		if p.Status != "Wait" {
 			busyProcesses[workProcessType]++
+			busyProcesses["Total"]++
 		}
 	}
+	for workProcessType, processCount := range processes {
+		busyProcessCount, ok := busyProcesses[workProcessType]
+		if !ok {
+			busyProcessCount = 0
+		}
+		busyProcessPercentage[workProcessType] = (busyProcessCount * 100) / processCount
+	}
 
-	log.Logger.Debugw("Found ABAP Processes", "count", processes, "busy", busyProcesses, "pidMap", processNameToPID)
-	return processes, busyProcesses, processNameToPID, nil
+	log.Logger.Debugw("Found ABAP Processes", "count", processes, "busy", busyProcesses, "percentage", busyProcessPercentage, "pidMap", processNameToPID)
+	return processes, busyProcesses, busyProcessPercentage, processNameToPID, nil
 }
 
 // ParseQueueStats runs and parses the output of sapcontrol function GetQueueStatistic.
