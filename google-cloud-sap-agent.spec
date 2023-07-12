@@ -153,13 +153,6 @@ if [ -d "/usr/sap/google-saphanamonitoring-agent/" ]; then
   fi
 fi
 
-# we have /usr/sap as part of ReadWritePaths in the service, it must exist
-# issue a seek in case /usr/sap is auto mounted
-ls /usr/sap > /dev/null 2>&1
-if [ ! -d "/usr/sap/" ]; then
-  mkdir /usr/sap
-fi
-
 # link the systemd service and reload the daemon
 # RHEL
 if [ -d "/lib/systemd/system/" ]; then
