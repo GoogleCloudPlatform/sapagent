@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package sosreport implements one time execution mode for
-// sosreport.
-package sosreport
+// Package supportbundle implements one time execution mode for
+// supportbundle.
+package supportbundle
 
 import (
 	"archive/zip"
@@ -43,8 +43,8 @@ import (
 )
 
 type (
-	// SOSReport has args for SOS report collection one time mode.
-	SOSReport struct {
+	// SupportBundle has args for support bundle collection one time mode.
+	SupportBundle struct {
 		sid                    string
 		instanceNums           string
 		instanceNumsAfterSplit []string
@@ -183,24 +183,24 @@ const (
 )
 
 // Name implements the subcommand interface for collecting SOS report collection for support team.
-func (*SOSReport) Name() string {
-	return "sosreport"
+func (*SupportBundle) Name() string {
+	return "supportbundle"
 }
 
 // Synopsis implements the subcommand interface for SOS report collection for support team.
-func (*SOSReport) Synopsis() string {
-	return "collect sos report of Agent for SAP for the support team"
+func (*SupportBundle) Synopsis() string {
+	return "collect support bundle of Agent for SAP for the support team"
 }
 
 // Usage implements the subcommand interface for SOS report collection for support team.
-func (*SOSReport) Usage() string {
-	return `sosreport [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>]
-	Example: sosreport -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"
+func (*SupportBundle) Usage() string {
+	return `supportbundle [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>]
+	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"
 	`
 }
 
 // SetFlags implements the subcommand interface for SOS report collection.
-func (s *SOSReport) SetFlags(fs *flag.FlagSet) {
+func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.sid, "sid", "", "SAP System Identifier")
 	fs.StringVar(&s.instanceNums, "instance-numbers", "", "Instance numbers")
 	fs.StringVar(&s.hostname, "hostname", "", "Hostname")
@@ -208,7 +208,7 @@ func (s *SOSReport) SetFlags(fs *flag.FlagSet) {
 }
 
 // Execute implements the subcommand interface for SOS report collection.
-func (s *SOSReport) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
+func (s *SupportBundle) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 2 {
 		log.Logger.Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -222,7 +222,7 @@ func (s *SOSReport) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 	return s.sosReportHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})
 }
 
-func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
+func (s *SupportBundle) sosReportHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
 		onetime.LogErrorToFileAndConsole("Invalid params for collecting SOS Report for Agent for SAP"+errMessage, errors.New(errMessage))
@@ -247,6 +247,7 @@ func (s *SOSReport) sosReportHandler(ctx context.Context, destFilePathPrefix str
 	hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fs) || hasErrors
 	hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fs) || hasErrors
 	reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
+	reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, agentLogFiles(linuxLogFilesPath, fs)...)
@@ -358,6 +359,27 @@ func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid 
 	res := []string{}
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
+		if err != nil {
+			onetime.LogErrorToFileAndConsole("Error while reading directory: "+hanaPath+"/trace", err)
+			return nil
+		}
+		for _, fd := range fds {
+			if fd.IsDir() {
+				continue
+			}
+			if matchNameServerTraceAndBackup(fd.Name()) {
+				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
+				res = append(res, path.Join(hanaPath+"/trace/", fd.Name()))
+			}
+		}
+	}
+	return res
+}
+
+func tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
+	res := []string{}
+	for _, hanaPath := range hanaPaths {
+		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid))
 		if err != nil {
 			onetime.LogErrorToFileAndConsole("Error while reading directory: "+hanaPath+"/trace", err)
 			return nil
@@ -544,13 +566,13 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	}
 	res := exec(ctx, commandlineexecutor.Params{
 		Executable:  "hb_report",
-		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath + "/report"),
+		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
 		Timeout:     3600,
 	})
 	if res.ExitCode != 0 {
 		res := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
-			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath + "/report"),
+			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
 			Timeout:     3600,
 		})
 		if res.ExitCode != 0 {
@@ -595,7 +617,7 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	return nil
 }
 
-func (s *SOSReport) validateParams() []string {
+func (s *SupportBundle) validateParams() []string {
 	var errs []string
 	if s.sid == "" {
 		errs = append(errs, "no value provided for sid")

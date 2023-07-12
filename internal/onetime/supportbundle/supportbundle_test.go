@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sosreport
+package supportbundle
 
 import (
 	"archive/zip"
@@ -294,7 +294,7 @@ func fakeExecSLES(ctx context.Context, p commandlineexecutor.Params) commandline
 }
 
 func TestSetFlagsForSOSReport(t *testing.T) {
-	sosrc := SOSReport{}
+	sosrc := SupportBundle{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"sid", "instance-numbers", "hostname"}
 	sosrc.SetFlags(fs)
@@ -309,7 +309,7 @@ func TestSetFlagsForSOSReport(t *testing.T) {
 func TestExecuteForSOSReport(t *testing.T) {
 	tests := []struct {
 		name string
-		sosr *SOSReport
+		sosr *SupportBundle
 		want subcommands.ExitStatus
 		args []any
 	}{
@@ -340,27 +340,27 @@ func TestExecuteForSOSReport(t *testing.T) {
 func TestValidateParams(t *testing.T) {
 	tests := []struct {
 		name  string
-		sosrc SOSReport
+		sosrc SupportBundle
 		want  []string
 	}{
 		{
 			name:  "NoValueForSID",
-			sosrc: SOSReport{instanceNums: "00 01", hostname: "sample_host"},
+			sosrc: SupportBundle{instanceNums: "00 01", hostname: "sample_host"},
 			want:  []string{"no value provided for sid"},
 		},
 		{
 			name:  "NoValueForInstance",
-			sosrc: SOSReport{sid: "DEH", instanceNums: "", hostname: "sample_host"},
+			sosrc: SupportBundle{sid: "DEH", instanceNums: "", hostname: "sample_host"},
 			want:  []string{"no value provided for instance-numbers"},
 		},
 		{
 			name:  "InvalidValueForinstanceNums",
-			sosrc: SOSReport{sid: "DEH", instanceNums: "00 011", hostname: "sample_host"},
+			sosrc: SupportBundle{sid: "DEH", instanceNums: "00 011", hostname: "sample_host"},
 			want:  []string{"invalid instance number 011"},
 		},
 		{
 			name:  "NoValueForHostName",
-			sosrc: SOSReport{sid: "DEH", instanceNums: "00 01", hostname: ""},
+			sosrc: SupportBundle{sid: "DEH", instanceNums: "00 01", hostname: ""},
 			want:  []string{"no value provided for hostname"},
 		},
 	}
@@ -378,7 +378,7 @@ func TestValidateParams(t *testing.T) {
 func TestSOSReportHandler(t *testing.T) {
 	tests := []struct {
 		name           string
-		sosr           *SOSReport
+		sosr           *SupportBundle
 		ctx            context.Context
 		destFilePrefix string
 		exec           commandlineexecutor.Execute
@@ -388,7 +388,7 @@ func TestSOSReportHandler(t *testing.T) {
 	}{
 		{
 			name: "InvalidParams",
-			sosr: &SOSReport{sid: "DEH",
+			sosr: &SupportBundle{sid: "DEH",
 				instanceNums: "",
 				hostname:     "sample_host",
 			},
@@ -400,7 +400,7 @@ func TestSOSReportHandler(t *testing.T) {
 		},
 		{
 			name: "MkdirError",
-			sosr: &SOSReport{
+			sosr: &SupportBundle{
 				sid:          "DEH",
 				instanceNums: "00 11",
 				hostname:     "sample_host",
@@ -414,7 +414,7 @@ func TestSOSReportHandler(t *testing.T) {
 		},
 		{
 			name: "FaultInExtractingErrors",
-			sosr: &SOSReport{
+			sosr: &SupportBundle{
 				sid:          "DEH",
 				instanceNums: "00 11",
 				hostname:     "sample_host",
@@ -428,7 +428,7 @@ func TestSOSReportHandler(t *testing.T) {
 		},
 		{
 			name: "Success",
-			sosr: &SOSReport{
+			sosr: &SupportBundle{
 				sid:                "DEH",
 				instanceNums:       "00 11",
 				hostname:           "sample_host",
@@ -759,6 +759,53 @@ func TestNameservertraceAndBackupLog(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := nameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
+			if !cmp.Equal(got, test.want) {
+				t.Errorf("nameServerTracesAndBackupLog(%q, %q, %q)=%q, want %q", test.hanaPath, test.sid, test.fu, got, test.want)
+			}
+		})
+	}
+}
+
+func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
+	tests := []struct {
+		name     string
+		hanaPath []string
+		sid      string
+		fu       filesystem.FileSystem
+		want     []string
+	}{
+		{
+			name:     "ReadFileError",
+			hanaPath: []string{"failure"},
+			sid:      "DEH",
+			fu:       mockedfilesystem{},
+			want:     nil,
+		},
+		{
+			name:     "NoMatch",
+			hanaPath: []string{"success"},
+			sid:      "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "file1", isDir: true},
+			},
+			},
+			want: []string{},
+		},
+		{
+			name:     "Success",
+			hanaPath: []string{"success"},
+			sid:      "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "backup.log", isDir: false},
+			},
+			},
+			want: []string{path.Join("success/trace", "backup.log")},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := tenantDBNameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("nameServerTracesAndBackupLog(%q, %q, %q)=%q, want %q", test.hanaPath, test.sid, test.fu, got, test.want)
 			}
