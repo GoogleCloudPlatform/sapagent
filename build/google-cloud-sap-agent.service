@@ -23,7 +23,7 @@ MemoryLimit=1G
 MemoryMax=1G
 ProtectSystem=full
 ReadWritePaths=/var/log /tmp -/usr/sap
-ProtectClock=true
+# Do not use ProtectClock, when that is enabled then the agent cannot see LVM mounts
 ProtectKernelModules=true
 RestrictRealtime=true
 # CPUQuota of 50 will allow for up to 50% on 1 CPU
