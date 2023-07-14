@@ -160,7 +160,7 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 // Returns true if the discovery goroutine is started, and false otherwise.
 func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface, wlmService wlmInterface, cloudLogService cloudLogInterface) bool {
 	// Start SAP system discovery only if sap_system_discovery is enabled.
-	if !config.GetCollectionConfiguration().GetSapSystemDiscovery() {
+	if !config.GetCollectionConfiguration().GetSapSystemDiscovery().GetValue() {
 		log.Logger.Info("Not starting SAP system discovery.")
 		return false
 	}

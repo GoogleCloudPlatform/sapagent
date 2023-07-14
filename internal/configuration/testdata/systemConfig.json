@@ -1,0 +1,11 @@
+{
+  "provide_sap_host_agent_metrics": false,
+  "cloud_properties": {
+    "project_id": "config-project-id",
+    "instance_id": "config-instance-id",
+    "zone": "config-zone"
+  },
+  "collection_configuration": {
+    "sap_system_discovery": false
+  }
+}

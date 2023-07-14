@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
+
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
@@ -114,7 +116,7 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 		name: "succeeds",
 		config: &cpb.Configuration{
 			CollectionConfiguration: &cpb.CollectionConfiguration{
-				SapSystemDiscovery: true,
+				SapSystemDiscovery: wpb.Bool(true),
 			},
 			CloudProperties: defaultCloudProperties,
 		},
@@ -126,7 +128,7 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 		name: "failsDueToConfig",
 		config: &cpb.Configuration{
 			CollectionConfiguration: &cpb.CollectionConfiguration{
-				SapSystemDiscovery: false,
+				SapSystemDiscovery: wpb.Bool(false),
 			},
 		},
 		testLog: &logfake.TestCloudLogging{

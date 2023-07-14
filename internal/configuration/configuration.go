@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strings"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"google.golang.org/protobuf/encoding/protojson"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
@@ -135,6 +136,9 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 
 func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfiguration) *cpb.CollectionConfiguration {
 	cc := configFromFile
+	if cc == nil {
+		cc = &cpb.CollectionConfiguration{}
+	}
 	if cc.GetCollectWorkloadValidationMetrics() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
 		cc.WorkloadValidationMetricsFrequency = 300
 	}
@@ -155,6 +159,9 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	}
 	if cc.GetCollectAgentMetrics() && cc.GetMissedHeartbeatThreshold() <= 0 {
 		cc.MissedHeartbeatThreshold = 10
+	}
+	if cc.GetSapSystemDiscovery() == nil {
+		cc.SapSystemDiscovery = wpb.Bool(true)
 	}
 	return cc
 }

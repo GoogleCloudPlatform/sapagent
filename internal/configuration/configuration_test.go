@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"testing"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -51,6 +52,8 @@ var (
 	sampleHANAMonitoringConfigQueriesJSON []byte
 	//go:embed testdata/sampleConfig.json
 	testConfigWithHANAMonitoringConfigJSON []byte
+	//go:embed testdata/systemConfig.json
+	testConfigWithSapSystemConfigJSON []byte
 )
 
 func TestReadFromFile(t *testing.T) {
@@ -142,6 +145,22 @@ func TestReadFromFile(t *testing.T) {
 			},
 			want: &cpb.Configuration{ProvideSapHostAgentMetrics: true},
 		},
+		{
+			name: "ConfigWithSapSystem",
+			readFunc: func(p string) ([]byte, error) {
+				return testConfigWithSapSystemConfigJSON, nil
+			},
+			want: &cpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					ProjectId:  "config-project-id",
+					InstanceId: "config-instance-id",
+					Zone:       "config-zone",
+				},
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery: wpb.Bool(false),
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -169,6 +188,7 @@ func TestApplyDefaults(t *testing.T) {
 				LogToCloud:                 true,
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
+				CollectionConfiguration:    &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
 			},
 		},
 		{
@@ -182,6 +202,7 @@ func TestApplyDefaults(t *testing.T) {
 				LogToCloud:                 false,
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
+				CollectionConfiguration:    &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
 			},
 		},
 		{
@@ -191,6 +212,7 @@ func TestApplyDefaults(t *testing.T) {
 					CollectWorkloadValidationMetrics: true,
 					CollectProcessMetrics:            true,
 					CollectAgentMetrics:              true,
+					SapSystemDiscovery:               wpb.Bool(false),
 				},
 			},
 			want: &cpb.Configuration{
@@ -205,6 +227,7 @@ func TestApplyDefaults(t *testing.T) {
 					AgentHealthFrequency:                 60,
 					HeartbeatFrequency:                   60,
 					MissedHeartbeatThreshold:             10,
+					SapSystemDiscovery:                   wpb.Bool(false),
 				},
 				AgentProperties: testAgentProps,
 				CloudProperties: testCloudProps,
@@ -230,6 +253,7 @@ func TestApplyDefaults(t *testing.T) {
 					InstanceId: "config-instance-id",
 					Zone:       "config-zone",
 				},
+				CollectionConfiguration: &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
 			},
 		},
 		{
@@ -277,6 +301,7 @@ func TestApplyDefaults(t *testing.T) {
 						},
 					},
 				},
+				CollectionConfiguration: &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
 			},
 		},
 	}
