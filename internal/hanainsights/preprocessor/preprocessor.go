@@ -51,6 +51,10 @@ var (
 		"rules/security/r_password_policy_last_used_passwords.json",
 		"rules/security/r_password_policy_maximum_invalid_connect_attempts.json",
 		"rules/security/r_password_policy_password_lock_time.json",
+		"rules/security/r_password_policy_maximum_password_lifetime.json",
+		"rules/security/r_password_policy_maximum_unused_initial_password_lifetime.json",
+		"rules/security/r_password_policy_maximum_unused_productive_password_lifetime.json",
+		"rules/security/r_password_policy_minimum_password_lifetime.json",
 	}
 
 	// CountPattern regex is used to identify possible matches in the trigger condition using count()

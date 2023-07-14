@@ -62,9 +62,9 @@ var (
 	bmConfiguration = &cfgpb.Configuration{
 		BareMetal: true,
 		CloudProperties: &iipb.CloudProperties{
-			ProjectId: "bm-project-id",
+			ProjectId:  "bm-project-id",
 			InstanceId: "bm-instance-id",
-			Region: "us-central1",
+			Region:     "us-central1",
 		},
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
@@ -350,7 +350,7 @@ func TestSendMetrics(t *testing.T) {
 			name: "succeedsWithZeroMetrics",
 			params: sendMetricsParams{
 				wm:                WorkloadMetrics{},
-				cp: defaultConfiguration.GetCloudProperties(),
+				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
 				wlmService:        &testWLMInterface{},
@@ -365,7 +365,7 @@ func TestSendMetrics(t *testing.T) {
 					Resource: &monitoredresourcepb.MonitoredResource{},
 					Points:   []*monitoringresourcespb.Point{},
 				}}},
-				cp: defaultConfiguration.GetCloudProperties(),
+				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
 				wlmService:        &testWLMInterface{},
@@ -380,8 +380,8 @@ func TestSendMetrics(t *testing.T) {
 					Resource: &monitoredresourcepb.MonitoredResource{},
 					Points:   []*monitoringresourcespb.Point{},
 				}}},
-				cp: bmConfiguration.GetCloudProperties(),
-				bareMetal: true,
+				cp:                bmConfiguration.GetCloudProperties(),
+				bareMetal:         true,
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
 				wlmService:        &testWLMInterface{},
@@ -396,7 +396,7 @@ func TestSendMetrics(t *testing.T) {
 					Resource: &monitoredresourcepb.MonitoredResource{},
 					Points:   []*monitoringresourcespb.Point{},
 				}}},
-				cp: defaultConfiguration.GetCloudProperties(),
+				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
 				backOffIntervals:  defaultBackOffIntervals,
 				wlmService:        &testWLMInterface{},
@@ -411,7 +411,7 @@ func TestSendMetrics(t *testing.T) {
 					Resource: &monitoredresourcepb.MonitoredResource{},
 					Points:   []*monitoringresourcespb.Point{},
 				}}},
-				cp: defaultConfiguration.GetCloudProperties(),
+				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
 				wlmService:        &testWLMInterface{err: cmpopts.AnyError},
@@ -632,7 +632,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 func TestReadHANAInsightsRules(t *testing.T) {
 	params := Parameters{Config: defaultConfiguration}
 	params.ReadHANAInsightsRules()
-	if len(params.HANAInsightRules) != 16 {
-		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(params.HANAInsightRules), 16)
+	if len(params.HANAInsightRules) != 20 {
+		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(params.HANAInsightRules), 20)
 	}
 }
