@@ -35,7 +35,7 @@ func (c Fake) GetProcessList() ([]sapcontrolclient.OSProcess, error) {
 	return c.Processes, c.ErrGetProcessList
 }
 
-// ABAPGetWPTable is a fake implemetation of sapcontrol package ABAPGetWPTable method.
+// ABAPGetWPTable is a fake implementation of sapcontrol package ABAPGetWPTable method.
 func (c Fake) ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error) {
 	return c.WorkProcesses, c.ErrABAPGetWPTable
 }

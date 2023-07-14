@@ -442,23 +442,14 @@ func TestABAPGetWPTable(t *testing.T) {
 			if test.wp == nil {
 				respErr = cmpopts.AnyError
 			}
+			wantWPDetails := WorkProcessDetails{test.wantProcesses, test.wantBusyProcesses, test.wantBusyPercentage, test.wantPIDMap}
 			fakeSAPClient := sapcontrolclienttest.Fake{WorkProcesses: test.wp, ErrABAPGetWPTable: respErr}
-			gotProcessCount, gotBusyProcessCount, gotBusyPercentage, gotPIDMap, err := p.ABAPGetWPTable(fakeSAPClient)
-
+			gotWPDetails, err := p.ABAPGetWPTable(fakeSAPClient)
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ABAPGetWPTable(%v)=%v, want: %v.", fakeSAPClient, err, test.wantErr)
 			}
-			if diff := cmp.Diff(test.wantProcesses, gotProcessCount); diff != "" {
-				t.Errorf("ABAPGetWPTable(%v) work process count mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
-			}
-			if diff := cmp.Diff(test.wantBusyProcesses, gotBusyProcessCount); diff != "" {
-				t.Errorf("ABAPGetWPTable(%v) busy work process count mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
-			}
-			if diff := cmp.Diff(test.wantBusyPercentage, gotBusyPercentage); diff != "" {
-				t.Errorf("ABAPGetWPTable(%v) busy work process percentage mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
-			}
-			if diff := cmp.Diff(test.wantPIDMap, gotPIDMap); diff != "" {
-				t.Errorf("ABAPGetWPTable(%v) PID map mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
+			if diff := cmp.Diff(wantWPDetails, gotWPDetails); diff != "" {
+				t.Errorf("ABAPGetWPTable(%v) work process details mismatch, diff (-want, +got): %v.", fakeSAPClient, diff)
 			}
 		})
 	}

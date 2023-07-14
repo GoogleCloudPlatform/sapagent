@@ -319,11 +319,15 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec c
 		busyPercentage   map[string]int
 	)
 	if p.UseSAPControlAPI {
-		processCount, busyProcessCount, busyPercentage, _, err = sc.ABAPGetWPTable(scc)
+		wpDetails, err := sc.ABAPGetWPTable(scc)
 		if err != nil {
 			log.Logger.Debugw("Sapcontrol web method failed", "error", err)
 			return nil
 		}
+		processCount = wpDetails.Processes
+		busyProcessCount = wpDetails.BusyProcesses
+		busyPercentage = wpDetails.BusyProcessPercentage
+
 	} else {
 		processCount, busyProcessCount, _, err = sc.ParseABAPGetWPTable(ctx, exec, params)
 		if err != nil {
@@ -362,14 +366,14 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, exec comm
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
-		errAPI            error
+		err               error
 		currentQueueUsage map[string]int64
 		peakQueueUsage    map[string]int64
 	)
 	if p.UseSAPControlAPI {
-		currentQueueUsage, peakQueueUsage, errAPI = sc.GetQueueStatistic(scc)
-		if errAPI != nil {
-			log.Logger.Debugw("Sapcontrol web method failed", "error", errAPI)
+		currentQueueUsage, peakQueueUsage, err = sc.GetQueueStatistic(scc)
+		if err != nil {
+			log.Logger.Debugw("Sapcontrol web method failed", "error", err)
 			return nil
 		}
 	} else {

@@ -217,10 +217,10 @@ func (p *Properties) GetProcessList(c ClientInterface) (map[int]*ProcessStatus, 
 	}
 	log.Logger.Debugw("Sapcontrol GetProcessList", "API response", processes)
 
-	return createProcessMapFromAPIResp(processes)
+	return createProcessMapFromAPIResp(processes), nil
 }
 
-func createProcessMapFromAPIResp(resp []sapcontrolclient.OSProcess) (map[int]*ProcessStatus, error) {
+func createProcessMapFromAPIResp(resp []sapcontrolclient.OSProcess) map[int]*ProcessStatus {
 	processes := make(map[int]*ProcessStatus)
 	for i, p := range resp {
 		if p.Name == "" || p.Dispstatus == "" || p.Pid == 0 {
@@ -240,7 +240,7 @@ func createProcessMapFromAPIResp(resp []sapcontrolclient.OSProcess) (map[int]*Pr
 	}
 
 	log.Logger.Debugw("Process statuses", "statuses", processes)
-	return processes, nil
+	return processes
 }
 
 // ParseABAPGetWPTable runs and parses the output of sapcontrol function ABAPGetWPTable.
@@ -285,48 +285,58 @@ func (p *Properties) ParseABAPGetWPTable(ctx context.Context, exec commandlineex
 	return processes, busyProcesses, processNameToPID, nil
 }
 
-// ABAPGetWPTable uses the sapcontrolclient package to run the ABAPGetWPTable SAPControl function.
-// Returns:
+// WorkProcessDetails contains the maps that will be used by the consumers to derive metrics.
 //   - processes - A map with key->worker_process_type and value->total_process_count.
 //   - busyProcesses - A map with key->worker_process_type and value->busy_process_count.
+//   - busyProcessPercentage - A map with key->worker_process_type and value->busy_process_percentage.
 //   - processNameToPID - A map with key->pid and value->worker_process_type.
-func (p *Properties) ABAPGetWPTable(c ClientInterface) (map[string]int, map[string]int, map[string]int, map[string]string, error) {
+type WorkProcessDetails struct {
+	Processes             map[string]int
+	BusyProcesses         map[string]int
+	BusyProcessPercentage map[string]int
+	ProcessNameToPID      map[string]string
+}
+
+// ABAPGetWPTable uses the sapcontrolclient package to run the ABAPGetWPTable SAPControl function.
+// Returns: WorkProcessDetails struct
+func (p *Properties) ABAPGetWPTable(c ClientInterface) (WorkProcessDetails, error) {
 	wp, err := c.ABAPGetWPTable()
 	if err != nil {
 		log.Logger.Debugw("Failed to run ABAPGetWPTable API call", log.Error(err))
-		return nil, nil, nil, nil, err
+		return WorkProcessDetails{}, err
 	}
 
 	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "API Response", wp)
-	return processABAPGetWPTableResponse(wp)
+	return processABAPGetWPTableResponse(wp), nil
 }
 
 // processABAPGetWPTableResponse processes the WorkProcess list returned by the ABAPGetWPTable SAPControl function.
-func processABAPGetWPTableResponse(wp []sapcontrolclient.WorkProcess) (processes, busyProcesses, busyProcessPercentage map[string]int, processNameToPID map[string]string, err error) {
-	processes = make(map[string]int)
-	busyProcesses = make(map[string]int)
-	processNameToPID = make(map[string]string)
-	busyProcessPercentage = make(map[string]int)
+func processABAPGetWPTableResponse(wp []sapcontrolclient.WorkProcess) (wpDetails WorkProcessDetails) {
+	wpDetails.Processes = make(map[string]int)
+	wpDetails.BusyProcesses = make(map[string]int)
+	wpDetails.BusyProcessPercentage = make(map[string]int)
+	wpDetails.ProcessNameToPID = make(map[string]string)
 	for _, p := range wp {
 		workProcessType := p.Type
-		processes[workProcessType]++
-		processes["Total"]++
-		processNameToPID[strconv.FormatInt(p.Pid, 10)] = workProcessType
+		wpDetails.Processes[workProcessType]++
+		wpDetails.Processes["Total"]++
+		wpDetails.ProcessNameToPID[strconv.FormatInt(p.Pid, 10)] = workProcessType
 		if p.Status != "Wait" {
-			busyProcesses[workProcessType]++
-			busyProcesses["Total"]++
+			wpDetails.BusyProcesses[workProcessType]++
+			wpDetails.BusyProcesses["Total"]++
 		}
 	}
-	for workProcessType, processCount := range processes {
-		busyProcessCount, ok := busyProcesses[workProcessType]
-		if !ok {
-			busyProcessCount = 0
+	for workProcessType, processCount := range wpDetails.Processes {
+		if processCount == 0 {
+			log.Logger.Debugw("Process count zero", "type", workProcessType)
+			continue
 		}
-		busyProcessPercentage[workProcessType] = (busyProcessCount * 100) / processCount
+		busyProcessCount, _ := wpDetails.BusyProcesses[workProcessType]
+		wpDetails.BusyProcessPercentage[workProcessType] = (busyProcessCount * 100) / processCount
 	}
 
-	log.Logger.Debugw("Found ABAP Processes", "count", processes, "busy", busyProcesses, "percentage", busyProcessPercentage, "pidMap", processNameToPID)
-	return processes, busyProcesses, busyProcessPercentage, processNameToPID, nil
+	log.Logger.Debugw("Found ABAP Processes", "count", wpDetails.Processes, "busy", wpDetails.BusyProcesses, "percentage", wpDetails.BusyProcessPercentage, "pidMap", wpDetails.ProcessNameToPID)
+	return wpDetails
 }
 
 // ParseQueueStats runs and parses the output of sapcontrol function GetQueueStatistic.
@@ -387,11 +397,12 @@ func (p *Properties) GetQueueStatistic(c ClientInterface) (map[string]int64, map
 		log.Logger.Debugw("Failed to run GetQueueStatistic API call", log.Error(err))
 		return nil, nil, err
 	}
-	return processGetQueueStatisticResponse(tq)
+	currentQueueUsage, peakQueueUsage := processGetQueueStatisticResponse(tq)
+	return currentQueueUsage, peakQueueUsage, nil
 }
 
 // processGetQueueStatisticResponse processes the TaskHandlerQueue list returned by the GetQueueStatistic SAPControl function.
-func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQueue) (map[string]int64, map[string]int64, error) {
+func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQueue) (map[string]int64, map[string]int64) {
 	currentQueueUsage := make(map[string]int64)
 	peakQueueUsage := make(map[string]int64)
 	for _, q := range taskQueues {
@@ -401,7 +412,7 @@ func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQ
 	}
 
 	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
-	return currentQueueUsage, peakQueueUsage, nil
+	return currentQueueUsage, peakQueueUsage
 }
 
 // EnqGetLockTable parses the output of sapcontrol function EnqGetLockTable.
