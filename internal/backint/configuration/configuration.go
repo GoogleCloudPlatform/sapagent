@@ -163,6 +163,10 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		log.Logger.Warn("parallel_streams defaulted to 1")
 		p.Config.ParallelStreams = 1
 	}
+	if p.Config.GetParallelStreams() > 32 {
+		log.Logger.Warn("parallel_streams capped to 32")
+		p.Config.ParallelStreams = 32
+	}
 	if p.Config.GetParallelSizeMb() <= 0 {
 		log.Logger.Warn("parallel_size_mb defaulted to 128")
 		p.Config.ParallelSizeMb = 128
@@ -195,7 +199,7 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		p.Config.InputFile = "/dev/stdin"
 	}
 	if p.Config.GetOutputFile() == "" {
-		log.Logger.Warn("input_file defaulted to /dev/stdout")
+		log.Logger.Warn("output_file defaulted to /dev/stdout")
 		p.Config.OutputFile = "/dev/stdout"
 	}
 }
