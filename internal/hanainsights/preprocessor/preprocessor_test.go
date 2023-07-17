@@ -561,6 +561,54 @@ func TestValidateRecommendations(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name: "ValidScalarReference",
+			recomms: []*rpb.Recommendation{
+				&rpb.Recommendation{
+					Id: "r_sap_hana_internal_support_role",
+					Trigger: &rpb.EvalNode{
+						Operation: rpb.EvalNode_EQ,
+						Lhs:       "sample_lhs:value",
+						Rhs:       "sample_rhs",
+					},
+				},
+			},
+			queryNametoCols: map[string]bool{
+				"sample_lhs:value": true,
+			},
+			want: nil,
+		},
+		{
+			name: "ValidScalarReferenceFetchedFromGlobalKB",
+			recomms: []*rpb.Recommendation{
+				&rpb.Recommendation{
+					Id: "r_sap_hana_internal_support_role",
+					Trigger: &rpb.EvalNode{
+						Operation: rpb.EvalNode_EQ,
+						Lhs:       "sample_lhs:value",
+						Rhs:       "sample_rhs",
+					},
+				},
+			},
+			globalKB: map[string]bool{
+				"sample_lhs:value": true,
+			},
+			want: nil,
+		},
+		{
+			name: "InvalidScalarReference",
+			recomms: []*rpb.Recommendation{
+				&rpb.Recommendation{
+					Id: "r_sap_hana_internal_support_role",
+					Trigger: &rpb.EvalNode{
+						Operation: rpb.EvalNode_EQ,
+						Lhs:       "sample_lhs:value",
+						Rhs:       "sample_rhs",
+					},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
 	}
 
 	for _, tc := range tests {

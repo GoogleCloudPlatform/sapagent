@@ -309,16 +309,30 @@ func buildQueryNameToCols(rule *rpb.Rule) map[string]bool {
 }
 
 func matchTriggerKeys(cond string, queryNameToCols map[string]bool, globalKBKeys map[string]bool) bool {
+	// check if count function usage is correct.
 	match := CountPattern.FindStringSubmatch(cond)
-	if len(match) != 2 {
-		return true
+	if len(match) == 2 {
+		key := match[1]
+		if _, ok := queryNameToCols[key]; ok {
+			return true
+		}
+		if _, ok := globalKBKeys[key]; ok {
+			return true
+		}
+		return false
 	}
-	key := match[1]
-	if _, ok := queryNameToCols[key]; ok {
-		return true
+
+	// Checking for a scalar reference.
+	match = KnowledgeBasePattern.FindStringSubmatch(cond)
+	if len(match) == 3 {
+		key := match[1] + ":" + match[2]
+		if _, ok := queryNameToCols[key]; ok {
+			return true
+		}
+		if _, ok := globalKBKeys[key]; ok {
+			return true
+		}
+		return false
 	}
-	if _, ok := globalKBKeys[key]; ok {
-		return true
-	}
-	return false
+	return true
 }
