@@ -80,9 +80,6 @@ func LogLevelToZapcore(level bpb.LogLevel) zapcore.Level {
 
 // parseCommandLineArgs checks that the necessary CLI arguments are provided.
 func (p *Parameters) parseCommandLineArgs() error {
-	if p.User == "" {
-		return errors.New("user ID must be provided")
-	}
 	if p.ParamFile == "" {
 		return errors.New("parameters file must be provided")
 	}

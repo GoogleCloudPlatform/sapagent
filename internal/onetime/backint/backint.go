@@ -19,6 +19,7 @@ package backint
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"flag"
@@ -30,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/diagnose"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
+	ac "github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -43,6 +45,7 @@ type Backint struct {
 	inFile, outFile, paramFile string
 	backupID, backupLevel      string
 	count                      int64
+	version, help              bool
 }
 
 // Name implements the subcommand interface for backint.
@@ -53,9 +56,10 @@ func (*Backint) Synopsis() string { return "backup, restore, inquire, or delete 
 
 // Usage implements the subcommand interface for backint.
 func (*Backint) Usage() string {
-	return `backint -user=<DBNAME@SID> -function=<backup|restore|inquire|delete|diagnose>
-	-paramfile=<path-to-file> [-input=<path-to-file>] [-output=<path-to-file>]
-	[-backupid=<database-backup-id>] [-count=<number-of-objects>] [-level=<backup-level>]
+	return `backint -function=<backup|restore|inquire|delete|diagnose>
+	-paramfile=<path-to-file> [-v] [-user=<DBNAME@SID>] [-input=<path-to-file>]
+	[-output=<path-to-file>] [-backupid=<database-backup-id>] [-count=<number-of-objects>]
+	[-level=<backup-level>]
 `
 }
 
@@ -77,18 +81,31 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&b.count, "c", 0, "Total number of database objects associated to the backup id specified (-s)")
 	fs.StringVar(&b.backupLevel, "level", "", "The type of backup, only usable if the function (-f) is backup")
 	fs.StringVar(&b.backupLevel, "l", "", "The type of backup, only usable if the function (-f) is backup")
+	fs.BoolVar(&b.version, "v", false, "Display the version of the agent")
+	fs.BoolVar(&b.help, "h", false, "Display help")
 }
 
 // Execute implements the subcommand interface for backint.
 func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	// this check will never be hit when executing the command line
 	if len(args) < 2 {
 		log.Logger.Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
+	// this check will never be hit when executing the command line
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
+	}
+
+	if b.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	if b.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", ac.AgentVersion))
+		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, b.Name())
 

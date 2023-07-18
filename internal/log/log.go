@@ -56,6 +56,7 @@ package log
 import (
 	"io"
 	"log"
+	"os"
 
 	logging "cloud.google.com/go/logging"
 	"github.com/natefinch/lumberjack"
@@ -98,12 +99,19 @@ func SetupLogging(params Parameters) {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.TimeKey = "timestamp"
-	fileEncoder := zapcore.NewJSONEncoder(config)
-	fileLogWriter := zapcore.AddSync(&lumberjack.Logger{
+	logEncoder := zapcore.NewJSONEncoder(config)
+	fileOrPrintLogger := &lumberjack.Logger{
 		Filename:   params.LogFileName,
 		MaxSize:    25, // megabytes
 		MaxBackups: 3,
-	})
+	}
+	_, err := fileOrPrintLogger.Write(make([]byte, 0))
+	fileOrPrintLogWriter := zapcore.AddSync(fileOrPrintLogger)
+	if err != nil {
+		// Could not write to the log file, write to console instead
+		logEncoder = zapcore.NewConsoleEncoder(config)
+		fileOrPrintLogWriter = zapcore.AddSync(os.Stdout)
+	}
 
 	var core zapcore.Core
 	// if logging to Cloud Logging then add the file based logging + cloud logging, else just file logging
@@ -113,12 +121,12 @@ func SetupLogging(params Parameters) {
 			LogLevel:          params.Level,
 		}
 		core = zapcore.NewTee(
-			zapcore.NewCore(fileEncoder, fileLogWriter, params.Level),
+			zapcore.NewCore(logEncoder, fileOrPrintLogWriter, params.Level),
 			cloudCore,
 		)
 	} else {
 		core = zapcore.NewTee(
-			zapcore.NewCore(fileEncoder, fileLogWriter, params.Level),
+			zapcore.NewCore(logEncoder, fileOrPrintLogWriter, params.Level),
 		)
 	}
 	coreLogger := zap.New(core, zap.AddCaller())

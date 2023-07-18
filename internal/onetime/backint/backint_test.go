@@ -110,10 +110,32 @@ func TestExecute(t *testing.T) {
 				log.Parameters{},
 			},
 		},
+		{
+			name: "SuccessForVersion",
+			backint: &Backint{
+				version: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessForHelp",
+			backint: &Backint{
+				help: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+			want: subcommands.ExitSuccess,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.backint.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := test.backint.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.backint, test.args, got, test.want)
 			}
@@ -147,9 +169,20 @@ func TestBackintHandler(t *testing.T) {
 			want: subcommands.ExitUsageError,
 		},
 		{
-			name: "SuccessfulBackup",
+			name: "SuccessfulBackupWithUser",
 			backint: &Backint{
 				user:      "test@TST",
+				function:  "backup",
+				paramFile: defaultParametersFile(t).Name(),
+				inFile:    t.TempDir() + "/input.txt",
+				outFile:   t.TempDir() + "/output.txt",
+			},
+			client: defaultStorageClient,
+			want:   subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessfulBackupWithoutUser",
+			backint: &Backint{
 				function:  "backup",
 				paramFile: defaultParametersFile(t).Name(),
 				inFile:    t.TempDir() + "/input.txt",
@@ -182,7 +215,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	b.SetFlags(fs)
 
-	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l"}
+	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l", "v", "h"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {
