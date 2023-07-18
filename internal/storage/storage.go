@@ -126,7 +126,7 @@ func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, 
 		log.Logger.Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", bucketName, "error", err)
 		return nil, false
 	}
-	log.Logger.Debugw("The bucket exists and has attributes: %#v\n", attrs)
+	log.Logger.Debugw(fmt.Sprintf("The bucket exists and has attributes: %#v", attrs))
 
 	if attrs.RetentionPolicy != nil && parallelStreams > 1 {
 		log.Logger.Errorw("Parallel streams are not supported on buckets with retention policies - 'parallel_streams' must be set to 1 in order to connect to this bucket", "bucket", bucketName, "parallelStreams", parallelStreams, "retentionPolicy", attrs.RetentionPolicy)
