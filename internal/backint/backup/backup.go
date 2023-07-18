@@ -170,6 +170,7 @@ func backupFile(ctx context.Context, p parameters) string {
 		TotalBytes:   p.fileSize,
 		LogDelay:     time.Duration(p.config.GetLogDelaySec()) * time.Second,
 		Compress:     p.config.GetCompress(),
+		DumpData:     p.config.GetDumpData(),
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {
@@ -242,6 +243,18 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
 	fileNameTrim := strings.Trim(p.fileName, `"`)
 	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + ".bak"
+
+	ret := func() string {
+		if chunkError {
+			return fmt.Sprintf("#ERROR %q\n", fileNameTrim)
+		}
+		return fmt.Sprintf("#SAVED %q %q %s\n", p.externalBackupID, fileNameTrim, strconv.FormatInt(p.fileSize, 10))
+	}
+	if p.config.GetDumpData() {
+		log.Logger.Warnw("dump_data set to true, not composing objects.", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
+		return ret()
+	}
+
 	log.Logger.Infow("All chunks uploaded, composing into 1 object", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
 	var srcs []*store.ObjectHandle
 	// The composer can take between 1 to 32 objects to compose into 1 object
@@ -272,8 +285,5 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
 		}
 	}
 
-	if chunkError {
-		return fmt.Sprintf("#ERROR %q\n", fileNameTrim)
-	}
-	return fmt.Sprintf("#SAVED %q %q %s\n", p.externalBackupID, fileNameTrim, strconv.FormatInt(p.fileSize, 10))
+	return ret()
 }

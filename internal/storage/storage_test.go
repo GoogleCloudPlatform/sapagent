@@ -187,6 +187,18 @@ func TestUpload(t *testing.T) {
 			wantError: cmpopts.AnyError,
 		},
 		{
+			name: "DumpDataWriteFail",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				Reader:       defaultBuffer(),
+				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					return 0, errors.New("write error")
+				},
+				DumpData: true,
+			},
+			wantError: cmpopts.AnyError,
+		},
+		{
 			name: "CompressWriteFail",
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
@@ -219,6 +231,19 @@ func TestUpload(t *testing.T) {
 				Reader:       defaultBuffer(),
 				LogDelay:     time.Nanosecond,
 				Compress:     true,
+			},
+			want:      int64(defaultBuffer().Len()),
+			wantError: nil,
+		},
+		{
+			name: "DumpDataUploadSuccess",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				ChunkSizeMb:  1,
+				Copier:       io.Copy,
+				Reader:       defaultBuffer(),
+				LogDelay:     time.Nanosecond,
+				DumpData:     true,
 			},
 			want:      int64(defaultBuffer().Len()),
 			wantError: nil,

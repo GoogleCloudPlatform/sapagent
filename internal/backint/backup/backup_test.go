@@ -333,6 +333,17 @@ func TestComposeChunks(t *testing.T) {
 			bucketName: "success",
 			want:       "#SAVED",
 		},
+		{
+			name:       "DumpDataPreviousError",
+			p:          parameters{config: &bpb.BackintConfiguration{DumpData: true}},
+			chunkError: true,
+			want:       "#ERROR",
+		},
+		{
+			name: "DumpDataNoError",
+			p:    parameters{config: &bpb.BackintConfiguration{DumpData: true}},
+			want: "#SAVED",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

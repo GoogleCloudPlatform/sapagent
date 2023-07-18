@@ -90,11 +90,20 @@ type ReadWriter struct {
 	// Downloads will decompress automatically based on the file's content type.
 	Compress bool
 
+	// DumpData discards bytes during upload rather than write to the bucket.
+	DumpData bool
+
 	bytesWritten     int64
 	lastBytesWritten int64
 	lastLog          time.Time
 	firstLog         time.Time
 }
+
+// discardCloser provides no-ops for a io.WriteCloser interface.
+type discardCloser struct{}
+
+func (discardCloser) Close() error                { return nil }
+func (discardCloser) Write(p []byte) (int, error) { return len(p), nil }
 
 // ConnectToBucket creates the storage client with custom retry logic and
 // attempts to connect to the GCS bucket. Returns false if there is a connection
@@ -134,13 +143,23 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		return 0, errors.New("no bucket defined")
 	}
 
-	writer := rw.BucketHandle.Object(rw.ObjectName).NewWriter(ctx)
-	writer.ChunkSize = int(rw.ChunkSizeMb) * 1024 * 1024
+	var writer io.WriteCloser
+	if rw.DumpData {
+		log.Logger.Warnw("dump_data set to true, discarding data during upload", "bucket", rw.BucketName, "object", rw.ObjectName)
+		writer = discardCloser{}
+	} else {
+		objectWriter := rw.BucketHandle.Object(rw.ObjectName).NewWriter(ctx)
+		objectWriter.ChunkSize = int(rw.ChunkSizeMb) * 1024 * 1024
+		if rw.Compress {
+			objectWriter.ObjectAttrs.ContentType = compressedContentType
+		}
+		writer = objectWriter
+	}
+
 	rw.lastLog = time.Now()
 	rw.firstLog = time.Now()
 	rw.bytesWritten = 0
 	rw.lastBytesWritten = 0
-
 	if rw.LogDelay <= 0 {
 		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
 		rw.LogDelay = DefaultLogDelay
@@ -154,7 +173,6 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	var err error
 	if rw.Compress {
 		log.Logger.Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
-		writer.ObjectAttrs.ContentType = compressedContentType
 		gzipWriter := gzip.NewWriter(writer)
 		if bytesWritten, err = rw.Copier(gzipWriter, rw); err != nil {
 			return 0, err
@@ -190,11 +208,11 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	defer reader.Close()
+
 	rw.lastLog = time.Now()
 	rw.firstLog = time.Now()
 	rw.bytesWritten = 0
 	rw.lastBytesWritten = 0
-
 	if rw.LogDelay <= 0 {
 		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
 		rw.LogDelay = DefaultLogDelay
