@@ -244,7 +244,8 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 				}
 				// See if a system with the same SID already exists
 				for _, sys := range sapSystems {
-					if sys.GetApplicationLayer().GetSid() == app.Sapsid || sys.GetDatabaseLayer().GetSid() == dbComp.Sid {
+					if (sys.GetApplicationLayer() != nil && sys.GetApplicationLayer().GetSid() == app.Sapsid) ||
+						(sys.GetDatabaseLayer() != nil && sys.GetDatabaseLayer().GetSid() == dbComp.Sid) {
 						system = sys
 						break
 					}
@@ -271,7 +272,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 			case sappb.InstanceType_HANA:
 				// See if a system with the same SID already exists
 				for _, sys := range sapSystems {
-					if sys.DatabaseLayer.Sid == app.Sapsid {
+					if sys.GetDatabaseLayer() != nil && sys.GetDatabaseLayer().Sid == app.Sapsid {
 						system = sys
 						break
 					}
