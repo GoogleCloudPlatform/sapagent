@@ -43,22 +43,22 @@ func (m Sapcontrol) Stop() {
 }
 
 var (
-	//go:embed testdata/getprocesslist/all_processes.txt
+	//go:embed testdata/getprocesslist/all_processes.xml
 	processListResponse string
 
-	//go:embed testdata/getprocesslist/no_pid.txt
+	//go:embed testdata/getprocesslist/no_pid.xml
 	noPidProcessListResponse string
 
-	//go:embed testdata/getprocesslist/no_name.txt
+	//go:embed testdata/getprocesslist/no_name.xml
 	noNameProcessListResponse string
 
-	//go:embed testdata/abapgetwptable/all_work_processes.txt
+	//go:embed testdata/abapgetwptable/all_work_processes.xml
 	workProcessResponse string
 
-	//go:embed testdata/fault_response.txt
+	//go:embed testdata/fault_response.xml
 	faultResponse string
 
-	//go:embed testdata/getqueuestatistic/all_queues.txt
+	//go:embed testdata/getqueuestatistic/all_queues.xml
 	taskQueueResponse string
 )
 

@@ -106,11 +106,6 @@ func (c Client) call(request, response any) error {
 
 // GetProcessList is a method defined on the Client struct. It uses the SAPControl web API
 // to build a map describing the statuses of all SAP processes.
-// Example Usage:
-//
-//	sc := New("02")
-//	processes, err := sc.GetProcessList()
-//
 // Returns:
 //   - A list of OSProcess structs which is the response from the GetProcessList API call.
 //   - Error if Client.call fails, nil otherwise.
