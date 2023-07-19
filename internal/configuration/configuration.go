@@ -58,7 +58,7 @@ const (
 	
 
 	// AgentVersion is the version of the agent.
-	AgentVersion = `2.1`
+	AgentVersion = `2.2`
 	// LINT.ThenChange(//depot/google3/third_party/sapagent/BUILD, //depot/google3/third_party/sapagent/google-cloud-sap-agent.blueprint)
 
 	// LinuxConfigPath is the default path to agent configuration file on linux.
