@@ -294,7 +294,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	if logClient != nil {
 		system.StartSAPSystemDiscovery(ctx, d.config, gceService, wlmService, logClient.Logger("google-cloud-sap-agent"))
 		log.FlushCloudLog()
-		logClient.Close()
+		defer logClient.Close()
 	} else {
 		system.StartSAPSystemDiscovery(ctx, d.config, gceService, wlmService, nil)
 	}
