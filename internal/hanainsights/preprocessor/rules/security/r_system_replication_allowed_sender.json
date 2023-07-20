@@ -7,12 +7,12 @@
   "queries": [
     {
       "name": "q_listeninterface",
-      "sql": "SELECT VALUE as value FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' SECTION = 'system_replication_communication' AND KEY = 'listeninterface'",
+      "sql": "SELECT VALUE as value FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_replication_communication' AND KEY = 'listeninterface'",
       "columns": ["value"]
     },
     {
       "name": "q_allowed_sender",
-      "sql": "SELECT VALUE as value from  M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' SECTION = 'system_replication_communication' AND KEY = 'allowed_sender'",
+      "sql": "SELECT VALUE as value from  M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_replication_communication' AND KEY = 'allowed_sender'",
       "columns": ["value"]
     }
   ],
