@@ -1922,78 +1922,65 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 }
 
 func TestDiscoverDatabaseSID(t *testing.T) {
-	var execCalls int
-	var userExecCalls int
+	var execCalls map[string]int
 	tests := []struct {
-		name              string
-		testSID           string
-		exec              commandlineexecutor.Execute
-		want              string
-		wantErr           error
-		wantUserExecCalls int
-		wantExecCalls     int
+		name          string
+		testSID       string
+		exec          commandlineexecutor.Execute
+		want          string
+		wantErr       error
+		wantExecCalls map[string]int
 	}{{
 		name:    "hdbUserStoreErr",
 		testSID: defaultSID,
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			if params.User != "" {
-				userExecCalls++
-			} else {
-				execCalls++
-			}
+			execCalls[params.Executable]++
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
 				Error:  errors.New("Some err"),
 			}
 		},
-		wantErr:           cmpopts.AnyError,
-		wantUserExecCalls: 1,
-		wantExecCalls:     0,
+		wantErr: cmpopts.AnyError,
+
+		wantExecCalls: map[string]int{"sudo": 1},
 	}, {
 		name:    "profileGrepErr",
 		testSID: defaultSID,
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			if params.User != "" {
-				userExecCalls++
+			execCalls[params.Executable]++
+			if params.Executable == "sudo" {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
 				}
 			}
-			execCalls++
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
 				Error:  errors.New("Some err"),
 			}
 		},
-		wantErr:           cmpopts.AnyError,
-		wantUserExecCalls: 1,
-		wantExecCalls:     1,
+		wantErr:       cmpopts.AnyError,
+		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
 	}, {
 		name:    "noSIDInGrep",
 		testSID: defaultSID,
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			if params.User != "" {
-				userExecCalls++
-			} else {
-				execCalls++
-			}
+			execCalls[params.Executable]++
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
 			}
 		},
-		wantErr:           cmpopts.AnyError,
-		wantUserExecCalls: 1,
-		wantExecCalls:     1,
+		wantErr:       cmpopts.AnyError,
+		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
 	}, {
 		name:    "sidInUserStore",
 		testSID: defaultSID,
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			if params.User != "" {
-				userExecCalls++
+			execCalls[params.Executable]++
+			if params.Executable == "sudo" {
 				return commandlineexecutor.Result{
 					StdOut: `KEY default
 					ENV : dnwh75ldbci:30013
@@ -2003,29 +1990,26 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 					StdErr: "",
 				}
 			}
-			execCalls++
 			return commandlineexecutor.Result{
 				StdOut: "",
 				StdErr: "",
 				Error:  errors.New("Some err"),
 			}
 		},
-		want:              "DEH",
-		wantErr:           nil,
-		wantUserExecCalls: 1,
-		wantExecCalls:     0,
+		want:          "DEH",
+		wantErr:       nil,
+		wantExecCalls: map[string]int{"sudo": 1},
 	}, {
 		name:    "sidInProfiles",
 		testSID: defaultSID,
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			if params.User != "" {
-				userExecCalls++
+			execCalls[params.Executable]++
+			if params.Executable == "sudo" {
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
 				}
 			}
-			execCalls++
 			return commandlineexecutor.Result{
 				StdOut: `
 				grep: /usr/sap/S15/SYS/profile/DEFAULT.PFL: Permission denied
@@ -2033,15 +2017,13 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 				StdErr: "",
 			}
 		},
-		want:              "HN1",
-		wantErr:           nil,
-		wantUserExecCalls: 1,
-		wantExecCalls:     1,
+		want:          "HN1",
+		wantErr:       nil,
+		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			userExecCalls = 0
-			execCalls = 0
+			execCalls = make(map[string]int)
 			d := Discovery{
 				execute: test.exec,
 			}
@@ -2054,11 +2036,8 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("discoverDatabaseSID() gotErr %q, wantErr %q", gotErr, test.wantErr)
 			}
-			if userExecCalls != test.wantUserExecCalls {
-				t.Errorf("discoverDatabaseSID() userExecCalls = %d, want %d", userExecCalls, test.wantUserExecCalls)
-			}
-			if execCalls != test.wantExecCalls {
-				t.Errorf("discoverDatabaseSID() execCalls = %d, want %d", execCalls, test.wantExecCalls)
+			if diff := cmp.Diff(test.wantExecCalls, execCalls); diff != "" {
+				t.Errorf("discoverDatabaseSID() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}

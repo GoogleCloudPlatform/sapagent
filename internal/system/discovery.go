@@ -756,13 +756,10 @@ func (d *Discovery) discoverAppToDBConnection(ctx context.Context, cp *ipb.Cloud
 	var res []*spb.SapDiscovery_Resource
 
 	sidLower := strings.ToLower(sid)
-	sidUpper := strings.ToUpper(sid)
-	sidPath := fmt.Sprintf("/usr/sap/%s/hdbclient/hdbuserstore", sidUpper)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	result := d.execute(ctx, commandlineexecutor.Params{
-		Executable: sidPath,
-		Args:       []string{"list", "DEFAULT"},
-		User:       sidAdm,
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list", "DEFAULT"},
 	})
 	if result.Error != nil {
 		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
@@ -966,12 +963,10 @@ func (d *Discovery) discoverAddressUsers(addr *compute.Address) []*spb.SapDiscov
 func (d *Discovery) discoverDatabaseSID(ctx context.Context, appSID string) (string, error) {
 	sidLower := strings.ToLower(appSID)
 	sidUpper := strings.ToUpper(appSID)
-	sidPath := fmt.Sprintf("/usr/sap/%s/hdbclient/hdbuserstore", sidUpper)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	result := d.execute(ctx, commandlineexecutor.Params{
-		Executable: sidPath,
-		Args:       []string{"list"},
-		User:       sidAdm,
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list"},
 	})
 	if result.Error != nil {
 		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
