@@ -93,10 +93,16 @@ type ReadWriter struct {
 	// DumpData discards bytes during upload rather than write to the bucket.
 	DumpData bool
 
-	bytesWritten     int64
-	lastBytesWritten int64
-	lastLog          time.Time
-	firstLog         time.Time
+	// RateLimitBytes caps the maximum number of bytes transferred per second.
+	// A default value of 0 prevents rate limiting.
+	RateLimitBytes int64
+
+	bytesWritten          int64
+	lastBytesWritten      int64
+	rateLimitBytesWritten int64
+	lastRateLimit         time.Time
+	lastLog               time.Time
+	firstLog              time.Time
 }
 
 // discardCloser provides no-ops for a io.WriteCloser interface.
@@ -156,14 +162,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		writer = objectWriter
 	}
 
-	rw.lastLog = time.Now()
-	rw.firstLog = time.Now()
-	rw.bytesWritten = 0
-	rw.lastBytesWritten = 0
-	if rw.LogDelay <= 0 {
-		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
-		rw.LogDelay = DefaultLogDelay
-	}
+	rw.defaultArgs()
 	if rw.ChunkSizeMb == 0 {
 		log.Logger.Warn("ChunkSizeMb set to 0, uploads cannot be retried.")
 	}
@@ -209,15 +208,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	}
 	defer reader.Close()
 
-	rw.lastLog = time.Now()
-	rw.firstLog = time.Now()
-	rw.bytesWritten = 0
-	rw.lastBytesWritten = 0
-	if rw.LogDelay <= 0 {
-		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
-		rw.LogDelay = DefaultLogDelay
-	}
-
+	rw.defaultArgs()
 	log.Logger.Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
 	if reader.Attrs.ContentType == compressedContentType {
@@ -281,6 +272,7 @@ func (rw *ReadWriter) Read(p []byte) (n int, err error) {
 	n, err = rw.Reader.Read(p)
 	if err == nil {
 		rw.logProgress("Upload progress", int64(n))
+		rw.rateLimit(int64(n))
 	}
 	return n, err
 }
@@ -290,6 +282,7 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 	n, err = rw.Writer.Write(p)
 	if err == nil {
 		rw.logProgress("Download progress", int64(n))
+		rw.rateLimit(int64(n))
 	}
 	return n, err
 }
@@ -303,5 +296,35 @@ func (rw *ReadWriter) logProgress(logMessage string, n int64) {
 		log.Logger.Infow(logMessage, "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", rw.bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", math.Round(percentComplete), "transferSpeedMBps", math.Round(transferSpeedMBps))
 		rw.lastLog = time.Now()
 		rw.lastBytesWritten = rw.bytesWritten
+	}
+}
+
+// rateLimit limits the bytes transferred by introducing a sleep up to 1 second
+// if the threshold is reached. RateLimitBytes set to 0 prevents rate limiting.
+func (rw *ReadWriter) rateLimit(bytes int64) {
+	if rw.RateLimitBytes == 0 {
+		return
+	}
+
+	rw.rateLimitBytesWritten += bytes
+	if rw.rateLimitBytesWritten >= rw.RateLimitBytes {
+		time.Sleep(time.Second - time.Since(rw.lastRateLimit))
+		rw.lastRateLimit = time.Now()
+		rw.rateLimitBytesWritten = 0
+	}
+}
+
+// defaultArgs prepares ReadWriter for a new upload/download.
+func (rw *ReadWriter) defaultArgs() {
+	rw.bytesWritten = 0
+	rw.lastBytesWritten = 0
+	rw.rateLimitBytesWritten = 0
+	rw.lastRateLimit = time.Now()
+	rw.lastLog = time.Now()
+	rw.firstLog = time.Now()
+
+	if rw.LogDelay <= 0 {
+		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
+		rw.LogDelay = DefaultLogDelay
 	}
 }

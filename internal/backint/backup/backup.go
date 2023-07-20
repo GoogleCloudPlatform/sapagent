@@ -161,16 +161,17 @@ func backupFile(ctx context.Context, p parameters) string {
 	}
 
 	rw := storage.ReadWriter{
-		Reader:       p.reader,
-		Copier:       p.copier,
-		BucketHandle: p.bucketHandle,
-		BucketName:   p.config.GetBucket(),
-		ChunkSizeMb:  p.config.GetBufferSizeMb(),
-		ObjectName:   object,
-		TotalBytes:   p.fileSize,
-		LogDelay:     time.Duration(p.config.GetLogDelaySec()) * time.Second,
-		Compress:     p.config.GetCompress(),
-		DumpData:     p.config.GetDumpData(),
+		Reader:         p.reader,
+		Copier:         p.copier,
+		BucketHandle:   p.bucketHandle,
+		BucketName:     p.config.GetBucket(),
+		ChunkSizeMb:    p.config.GetBufferSizeMb(),
+		ObjectName:     object,
+		TotalBytes:     p.fileSize,
+		LogDelay:       time.Duration(p.config.GetLogDelaySec()) * time.Second,
+		Compress:       p.config.GetCompress(),
+		DumpData:       p.config.GetDumpData(),
+		RateLimitBytes: p.config.GetRateLimitMb() * 1024 * 1024,
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {

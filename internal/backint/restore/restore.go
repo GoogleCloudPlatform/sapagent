@@ -141,9 +141,10 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		BucketName:   config.GetBucket(),
 		// The objects will be sorted by creation date, latest first.
 		// Thus, the requested restore will always be the first in the objects slice.
-		ObjectName: objects[0].Name,
-		TotalBytes: objects[0].Size,
-		LogDelay:   time.Duration(config.GetLogDelaySec()) * time.Second,
+		ObjectName:     objects[0].Name,
+		TotalBytes:     objects[0].Size,
+		LogDelay:       time.Duration(config.GetLogDelaySec()) * time.Second,
+		RateLimitBytes: config.GetRateLimitMb() * 1024 * 1024,
 	}
 	bytesWritten, err := rw.Download(ctx)
 	if err != nil {

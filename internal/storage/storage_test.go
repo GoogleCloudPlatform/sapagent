@@ -223,6 +223,19 @@ func TestUpload(t *testing.T) {
 			wantError: nil,
 		},
 		{
+			name: "UploadSuccessWithRateLimit",
+			rw: &ReadWriter{
+				BucketHandle:   defaultBucketHandle,
+				ChunkSizeMb:    1,
+				Copier:         io.Copy,
+				Reader:         defaultBuffer(),
+				LogDelay:       time.Nanosecond,
+				RateLimitBytes: 1,
+			},
+			want:      int64(defaultBuffer().Len()),
+			wantError: nil,
+		},
+		{
 			name: "CompressUploadSuccess",
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
@@ -317,6 +330,19 @@ func TestDownload(t *testing.T) {
 				Writer:       defaultBuffer(),
 				Copier:       io.Copy,
 				LogDelay:     time.Nanosecond,
+			},
+			want:      int64(len(defaultContent)),
+			wantError: nil,
+		},
+		{
+			name: "DownloadSuccessWithRateLimit",
+			rw: &ReadWriter{
+				BucketHandle:   defaultBucketHandle,
+				ObjectName:     "object.txt",
+				Writer:         defaultBuffer(),
+				Copier:         io.Copy,
+				LogDelay:       time.Nanosecond,
+				RateLimitBytes: 1,
 			},
 			want:      int64(len(defaultContent)),
 			wantError: nil,
