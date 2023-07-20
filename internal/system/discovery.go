@@ -179,9 +179,6 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 }
 
 func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
-	// Ensure any messages left in the buffer get written
-	defer d.cloudLogInterface.Flush()
-
 	cp := config.GetCloudProperties()
 	if cp == nil {
 		log.Logger.Warn("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
@@ -304,16 +301,20 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 
 		log.Logger.Info("Sending systems to WLM API")
 		for _, sys := range sapSystems {
-			err := d.writeToCloudLogging(sys)
-			if err != nil {
-				log.Logger.Warnw("Encountered error writing to cloud logging", "error", err)
-			}
 			// Send System to DW API
 			req := &workloadmanager.WriteInsightRequest{
 				Insight: insightFromSAPSystem(sys),
 			}
 
 			d.wlmService.WriteInsight(cp.ProjectId, continent, req)
+
+			if d.cloudLogInterface == nil {
+				continue
+			}
+			err := d.writeToCloudLogging(sys)
+			if err != nil {
+				log.Logger.Warnw("Encountered error writing to cloud logging", "error", err)
+			}
 		}
 
 		log.Logger.Info("Done SAP System Discovery")
