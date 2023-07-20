@@ -389,8 +389,8 @@ func tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []stri
 				continue
 			}
 			if matchNameServerTraceAndBackup(fd.Name()) {
-				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
-				res = append(res, path.Join(hanaPath+"/trace/", fd.Name()))
+				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name())))
+				res = append(res, path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name()))
 			}
 		}
 	}
@@ -564,12 +564,14 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	if err := fu.MkdirAll(destFilesPath, 0777); err != nil {
 		return err
 	}
+	onetime.LogMessageToFileAndConsole("Collecting hb_report...")
 	res := exec(ctx, commandlineexecutor.Params{
 		Executable:  "hb_report",
 		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
 		Timeout:     3600,
 	})
 	if res.ExitCode != 0 {
+		onetime.LogMessageToFileAndConsole("Collecting crm_report...")
 		res := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
 			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
@@ -579,6 +581,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 			return errors.New(res.StdErr)
 		}
 	}
+	onetime.LogMessageToFileAndConsole("Collecting supportconfig...")
 	res = exec(ctx, commandlineexecutor.Params{
 		Executable:  "supportconfig",
 		ArgsToSplit: fmt.Sprintf("-bl -R %s", destFilesPath),
@@ -591,6 +594,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 }
 
 func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
+	onetime.LogMessageToFileAndConsole("Collecting sosreport...")
 	p := commandlineexecutor.Params{
 		Executable:  "sosreport",
 		ArgsToSplit: fmt.Sprintf("--batch --tmp-dir %s", destFilesPath),
@@ -605,6 +609,7 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 		// if sosreport is unsuccessful in collecting pacemaker data, we will fallback to crm_report
 		from := time.Now().UTC().AddDate(0, 0, -3).String()[:16]
 		to := time.Now().UTC().String()[:16]
+		onetime.LogMessageToFileAndConsole("Collecting crm_report...")
 		crmRes := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
 			ArgsToSplit: fmt.Sprintf("-S -f '%s' -t '%s' --dest %s", from, to, destFilesPath+"/report"),

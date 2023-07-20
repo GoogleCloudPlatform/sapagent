@@ -799,7 +799,7 @@ func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
 				mockedFileInfo{name: "backup.log", isDir: false},
 			},
 			},
-			want: []string{path.Join("success/trace", "backup.log")},
+			want: []string{path.Join("success/trace/DB_DEH/", "backup.log")},
 		},
 	}
 
