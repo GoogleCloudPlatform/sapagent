@@ -410,7 +410,6 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		fakeExec           commandlineexecutor.Execute
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
-		useSAPControlAPI   bool
 		instanceProperties *InstanceProperties
 	}{
 		{
@@ -661,7 +660,6 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		fakeExec           commandlineexecutor.Execute
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
-		useSAPControlAPI   bool
 		instanceProperties *InstanceProperties
 	}{
 		{
@@ -720,7 +718,6 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		fakeExec           commandlineexecutor.Execute
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
-		useSAPControlAPI   bool
 		instanceProperties *InstanceProperties
 	}{
 		{
