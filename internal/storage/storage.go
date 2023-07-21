@@ -190,8 +190,20 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	if err := writer.Close(); err != nil {
 		return 0, err
 	}
+	// Verify object is in the bucket and bytesWritten matches the object's size in the bucket.
+	objectSize := int64(0)
+	if !rw.DumpData {
+		attrs, err := rw.BucketHandle.Object(rw.ObjectName).Attrs(ctx)
+		if err != nil {
+			return bytesWritten, err
+		}
+		objectSize = attrs.Size
+		if bytesWritten != objectSize && !rw.Compress {
+			return bytesWritten, fmt.Errorf("upload error for object: %v, bytesWritten: %d does not equal the object's size: %d", rw.ObjectName, bytesWritten, objectSize)
+		}
+	}
 	avgTransferSpeedMBps := float64(bytesWritten) / time.Since(rw.firstLog).Seconds() / 1024 / 1024
-	log.Logger.Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	log.Logger.Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "objectSizeInBucket", objectSize, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return bytesWritten, nil
 }
 

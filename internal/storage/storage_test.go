@@ -73,7 +73,7 @@ func objectAttrs(object *storage.ObjectHandle) []*storage.ObjectAttrs {
 }
 
 func defaultBuffer() *bytes.Buffer {
-	return bytes.NewBufferString("test data")
+	return bytes.NewBuffer(defaultContent)
 }
 
 func defaultCompressedContent() []byte {
@@ -218,6 +218,7 @@ func TestUpload(t *testing.T) {
 				Copier:       io.Copy,
 				Reader:       defaultBuffer(),
 				LogDelay:     time.Nanosecond,
+				ObjectName:   "object.txt",
 			},
 			want:      int64(defaultBuffer().Len()),
 			wantError: nil,
@@ -231,6 +232,7 @@ func TestUpload(t *testing.T) {
 				Reader:         defaultBuffer(),
 				LogDelay:       time.Nanosecond,
 				RateLimitBytes: 1,
+				ObjectName:     "object.txt",
 			},
 			want:      int64(defaultBuffer().Len()),
 			wantError: nil,
@@ -244,6 +246,7 @@ func TestUpload(t *testing.T) {
 				Reader:       defaultBuffer(),
 				LogDelay:     time.Nanosecond,
 				Compress:     true,
+				ObjectName:   "object.txt",
 			},
 			want:      int64(defaultBuffer().Len()),
 			wantError: nil,
@@ -257,6 +260,7 @@ func TestUpload(t *testing.T) {
 				Reader:       defaultBuffer(),
 				LogDelay:     time.Nanosecond,
 				DumpData:     true,
+				ObjectName:   "object.txt",
 			},
 			want:      int64(defaultBuffer().Len()),
 			wantError: nil,

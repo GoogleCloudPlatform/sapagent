@@ -54,6 +54,7 @@ var (
 		mu:               &sync.Mutex{},
 		stat:             os.Stat,
 	}
+	defaultContent = []byte("test content")
 )
 
 // fakeServer creates a new server with objects in the bucketName.
@@ -190,9 +191,22 @@ func TestBackupFile(t *testing.T) {
 		{
 			name: "UploadError",
 			p: parameters{
-				fileName: t.TempDir() + "/UploadError.txt",
+				reader: fakeFile(),
 				copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
 					return 0, errors.New("copy error")
+				},
+			},
+			want: "#ERROR",
+		},
+		{
+			name: "BytesWrittenMismatch",
+			p: parameters{
+				bucketHandle: defaultBucketHandle,
+				fileName:     "object.txt",
+				reader:       bytes.NewBuffer(defaultContent),
+				copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					dst.Write(defaultContent)
+					return 0, nil
 				},
 			},
 			want: "#ERROR",
@@ -201,22 +215,18 @@ func TestBackupFile(t *testing.T) {
 			name: "UploadSuccess",
 			p: parameters{
 				bucketHandle: defaultBucketHandle,
-				fileName:     t.TempDir() + "/UploadSuccess.txt",
-				copier:       io.Copy,
+				fileName:     "object.txt",
+				reader:       bytes.NewBuffer(defaultContent),
+				copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					dst.Write(defaultContent)
+					return int64(len(defaultContent)), nil
+				},
 			},
 			want: "#SAVED",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.p.fileName != "" {
-				f, err := os.Create(test.p.fileName)
-				if err != nil {
-					t.Fatalf("os.Create(%v) failed: %v", test.p.fileName, err)
-				}
-				defer f.Close()
-			}
-
 			got := backupFile(context.Background(), test.p)
 			if !strings.HasPrefix(got, test.want) {
 				t.Errorf("backupFile(%s) = %v, want prefix %v", test.p.fileName, got, test.want)
@@ -264,11 +274,25 @@ func TestBackupFileParallel(t *testing.T) {
 			},
 		},
 		{
-			name: "Success",
+			name: "ErrorObjectNotInBucket",
 			p: parameters{
-				bucketHandle: fakeServer("parallel-success").Client().Bucket("parallel-success"),
+				bucketHandle: fakeServer("parallel-not-in-bucket").Client().Bucket("parallel-not-in-bucket"),
 				fileName:     t.TempDir() + "/object.txt",
 				config:       &bpb.BackintConfiguration{ParallelStreams: 2},
+				wp:           workerpool.New(2),
+				mu:           &sync.Mutex{},
+				output:       bytes.NewBufferString(""),
+				stat:         os.Stat,
+				copier:       io.Copy,
+			},
+		},
+		{
+			name: "Success",
+			p: parameters{
+				// Dump data due to limitation with uploading chunks to the fake bucket in this test.
+				bucketHandle: fakeServer("parallel-success").Client().Bucket("parallel-success"),
+				fileName:     t.TempDir() + "/object.txt",
+				config:       &bpb.BackintConfiguration{ParallelStreams: 2, DumpData: true},
 				wp:           workerpool.New(2),
 				mu:           &sync.Mutex{},
 				output:       bytes.NewBufferString(""),
