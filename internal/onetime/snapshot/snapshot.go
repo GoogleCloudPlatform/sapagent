@@ -302,6 +302,7 @@ func (s *Snapshot) createPDSnapshot(ctx context.Context) (err error) {
 	snapshot := &compute.Snapshot{
 		Description:      s.description,
 		Name:             s.snapshotName,
+		SnapshotType:     "STANDARD",
 		StorageLocations: []string{s.storageLocation},
 	}
 
@@ -323,20 +324,20 @@ func (s *Snapshot) createPDSnapshot(ctx context.Context) (err error) {
 }
 
 func (s *Snapshot) waitForCompletion(op *compute.Operation) error {
-	zos := compute.NewZoneOperationsService(s.computeService)
-	tracker, err := zos.Wait(s.project, s.diskZone, op.Name).Do()
+	ss, err := s.computeService.Snapshots.Get(s.project, s.snapshotName).Do()
 	if err != nil {
 		return err
 	}
-	log.Logger.Infow("Snapshot creation progress", "perecentage", tracker.Progress, "status", tracker.Status)
-	if tracker.Status != "DONE" {
-		return fmt.Errorf("Snapshot creation is not DONE yet")
+	if ss.Status == "CREATING" {
+		return fmt.Errorf("snapshot creation is in progress, snapshot name: %s, status:  CREATING", s.snapshotName)
 	}
+	log.Logger.Infow("Snapshot creation progress", "snapshot", s.snapshotName, "status", ss.Status)
 	return nil
 }
 
-// Each waitForCompletion() calls blocks for max 120s, we sleep for 120s between
-// retries a total 120 times => max_wait_duration = (120+120)*120 = 8 Hours
+// Each waitForCompletion() returns immediately, we sleep for 120s between
+// retries a total 120 times => max_wait_duration = 120*120 = 4 Hours
+// TODO: change timeout depending on PD limits
 func (s *Snapshot) waitForCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 120), ctx)
