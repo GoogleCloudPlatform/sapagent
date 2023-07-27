@@ -169,20 +169,9 @@ func TestBackintHandler(t *testing.T) {
 			want: subcommands.ExitUsageError,
 		},
 		{
-			name: "SuccessfulBackupWithUser",
+			name: "SuccessfulBackup",
 			backint: &Backint{
 				user:      "test@TST",
-				function:  "backup",
-				paramFile: defaultParametersFile(t).Name(),
-				inFile:    t.TempDir() + "/input.txt",
-				outFile:   t.TempDir() + "/output.txt",
-			},
-			client: defaultStorageClient,
-			want:   subcommands.ExitSuccess,
-		},
-		{
-			name: "SuccessfulBackupWithoutUser",
-			backint: &Backint{
 				function:  "backup",
 				paramFile: defaultParametersFile(t).Name(),
 				inFile:    t.TempDir() + "/input.txt",

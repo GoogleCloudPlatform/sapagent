@@ -61,12 +61,29 @@ func Split(s string) []string {
 }
 
 // WriteSoftwareVersion writes the Backint and agent software versions to the output.
-func WriteSoftwareVersion(line string, output io.Writer) error {
+// Returns the backint software version.
+func WriteSoftwareVersion(line string, output io.Writer) (string, error) {
 	s := Split(line)
 	if len(s) < 2 {
-		return fmt.Errorf("malformed input line, got: %s, want: #SOFTWAREID <backint_version> <software_version>", line)
+		return "", fmt.Errorf("malformed input line, got: %s, want: #SOFTWAREID <backint_version> <software_version>", line)
 	}
-	log.Logger.Infow("Version information", "backint", strings.Trim(s[1], `"`), configuration.AgentName, configuration.AgentVersion)
-	output.Write([]byte(fmt.Sprintf(`#SOFTWAREID %s "Google %s %s"`, s[1], configuration.AgentName, configuration.AgentVersion) + "\n"))
-	return nil
+	backint := TrimAndClean(s[1])
+	log.Logger.Infow("Version information", "backint", backint, configuration.AgentName, configuration.AgentVersion)
+	output.Write([]byte(fmt.Sprintf(`#SOFTWAREID %q "Google %s %s"`, backint, configuration.AgentName, configuration.AgentVersion) + "\n"))
+	return strings.Trim(backint, "backint "), nil
+}
+
+// TrimAndClean trims quotes, removes backslashes from escaped embedded quotes,
+// and creates a raw literal string to preserve all special characters.
+func TrimAndClean(str string) string {
+	str = strings.Trim(str, `"`)
+	str = strings.ReplaceAll(str, `\"`, `"`)
+	return fmt.Sprintf(`%s`, str)
+}
+
+// RestoreFilename adds a preceding forward slash, fully escapes the string,
+// then removes any escaped backslashes to conform to the specification.
+func RestoreFilename(str string) string {
+	str = fmt.Sprintf("%q", "/"+str)
+	return strings.ReplaceAll(str, `\\`, `\`)
 }

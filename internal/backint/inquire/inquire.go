@@ -54,11 +54,14 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
+	backintVersion := ""
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
+		log.Logger.Infow("Executing inquire input", "line", line)
 		if strings.HasPrefix(line, "#SOFTWAREID") {
-			if err := parse.WriteSoftwareVersion(line, output); err != nil {
+			var err error
+			if backintVersion, err = parse.WriteSoftwareVersion(line, output); err != nil {
 				return err
 			}
 		} else if strings.HasPrefix(line, "#NULL") {
@@ -66,28 +69,28 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			// File name is an optional parameter for #NULL.
 			fileName := ""
 			if len(s) > 1 {
-				fileName = strings.Trim(s[1], `"`)
+				fileName = s[1]
 			}
-			prefix := config.GetUserId() + fileName
+			prefix := config.GetUserId() + parse.TrimAndClean(fileName)
 			wp.Submit(func() {
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "")
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion)
 				mu.Lock()
 				defer mu.Unlock()
-				output.Write([]byte(out))
+				output.Write(out)
 			})
 		} else if strings.HasPrefix(line, "#EBID") {
 			s := parse.Split(line)
 			if len(s) < 3 {
 				return fmt.Errorf("malformed inquire input line, got: %s, want: #EBID <external_backup_id> <file_name>", line)
 			}
-			externalBackupID := strings.Trim(s[1], `"`)
-			fileName := strings.Trim(s[2], `"`)
-			prefix := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
+			externalBackupID := parse.TrimAndClean(s[1])
+			fileName := s[2]
+			prefix := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
 			wp.Submit(func() {
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID)
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion)
 				mu.Lock()
 				defer mu.Unlock()
-				output.Write([]byte(out))
+				output.Write(out)
 			})
 		} else {
 			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
@@ -102,7 +105,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // inquireFiles queries the bucket with the specified prefix and returns all
 // objects found according to SAP HANA formatting specifications.
-func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID string) []byte {
+func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion string) []byte {
 	var result []byte
 	log.Logger.Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
 	objects, err := storage.ListObjects(ctx, bucketHandle, prefix)
@@ -119,7 +122,7 @@ func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix,
 			result = append(result, fmt.Sprintf(" %q", externalBackupID)...)
 		}
 		if fileName != "" {
-			result = append(result, fmt.Sprintf(" %q", fileName)...)
+			result = append(result, fmt.Sprintf(" %s", fileName)...)
 		}
 		return append(result, "\n"...)
 	}
@@ -133,9 +136,15 @@ func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix,
 			result = append(result, fmt.Sprintf("#ERROR %q %q\n", externalBackupID, object.Name)...)
 			continue
 		}
-		fileName := dirs[1]
+		fileName = parse.RestoreFilename(dirs[1])
 		log.Logger.Infow("Found object", "name", object.Name, "externalBackupID", externalBackupID, "fileName", fileName)
-		result = append(result, fmt.Sprintf("#BACKUP %q %q %q\n", externalBackupID, fileName, object.Created.Format(parse.BackintRFC3339Millis))...)
+
+		// Backint versions prior to 1.50 do not include the creation timestamp in the INQUIRE output.
+		result = append(result, fmt.Sprintf("#BACKUP %q %s", externalBackupID, fileName)...)
+		if backintVersion >= "1.50" {
+			result = append(result, fmt.Sprintf(" %q", object.Created.Format(parse.BackintRFC3339Millis))...)
+		}
+		result = append(result, "\n"...)
 	}
 	return result
 }

@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
@@ -308,15 +310,15 @@ func TestDiagnoseInquire(t *testing.T) {
 		{
 			name:  "InquireNullFailed",
 			opts:  defaultOptions,
-			lines: []string{`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`},
+			lines: []string{`#BACKUP "12345" "/object.txt"`},
 			want:  cmpopts.AnyError,
 		},
 		{
 			name: "InquireTimestampsOutOfOrder",
 			opts: defaultOptions,
 			lines: []string{
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2026-01-02T15:04:05.999Z07:00"`,
+				`#BACKUP "12345" "/object.txt"`,
+				fmt.Sprintf(`#SOFTWAREID "backint 1.50" "Google %s %s"`, configuration.AgentName, configuration.AgentVersion) + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2026-01-02T15:04:05.999Z07:00"`,
 			},
 			want: cmpopts.AnyError,
 		},
@@ -324,8 +326,8 @@ func TestDiagnoseInquire(t *testing.T) {
 			name: "InquireNotFoundFailed",
 			opts: defaultOptions,
 			lines: []string{
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
+				`#BACKUP "12345" "/object.txt"`,
+				fmt.Sprintf(`#SOFTWAREID "backint 1.50" "Google %s %s"`, configuration.AgentName, configuration.AgentVersion) + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
 			},
 			want: cmpopts.AnyError,
 		},
@@ -333,8 +335,8 @@ func TestDiagnoseInquire(t *testing.T) {
 			name: "InquireErrorFailed",
 			opts: defaultOptions,
 			lines: []string{
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
+				`#BACKUP "12345" "/object.txt"`,
+				fmt.Sprintf(`#SOFTWAREID "backint 1.50" "Google %s %s"`, configuration.AgentName, configuration.AgentVersion) + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
 				`#NOTFOUND "/object.txt"`,
 			},
 			want: cmpopts.AnyError,
@@ -343,8 +345,8 @@ func TestDiagnoseInquire(t *testing.T) {
 			name: "InquireSuccess",
 			opts: defaultOptions,
 			lines: []string{
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
-				`#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
+				`#BACKUP "12345" "/object.txt"`,
+				fmt.Sprintf(`#SOFTWAREID "backint 1.50" "Google %s %s"`, configuration.AgentName, configuration.AgentVersion) + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"` + "\n" + `#BACKUP "12345" "/object.txt" "2006-01-02T15:04:05.999Z07:00"`,
 				`#NOTFOUND "/object.txt"`,
 				`#ERROR "/object.txt"`,
 			},

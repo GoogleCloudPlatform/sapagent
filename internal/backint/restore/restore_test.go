@@ -48,6 +48,14 @@ var (
 		{
 			ObjectAttrs: fakestorage.ObjectAttrs{
 				BucketName: "test-bucket",
+				Name:       "test@TST/file-object.txt/12345.bak",
+				Metadata:   map[string]string{"X-Backup-Type": "FILE"},
+			},
+			Content: []byte("test content"),
+		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
 				// The backup object name is in the format <userID>/<fileName>/<externalBackupID>.bak
 				Name:    "test@TST/object.txt/12345.bak",
 				Created: time.UnixMilli(12345),
@@ -160,7 +168,8 @@ func TestRestoreScannerError(t *testing.T) {
 	}
 }
 
-func TestRestoreFile(t *testing.T) {
+// Pipe types will be created beforehand by the database.
+func TestRestoreFileBackupTypePipe(t *testing.T) {
 	tests := []struct {
 		name             string
 		bucket           *s.BucketHandle
@@ -235,5 +244,18 @@ func TestRestoreFile(t *testing.T) {
 				t.Errorf("restoreFile(%s, %s) = %s, wantPrefix: %s", test.fileName, test.externalBackupID, got, test.wantPrefix)
 			}
 		})
+	}
+}
+
+// File types will be created during execution by the agent.
+func TestRestoreFileBackupTypeFile(t *testing.T) {
+	externalBackupID := "12345"
+	fileName := "/file-object.txt"
+	destName := t.TempDir() + "/file-object.txt"
+	wantPrefix := "#RESTORED"
+
+	got := restoreFile(context.Background(), defaultConfig, defaultBucketHandle, io.Copy, fileName, destName, externalBackupID)
+	if !strings.HasPrefix(string(got), wantPrefix) {
+		t.Errorf("restoreFile(%s, %s) = %s, wantPrefix: %s", fileName, externalBackupID, got, wantPrefix)
 	}
 }

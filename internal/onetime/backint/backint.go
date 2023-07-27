@@ -158,12 +158,20 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.
 		return false
 	}
 	defer inFile.Close()
+	if fileInfo, err := inFile.Stat(); err != nil || fileInfo.Mode()&0222 == 0 {
+		log.Logger.Errorw("Input file does not have readable permissions", "fileName", config.GetInputFile(), "err", err)
+		return false
+	}
 	outFile, err := os.Create(config.GetOutputFile())
 	if err != nil {
 		log.Logger.Errorw("Error opening output file", "fileName", config.GetOutputFile(), "err", err)
 		return false
 	}
 	defer outFile.Close()
+	if fileInfo, err := outFile.Stat(); err != nil || fileInfo.Mode()&0444 == 0 {
+		log.Logger.Errorw("Output file does not have writable permissions", "fileName", config.GetOutputFile(), "err", err)
+		return false
+	}
 
 	switch config.GetFunction() {
 	case bpb.Function_BACKUP:

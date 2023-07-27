@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
@@ -212,22 +213,24 @@ func diagnoseInquire(ctx context.Context, opts diagnoseOptions) error {
 	}
 	opts.output.Write([]byte("\nINQUIRE:\n"))
 	for _, file := range opts.files {
+		// No version supplied, the default is to leave out creation_timestamp.
 		opts.input = fmt.Sprintf("#EBID %q %q", file.externalBackupID, file.fileName)
-		opts.want = "#BACKUP <external_backup_id> <file_name> <creation_timestamp>"
+		opts.want = "#BACKUP <external_backup_id> <file_name>"
 		if _, err := performDiagnostic(ctx, opts); err != nil {
 			return err
 		}
 	}
 
-	opts.input = fmt.Sprintf("#NULL %q", opts.files[0].fileName)
-	opts.want = "#BACKUP <external_backup_id> <file_name> <creation_timestamp>\n#BACKUP <external_backup_id> <file_name> <creation_timestamp>"
+	// Version is supplied as >= 1.50, expecting creation_timestamp is present.
+	opts.input = fmt.Sprintf(`#SOFTWAREID "backint 1.50" "Google %s %s"`+"\n#NULL %q", configuration.AgentName, configuration.AgentVersion, opts.files[0].fileName)
+	opts.want = "#SOFTWAREID <backint_version> <agent_version>\n#BACKUP <external_backup_id> <file_name> <creation_timestamp>\n#BACKUP <external_backup_id> <file_name> <creation_timestamp>"
 	splitLines, err := performDiagnostic(ctx, opts)
 	if err != nil {
 		return err
 	}
 	// Ensure the creation_timestamp for the first line is older than the second line.
-	if splitLines[0][3] < splitLines[1][3] {
-		return fmt.Errorf("inquiry files are out of order based on creation time, file1: %s, file2: %s", splitLines[0], splitLines[1])
+	if splitLines[1][3] < splitLines[2][3] {
+		return fmt.Errorf("inquiry files are out of order based on creation time, file1: %s, file2: %s", splitLines[1], splitLines[2])
 	}
 
 	opts.input = fmt.Sprintf("#NULL %q", fileNotExists)

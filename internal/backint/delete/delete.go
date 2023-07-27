@@ -57,8 +57,9 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
+		log.Logger.Infow("Executing delete input", "line", line)
 		if strings.HasPrefix(line, "#SOFTWAREID") {
-			if err := parse.WriteSoftwareVersion(line, output); err != nil {
+			if _, err := parse.WriteSoftwareVersion(line, output); err != nil {
 				return err
 			}
 		} else if strings.HasPrefix(line, "#EBID") {
@@ -67,8 +68,8 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 				return fmt.Errorf("malformed delete input line, got: %s, want: #EBID <external_backup_id> <file_name>", line)
 			}
 			externalBackupID := strings.Trim(s[1], `"`)
-			fileName := strings.Trim(s[2], `"`)
-			object := config.GetUserId() + fileName + "/" + externalBackupID + ".bak"
+			fileName := s[2]
+			object := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
 			wp.Submit(func() {
 				log.Logger.Infow("Deleting object", "object", object)
 				err := storage.DeleteObject(ctx, bucketHandle, object)
@@ -76,13 +77,13 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 				defer mu.Unlock()
 				if errors.Is(err, store.ErrObjectNotExist) {
 					log.Logger.Errorw("Object not found", "object", object, "err", err)
-					output.Write([]byte(fmt.Sprintf("#NOTFOUND %q %q\n", externalBackupID, fileName)))
+					output.Write([]byte(fmt.Sprintf("#NOTFOUND %q %s\n", externalBackupID, fileName)))
 				} else if err != nil {
 					log.Logger.Errorw("Error deleting object", "object", object, "err", err)
-					output.Write([]byte(fmt.Sprintf("#ERROR %q %q\n", externalBackupID, fileName)))
+					output.Write([]byte(fmt.Sprintf("#ERROR %q %s\n", externalBackupID, fileName)))
 				} else {
 					log.Logger.Infow("Object deleted", "object", object)
-					output.Write([]byte(fmt.Sprintf("#DELETED %q %q\n", externalBackupID, fileName)))
+					output.Write([]byte(fmt.Sprintf("#DELETED %q %s\n", externalBackupID, fileName)))
 				}
 			})
 		} else {

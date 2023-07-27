@@ -56,7 +56,7 @@ var (
 		{
 			ObjectAttrs: fakestorage.ObjectAttrs{
 				BucketName: "test-bucket",
-				Name:       "test@TST/object2.txt/12345.bak",
+				Name:       `test@TST/object'with"special\characters.txt/12345.bak`,
 			},
 			Content: []byte("test content"),
 		},
@@ -95,9 +95,15 @@ func TestInquire(t *testing.T) {
 		// There are 2 objects in the fake bucket with the same user ID prefix.
 		// This test case will return just 1 (object.txt).
 		{
-			name:      "AllObjectsWithPrefix",
-			input:     bytes.NewBufferString(`#NULL "/object.txt"`),
-			want:      fmt.Sprintf(`#BACKUP "12345" "object.txt" %q`+"\n", time.UnixMilli(12345).Format(parse.BackintRFC3339Millis)),
+			name:      "AllObjectsWithPrefixWithTimestamp",
+			input:     bytes.NewBufferString(`#SOFTWAREID "backint 1.50"` + "\n" + `#NULL "/object.txt"`),
+			want:      fmt.Sprintf(`#SOFTWAREID "backint 1.50" "Google %s %s"`+"\n"+`#BACKUP "12345" "/object.txt" %q`+"\n", configuration.AgentName, configuration.AgentVersion, time.UnixMilli(12345).Format(parse.BackintRFC3339Millis)),
+			wantError: nil,
+		},
+		{
+			name:      "AllObjectsNoTimestamps",
+			input:     bytes.NewBufferString(`#NULL`),
+			want:      fmt.Sprintf(`#BACKUP "12345" "/object'with\"special\characters.txt"` + "\n" + `#BACKUP "12345" "/object.txt"` + "\n"),
 			wantError: nil,
 		},
 		{
@@ -106,9 +112,9 @@ func TestInquire(t *testing.T) {
 			wantError: cmpopts.AnyError,
 		},
 		{
-			name:      "FormattedExternalBackupID",
-			input:     bytes.NewBufferString(`#EBID "12345" "/object.txt"`),
-			want:      fmt.Sprintf(`#BACKUP "12345" "object.txt" %q`+"\n", time.UnixMilli(12345).Format(parse.BackintRFC3339Millis)),
+			name:      "FormattedExternalBackupIDNoTimestamp",
+			input:     bytes.NewBufferString(`#EBID "12345" "/object'with\"special\characters.txt"`),
+			want:      fmt.Sprintf(`#BACKUP "12345" "/object'with\"special\characters.txt"` + "\n"),
 			wantError: nil,
 		},
 		{
@@ -143,6 +149,7 @@ func TestInquireFiles(t *testing.T) {
 		prefix           string
 		fileName         string
 		externalBackupID string
+		backintVersion   string
 		wantPrefix       string
 	}{
 		{
@@ -168,15 +175,23 @@ func TestInquireFiles(t *testing.T) {
 			wantPrefix: "#ERROR",
 		},
 		{
-			name:       "ObjectFoundNoError",
-			bucket:     defaultBucketHandle,
-			prefix:     "test@TST/object.txt/12345.bak",
-			wantPrefix: "#BACKUP",
+			name:           "ObjectFoundNoErrorVersion1.00",
+			bucket:         defaultBucketHandle,
+			prefix:         "test@TST/object.txt/12345.bak",
+			backintVersion: "1.00",
+			wantPrefix:     "#BACKUP",
+		},
+		{
+			name:           "ObjectFoundNoErrorVersion1.50",
+			bucket:         defaultBucketHandle,
+			prefix:         "test@TST/object.txt/12345.bak",
+			backintVersion: "1.50",
+			wantPrefix:     "#BACKUP",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID)
+			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID, test.backintVersion)
 			if !strings.HasPrefix(string(got), test.wantPrefix) {
 				t.Errorf("inquireFiles(%s, %s, %s) = %s, wantPrefix: %s", test.prefix, test.fileName, test.externalBackupID, got, test.wantPrefix)
 			}

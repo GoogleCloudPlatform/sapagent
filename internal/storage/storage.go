@@ -80,6 +80,9 @@ type ReadWriter struct {
 	// ObjectName is the destination or source in the bucket for uploading or downloading data.
 	ObjectName string
 
+	// Metadata is an optional parameter to add metadata to uploads.
+	Metadata map[string]string
+
 	// If TotalBytes is not set, percent completion cannot be calculated when logging progress.
 	TotalBytes int64
 
@@ -156,13 +159,14 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	} else {
 		objectWriter := rw.BucketHandle.Object(rw.ObjectName).NewWriter(ctx)
 		objectWriter.ChunkSize = int(rw.ChunkSizeMb) * 1024 * 1024
+		objectWriter.Metadata = rw.Metadata
 		if rw.Compress {
 			objectWriter.ObjectAttrs.ContentType = compressedContentType
 		}
 		writer = objectWriter
 	}
 
-	rw.defaultArgs()
+	rw = rw.defaultArgs()
 	if rw.ChunkSizeMb == 0 {
 		log.Logger.Warn("ChunkSizeMb set to 0, uploads cannot be retried.")
 	}
@@ -220,7 +224,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	}
 	defer reader.Close()
 
-	rw.defaultArgs()
+	rw = rw.defaultArgs()
 	log.Logger.Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
 	if reader.Attrs.ContentType == compressedContentType {
@@ -327,7 +331,7 @@ func (rw *ReadWriter) rateLimit(bytes int64) {
 }
 
 // defaultArgs prepares ReadWriter for a new upload/download.
-func (rw *ReadWriter) defaultArgs() {
+func (rw *ReadWriter) defaultArgs() *ReadWriter {
 	rw.bytesWritten = 0
 	rw.lastBytesWritten = 0
 	rw.rateLimitBytesWritten = 0
@@ -339,4 +343,5 @@ func (rw *ReadWriter) defaultArgs() {
 		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
 		rw.LogDelay = DefaultLogDelay
 	}
+	return rw
 }

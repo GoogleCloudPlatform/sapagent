@@ -87,8 +87,9 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
+		log.Logger.Infow("Executing backup input", "line", line)
 		if strings.HasPrefix(line, "#SOFTWAREID") {
-			if err := parse.WriteSoftwareVersion(line, output); err != nil {
+			if _, err := parse.WriteSoftwareVersion(line, output); err != nil {
 				return err
 			}
 		} else if strings.HasPrefix(line, "#PIPE") || strings.HasPrefix(line, "#FILE") {
@@ -147,16 +148,20 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 // backupFile attempts to upload a file to the bucket using the storage package.
 // String results are returned on success or failure.
 func backupFile(ctx context.Context, p parameters) string {
-	fileNameTrim := strings.Trim(p.fileName, `"`)
+	fileNameTrim := parse.TrimAndClean(p.fileName)
 	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + p.extension
 	log.Logger.Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType)
 	if p.reader == nil {
 		f, err := os.Open(fileNameTrim)
 		if err != nil {
 			log.Logger.Errorw("Error opening backup file", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
-			return fmt.Sprintf("#ERROR %q\n", fileNameTrim)
+			return fmt.Sprintf("#ERROR %s\n", p.fileName)
 		}
 		defer f.Close()
+		if fileInfo, err := f.Stat(); err != nil || fileInfo.Mode()&0444 == 0 {
+			log.Logger.Errorw("Backup file does not have readable permissions", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
+			return fmt.Sprintf("#ERROR %s\n", p.fileName)
+		}
 		p.reader = f
 	}
 
@@ -172,14 +177,16 @@ func backupFile(ctx context.Context, p parameters) string {
 		Compress:       p.config.GetCompress(),
 		DumpData:       p.config.GetDumpData(),
 		RateLimitBytes: p.config.GetRateLimitMb() * 1024 * 1024,
+		// Match the previous Backint implementation's metadata format.
+		Metadata: map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {
 		log.Logger.Errorw("Error uploading file", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
-		return fmt.Sprintf("#ERROR %q\n", fileNameTrim)
+		return fmt.Sprintf("#ERROR %s\n", p.fileName)
 	}
 	log.Logger.Infow("File uploaded", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "bytesWritten", bytesWritten, "fileSize", p.fileSize, "fileType", p.fileType)
-	return fmt.Sprintf("#SAVED %q %q %s\n", p.externalBackupID, fileNameTrim, strconv.FormatInt(bytesWritten, 10))
+	return fmt.Sprintf("#SAVED %q %s %s\n", p.externalBackupID, p.fileName, strconv.FormatInt(bytesWritten, 10))
 }
 
 // backupFileParallel chunks a file and uploads the sections in parallel
@@ -187,19 +194,23 @@ func backupFile(ctx context.Context, p parameters) string {
 // which combines all chunks into 1 object and deletes the temporary chunks.
 // A returned error indicates the parallel jobs were not started.
 func backupFileParallel(ctx context.Context, p parameters) (string, error) {
-	fileNameTrim := strings.Trim(p.fileName, `"`)
+	fileNameTrim := parse.TrimAndClean(p.fileName)
 	f, err := os.Open(fileNameTrim)
 	if err != nil {
 		log.Logger.Errorw("Error opening backup file", "fileName", p.fileName, "err", err)
-		return fmt.Sprintf("#ERROR %q\n", fileNameTrim), err
+		return fmt.Sprintf("#ERROR %s\n", p.fileName), err
 	}
 	if p.fileSize == 0 {
 		fi, err := p.stat(fileNameTrim)
 		if err != nil {
 			log.Logger.Errorw("Cannot determine file size, cannot chunk file for parallel upload.", "fileName", p.fileName, "err", err)
-			return fmt.Sprintf("#ERROR %q\n", fileNameTrim), err
+			return fmt.Sprintf("#ERROR %s\n", p.fileName), err
 		}
 		p.fileSize = fi.Size()
+	}
+	if fileInfo, err := f.Stat(); err != nil || fileInfo.Mode()&0444 == 0 {
+		log.Logger.Errorw("Backup file does not have readable permissions", "fileName", p.fileName, "err", err)
+		return fmt.Sprintf("#ERROR %s\n", p.fileName), fmt.Errorf("backup file does not have readable permissions")
 	}
 
 	sectionLength := p.fileSize / p.config.GetParallelStreams()
@@ -242,14 +253,14 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 // composeChunks composes all chunks into 1 object in the bucket and deletes
 // the temporary chunks. Any chunk error will result in a failure.
 func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
-	fileNameTrim := strings.Trim(p.fileName, `"`)
+	fileNameTrim := parse.TrimAndClean(p.fileName)
 	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + ".bak"
 
 	ret := func() string {
 		if chunkError {
-			return fmt.Sprintf("#ERROR %q\n", fileNameTrim)
+			return fmt.Sprintf("#ERROR %s\n", p.fileName)
 		}
-		return fmt.Sprintf("#SAVED %q %q %s\n", p.externalBackupID, fileNameTrim, strconv.FormatInt(p.fileSize, 10))
+		return fmt.Sprintf("#SAVED %q %s %s\n", p.externalBackupID, p.fileName, strconv.FormatInt(p.fileSize, 10))
 	}
 	if p.config.GetDumpData() {
 		log.Logger.Warnw("dump_data set to true, not composing objects.", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
