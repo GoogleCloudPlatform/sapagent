@@ -140,7 +140,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "token: (\\w+)"
+              "value_from_regex": "token:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -159,7 +159,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "token_retransmits_before_loss_const: (\\w+)"
+              "value_from_regex": "token_retransmits_before_loss_const:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -178,7 +178,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "consensus: (\\w+)"
+              "value_from_regex": "consensus:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -197,7 +197,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "join: (\\w+)"
+              "value_from_regex": "join:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -216,7 +216,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "max_messages: (\\w+)"
+              "value_from_regex": "max_messages:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -235,7 +235,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "transport: (\\w+)"
+              "value_from_regex": "transport:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -254,7 +254,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "fail_recv_const: (\\w+)"
+              "value_from_regex": "fail_recv_const:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -273,7 +273,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "two_node: (\\w+)"
+              "value_from_regex": "two_node:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -298,7 +298,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -321,7 +321,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -344,7 +344,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -367,7 +367,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -390,7 +390,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -413,7 +413,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -436,7 +436,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -459,7 +459,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""

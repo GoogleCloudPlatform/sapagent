@@ -49,17 +49,17 @@ var (
 		return nil, errors.New("Could not find file")
 	})
 	validCSConfigFile = `totem {
-	version: 2
-	cluster_name: hacluster
-	transport: knet
-	join: 60
-	consensus: 1200
-	fail_recv_const: 2500
-	max_messages: 20
-	token: 20000
+	version:                             2
+	cluster_name:                        hacluster
+	transport:                           knet
+	join:                                60
+	consensus:                           1200
+	fail_recv_const:                     2500
+	max_messages:                        20
+	token:                               20000
 	token_retransmits_before_loss_const: 10
-	crypto_cipher: aes256
-	crypto_hash: sha256
+	crypto_cipher:                       aes256
+	crypto_hash:                         sha256
 }
 quorum {
 	provider: corosync_votequorum
