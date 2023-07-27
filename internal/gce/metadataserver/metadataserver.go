@@ -50,6 +50,7 @@ var (
 const (
 	cloudPropertiesURI  = "/"
 	maintenanceEventURI = "/instance/maintenance-event"
+	diskType            = "/instance/disks/"
 
 	helpString = `For information on permissions needed to access metadata refer: https://cloud.google.com/compute/docs/metadata/querying-metadata#permissions. Restart the agent after adding necessary permissions.`
 )
@@ -93,6 +94,30 @@ func CloudPropertiesWithRetry(bo backoff.BackOff) *instancepb.CloudProperties {
 		log.Logger.Errorw("CloudProperties request retry limit exceeded", log.Error(err))
 	}
 	return cp
+}
+
+// DiskTypeWithRetry fetches disk information from the GCE metadata server with a retry mechanism.
+//
+// If there are any persistent errors in fetching this information, then the error will be logged
+// and the return value will be "".
+func DiskTypeWithRetry(bo backoff.BackOff, disk string) string {
+	var (
+		attempt  = 1
+		diskType string
+	)
+	err := backoff.Retry(func() error {
+		var err error
+		diskType, err = requestDiskType(disk)
+		if err != nil {
+			log.Logger.Errorw("Error in requestDiskType", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, bo)
+	if err != nil {
+		log.Logger.Errorw("DiskType request retry limit exceeded", log.Error(err))
+	}
+	return diskType
 }
 
 // get performs a get request to the metadata server and returns the response body.
@@ -162,6 +187,15 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 		InstanceName:     instanceName,
 		Image:            image,
 	}, nil
+}
+
+// requestDiskType attempts to fetch information from the GCE metadata server.
+func requestDiskType(disk string) (string, error) {
+	body, err := get(fmt.Sprintf("%s%s/type", diskType, disk), "recursive=true")
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }
 
 func isStatusSuccess(statusCode int) bool {

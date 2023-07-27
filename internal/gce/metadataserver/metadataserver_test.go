@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	backoff "github.com/cenkalti/backoff/v4"
@@ -45,13 +46,17 @@ func mockMetadataServer(t *testing.T, handler endpoint) *httptest.Server {
 			w.WriteHeader(403)
 			fmt.Fprint(w, "Metadata-flavor header missing")
 		}
-		if r.URL.Path != cloudPropertiesURI && r.URL.Path != maintenanceEventURI {
+		if r.URL.Path != cloudPropertiesURI && r.URL.Path != maintenanceEventURI && !strings.HasPrefix(r.URL.Path, diskType) {
 			w.WriteHeader(404)
 			fmt.Fprint(w, "404 Page not found")
 		}
 		if handler.contentLength != "" {
 			w.Header().Set("Content-Length", handler.contentLength)
 			return
+		}
+		if handler.responseBody == "error" {
+			w.WriteHeader(404)
+			fmt.Fprint(w, "404 Page not found")
 		}
 		w.Header().Set("Content-Length", strconv.Itoa(len(handler.responseBody)))
 		w.WriteHeader(200)
@@ -259,6 +264,43 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 			got := CloudPropertiesWithRetry(testBackOffPolicy())
 			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
 				t.Errorf("CloudProperties() mismatch (-want, +got):\n%s", d)
+			}
+		})
+	}
+}
+
+func TestDiskTypeWithRetry(t *testing.T) {
+	tests := []struct {
+		name string
+		url  endpoint
+		want string
+	}{
+		{
+			name: "success",
+			url: endpoint{
+				uri:          fmt.Sprintf("%s%s/type", diskType, "any"),
+				responseBody: "anyType",
+			},
+			want: "anyType",
+		},
+		{
+			name: "invalid diskType",
+			url: endpoint{
+				uri:          fmt.Sprintf("%s%s/type", diskType, "any"),
+				responseBody: "error",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ts := mockMetadataServer(t, test.url)
+			defer ts.Close()
+			metadataServerURL = ts.URL
+
+			got := DiskTypeWithRetry(testBackOffPolicy(), "any")
+			if test.want !=	got {
+				t.Errorf("DiskTypeWithRetry()=%v, want %v", got, test.want)
 			}
 		})
 	}
