@@ -117,7 +117,7 @@ func (discardCloser) Write(p []byte) (int, error) { return len(p), nil }
 // ConnectToBucket creates the storage client with custom retry logic and
 // attempts to connect to the GCS bucket. Returns false if there is a connection
 // failure (bucket does not exist, invalid credentials, etc.)
-func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName string, parallelStreams int64) (*storage.BucketHandle, bool) {
+func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName string) (*storage.BucketHandle, bool) {
 	var opts []option.ClientOption
 	if serviceAccount != "" {
 		opts = append(opts, option.WithCredentialsFile(serviceAccount))
@@ -130,18 +130,11 @@ func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, 
 	// TODO: Add custom retry logic
 
 	bucket := client.Bucket(bucketName)
-	attrs, err := bucket.Attrs(ctx)
-	if err != nil {
+	if _, err := bucket.Objects(ctx, nil).Next(); err != nil && err != iterator.Done {
 		log.Logger.Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", bucketName, "error", err)
 		return nil, false
 	}
-	log.Logger.Debugf("The bucket exists and has attributes: %#v", attrs)
-
-	if attrs.RetentionPolicy != nil && parallelStreams > 1 {
-		log.Logger.Errorw("Parallel streams are not supported on buckets with retention policies - 'parallel_streams' must be set to 1 in order to connect to this bucket", "bucket", bucketName, "parallelStreams", parallelStreams, "retentionPolicy", attrs.RetentionPolicy)
-		return nil, false
-	}
-
+	log.Logger.Infow("Connected to bucket", "bucket", bucketName)
 	return bucket, true
 }
 

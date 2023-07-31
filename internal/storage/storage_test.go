@@ -86,6 +86,12 @@ func defaultCompressedContent() []byte {
 	return compressedContent.Bytes()
 }
 
+func emptyServer(bucketName string) *fakestorage.Server {
+	server := fakestorage.NewServer([]fakestorage.Object{})
+	server.CreateBucketWithOpts(fakestorage.CreateBucketOpts{Name: bucketName})
+	return server
+}
+
 func TestConnectToBucket(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -147,10 +153,21 @@ func TestConnectToBucket(t *testing.T) {
 			want:   fakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
+		{
+			name: "ConnectSuccessEmptyBucket",
+			config: &bpb.BackintConfiguration{
+				Bucket: "empty-bucket",
+			},
+			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+				return emptyServer("empty-bucket").Client(), nil
+			},
+			want:   emptyServer("empty-bucket").Client().Bucket("empty-bucket"),
+			wantOk: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config.GetServiceAccount(), test.config.GetBucket(), test.config.GetBufferSizeMb())
+			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config.GetServiceAccount(), test.config.GetBucket())
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.IgnoreUnexported(storage.BucketHandle{})); diff != "" {
 				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.config.GetServiceAccount(), test.config.GetBucket(), diff)
 			}
