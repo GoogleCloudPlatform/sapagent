@@ -60,6 +60,7 @@ type (
 		GetProcessList() ([]sapcontrolclient.OSProcess, error)
 		ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error)
 		GetQueueStatistic() ([]sapcontrolclient.TaskHandlerQueue, error)
+		GetEnqLockTable() ([]sapcontrolclient.EnqLock, error)
 	}
 
 	// ProcessStatus has the sap process status.
@@ -415,11 +416,11 @@ func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQ
 	return currentQueueUsage, peakQueueUsage
 }
 
-// EnqGetLockTable parses the output of sapcontrol function EnqGetLockTable.
+// ParseEnqGetLockTable parses the output of sapcontrol function EnqGetLockTable.
 // Returns:
 //   - A slice of EnqLock structs containing lock details.
 //   - Error if sapcontrol fails, nil otherwise.
-func (p *Properties) EnqGetLockTable(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (EnqLocks []*EnqLock, err error) {
+func (p *Properties) ParseEnqGetLockTable(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (EnqLocks []*EnqLock, err error) {
 	const numberOfColumns = 12
 	const (
 		lockName = iota
@@ -486,4 +487,36 @@ func (p *Properties) EnqGetLockTable(ctx context.Context, exec commandlineexecut
 
 	log.Logger.Debugw("EnqLocks successfully parsed", "EnqLocks", EnqLocks)
 	return EnqLocks, nil
+}
+
+// EnqGetLockTable performs the SOAP API request
+// returns
+//   - A slice of EnqLock structs containing lock details
+//   - error if API call fails
+func (p *Properties) EnqGetLockTable(c ClientInterface) ([]*EnqLock, error) {
+	resp, err := c.GetEnqLockTable()
+	log.Logger.Info("EnqGetLockTable API response", resp, err)
+	if err != nil {
+		log.Logger.Debugw("EnqGetLockTable API call failed", log.Error(err))
+		return nil, err
+	}
+	enqLocks := []*EnqLock{}
+	for _, lock := range resp {
+		item := &EnqLock{
+			LockName:         lock.LockName,
+			LockArg:          lock.LockArg,
+			LockMode:         lock.LockMode,
+			Owner:            lock.Owner,
+			OwnerVB:          lock.OwnerVB,
+			UserCountOwner:   lock.UseCountOwner,
+			UserCountOwnerVB: lock.UseCountOwnerVB,
+			Client:           lock.Client,
+			User:             lock.User,
+			Transaction:      lock.Transaction,
+			Object:           lock.Object,
+			Backup:           lock.Backup,
+		}
+		enqLocks = append(enqLocks, item)
+	}
+	return enqLocks, nil
 }

@@ -89,6 +89,33 @@ type (
 		Now  int64  `xml:"Now,omitempty"`
 		High int64  `xml:"High,omitempty"`
 	}
+
+	// GetEnqLockTableRequest struct for EnqGetLockTable soap request body.
+	GetEnqLockTableRequest struct {
+		XMLName xml.Name `xml:"urn:SAPControl EnqGetLockTable"`
+	}
+
+	// GetEnqLockTableResponse struct for EnqGetLockTable soap response body.
+	GetEnqLockTableResponse struct {
+		XMLName  xml.Name  `xml:"SAPControl EnqGetLockTableResponse"`
+		EnqLocks []EnqLock `xml:"lock>item"`
+	}
+
+	// EnqLock struct holds the data about lock details.
+	EnqLock struct {
+		LockName        string `xml:"lock-name,omitempty"`
+		LockArg         string `xml:"lock-arg,omitempty"`
+		LockMode        string `xml:"lock-mode,omitempty"`
+		Owner           string `xml:"owner,omitempty"`
+		OwnerVB         string `xml:"owner-vb,omitempty"`
+		UseCountOwner   int64  `xml:"use-count-owner,omitempty"`
+		UseCountOwnerVB int64  `xml:"use-count-owner-vb,omitempty"`
+		Client          string `xml:"client,omitempty"`
+		User            string `xml:"user,omitempty"`
+		Transaction     string `xml:"transaction,omitempty"`
+		Object          string `xml:"object,omitempty"`
+		Backup          string `xml:"backup,omitempty"`
+	}
 )
 
 // New returns a Client for soap calls supported by all types of sap instances.
@@ -143,4 +170,17 @@ func (c Client) GetQueueStatistic() ([]TaskHandlerQueue, error) {
 	}
 	log.Logger.Debugw("Sapcontrol GetQueueStatistic", "apiResponse", res.Queues)
 	return res.Queues, nil
+}
+
+// GetEnqLockTable  performs EnqGetLockTable soap request.
+// Returns:
+//   - GetEqnLockTable API call response as a list of EnqLock struct.
+//   - Error if Client.call fails, nil otherwise.
+func (c Client) GetEnqLockTable() ([]EnqLock, error) {
+	res := &GetEnqLockTableResponse{}
+	if err := c.call(&GetEnqLockTableRequest{}, res); err != nil {
+		return nil, err
+	}
+	log.Logger.Infow("Sapcontrol GetEnqLockTable", "apiResponse", res.EnqLocks)
+	return res.EnqLocks, nil
 }

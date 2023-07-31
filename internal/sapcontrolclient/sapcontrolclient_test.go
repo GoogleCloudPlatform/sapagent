@@ -60,6 +60,9 @@ var (
 
 	//go:embed testdata/getqueuestatistic/all_queues.xml
 	taskQueueResponse string
+
+	//go:embed testdata/enqgetlocktable/enqgetlocktable_success_response.xml
+	enqLocksResponse string
 )
 
 // NewSapControl returns a new mock for sapcontrol.
@@ -249,6 +252,58 @@ func TestGetQueueStatistic(t *testing.T) {
 
 			if diff := cmp.Diff(test.wantTaskQueues, gotTaskQueues); diff != "" {
 				t.Errorf("GetQueueStatistic() returned unexpected diff (-want +got):\n%v", diff)
+			}
+		})
+	}
+}
+
+func TestGetEnqLockTable(t *testing.T) {
+	tests := []struct {
+		name         string
+		fakeResponse string
+		wantEnqLocks []EnqLock
+		wantErr      error
+	}{
+		{
+			name:         "SuccessEnqLocks",
+			fakeResponse: enqLocksResponse,
+			wantEnqLocks: []EnqLock{
+				EnqLock{
+					LockName:        "USR04",
+					LockArg:         "001SAP*",
+					LockMode:        "E",
+					Owner:           "20230727064138963356000902dnwh75ldbci.....................",
+					OwnerVB:         "20230727064138963356000902dnwh75ldbci.....................",
+					UseCountOwner:   0,
+					UseCountOwnerVB: 1,
+					Client:          "001",
+					User:            "CALM_USER",
+					Transaction:     "SU01",
+					Object:          "E_USR04",
+					Backup:          "false",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name:         "Failure",
+			fakeResponse: faultResponse,
+			wantErr:      cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setupSAPMocks(t, test.fakeResponse)
+			c := setupClient(t)
+			gotEnqLocks, gotErr := c.GetEnqLockTable()
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("GetEnqLockTable(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
+			}
+
+			if diff := cmp.Diff(test.wantEnqLocks, gotEnqLocks); diff != "" {
+				t.Errorf("GetEnqLockTable() returned unexpected diff (-want +got):\n%v", diff)
 			}
 		})
 	}

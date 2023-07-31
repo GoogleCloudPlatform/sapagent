@@ -143,7 +143,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		ArgsToSplit: fmt.Sprintf("-nr %s -function EnqGetLockTable", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics = append(metrics, collectEnqLockMetrics(ctx, p, commandlineexecutor.ExecuteCommand, enqLockParams)...)
+	metrics = append(metrics, collectEnqLockMetrics(ctx, p, commandlineexecutor.ExecuteCommand, enqLockParams, scc)...)
 
 	return metrics
 }
@@ -472,8 +472,7 @@ func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec comm
 }
 
 // collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
-func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
-
+func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	instance := p.SAPInstance.GetInstanceId()
 	if !strings.HasPrefix(instance, "ASCS") && !strings.HasPrefix(instance, "ERS") {
 		log.Logger.Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)
@@ -481,8 +480,14 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
-	enqLocks, error := sc.EnqGetLockTable(ctx, exec, params)
-	if error != nil {
+	var enqLocks []*sapcontrol.EnqLock
+	var err error
+	if p.UseSAPControlAPI {
+		enqLocks, err = sc.EnqGetLockTable(scc)
+	} else {
+		enqLocks, err = sc.ParseEnqGetLockTable(ctx, exec, params)
+	}
+	if err != nil {
 		return nil
 	}
 

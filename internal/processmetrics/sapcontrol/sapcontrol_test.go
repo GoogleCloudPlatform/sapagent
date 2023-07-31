@@ -575,7 +575,7 @@ func TestGetQueueStatistic(t *testing.T) {
 	}
 }
 
-func TestEnqGetLockTable(t *testing.T) {
+func TestParseEnqGetLockTable(t *testing.T) {
 	tests := []struct {
 		name         string
 		fakeExec     commandlineexecutor.Execute
@@ -682,13 +682,72 @@ func TestEnqGetLockTable(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := Properties{}
-			gotEnqList, gotErr := p.EnqGetLockTable(context.Background(), test.fakeExec, commandlineexecutor.Params{})
+			gotEnqList, gotErr := p.ParseEnqGetLockTable(context.Background(), test.fakeExec, commandlineexecutor.Params{})
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("EnqGetLockTable(%v)=%v, want: %v.", test.fakeExec, gotErr, test.wantErr)
 			}
 			if diff := cmp.Diff(test.wantEnqLocks, gotEnqList); diff != "" {
 				t.Errorf("EnqGetLockTable(%v) mismatch, diff (-want, +got): %v", test.fakeExec, diff)
+			}
+		})
+	}
+}
+
+func TestEnqGetLockTable(t *testing.T) {
+	tests := []struct {
+		name    string
+		c       ClientInterface
+		want    []*EnqLock
+		wantErr error
+	}{
+		{
+			name: "Success",
+			c: sapcontrolclienttest.Fake{
+				EnqLocks: []sapcontrolclient.EnqLock{
+					{
+						LockName:        "USR04",
+						LockArg:         "001BASIS",
+						LockMode:        "E",
+						Owner:           "20230509120639629460000602dnwh75ldbci.....................",
+						OwnerVB:         "20230509120639629460000602dnwh75ldbci.....................",
+						UseCountOwnerVB: 1,
+					},
+				},
+				ErrEnqGetLockTable: nil,
+			},
+			want: []*EnqLock{
+				{
+					LockName:         "USR04",
+					LockArg:          "001BASIS",
+					LockMode:         "E",
+					Owner:            "20230509120639629460000602dnwh75ldbci.....................",
+					OwnerVB:          "20230509120639629460000602dnwh75ldbci.....................",
+					UserCountOwnerVB: 1,
+				}},
+			wantErr: nil,
+		},
+		{
+			name: "Error",
+			c: sapcontrolclienttest.Fake{
+				ErrEnqGetLockTable: cmpopts.AnyError,
+				EnqLocks:           nil,
+			},
+			want:    nil,
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var p Properties
+			got, err := p.EnqGetLockTable(tc.c)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("EnqGetLockTable(%v)=%v, want %v", tc.c, err, tc.wantErr)
+			}
+
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("EnqGetLockTable(%v) returned an unexpected diff (-want +got): %v", tc.c, diff)
 			}
 		})
 	}

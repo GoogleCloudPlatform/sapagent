@@ -24,10 +24,12 @@ type Fake struct {
 	Processes     []sapcontrolclient.OSProcess
 	WorkProcesses []sapcontrolclient.WorkProcess
 	TaskQueues    []sapcontrolclient.TaskHandlerQueue
+	EnqLocks      []sapcontrolclient.EnqLock
 
 	ErrGetProcessList    error
 	ErrABAPGetWPTable    error
 	ErrGetQueueStatistic error
+	ErrEnqGetLockTable   error
 }
 
 // GetProcessList a mock that returns map describing the statuses of SAP processes.
@@ -43,4 +45,9 @@ func (c Fake) ABAPGetWPTable() ([]sapcontrolclient.WorkProcess, error) {
 // GetQueueStatistic is a fake implementation of sapcontrol package GetQueueStatistic method.
 func (c Fake) GetQueueStatistic() ([]sapcontrolclient.TaskHandlerQueue, error) {
 	return c.TaskQueues, c.ErrGetQueueStatistic
+}
+
+// GetEnqLockTable is a fake implementation of sapcontrol package EnqGetLockTable method.
+func (c Fake) GetEnqLockTable() ([]sapcontrolclient.EnqLock, error) {
+	return c.EnqLocks, c.ErrEnqGetLockTable
 }

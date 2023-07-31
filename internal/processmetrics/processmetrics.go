@@ -218,7 +218,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				},
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				UseSAPControlAPI: mainUseSAPControlAPI,
-				LastValue: make(map[string]*process.IOCountersStat),
+				LastValue:        make(map[string]*process.IOCountersStat),
 			}
 
 			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
@@ -252,7 +252,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				},
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				UseSAPControlAPI: mainUseSAPControlAPI,
-				LastValue: make(map[string]*process.IOCountersStat),
+				LastValue:        make(map[string]*process.IOCountersStat),
 			}
 
 			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)

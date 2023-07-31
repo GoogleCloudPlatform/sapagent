@@ -916,6 +916,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 		name            string
 		props           *InstanceProperties
 		fakeExec        commandlineexecutor.Execute
+		fakeClient      sapcontrolclienttest.Fake
 		wantMetricCount int
 	}{
 		{
@@ -971,10 +972,63 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 			},
 			wantMetricCount: 1,
 		},
+		{
+			name: "UseGetEnqLockTableAPISuccess",
+			props: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					InstanceId: "ERS01",
+				},
+				UseSAPControlAPI: true,
+			},
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
+				}
+			},
+			fakeClient: sapcontrolclienttest.Fake{
+				EnqLocks: []sapcontrolclient.EnqLock{
+					sapcontrolclient.EnqLock{
+						LockName:        "USR04",
+						LockArg:         "000DDIC",
+						LockMode:        "E",
+						Owner:           "dnwh75ldbci",
+						OwnerVB:         "dnwh75ldbci",
+						UseCountOwner:   1,
+						UseCountOwnerVB: 1,
+						Client:          "000",
+						User:            "SAP*",
+						Transaction:     "SU01",
+						Object:          "E_USR04",
+						Backup:          "FALSE",
+					},
+				},
+			},
+			wantMetricCount: 1,
+		},
+		{
+			name: "UseGetEnqLockTableAPIError",
+			props: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					InstanceId: "ERS01",
+				},
+				UseSAPControlAPI: true,
+			},
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
+				}
+			},
+			fakeClient: sapcontrolclienttest.Fake{
+				ErrEnqGetLockTable: cmpopts.AnyError,
+			},
+			wantMetricCount: 0,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectEnqLockMetrics(context.Background(), test.props, test.fakeExec, commandlineexecutor.Params{})
+			got := collectEnqLockMetrics(context.Background(), test.props, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectEnqLockMetrics()=%d, want: %d.", len(got), test.wantMetricCount)
