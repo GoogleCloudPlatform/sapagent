@@ -33,6 +33,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 )
@@ -326,10 +327,32 @@ func TestExecuteForSOSReport(t *testing.T) {
 				"test2",
 			},
 		},
+		{
+			name: "SuccessForAgentVersion",
+			sosr: &SupportBundle{
+				version: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
+		{
+			name: "SuccessForHelp",
+			sosr: &SupportBundle{
+				help: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.sosr.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := test.sosr.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.sosr, test.args, got, test.want)
 			}

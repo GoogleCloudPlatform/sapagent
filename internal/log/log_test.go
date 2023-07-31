@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	logging "cloud.google.com/go/logging"
+	"github.com/google/go-cmp/cmp"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -50,6 +51,49 @@ func TestSetupLoggingForTest(t *testing.T) {
 	got = GetLogFile()
 	if got != wantLogFile {
 		t.Errorf("TestSetupLoggingForTest() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
+	}
+}
+
+func TestLogLevelStringToZapcore(t *testing.T) {
+	tests := []struct {
+		name  string
+		level string
+		want  zapcore.Level
+	}{
+		{
+			name:  "info",
+			level: "info",
+			want:  zapcore.InfoLevel,
+		},
+		{
+			name:  "error",
+			level: "error",
+			want:  zapcore.ErrorLevel,
+		},
+		{
+			name:  "warn",
+			level: "warn",
+			want:  zapcore.WarnLevel,
+		},
+		{
+			name:  "debug",
+			level: "debug",
+			want:  zapcore.DebugLevel,
+		},
+		{
+			name:  "unknown",
+			level: "unknown",
+			want:  zapcore.InfoLevel,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := StringLevelToZapcore(tc.level)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("LogLevelStringToZapcore(%v) returned an unexpected diff (-want +got): %v", tc.level, diff)
+			}
+		})
 	}
 }
 

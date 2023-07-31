@@ -58,8 +58,8 @@ func TestLogUsageHandler(t *testing.T) {
 		{
 			name: "AgentUpdatedWithEmptyPriorVersion",
 			logUsage: &LogUsage{
-				status:       "UPDATED",
-				priorVersion: "",
+				status:            "UPDATED",
+				agentPriorVersion: "",
 			},
 			want: subcommands.ExitUsageError,
 		},
@@ -238,10 +238,38 @@ func TestExecuteLogUsage(t *testing.T) {
 				&ipb.CloudProperties{},
 			},
 		},
+		{
+			name: "SuccessForAgentVersion",
+			logUsage: &LogUsage{
+				status:  "ACTION",
+				action:  1,
+				version: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "SuccessForHelp",
+			logUsage: &LogUsage{
+				status: "ACTION",
+				action: 1,
+				help:   true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.logUsage.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := test.logUsage.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.logUsage, test.args, got, test.want)
 			}
@@ -254,7 +282,7 @@ func TestSetFlagsLogUsage(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	l.SetFlags(fs)
 
-	flags := []string{"name", "n", "version", "v", "prior-version", "pv", "status", "s", "action", "a", "error", "e"}
+	flags := []string{"name", "n", "agentVersion", "av", "prior-version", "pv", "status", "s", "action", "a", "error", "e", "v", "h", "loglevel"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {

@@ -35,6 +35,7 @@ var invalidCollectionDefinition []byte
 func TestExecuteValidate(t *testing.T) {
 	tests := []struct {
 		name string
+		v    Validate
 		args []any
 		want subcommands.ExitStatus
 	}{
@@ -53,12 +54,28 @@ func TestExecuteValidate(t *testing.T) {
 			args: []any{"test", log.Parameters{}},
 			want: subcommands.ExitSuccess,
 		},
+		{
+			name: "SuccessForAgentVersion",
+			v: Validate{
+				version: true,
+			},
+			args: []any{"test", log.Parameters{}},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessForHelp",
+			v: Validate{
+				help: true,
+			},
+			args: []any{"test", log.Parameters{}},
+			want: subcommands.ExitSuccess,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			validate := Validate{}
-			got := validate.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := validate.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v)=%v, want %v", test.args, got, test.want)
 			}

@@ -61,40 +61,16 @@ func TestSynopsis(t *testing.T) {
 }
 
 func TestSetFlags(t *testing.T) {
-	tests := []struct {
-		name    string
-		mm      Mode
-		pattern string
-		fs      *flag.FlagSet
-	}{
-		{
-			name:    "HasSidFlag",
-			mm:      Mode{},
-			pattern: "sid",
-			fs:      flag.NewFlagSet("sid", flag.ExitOnError),
-		},
-		{
-			name:    "HasEnableFlag",
-			mm:      Mode{},
-			pattern: "enable",
-			fs:      flag.NewFlagSet("enable", flag.ExitOnError),
-		},
-		{
-			name:    "HasShowFlag",
-			mm:      Mode{},
-			pattern: "show",
-			fs:      flag.NewFlagSet("show", flag.ExitOnError),
-		},
-	}
+	m := &Mode{}
+	fs := flag.NewFlagSet("flags", flag.ExitOnError)
+	m.SetFlags(fs)
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.mm.SetFlags(test.fs)
-			got := test.fs.Lookup(test.pattern)
-			if got == nil {
-				t.Errorf("SetupFlags(%v) flag not found %s", test.fs, test.pattern)
-			}
-		})
+	flags := []string{"sid", "enable", "show", "v", "h", "loglevel"}
+	for _, flag := range flags {
+		got := fs.Lookup(flag)
+		if got == nil {
+			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
+		}
 	}
 }
 
@@ -127,10 +103,28 @@ func TestExecuteMaintenance(t *testing.T) {
 				log.Parameters{},
 			},
 		},
+		{
+			name: "SuccessForAgentVersion",
+			mm:   Mode{version: true},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
+		{
+			name: "SuccessForHelp",
+			mm:   Mode{help: true},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.mm.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := test.mm.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.mm, test.args, got, test.want)
 			}

@@ -19,6 +19,7 @@ package onetime
 import (
 	"testing"
 
+	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 )
 
@@ -52,7 +53,7 @@ func TestSetupOneTimeLogging(t *testing.T) {
 				OSType:     test.os,
 				Level:      2,
 			}
-			gotparams := SetupOneTimeLogging(lp, test.subCommandName)
+			gotparams := SetupOneTimeLogging(lp, test.subCommandName, zapcore.ErrorLevel)
 			if gotparams.CloudLogName != test.wantcloudlogname {
 				t.Errorf("SetupOneTimeLogging(%s,%s) cloudlogname is incorrect, got: %s, want: %s", test.os, test.subCommandName, gotparams.CloudLogName, test.wantcloudlogname)
 			}

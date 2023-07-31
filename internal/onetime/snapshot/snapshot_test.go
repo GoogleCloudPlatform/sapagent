@@ -131,10 +131,34 @@ func TestExecuteSnapshot(t *testing.T) {
 				&ipb.CloudProperties{},
 			},
 		},
+		{
+			name: "SuccessForAgentVersion",
+			snapshot: Snapshot{
+				help: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "SuccessForHelp",
+			snapshot: Snapshot{
+				help: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := test.snapshot.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.snapshot, test.args, got, test.want)
 			}

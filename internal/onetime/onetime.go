@@ -21,6 +21,7 @@ package onetime
 import (
 	"context"
 
+	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -69,11 +70,12 @@ func LogMessageToFileAndConsole(msg string) {
 }
 
 // SetupOneTimeLogging creates logging config for the agent's one time execution.
-func SetupOneTimeLogging(params log.Parameters, subcommandName string) log.Parameters {
+func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zapcore.Level) log.Parameters {
 	prefix := LinuxOneTimeLogPrefix
 	if params.OSType == "windows" {
 		prefix = WindowsOneTimeLogPrefix
 	}
+	params.Level = level
 	params.LogFileName = prefix + subcommandName + ".log"
 	params.CloudLogName = "google-cloud-sap-agent-" + subcommandName
 	log.SetupLogging(params)

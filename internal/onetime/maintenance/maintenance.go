@@ -24,6 +24,7 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
@@ -31,8 +32,9 @@ import (
 
 // Mode has args for maintenance subcommands.
 type Mode struct {
-	sid          string
-	enable, show bool
+	sid                         string
+	enable, show, help, version bool
+	logLevel                    string
 }
 
 // Name implements the subcommand interface for maintenance.
@@ -43,7 +45,7 @@ func (*Mode) Synopsis() string { return "configure maintenance mode" }
 
 // Usage implements the subcommand interface for maintenance.
 func (*Mode) Usage() string {
-	return "maintenance [-enable=true|false -sid=<SAP System Identifier>] [show]\n"
+	return "maintenance [-enable=true|false -sid=<SAP System Identifier>] [show] [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
 }
 
 // SetFlags implements the subcommand interface for maintenance.
@@ -51,6 +53,9 @@ func (m *Mode) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&m.sid, "sid", "", "SAP System Identifier")
 	fs.BoolVar(&m.enable, "enable", false, "Enable maintenance mode for SID")
 	fs.BoolVar(&m.show, "show", false, "Show maintenance mode status")
+	fs.BoolVar(&m.help, "h", false, "Display help")
+	fs.BoolVar(&m.version, "v", false, "Display the version of the agent")
+	fs.StringVar(&m.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
 
 // Execute implements the subcommand interface for maintenance.
@@ -64,7 +69,15 @@ func (m *Mode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcom
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	onetime.SetupOneTimeLogging(lp, m.Name())
+	if m.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
+	}
+	if m.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	onetime.SetupOneTimeLogging(lp, m.Name(), log.StringLevelToZapcore(m.logLevel))
 	return m.maintenanceModeHandler(f, maintenance.ModeReader{}, maintenance.ModeWriter{})
 }
 

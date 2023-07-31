@@ -20,6 +20,7 @@ package migratehanamonitoring
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -43,7 +44,10 @@ const (
 )
 
 // MigrateHANAMonitoring is a struct which implements subcommands interface.
-type MigrateHANAMonitoring struct{}
+type MigrateHANAMonitoring struct {
+	help, version bool
+	logLevel      string
+}
 
 // Name implements the subcommand interface for migrating HANA Monitoring Agent.
 func (*MigrateHANAMonitoring) Name() string { return "migratehma" }
@@ -55,11 +59,15 @@ func (*MigrateHANAMonitoring) Synopsis() string {
 
 // Usage implements the subcommand interface for migrating hana monitoring agent.
 func (*MigrateHANAMonitoring) Usage() string {
-	return "migratehma"
+	return "migratehma [-h] [-v] [-loglevel]=<debug|info|warn|error>"
 }
 
 // SetFlags implements the subcommand interface for migrating hana monitoring agent.
-func (*MigrateHANAMonitoring) SetFlags(f *flag.FlagSet) {}
+func (m *MigrateHANAMonitoring) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&m.help, "h", false, "Displays help")
+	f.BoolVar(&m.version, "v", false, "Display the version of the agent")
+	f.StringVar(&m.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+}
 
 // Execute implements the subcommand interface for Migrating HANA Monitoring Agent.
 func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
@@ -72,7 +80,15 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	onetime.SetupOneTimeLogging(lp, m.Name())
+	if m.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	if m.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
+	}
+	onetime.SetupOneTimeLogging(lp, m.Name(), log.StringLevelToZapcore(m.logLevel))
 	return m.migrationHandler(f, os.ReadFile, os.WriteFile)
 }
 

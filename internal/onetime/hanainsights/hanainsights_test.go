@@ -61,10 +61,34 @@ func TestExecuteHANAInsights(t *testing.T) {
 				&ipb.CloudProperties{},
 			},
 		},
+		{
+			name: "SuccessForAgentVersion",
+			hanainsights: HANAInsights{
+				version: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "SuccessForHelp",
+			hanainsights: HANAInsights{
+				help: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.hanainsights.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := test.hanainsights.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.hanainsights, test.args, got, test.want)
 			}

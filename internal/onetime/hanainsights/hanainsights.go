@@ -26,6 +26,7 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
@@ -41,6 +42,8 @@ type HANAInsights struct {
 	gceService                     onetime.GCEInterface
 	status                         bool
 	db                             *sql.DB
+	help, version                  bool
+	logLevel                       string
 }
 
 // Name implements the subcommand interface for hanainsights.
@@ -52,7 +55,7 @@ func (*HANAInsights) Synopsis() string { return "invoke HANA local insights work
 // Usage implements the subcommand interface for hanainsights.
 func (*HANAInsights) Usage() string {
 	return `hanainsights -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
-	[-password=<passwd> | -password-secret=<secret-name>]`
+	[-password=<passwd> | -password-secret=<secret-name>] [-v] [-h] [-loglevel=<debug|info|warn|error>]`
 }
 
 // SetFlags implements the subcommand interface for hanainsights.
@@ -63,7 +66,10 @@ func (h *HANAInsights) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&h.sid, "sid", "", "HANA SID. (required)")
 	fs.StringVar(&h.user, "user", "", "HANA username. (required)")
 	fs.StringVar(&h.password, "password", "", "HANA password. (discouraged - use password-secret instead)")
-	fs.StringVar(&h.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA Password.")
+	fs.StringVar(&h.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA Password")
+	fs.BoolVar(&h.help, "h", false, "Display help")
+	fs.BoolVar(&h.version, "v", false, "Display agent version")
+	fs.StringVar(&h.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
 
 // Execute implements the subcommand interface for hanainsights.
@@ -77,7 +83,15 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	onetime.SetupOneTimeLogging(lp, h.Name())
+	if h.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
+	}
+	if h.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	onetime.SetupOneTimeLogging(lp, h.Name(), log.StringLevelToZapcore(h.logLevel))
 
 	return h.hanaInsightsHandler(ctx, gce.NewGCEClient)
 }

@@ -35,8 +35,10 @@ import (
 
 // LogUsage has args for logusage subcommands.
 type LogUsage struct {
-	name, version, priorVersion, status string
-	action, usageError                  int
+	name, agentVersion, agentPriorVersion, status string
+	action, usageError                            int
+	help, version                                 bool
+	logLevel                                      string
 }
 
 // Name implements the subcommand interface for logusage.
@@ -47,23 +49,26 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 
 // Usage implements the subcommand interface for logusage.
 func (*LogUsage) Usage() string {
-	return "logusage [-name <tool or agent name>] [-version tool or agent version] [-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]\n"
+	return "logusage [-name <tool or agent name>] [-av tool or agent version] [-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>] [-v] [-h] [-loglevel=<debug|info|warn|error>]\n"
 }
 
 // SetFlags implements the subcommand interface for logusage.
 func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&l.name, "name", configuration.AgentName, "Agent or Tool  name")
 	fs.StringVar(&l.name, "n", configuration.AgentName, "Agent or Tool  name")
-	fs.StringVar(&l.version, "version", configuration.AgentVersion, "Agent or Tool version")
-	fs.StringVar(&l.version, "v", configuration.AgentVersion, "Agent or Tool version")
-	fs.StringVar(&l.priorVersion, "prior-version", "", "prior installed version")
-	fs.StringVar(&l.priorVersion, "pv", "", "prior installed version")
+	fs.StringVar(&l.agentVersion, "agentVersion", configuration.AgentVersion, "Agent or Tool version")
+	fs.StringVar(&l.agentVersion, "av", configuration.AgentVersion, "Agent or Tool version")
+	fs.StringVar(&l.agentPriorVersion, "prior-version", "", "prior installed version")
+	fs.StringVar(&l.agentPriorVersion, "pv", "", "prior installed version")
 	fs.StringVar(&l.status, "status", "", "usage status value")
 	fs.StringVar(&l.status, "s", "", "usage status value")
 	fs.IntVar(&l.action, "action", 0, "usage action code")
 	fs.IntVar(&l.action, "a", 0, "usage action code")
 	fs.IntVar(&l.usageError, "error", 0, "usage error code")
 	fs.IntVar(&l.usageError, "e", 0, "usage error code")
+	fs.BoolVar(&l.help, "h", false, "help")
+	fs.BoolVar(&l.version, "v", false, "Displays the current version of the agent")
+	fs.StringVar(&l.logLevel, "loglevel", "", "Sets the logging level for a log file")
 }
 
 // Execute implements the subcommand interface for logusage.
@@ -82,7 +87,15 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
-	onetime.SetupOneTimeLogging(lp, l.Name())
+	if l.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	if l.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
+	}
+	onetime.SetupOneTimeLogging(lp, l.Name(), log.StringLevelToZapcore(l.logLevel))
 	return l.logUsageHandler(cloudProps)
 }
 
@@ -91,7 +104,7 @@ func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands
 	case l.status == "":
 		log.Print("A usage status value is required.")
 		return subcommands.ExitUsageError
-	case l.status == string(usagemetrics.StatusUpdated) && l.priorVersion == "":
+	case l.status == string(usagemetrics.StatusUpdated) && l.agentPriorVersion == "":
 		log.Print("Prior agent version is required.")
 		return subcommands.ExitUsageError
 	case l.status == string(usagemetrics.StatusError) && l.usageError <= 0:
@@ -111,7 +124,7 @@ func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands
 
 // logUsageStatus makes a call to the appropriate usage metrics API.
 func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
-	configureUsageMetricsForOTE(cloudProps, l.name, l.priorVersion)
+	configureUsageMetricsForOTE(cloudProps, l.name, l.agentPriorVersion)
 	switch usagemetrics.Status(l.status) {
 	case usagemetrics.StatusRunning:
 		usagemetrics.Running()

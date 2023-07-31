@@ -45,6 +45,7 @@ import (
 // RemoteValidation has args for remote subcommands.
 type RemoteValidation struct {
 	project, instanceid, instancename, zone string
+	help, version                           bool
 }
 
 // Name implements the subcommand interface for remote.
@@ -57,7 +58,7 @@ func (*RemoteValidation) Synopsis() string {
 
 // Usage implements the subcommand interface for remote.
 func (*RemoteValidation) Usage() string {
-	return `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone>\n`
+	return `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n`
 }
 
 // SetFlags implements the subcommand interface for remote.
@@ -70,6 +71,8 @@ func (r *RemoteValidation) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.instancename, "name", "", "instance name of this instance")
 	fs.StringVar(&r.zone, "z", "", "zone of this instance")
 	fs.StringVar(&r.zone, "zone", "", "zone of this instance")
+	fs.BoolVar(&r.help, "h", false, "Display help")
+	fs.BoolVar(&r.version, "v", false, "Display the current version of the agent")
 }
 
 // Execute implements the subcommand interface for remote.
@@ -78,6 +81,14 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	if err != nil {
 		log.Print(fmt.Sprintf("ERROR: Failed to create GCE service: %v", err))
 		return subcommands.ExitFailure
+	}
+	if r.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	if r.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
 	}
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{runtime.GOOS}, gceService)
 	log.SetupLoggingToDiscard()

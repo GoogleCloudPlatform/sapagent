@@ -46,6 +46,7 @@ type Backint struct {
 	backupID, backupLevel      string
 	count                      int64
 	version, help              bool
+	logLevel                   string
 }
 
 // Name implements the subcommand interface for backint.
@@ -57,9 +58,9 @@ func (*Backint) Synopsis() string { return "backup, restore, inquire, or delete 
 // Usage implements the subcommand interface for backint.
 func (*Backint) Usage() string {
 	return `backint -function=<backup|restore|inquire|delete|diagnose>
-	-paramfile=<path-to-file> [-v] [-user=<DBNAME@SID>] [-input=<path-to-file>]
+	-paramfile=<path-to-file> [-v] [-h] [-user=<DBNAME@SID>] [-input=<path-to-file>]
 	[-output=<path-to-file>] [-backupid=<database-backup-id>] [-count=<number-of-objects>]
-	[-level=<backup-level>]
+	[-level=<backup-level>] [-loglevel=<debug|info|warn|error>]
 `
 }
 
@@ -83,6 +84,7 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&b.backupLevel, "l", "", "The type of backup, only usable if the function (-f) is backup")
 	fs.BoolVar(&b.version, "v", false, "Display the version of the agent")
 	fs.BoolVar(&b.help, "h", false, "Display help")
+	fs.StringVar(&b.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
 
 // Execute implements the subcommand interface for backint.
@@ -107,7 +109,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", ac.AgentVersion))
 		return subcommands.ExitSuccess
 	}
-	onetime.SetupOneTimeLogging(lp, b.Name())
+	onetime.SetupOneTimeLogging(lp, b.Name(), log.StringLevelToZapcore(b.logLevel))
 
 	return b.backintHandler(ctx, lp, s.NewClient)
 }
@@ -129,8 +131,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 		return subcommands.ExitUsageError
 	}
 	log.Logger.Debugw("Args parsed and config validated", "config", config)
-	lp.Level = configuration.LogLevelToZapcore(config.GetLogLevel())
-	onetime.SetupOneTimeLogging(lp, b.Name())
+	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
 
 	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket(), config.GetParallelStreams())
 	if !ok {

@@ -135,6 +135,24 @@ func SetupLogging(params Parameters) {
 	Logger = coreLogger.Sugar()
 }
 
+// StringLevelToZapcore returns the equivalent of the string log level. It defaults to info level
+// in case unknown log level is identified.
+func StringLevelToZapcore(level string) zapcore.Level {
+	switch level {
+	case "debug":
+		return zapcore.DebugLevel
+	case "info":
+		return zapcore.InfoLevel
+	case "warn":
+		return zapcore.WarnLevel
+	case "error":
+		return zapcore.ErrorLevel
+	default:
+		Logger.Warnw("Unsupported log level, defaulting to info", "level", level)
+		return zapcore.InfoLevel
+	}
+}
+
 // SetupLoggingForTest creates the Logger to log to the console during unit tests.
 func SetupLoggingForTest() {
 	logger, _ := zap.NewDevelopment()

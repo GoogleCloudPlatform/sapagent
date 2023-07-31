@@ -80,6 +80,8 @@ type Snapshot struct {
 	status            bool
 	timeSeriesCreator cloudmonitoring.TimeSeriesCreator
 	cloudProps        *ipb.CloudProperties
+	help, version     bool
+	logLevel          string
 }
 
 // Name implements the subcommand interface for snapshot.
@@ -92,6 +94,7 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snaps
 func (*Snapshot) Usage() string {
 	return `snapshot -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
 	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-password=<passwd> | -password-secret=<secret-name>]
+	[-h] [-v] [loglevel]=<debug|info|warn|error>
 	`
 }
 
@@ -113,6 +116,9 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.csekKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
 	fs.StringVar(&s.description, "snapshot-description", "", "Description of the new snapshot(optional)")
 	fs.BoolVar(&s.sendToMonitoring, "send-status-to-monitoring", true, "Send the execution status to cloud monitoring as a metric")
+	fs.BoolVar(&s.help, "h", false, "Displays help")
+	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
+	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
 // Execute implements the subcommand interface for snapshot.
@@ -131,7 +137,15 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
-	onetime.SetupOneTimeLogging(lp, s.Name())
+	if s.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	if s.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
+	}
+	onetime.SetupOneTimeLogging(lp, s.Name(), log.StringLevelToZapcore(s.logLevel))
 
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {

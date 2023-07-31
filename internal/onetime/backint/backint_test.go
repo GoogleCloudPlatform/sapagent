@@ -111,7 +111,7 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForVersion",
+			name: "SuccessForAgentVersion",
 			backint: &Backint{
 				version: true,
 			},
@@ -204,7 +204,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	b.SetFlags(fs)
 
-	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l", "v", "h"}
+	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l", "v", "h", "loglevel"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {

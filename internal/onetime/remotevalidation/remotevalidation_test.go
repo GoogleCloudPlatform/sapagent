@@ -85,6 +85,28 @@ func TestRemoteValidationHandler(t *testing.T) {
 			want: subcommands.ExitFailure,
 		},
 		{
+			name: "SuccessForAgentVersion",
+			remote: &RemoteValidation{
+				project:    "project-1",
+				instanceid: "instance-1",
+				zone:       "zone-1",
+				version:    true,
+			},
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessForHelp",
+			remote: &RemoteValidation{
+				project:    "project-1",
+				instanceid: "instance-1",
+				zone:       "zone-1",
+				help:       true,
+			},
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitSuccess,
+		},
+		{
 			name: "Success",
 			remote: &RemoteValidation{
 				project:    "project-1",
@@ -106,7 +128,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 }
 
 func TestUsageForRemoteValidation(t *testing.T) {
-	want := `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone>\n`
+	want := `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n`
 	rv := RemoteValidation{}
 	got := rv.Usage()
 	if got != want {

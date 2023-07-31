@@ -137,10 +137,32 @@ func TestExecuteMigrateHANAMonitoring(t *testing.T) {
 				log.Parameters{},
 			},
 		},
+		{
+			name: "SuccessForAgentVersion",
+			migrate: MigrateHANAMonitoring{
+				version: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
+		{
+			name: "SuccessForHelp",
+			migrate: MigrateHANAMonitoring{
+				help: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.migrate.Execute(context.Background(), &flag.FlagSet{}, test.args...)
+			got := test.migrate.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.migrate, test.args, got, test.want)
 			}

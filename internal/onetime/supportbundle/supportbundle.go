@@ -36,6 +36,7 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
@@ -50,6 +51,8 @@ type (
 		instanceNumsAfterSplit []string
 		hostname               string
 		pacemakerDiagnosis     bool
+		help, version          bool
+		logLevel               string
 	}
 
 	fileSystemHelper struct{}
@@ -194,7 +197,7 @@ func (*SupportBundle) Synopsis() string {
 
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
-	return `supportbundle [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>]
+	return `supportbundle [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>] [-h] [-v] [-loglevel]=<debug|info|warn|error>
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"
 	`
 }
@@ -205,6 +208,9 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.instanceNums, "instance-numbers", "", "Instance numbers")
 	fs.StringVar(&s.hostname, "hostname", "", "Hostname")
 	fs.BoolVar(&s.pacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
+	fs.BoolVar(&s.help, "h", false, "Displays help")
+	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
+	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
 
 // Execute implements the subcommand interface for support bundle report collection.
@@ -218,7 +224,15 @@ func (s *SupportBundle) Execute(ctx context.Context, fs *flag.FlagSet, args ...a
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	onetime.SetupOneTimeLogging(lp, s.Name())
+	if s.help {
+		fs.Usage()
+		return subcommands.ExitSuccess
+	}
+	if s.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
+	}
+	onetime.SetupOneTimeLogging(lp, s.Name(), log.StringLevelToZapcore(s.logLevel))
 	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})
 }
 

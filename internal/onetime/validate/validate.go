@@ -19,6 +19,7 @@ package validate
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"flag"
@@ -32,6 +33,8 @@ import (
 // Validate implements the subcommand interface.
 type Validate struct {
 	workloadCollection string
+	help, version      bool
+	logLevel           string
 }
 
 // Name returns the name of the command.
@@ -42,13 +45,16 @@ func (*Validate) Synopsis() string { return "validate an Agent for SAP configura
 
 // Usage returns a long string explaining the command and giving usage information.
 func (*Validate) Usage() string {
-	return "validate [-workloadcollection <filename>]\n"
+	return "validate [-workloadcollection <filename>] [-h] [-v] [-loglevel]=<debug|info|warn|error>\n"
 }
 
 // SetFlags adds the flags for this command to the specified set.
 func (v *Validate) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&v.workloadCollection, "workloadcollection", "", "workload collection filename")
 	fs.StringVar(&v.workloadCollection, "wc", "", "workload collection filename")
+	fs.BoolVar(&v.help, "h", false, "Displays help")
+	fs.BoolVar(&v.version, "v", false, "Displays the current version of the agent")
+	fs.StringVar(&v.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
 
 // Execute executes the command and returns an ExitStatus.
@@ -62,7 +68,15 @@ func (v *Validate) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
-	onetime.SetupOneTimeLogging(lp, v.Name())
+	if v.help {
+		f.Usage()
+		return subcommands.ExitSuccess
+	}
+	if v.version {
+		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		return subcommands.ExitSuccess
+	}
+	onetime.SetupOneTimeLogging(lp, v.Name(), log.StringLevelToZapcore(v.logLevel))
 	return v.validateHandler()
 }
 
