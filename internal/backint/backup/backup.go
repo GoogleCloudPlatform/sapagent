@@ -177,6 +177,8 @@ func backupFile(ctx context.Context, p parameters) string {
 		Compress:       p.config.GetCompress(),
 		DumpData:       p.config.GetDumpData(),
 		RateLimitBytes: p.config.GetRateLimitMb() * 1024 * 1024,
+		EncryptionKey:  p.config.GetEncryptionKey(),
+		KMSKey:         p.config.GetKmsKey(),
 		// Match the previous Backint implementation's metadata format.
 		Metadata: map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
 	}

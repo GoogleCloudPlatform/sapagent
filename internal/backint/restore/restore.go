@@ -159,6 +159,8 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		TotalBytes:     object.Size,
 		LogDelay:       time.Duration(config.GetLogDelaySec()) * time.Second,
 		RateLimitBytes: config.GetRateLimitMb() * 1024 * 1024,
+		EncryptionKey:  config.GetEncryptionKey(),
+		KMSKey:         config.GetKmsKey(),
 	}
 	bytesWritten, err := rw.Download(ctx)
 	if err != nil {

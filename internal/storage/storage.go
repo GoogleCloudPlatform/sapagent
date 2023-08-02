@@ -93,6 +93,16 @@ type ReadWriter struct {
 	// Downloads will decompress automatically based on the file's content type.
 	Compress bool
 
+	// EncryptionKey enables customer-supplied server side encryption with a
+	// base64 encoded AES-256 key string.
+	// Providing both EncryptionKey and KMSKey will result in an error.
+	EncryptionKey string
+
+	// KMSKey enables customer-managed server side encryption with a cloud
+	// key management service encryption key.
+	// Providing both EncryptionKey and KMSKey will result in an error.
+	KMSKey string
+
 	// DumpData discards bytes during upload rather than write to the bucket.
 	DumpData bool
 
@@ -146,11 +156,19 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	}
 
 	var writer io.WriteCloser
+	if rw.EncryptionKey != "" || rw.KMSKey != "" {
+		log.Logger.Infow("Encryption enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName, "encryptionKey", rw.EncryptionKey, "kmsKey", rw.KMSKey)
+	}
 	if rw.DumpData {
 		log.Logger.Warnw("dump_data set to true, discarding data during upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		writer = discardCloser{}
 	} else {
-		objectWriter := rw.BucketHandle.Object(rw.ObjectName).NewWriter(ctx)
+		object := rw.BucketHandle.Object(rw.ObjectName)
+		if rw.EncryptionKey != "" {
+			object = object.Key([]byte(rw.EncryptionKey))
+		}
+		objectWriter := object.NewWriter(ctx)
+		objectWriter.KMSKeyName = rw.KMSKey
 		objectWriter.ChunkSize = int(rw.ChunkSizeMb) * 1024 * 1024
 		objectWriter.Metadata = rw.Metadata
 		if rw.Compress {
@@ -211,7 +229,14 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		return 0, errors.New("no bucket defined")
 	}
 
-	reader, err := rw.BucketHandle.Object(rw.ObjectName).NewReader(ctx)
+	if rw.EncryptionKey != "" || rw.KMSKey != "" {
+		log.Logger.Infow("Decryption enabled for download", "bucket", rw.BucketName, "object", rw.ObjectName)
+	}
+	object := rw.BucketHandle.Object(rw.ObjectName)
+	if rw.EncryptionKey != "" {
+		object = object.Key([]byte(rw.EncryptionKey))
+	}
+	reader, err := object.NewReader(ctx)
 	if err != nil {
 		return 0, err
 	}
