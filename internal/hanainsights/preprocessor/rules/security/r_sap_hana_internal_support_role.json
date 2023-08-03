@@ -1,6 +1,6 @@
 {
   "id": "r_sap_hana_internal_support_role",
-  "description": "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
+  "description": "Users with SAP_INTERNAL_HANA_SUPPORT role",
   "labels": [
     "security"
   ],
@@ -25,7 +25,7 @@
         }
       ],
       "references": [
-        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#predefined-catalog-role-sap_internal_hana_support"
+        "SAP HANA Database Checklists and Recommendations: https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#predefined-catalog-role-sap_internal_hana_support"
       ]
     }
   ]

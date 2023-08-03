@@ -1,6 +1,6 @@
 {
   "id": "r_prod_users_with_debug_roles",
-  "description": "Checks if the privileges DEBUG or ATTACH DEBUGGER are assigned to any user for any object in the system.",
+  "description": "Users with debug privileges in production environment. At least one user has the DEBUG or ATTACH DEBUGGER privilege in the system. Recommendation is to have no users with this privilege.",
   "labels": [
     "security"
   ],
@@ -31,11 +31,11 @@
       },
       "actions": [
         {
-          "description": "At least one user has the DEBUG or ATTACH DEBUGGER privilege. It is recommended that no user or role in a production database has this privilege."
+          "description": "Remove DEBUG or ATTACH DEBUGGER privileges from any user or role associated with a production database."
         }
       ],
       "references": [
-        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#debug-privileges"
+        "SAP HANA Database Checklists and Recommendations: https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#debug-privileges"
       ]
     }
   ]

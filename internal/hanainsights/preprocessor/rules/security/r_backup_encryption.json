@@ -1,6 +1,6 @@
 {
   "id": "r_backup_encryption",
-  "description": "Validates the encryption status of data and log backups.",
+  "description": "Encryption status of data and log backups. Encryption protects backups from unauthorized access by encrypting the backup data before it is transferred to the backup location. This means that even if an unauthorized user gains access to the backup data, they will not be able to read it without the decryption key. This is applicable for both file-based backups and backups created using third-party backup tools. Recommendation is to enable backup encryption in the SAP HANA system.",
   "labels": [
     "security"
   ],
@@ -21,11 +21,13 @@
       },
       "actions": [
         {
-          "description": "Data and Log backups are not encrypted. It is recommended to protect backups from unauthorized access. When backup encryption is enabled, the backup data is transferred encrypted to the backup location, both for file-based backups and for backups created using third-party backup tools."
+          "description": "Enable backup encryption in the SAP HANA system."
         }
       ],
       "references": [
-        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/4fe29514fd584807ac9f2a04f6754767/edf132427f0043b08769774512504858.html, https://help.sap.com/docs/SAP_HANA_PLATFORM/b3ee5778bc2e4a089d3299b82ec762a7/e5c51c31ecaf4b7188a76776ba3c0797.html,SAP Note 2444090 - FAQ: SAP HANA Backup Encryption,https://me.sap.com/notes/2444090"
+        "Steps to configure Encryption: https://help.sap.com/docs/SAP_HANA_PLATFORM/4fe29514fd584807ac9f2a04f6754767/edf132427f0043b08769774512504858.html",
+        "SAP HANA Security Guide for SAP HANA Platform: https://help.sap.com/docs/SAP_HANA_PLATFORM/b3ee5778bc2e4a089d3299b82ec762a7/e5c51c31ecaf4b7188a76776ba3c0797.html",
+        "SAP Note 2444090 - FAQ: SAP HANA Backup Encryption: https://me.sap.com/notes/2444090"
       ]
     }
   ]

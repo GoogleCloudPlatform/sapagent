@@ -1,6 +1,6 @@
 {
   "id": "r_log_encryption",
-  "description": "Validates the encryption status of the log volume.",
+  "description": "Encryption status of the log volume. It is recommended to protect SAP HANA logs from unauthorized access. One way to do this is to encrypt the logs at the operating system level. SAP HANA also supports encryption in the persistence layer, which can provide additional security. Recommendation is to encrypt log volumes.",
   "labels": [
     "security"
   ],
@@ -21,11 +21,11 @@
       },
       "actions": [
         {
-          "description": "Database logs are not encrypted. It is recommended to protect logs saved to disk from unauthorized access at operating system level. The SAP HANA database supports encryption in the persistence layer."
+          "description": "Enable encryption of log volumes in the SAP HANA system."
         }
       ],
       "references": [
-        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/904911eb0fe54124b10dfaeadb5337ce.html#data-and-log-volume-encryption, https://help.sap.com/docs/SAP_HANA_ONE/102d9916bf77407ea3942fef93a47da8/dc01f36fbb5710148b668201a6e95cf2.html,https://help.sap.com/docs/SAP_HANA_PLATFORM/b3ee5778bc2e4a089d3299b82ec762a7/dc01f36fbb5710148b668201a6e95cf2.html"
+        "SAP HANA Security Checklists and Recommendations: https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/904911eb0fe54124b10dfaeadb5337ce.html#data-and-log-volume-encryption"
       ]
     }
   ]

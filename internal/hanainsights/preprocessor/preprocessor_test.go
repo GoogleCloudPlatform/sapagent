@@ -112,7 +112,7 @@ func TestReadRules(t *testing.T) {
 			want: []*rpb.Rule{
 				&rpb.Rule{
 					Id:          "r_sap_hana_internal_support_role",
-					Description: "Check to see if any users have the SAP_INTERNAL_HANA_SUPPORT role",
+					Description: "Users with SAP_INTERNAL_HANA_SUPPORT role",
 					Labels:      []string{"security"},
 					Queries: []*rpb.Query{
 						&rpb.Query{
@@ -134,7 +134,7 @@ func TestReadRules(t *testing.T) {
 									Description: "At least one account has the SAP_INTERNAL_HANA_SUPPORT role. This is an internal role that enables low level access to data. It should only be assigned to admin or support at the request of SAP Development and during an active SAP support request.",
 								},
 							},
-							References: []string{"SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#predefined-catalog-role-sap_internal_hana_support"},
+							References: []string{"SAP HANA Database Checklists and Recommendations: https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#predefined-catalog-role-sap_internal_hana_support"},
 						},
 					},
 				},

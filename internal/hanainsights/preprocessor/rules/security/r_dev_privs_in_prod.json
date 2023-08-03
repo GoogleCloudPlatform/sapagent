@@ -1,6 +1,6 @@
 {
   "id": "r_dev_privs_in_prod",
-  "description": "Check for users with DEVELOPMENT privileges in Production environment",
+  "description": "Users with DEVELOPMENT privileges in production environment. At least one user or role has the DEVELOPMENT privilege in the production database. Recommendation is to have no users with this privilege.",
   "labels": [
     "security"
   ],
@@ -31,11 +31,11 @@
       },
       "actions": [
         {
-          "description": "It has been determined that at least one user or role has the DEVELOPMENT privilege. It is imperative that no user or role in a production database has this privilege."
+          "description": "Remove DEVELOPMENT privileges from any user or role associated with a production database."
         }
       ],
       "references": [
-        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#system-privilege%3A-development"
+        "SAP HANA Security Checklists and Recommendations: https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/45955420940c4e80a1379bc7270cead6.html#system-privilege%3A-development"
       ]
     }
   ]

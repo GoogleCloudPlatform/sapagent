@@ -1,6 +1,6 @@
 {
   "id": "r_system_replication_allowed_sender",
-  "description": "Check if system replication is configured with allowed_sender if the listen interface is global",
+  "description": "Restricted senders in system replication configuration. System replication is configured with allowed_sender when the listen interface is global.",
   "labels": [
     "security"
   ],
@@ -40,7 +40,7 @@
         }
       ],
       "references": [
-        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/eccef06eabe545e68d5019bcb6d8e342.html#host-name-resolution-in-system-replication"
+        "SAP HANA Database Checklists and Recommendations: https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/eccef06eabe545e68d5019bcb6d8e342.html#host-name-resolution-in-system-replication"
       ]
     }
   ]

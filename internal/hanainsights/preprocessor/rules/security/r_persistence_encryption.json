@@ -1,6 +1,6 @@
 {
   "id": "r_persistence_encryption",
-  "description": "Validates the encryption status of the persistent (data) volume.",
+  "description": "Encryption status of the persistent (data) volume. It is recommended to protect SAP HANA data from unauthorized access. One way to do this is to encrypt the data at the operating system level. SAP HANA also supports encryption in the persistence layer, which can provide additional security. Recommendation is to encrypt data volumes.",
   "labels": [
     "security"
   ],
@@ -21,7 +21,7 @@
       },
       "actions": [
         {
-          "description": "Database data is not encrypted. It is recommended to protect data saved to disk from unauthorized access at operating system level. The SAP HANA database supports data encryption in the persistence layer."
+          "description": "Enable encryption of data and log volumes in the SAP HANA system."
         }
       ],
       "references": [
