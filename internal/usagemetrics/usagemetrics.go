@@ -111,6 +111,7 @@ const (
 	BackintDeleteFinished
 	BackintDiagnoseStarted
 	BackintDiagnoseFinished
+	HANADiskRestore
 )
 
 var (

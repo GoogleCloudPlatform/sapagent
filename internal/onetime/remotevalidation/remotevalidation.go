@@ -36,6 +36,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -87,7 +88,7 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		return subcommands.ExitSuccess
 	}
 	if r.version {
-		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{runtime.GOOS}, gceService)

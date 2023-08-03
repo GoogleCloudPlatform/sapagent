@@ -24,7 +24,6 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
@@ -70,7 +69,7 @@ func (m *Mode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcom
 		return subcommands.ExitUsageError
 	}
 	if m.version {
-		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
 	if m.help {

@@ -31,8 +31,6 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	compute "google.golang.org/api/compute/v1"
-	"google.golang.org/api/option"
-	"golang.org/x/oauth2/google"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -142,7 +140,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return subcommands.ExitSuccess
 	}
 	if s.version {
-		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, s.Name(), log.StringLevelToZapcore(s.logLevel))
@@ -154,7 +152,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	}
 	s.timeSeriesCreator = mc
 
-	return s.snapshotHandler(ctx, gce.NewGCEClient, newComputeService)
+	return s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService)
 }
 
 func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc) subcommands.ExitStatus {
@@ -169,7 +167,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 
 	s.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
-		logErrorToFileAndConsole("ERROR: Failed to create GCE service", err)
+		onetime.LogErrorToFileAndConsole("ERROR: Failed to create GCE service", err)
 		return subcommands.ExitFailure
 	}
 
@@ -186,18 +184,18 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		Project:        s.project,
 	}
 	if s.db, err = databaseconnector.Connect(ctx, dbp); err != nil {
-		logErrorToFileAndConsole("ERROR: Failed to connect to database", err)
+		onetime.LogErrorToFileAndConsole("ERROR: Failed to connect to database", err)
 		return subcommands.ExitFailure
 	}
 
 	s.computeService, err = computeServiceCreator(ctx)
 	if err != nil {
-		logErrorToFileAndConsole("ERROR: Failed to create compute service", err)
+		onetime.LogErrorToFileAndConsole("ERROR: Failed to create compute service", err)
 		return subcommands.ExitFailure
 	}
 
 	if err = s.runWorkflow(ctx, runQuery); err != nil {
-		logErrorToFileAndConsole("Error: Failed to run HANA disk snapshot workflow", err)
+		onetime.LogErrorToFileAndConsole("Error: Failed to run HANA disk snapshot workflow", err)
 		return subcommands.ExitFailure
 	}
 	log.Print("SUCCESS: HANA backup and persistent disk snapshot creation successful.")
@@ -356,22 +354,6 @@ func (s *Snapshot) waitForCompletionWithRetry(ctx context.Context, op *compute.O
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 120), ctx)
 	return backoff.Retry(func() error { return s.waitForCompletion(op) }, bo)
-}
-
-func newComputeService(ctx context.Context) (cs *compute.Service, err error) {
-	client, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
-	if err != nil {
-		return nil, fmt.Errorf("Failure creating compute HTTP client" + err.Error())
-	}
-	if cs, err = compute.NewService(ctx, option.WithHTTPClient(client)); err != nil {
-		return nil, fmt.Errorf("Failure creating compute service" + err.Error())
-	}
-	return cs, nil
-}
-
-func logErrorToFileAndConsole(msg string, err error) {
-	log.Print(msg + " " + err.Error() + "\n" + "Refer to log file at:" + log.GetLogFile())
-	log.Logger.Errorw(msg, "error", err.Error())
 }
 
 // sendStatusToMonitoring sends the status of one time execution to cloud monitoring as a GAUGE metric.

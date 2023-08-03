@@ -20,7 +20,6 @@ package migratehanamonitoring
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -85,7 +84,7 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 		return subcommands.ExitSuccess
 	}
 	if m.version {
-		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, m.Name(), log.StringLevelToZapcore(m.logLevel))

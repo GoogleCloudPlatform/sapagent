@@ -20,8 +20,13 @@ package onetime
 
 import (
 	"context"
+	"fmt"
 
+	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/option"
+	"golang.org/x/oauth2/google"
 	"go.uber.org/zap/zapcore"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -80,4 +85,21 @@ func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zap
 	params.CloudLogName = "google-cloud-sap-agent-" + subcommandName
 	log.SetupLogging(params)
 	return params
+}
+
+// NewComputeService creates the compute service.
+func NewComputeService(ctx context.Context) (cs *compute.Service, err error) {
+	client, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
+	if err != nil {
+		return nil, fmt.Errorf("failure creating compute HTTP client" + err.Error())
+	}
+	if cs, err = compute.NewService(ctx, option.WithHTTPClient(client)); err != nil {
+		return nil, fmt.Errorf("failure creating compute service" + err.Error())
+	}
+	return cs, nil
+}
+
+// PrintAgentVersion prints the current version of the agent to stdout.
+func PrintAgentVersion() {
+	log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
 }

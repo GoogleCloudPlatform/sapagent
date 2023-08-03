@@ -26,7 +26,6 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
@@ -84,7 +83,7 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 		return subcommands.ExitUsageError
 	}
 	if h.version {
-		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
 	if h.help {

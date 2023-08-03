@@ -92,7 +92,7 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return subcommands.ExitSuccess
 	}
 	if l.version {
-		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", configuration.AgentVersion))
+		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, l.Name(), log.StringLevelToZapcore(l.logLevel))

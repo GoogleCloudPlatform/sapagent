@@ -19,7 +19,6 @@ package backint
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"flag"
@@ -31,7 +30,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/diagnose"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
-	ac "github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -106,7 +104,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		return subcommands.ExitSuccess
 	}
 	if b.version {
-		log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s", ac.AgentVersion))
+		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, b.Name(), log.StringLevelToZapcore(b.logLevel))

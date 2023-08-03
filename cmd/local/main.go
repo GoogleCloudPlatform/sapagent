@@ -34,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/restore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/snapshot"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
@@ -52,6 +53,7 @@ func registerSubCommands() {
 		&hanainsights.HANAInsights{},
 		&backint.Backint{},
 		&supportbundle.SupportBundle{},
+		&restore.Restorer{},
 		subcommands.HelpCommand(),  // Implement "help"
 		subcommands.FlagsCommand(), // Implement "flags"
 	} {
