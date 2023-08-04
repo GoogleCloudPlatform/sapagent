@@ -111,9 +111,54 @@ func (s *Service) userAgent() string {
 	return googleapi.UserAgent + " " + s.UserAgent
 }
 
+
+
+// SapValidationType provides enum functionality for ValidationDetail.ValidationType values.
+type SapValidationType int64
+
+const (
+	// SapValidationTypeUnspecified is the enum value for the SapValidationType "SAP_VALIDATION_TYPE_UNSPECIFIED".
+	SapValidationTypeUnspecified SapValidationType = iota
+	// SapValidationTypeSystem is the enum value for the SapValidationType "SYSTEM".
+	SapValidationTypeSystem
+	// SapValidationTypeCorosync is the enum value for the SapValidationType "COROSYNC".
+	SapValidationTypeCorosync
+	// SapValidationTypePacemaker is the enum value for the SapValidationType "PACEMAKER".
+	SapValidationTypePacemaker
+	// SapValidationTypeHana is the enum value for the SapValidationType "HANA".
+	SapValidationTypeHana
+	// SapValidationTypeNetweaver is the enum value for the SapValidationType "NETWEAVER".
+	SapValidationTypeNetweaver
+	// SapValidationTypeHanaSecurity is the enum value for the SapValidationType "HANA_SECURITY".
+	SapValidationTypeHanaSecurity
+	// SapValidationTypeCustom is the enum value for the SapValidationType "CUSTOM".
+	SapValidationTypeCustom
+)
+
+func (t SapValidationType) String() string {
+	switch t {
+	case SapValidationTypeUnspecified:
+		return "SAP_VALIDATION_TYPE_UNSPECIFIED"
+	case SapValidationTypeSystem:
+		return "SYSTEM"
+	case SapValidationTypeCorosync:
+		return "COROSYNC"
+	case SapValidationTypePacemaker:
+		return "PACEMAKER"
+	case SapValidationTypeHana:
+		return "HANA"
+	case SapValidationTypeNetweaver:
+		return "NETWEAVER"
+	case SapValidationTypeHanaSecurity:
+		return "HANA_SECURITY"
+	case SapValidationTypeCustom:
+		return "CUSTOM"
+	}
+	return "SAP_VALIDATION_TYPE_UNSPECIFIED"
+}
+
 // Insight is a presentation of host resource usage where the workload
 // runs.
-
 type Insight struct {
 	// SapValidation: The insights data for the sap workload validation.
 	SapValidation *SapValidation `json:"sapValidation,omitempty"`
@@ -332,9 +377,8 @@ type ValidationDetail struct {
 	//   "PACEMAKER" - The SAP system named PACEMAKER.
 	//   "HANA" - The SAP system named HANA.
 	//   "NETWEAVER" - The SAP system named NETWEAVER.
-	//
-	// Additional validation types (e.g. CUSTOM) are currently not supported in
-	// DW. Submission of these types from the Agent will default to UNSPECIFIED.
+	//   "HANA_SECURITY" - The SAP system named HANA_SECURITY.
+	//   "CUSTOM" - The SAP system named CUSTOM.
 	SapValidationType string `json:"sapValidationType,omitempty"`
 	// Details: The k/v pairs of metrics data.
 	Details map[string]string `json:"details,omitempty"`

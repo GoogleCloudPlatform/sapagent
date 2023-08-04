@@ -204,3 +204,60 @@ func TestWriteInsightDo(t *testing.T) {
 		})
 	}
 }
+
+func TestSapValidationType(t *testing.T) {
+	tests := []struct {
+		name              string
+		sapValidationType SapValidationType
+		want              string
+	}{
+		{
+			name:              "Unspecified",
+			sapValidationType: SapValidationTypeUnspecified,
+			want:              "SAP_VALIDATION_TYPE_UNSPECIFIED",
+		},
+		{
+			name:              "System",
+			sapValidationType: SapValidationTypeSystem,
+			want:              "SYSTEM",
+		},
+		{
+			name:              "Corosync",
+			sapValidationType: SapValidationTypeCorosync,
+			want:              "COROSYNC",
+		},
+		{
+			name:              "Pacemaker",
+			sapValidationType: SapValidationTypePacemaker,
+			want:              "PACEMAKER",
+		},
+		{
+			name:              "HANA",
+			sapValidationType: SapValidationTypeHana,
+			want:              "HANA",
+		},
+		{
+			name:              "NetWeaver",
+			sapValidationType: SapValidationTypeNetweaver,
+			want:              "NETWEAVER",
+		},
+		{
+			name:              "HANASecurity",
+			sapValidationType: SapValidationTypeHanaSecurity,
+			want:              "HANA_SECURITY",
+		},
+		{
+			name:              "Custom",
+			sapValidationType: SapValidationTypeCustom,
+			want:              "CUSTOM",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.sapValidationType.String()
+			if got != test.want {
+				t.Errorf("SapValidationType.String() for type %v got %q, want %q", test.sapValidationType, got, test.want)
+			}
+		})
+	}
+}

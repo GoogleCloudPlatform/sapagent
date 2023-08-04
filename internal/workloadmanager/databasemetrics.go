@@ -25,6 +25,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+const sapValidationHANASecurity = "workload.googleapis.com/sap/validation/hanasecurity"
+
 // collectDBMetricsOnce  returns the result of metric collection using the HANA Insights module.
 func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	if params.Config.GetCollectionConfiguration().GetHanaMetricsConfig() == nil {
@@ -77,7 +79,6 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 
 func processInsights(ctx context.Context, params Parameters, insights ruleengine.Insights) WorkloadMetrics {
 	labels := make(map[string]string)
-	mPath := metricTypePrefix + "hanasecurity"
 
 	for ruleID, evalResults := range insights {
 		for _, evalResult := range evalResults {
@@ -85,5 +86,5 @@ func processInsights(ctx context.Context, params Parameters, insights ruleengine
 			labels[ruleID+"_"+evalResult.RecommendationID] = fmt.Sprintf("%t", evalResult.Result)
 		}
 	}
-	return WorkloadMetrics{Metrics: createTimeSeries(mPath, labels, 1.0, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANASecurity, labels, 1.0, params.Config)}
 }

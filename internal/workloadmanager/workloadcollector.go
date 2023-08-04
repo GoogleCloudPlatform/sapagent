@@ -515,22 +515,22 @@ func (p *Parameters) ReadHANAInsightsRules() {
 func createWriteInsightRequest(wm WorkloadMetrics, instanceID string) *wlm.WriteInsightRequest {
 	validations := []*wlm.ValidationDetail{}
 	for _, m := range wm.Metrics {
-		t := wlmpb.SapValidationType_SAP_VALIDATION_TYPE_UNSPECIFIED
+		t := wlm.SapValidationTypeUnspecified
 		switch m.GetMetric().GetType() {
 		case sapValidationSystem:
-			t = wlmpb.SapValidationType_SYSTEM
+			t = wlm.SapValidationTypeSystem
 		case sapValidationCorosync:
-			t = wlmpb.SapValidationType_COROSYNC
+			t = wlm.SapValidationTypeCorosync
 		case sapValidationHANA:
-			t = wlmpb.SapValidationType_HANA
+			t = wlm.SapValidationTypeHana
 		case sapValidationNetweaver:
-			t = wlmpb.SapValidationType_NETWEAVER
+			t = wlm.SapValidationTypeNetweaver
 		case sapValidationPacemaker:
-			t = wlmpb.SapValidationType_PACEMAKER
+			t = wlm.SapValidationTypePacemaker
+		case sapValidationHANASecurity:
+			t = wlm.SapValidationTypeHanaSecurity
 		case sapValidationCustom:
-			// Data Warehouse does not support this validation type.
-			// TODO: Add support once new validation types are enabled.
-			t = wlmpb.SapValidationType_SAP_VALIDATION_TYPE_UNSPECIFIED
+			t = wlm.SapValidationTypeCustom
 		}
 		validations = append(validations, &wlm.ValidationDetail{
 			SapValidationType: t.String(),
