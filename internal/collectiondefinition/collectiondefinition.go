@@ -30,7 +30,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"

@@ -29,10 +29,10 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	hmmpb "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var (

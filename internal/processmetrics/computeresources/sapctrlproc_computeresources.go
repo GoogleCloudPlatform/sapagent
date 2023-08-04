@@ -22,8 +22,8 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 const (

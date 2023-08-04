@@ -25,7 +25,7 @@ import (
 	"strconv"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 )

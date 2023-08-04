@@ -27,9 +27,9 @@ import (
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var (

@@ -29,9 +29,9 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"golang.org/x/oauth2/google"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // Status enumerates the supported usage logging statuses.

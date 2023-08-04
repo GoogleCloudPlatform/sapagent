@@ -32,7 +32,7 @@ import (
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )

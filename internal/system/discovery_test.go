@@ -34,11 +34,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
-	logfake "github.com/GoogleCloudPlatform/sapagent/internal/log/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+	logfake "google3/third_party/sapagent/shared/log/fake/fake"
 )
 
 const (

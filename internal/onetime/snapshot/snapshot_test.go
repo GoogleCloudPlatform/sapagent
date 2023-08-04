@@ -32,8 +32,8 @@ import (
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var defaultSnapshot = Snapshot{

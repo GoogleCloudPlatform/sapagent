@@ -40,15 +40,15 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 /*

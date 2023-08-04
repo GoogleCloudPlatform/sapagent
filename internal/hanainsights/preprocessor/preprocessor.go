@@ -25,8 +25,8 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var (

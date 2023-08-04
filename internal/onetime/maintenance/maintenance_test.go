@@ -24,7 +24,7 @@ import (
 	"flag"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 type (

@@ -38,12 +38,12 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var (

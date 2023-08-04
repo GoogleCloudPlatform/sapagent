@@ -35,8 +35,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/memorymetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/osmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"google3/third_party/sapagent/shared/log/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"

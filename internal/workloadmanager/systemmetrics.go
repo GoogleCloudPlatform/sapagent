@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )

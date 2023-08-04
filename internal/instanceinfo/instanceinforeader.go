@@ -25,9 +25,9 @@ import (
 
 	compute "google.golang.org/api/compute/v1"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // The DiskMapper interface is a wrapper which allows for ease of testing.

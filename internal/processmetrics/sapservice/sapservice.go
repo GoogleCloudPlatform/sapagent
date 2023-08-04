@@ -25,9 +25,9 @@ import (
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 const (

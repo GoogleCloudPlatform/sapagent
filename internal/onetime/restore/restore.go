@@ -29,10 +29,10 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 type (

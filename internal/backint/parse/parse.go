@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // BackintRFC3339Millis is a reference for timestamps to Backint specifications.

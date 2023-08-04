@@ -22,7 +22,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // collectDBMetricsOnce  returns the result of metric collection using the HANA Insights module.

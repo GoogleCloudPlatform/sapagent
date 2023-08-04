@@ -33,9 +33,9 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 type (

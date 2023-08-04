@@ -25,9 +25,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"go.uber.org/zap/zapcore"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // ReadConfigFile abstracts os.ReadFile function for testability.

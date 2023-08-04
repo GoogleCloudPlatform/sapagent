@@ -28,9 +28,9 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"google3/third_party/sapagent/shared/log/log"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"

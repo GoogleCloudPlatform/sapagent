@@ -23,10 +23,10 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 const (

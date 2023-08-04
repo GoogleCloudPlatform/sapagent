@@ -25,8 +25,8 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // Validate implements the subcommand interface.

@@ -30,11 +30,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/diagnose"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // Backint has args for backint subcommands.

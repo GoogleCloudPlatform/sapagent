@@ -26,9 +26,9 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
+	"google3/third_party/sapagent/shared/log/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"

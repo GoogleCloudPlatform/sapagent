@@ -41,7 +41,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/cluster"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/hana"
@@ -52,6 +51,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"google3/third_party/sapagent/shared/log/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

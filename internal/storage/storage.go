@@ -30,7 +30,7 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // DefaultLogDelay sets the default upload and download progress logging to once a minute.

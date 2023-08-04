@@ -22,7 +22,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 
 	// Register hdb driver.
 	_ "github.com/SAP/go-hdb/driver"

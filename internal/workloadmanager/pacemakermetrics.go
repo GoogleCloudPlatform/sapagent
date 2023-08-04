@@ -26,8 +26,8 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
+	"google3/third_party/sapagent/shared/log/log"
 
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )

@@ -27,7 +27,6 @@ import (
 	"github.com/google/subcommands"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
@@ -39,6 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 func registerSubCommands() {

@@ -24,7 +24,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // FakeServer defines a fake HTTP server returning a set of hard-coded responses.

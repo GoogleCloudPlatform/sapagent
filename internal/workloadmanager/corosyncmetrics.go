@@ -20,7 +20,7 @@ import (
 	"context"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 const sapValidationCorosync = "workload.googleapis.com/sap/validation/corosync"

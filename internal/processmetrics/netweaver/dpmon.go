@@ -25,7 +25,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var (

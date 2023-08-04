@@ -26,8 +26,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 const agentBinary = "/usr/bin/google_cloud_sap_agent"
@@ -82,7 +82,7 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 			defer mu.Unlock()
 			metricsSent += sendMetrics(ctx, sendMetricsParams{
 				wm:                wm,
-				cp: params.Config.GetCloudProperties(),
+				cp:                params.Config.GetCloudProperties(),
 				bareMetal:         params.Config.GetBareMetal(),
 				timeSeriesCreator: params.TimeSeriesCreator,
 				backOffIntervals:  params.BackOffs,

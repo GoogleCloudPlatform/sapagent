@@ -24,9 +24,9 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 // Mode has args for maintenance subcommands.

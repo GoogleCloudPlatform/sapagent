@@ -30,9 +30,9 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 const (

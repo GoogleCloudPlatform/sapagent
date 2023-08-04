@@ -24,8 +24,8 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 type (

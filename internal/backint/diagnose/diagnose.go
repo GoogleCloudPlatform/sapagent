@@ -34,9 +34,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var (

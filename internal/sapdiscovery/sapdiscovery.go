@@ -25,8 +25,8 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
+	"google3/third_party/sapagent/shared/log/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"

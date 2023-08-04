@@ -23,8 +23,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 var (
@@ -64,7 +64,7 @@ func NewSapControl(socket, response string) (*Sapcontrol, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Replace default listener with socket listener.
 	s.Listener.Close()
 	s.Listener = l

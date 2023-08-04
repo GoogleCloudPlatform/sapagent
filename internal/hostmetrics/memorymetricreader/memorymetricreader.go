@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
+	"google3/third_party/sapagent/shared/log/log"
 
 	mstatspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )

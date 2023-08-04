@@ -30,12 +30,12 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/log"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/yamlpb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	hmmpb "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration"
+	"google3/third_party/sapagent/shared/log/log"
 )
 
 const (
