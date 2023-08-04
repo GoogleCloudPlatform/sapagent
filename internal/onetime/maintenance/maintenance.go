@@ -26,7 +26,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // Mode has args for maintenance subcommands.

@@ -20,7 +20,7 @@ import (
 	"context"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 const sapValidationCustom = "workload.googleapis.com/sap/validation/custom"

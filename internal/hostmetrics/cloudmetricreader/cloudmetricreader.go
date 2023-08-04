@@ -28,7 +28,7 @@ import (
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/googleapis/gax-go/v2"
 	"google.golang.org/api/iterator"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"

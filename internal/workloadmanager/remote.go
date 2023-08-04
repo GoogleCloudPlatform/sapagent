@@ -27,7 +27,7 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 const agentBinary = "/usr/bin/google_cloud_sap_agent"

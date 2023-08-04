@@ -31,7 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // Status enumerates the supported usage logging statuses.

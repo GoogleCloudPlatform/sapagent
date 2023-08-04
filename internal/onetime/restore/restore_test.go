@@ -28,7 +28,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 var (

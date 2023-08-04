@@ -32,7 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 type (

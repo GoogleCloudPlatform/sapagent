@@ -29,7 +29,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 var (

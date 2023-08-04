@@ -22,7 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // WLM is a wrapper for Workload Manager API services.

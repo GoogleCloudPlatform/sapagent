@@ -32,7 +32,7 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	hmmpb "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 var (

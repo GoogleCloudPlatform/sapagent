@@ -27,7 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 const sapValidationHANA = "workload.googleapis.com/sap/validation/hana"

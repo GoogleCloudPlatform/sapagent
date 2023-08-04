@@ -32,7 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 const (

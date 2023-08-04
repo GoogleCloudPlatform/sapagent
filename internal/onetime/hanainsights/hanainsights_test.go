@@ -27,7 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 func TestExecuteHANAInsights(t *testing.T) {

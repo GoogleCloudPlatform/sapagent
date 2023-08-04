@@ -31,7 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"google3/third_party/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // HANAInsights has args for hanainsights subcommands.
