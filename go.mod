@@ -3,6 +3,7 @@ module github.com/GoogleCloudPlatform/sapagent
 go 1.20
 
 replace github.com/GoogleCloudPlatform/sapagent/internal => ./internal
+replace github.com/GoogleCloudPlatform/sapagent/shared => ./shared
 
 replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
