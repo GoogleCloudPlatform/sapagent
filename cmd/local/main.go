@@ -38,7 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 )
 
 func registerSubCommands() {

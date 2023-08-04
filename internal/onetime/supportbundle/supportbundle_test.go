@@ -35,7 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 )
 
 type (

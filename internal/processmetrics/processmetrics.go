@@ -51,7 +51,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

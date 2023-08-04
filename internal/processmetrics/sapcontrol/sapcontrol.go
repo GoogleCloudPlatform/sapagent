@@ -26,7 +26,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )

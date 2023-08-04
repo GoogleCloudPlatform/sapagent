@@ -25,7 +25,7 @@ import (
 	"regexp"
 	"strings"
 
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 )
 
 var (

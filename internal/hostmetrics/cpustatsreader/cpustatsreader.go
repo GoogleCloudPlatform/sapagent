@@ -25,7 +25,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 )
 
 type (

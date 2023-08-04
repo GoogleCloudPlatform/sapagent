@@ -25,7 +25,7 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/googleapis/gax-go/v2"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"

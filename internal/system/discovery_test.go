@@ -38,7 +38,7 @@ import (
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
-	logfake "google3/third_party/sapagent/shared/log/fake/fake"
+	logfake "google3/third_party/sapagent/shared/log/fake"
 )
 
 const (

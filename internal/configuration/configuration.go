@@ -29,7 +29,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"

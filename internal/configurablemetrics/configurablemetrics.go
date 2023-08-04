@@ -29,7 +29,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 )

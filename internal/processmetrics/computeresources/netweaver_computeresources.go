@@ -26,7 +26,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 )
 
 const (

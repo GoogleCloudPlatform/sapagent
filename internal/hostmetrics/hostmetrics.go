@@ -36,7 +36,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/osmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"

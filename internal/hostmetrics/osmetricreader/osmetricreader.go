@@ -30,7 +30,7 @@ import (
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 )
 
 /*

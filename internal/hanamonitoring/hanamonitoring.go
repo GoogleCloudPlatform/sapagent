@@ -30,7 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"google3/third_party/sapagent/shared/log/log"
+	"google3/third_party/sapagent/shared/log"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
