@@ -97,7 +97,7 @@ var (
 	"blockdevices": [{
 		"name": "/dev/sdb",
 		"type": "disk",
-		"mountpoint": null,
+		"mountpoint": "/hana/data",
 		"size": 4096,
 		"children": null
 	}]
@@ -167,6 +167,14 @@ var (
 basepath_datavolumes = /hana/data/ISC
 basepath_logvolumes = /hana/log/ISC
 basepath_persistent_memory_volumes = /hana/memory/ISC
+`
+	dfTargetData = `
+Mounted on
+/hana/data
+`
+	dfTargetLog = `
+Mounted on
+/hana/log
 `
 	defaultDiskMapper = &fakeDiskMapper{err: nil, out: "disk-mapping"}
 	defaultMapperFunc = func() (map[instanceinfo.InterfaceName][]instanceinfo.NetworkAddress, error) {
@@ -508,6 +516,47 @@ func TestDiskInfo(t *testing.T) {
 			want:   map[string]string{},
 		},
 		{
+			name:              "TestDiskInfoErrorDF",
+			basePathVolume:    "/dev/sda",
+			globalINILocation: "/etc/config/test.ini",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "df" {
+					return commandlineexecutor.Result{
+						Error: errors.New("Command failed"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "basepath_datavolumes = /hana/data/ISC",
+					StdErr: "",
+				}
+			},
+			iir:    defaultIIR,
+			config: defaultConfiguration,
+			mapper: defaultMapperFunc,
+			want:   map[string]string{},
+		},
+		{
+			name:              "TestDiskInfoInvalidDF",
+			basePathVolume:    "/dev/sda",
+			globalINILocation: "/etc/config/test.ini",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "df" {
+					return commandlineexecutor.Result{
+						StdOut: "\nMounted on\n/hana/data\ninvalid line\n",
+						StdErr: "",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "basepath_datavolumes = /hana/data/ISC",
+					StdErr: "",
+				}
+			},
+			iir:    defaultIIR,
+			config: defaultConfiguration,
+			mapper: defaultMapperFunc,
+			want:   map[string]string{},
+		},
+		{
 			name:              "TestDiskInfoNoMatches",
 			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
@@ -539,6 +588,12 @@ func TestDiskInfo(t *testing.T) {
 						StdErr: "",
 					}
 				}
+				if params.Executable == "df" {
+					return commandlineexecutor.Result{
+						StdOut: dfTargetData,
+						StdErr: "",
+					}
+				}
 				return commandlineexecutor.Result{
 					StdOut: "basepath_datavolumes = /hana/data/ISC",
 					StdErr: "",
@@ -565,6 +620,12 @@ func TestDiskInfo(t *testing.T) {
 						StdErr: "",
 					}
 				}
+				if params.Executable == "df" {
+					return commandlineexecutor.Result{
+						StdOut: dfTargetData,
+						StdErr: "",
+					}
+				}
 				return commandlineexecutor.Result{
 					StdOut: "basepath_datavolumes = /hana/data/ISC",
 					StdErr: "",
@@ -586,6 +647,12 @@ func TestDiskInfo(t *testing.T) {
 						StdErr: "",
 					}
 				}
+				if params.Executable == "df" {
+					return commandlineexecutor.Result{
+						StdOut: dfTargetData,
+						StdErr: "",
+					}
+				}
 				return commandlineexecutor.Result{
 					StdOut: "basepath_datavolumes = /hana/data/ISC",
 					StdErr: "",
@@ -594,7 +661,12 @@ func TestDiskInfo(t *testing.T) {
 			iir:    defaultIIR,
 			config: defaultConfiguration,
 			mapper: defaultMapperFunc,
-			want:   map[string]string{},
+			want: map[string]string{
+				"mountpoint":       "/hana/data",
+				"instancedisktype": "default-disk-type",
+				"size":             "4096",
+				"pdsize":           "4096",
+			},
 		},
 	}
 
@@ -602,7 +674,6 @@ func TestDiskInfo(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.iir.Read(context.Background(), test.config, test.mapper)
 			got := diskInfo(context.Background(), test.basePathVolume, test.globalINILocation, test.exec, *test.iir)
-
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, diskInfo returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
 			}
@@ -793,6 +864,18 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				if params.Executable == "grep" {
 					return commandlineexecutor.Result{
 						StdOut: "basepath location /hana/data",
+						StdErr: "",
+					}
+				}
+				if params.Executable == "df" {
+					if strings.Contains(params.ArgsToSplit, "/hana/data") {
+						return commandlineexecutor.Result{
+							StdOut: dfTargetData,
+							StdErr: "",
+						}
+					}
+					return commandlineexecutor.Result{
+						StdOut: dfTargetLog,
 						StdErr: "",
 					}
 				}

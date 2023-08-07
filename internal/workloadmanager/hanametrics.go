@@ -206,6 +206,26 @@ func diskInfo(ctx context.Context, basepathVolume string, globalINILocation stri
 	basepathVolumePath := vList[2]
 	log.Logger.Debugw("basepathVolumePath from string field", "basepathvolumepath", basepathVolumePath)
 
+	// Get the exact mount location for the volume basepath
+	// Expected output:
+	// Mounted on
+	// /hana/data
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable:  "df",
+		ArgsToSplit: fmt.Sprintf("--output=target %s", basepathVolumePath),
+	})
+	if result.Error != nil {
+		log.Logger.Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "error", result.Error)
+		return diskInfo
+	}
+	lines := strings.Split(strings.TrimSpace(result.StdOut), "\n")
+	if len(lines) != 2 {
+		log.Logger.Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "output", result.StdOut)
+		return diskInfo
+	}
+	volumeMountpoint := strings.TrimSpace(lines[1])
+	log.Logger.Debugw("Found volume mountpoint", "mountpoint", volumeMountpoint, "basepathvolumepath", basepathVolumePath)
+
 	// JSON output from lsblk to match the lsblk.proto is produced by the following command:
 	// lsblk -p -J -o name,type,mountpoint
 	lsblkresult := exec(ctx, commandlineexecutor.Params{
@@ -224,22 +244,32 @@ func diskInfo(ctx context.Context, basepathVolume string, globalINILocation stri
 	matchedMountPoint := ""
 	matchedBlockDevice := lsblkdevice{}
 	matchedSize := ""
+BlockDeviceLoop:
 	for _, blockDevice := range lsblk.BlockDevices {
+		children := blockDevice.Children
+		// Accommodate direct device mapping where devices do not resolve to
+		// /dev/mapper child configurations.
 		if blockDevice.Children == nil {
-			continue
+			children = []lsblkdevicechild{{
+				Name:       blockDevice.Name,
+				Type:       blockDevice.Type,
+				Mountpoint: blockDevice.Mountpoint,
+				Size:       blockDevice.Size,
+			}}
 		}
-		for _, child := range blockDevice.Children {
-			if strings.HasPrefix(basepathVolumePath, child.Mountpoint) && len(child.Mountpoint) > len(matchedMountPoint) {
+		for _, child := range children {
+			if child.Mountpoint == volumeMountpoint {
 				matchedBlockDevice = blockDevice
 				matchedMountPoint = child.Mountpoint
 				childSize := extractSize(child.Size)
 				matchedSize = strconv.FormatInt(childSize, 10)
-				log.Logger.Debugw("Found matched block device", "matchedblockdevice", matchedBlockDevice.Name, "matchedmountpoint", matchedMountPoint, "matchedsize", matchedSize)
-				break
+				break BlockDeviceLoop
 			}
 		}
 	}
+
 	if len(matchedMountPoint) > 0 {
+		log.Logger.Debugw("Found matched block device", "matchedblockdevice", matchedBlockDevice.Name, "matchedmountpoint", matchedMountPoint, "matchedsize", matchedSize)
 		setDiskInfoForDevice(diskInfo, &matchedBlockDevice, matchedMountPoint, matchedSize, iir)
 	}
 
