@@ -35,10 +35,10 @@ import (
 
 // LogUsage has args for logusage subcommands.
 type LogUsage struct {
-	name, agentVersion, agentPriorVersion, status string
-	action, usageError                            int
-	help, version                                 bool
-	logLevel                                      string
+	name, agentVersion, agentPriorVersion, status, image string
+	action, usageError                                   int
+	help, version                                        bool
+	logLevel                                             string
 }
 
 // Name implements the subcommand interface for logusage.
@@ -49,7 +49,10 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 
 // Usage implements the subcommand interface for logusage.
 func (*LogUsage) Usage() string {
-	return "logusage [-name <tool or agent name>] [-av tool or agent version] [-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>] [-v] [-h] [-loglevel=<debug|info|warn|error>]\n"
+	return `logusage [-name <tool or agent name>] [-av <tool or agent version>]
+	[-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]
+	[-image <image URL of the compute instance>] [-v] [-h] [-loglevel=<debug|info|warn|error>]
+	`
 }
 
 // SetFlags implements the subcommand interface for logusage.
@@ -66,6 +69,8 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 	fs.IntVar(&l.action, "a", 0, "usage action code")
 	fs.IntVar(&l.usageError, "error", 0, "usage error code")
 	fs.IntVar(&l.usageError, "e", 0, "usage error code")
+	fs.StringVar(&l.image, "image", "", "the image url of the compute instance(optional), default value is retreived from metadata)")
+	fs.StringVar(&l.image, "i", "", "the image url of the compute instance(optional), default value is retreived from metadata)")
 	fs.BoolVar(&l.help, "h", false, "help")
 	fs.BoolVar(&l.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&l.logLevel, "loglevel", "", "Sets the logging level for a log file")
@@ -118,13 +123,12 @@ func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands
 	if err := l.logUsageStatus(cloudProps); err != nil {
 		log.Logger.Warnw("Could not log usage", "error", err)
 	}
-
 	return subcommands.ExitSuccess
 }
 
 // logUsageStatus makes a call to the appropriate usage metrics API.
 func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
-	configureUsageMetricsForOTE(cloudProps, l.name, l.agentPriorVersion)
+	configureUsageMetricsForOTE(cloudProps, l.name, l.agentPriorVersion, l.image)
 	switch usagemetrics.Status(l.status) {
 	case usagemetrics.StatusRunning:
 		usagemetrics.Running()
@@ -152,11 +156,15 @@ func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
 	return nil
 }
 
-func configureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string) {
+func configureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version, image string) {
 	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
 		Name:            name,
 		Version:         version,
 		LogUsageMetrics: true,
 	})
+	// Override the imageURL with value passed in args.
+	if image != "" && cp != nil {
+		cp.Image = image
+	}
 	usagemetrics.SetCloudProperties(cp)
 }
