@@ -29,12 +29,11 @@ const sapValidationHANASecurity = "workload.googleapis.com/sap/validation/hanase
 
 // collectDBMetricsOnce  returns the result of metric collection using the HANA Insights module.
 func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
-	if params.Config.GetCollectionConfiguration().GetHanaMetricsConfig() == nil {
+	if params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig() == nil {
 		log.Logger.Debug("Cannot collect database metrics without DB credentials.")
 		return fmt.Errorf("Cannot collect database metrics without DB credentials")
 	}
 
-	// TODO: Implement remote mode for database metrics
 	if len(params.HANAInsightRules) == 0 {
 		log.Logger.Debug("HANA Insights rules not found")
 		return fmt.Errorf("HANA Insights rules not found")
@@ -42,11 +41,11 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 
 	log.Logger.Info("Collecting Workload Manager Database metrics...")
 	dpb := databaseconnector.Params{
-		Username:       params.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHanaDbUser(),
-		Password:       params.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHanaDbPassword(),
-		PasswordSecret: params.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHanaDbPasswordSecretName(),
-		Host:           params.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHostname(),
-		Port:           params.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetPort(),
+		Username:       params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbUser(),
+		Password:       params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPassword(),
+		PasswordSecret: params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPasswordSecretName(),
+		Host:           params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHostname(),
+		Port:           params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetPort(),
 		GCEService:     params.GCEService,
 		Project:        params.Config.GetCloudProperties().GetProjectId(),
 	}

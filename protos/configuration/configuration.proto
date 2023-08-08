@@ -51,7 +51,7 @@ message CollectionConfiguration {
   WorkloadValidationRemoteCollection workload_validation_remote_collection = 6;
   bool collect_experimental_metrics = 7;
   HANAMetricsConfig hana_metrics_config =
-      8;  // HANA DB user credentials for process metrics and HANA insights
+      8;  // HANA DB user credentials for process metrics
   google.protobuf.BoolValue sap_system_discovery = 9;
   bool collect_agent_metrics = 10;
   int64 agent_metrics_frequency = 11;
@@ -59,6 +59,8 @@ message CollectionConfiguration {
   int64 missed_heartbeat_threshold = 13;
   int64 agent_health_frequency = 14;
   int64 workload_validation_db_metrics_frequency = 15;
+  HANAMetricsConfig workload_validation_db_metrics_config =
+      16;  // HANA DB user credentials for WLM DB based metrics
 }
 
 message AgentProperties {
@@ -73,7 +75,6 @@ message WorkloadValidationRemoteCollection {
   RemoteCollectionGcloud remote_collection_gcloud = 3;
   RemoteCollectionSsh remote_collection_ssh = 4;
   repeated RemoteCollectionInstance remote_collection_instances = 5;
-  // TODO: Implement remote mode for database metrics
 }
 
 message RemoteCollectionInstance {

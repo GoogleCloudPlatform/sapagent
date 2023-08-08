@@ -81,7 +81,7 @@ var (
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
 			CollectWorkloadValidationMetrics: true,
-			HanaMetricsConfig: &cfgpb.HANAMetricsConfig{
+			WorkloadValidationDbMetricsConfig: &cfgpb.HANAMetricsConfig{
 				HanaDbUser:     "SYSTEM",
 				HanaDbPassword: "dummy-pass",
 				Hostname:       "test-hostname",
