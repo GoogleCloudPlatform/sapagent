@@ -28,9 +28,9 @@ import (
 
 	compute "google.golang.org/api/compute/v1"
 	"golang.org/x/oauth2/google"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

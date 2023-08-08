@@ -23,9 +23,9 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 )
 
 const (

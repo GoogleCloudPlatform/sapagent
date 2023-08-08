@@ -28,10 +28,10 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

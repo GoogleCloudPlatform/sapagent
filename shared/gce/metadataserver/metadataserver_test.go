@@ -299,7 +299,7 @@ func TestDiskTypeWithRetry(t *testing.T) {
 			metadataServerURL = ts.URL
 
 			got := DiskTypeWithRetry(testBackOffPolicy(), "any")
-			if test.want !=	got {
+			if test.want != got {
 				t.Errorf("DiskTypeWithRetry()=%v, want %v", got, test.want)
 			}
 		})
