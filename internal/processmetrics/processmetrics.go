@@ -60,7 +60,7 @@ import (
 
 type (
 	// Collector interface is SAP application specific metric collection logic.
-	// This needs to be implennted by application specific modules that want to leverage
+	// This needs to be implented by application specific modules that want to leverage
 	// startMetricGroup functionality.
 	Collector interface {
 		Collect(context.Context) []*mrpb.TimeSeries
@@ -101,7 +101,7 @@ const (
 // and false if we want to get metrics using the command line interface.
 // It will be removed once migration from command line to web interface is complete.
 // This variable is used to initialize `UseSAPControlAPI` in instance properties.
-var mainUseSAPControlAPI = false
+var mainUseSAPControlAPI = true
 
 /*
 Start starts collection if collect_process_metrics config option is enabled
