@@ -546,6 +546,32 @@ func TestListSAPInstances(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "CommentedLine",
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `#LD_LIBRARY_PATH=/usr/sap/DEH/HDB00/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/DEH/HDB00/exe/sapstartsrv pf=/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci -D -u dehadm
+					LD_LIBRARY_PATH=/usr/sap/DEV/ASCS01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm
+					/usr/sap/DEV/D02/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci -D -u devadm`,
+				}
+			},
+			want: []*instanceInfo{
+				&instanceInfo{
+					Sid:           "DEV",
+					Snr:           "01",
+					InstanceName:  "ASCS",
+					ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci",
+					LDLibraryPath: "/usr/sap/DEV/ASCS01/exe",
+				},
+				&instanceInfo{
+					Sid:           "DEV",
+					Snr:           "02",
+					InstanceName:  "D",
+					ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci",
+					LDLibraryPath: "/usr/sap/DEV/D02/exe",
+				},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

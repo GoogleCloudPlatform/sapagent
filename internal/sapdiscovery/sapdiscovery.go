@@ -313,6 +313,10 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 
 	lines := strings.Split(strings.TrimSuffix(result.StdOut, "\n"), "\n")
 	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			log.Logger.Infow("Not processing the commented entry", "line", line)
+			continue
+		}
 		path := sapServicesStartsrvPattern.FindStringSubmatch(line)
 		if len(path) != 5 {
 			log.Logger.Debugw("No SAP instance found", "line", line, "match", path)
