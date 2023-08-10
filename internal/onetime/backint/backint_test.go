@@ -66,7 +66,6 @@ func defaultParametersFile(t *testing.T) *os.File {
 		"bucket": "test-bucket",
 		"retries": 5,
 		"parallel_streams": 2,
-		"parallel_size_mb": 128,
 		"buffer_size_mb": 100,
 		"encryption_key": "",
 		"compress": false,

@@ -201,7 +201,6 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				ParallelStreams:   1,
 				BufferSizeMb:      100,
 				FileReadTimeoutMs: 1000,
-				ParallelSizeMb:    128,
 				Retries:           5,
 				Threads:           defaultThreads(),
 				RateLimitMb:       0,
@@ -230,7 +229,6 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				ParallelStreams:   32,
 				BufferSizeMb:      250,
 				FileReadTimeoutMs: 2000,
-				ParallelSizeMb:    228,
 				Retries:           25,
 				Threads:           2,
 				RateLimitMb:       200,
@@ -240,7 +238,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				OutputFile:        "/output.txt",
 			},
 			read: func(p string) ([]byte, error) {
-				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "parallel_size_mb": 228, "retries": 25, "threads": 2, "rate_limit_mb": 200}`), nil
+				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 2, "rate_limit_mb": 200}`), nil
 			},
 			wantOk: true,
 		},
@@ -264,7 +262,6 @@ func TestApplyDefaultMaxThreads(t *testing.T) {
 		ParallelStreams:   1,
 		BufferSizeMb:      100,
 		FileReadTimeoutMs: 1000,
-		ParallelSizeMb:    128,
 		Retries:           5,
 		Threads:           64,
 		InputFile:         "/dev/stdin",

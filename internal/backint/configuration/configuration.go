@@ -167,10 +167,6 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		log.Logger.Warn("parallel_streams capped to 32")
 		p.Config.ParallelStreams = 32
 	}
-	if p.Config.GetParallelSizeMb() <= 0 {
-		log.Logger.Warn("parallel_size_mb defaulted to 128")
-		p.Config.ParallelSizeMb = 128
-	}
 	if p.Config.GetThreads() <= 0 {
 		if numCPU > 64 {
 			numCPU = 64
