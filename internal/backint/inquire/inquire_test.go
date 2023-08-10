@@ -191,7 +191,7 @@ func TestInquireFiles(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID, test.backintVersion)
+			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID, test.backintVersion, 0)
 			if !strings.HasPrefix(string(got), test.wantPrefix) {
 				t.Errorf("inquireFiles(%s, %s, %s) = %s, wantPrefix: %s", test.prefix, test.fileName, test.externalBackupID, got, test.wantPrefix)
 			}

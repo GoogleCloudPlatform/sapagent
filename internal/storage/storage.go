@@ -24,10 +24,13 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"sort"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/googleapis/gax-go/v2"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -110,6 +113,11 @@ type ReadWriter struct {
 	// A default value of 0 prevents rate limiting.
 	RateLimitBytes int64
 
+	// MaxRetries sets the maximum amount of retries when executing an API call.
+	// An exponential backoff delays each subsequent retry.
+	MaxRetries int64
+
+	numRetries            int64
 	bytesWritten          int64
 	lastBytesWritten      int64
 	rateLimitBytesWritten int64
@@ -137,7 +145,6 @@ func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, 
 		log.Logger.Errorw("Failed to create GCS client. Ensure your default credentials or service account file are correct.", "error", err)
 		return nil, false
 	}
-	// TODO: Add custom retry logic
 
 	bucket := client.Bucket(bucketName)
 	if _, err := bucket.Objects(ctx, nil).Next(); err != nil && err != iterator.Done {
@@ -155,6 +162,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		return 0, errors.New("no bucket defined")
 	}
 
+	object := rw.BucketHandle.Object(rw.ObjectName).Retryer(rw.retryOptions("Failed to upload data to Google Cloud Storage, retrying.")...)
 	var writer io.WriteCloser
 	if rw.EncryptionKey != "" || rw.KMSKey != "" {
 		log.Logger.Infow("Encryption enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName, "encryptionKey", rw.EncryptionKey, "kmsKey", rw.KMSKey)
@@ -163,7 +171,6 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		log.Logger.Warnw("dump_data set to true, discarding data during upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		writer = discardCloser{}
 	} else {
-		object := rw.BucketHandle.Object(rw.ObjectName)
 		if rw.EncryptionKey != "" {
 			object = object.Key([]byte(rw.EncryptionKey))
 		}
@@ -188,7 +195,8 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	if rw.Compress {
 		log.Logger.Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		gzipWriter := gzip.NewWriter(writer)
-		if bytesWritten, err = rw.Copier(gzipWriter, rw); err != nil {
+		rw.Writer = gzipWriter
+		if bytesWritten, err = rw.Copier(rw, rw.Reader); err != nil {
 			return 0, err
 		}
 		// Closing the gzip writer flushes data to the underlying writer and writes the gzip footer.
@@ -197,7 +205,8 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 			return 0, err
 		}
 	} else {
-		if bytesWritten, err = rw.Copier(writer, rw); err != nil {
+		rw.Writer = writer
+		if bytesWritten, err = rw.Copier(rw, rw.Reader); err != nil {
 			return 0, err
 		}
 	}
@@ -236,6 +245,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	if rw.EncryptionKey != "" {
 		object = object.Key([]byte(rw.EncryptionKey))
 	}
+	object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
 	reader, err := object.NewReader(ctx)
 	if err != nil {
 		return 0, err
@@ -251,14 +261,16 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		if bytesWritten, err = rw.Copier(rw, gzipReader); err != nil {
+		rw.Reader = gzipReader
+		if bytesWritten, err = rw.Copier(rw.Writer, rw); err != nil {
 			return 0, err
 		}
 		if err := gzipReader.Close(); err != nil {
 			return 0, err
 		}
 	} else {
-		if bytesWritten, err = rw.Copier(rw, reader); err != nil {
+		rw.Reader = reader
+		if bytesWritten, err = rw.Copier(rw.Writer, rw); err != nil {
 			return 0, err
 		}
 	}
@@ -271,13 +283,14 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 // ListObjects returns all objects in the bucket with the given prefix sorted by latest creation.
 // The prefix can be empty and can contain multiple folders separated by forward slashes.
 // Errors are returned if no handle is defined or if there are iteration issues.
-func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix string) ([]*storage.ObjectAttrs, error) {
+func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix string, maxRetries int64) ([]*storage.ObjectAttrs, error) {
 	if bucketHandle == nil {
 		return nil, errors.New("no bucket defined")
 	}
 
+	rw := &ReadWriter{MaxRetries: maxRetries}
+	it := bucketHandle.Retryer(rw.retryOptions("Failed to list objects, retrying.")...).Objects(ctx, &storage.Query{Prefix: prefix})
 	var result []*storage.ObjectAttrs
-	it := bucketHandle.Objects(ctx, &storage.Query{Prefix: prefix})
 	for {
 		attrs, err := it.Next()
 		if err == iterator.Done {
@@ -294,28 +307,35 @@ func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix
 }
 
 // DeleteObject deletes the specified object from the bucket.
-func DeleteObject(ctx context.Context, bucketHandle *storage.BucketHandle, objectName string) error {
+func DeleteObject(ctx context.Context, bucketHandle *storage.BucketHandle, objectName string, maxRetries int64) error {
 	if bucketHandle == nil {
 		return errors.New("no bucket defined")
 	}
-	return bucketHandle.Object(objectName).Delete(ctx)
+
+	rw := &ReadWriter{MaxRetries: maxRetries, ObjectName: objectName}
+	object := bucketHandle.Object(objectName).Retryer(rw.retryOptions("Failed to delete object, retrying.")...)
+	if err := object.Delete(ctx); err != nil {
+		log.Logger.Errorw("Failed to delete object.", "objectName", objectName, "error", err)
+		return err
+	}
+	return nil
 }
 
-// Read wraps io.Reader to provide upload progress updates.
+// Read wraps io.Reader to provide download progress updates.
 func (rw *ReadWriter) Read(p []byte) (n int, err error) {
 	n, err = rw.Reader.Read(p)
 	if err == nil {
-		rw.logProgress("Upload progress", int64(n))
+		rw.logProgress("Download progress", int64(n))
 		rw.rateLimit(int64(n))
 	}
 	return n, err
 }
 
-// Write wraps io.Writer to provide download progress updates.
+// Write wraps io.Writer to provide upload progress updates.
 func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 	n, err = rw.Writer.Write(p)
 	if err == nil {
-		rw.logProgress("Download progress", int64(n))
+		rw.logProgress("Upload progress", int64(n))
 		rw.rateLimit(int64(n))
 	}
 	return n, err
@@ -350,6 +370,7 @@ func (rw *ReadWriter) rateLimit(bytes int64) {
 
 // defaultArgs prepares ReadWriter for a new upload/download.
 func (rw *ReadWriter) defaultArgs() *ReadWriter {
+	rw.numRetries = 0
 	rw.bytesWritten = 0
 	rw.lastBytesWritten = 0
 	rw.rateLimitBytesWritten = 0
@@ -362,4 +383,29 @@ func (rw *ReadWriter) defaultArgs() *ReadWriter {
 		rw.LogDelay = DefaultLogDelay
 	}
 	return rw
+}
+
+// retryOptions uses an exponential backoff to retry all errors except 404.
+func (rw *ReadWriter) retryOptions(failureMessage string) []storage.RetryOption {
+	return []storage.RetryOption{storage.WithErrorFunc(func(err error) bool {
+		var e *googleapi.Error
+		if err == nil || errors.As(err, &e) && e.Code == http.StatusNotFound {
+			rw.numRetries = 0
+			return false
+		}
+
+		rw.numRetries++
+		if rw.numRetries > rw.MaxRetries {
+			log.Logger.Errorw("Max retries exceeded, cancelling operation.", "numRetries", rw.numRetries, "maxRetries", rw.MaxRetries, "objectName", rw.ObjectName, "error", err)
+			return false
+		}
+		log.Logger.Infow(failureMessage, "numRetries", rw.numRetries, "maxRetries", rw.MaxRetries, "objectName", rw.ObjectName, "error", err)
+		return true
+	}),
+		storage.WithBackoff(gax.Backoff{
+			Initial:    10 * time.Second,
+			Max:        120 * time.Second,
+			Multiplier: 2,
+		}),
+		storage.WithPolicy(storage.RetryAlways)}
 }

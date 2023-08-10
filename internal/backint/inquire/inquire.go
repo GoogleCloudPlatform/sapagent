@@ -73,7 +73,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			}
 			prefix := config.GetUserId() + parse.TrimAndClean(fileName)
 			wp.Submit(func() {
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion)
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion, config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -87,7 +87,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			fileName := s[2]
 			prefix := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
 			wp.Submit(func() {
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion)
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion, config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -105,10 +105,10 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // inquireFiles queries the bucket with the specified prefix and returns all
 // objects found according to SAP HANA formatting specifications.
-func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion string) []byte {
+func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion string, retries int64) []byte {
 	var result []byte
 	log.Logger.Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
-	objects, err := storage.ListObjects(ctx, bucketHandle, prefix)
+	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, retries)
 	if err != nil {
 		log.Logger.Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID)
 		result = []byte("#ERROR")

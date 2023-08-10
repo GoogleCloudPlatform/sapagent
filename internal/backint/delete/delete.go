@@ -72,7 +72,7 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 			object := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
 			wp.Submit(func() {
 				log.Logger.Infow("Deleting object", "object", object)
-				err := storage.DeleteObject(ctx, bucketHandle, object)
+				err := storage.DeleteObject(ctx, bucketHandle, object, config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()
 				if errors.Is(err, store.ErrObjectNotExist) {

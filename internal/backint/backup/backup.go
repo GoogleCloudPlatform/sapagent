@@ -179,6 +179,7 @@ func backupFile(ctx context.Context, p parameters) string {
 		RateLimitBytes: p.config.GetRateLimitMb() * 1024 * 1024,
 		EncryptionKey:  p.config.GetEncryptionKey(),
 		KMSKey:         p.config.GetKmsKey(),
+		MaxRetries:     p.config.GetRetries(),
 		// Match the previous Backint implementation's metadata format.
 		Metadata: map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
 	}
@@ -293,7 +294,7 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
 
 	log.Logger.Infow("Deleting temporary chunked objects", "object", object, "chunks", p.config.GetParallelStreams())
 	for i := int64(0); i < p.config.GetParallelStreams(); i++ {
-		if err := storage.DeleteObject(ctx, p.bucketHandle, object+strconv.FormatInt(i, 10)); err != nil {
+		if err := storage.DeleteObject(ctx, p.bucketHandle, object+strconv.FormatInt(i, 10), p.config.GetRetries()); err != nil {
 			log.Logger.Errorw("Error deleting temporary chunked object", "object", object+strconv.FormatInt(i, 10), "err", err)
 			chunkError = true
 		}

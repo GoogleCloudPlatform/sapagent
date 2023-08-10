@@ -347,11 +347,12 @@ func TestDownload(t *testing.T) {
 			wantError: cmpopts.AnyError,
 		},
 		{
-			name: "ObjectNotFound",
+			name: "ObjectNotFoundWithRetries",
 			rw: &ReadWriter{
 				BucketHandle: defaultBucketHandle,
 				ObjectName:   "fake-object.txt",
 				Writer:       defaultBuffer(),
+				MaxRetries:   1,
 			},
 			wantError: cmpopts.AnyError,
 		},
@@ -486,7 +487,7 @@ func TestListObjects(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotError := ListObjects(context.Background(), test.bucket, test.prefix)
+			got, gotError := ListObjects(context.Background(), test.bucket, test.prefix, 0)
 			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
 				t.Errorf("ListObjects(%s) = %v, want %v", test.prefix, gotError, test.wantError)
 			}
@@ -523,7 +524,7 @@ func TestDeleteObject(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := DeleteObject(context.Background(), test.bucket, test.object)
+			got := DeleteObject(context.Background(), test.bucket, test.object, 0)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("DeleteObject(%s) = %v, want %v", test.object, got, test.want)
 			}
