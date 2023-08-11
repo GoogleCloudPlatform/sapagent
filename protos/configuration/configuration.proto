@@ -61,6 +61,7 @@ message CollectionConfiguration {
   int64 workload_validation_db_metrics_frequency = 15;
   HANAMetricsConfig workload_validation_db_metrics_config =
       16;  // HANA DB user credentials for WLM DB based metrics
+  string data_warehouse_endpoint = 17;
 }
 
 message AgentProperties {

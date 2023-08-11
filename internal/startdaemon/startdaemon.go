@@ -224,7 +224,8 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return
 	}
-	wlmService, err := gce.NewWLMClient(ctx)
+
+	wlmService, err := gce.NewWLMClient(ctx, d.config.GetCollectionConfiguration().GetDataWarehouseEndpoint())
 	if err != nil {
 		log.Logger.Errorw("Error creating WLM Client", "error", err)
 		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)

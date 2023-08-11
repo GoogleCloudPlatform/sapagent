@@ -34,7 +34,7 @@ import (
 	htransport "google.golang.org/api/transport/http"
 )
 
-const basePath = "https://workloadmanager-datawarehouse.googleapis.com/v1/"
+const defaultBasePath = "https://workloadmanager-datawarehouse.googleapis.com/v1/"
 const mtlsBasePath = "https://workloadmanager.mtls.googleapis.com/v1alpha1/"
 
 type (
@@ -77,7 +77,10 @@ func setOptions(u map[string][]string, opts ...googleapi.CallOption) {
 }
 
 // NewService creates a new WorkloadManager Service.
-func NewService(ctx context.Context, opts ...option.ClientOption) (*Service, error) {
+func NewService(ctx context.Context, basePath string, opts ...option.ClientOption) (*Service, error) {
+	if basePath == "" {
+		basePath = defaultBasePath
+	}
 	scopesOption := internaloption.WithDefaultScopes(
 		"https://www.googleapis.com/auth/cloud-platform",
 	)

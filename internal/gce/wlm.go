@@ -31,8 +31,8 @@ type WLM struct {
 }
 
 // NewWLMClient creates a new WLM service wrapper.
-func NewWLMClient(ctx context.Context) (*WLM, error) {
-	s, err := workloadmanager.NewService(ctx)
+func NewWLMClient(ctx context.Context, basePath string) (*WLM, error) {
+	s, err := workloadmanager.NewService(ctx, basePath)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating WLM client")
 	}
