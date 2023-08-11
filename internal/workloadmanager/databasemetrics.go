@@ -39,6 +39,11 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 		return fmt.Errorf("HANA Insights rules not found")
 	}
 
+	if fileInfo, err := params.OSStatReader(metricOverridePath); fileInfo != nil && err == nil {
+		log.Logger.Info("Using override metrics from yaml file, nothing to be done.")
+		return nil
+	}
+
 	log.Logger.Info("Collecting Workload Manager Database metrics...")
 	dpb := databaseconnector.Params{
 		Username:       params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbUser(),

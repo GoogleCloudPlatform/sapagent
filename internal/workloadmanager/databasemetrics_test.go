@@ -18,6 +18,7 @@ package workloadmanager
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
@@ -104,7 +105,7 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 			want:   cmpopts.AnyError,
 		},
 		{
-			name: "HANAMetricsConfigSet",
+			name: "HANAMetricsConfigSetMetricOverride",
 			params: Parameters{
 				Config: defaultConfigurationDBMetrics,
 				HANAInsightRules: []*rpb.Rule{
@@ -113,6 +114,28 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				BackOffs:          defaultBackOffIntervals,
 				WLMService:        &testWLMInterface{},
+				OSStatReader: func(string) (os.FileInfo, error) {
+					f, err := testFS.Open("test_data/metricoverride.yaml")
+					if err != nil {
+						return nil, err
+					}
+					return f.Stat()
+				},
+			},
+		},
+		{
+			name: "HANAMetricsConfigSetNoOverride",
+			params: Parameters{
+				Config: defaultConfigurationDBMetrics,
+				HANAInsightRules: []*rpb.Rule{
+					&rpb.Rule{},
+				},
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				BackOffs:          defaultBackOffIntervals,
+				WLMService:        &testWLMInterface{},
+				OSStatReader: func(data string) (os.FileInfo, error) {
+					return nil, cmpopts.AnyError
+				},
 			},
 		},
 	}
