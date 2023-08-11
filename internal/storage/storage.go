@@ -117,13 +117,14 @@ type ReadWriter struct {
 	// An exponential backoff delays each subsequent retry.
 	MaxRetries int64
 
-	numRetries            int64
-	bytesWritten          int64
-	lastBytesWritten      int64
-	rateLimitBytesWritten int64
-	lastRateLimit         time.Time
-	lastLog               time.Time
-	firstLog              time.Time
+	numRetries                int64
+	bytesTransferred          int64
+	lastBytesTransferred      int64
+	rateLimitBytesTransferred int64
+	lastRateLimit             time.Time
+	lastLog                   time.Time
+	lastTransferTime          time.Duration
+	totalTransferTime         time.Duration
 }
 
 // discardCloser provides no-ops for a io.WriteCloser interface.
@@ -183,6 +184,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		}
 		writer = objectWriter
 	}
+	rw.Writer = writer
 
 	rw = rw.defaultArgs()
 	if rw.ChunkSizeMb == 0 {
@@ -194,9 +196,8 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	var err error
 	if rw.Compress {
 		log.Logger.Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
-		gzipWriter := gzip.NewWriter(writer)
-		rw.Writer = gzipWriter
-		if bytesWritten, err = rw.Copier(rw, rw.Reader); err != nil {
+		gzipWriter := gzip.NewWriter(rw)
+		if bytesWritten, err = rw.Copier(gzipWriter, rw.Reader); err != nil {
 			return 0, err
 		}
 		// Closing the gzip writer flushes data to the underlying writer and writes the gzip footer.
@@ -205,7 +206,6 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 			return 0, err
 		}
 	} else {
-		rw.Writer = writer
 		if bytesWritten, err = rw.Copier(rw, rw.Reader); err != nil {
 			return 0, err
 		}
@@ -226,8 +226,8 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 			return bytesWritten, fmt.Errorf("upload error for object: %v, bytesWritten: %d does not equal the object's size: %d", rw.ObjectName, bytesWritten, objectSize)
 		}
 	}
-	avgTransferSpeedMBps := float64(bytesWritten) / time.Since(rw.firstLog).Seconds() / 1024 / 1024
-	log.Logger.Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "objectSizeInBucket", objectSize, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	avgTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
+	log.Logger.Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "objectSizeInBucket", objectSize, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return bytesWritten, nil
 }
 
@@ -251,32 +251,31 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	defer reader.Close()
+	rw.Reader = reader
 
 	rw = rw.defaultArgs()
 	log.Logger.Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
 	if reader.Attrs.ContentType == compressedContentType {
 		log.Logger.Infow("Compressed file detected, decompressing during download", "bucket", rw.BucketName, "object", rw.ObjectName)
-		gzipReader, err := gzip.NewReader(reader)
+		gzipReader, err := gzip.NewReader(rw)
 		if err != nil {
 			return 0, err
 		}
-		rw.Reader = gzipReader
-		if bytesWritten, err = rw.Copier(rw.Writer, rw); err != nil {
+		if bytesWritten, err = rw.Copier(rw.Writer, gzipReader); err != nil {
 			return 0, err
 		}
 		if err := gzipReader.Close(); err != nil {
 			return 0, err
 		}
 	} else {
-		rw.Reader = reader
 		if bytesWritten, err = rw.Copier(rw.Writer, rw); err != nil {
 			return 0, err
 		}
 	}
 
-	avgTransferSpeedMBps := float64(bytesWritten) / time.Since(rw.firstLog).Seconds() / 1024 / 1024
-	log.Logger.Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	avgTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
+	log.Logger.Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return bytesWritten, nil
 }
 
@@ -323,7 +322,12 @@ func DeleteObject(ctx context.Context, bucketHandle *storage.BucketHandle, objec
 
 // Read wraps io.Reader to provide download progress updates.
 func (rw *ReadWriter) Read(p []byte) (n int, err error) {
+	start := time.Now()
 	n, err = rw.Reader.Read(p)
+	readTime := time.Since(start)
+	rw.lastTransferTime += readTime
+	rw.totalTransferTime += readTime
+
 	if err == nil {
 		rw.logProgress("Download progress", int64(n))
 		rw.rateLimit(int64(n))
@@ -333,7 +337,12 @@ func (rw *ReadWriter) Read(p []byte) (n int, err error) {
 
 // Write wraps io.Writer to provide upload progress updates.
 func (rw *ReadWriter) Write(p []byte) (n int, err error) {
+	start := time.Now()
 	n, err = rw.Writer.Write(p)
+	writeTime := time.Since(start)
+	rw.lastTransferTime += writeTime
+	rw.totalTransferTime += writeTime
+
 	if err == nil {
 		rw.logProgress("Upload progress", int64(n))
 		rw.rateLimit(int64(n))
@@ -343,13 +352,19 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 
 // logProgress logs download/upload status including percent completion and transfer speed in MBps.
 func (rw *ReadWriter) logProgress(logMessage string, n int64) {
-	rw.bytesWritten += int64(n)
+	rw.bytesTransferred += int64(n)
 	if time.Since(rw.lastLog) > rw.LogDelay {
-		percentComplete := float64(rw.bytesWritten) / float64(rw.TotalBytes) * 100.0
-		transferSpeedMBps := float64(rw.bytesWritten-rw.lastBytesWritten) / time.Since(rw.lastLog).Seconds() / 1024 / 1024
-		log.Logger.Infow(logMessage, "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", rw.bytesWritten, "totalBytes", rw.TotalBytes, "percentComplete", math.Round(percentComplete), "transferSpeedMBps", math.Round(transferSpeedMBps))
+		percentComplete := float64(0)
+		if rw.TotalBytes > 0 {
+			percentComplete = float64(rw.bytesTransferred) / float64(rw.TotalBytes) * 100.0
+		}
+		lastTransferSpeedMBps := float64(rw.bytesTransferred-rw.lastBytesTransferred) / rw.lastTransferTime.Seconds() / 1024 / 1024
+		totalTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
+		log.Logger.Infow(logMessage, "bucket", rw.BucketName, "object", rw.ObjectName, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", math.Round(percentComplete), "lastTransferSpeedMBps", math.Round(lastTransferSpeedMBps), "totalTransferSpeedMBps", math.Round(totalTransferSpeedMBps))
 		rw.lastLog = time.Now()
-		rw.lastBytesWritten = rw.bytesWritten
+		rw.lastBytesTransferred = rw.bytesTransferred
+		// Prevent potential divide by zero by defaulting to 1 nanosecond.
+		rw.lastTransferTime = time.Nanosecond
 	}
 }
 
@@ -360,23 +375,25 @@ func (rw *ReadWriter) rateLimit(bytes int64) {
 		return
 	}
 
-	rw.rateLimitBytesWritten += bytes
-	if rw.rateLimitBytesWritten >= rw.RateLimitBytes {
+	rw.rateLimitBytesTransferred += bytes
+	if rw.rateLimitBytesTransferred >= rw.RateLimitBytes {
 		time.Sleep(time.Second - time.Since(rw.lastRateLimit))
 		rw.lastRateLimit = time.Now()
-		rw.rateLimitBytesWritten = 0
+		rw.rateLimitBytesTransferred = 0
 	}
 }
 
 // defaultArgs prepares ReadWriter for a new upload/download.
 func (rw *ReadWriter) defaultArgs() *ReadWriter {
 	rw.numRetries = 0
-	rw.bytesWritten = 0
-	rw.lastBytesWritten = 0
-	rw.rateLimitBytesWritten = 0
+	rw.bytesTransferred = 0
+	rw.lastBytesTransferred = 0
+	rw.rateLimitBytesTransferred = 0
 	rw.lastRateLimit = time.Now()
 	rw.lastLog = time.Now()
-	rw.firstLog = time.Now()
+	// Prevent potential divide by zero by defaulting to 1 nanosecond.
+	rw.lastTransferTime = time.Nanosecond
+	rw.totalTransferTime = time.Nanosecond
 
 	if rw.LogDelay <= 0 {
 		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
