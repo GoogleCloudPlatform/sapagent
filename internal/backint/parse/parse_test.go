@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -159,42 +158,37 @@ func TestRestoreFilename(t *testing.T) {
 
 func TestOpenFileWithRetries(t *testing.T) {
 	tests := []struct {
-		name          string
-		fileName      string
-		timeoutMs     int64
-		creationDelay time.Duration
-		wantError     error
+		name       string
+		fileName   string
+		createFile bool
+		wantError  error
 	}{
 		{
-			name:          "FileFoundAfterDelay",
-			fileName:      t.TempDir() + "/found_after_delay.txt",
-			timeoutMs:     2000,
-			creationDelay: 1000 * time.Millisecond,
-			wantError:     nil,
+			name:       "FileFound",
+			fileName:   t.TempDir() + "/found.txt",
+			createFile: true,
+			wantError:  nil,
 		},
 		{
-			name:          "FileNotFound",
-			fileName:      t.TempDir() + "/not_found.txt",
-			timeoutMs:     2000,
-			creationDelay: 5000 * time.Millisecond,
-			wantError:     cmpopts.AnyError,
+			name:       "FileNotFound",
+			fileName:   t.TempDir() + "/not_found.txt",
+			createFile: false,
+			wantError:  cmpopts.AnyError,
 		},
 	}
 
 	for _, tc := range tests {
-		go func() {
-			// Sleep before creating the file to simulate a delay from HANA.
-			time.Sleep(tc.creationDelay)
+		if tc.createFile {
 			f, err := os.Create(tc.fileName)
 			if err != nil {
 				t.Errorf("os.Create(%v) failed: %v", tc.fileName, err)
 			}
 			defer f.Close()
-		}()
+		}
 
-		_, err := OpenFileWithRetries(tc.fileName, os.O_RDONLY, 0, tc.timeoutMs)
+		_, err := OpenFileWithRetries(tc.fileName, os.O_RDONLY, 0, 0)
 		if cmp.Diff(err, tc.wantError, cmpopts.EquateErrors()) != "" {
-			t.Errorf("OpenFileWithRetries(%v, %v) = %v, wantError: %v", tc.fileName, tc.timeoutMs, err, tc.wantError)
+			t.Errorf("OpenFileWithRetries(%v) = %v, wantError: %v", tc.fileName, err, tc.wantError)
 		}
 	}
 }
