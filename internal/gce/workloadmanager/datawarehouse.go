@@ -228,10 +228,10 @@ type SapDiscoveryComponentApplicationProperties struct {
 	//   "NETWEAVER" - Netweaver application.
 	ApplicationType string `json:"applicationType,omitempty"`
 	// Resource URI of the recognized ASCS host of the application.
-	AscsURI string `json:"ascURI,omitempty"`
+	AscsURI string `json:"ascsUri,omitempty"`
 	// Resource URI of the recognized shared NFS of the application.
 	// May be empty if the application server has only a single node.
-	NfsURI string `json:"nfs,omitempty"`
+	NfsURI string `json:"nfsUri,omitempty"`
 }
 
 // SapDiscoveryComponentDatabaseProperties is a set of properties describing an SAP Database layer.
@@ -245,10 +245,10 @@ type SapDiscoveryComponentDatabaseProperties struct {
 	//   "DB2" - IBM DB2
 	DatabaseType string `json:"databaseType,omitempty"`
 	// URI of the recognized primary instance of the database.
-	PrimaryInstanceURI string `json:"primaryInstanceURI,omitempty"`
+	PrimaryInstanceURI string `json:"primaryInstanceUri,omitempty"`
 	// URI of the recognized shared NFS of the database.
 	// May be empty if the database has only a single node.
-	SharedNfsURI string `json:"sharedNfsURI,omitempty"`
+	SharedNfsURI string `json:"sharedNfsUri,omitempty"`
 }
 
 // SapDiscoveryComponent is an organized set of SAP System resources.
@@ -340,8 +340,7 @@ type SapDiscoveryResource struct {
 	ResourceType string `json:"resourceType,omitempty"`
 	// ResourceURI: URI of the resource, includes project, location, and
 	// name.
-	//   "RESOURCE_KIND_INSTANCE_GROUP" - This is a compute instance group.
-	ResourceURI string `json:"resourceURI,omitempty"`
+	ResourceURI string `json:"resourceUri,omitempty"`
 	// UpdateTime: Unix timestamp of when this resource last had its
 	// discovery data updated.
 	UpdateTime string `json:"updateTime,omitempty"`

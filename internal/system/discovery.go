@@ -189,13 +189,16 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 		// Discover instance and immediately adjacent resources (disks, addresses, networks)
 		res, ci, ir := d.discoverInstance(cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
 
-		if ci != nil {
-			netRes := d.discoverNetworks(cp.GetProjectId(), ci, ir)
-			res = append(res, netRes...)
-
-			disks := d.discoverDisks(cp.GetProjectId(), cp.GetZone(), ci, ir)
-			res = append(res, disks...)
+		if ci == nil {
+			log.Logger.Warn("Unable to discover current instance, cannot complete discovery")
+			continue
 		}
+
+		netRes := d.discoverNetworks(cp.GetProjectId(), ci, ir)
+		res = append(res, netRes...)
+
+		disks := d.discoverDisks(cp.GetProjectId(), cp.GetZone(), ci, ir)
+		res = append(res, disks...)
 
 		fsRes := d.discoverFilestores(ctx, cp.GetProjectId(), ir)
 		res = append(res, fsRes...)
@@ -234,9 +237,10 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 						continue
 					}
 					dbComp = &spb.SapDiscovery_Component{
-						Sid:        dbSid,
-						Resources:  dbRes,
-						Properties: &spb.SapDiscovery_Component_DatabaseProperties_{DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{}},
+						Sid:         dbSid,
+						Resources:   dbRes,
+						Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{}},
+						HostProject: config.GetCloudProperties().GetProjectId(),
 					}
 				}
 				// See if a system with the same SID already exists
@@ -257,10 +261,15 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 					}},
+					HostProject: config.GetCloudProperties().GetProjectId(),
 				}
 				err := d.discoverASCS(ctx, app.Sapsid, system.GetApplicationLayer(), cp)
 				if err != nil {
 					log.Logger.Warnw("Error discovering ascs", "error", err)
+				}
+				err = d.discoverAppNFS(ctx, app, system.GetApplicationLayer(), cp)
+				if err != nil {
+					log.Logger.Warnw("Error discovering app NFS", "error", err)
 				}
 				if dbComp != nil {
 					system.DatabaseLayer = dbComp
@@ -297,7 +306,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 		}
 
 		locationParts := strings.Split(cp.GetZone(), "-")
-		continent := locationParts[0]
+		region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 
 		log.Logger.Info("Sending systems to WLM API")
 		for _, sys := range sapSystems {
@@ -305,13 +314,17 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 			req := &workloadmanager.WriteInsightRequest{
 				Insight: insightFromSAPSystem(sys),
 			}
+			req.Insight.InstanceID = fmt.Sprintf("%d", ci.Id)
 
-			d.wlmService.WriteInsight(cp.ProjectId, continent, req)
+			err := d.wlmService.WriteInsight(cp.ProjectId, region, req)
+			if err != nil {
+				log.Logger.Warnw("Encountered error writing to WLM", "error", err)
+			}
 
 			if d.cloudLogInterface == nil {
 				continue
 			}
-			err := d.writeToCloudLogging(sys)
+			err = d.writeToCloudLogging(sys)
 			if err != nil {
 				log.Logger.Warnw("Encountered error writing to cloud logging", "error", err)
 			}
