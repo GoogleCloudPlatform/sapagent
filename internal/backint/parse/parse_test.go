@@ -17,7 +17,10 @@ limitations under the License.
 package parse
 
 import (
+	"bytes"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -63,5 +66,135 @@ func TestSplit(t *testing.T) {
 				t.Errorf("split(%v) had unexpected diff (-want +got):\n%s", test.s, diff)
 			}
 		})
+	}
+}
+
+func TestWriteSoftwareVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		line    string
+		want    string
+		wantErr error
+	}{
+		{
+			name:    "EmptyString",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ParseVersion",
+			line: `#SOFTWAREID "backint 1.50" "hdb nameserver 2.00.50"`,
+			want: "1.50",
+		},
+	}
+	for _, tc := range tests {
+		output := bytes.NewBufferString("")
+		got, err := WriteSoftwareVersion(tc.line, output)
+		if cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()) != "" {
+			t.Errorf("WriteSoftwareVersion(%v) = %v, wantError: %v", tc.line, err, tc.wantErr)
+		}
+		if got != tc.want {
+			t.Errorf("WriteSoftwareVersion(%v) = %v, want: %v", tc.line, got, tc.want)
+		}
+	}
+}
+
+func TestTrimAndClean(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		{
+			name: "EmptyString",
+		},
+		{
+			name: "TrimQuotes",
+			str:  `"Hello World"`,
+			want: `Hello World`,
+		},
+		{
+			name: "EmbeddedQuotesAndBackslashes",
+			str:  `Hello\" W\orld`,
+			want: `Hello" W\orld`,
+		},
+	}
+
+	for _, tc := range tests {
+		got := TrimAndClean(tc.str)
+		if got != tc.want {
+			t.Errorf("TrimAndClean(%v) = %v, want: %v", tc.str, got, tc.want)
+		}
+	}
+}
+
+func TestRestoreFilename(t *testing.T) {
+	tests := []struct {
+		name string
+		str  string
+		want string
+	}{
+		{
+			name: "EmptyString",
+			want: `"/"`,
+		},
+		{
+			name: "RegularFileName",
+			str:  `tmp/test.txt`,
+			want: `"/tmp/test.txt"`,
+		},
+		{
+			name: "EmbeddedQuotesAndBackslashes",
+			str:  `tmp/test".\txt`,
+			want: `"/tmp/test\".\txt"`,
+		},
+	}
+
+	for _, tc := range tests {
+		got := RestoreFilename(tc.str)
+		if got != tc.want {
+			t.Errorf("RestoreFilename(%v) = %v, want: %v", tc.str, got, tc.want)
+		}
+	}
+}
+
+func TestOpenFileWithRetries(t *testing.T) {
+	tests := []struct {
+		name          string
+		fileName      string
+		timeoutMs     int64
+		creationDelay time.Duration
+		wantError     error
+	}{
+		{
+			name:          "FileFoundAfterDelay",
+			fileName:      t.TempDir() + "/found_after_delay.txt",
+			timeoutMs:     2000,
+			creationDelay: 1000 * time.Millisecond,
+			wantError:     nil,
+		},
+		{
+			name:          "FileNotFound",
+			fileName:      t.TempDir() + "/not_found.txt",
+			timeoutMs:     2000,
+			creationDelay: 5000 * time.Millisecond,
+			wantError:     cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		go func() {
+			// Sleep before creating the file to simulate a delay from HANA.
+			time.Sleep(tc.creationDelay)
+			f, err := os.Create(tc.fileName)
+			if err != nil {
+				t.Errorf("os.Create(%v) failed: %v", tc.fileName, err)
+			}
+			defer f.Close()
+		}()
+
+		_, err := OpenFileWithRetries(tc.fileName, os.O_RDONLY, 0, tc.timeoutMs)
+		if cmp.Diff(err, tc.wantError, cmpopts.EquateErrors()) != "" {
+			t.Errorf("OpenFileWithRetries(%v, %v) = %v, wantError: %v", tc.fileName, tc.timeoutMs, err, tc.wantError)
+		}
 	}
 }

@@ -133,15 +133,15 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	object := objects[0]
 
 	// From the specification, files are created by Backint and pipes are created by the database.
-	log.Logger.Infow("Restoring object from bucket", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "obj", object.Name, "fileType", object.Metadata["fileType"], "destName", destName, "objSize", object.Size)
+	log.Logger.Infow("Restoring object from bucket", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "obj", object.Name, "fileType", object.Metadata["X-Backup-Type"], "destName", destName, "objSize", object.Size)
 	var destFile *os.File
 	if object.Metadata["X-Backup-Type"] == "FILE" {
 		destFile, err = os.Create(parse.TrimAndClean(destName))
 	} else {
-		destFile, err = os.OpenFile(parse.TrimAndClean(destName), os.O_RDWR, 0)
+		destFile, err = parse.OpenFileWithRetries(parse.TrimAndClean(destName), os.O_RDWR, 0, config.GetFileReadTimeoutMs())
 	}
 	if err != nil {
-		log.Logger.Errorw("Error opening dest file", "destName", destName, "err", err, "fileType", object.Metadata["fileType"])
+		log.Logger.Errorw("Error opening dest file", "destName", destName, "err", err, "fileType", object.Metadata["X-Backup-Type"])
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	}
 	defer destFile.Close()

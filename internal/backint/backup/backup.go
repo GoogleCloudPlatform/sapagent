@@ -152,7 +152,7 @@ func backupFile(ctx context.Context, p parameters) string {
 	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + p.extension
 	log.Logger.Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType)
 	if p.reader == nil {
-		f, err := os.Open(fileNameTrim)
+		f, err := parse.OpenFileWithRetries(fileNameTrim, os.O_RDONLY, 0, p.config.GetFileReadTimeoutMs())
 		if err != nil {
 			log.Logger.Errorw("Error opening backup file", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 			return fmt.Sprintf("#ERROR %s\n", p.fileName)
@@ -198,7 +198,7 @@ func backupFile(ctx context.Context, p parameters) string {
 // A returned error indicates the parallel jobs were not started.
 func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
-	f, err := os.Open(fileNameTrim)
+	f, err := parse.OpenFileWithRetries(fileNameTrim, os.O_RDONLY, 0, p.config.GetFileReadTimeoutMs())
 	if err != nil {
 		log.Logger.Errorw("Error opening backup file", "fileName", p.fileName, "err", err)
 		return fmt.Sprintf("#ERROR %s\n", p.fileName), err

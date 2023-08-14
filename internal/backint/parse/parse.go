@@ -20,8 +20,11 @@ package parse
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -86,4 +89,30 @@ func TrimAndClean(str string) string {
 func RestoreFilename(str string) string {
 	str = fmt.Sprintf("%q", "/"+str)
 	return strings.ReplaceAll(str, `\\`, `\`)
+}
+
+// OpenFileWithRetries will retry opening a file with an
+// exponential backoff until the timeout.
+func OpenFileWithRetries(name string, flag int, perm os.FileMode, timeoutMs int64) (*os.File, error) {
+	if timeoutMs <= 0 {
+		log.Logger.Warn("timeoutMs defaulted to 1000")
+		timeoutMs = 1000
+	}
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxInterval = 10 * time.Second
+	bo.MaxElapsedTime = time.Duration(timeoutMs) * time.Millisecond
+
+	var file *os.File
+	err := backoff.Retry(func() error {
+		var err error
+		file, err = os.OpenFile(name, flag, perm)
+		if err != nil && bo.GetElapsedTime().Milliseconds() < timeoutMs {
+			log.Logger.Infow("Failed to open file, retrying.", "fileName", name, "elapsedTimeMs", bo.GetElapsedTime().Milliseconds(), "timeoutMs", timeoutMs, "err", err)
+		}
+		return err
+	}, bo)
+	if err != nil {
+		log.Logger.Errorw("Timeout opening file", "fileName", name, "elapsedTimeMs", bo.GetElapsedTime().Milliseconds(), "timeoutMs", timeoutMs, "err", err)
+	}
+	return file, err
 }
