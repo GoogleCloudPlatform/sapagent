@@ -229,7 +229,9 @@ func TestStart(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := Start(context.Background(), test.parameters)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			got := Start(ctx, test.parameters)
 			if got != test.want {
 				t.Errorf("Start(%v), got: %t want: %t", test.parameters, got, test.want)
 			}
