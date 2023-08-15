@@ -26,6 +26,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -33,6 +34,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -136,8 +138,15 @@ func (discardCloser) Write(p []byte) (int, error) { return len(p), nil }
 // ConnectToBucket creates the storage client with custom retry logic and
 // attempts to connect to the GCS bucket. Returns false if there is a connection
 // failure (bucket does not exist, invalid credentials, etc.)
-func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName string) (*storage.BucketHandle, bool) {
+// userAgentSuffix is an optional parameter to set the User-Agent header.
+func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName, userAgentSuffix string) (*storage.BucketHandle, bool) {
 	var opts []option.ClientOption
+	userAgent := fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", configuration.AgentVersion)
+	if userAgentSuffix != "" {
+		userAgent = fmt.Sprintf("%s %s)", strings.TrimSuffix(userAgent, ")"), userAgentSuffix)
+	}
+	log.Logger.Infow("Setting User-Agent header", "userAgent", userAgent)
+	opts = append(opts, option.WithUserAgent(userAgent))
 	if serviceAccount != "" {
 		opts = append(opts, option.WithCredentialsFile(serviceAccount))
 	}

@@ -37,6 +37,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+const userAgent = "Backint for GCS"
+
 // Backint has args for backint subcommands.
 type Backint struct {
 	user, function             string
@@ -56,7 +58,7 @@ func (*Backint) Synopsis() string { return "backup, restore, inquire, or delete 
 // Usage implements the subcommand interface for backint.
 func (*Backint) Usage() string {
 	return `backint -function=<backup|restore|inquire|delete|diagnose>
-	-paramfile=<path-to-file> [-v] [-h] [-user=<DBNAME@SID>] [-input=<path-to-file>]
+	-paramfile=<path-to-file> [-v] [-h] -user=<DBNAME@SID> [-input=<path-to-file>]
 	[-output=<path-to-file>] [-backupid=<database-backup-id>] [-count=<number-of-objects>]
 	[-level=<backup-level>] [-loglevel=<debug|info|warn|error>]
 `
@@ -131,7 +133,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 	log.Logger.Debugw("Args parsed and config validated", "config", config)
 	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
 
-	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket())
+	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket(), userAgent)
 	if !ok {
 		return subcommands.ExitUsageError
 	}
