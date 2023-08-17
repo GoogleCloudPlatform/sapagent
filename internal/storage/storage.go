@@ -123,7 +123,7 @@ type ReadWriter struct {
 	bytesTransferred          int64
 	lastBytesTransferred      int64
 	rateLimitBytesTransferred int64
-	lastRateLimit             time.Time
+	lastRateLimit             time.Duration
 	lastLog                   time.Time
 	lastTransferTime          time.Duration
 	totalTransferTime         time.Duration
@@ -333,14 +333,13 @@ func DeleteObject(ctx context.Context, bucketHandle *storage.BucketHandle, objec
 func (rw *ReadWriter) Read(p []byte) (n int, err error) {
 	start := time.Now()
 	n, err = rw.Reader.Read(p)
+	if err == nil {
+		rw.logProgress("Download progress", int64(n))
+		rw.rateLimit(int64(n), time.Since(start))
+	}
 	readTime := time.Since(start)
 	rw.lastTransferTime += readTime
 	rw.totalTransferTime += readTime
-
-	if err == nil {
-		rw.logProgress("Download progress", int64(n))
-		rw.rateLimit(int64(n))
-	}
 	return n, err
 }
 
@@ -348,14 +347,13 @@ func (rw *ReadWriter) Read(p []byte) (n int, err error) {
 func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 	start := time.Now()
 	n, err = rw.Writer.Write(p)
+	if err == nil {
+		rw.logProgress("Upload progress", int64(n))
+		rw.rateLimit(int64(n), time.Since(start))
+	}
 	writeTime := time.Since(start)
 	rw.lastTransferTime += writeTime
 	rw.totalTransferTime += writeTime
-
-	if err == nil {
-		rw.logProgress("Upload progress", int64(n))
-		rw.rateLimit(int64(n))
-	}
 	return n, err
 }
 
@@ -379,15 +377,17 @@ func (rw *ReadWriter) logProgress(logMessage string, n int64) {
 
 // rateLimit limits the bytes transferred by introducing a sleep up to 1 second
 // if the threshold is reached. RateLimitBytes set to 0 prevents rate limiting.
-func (rw *ReadWriter) rateLimit(bytes int64) {
+func (rw *ReadWriter) rateLimit(bytes int64, transferTime time.Duration) {
 	if rw.RateLimitBytes == 0 {
 		return
 	}
 
 	rw.rateLimitBytesTransferred += bytes
+	rw.lastRateLimit += transferTime
 	if rw.rateLimitBytesTransferred >= rw.RateLimitBytes {
-		time.Sleep(time.Second - time.Since(rw.lastRateLimit))
-		rw.lastRateLimit = time.Now()
+		time.Sleep(time.Second - rw.lastRateLimit)
+		// Prevent potential divide by zero by defaulting to 1 nanosecond.
+		rw.lastRateLimit = time.Nanosecond
 		rw.rateLimitBytesTransferred = 0
 	}
 }
@@ -398,11 +398,11 @@ func (rw *ReadWriter) defaultArgs() *ReadWriter {
 	rw.bytesTransferred = 0
 	rw.lastBytesTransferred = 0
 	rw.rateLimitBytesTransferred = 0
-	rw.lastRateLimit = time.Now()
 	rw.lastLog = time.Now()
 	// Prevent potential divide by zero by defaulting to 1 nanosecond.
 	rw.lastTransferTime = time.Nanosecond
 	rw.totalTransferTime = time.Nanosecond
+	rw.lastRateLimit = time.Nanosecond
 
 	if rw.LogDelay <= 0 {
 		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
