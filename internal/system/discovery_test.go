@@ -229,13 +229,15 @@ func TestDiscoverDisks(t *testing.T) {
 		},
 		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
 		want: []*spb.SapDiscovery_Resource{&spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "no/source/disk",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			RelatedResources: []string{"some/resource/uri"},
+			ResourceUri:      "no/source/disk",
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "no/source/disk2",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			RelatedResources: []string{"some/resource/uri"},
+			ResourceUri:      "no/source/disk2",
 		}},
 	}, {
 		name: "getDiskFromSource",
@@ -257,9 +259,10 @@ func TestDiscoverDisks(t *testing.T) {
 		},
 		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "uri/for/disk1",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			RelatedResources: []string{"some/resource/uri"},
+			ResourceUri:      "uri/for/disk1",
 		}},
 	}, {
 		name: "errGettingDisk",
@@ -282,9 +285,10 @@ func TestDiscoverDisks(t *testing.T) {
 		},
 		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
 		want: []*spb.SapDiscovery_Resource{&spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "uri/for/disk2",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			RelatedResources: []string{"some/resource/uri"},
+			ResourceUri:      "uri/for/disk2",
 		}},
 	}}
 	for _, test := range tests {
@@ -330,23 +334,43 @@ func TestDiscoverNetworks(t *testing.T) {
 		},
 		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:      "network",
-			RelatedResources: []string{"regions/test-region/subnet"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
+			ResourceUri:  "network",
+			RelatedResources: []string{
+				"regions/test-region/subnet",
+				"some/resource/uri",
+				"1.2.3.4",
+				"some/address/uri",
+			},
 		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:      "regions/test-region/subnet",
-			RelatedResources: []string{"some/address/uri"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
+			ResourceUri:  "regions/test-region/subnet",
+			RelatedResources: []string{
+				"some/resource/uri",
+				"network",
+				"1.2.3.4",
+				"some/address/uri",
+			},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
 			ResourceUri:  "1.2.3.4",
+			RelatedResources: []string{
+				"some/resource/uri",
+				"network",
+				"regions/test-region/subnet",
+			},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 			ResourceUri:  "some/address/uri",
+			RelatedResources: []string{
+				"some/resource/uri",
+				"network",
+				"regions/test-region/subnet",
+			},
 		}},
 	}, {
 		name:       "noSubnetRegion",
@@ -361,14 +385,21 @@ func TestDiscoverNetworks(t *testing.T) {
 		},
 		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:      "network",
-			RelatedResources: []string{"noregionsubnet"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
+			ResourceUri:  "network",
+			RelatedResources: []string{
+				"noregionsubnet",
+				"some/resource/uri",
+			},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
 			ResourceUri:  "noregionsubnet",
+			RelatedResources: []string{
+				"some/resource/uri",
+				"network",
+			},
 		}},
 	}, {
 		name: "errGetAddressByIP",
@@ -391,14 +422,21 @@ func TestDiscoverNetworks(t *testing.T) {
 		},
 		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:      "network",
-			RelatedResources: []string{"regions/test-region/subnet"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
+			ResourceUri:  "network",
+			RelatedResources: []string{
+				"regions/test-region/subnet",
+				"some/resource/uri",
+			},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
 			ResourceUri:  "regions/test-region/subnet",
+			RelatedResources: []string{
+				"some/resource/uri",
+				"network",
+			},
 		}},
 	}}
 	for _, test := range tests {
@@ -711,15 +749,18 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
 			},
 		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/instances/test-instance-id"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:  "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			RelatedResources: []string{
+				"projects/test-project/zones/test-zone/instances/test-instance-id",
+				"projects/test-project/regions/test-region/backendServices/test-bes",
+			},
 		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -830,7 +871,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -888,7 +929,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -947,7 +988,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1008,14 +1049,15 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
 			},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1077,14 +1119,15 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
 			},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1146,14 +1189,15 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
 			},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1215,14 +1259,15 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
 			},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1444,32 +1489,50 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			GetFilestoreByIPErr:  []error{nil},
 		},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "some/compute/disk",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:      "some/compute/disk",
+			RelatedResources: []string{"some/compute/instance"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 			ResourceUri:  "some/compute/address2",
+			RelatedResources: []string{
+				"some/compute/instance",
+				"network",
+				"regions/test-region/subnet",
+			},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
 			ResourceUri:  "1.2.3.4",
+			RelatedResources: []string{
+				"some/compute/instance",
+				"network",
+				"regions/test-region/subnet",
+			},
 		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:      "network",
-			RelatedResources: []string{"regions/test-region/subnet"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
+			ResourceUri:  "network",
+			RelatedResources: []string{
+				"regions/test-region/subnet",
+				"some/compute/address2",
+				"some/compute/instance", "1.2.3.4"},
 		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
 			ResourceUri:      "regions/test-region/subnet",
-			RelatedResources: []string{"some/compute/address2"},
+			RelatedResources: []string{"some/compute/address2", "network", "some/compute/instance", "1.2.3.4"},
 		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:      "some/compute/instance",
-			RelatedResources: []string{"regions/test-region/subnet", "network", "1.2.3.4", "some/compute/address2", "some/compute/disk"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "some/compute/instance",
+			RelatedResources: []string{
+				"regions/test-region/subnet",
+				"network",
+				"1.2.3.4",
+				"some/compute/address2", "some/compute/disk", "regions/test-region/subnet"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
@@ -1519,32 +1582,55 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			GetInstanceByIPErr:   []error{nil},
 		},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "some/compute/disk",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:      "some/compute/disk",
+			RelatedResources: []string{"some/compute/instance"},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
+			RelatedResources: []string{
+				"some/compute/instance",
+				"network",
+				"regions/test-region/subnet",
+			},
 		}, {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
 			ResourceUri:  "1.2.3.4",
+			RelatedResources: []string{
+				"some/compute/instance",
+				"network",
+				"regions/test-region/subnet",
+			},
 		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:      "network",
-			RelatedResources: []string{"regions/test-region/subnet"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
+			ResourceUri:  "network",
+			RelatedResources: []string{
+				"regions/test-region/subnet",
+				"1.2.3.4",
+				"projects/test-project/zones/test-zone/addresses/test-address", "some/compute/instance"},
 		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:      "regions/test-region/subnet",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
+			ResourceUri:  "regions/test-region/subnet",
+			RelatedResources: []string{
+				"projects/test-project/zones/test-zone/addresses/test-address",
+				"network",
+				"1.2.3.4",
+				"some/compute/instance",
+			},
 		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:      "some/compute/instance",
-			RelatedResources: []string{"regions/test-region/subnet", "network", "1.2.3.4", "projects/test-project/zones/test-zone/addresses/test-address", "some/compute/disk"},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "some/compute/instance",
+			RelatedResources: []string{
+				"regions/test-region/subnet",
+				"network",
+				"1.2.3.4",
+				"projects/test-project/zones/test-zone/addresses/test-address", "some/compute/disk", "regions/test-region/subnet"},
 		}},
 	}, {
 		name: "appToDBWithIPToLoadBalancerZonalFwr",

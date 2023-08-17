@@ -385,10 +385,11 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, 
 		}
 
 		dr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  cd.SelfLink,
-			UpdateTime:   timestamppb.Now(),
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:      cd.SelfLink,
+			RelatedResources: []string{ir.ResourceUri},
+			UpdateTime:       timestamppb.Now(),
 		}
 		disks = append(disks, dr)
 		ir.RelatedResources = append(ir.RelatedResources, dr.ResourceUri)
@@ -404,32 +405,37 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 	// Get Network related resources
 	for _, net := range ci.NetworkInterfaces {
 		sr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:  net.Subnetwork,
-			UpdateTime:   timestamppb.Now(),
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
+			ResourceUri:      net.Subnetwork,
+			RelatedResources: []string{ir.ResourceUri},
+			UpdateTime:       timestamppb.Now(),
 		}
 		netRes = append(netRes, sr)
 		ir.RelatedResources = append(ir.RelatedResources, sr.ResourceUri)
 
 		nr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:  net.Network,
-			UpdateTime:   timestamppb.Now(),
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
+			ResourceUri:      net.Network,
+			RelatedResources: []string{ir.ResourceUri, sr.ResourceUri},
+			UpdateTime:       timestamppb.Now(),
 		}
-		nr.RelatedResources = append(nr.RelatedResources, sr.ResourceUri)
+		sr.RelatedResources = append(sr.RelatedResources, nr.ResourceUri)
 		netRes = append(netRes, nr)
-		ir.RelatedResources = append(ir.RelatedResources, nr.ResourceUri)
+		ir.RelatedResources = append(ir.RelatedResources, nr.ResourceUri, sr.ResourceUri)
 
 		// Examine assigned IP addresses
 		for _, ac := range net.AccessConfigs {
 			ar := &spb.SapDiscovery_Resource{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
-				UpdateTime:   timestamppb.Now(),
-				ResourceUri:  ac.NatIP,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
+				UpdateTime:       timestamppb.Now(),
+				RelatedResources: []string{ir.ResourceUri, nr.ResourceUri, sr.ResourceUri},
+				ResourceUri:      ac.NatIP,
 			}
+			nr.RelatedResources = append(nr.RelatedResources, ar.ResourceUri)
+			sr.RelatedResources = append(sr.RelatedResources, ar.ResourceUri)
 			netRes = append(netRes, ar)
 			ir.RelatedResources = append(ir.RelatedResources, ar.ResourceUri)
 		}
@@ -453,12 +459,14 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 			continue
 		}
 		ar := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  addr.SelfLink,
-			UpdateTime:   timestamppb.Now(),
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+			ResourceUri:      addr.SelfLink,
+			RelatedResources: []string{ir.ResourceUri, nr.ResourceUri, sr.ResourceUri},
+			UpdateTime:       timestamppb.Now(),
 		}
 		sr.RelatedResources = append(sr.RelatedResources, ar.ResourceUri)
+		nr.RelatedResources = append(nr.RelatedResources, ar.ResourceUri)
 		netRes = append(netRes, ar)
 		ir.RelatedResources = append(ir.RelatedResources, ar.ResourceUri)
 	}
@@ -594,10 +602,11 @@ func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *s
 			continue
 		}
 		igr := &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  ig.SelfLink,
-			UpdateTime:   timestamppb.Now(),
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:      ig.SelfLink,
+			RelatedResources: []string{parent.ResourceUri},
+			UpdateTime:       timestamppb.Now(),
 		}
 		parent.RelatedResources = append(parent.RelatedResources, igr.ResourceUri)
 		res = append(res, igr)
