@@ -62,6 +62,11 @@ message CollectionConfiguration {
   HANAMetricsConfig workload_validation_db_metrics_config =
       16;  // HANA DB user credentials for WLM DB based metrics
   string data_warehouse_endpoint = 17;
+  int64 slow_process_metrics_frequency = 18;
+  repeated string process_metrics_to_skip =
+      19;  // List of process metrics which
+  // are skipped during metrics collection Ex: ["/nw/availability",
+  // "/hana/availability"].
 }
 
 message AgentProperties {

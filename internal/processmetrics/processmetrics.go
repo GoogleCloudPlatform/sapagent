@@ -60,7 +60,7 @@ import (
 
 type (
 	// Collector interface is SAP application specific metric collection logic.
-	// This needs to be implented by application specific modules that want to leverage
+	// This needs to be implemented by application specific modules that want to leverage
 	// startMetricGroup functionality.
 	Collector interface {
 		Collect(context.Context) []*mrpb.TimeSeries
