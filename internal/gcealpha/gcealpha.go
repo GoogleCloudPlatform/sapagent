@@ -39,12 +39,22 @@ func NewGCEClient(ctx context.Context) (*GCEAlpha, error) {
 	return &GCEAlpha{s}, nil
 }
 
+// OverrideComputeBasePath overrides the base path of the GCE clients.
+func (g *GCEAlpha) OverrideComputeBasePath(basePath string) {
+	g.service.BasePath = basePath
+}
+
 // GetInstance retrieves a GCE Instance defined by the project, zone, and name provided.
 func (g *GCEAlpha) GetInstance(project, zone, instance string) (*compute.Instance, error) {
 	return g.service.Instances.Get(project, zone, instance).Do()
 }
 
-// ListNodes retrieves a node group's contents for a given project, zone, and node group name.
-func (g *GCEAlpha) ListNodes(project, zone, nodeGroup string) (*compute.NodeGroupsListNodes, error) {
+// ListNodeGroups retrieves the node groups for a given project and zone.
+func (g *GCEAlpha) ListNodeGroups(project, zone string) (*compute.NodeGroupList, error) {
+	return g.service.NodeGroups.List(project, zone).Do()
+}
+
+// ListNodeGroupNodes lists the nodes in a given node group.
+func (g *GCEAlpha) ListNodeGroupNodes(project, zone, nodeGroup string) (*compute.NodeGroupsListNodes, error) {
 	return g.service.NodeGroups.ListNodes(project, zone, nodeGroup).Do()
 }

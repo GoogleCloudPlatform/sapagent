@@ -216,6 +216,10 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 		return
 	}
+	if d.config.GetServiceEndpointOverride() != "" {
+		log.Logger.Infow("Service endpoint override", "endpoint", d.config.GetServiceEndpointOverride())
+		gceService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
+	}
 	ppr := &instanceinfo.PhysicalPathReader{goos}
 	instanceInfoReader := instanceinfo.New(ppr, gceService)
 	mc, err := monitoring.NewMetricClient(ctx)

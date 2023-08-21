@@ -53,6 +53,11 @@ func NewGCEClient(ctx context.Context) (*GCE, error) {
 	return &GCE{s, f, sm}, nil
 }
 
+// OverrideComputeBasePath overrides the base path of the GCE clients.
+func (g *GCE) OverrideComputeBasePath(basePath string) {
+	g.service.BasePath = basePath
+}
+
 // GetInstance retrieves a GCE Instance defined by the project, zone, and name provided.
 func (g *GCE) GetInstance(project, zone, instance string) (*compute.Instance, error) {
 	return g.service.Instances.Get(project, zone, instance).Do()
