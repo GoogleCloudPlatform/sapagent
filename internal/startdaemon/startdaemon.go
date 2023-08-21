@@ -38,6 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcealpha"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
@@ -216,9 +217,21 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 		return
 	}
+	var gceAlphaService *gcealpha.GCEAlpha
+	if d.config.GetServiceEndpointOverride() != "" {
+		gceAlphaService, err = gcealpha.NewGCEClient(ctx)
+		if err != nil {
+			log.Logger.Errorw("Failed to create GCE alpha service", "error", err)
+			usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
+			return
+		}
+	}
 	if d.config.GetServiceEndpointOverride() != "" {
 		log.Logger.Infow("Service endpoint override", "endpoint", d.config.GetServiceEndpointOverride())
 		gceService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
+		if gceAlphaService != nil {
+			gceAlphaService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
+		}
 	}
 	ppr := &instanceinfo.PhysicalPathReader{goos}
 	instanceInfoReader := instanceinfo.New(ppr, gceService)
