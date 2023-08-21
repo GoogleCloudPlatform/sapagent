@@ -111,8 +111,8 @@ func LogRunningDaily() {
 func LogActionDaily(id int) {
 	log.Logger.Debugw("Starting daily log action", "ACTION", id)
 	for {
-		logger.logStatus(StatusAction, fmt.Sprintf("%d", id))
 		// sleep for 24 hours and a minute.
 		time.Sleep(24*time.Hour + 1*time.Minute)
+		logger.logStatus(StatusAction, fmt.Sprintf("%d", id))
 	}
 }
