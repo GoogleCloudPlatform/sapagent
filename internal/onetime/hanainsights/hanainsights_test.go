@@ -18,6 +18,7 @@ package hanainsights
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"flag"
@@ -25,10 +26,24 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func fakeWritefileSuccess(name string, content []byte, perm os.FileMode) error {
+	return nil
+}
+
+func fakeWritefileFail(name string, content []byte, perm os.FileMode) error {
+	return cmpopts.AnyError
+}
+
+func fakeCreateDirSuccess(path string, perm os.FileMode) error { return nil }
+
+func fakeCreateDirFail(path string, perm os.FileMode) error { return cmpopts.AnyError }
 
 func TestExecuteHANAInsights(t *testing.T) {
 	tests := []struct {
@@ -187,9 +202,155 @@ func TestHANAInsightsHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.hanainsights.hanaInsightsHandler(context.Background(), test.fakeNewGCE)
+			got := test.hanainsights.hanaInsightsHandler(context.Background(), test.fakeNewGCE, fakeWritefileSuccess, fakeCreateDirSuccess)
 			if got != test.want {
 				t.Errorf("hanainsightsHandler(%v)=%v want %v", test.name, got, test.want)
+			}
+		})
+	}
+}
+
+func TestGenerateLocalHANAInsights(t *testing.T) {
+	tests := []struct {
+		name        string
+		rules       []*rpb.Rule
+		insights    ruleengine.Insights
+		wf          writeFile
+		c           createDir
+		expectedErr error
+	}{
+		{
+			name:        "EmptyRules",
+			rules:       nil,
+			insights:    ruleengine.Insights{},
+			wf:          nil,
+			expectedErr: nil,
+		},
+		{
+			name:        "EmptyInsights",
+			rules:       nil,
+			insights:    ruleengine.Insights{},
+			wf:          nil,
+			expectedErr: nil,
+		},
+		{
+			name: "WriteFileSuccess",
+			rules: []*rpb.Rule{
+				&rpb.Rule{
+					Id:          "rule1",
+					Description: "rule1",
+					Recommendations: []*rpb.Recommendation{
+						&rpb.Recommendation{
+							Id:          "recommendation1",
+							Description: "recommendation1",
+							Actions: []*rpb.Action{
+								&rpb.Action{
+									Description: "action1",
+								},
+							},
+						},
+					},
+				},
+			},
+			insights: ruleengine.Insights{
+				"rule1": []ruleengine.ValidationResult{
+					ruleengine.ValidationResult{
+						RecommendationID: "recommendation1",
+						Result:           true,
+					},
+				},
+			},
+			wf: fakeWritefileSuccess,
+			c:  fakeCreateDirSuccess,
+		},
+		{
+			name: "WriteFileFailure",
+			rules: []*rpb.Rule{
+				&rpb.Rule{
+					Id:          "rule1",
+					Description: "rule1",
+					Recommendations: []*rpb.Recommendation{
+						&rpb.Recommendation{
+							Id:          "recommendation1",
+							Description: "recommendation1",
+							Actions: []*rpb.Action{
+								&rpb.Action{
+									Description: "action1",
+								},
+							},
+						},
+					},
+				},
+			},
+			insights: ruleengine.Insights{
+				"rule1": []ruleengine.ValidationResult{
+					ruleengine.ValidationResult{
+						RecommendationID: "recommendation1",
+						Result:           true,
+					},
+				},
+			},
+			wf:          fakeWritefileFail,
+			c:           fakeCreateDirSuccess,
+			expectedErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoRecommendations",
+			rules: []*rpb.Rule{
+				&rpb.Rule{
+					Id:          "rule1",
+					Description: "rule1",
+				},
+			},
+			insights: ruleengine.Insights{
+				"rule1": []ruleengine.ValidationResult{
+					ruleengine.ValidationResult{
+						RecommendationID: "recommendation1",
+						Result:           false,
+					},
+				},
+			},
+			wf: fakeWritefileSuccess,
+			c:  fakeCreateDirSuccess,
+		},
+		{
+			name: "CreateDirFail",
+			rules: []*rpb.Rule{
+				&rpb.Rule{
+					Id:          "rule1",
+					Description: "rule1",
+					Recommendations: []*rpb.Recommendation{
+						&rpb.Recommendation{
+							Id:          "recommendation1",
+							Description: "recommendation1",
+							Actions: []*rpb.Action{
+								&rpb.Action{
+									Description: "action1",
+								},
+							},
+						},
+					},
+				},
+			},
+			insights: ruleengine.Insights{
+				"rule1": []ruleengine.ValidationResult{
+					ruleengine.ValidationResult{
+						RecommendationID: "recommendation1",
+						Result:           true,
+					},
+				},
+			},
+			wf:          fakeWritefileSuccess,
+			c:           fakeCreateDirFail,
+			expectedErr: cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotErr := generateLocalHANAInsights(test.rules, test.insights, test.wf, test.c)
+			if !cmp.Equal(gotErr, test.expectedErr, cmpopts.EquateErrors()) {
+				t.Errorf("generateLocalHANAInsights(%v, %v)=%v, want %v", test.rules, test.insights, gotErr, test.expectedErr)
 			}
 		})
 	}

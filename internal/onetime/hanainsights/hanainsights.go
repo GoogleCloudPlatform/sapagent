@@ -22,7 +22,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"runtime"
+	"strings"
+	"time"
 
 	"flag"
 	"github.com/google/subcommands"
@@ -31,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -44,6 +48,14 @@ type HANAInsights struct {
 	help, version                  bool
 	logLevel                       string
 }
+
+const (
+	localInsightsDir = "/var/log/google-cloud-sap-agent/"
+)
+
+type writeFile func(string, []byte, os.FileMode) error
+
+type createDir func(string, os.FileMode) error
 
 // Name implements the subcommand interface for hanainsights.
 func (*HANAInsights) Name() string { return "hanainsights" }
@@ -92,7 +104,7 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 	}
 	onetime.SetupOneTimeLogging(lp, h.Name(), log.StringLevelToZapcore(h.logLevel))
 
-	return h.hanaInsightsHandler(ctx, gce.NewGCEClient)
+	return h.hanaInsightsHandler(ctx, gce.NewGCEClient, os.WriteFile, os.MkdirAll)
 }
 
 func (h *HANAInsights) validateParameters(os string) error {
@@ -109,7 +121,7 @@ func (h *HANAInsights) validateParameters(os string) error {
 	return nil
 }
 
-func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc) subcommands.ExitStatus {
+func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc, wf writeFile, c createDir) subcommands.ExitStatus {
 	var err error
 	if err = h.validateParameters(runtime.GOOS); err != nil {
 		log.Print(err.Error())
@@ -148,6 +160,79 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		return subcommands.ExitFailure
 	}
 	log.Logger.Infow("Generating HANA insights", insights)
-	// TODO: Generate local HANA insights in markdown and json format.
+	if err = generateLocalHANAInsights(rules, insights, wf, c); err != nil {
+		log.Logger.Errorw("ERROR: Failed to generate local HANA insights", "error", err)
+		return subcommands.ExitFailure
+	}
 	return subcommands.ExitSuccess
+}
+
+// generateLocalHANAInsights will create the HANA Insights in a markdown file stored under the
+// directory /var/log/google-cloud-sap-agent/.
+func generateLocalHANAInsights(rules []*rpb.Rule, insights ruleengine.Insights, wf writeFile, c createDir) error {
+	write := false
+	sb := new(strings.Builder)
+	fmt.Fprintf(sb, "# Recommendations\n")
+	ruleWiseRecs := buildRuleWiseRecs(rules)
+	for _, rule := range rules {
+		if _, ok := insights[rule.GetId()]; ok {
+			content, writeRule := checkForRecommendation(insights, rule, ruleWiseRecs)
+			write = write || writeRule
+			fmt.Fprint(sb, content)
+		}
+	}
+	file := fmt.Sprintf("%s/local-hana-insights-%s.md", localInsightsDir, time.Now().UTC().Format(time.RFC3339))
+	contentBytes := []byte(sb.String())
+	var err error
+	if write {
+		if err = createDirHelper(c, localInsightsDir, os.FileMode(0755)); err != nil {
+			return err
+		}
+		err = writeFileHelper(wf, file, contentBytes, os.FileMode(0644))
+	}
+	return err
+}
+
+func checkForRecommendation(insights ruleengine.Insights, rule *rpb.Rule, ruleWiseRecs map[string]map[string]*rpb.Recommendation) (string, bool) {
+	write := false
+	vrs := insights[rule.GetId()]
+	content := new(strings.Builder)
+	for _, vr := range vrs {
+		if vr.Result {
+			recommendation := ruleWiseRecs[rule.GetId()][vr.RecommendationID]
+			fmt.Fprintf(content, "## %s\n", rule.GetId())
+			fmt.Fprintf(content, "### Actions\n")
+			for _, action := range recommendation.GetActions() {
+				fmt.Fprintf(content, "- %s\n", action.GetDescription())
+				write = true
+			}
+			fmt.Fprintf(content, "### References\n")
+			for _, reference := range recommendation.GetReferences() {
+				fmt.Fprintf(content, "- %s\n", reference)
+			}
+		}
+	}
+	if !write {
+		return "", write
+	}
+	return content.String(), write
+}
+
+func writeFileHelper(w writeFile, name string, content []byte, perm os.FileMode) error {
+	return w(name, content, perm)
+}
+
+func createDirHelper(c createDir, path string, perm os.FileMode) error {
+	return c(path, perm)
+}
+
+func buildRuleWiseRecs(rules []*rpb.Rule) map[string]map[string]*rpb.Recommendation {
+	result := make(map[string]map[string]*rpb.Recommendation)
+	for _, rule := range rules {
+		result[rule.GetId()] = make(map[string]*rpb.Recommendation)
+		for _, recommendation := range rule.GetRecommendations() {
+			result[rule.GetId()][recommendation.GetId()] = recommendation
+		}
+	}
+	return result
 }
