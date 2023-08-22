@@ -89,6 +89,9 @@ const (
 	SOSReportCollectionUsageError
 	SOSReportCollectionExitFailure
 	BackintDiagnoseFailure
+	ReadMetricsQueryFailure
+	ReadMetricsWriteFileFailure
+	ReadMetricsBucketUploadFailure
 )
 
 // Agent wide action mappings.
@@ -112,6 +115,8 @@ const (
 	BackintDiagnoseStarted
 	BackintDiagnoseFinished
 	HANADiskRestore
+	ReadMetricsStarted
+	ReadMetricsFinished
 )
 
 var (

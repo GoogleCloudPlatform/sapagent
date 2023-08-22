@@ -31,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/readmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/restore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/snapshot"
@@ -54,6 +55,7 @@ func registerSubCommands() {
 		&backint.Backint{},
 		&supportbundle.SupportBundle{},
 		&restore.Restorer{},
+		&readmetrics.ReadMetrics{},
 		subcommands.HelpCommand(),  // Implement "help"
 		subcommands.FlagsCommand(), // Implement "flags"
 	} {
