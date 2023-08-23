@@ -69,9 +69,8 @@ var (
 	}
 
 	defaultAPIInstanceProperties = &InstanceProperties{
-		Config:           defaultConfig,
-		SAPInstance:      defaultSAPInstance,
-		UseSAPControlAPI: true,
+		Config:      defaultConfig,
+		SAPInstance: defaultSAPInstance,
 	}
 
 	defaultSapControlOutput = `OK
@@ -199,10 +198,10 @@ func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
 
 func TestCollectReplicationHA(t *testing.T) {
 	tests := []struct {
-		name             string
-		fakeExec         commandlineexecutor.Execute
-		fakeClient       sapcontrolclienttest.Fake
-		wantMetricCount  int
+		name               string
+		fakeExec           commandlineexecutor.Execute
+		fakeClient         sapcontrolclienttest.Fake
+		wantMetricCount    int
 		instanceProperties *InstanceProperties
 	}{
 		{
@@ -212,7 +211,18 @@ func TestCollectReplicationHA(t *testing.T) {
 					StdOut: defaultSapControlOutput,
 				}
 			},
-			wantMetricCount: 10,
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"hdbdaemon", "SAPControl-GREEN", 9609},
+					{"hdbcompileserver", "SAPControl-GREEN", 9972},
+					{"hdbindexserver", "SAPControl-GREEN", 10013},
+					{"hdbnameserver", "SAPControl-GREEN", 9642},
+					{"hdbpreprocessor", "SAPControl-GREEN", 9975},
+					{"hdbwebdispatcher", "SAPControl-GREEN", 666},
+					{"hdbxsengine", "SAPControl-GREEN", 777},
+				},
+			},
+			wantMetricCount:    10,
 			instanceProperties: defaultInstanceProperties,
 		},
 		{
@@ -233,7 +243,7 @@ func TestCollectReplicationHA(t *testing.T) {
 					{"hdbxsengine", "SAPControl-GREEN", 777},
 				},
 			},
-			wantMetricCount:  10,
+			wantMetricCount:    10,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -244,7 +254,7 @@ func TestCollectReplicationHA(t *testing.T) {
 					StdOut: defaultSapControlOutput,
 				}
 			},
-			wantMetricCount:  2,
+			wantMetricCount:    2,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -257,7 +267,7 @@ func TestCollectReplicationHA(t *testing.T) {
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}},
 			},
-			wantMetricCount:  3,
+			wantMetricCount:    3,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -267,10 +277,9 @@ func TestCollectReplicationHA(t *testing.T) {
 					Error: cmpopts.AnyError,
 				}
 			},
-			fakeClient:       sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
-			wantMetricCount:  1,
+			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
+			wantMetricCount:    1,
 			instanceProperties: defaultAPIInstanceProperties,
-			
 		},
 	}
 
@@ -532,7 +541,7 @@ func TestCollect(t *testing.T) {
 		{
 			name:       "MetricCountTest",
 			properties: defaultInstanceProperties,
-			wantCount:  1, // Without HANA setup in unit test ENV, only query/state metric is generated.
+			wantCount:  2, // Without HANA setup in unit test ENV, only query/state metric is generated.
 		},
 		{
 			name: "NoHANADBUserAndKey",
@@ -543,7 +552,7 @@ func TestCollect(t *testing.T) {
 					InstanceNumber: "00",
 				},
 			},
-			wantCount: 0, // Query state metric not generated without credentials.
+			wantCount: 1, // Query state metric not generated without credentials.
 		},
 		{
 			name: "NoHANADBUser",
@@ -555,7 +564,7 @@ func TestCollect(t *testing.T) {
 					HanaDbPassword: "test-pass",
 				},
 			},
-			wantCount: 0, // Query state metric not generated without credentials.
+			wantCount: 1, // Query state metric not generated without credentials.
 		},
 		{
 			name: "NoHANADBPassword",
@@ -567,7 +576,7 @@ func TestCollect(t *testing.T) {
 					HanaDbUser:     "test-user",
 				},
 			},
-			wantCount: 0, // Query state metric not generated without credentials.
+			wantCount: 1, // Query state metric not generated without credentials.
 		},
 		{
 			name: "HANASecondaryNode",
@@ -581,7 +590,7 @@ func TestCollect(t *testing.T) {
 					Site:           sapb.InstanceSite_HANA_SECONDARY,
 				},
 			},
-			wantCount: 0, // Query state metric not generated for HANA secondary.
+			wantCount: 1, // Query state metric not generated for HANA secondary.
 		},
 	}
 

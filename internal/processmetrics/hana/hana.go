@@ -53,7 +53,6 @@ type (
 		Config             *cnfpb.Configuration
 		Client             cloudmonitoring.TimeSeriesCreator
 		HANAQueryFailCount int64
-		UseSAPControlAPI   bool
 	}
 )
 
@@ -145,17 +144,9 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e command
 		metrics           []*mrpb.TimeSeries
 		availabilityValue int64
 	)
-	if ip.UseSAPControlAPI {
-		processes, err = sc.GetProcessList(scc)
-		if err != nil {
-			log.Logger.Errorw("Error executing GetProcessList SAPControl API", log.Error(err))
-		}
-	} else {
-		processes, sapControlResult, err = sc.ProcessList(ctx, e, p)
-		if err != nil {
-			log.Logger.Errorw("Error getting ProcessList", log.Error(err))
-			return nil
-		}
+	processes, err = sc.GetProcessList(scc)
+	if err != nil {
+		log.Logger.Errorw("Error executing GetProcessList SAPControl API", log.Error(err))
 	}
 
 	if err == nil {
@@ -169,13 +160,10 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e command
 		"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
 	}
 	metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
-
-	if ip.UseSAPControlAPI {
-		_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
-		if err != nil {
-			log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
-			return metrics
-		}
+	_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
+	if err != nil {
+		log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
+		return metrics
 	}
 	haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
 	metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))

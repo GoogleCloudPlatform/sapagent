@@ -68,28 +68,10 @@ func TestCollectForHANA(t *testing.T) {
 		lastValue        map[string]*process.IOCountersStat
 	}{
 		{
-			name: "EmptyPIDsMap",
-			executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
-			lastValue: make(map[string]*process.IOCountersStat),
-			wantCount: 0,
-		},
-		{
 			name:             "EmptyPIDsMapWebmethod",
 			useSAPControlAPI: true,
 			fakeClient:       sapcontrolclienttest.Fake{},
 			wantCount:        0,
-		},
-		{
-			name: "OnlyMemoryPerProcessMetricAvailable",
-			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultSapControlOutputHANA,
-				}
-			},
-			lastValue: make(map[string]*process.IOCountersStat),
-			wantCount: 3,
 		},
 		{
 			name:             "OnlyMemoryPerProcessMetricAvailableWebmethod",
@@ -104,23 +86,6 @@ func TestCollectForHANA(t *testing.T) {
 			wantCount: 3,
 		},
 		{
-			name: "OnlyCPUPerProcessMetricAvailable",
-			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `OK
-					0 name: msg_server
-					0 dispstatus: GREEN
-					0 pid: 111
-					1 name: enserver
-					1 dispstatus: GREEN
-					1 pid: 333
-					`,
-				}
-			},
-			lastValue: make(map[string]*process.IOCountersStat),
-			wantCount: 1,
-		},
-		{
 			name:             "OnlyCPUPerProcessMetricAvailableWebmethod",
 			useSAPControlAPI: true,
 			fakeClient: sapcontrolclienttest.Fake{
@@ -131,32 +96,6 @@ func TestCollectForHANA(t *testing.T) {
 			},
 			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 1,
-		},
-		{
-			name: "FetchedAllMetricsSuccessfully",
-			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `OK
-					0 name: hdbdaemon
-					0 dispstatus: GREEN
-					0 pid: 555
-					1 name: hdbcompileserver
-					1 dispstatus: GREEN
-					1 pid: 666
-					`,
-				}
-			},
-			lastValue: map[string]*process.IOCountersStat{
-				"hdbdaemon:555": &process.IOCountersStat{
-					ReadCount:  1,
-					WriteCount: 1,
-				},
-				"hdbcompileserver:666": &process.IOCountersStat{
-					ReadCount:  1,
-					WriteCount: 1,
-				},
-			},
-			wantCount: 12,
 		},
 		{
 			name:             "FetchedAllMetricsSuccessfullyWebmethod",

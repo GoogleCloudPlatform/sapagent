@@ -225,7 +225,6 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Config:             p.Config,
 				Client:             p.Client,
 				HANAQueryFailCount: 0,
-				UseSAPControlAPI:   mainUseSAPControlAPI,
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 		}
@@ -255,10 +254,9 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 
 			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)
 			netweaverCollector := &netweaver.InstanceProperties{
-				SAPInstance:      instance,
-				Config:           p.Config,
-				Client:           p.Client,
-				UseSAPControlAPI: mainUseSAPControlAPI,
+				SAPInstance: instance,
+				Config:      p.Config,
+				Client:      p.Client,
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
 		}

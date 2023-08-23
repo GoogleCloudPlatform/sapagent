@@ -70,7 +70,6 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries
 		newProc:              p.NewProcHelper,
 		getProcessListParams: p.ProcessListParams,
 		SAPControlClient:     p.SAPControlClient,
-		useSAPControlAPI:     p.UseSAPControlAPI,
 	}
 	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {

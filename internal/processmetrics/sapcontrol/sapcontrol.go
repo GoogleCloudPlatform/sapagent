@@ -79,48 +79,6 @@ type (
 	}
 )
 
-// ProcessList uses the SapControl command to build a map describing the statuses
-// of all SAP processes.
-// Parameters are a commandlineexecutor.Execute and commandlineexecutor.Params
-// Example Usage:
-//
-//	params := commandlineexecutor.Params{
-//		User:        "hdbadm",
-//		Executable:  "/usr/sap/HDB/HDB00/exe/sapcontrol",
-//		ArgsToSplit: "-nr 00 -function GetProcessList -format script",
-//		Env:         []string{"LD_LIBRARY_PATH=/usr/sap/HDB/HDB00/exe/ld_library"},
-//	}
-//	sc := &sapcontrol.Properties{&sapb.SAPInstance{}}
-//	procs, code, err := sc.ProcessList(commandlineexecutor.ExecuteCommand, params)
-//
-// Returns:
-//   - A map[int]*ProcessStatus where key is the process index as listed by
-//     sapcontrol, and the value is an ProcessStatus struct containing process
-//     status details.
-//   - The exit status returned by sapcontrol command as int.
-//   - Error if process detection fails, nil otherwise.
-func (p *Properties) ProcessList(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (map[int]*ProcessStatus, int, error) {
-	result, exitCode, err := ExecProcessList(ctx, exec, params)
-	if err != nil {
-		return nil, exitCode, err
-	}
-	names := processNameRegex.FindAllStringSubmatch(result.StdOut, -1)
-	if len(names) == 0 {
-		expectedFormat := `0 name: <ProcessName>
-		0 dispstatus: <Status>
-		0 pid: <ProcessID>`
-		return nil, 0, fmt.Errorf("output: %q is not in expected format: %q", result.StdOut, expectedFormat)
-	}
-
-	dss := processDisplayStatusRegex.FindAllStringSubmatch(result.StdOut, -1)
-	pids := processPIDRegex.FindAllStringSubmatch(result.StdOut, -1)
-	if len(names) != len(dss) || len(names) != len(pids) {
-		return nil, 0, fmt.Errorf("getProcessList - discrepancy in number of processes: %q", result.StdOut)
-	}
-
-	return createProcessMap(result, names, dss, pids)
-}
-
 // ExecProcessList uses the SAPControl command to obtain the process list result.
 // Parameters are a commandlineexecutor.Execute and commandlineexecutor.Params
 // Example Usage:
@@ -152,48 +110,6 @@ func ExecProcessList(ctx context.Context, exec commandlineexecutor.Execute, para
 	log.Logger.Debugw("Sapcontrol ExitStatusProcessList", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
 
 	return result, result.ExitCode, nil
-}
-
-func createProcessMap(result commandlineexecutor.Result, names, dss, pids [][]string) (map[int]*ProcessStatus, int, error) {
-	// Pass 1 - initialize the map and create struct values with process name.
-	processes := make(map[int]*ProcessStatus)
-	for _, n := range names {
-		if len(n) != 3 {
-			continue
-		}
-		id, err := strconv.Atoi(n[1])
-		if err != nil {
-			log.Logger.Debugw("Could not parse the name process index", log.Error(err))
-			return nil, result.ExitCode, err
-		}
-		processes[id] = &ProcessStatus{Name: n[2]}
-	}
-
-	// Pass 2 - iterate dss and pids arrays to build displayStatus, IsGreen and pid into the map.
-	for i := range dss {
-		d := dss[i]
-		p := pids[i]
-		if len(d) != 3 || len(p) != 3 {
-			continue
-		}
-		id, err := strconv.Atoi(d[1])
-		if err != nil {
-			log.Logger.Debugw("Could not parse the display status process index", log.Error(err))
-			return nil, result.ExitCode, err
-		}
-
-		if _, ok := processes[id]; !ok {
-			return nil, 0, fmt.Errorf("getProcessList - discrepancy in number of processes, no name entry for process: %q", id)
-		}
-		processes[id].DisplayStatus = d[2]
-		processes[id].PID = p[2]
-		if strings.ToUpper(d[2]) == "GREEN" {
-			processes[id].IsGreen = true
-		}
-	}
-
-	log.Logger.Debugw("Process statuses", "statuses", processes)
-	return processes, result.ExitCode, nil
 }
 
 // GetProcessList uses the SapControl web API to build a map describing the statuses
@@ -242,48 +158,6 @@ func createProcessMapFromAPIResp(resp []sapcontrolclient.OSProcess) map[int]*Pro
 
 	log.Logger.Debugw("Process statuses", "statuses", processes)
 	return processes
-}
-
-// ParseABAPGetWPTable runs and parses the output of sapcontrol function ABAPGetWPTable.
-// Returns:
-//   - processes - A map with key->worker_process_type and value->total_process_count.
-//   - busyProcesses - A map with key->worker_process_type and value->busy_process_count.
-func (p *Properties) ParseABAPGetWPTable(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (processes, busyProcesses map[string]int, processNameToPID map[string]string, err error) {
-	const (
-		numberOfColumns = 15
-		typeColumn      = 1
-		pidColumn       = 2
-		timeColumn      = 9
-	)
-
-	result := exec(ctx, params)
-	if result.Error != nil && !result.ExitStatusParsed {
-		log.Logger.Debugw("Failed to run ABAPGetWPTable", log.Error(result.Error))
-		return nil, nil, nil, result.Error
-	}
-
-	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "stdout", result.StdOut)
-
-	processes = make(map[string]int)
-	busyProcesses = make(map[string]int)
-	processNameToPID = make(map[string]string)
-	lines := strings.Split(result.StdOut, "\n")
-	for _, line := range lines {
-		line = emptyChars.ReplaceAllString(line, "")
-		row := strings.Split(line, ",")
-		if len(row) != numberOfColumns || row[typeColumn] == "Typ" {
-			continue
-		}
-		workProcessType := row[typeColumn]
-		processes[workProcessType]++
-		processNameToPID[row[pidColumn]] = workProcessType
-		if row[timeColumn] != "" {
-			busyProcesses[workProcessType]++
-		}
-	}
-
-	log.Logger.Debugw("Found ABAP Processes", "processcount", processes, "busyprocesses", busyProcesses, "pidMap", processNameToPID)
-	return processes, busyProcesses, processNameToPID, nil
 }
 
 // WorkProcessDetails contains the maps that will be used by the consumers to derive metrics.
@@ -414,79 +288,6 @@ func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQ
 
 	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
 	return currentQueueUsage, peakQueueUsage
-}
-
-// ParseEnqGetLockTable parses the output of sapcontrol function EnqGetLockTable.
-// Returns:
-//   - A slice of EnqLock structs containing lock details.
-//   - Error if sapcontrol fails, nil otherwise.
-func (p *Properties) ParseEnqGetLockTable(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (EnqLocks []*EnqLock, err error) {
-	const numberOfColumns = 12
-	const (
-		lockName = iota
-		lockArg
-		lockMode
-		owner
-		ownerVB
-		UserCountOwner
-		UserCountOwnerVB
-		client
-		user
-		transaction
-		object
-		backup
-	)
-	result := exec(ctx, params)
-	if result.Error != nil && !result.ExitStatusParsed {
-		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
-		return nil, result.Error
-	}
-
-	message, ok := sapcontrolStatus[result.ExitCode]
-	if !ok {
-		return nil, fmt.Errorf("invalid sapcontrol return code: %d", result.ExitCode)
-	}
-	log.Logger.Debugw("Sapcontrol EnqGetLockTable", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
-
-	lines := strings.Split(result.StdOut, "\n")
-	for _, line := range lines {
-		line = emptyChars.ReplaceAllString(line, "")
-		row := strings.Split(line, ",")
-		if len(row) != numberOfColumns || row[lockName] == "lock_name" {
-			continue
-		}
-
-		uco, err := strconv.Atoi(row[UserCountOwner])
-		if err != nil {
-			log.Logger.Debugw("Could not parse UserCountOwner field in EnqGetLockTable", log.Error(err))
-			return nil, err
-		}
-
-		ucoVB, err := strconv.Atoi(row[UserCountOwnerVB])
-		if err != nil {
-			log.Logger.Debugw("Could not parse UserCountOwnerVB Field in EnqGetLockTable", log.Error(err))
-			return nil, err
-		}
-
-		lock := &EnqLock{
-			LockName:         row[lockName],
-			LockArg:          row[lockArg],
-			LockMode:         row[lockMode],
-			Owner:            row[owner],
-			OwnerVB:          row[ownerVB],
-			UserCountOwner:   int64(uco),
-			UserCountOwnerVB: int64(ucoVB),
-			Client:           row[client],
-			User:             row[user],
-			Transaction:      row[transaction],
-			Object:           row[object],
-			Backup:           row[backup],
-		}
-		EnqLocks = append(EnqLocks, lock)
-	}
-
-	log.Logger.Debugw("EnqLocks successfully parsed", "EnqLocks", EnqLocks)
-	return EnqLocks, nil
 }
 
 // EnqGetLockTable performs the SOAP API request

@@ -203,22 +203,6 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		want       []*ProcessInfo
 	}{
 		{
-			name: "EmptyProcessListCommandLine",
-			params: parameters{
-				config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				cpuMetricPath:        "/sample/test/proc",
-				memoryMetricPath:     "/sample/test/memory",
-				sapInstance:          defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{},
-				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{}
-				},
-			},
-			want: nil,
-		},
-		{
 			name: "EmptyProcessListWebmethod",
 			params: parameters{
 				config:           defaultConfig,
@@ -227,25 +211,6 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				memoryMetricPath: "/sample/test/memory",
 				sapInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{},
-				useSAPControlAPI: true,
-			},
-			want: nil,
-		},
-		{
-			name: "NilSAPInstanceCommandLine",
-			params: parameters{
-				config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				cpuMetricPath:        "/sample/test/proc",
-				memoryMetricPath:     "/sample/test/memory",
-				sapInstance:          nil,
-				getProcessListParams: commandlineexecutor.Params{},
-				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: defaultSapControlOutput,
-					}
-				},
 			},
 			want: nil,
 		},
@@ -258,41 +223,8 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				memoryMetricPath: "/sample/test/memory",
 				sapInstance:      nil,
 				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse},
-				useSAPControlAPI: true,
 			},
 			want: nil,
-		},
-		{
-			name: "ErrorInFetchingABAPProcessList",
-			params: parameters{
-				config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{
-					Executable:  "exe",
-					ArgsToSplit: "processlist",
-				},
-				getABAPWPTableParams: commandlineexecutor.Params{
-					Executable:  "exe",
-					ArgsToSplit: "abaptable",
-				},
-				executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-					if params.ArgsToSplit == "processlist" {
-						return commandlineexecutor.Result{
-							StdOut: defaultSapControlOutput,
-						}
-					}
-					return commandlineexecutor.Result{
-						Error: errors.New("could not parse ABAPGetWPTable"),
-					}
-				},
-			},
-			want: []*ProcessInfo{
-				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
-				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
-			},
 		},
 		{
 			name: "ErrorInFetchingABAPProcessListWebmethod",
@@ -303,45 +235,10 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				memoryMetricPath: "/sample/test/memory",
 				sapInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse, ErrABAPGetWPTable: errors.New("could not parse ABAPGetWPTable")},
-				useSAPControlAPI: true,
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
 				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
-			},
-		},
-		{
-			name: "ProcessListCreatedWithABAPProcesses",
-			params: parameters{
-				config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{
-					Executable:  "exe",
-					ArgsToSplit: "processlist",
-				},
-				getABAPWPTableParams: commandlineexecutor.Params{
-					Executable:  "exe",
-					ArgsToSplit: "abaptable",
-				},
-				executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-					if params.ArgsToSplit == "processlist" {
-						return commandlineexecutor.Result{
-							StdOut: defaultSapControlOutput,
-						}
-					}
-					return commandlineexecutor.Result{
-						StdOut: defaultABAPGetWPTableOuput,
-					}
-				},
-			},
-			want: []*ProcessInfo{
-				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
-				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
-				&ProcessInfo{Name: "DIA", PID: "7488"},
-				&ProcessInfo{Name: "BTC", PID: "7489"},
 			},
 		},
 		{
@@ -359,34 +256,12 @@ func TestCollectProcessesForInstance(t *testing.T) {
 						{1, "BTC", 7489, "Wait", "", ""},
 					},
 				},
-				useSAPControlAPI: true,
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
 				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
 				&ProcessInfo{Name: "DIA", PID: "7488"},
 				&ProcessInfo{Name: "BTC", PID: "7489"},
-			},
-		},
-		{
-			name: "ProcessListCreatedSuccessfully",
-			params: parameters{
-				config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				cpuMetricPath:        "/sample/test/proc",
-				memoryMetricPath:     "/sample/test/memory",
-				sapInstance:          defaultSAPInstance,
-				getProcessListParams: commandlineexecutor.Params{},
-				getABAPWPTableParams: commandlineexecutor.Params{},
-				executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: defaultSapControlOutput,
-					}
-				},
-			},
-			want: []*ProcessInfo{
-				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
-				&ProcessInfo{Name: "hdbcompileserver", PID: "222"},
 			},
 		},
 		{
@@ -398,7 +273,6 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				memoryMetricPath: "/sample/test/memory",
 				sapInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse},
-				useSAPControlAPI: true,
 			},
 			want: []*ProcessInfo{
 				&ProcessInfo{Name: "hdbdaemon", PID: "111"},
@@ -414,7 +288,6 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				memoryMetricPath: "/sample/test/memory",
 				sapInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
-				useSAPControlAPI: true,
 			},
 			want: nil,
 		},

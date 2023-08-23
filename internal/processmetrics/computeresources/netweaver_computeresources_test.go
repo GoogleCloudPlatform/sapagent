@@ -52,31 +52,11 @@ func TestCollectForNetweaver(t *testing.T) {
 		lastValue        map[string]*process.IOCountersStat
 	}{
 		{
-			name:          "EmptyPIDsMap",
-			processParams: commandlineexecutor.Params{},
-			executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
-			},
-			lastValue: make(map[string]*process.IOCountersStat),
-			wantCount: 0,
-		},
-		{
 			name:             "EmptyPIDsMapWebmethod",
 			useSAPControlAPI: true,
 			fakeClient:       sapcontrolclienttest.Fake{},
 			lastValue:        make(map[string]*process.IOCountersStat),
 			wantCount:        0,
-		},
-		{
-			name:          "OnlyMemoryPerProcessMetricAvailable",
-			processParams: commandlineexecutor.Params{},
-			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultSapControlOutputNetWeaver,
-				}
-			},
-			lastValue: make(map[string]*process.IOCountersStat),
-			wantCount: 3,
 		},
 		{
 			name:             "OnlyMemoryPerProcessMetricAvailableWebmethod",
@@ -89,24 +69,6 @@ func TestCollectForNetweaver(t *testing.T) {
 			},
 			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 3,
-		},
-		{
-			name:          "OnlyCPUPerProcessMetricAvailable",
-			processParams: commandlineexecutor.Params{},
-			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `OK
-					0 name: msg_server
-					0 dispstatus: GREEN
-					0 pid: 111
-					1 name: enserver
-					1 dispstatus: GREEN
-					1 pid: 333
-					`,
-				}
-			},
-			lastValue: make(map[string]*process.IOCountersStat),
-			wantCount: 1,
 		},
 		{
 			name:             "OnlyCPUPerProcessMetricAvailableWebmethod",

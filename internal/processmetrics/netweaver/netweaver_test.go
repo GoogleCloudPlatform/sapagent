@@ -71,9 +71,8 @@ var (
 	}
 
 	defaultAPIInstanceProperties = &InstanceProperties{
-		Config:           defaultConfig,
-		SAPInstance:      defaultSAPInstance,
-		UseSAPControlAPI: true,
+		Config:      defaultConfig,
+		SAPInstance: defaultSAPInstance,
 	}
 
 	defaultSapControlOutputAppSrv = `OK
@@ -112,243 +111,299 @@ var (
 		4 name: jcontrol
 		4 dispstatus: GREEN
 		4 pid: 555`
+
+	defaultSapControlOutputAppSrvAPI = sapcontrolclienttest.Fake{
+		Processes: []sapcontrolclient.OSProcess{
+			sapcontrolclient.OSProcess{
+				Name:       "msg_server",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        111,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "enserver",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        222,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "enrepserver",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        333,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "disp+work",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        444,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "gwrd",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        555,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "icman",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        666,
+			},
+		},
+	}
+
+	defaultSapControlOutputJavaAPI = sapcontrolclienttest.Fake{
+		Processes: []sapcontrolclient.OSProcess{
+			sapcontrolclient.OSProcess{
+				Name:       "msg_server",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        111,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "enserver",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        222,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "enrepserver",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        333,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "jstart",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        444,
+			},
+			sapcontrolclient.OSProcess{
+				Name:       "jcontrol",
+				Dispstatus: "SAPControl-GREEN",
+				Pid:        555,
+			},
+		},
+	}
 )
 
 func TestNWAvailabilityValue(t *testing.T) {
 	tests := []struct {
 		name             string
-		fakeExec         commandlineexecutor.Execute
+		fakeClient       sapcontrolclienttest.Fake
 		wantAvailability int64
 	}{
 		{
 			name: "SapControlFailsTwoProcesses",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: msg_server
-					0 description: Message Server
-					0 dispstatus: GREEN
-					0 pid: 111
-					1 name: enserver
-					1 description: EN Server
-					1 dispstatus: RED
-					1 pid: 222`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "msg_server",
+						Dispstatus: "SAPControl-GREEN",
+						Pid:        111,
+					},
+					sapcontrolclient.OSProcess{
+						Name:       "enserver",
+						Dispstatus: "SAPControl-RED",
+						Pid:        222,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
-			name: "SapControlSucceedsAppSrv",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   defaultSapControlOutputAppSrv,
-					ExitCode: 1,
-				}
-			},
+			name:             "SapControlSucceedsAppSrv",
+			fakeClient:       defaultSapControlOutputAppSrvAPI,
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
-			name: "SapControlSucceedsJava",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   defaultSapControlOutputJava,
-					ExitCode: 1,
-				}
-			},
+			name:             "SapControlSucceedsJava",
+			fakeClient:       defaultSapControlOutputJavaAPI,
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlSuccessMsg",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: msg_server
-					0 description: msg_server
-					0 dispstatus: GREEN
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "msg_server",
+						Dispstatus: "SAPControl-GREEN",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsEnServer",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: enserver
-					0 description: enserver
-					0 dispstatus: RED
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "enserver",
+						Dispstatus: "SAPControl-RED",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlFailEnRepServer",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: enrepserver
-					0 description: enrepserver
-					0 dispstatus: RED
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "enrepserver",
+						Dispstatus: "SAPControl-RED",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlSuccessEnRepServer",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: enrepserver
-					0 description: enrepserver
-					0 dispstatus: GREEN
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "enrepserver",
+						Dispstatus: "SAPControl-GREEN",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsAppSrv",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: gwrd
-					0 description: GWRD
-					0 dispstatus: RED
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "gwrd",
+						Dispstatus: "SAPControl-RED",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlFailsJava",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: jcontrol
-					0 description: Java
-					0 dispstatus: RED
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "jcontrol",
+						Dispstatus: "SAPControl-RED",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlSuccessJava",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: jstart
-					0 description: Java
-					0 dispstatus: GREEN
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "jstart",
+						Dispstatus: "SAPControl-GREEN",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlSuccessAppSrv",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: icman
-					0 description: ICMAN
-					0 dispstatus: GREEN
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "icman",
+						Dispstatus: "SAPControl-GREEN",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "InvalidProcess",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: invalidproc
-					0 description: INVALIDPROC
-					0 dispstatus: RED
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "invalidproc",
+						Dispstatus: "SAPControl-RED",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlSuccessEnqReplicator",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: enq_replicator
-					0 description: enq_replicator
-					0 dispstatus: GREEN
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "enq_replicator",
+						Dispstatus: "SAPControl-GREEN",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsEnqReplicator",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: enq_replicator
-					0 description: enq_replicator
-					0 dispstatus: RED
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "enq_replicator",
+						Dispstatus: "SAPControl-RED",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "SapControlSuccessEnqServer",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: enq_server
-					0 description: enq_server
-					0 dispstatus: GREEN
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "enq_server",
+						Dispstatus: "SAPControl-GREEN",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAllProcessesGreen,
 		},
 		{
 			name: "SapControlFailsEnqServer",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: enq_server
-					0 description: enq_server
-					0 dispstatus: GRAY
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "enq_server",
+						Dispstatus: "SAPControl-GRAY",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "WebDispatctherGrey",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: sapwebdisp
-					0 description: sapwebdisp
-					0 dispstatus: GRAY
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "sapwebdisp",
+						Dispstatus: "SAPControl-GRAY",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
 		{
 			name: "gwrdGrey",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `0 name: gwrd
-					0 description: gwrd
-					0 dispstatus: GRAY
-					0 pid: 111`,
-					ExitCode: 1,
-				}
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					sapcontrolclient.OSProcess{
+						Name:       "gwrd",
+						Dispstatus: "SAPControl-GRAY",
+						Pid:        111,
+					},
+				},
 			},
 			wantAvailability: systemAtLeastOneProcessNotGreen,
 		},
@@ -359,7 +414,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 			sc := &sapcontrol.Properties{
 				Instance: defaultSAPInstance,
 			}
-			procs, _, err := sc.ProcessList(context.Background(), test.fakeExec, commandlineexecutor.Params{})
+			procs, err := sc.GetProcessList(test.fakeClient)
 			if err != nil {
 				t.Errorf("ProcessList() failed with: %v.", err)
 			}
@@ -412,27 +467,6 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		wantMetricCount    int
 		instanceProperties *InstanceProperties
 	}{
-		{
-			name: "SuccessCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   defaultSapControlOutputJava,
-					ExitCode: 1,
-				}
-			},
-			wantMetricCount:    6,
-			instanceProperties: defaultInstanceProperties,
-		},
-		{
-			name: "FailureCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
-			wantMetricCount:    0,
-			instanceProperties: defaultInstanceProperties,
-		},
 		{
 			name: "SuccessWebmethod",
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
@@ -663,28 +697,6 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		instanceProperties *InstanceProperties
 	}{
 		{
-			name: "FailureCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
-			wantMetricCount:    0,
-			instanceProperties: defaultInstanceProperties,
-		},
-		{
-			name: "SuccessCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
-					0, DIA, 7488, Wait, , yes, , , 0:24:54, 4, , , , ,
-					1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`,
-				}
-			},
-			wantMetricCount:    3,
-			instanceProperties: defaultInstanceProperties,
-		},
-		{
 			name:               "FailureWebmethod",
 			fakeClient:         sapcontrolclienttest.Fake{ErrABAPGetWPTable: cmpopts.AnyError},
 			wantMetricCount:    0,
@@ -715,55 +727,10 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 func TestCollectABAPQueueStats(t *testing.T) {
 	tests := []struct {
 		name               string
-		fakeExec           commandlineexecutor.Execute
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
 		instanceProperties *InstanceProperties
 	}{
-		{
-			name: "DPMONFailureCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
-			wantMetricCount:    0,
-			instanceProperties: defaultInstanceProperties,
-		},
-		{
-			name: "DPMonFailsWithStdOutCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `ICM/Intern, 0, 7, 6000, 184690, 184690`,
-					Error:  cmpopts.AnyError,
-				}
-			},
-			wantMetricCount:    0,
-			instanceProperties: defaultInstanceProperties,
-		},
-		{
-			name: "ZeroQueuesCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "InvalidOutput",
-				}
-			},
-			wantMetricCount:    0,
-			instanceProperties: defaultInstanceProperties,
-		},
-		{
-			name: "DPMONSuccessCommandLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `Typ, Now, High, Max, Writes, Reads
-					ABAP/NOWP, 0, 8, 14000, 270537, 270537
-					ABAP/DIA, 0, 10, 14000, 534960, 534960
-					ICM/Intern, 0, 7, 6000, 184690, 184690`,
-				}
-			},
-			wantMetricCount:    6,
-			instanceProperties: defaultInstanceProperties,
-		},
 		{
 			name:               "DPMONFailureWebmethod",
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetQueueStatistic: cmpopts.AnyError},
@@ -794,7 +761,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPQueueStats(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			got := collectABAPQueueStats(context.Background(), test.instanceProperties, test.fakeClient)
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPQueueStats() unexpected metric count using webmethod, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -932,30 +899,25 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
 				}
 			},
+			fakeClient: sapcontrolclienttest.Fake{
+				EnqLocks: []sapcontrolclient.EnqLock{
+					sapcontrolclient.EnqLock{
+						LockName:        "USR04",
+						LockArg:         "000DDIC",
+						LockMode:        "E",
+						Owner:           "dnwh75ldbci",
+						OwnerVB:         "dnwh75ldbci",
+						UseCountOwner:   1,
+						UseCountOwnerVB: 1,
+						Client:          "000",
+						User:            "SAP*",
+						Transaction:     "SU01",
+						Object:          "E_USR04",
+						Backup:          "FALSE",
+					},
+				},
+			},
 			wantMetricCount: 1,
-		},
-		{
-			name: "ASCSInstanceError",
-			props: &InstanceProperties{
-				Config: defaultConfig,
-				SAPInstance: &sapb.SAPInstance{
-					InstanceId: "ASCS01",
-				},
-			},
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
-		},
-		{
-			name: "HANAInstance",
-			props: &InstanceProperties{
-				Config: defaultConfig,
-				SAPInstance: &sapb.SAPInstance{
-					InstanceId: "HDB00",
-				},
-			},
 		},
 		{
 			name: "ERSInstanceSuccess",
@@ -970,6 +932,24 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
 				}
 			},
+			fakeClient: sapcontrolclienttest.Fake{
+				EnqLocks: []sapcontrolclient.EnqLock{
+					sapcontrolclient.EnqLock{
+						LockName:        "USR04",
+						LockArg:         "000DDIC",
+						LockMode:        "E",
+						Owner:           "dnwh75ldbci",
+						OwnerVB:         "dnwh75ldbci",
+						UseCountOwner:   1,
+						UseCountOwnerVB: 1,
+						Client:          "000",
+						User:            "SAP*",
+						Transaction:     "SU01",
+						Object:          "E_USR04",
+						Backup:          "FALSE",
+					},
+				},
+			},
 			wantMetricCount: 1,
 		},
 		{
@@ -979,7 +959,6 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 				SAPInstance: &sapb.SAPInstance{
 					InstanceId: "ERS01",
 				},
-				UseSAPControlAPI: true,
 			},
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1013,7 +992,6 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 				SAPInstance: &sapb.SAPInstance{
 					InstanceId: "ERS01",
 				},
-				UseSAPControlAPI: true,
 			},
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{

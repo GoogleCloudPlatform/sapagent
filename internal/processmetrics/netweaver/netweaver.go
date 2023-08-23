@@ -44,10 +44,9 @@ import (
 type (
 	// InstanceProperties struct has necessary context for Metrics collection.
 	InstanceProperties struct {
-		SAPInstance      *sapb.SAPInstance
-		Config           *cnfpb.Configuration
-		Client           cloudmonitoring.TimeSeriesCreator
-		UseSAPControlAPI bool
+		SAPInstance *sapb.SAPInstance
+		Config      *cnfpb.Configuration
+		Client      cloudmonitoring.TimeSeriesCreator
 	}
 )
 
@@ -103,13 +102,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	}
 	metrics = append(metrics, collectABAPProcessStatus(ctx, p, commandlineexecutor.ExecuteCommand, abapProcessParams, scc)...)
 
-	abapQueuesParams := commandlineexecutor.Params{
-		User:        p.SAPInstance.GetUser(),
-		Executable:  p.SAPInstance.GetSapcontrolPath(),
-		ArgsToSplit: fmt.Sprintf("-nr %s -function GetQueueStatistic", p.SAPInstance.GetInstanceNumber()),
-		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
-	}
-	metrics = append(metrics, collectABAPQueueStats(ctx, p, commandlineexecutor.ExecuteCommand, abapQueuesParams, scc)...)
+	metrics = append(metrics, collectABAPQueueStats(ctx, p, scc)...)
 
 	dpmonPath := `/usr/sap/` + p.SAPInstance.GetSapsid() + `/SYS/exe/run/dpmon`
 	command := `-c 'echo q | %s pf=%s v'`
@@ -157,18 +150,10 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, exec co
 		err   error
 		procs map[int]*sapcontrol.ProcessStatus
 	)
-	if p.UseSAPControlAPI {
-		procs, err = sc.GetProcessList(scc)
-		if err != nil {
-			log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
-			return nil
-		}
-	} else {
-		procs, _, err = sc.ProcessList(ctx, exec, params)
-		if err != nil {
-			log.Logger.Errorw("Error getting ProcessList", log.Error(err))
-			return nil
-		}
+	procs, err = sc.GetProcessList(scc)
+	if err != nil {
+		log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
+		return nil
 	}
 
 	metrics, availabilityValue := collectServiceMetrics(p, procs, now)
@@ -318,23 +303,14 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec c
 		busyProcessCount map[string]int
 		busyPercentage   map[string]int
 	)
-	if p.UseSAPControlAPI {
-		wpDetails, err := sc.ABAPGetWPTable(scc)
-		if err != nil {
-			log.Logger.Debugw("Sapcontrol web method failed", "error", err)
-			return nil
-		}
-		processCount = wpDetails.Processes
-		busyProcessCount = wpDetails.BusyProcesses
-		busyPercentage = wpDetails.BusyProcessPercentage
-
-	} else {
-		processCount, busyProcessCount, _, err = sc.ParseABAPGetWPTable(ctx, exec, params)
-		if err != nil {
-			log.Logger.Debugw("Command sapcontrol failed", "error", err)
-			return nil
-		}
+	wpDetails, err := sc.ABAPGetWPTable(scc)
+	if err != nil {
+		log.Logger.Debugw("Sapcontrol web method failed", "error", err)
+		return nil
 	}
+	processCount = wpDetails.Processes
+	busyProcessCount = wpDetails.BusyProcesses
+	busyPercentage = wpDetails.BusyProcessPercentage
 
 	var metrics []*mrpb.TimeSeries
 	for k, v := range processCount {
@@ -362,7 +338,7 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec c
 }
 
 // collectABAPQueueStats collects ABAP Queue utilization metrics using dpmon tool.
-func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
@@ -370,26 +346,10 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, exec comm
 		currentQueueUsage map[string]int64
 		peakQueueUsage    map[string]int64
 	)
-	if p.UseSAPControlAPI {
-		currentQueueUsage, peakQueueUsage, err = sc.GetQueueStatistic(scc)
-		if err != nil {
-			log.Logger.Debugw("Sapcontrol web method failed", "error", err)
-			return nil
-		}
-	} else {
-		currentQueueUsageInt, peakQueueUsageInt, err := sc.ParseQueueStats(ctx, exec, params)
-		currentQueueUsage = make(map[string]int64)
-		peakQueueUsage = make(map[string]int64)
-		if err != nil {
-			log.Logger.Debugw("Command sapcontrol failed", "error", err)
-			return nil
-		}
-		for k, v := range currentQueueUsageInt {
-			currentQueueUsage[k] = int64(v)
-		}
-		for k, v := range peakQueueUsageInt {
-			peakQueueUsage[k] = int64(v)
-		}
+	currentQueueUsage, peakQueueUsage, err = sc.GetQueueStatistic(scc)
+	if err != nil {
+		log.Logger.Debugw("Sapcontrol web method failed", "error", err)
+		return nil
 	}
 
 	var metrics []*mrpb.TimeSeries
@@ -482,11 +442,8 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var enqLocks []*sapcontrol.EnqLock
 	var err error
-	if p.UseSAPControlAPI {
-		enqLocks, err = sc.EnqGetLockTable(scc)
-	} else {
-		enqLocks, err = sc.ParseEnqGetLockTable(ctx, exec, params)
-	}
+
+	enqLocks, err = sc.EnqGetLockTable(scc)
 	if err != nil {
 		return nil
 	}

@@ -70,7 +70,6 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeS
 		getProcessListParams: p.SAPControlProcessParams,
 		getABAPWPTableParams: p.ABAPProcessParams,
 		SAPControlClient:     p.SAPControlClient,
-		useSAPControlAPI:     p.UseSAPControlAPI,
 	}
 	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {
