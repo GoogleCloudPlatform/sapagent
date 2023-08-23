@@ -19,10 +19,15 @@ package readmetrics
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"time"
 
 	"flag"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
@@ -31,6 +36,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
@@ -73,7 +79,7 @@ func (*ReadMetrics) Usage() string {
 func (r *ReadMetrics) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.projectID, "project", "", "Project ID, defaults to the value from the metadata server")
 	fs.StringVar(&r.inputFile, "i", "", "Input file")
-	fs.StringVar(&r.outputFolder, "o", "/tmp", "Output folder")
+	fs.StringVar(&r.outputFolder, "o", "/tmp/google-cloud-sap-agent", "Output folder")
 	fs.StringVar(&r.bucketName, "bucket", "", "GCS bucket name to send packaged results to")
 	fs.StringVar(&r.serviceAccount, "service-account", "", "Service account to authenticate with")
 	fs.BoolVar(&r.sendToMonitoring, "send-status-to-monitoring", true, "Send the execution status to cloud monitoring as a metric")
@@ -107,18 +113,23 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, r.Name(), log.StringLevelToZapcore(r.logLevel))
+	log.Logger.Info("ReadMetrics starting")
 	if r.projectID == "" {
 		r.projectID = r.cloudProps.GetProjectId()
 		log.Logger.Warnf("Project ID defaulted to: %s", r.projectID)
 	}
 
-	mc, err := monitoring.NewMetricClient(ctx)
-	if err != nil {
+	var err error
+	if r.queries, err = r.createQueryMap(); err != nil {
+		log.Logger.Errorw("Failed to create queries", "inputFile", r.inputFile, "err", err)
+		return subcommands.ExitFailure
+	}
+
+	if r.timeSeriesCreator, err = monitoring.NewMetricClient(ctx); err != nil {
 		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return subcommands.ExitFailure
 	}
-	r.timeSeriesCreator = mc
 
 	mqc, err := monitoring.NewQueryClient(ctx)
 	if err != nil {
@@ -131,32 +142,96 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
 	}
 
-	r.queries = make(map[string]string)
-	r.queries["default_hana_availability"] = defaultHanaHAAvailability
-	r.queries["default_hana_ha_availability"] = defaultHanaHAAvailability
 	return r.readMetricsHandler(ctx)
 }
 
+// readMetricsHandler executes all queries, saves results to the local
+// filesystem, and optionally uploads results to a GCS bucket.
 func (r *ReadMetrics) readMetricsHandler(ctx context.Context) subcommands.ExitStatus {
 	usagemetrics.Action(usagemetrics.ReadMetricsStarted)
+	if err := os.MkdirAll(r.outputFolder, os.ModePerm); err != nil {
+		log.Logger.Errorw("Failed to create output folder", "outputFolder", r.outputFolder, "err", err)
+		return subcommands.ExitFailure
+	}
 
 	for identifier, query := range r.queries {
-		req := &monitoringpb.QueryTimeSeriesRequest{
-			Name:  fmt.Sprintf("projects/%s", r.projectID),
-			Query: query,
+		if query == "" {
+			log.Logger.Infow("Skipping empty query", "identifier", identifier)
+			continue
 		}
 
-		log.Logger.Infow("Executing query", "identifier", identifier, "query", query)
-		data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, r.cmr.QueryClient, req, r.cmr.BackOffs)
+		data, err := r.executeQuery(ctx, identifier, query)
 		if err != nil {
-			log.Logger.Errorw("Query failed", "error", err)
+			log.Logger.Errorw("Failed to execute query", "identifier", identifier, "query", query, "err", err)
 			usagemetrics.Error(usagemetrics.ReadMetricsQueryFailure)
 			return subcommands.ExitFailure
 		}
-		log.Logger.Infow("Query succeeded", "identifier", identifier)
-		log.Logger.Debugw("Query response", "identifier", identifier, "response", data)
+
+		if err := r.writeResults(data, identifier); err != nil {
+			log.Logger.Errorw("Failed to write results", "identifier", identifier, "query", query, "err", err)
+			usagemetrics.Error(usagemetrics.ReadMetricsWriteFileFailure)
+			return subcommands.ExitFailure
+		}
 	}
 
+	log.Logger.Info("ReadMetrics finished")
 	usagemetrics.Action(usagemetrics.ReadMetricsFinished)
 	return subcommands.ExitSuccess
+}
+
+// createQueryMap creates a map of identifiers to MQL queries from default
+// queries and an optional inputFile supplied by the user.
+func (r *ReadMetrics) createQueryMap() (map[string]string, error) {
+	queries := map[string]string{
+		"default_hana_availability":    defaultHanaAvailability,
+		"default_hana_ha_availability": defaultHanaHAAvailability,
+	}
+	if r.inputFile == "" {
+		return queries, nil
+	}
+
+	data, err := os.ReadFile(r.inputFile)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, &queries); err != nil {
+		return nil, err
+	}
+	return queries, nil
+}
+
+// executeQuery queries Cloud Monitoring and returns the results.
+func (r *ReadMetrics) executeQuery(ctx context.Context, identifier, query string) ([]*mrpb.TimeSeriesData, error) {
+	req := &monitoringpb.QueryTimeSeriesRequest{
+		Name:  fmt.Sprintf("projects/%s", r.projectID),
+		Query: query,
+	}
+	log.Logger.Infow("Executing query", "identifier", identifier, "query", query)
+	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, r.cmr.QueryClient, req, r.cmr.BackOffs)
+	if err != nil {
+		return nil, err
+	}
+	log.Logger.Infow("Query succeeded", "identifier", identifier)
+	log.Logger.Debugw("Query response", "identifier", identifier, "response", data)
+	return data, nil
+}
+
+// writeResults marshalls the query response data and writes it to the output.
+func (r *ReadMetrics) writeResults(data []*mrpb.TimeSeriesData, identifier string) error {
+	if len(data) == 0 {
+		return errors.New("no data to write")
+	}
+	// Use ISO 8601 standard for printing the current time.
+	outFile := fmt.Sprintf("%s/%s_%s.json", r.outputFolder, identifier, time.Now().Format("20060102T150405Z0700"))
+	// In the event of multiple entries in the time series, the first entry is the most recent.
+	jsonData, err := protojson.Marshal(data[0])
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(outFile, jsonData, os.ModePerm); err != nil {
+		log.Logger.Errorw("Failed to write output file", "outFile", outFile, "err", err)
+		usagemetrics.Error(usagemetrics.ReadMetricsWriteFileFailure)
+		return err
+	}
+	return nil
 }

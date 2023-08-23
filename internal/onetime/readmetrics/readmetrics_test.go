@@ -19,10 +19,14 @@ package readmetrics
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"flag"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
@@ -33,7 +37,8 @@ import (
 
 var (
 	defaultQueries = map[string]string{
-		"test": "testQuery",
+		"default_hana_availability":    defaultHanaAvailability,
+		"default_hana_ha_availability": defaultHanaHAAvailability,
 	}
 	defaultBackoff = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
 )
@@ -75,6 +80,18 @@ func TestExecuteReadMetrics(t *testing.T) {
 				"test",
 				log.Parameters{},
 				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "FailCreateQueryMap",
+			want: subcommands.ExitFailure,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+			r: ReadMetrics{
+				inputFile: "does_not_exist",
 			},
 		},
 		{
@@ -141,14 +158,29 @@ func TestReadMetricsHandler(t *testing.T) {
 		want subcommands.ExitStatus
 	}{
 		{
+			name: "NoOutputFolder",
+			want: subcommands.ExitFailure,
+		},
+		{
 			name: "NoQueries",
-			r:    ReadMetrics{},
+			r: ReadMetrics{
+				outputFolder: t.TempDir(),
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "EmptyQuery",
+			r: ReadMetrics{
+				outputFolder: t.TempDir(),
+				queries:      map[string]string{"test": ""},
+			},
 			want: subcommands.ExitSuccess,
 		},
 		{
 			name: "QueryFailure",
 			r: ReadMetrics{
-				queries: defaultQueries,
+				outputFolder: t.TempDir(),
+				queries:      defaultQueries,
 				cmr: &cloudmetricreader.CloudMetricReader{
 					QueryClient: &fake.TimeSeriesQuerier{
 						Err: fmt.Errorf("query failure"),
@@ -159,12 +191,26 @@ func TestReadMetricsHandler(t *testing.T) {
 			want: subcommands.ExitFailure,
 		},
 		{
-			name: "QuerySuccess",
+			name: "WriteFailure",
 			r: ReadMetrics{
-				queries: defaultQueries,
+				outputFolder: t.TempDir(),
+				queries:      defaultQueries,
 				cmr: &cloudmetricreader.CloudMetricReader{
 					QueryClient: &fake.TimeSeriesQuerier{},
 					BackOffs:    defaultBackoff,
+				},
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "QueryAndWriteSuccess",
+			r: ReadMetrics{
+				outputFolder: t.TempDir(),
+				queries:      defaultQueries,
+				cmr: &cloudmetricreader.CloudMetricReader{
+					QueryClient: &fake.TimeSeriesQuerier{
+						TS: []*mrpb.TimeSeriesData{&mrpb.TimeSeriesData{}}},
+					BackOffs: defaultBackoff,
 				},
 			},
 			want: subcommands.ExitSuccess,
@@ -175,6 +221,145 @@ func TestReadMetricsHandler(t *testing.T) {
 			got := test.r.readMetricsHandler(context.Background())
 			if got != test.want {
 				t.Errorf("readMetricsHandler()=%v want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCreateQueryMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        ReadMetrics
+		fileData string
+		want     map[string]string
+		wantErr  error
+	}{
+		{
+			name:    "NoInputFile",
+			r:       ReadMetrics{},
+			want:    defaultQueries,
+			wantErr: nil,
+		},
+		{
+			name: "ReadFileError",
+			r: ReadMetrics{
+				inputFile: "does_not_exist",
+			},
+			want:    nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UnmarshallError",
+			r: ReadMetrics{
+				inputFile: t.TempDir() + "/UnmarshallError.json",
+			},
+			fileData: `{"key":"value`,
+			want:     nil,
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "SuccessOverrideDefaults",
+			r: ReadMetrics{
+				inputFile: t.TempDir() + "/SuccessOverrideDefaults.json",
+			},
+			fileData: `{"default_hana_availability":"", "default_hana_ha_availability": ""}`,
+			want: map[string]string{
+				"default_hana_availability":    "",
+				"default_hana_ha_availability": "",
+			},
+			wantErr: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.fileData != "" {
+				os.WriteFile(test.r.inputFile, []byte(test.fileData), os.ModePerm)
+			}
+
+			got, gotErr := test.r.createQueryMap()
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("createQueryMap() had unexpected diff: (-want +got):\n%s", diff)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("createQueryMap()=%v want %v", gotErr, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestExecuteQuery(t *testing.T) {
+	tests := []struct {
+		name string
+		r    ReadMetrics
+		want error
+	}{
+		{
+			name: "FailedToQuery",
+			r: ReadMetrics{
+				cmr: &cloudmetricreader.CloudMetricReader{
+					QueryClient: &fake.TimeSeriesQuerier{
+						Err: fmt.Errorf("query failure"),
+					},
+					BackOffs: defaultBackoff,
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessfulQuery",
+			r: ReadMetrics{
+				cmr: &cloudmetricreader.CloudMetricReader{
+					QueryClient: &fake.TimeSeriesQuerier{},
+					BackOffs:    defaultBackoff,
+				},
+			},
+			want: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, got := test.r.executeQuery(context.Background(), "test", "testQuery")
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("executeQuery()=%v want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestWriteResults(t *testing.T) {
+	tests := []struct {
+		name string
+		r    ReadMetrics
+		data []*mrpb.TimeSeriesData
+		want error
+	}{
+		{
+			name: "NoData",
+			r:    ReadMetrics{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToWrite",
+			r: ReadMetrics{
+				outputFolder: t.TempDir() + "/does_not_exist",
+			},
+			data: []*mrpb.TimeSeriesData{&mrpb.TimeSeriesData{}},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessfulWrite",
+			r: ReadMetrics{
+				outputFolder: t.TempDir(),
+			},
+			data: []*mrpb.TimeSeriesData{&mrpb.TimeSeriesData{}},
+			want: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.r.writeResults(test.data, "test")
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("writeResults(%v)=%v want %v", test.data, got, test.want)
 			}
 		})
 	}
