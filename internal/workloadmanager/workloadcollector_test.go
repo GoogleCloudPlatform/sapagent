@@ -37,7 +37,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	wlm "github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
+
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -103,7 +104,7 @@ type testWLMInterface struct {
 	err error
 }
 
-func (t *testWLMInterface) WriteInsight(project string, location string, req *wlm.WriteInsightRequest) error {
+func (t *testWLMInterface) WriteInsight(project string, location string, req *workloadmanager.WriteInsightRequest) error {
 	return t.err
 }
 

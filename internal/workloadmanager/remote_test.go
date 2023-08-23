@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func TestCollectMetricsToJSON(t *testing.T) {
@@ -139,7 +140,7 @@ func TestAppendCommonGcloudArgs(t *testing.T) {
 			}
 			got := appendCommonGcloudArgs(args, rc, &cfgpb.RemoteCollectionInstance{
 				ProjectId: "projectId",
-				Zone:      "zone",
+				Zone:      "some-region-zone",
 			})
 			for _, want := range test.wantInArgs {
 				if !slices.Contains(got, want) {
@@ -180,7 +181,7 @@ func TestAppendSSHArgs(t *testing.T) {
 				ProjectId:      "projectId",
 				InstanceId:     "instanceId",
 				InstanceName:   "instanceName",
-				Zone:           "zone",
+				Zone:           "some-region-zone",
 				SshHostAddress: "sshHostAddress",
 			}
 
@@ -221,6 +222,9 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		{
 			name: "returnsSentWhenConfigured",
 			config: &cfgpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					Zone: "some-region-zone",
+				},
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
@@ -229,7 +233,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
 							&cfgpb.RemoteCollectionInstance{
 								ProjectId:    "projectId",
-								Zone:         "zone",
+								Zone:         "some-region-zone",
 								InstanceId:   "instanceId",
 								InstanceName: "instanceName",
 							},
@@ -237,12 +241,10 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
-
-`,
-			wantCount: 1,
-			execError: nil,
-			cmdExists: true,
+			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
+			wantCount:  1,
+			execError:  nil,
+			cmdExists:  true,
 		},
 		{
 			name: "returnsZeroWithErrorFromRemote",
@@ -255,7 +257,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
 							&cfgpb.RemoteCollectionInstance{
 								ProjectId:    "projectId",
-								Zone:         "zone",
+								Zone:         "some-region-zone",
 								InstanceId:   "instanceId",
 								InstanceName: "instanceName",
 							},
@@ -271,6 +273,9 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		{
 			name: "returnsZeroWithErrorExec",
 			config: &cfgpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					Zone: "some-region-zone",
+				},
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
@@ -279,7 +284,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
 							&cfgpb.RemoteCollectionInstance{
 								ProjectId:    "projectId",
-								Zone:         "zone",
+								Zone:         "some-region-zone",
 								InstanceId:   "instanceId",
 								InstanceName: "instanceName",
 							},
@@ -297,6 +302,9 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		{
 			name: "gcloudNotFound",
 			config: &cfgpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					Zone: "some-region-zone",
+				},
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
@@ -305,7 +313,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
 							&cfgpb.RemoteCollectionInstance{
 								ProjectId:    "projectId",
-								Zone:         "zone",
+								Zone:         "some-region-zone",
 								InstanceId:   "instanceId",
 								InstanceName: "instanceName",
 							},
@@ -323,6 +331,9 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		{
 			name: "returnsSentWhenConfiguredSSH",
 			config: &cfgpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					Zone: "some-region-zone",
+				},
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
@@ -331,7 +342,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
 							&cfgpb.RemoteCollectionInstance{
 								ProjectId:    "projectId",
-								Zone:         "zone",
+								Zone:         "some-region-zone",
 								InstanceId:   "instanceId",
 								InstanceName: "instanceName",
 							},
@@ -348,6 +359,9 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		{
 			name: "returnsZeroWithErrorFromRemote",
 			config: &cfgpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					Zone: "some-region-zone",
+				},
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
@@ -356,7 +370,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
 							&cfgpb.RemoteCollectionInstance{
 								ProjectId:    "projectId",
-								Zone:         "zone",
+								Zone:         "some-region-zone",
 								InstanceId:   "instanceId",
 								InstanceName: "instanceName",
 							},
@@ -371,6 +385,9 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 		{
 			name: "returnsZeroWithErrorExec",
 			config: &cfgpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					Zone: "some-region-zone",
+				},
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
@@ -379,7 +396,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
 							&cfgpb.RemoteCollectionInstance{
 								ProjectId:    "projectId",
-								Zone:         "zone",
+								Zone:         "some-region-zone",
 								InstanceId:   "instanceId",
 								InstanceName: "instanceName",
 							},

@@ -36,8 +36,8 @@ import (
 	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -107,7 +107,7 @@ func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadma
 		RelatedResources: r.RelatedResources,
 		ResourceKind:     r.ResourceKind.String(),
 		ResourceType:     r.ResourceType.String(),
-		ResourceURI:      r.ResourceUri,
+		ResourceUri:      r.ResourceUri,
 		UpdateTime:       r.UpdateTime.AsTime().Format(time.RFC3339),
 	}
 }
@@ -126,14 +126,14 @@ func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *work
 	case *spb.SapDiscovery_Component_ApplicationProperties_:
 		iComp.ApplicationProperties = &workloadmanager.SapDiscoveryComponentApplicationProperties{
 			ApplicationType: x.ApplicationProperties.GetApplicationType().String(),
-			AscsURI:         x.ApplicationProperties.GetAscsUri(),
-			NfsURI:          x.ApplicationProperties.GetNfsUri(),
+			AscsUri:         x.ApplicationProperties.GetAscsUri(),
+			NfsUri:          x.ApplicationProperties.GetNfsUri(),
 		}
 	case *spb.SapDiscovery_Component_DatabaseProperties_:
 		iComp.DatabaseProperties = &workloadmanager.SapDiscoveryComponentDatabaseProperties{
 			DatabaseType:       x.DatabaseProperties.GetDatabaseType().String(),
-			PrimaryInstanceURI: x.DatabaseProperties.GetPrimaryInstanceUri(),
-			SharedNfsURI:       x.DatabaseProperties.GetSharedNfsUri(),
+			PrimaryInstanceUri: x.DatabaseProperties.GetPrimaryInstanceUri(),
+			SharedNfsUri:       x.DatabaseProperties.GetSharedNfsUri(),
 		}
 	}
 
@@ -142,7 +142,7 @@ func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *work
 
 func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 	iDiscovery := &workloadmanager.SapDiscovery{
-		SystemID:   sys.SystemId,
+		SystemId:   sys.SystemId,
 		UpdateTime: sys.UpdateTime.AsTime().Format(time.RFC3339),
 	}
 	if sys.ApplicationLayer != nil {
@@ -314,7 +314,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 			req := &workloadmanager.WriteInsightRequest{
 				Insight: insightFromSAPSystem(sys),
 			}
-			req.Insight.InstanceID = fmt.Sprintf("%d", ci.Id)
+			req.Insight.InstanceId = fmt.Sprintf("%d", ci.Id)
 
 			err := d.wlmService.WriteInsight(cp.ProjectId, region, req)
 			if err != nil {

@@ -188,7 +188,10 @@ func TestApplyDefaults(t *testing.T) {
 				LogToCloud:                 true,
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
-				CollectionConfiguration:    &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    wpb.Bool(true),
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+				},
 			},
 		},
 		{
@@ -202,7 +205,10 @@ func TestApplyDefaults(t *testing.T) {
 				LogToCloud:                 false,
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
-				CollectionConfiguration:    &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    wpb.Bool(true),
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+				},
 			},
 		},
 		{
@@ -213,6 +219,7 @@ func TestApplyDefaults(t *testing.T) {
 					CollectProcessMetrics:            true,
 					CollectAgentMetrics:              true,
 					SapSystemDiscovery:               wpb.Bool(false),
+					DataWarehouseEndpoint:            "https://other-workloadmanager-datawarehouse.googleapis.com/",
 				},
 			},
 			want: &cpb.Configuration{
@@ -228,6 +235,7 @@ func TestApplyDefaults(t *testing.T) {
 					HeartbeatFrequency:                   60,
 					MissedHeartbeatThreshold:             10,
 					SapSystemDiscovery:                   wpb.Bool(false),
+					DataWarehouseEndpoint:                "https://other-workloadmanager-datawarehouse.googleapis.com/",
 				},
 				AgentProperties: testAgentProps,
 				CloudProperties: testCloudProps,
@@ -253,7 +261,10 @@ func TestApplyDefaults(t *testing.T) {
 					InstanceId: "config-instance-id",
 					Zone:       "config-zone",
 				},
-				CollectionConfiguration: &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    wpb.Bool(true),
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+				},
 			},
 		},
 		{
@@ -301,7 +312,10 @@ func TestApplyDefaults(t *testing.T) {
 						},
 					},
 				},
-				CollectionConfiguration: &cpb.CollectionConfiguration{SapSystemDiscovery: wpb.Bool(true)},
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    wpb.Bool(true),
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+				},
 			},
 		},
 	}

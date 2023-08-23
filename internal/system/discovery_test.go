@@ -33,7 +33,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
+
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -2144,7 +2145,7 @@ func TestResourceToInsight(t *testing.T) {
 			UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
 		},
 		want: &workloadmanager.SapDiscoveryResource{
-			ResourceURI:      "test/uri",
+			ResourceUri:      "test/uri",
 			ResourceKind:     "RESOURCE_KIND_INSTANCE",
 			ResourceType:     "RESOURCE_TYPE_COMPUTE",
 			RelatedResources: []string{"other/resource"},
@@ -2191,11 +2192,11 @@ func TestComponentToInsight(t *testing.T) {
 			Sid:         "SID",
 			ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
 				ApplicationType: "NETWEAVER",
-				AscsURI:         "ascs/uri",
-				NfsURI:          "nfs/uri",
+				AscsUri:         "ascs/uri",
+				NfsUri:          "nfs/uri",
 			},
 			Resources: []*workloadmanager.SapDiscoveryResource{{
-				ResourceURI:      "test/uri",
+				ResourceUri:      "test/uri",
 				ResourceKind:     "RESOURCE_KIND_INSTANCE",
 				ResourceType:     "RESOURCE_TYPE_COMPUTE",
 				RelatedResources: []string{"other/resource"},
@@ -2226,11 +2227,11 @@ func TestComponentToInsight(t *testing.T) {
 			Sid:         "SID",
 			DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
 				DatabaseType:       "HANA",
-				PrimaryInstanceURI: "primary/uri",
-				SharedNfsURI:       "shared/uri",
+				PrimaryInstanceUri: "primary/uri",
+				SharedNfsUri:       "shared/uri",
 			},
 			Resources: []*workloadmanager.SapDiscoveryResource{{
-				ResourceURI:      "test/uri",
+				ResourceUri:      "test/uri",
 				ResourceKind:     "RESOURCE_KIND_INSTANCE",
 				ResourceType:     "RESOURCE_TYPE_COMPUTE",
 				RelatedResources: []string{"other/resource"},
@@ -2271,13 +2272,13 @@ func TestDiscoverySystemToInsight(t *testing.T) {
 		},
 		want: &workloadmanager.Insight{
 			SapDiscovery: &workloadmanager.SapDiscovery{
-				SystemID:   "test-system",
+				SystemId:   "test-system",
 				UpdateTime: "2023-05-01T15:45:11Z",
 				ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
 					HostProject: "test/project",
 					Sid:         "SID",
 					Resources: []*workloadmanager.SapDiscoveryResource{{
-						ResourceURI:      "test/uri",
+						ResourceUri:      "test/uri",
 						ResourceKind:     "RESOURCE_KIND_INSTANCE",
 						ResourceType:     "RESOURCE_TYPE_COMPUTE",
 						RelatedResources: []string{"other/resource"},

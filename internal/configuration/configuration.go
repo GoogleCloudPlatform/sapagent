@@ -163,6 +163,9 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc.GetSapSystemDiscovery() == nil {
 		cc.SapSystemDiscovery = wpb.Bool(true)
 	}
+	if cc.GetDataWarehouseEndpoint() == "" {
+		cc.DataWarehouseEndpoint = "https://workloadmanager-datawarehouse.googleapis.com/"
+	}
 	return cc
 }
 

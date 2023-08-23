@@ -36,7 +36,8 @@ import (
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	wlm "github.com/GoogleCloudPlatform/sapagent/internal/gce/workloadmanager"
+
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
@@ -95,7 +96,7 @@ type gceInterface interface {
 }
 
 type wlmInterface interface {
-	WriteInsight(project, location string, writeInsightRequest *wlm.WriteInsightRequest) error
+	WriteInsight(project, location string, writeInsightRequest *workloadmanager.WriteInsightRequest) error
 }
 
 /*
@@ -458,12 +459,13 @@ func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	log.Logger.Infow("Sent metrics to Cloud Monitoring.", "number", len(params.wm.Metrics))
 
 	log.Logger.Debugw("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
-	// Send request to global endpoint. Ex: "us-central1-a" -> "us"
+	// Send request to regional endpoint. Ex: "us-central1-a" -> "us-central1"
 	location := params.cp.GetZone()
 	if params.bareMetal {
 		location = params.cp.GetRegion()
 	}
-	location = strings.Split(location, "-")[0]
+	locationParts := strings.Split(location, "-")
+	location = strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 	req := createWriteInsightRequest(params.wm, params.cp.GetInstanceId())
 	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
 		log.Logger.Debugw("Failed to send metrics to Data Warehouse", "error", err)
@@ -512,36 +514,36 @@ func (p *Parameters) ReadHANAInsightsRules() {
 }
 
 // createWriteInsightRequest converts a WorkloadMetrics time series into a WriteInsightRequest.
-func createWriteInsightRequest(wm WorkloadMetrics, instanceID string) *wlm.WriteInsightRequest {
-	validations := []*wlm.ValidationDetail{}
+func createWriteInsightRequest(wm WorkloadMetrics, instanceID string) *workloadmanager.WriteInsightRequest {
+	validations := []*workloadmanager.SapValidationValidationDetail{}
 	for _, m := range wm.Metrics {
-		t := wlm.SapValidationTypeUnspecified
+		t := "SAP_VALIDATION_TYPE_UNSPECIFIED"
 		switch m.GetMetric().GetType() {
 		case sapValidationSystem:
-			t = wlm.SapValidationTypeSystem
+			t = "SYSTEM"
 		case sapValidationCorosync:
-			t = wlm.SapValidationTypeCorosync
+			t = "COROSYNC"
 		case sapValidationHANA:
-			t = wlm.SapValidationTypeHana
+			t = "HANA"
 		case sapValidationNetweaver:
-			t = wlm.SapValidationTypeNetweaver
+			t = "NETWEAVER"
 		case sapValidationPacemaker:
-			t = wlm.SapValidationTypePacemaker
+			t = "PACEMAKER"
 		case sapValidationHANASecurity:
-			t = wlm.SapValidationTypeHanaSecurity
+			t = "HANA_SECURITY"
 		case sapValidationCustom:
-			t = wlm.SapValidationTypeCustom
+			t = "CUSTOM"
 		}
-		validations = append(validations, &wlm.ValidationDetail{
-			SapValidationType: t.String(),
+		validations = append(validations, &workloadmanager.SapValidationValidationDetail{
+			SapValidationType: t,
 			Details:           m.GetMetric().GetLabels(),
 		})
 	}
 
-	return &wlm.WriteInsightRequest{
-		Insight: &wlm.Insight{
-			InstanceID: instanceID,
-			SapValidation: &wlm.SapValidation{
+	return &workloadmanager.WriteInsightRequest{
+		Insight: &workloadmanager.Insight{
+			InstanceId: instanceID,
+			SapValidation: &workloadmanager.SapValidation{
 				ValidationDetails: validations,
 			},
 		},
