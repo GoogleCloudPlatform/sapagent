@@ -19,6 +19,7 @@ package readmetrics
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -27,10 +28,12 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -40,7 +43,8 @@ var (
 		"default_hana_availability":    defaultHanaAvailability,
 		"default_hana_ha_availability": defaultHanaHAAvailability,
 	}
-	defaultBackoff = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
+	defaultBackoff      = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
+	defaultBucketHandle = fakestorage.NewServer([]fakestorage.Object{}).Client().Bucket("default-bucket")
 )
 
 func TestExecuteReadMetrics(t *testing.T) {
@@ -92,6 +96,30 @@ func TestExecuteReadMetrics(t *testing.T) {
 			},
 			r: ReadMetrics{
 				inputFile: "does_not_exist",
+			},
+		},
+		{
+			name: "FailConnectToBucket",
+			want: subcommands.ExitFailure,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+			r: ReadMetrics{
+				bucketName: "does_not_exist",
+			},
+		},
+		{
+			name: "FailCreateMetricClient",
+			want: subcommands.ExitFailure,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+			r: ReadMetrics{
+				serviceAccount: "does_not_exist",
 			},
 		},
 		{
@@ -194,11 +222,25 @@ func TestReadMetricsHandler(t *testing.T) {
 			name: "WriteFailure",
 			r: ReadMetrics{
 				outputFolder: t.TempDir(),
-				queries:      defaultQueries,
+				queries:      map[string]string{"identifier/with/forward/slashes": "testQuery"},
 				cmr: &cloudmetricreader.CloudMetricReader{
 					QueryClient: &fake.TimeSeriesQuerier{},
 					BackOffs:    defaultBackoff,
 				},
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "UploadFailure",
+			r: ReadMetrics{
+				outputFolder: t.TempDir(),
+				queries:      defaultQueries,
+				cmr: &cloudmetricreader.CloudMetricReader{
+					QueryClient: &fake.TimeSeriesQuerier{
+						TS: []*mrpb.TimeSeriesData{&mrpb.TimeSeriesData{}}},
+					BackOffs: defaultBackoff,
+				},
+				bucket: defaultBucketHandle,
 			},
 			want: subcommands.ExitFailure,
 		},
@@ -273,7 +315,9 @@ func TestCreateQueryMap(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if test.fileData != "" {
-				os.WriteFile(test.r.inputFile, []byte(test.fileData), os.ModePerm)
+				if err := os.WriteFile(test.r.inputFile, []byte(test.fileData), os.ModePerm); err != nil {
+					t.Fatalf("Failed to write file %v: %v", test.r.inputFile, err)
+				}
 			}
 
 			got, gotErr := test.r.createQueryMap()
@@ -335,8 +379,10 @@ func TestWriteResults(t *testing.T) {
 	}{
 		{
 			name: "NoData",
-			r:    ReadMetrics{},
-			want: cmpopts.AnyError,
+			r: ReadMetrics{
+				outputFolder: t.TempDir(),
+			},
+			want: nil,
 		},
 		{
 			name: "FailedToWrite",
@@ -357,10 +403,95 @@ func TestWriteResults(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.r.writeResults(test.data, "test")
+			_, got := test.r.writeResults(test.data, "test")
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("writeResults(%v)=%v want %v", test.data, got, test.want)
 			}
 		})
+	}
+}
+
+func TestUploadFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        ReadMetrics
+		fileName string
+		copier   storage.IOFileCopier
+		want     error
+	}{
+		{
+			name: "NoBucket",
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "NoFile",
+			r: ReadMetrics{
+				bucket: defaultBucketHandle,
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "UploadFailure",
+			r: ReadMetrics{
+				bucket: defaultBucketHandle,
+			},
+			fileName: t.TempDir() + "/upload_failure.json",
+			copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+				return 0, fmt.Errorf("upload failure")
+			},
+			want: cmpopts.AnyError,
+		},
+		// Cannot unit test successful upload since object Attrs cannot be acquired in fakestorage
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.fileName != "" {
+				if err := os.WriteFile(test.fileName, []byte("test content"), os.ModePerm); err != nil {
+					t.Fatalf("Failed to write file %v: %v", test.fileName, err)
+				}
+			}
+
+			got := test.r.uploadFile(context.Background(), test.fileName, test.copier)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("uploadFile(%v)=%v want %v", test.fileName, got, test.want)
+			}
+		})
+	}
+}
+
+func TestSendStatusToMonitoring(t *testing.T) {
+	tests := []struct {
+		name string
+		r    ReadMetrics
+		want bool
+	}{
+		{
+			name: "DontSendToMonitoring",
+			want: false,
+		},
+		{
+			name: "FailedSendToMonitoring",
+			r: ReadMetrics{
+				sendToMonitoring: true,
+				timeSeriesCreator: &fake.TimeSeriesCreator{
+					Err: fmt.Errorf("failure"),
+				},
+			},
+			want: false,
+		},
+		{
+			name: "Success",
+			r: ReadMetrics{
+				sendToMonitoring:  true,
+				timeSeriesCreator: &fake.TimeSeriesCreator{},
+			},
+			want: true,
+		},
+	}
+	for _, test := range tests {
+		got := test.r.sendStatusToMonitoring(context.Background(), cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond))
+		if got != test.want {
+			t.Errorf("sendStatusToMonitoring() = %v, want: %v", got, test.want)
+		}
 	}
 }

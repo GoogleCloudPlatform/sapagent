@@ -20,27 +20,34 @@ package readmetrics
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"flag"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"google.golang.org/api/option"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	s "cloud.google.com/go/storage"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 const (
+	userAgent = "ReadMetrics for GCS"
+
 	defaultHanaAvailability   = "fetch gce_instance | metric 'workload.googleapis.com/sap/hana/availability' | group_by 1m, [value_availability_mean: mean(value.availability)] | every 1m | group_by [metric.sid, resource.instance_id], [value_availability_mean_mean: mean(value_availability_mean)] | within 24h"
 	defaultHanaHAAvailability = "fetch gce_instance | metric 'workload.googleapis.com/sap/hana/ha/availability' | group_by 1m, [value_availability_mean: mean(value.availability)] | every 1m | group_by [metric.sid, resource.instance_id], [value_availability_mean_mean: mean(value_availability_mean)] | within 24h"
 )
@@ -56,6 +63,7 @@ type ReadMetrics struct {
 
 	queries           map[string]string
 	cmr               *cloudmetricreader.CloudMetricReader
+	bucket            *s.BucketHandle
 	status            bool
 	timeSeriesCreator cloudmonitoring.TimeSeriesCreator
 	cloudProps        *ipb.CloudProperties
@@ -125,13 +133,24 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		return subcommands.ExitFailure
 	}
 
-	if r.timeSeriesCreator, err = monitoring.NewMetricClient(ctx); err != nil {
+	if r.bucketName != "" {
+		if r.bucket, ok = storage.ConnectToBucket(ctx, s.NewClient, r.serviceAccount, r.bucketName, userAgent); !ok {
+			log.Logger.Errorw("Failed to connect to bucket", "bucketName", r.bucketName)
+			return subcommands.ExitFailure
+		}
+	}
+
+	var opts []option.ClientOption
+	if r.serviceAccount != "" {
+		opts = append(opts, option.WithCredentialsFile(r.serviceAccount))
+	}
+	if r.timeSeriesCreator, err = monitoring.NewMetricClient(ctx, opts...); err != nil {
 		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return subcommands.ExitFailure
 	}
 
-	mqc, err := monitoring.NewQueryClient(ctx)
+	mqc, err := monitoring.NewQueryClient(ctx, opts...)
 	if err != nil {
 		log.Logger.Errorw("Failed to create Cloud Monitoring query client", "error", err)
 		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
@@ -153,6 +172,7 @@ func (r *ReadMetrics) readMetricsHandler(ctx context.Context) subcommands.ExitSt
 		log.Logger.Errorw("Failed to create output folder", "outputFolder", r.outputFolder, "err", err)
 		return subcommands.ExitFailure
 	}
+	defer r.sendStatusToMonitoring(ctx, cloudmonitoring.NewDefaultBackOffIntervals())
 
 	for identifier, query := range r.queries {
 		if query == "" {
@@ -167,14 +187,24 @@ func (r *ReadMetrics) readMetricsHandler(ctx context.Context) subcommands.ExitSt
 			return subcommands.ExitFailure
 		}
 
-		if err := r.writeResults(data, identifier); err != nil {
+		fileName, err := r.writeResults(data, identifier)
+		if err != nil {
 			log.Logger.Errorw("Failed to write results", "identifier", identifier, "query", query, "err", err)
 			usagemetrics.Error(usagemetrics.ReadMetricsWriteFileFailure)
 			return subcommands.ExitFailure
 		}
+
+		if r.bucket != nil {
+			if err := r.uploadFile(ctx, fileName, io.Copy); err != nil {
+				log.Logger.Errorw("Failed to upload file", "fileName", fileName, "err", err)
+				usagemetrics.Error(usagemetrics.ReadMetricsBucketUploadFailure)
+				return subcommands.ExitFailure
+			}
+		}
 	}
 
 	log.Logger.Info("ReadMetrics finished")
+	r.status = true
 	usagemetrics.Action(usagemetrics.ReadMetricsFinished)
 	return subcommands.ExitSuccess
 }
@@ -217,21 +247,90 @@ func (r *ReadMetrics) executeQuery(ctx context.Context, identifier, query string
 }
 
 // writeResults marshalls the query response data and writes it to the output.
-func (r *ReadMetrics) writeResults(data []*mrpb.TimeSeriesData, identifier string) error {
-	if len(data) == 0 {
-		return errors.New("no data to write")
-	}
+func (r *ReadMetrics) writeResults(data []*mrpb.TimeSeriesData, identifier string) (string, error) {
 	// Use ISO 8601 standard for printing the current time.
 	outFile := fmt.Sprintf("%s/%s_%s.json", r.outputFolder, identifier, time.Now().Format("20060102T150405Z0700"))
-	// In the event of multiple entries in the time series, the first entry is the most recent.
-	jsonData, err := protojson.Marshal(data[0])
+	log.Logger.Infow("Writing results", "outFile", outFile)
+
+	var output []byte
+	if len(data) == 0 {
+		log.Logger.Warnw("No data, writing empty file", "outFile", outFile)
+	} else {
+		jsonData := make([]json.RawMessage, len(data))
+		var err error
+		for i, d := range data {
+			jsonData[i], err = protojson.Marshal(d)
+			if err != nil {
+				return "", err
+			}
+		}
+		output, err = json.Marshal(jsonData)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if err := os.WriteFile(outFile, output, os.ModePerm); err != nil {
+		return "", err
+	}
+	log.Logger.Infow("Results written", "outFile", outFile)
+	return outFile, nil
+}
+
+// uploadFile uploads the file to the GCS bucket.
+func (r *ReadMetrics) uploadFile(ctx context.Context, fileName string, copier storage.IOFileCopier) error {
+	if r.bucket == nil {
+		return fmt.Errorf("bucket is nil")
+	}
+
+	log.Logger.Infow("Uploading file", "bucket", r.bucketName, "fileName", fileName)
+	f, err := os.Open(fileName)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(outFile, jsonData, os.ModePerm); err != nil {
-		log.Logger.Errorw("Failed to write output file", "outFile", outFile, "err", err)
-		usagemetrics.Error(usagemetrics.ReadMetricsWriteFileFailure)
+	defer f.Close()
+	fileInfo, err := f.Stat()
+	if err != nil {
 		return err
 	}
+
+	rw := storage.ReadWriter{
+		Reader:       f,
+		Copier:       copier,
+		BucketHandle: r.bucket,
+		BucketName:   r.bucketName,
+		ChunkSizeMb:  100,
+		ObjectName:   fileName,
+		TotalBytes:   fileInfo.Size(),
+		MaxRetries:   5,
+		LogDelay:     30 * time.Second,
+	}
+	bytesWritten, err := rw.Upload(ctx)
+	if err != nil {
+		return err
+	}
+	log.Logger.Infow("File uploaded", "bucket", r.bucketName, "fileName", fileName, "bytesWritten", bytesWritten, "fileSize", fileInfo.Size())
 	return nil
+}
+
+// sendStatusToMonitoring sends the status of ReadMetrics one time execution
+// to cloud monitoring as a GAUGE metric.
+func (r *ReadMetrics) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) bool {
+	if !r.sendToMonitoring {
+		return false
+	}
+	log.Logger.Infow("Sending ReadMetrics status to cloud monitoring", "status", r.status)
+	ts := []*mrpb.TimeSeries{
+		timeseries.BuildBool(timeseries.Params{
+			CloudProp:  r.cloudProps,
+			MetricType: "workload.googleapis.com/sap/agent/" + r.Name(),
+			Timestamp:  tspb.Now(),
+			BoolValue:  r.status,
+		}),
+	}
+	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, r.timeSeriesCreator, bo, r.projectID); err != nil {
+		log.Logger.Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
+		return false
+	}
+	return true
 }
