@@ -29,6 +29,7 @@ import (
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -82,10 +83,7 @@ func TestParseRemoteJSON(t *testing.T) {
 				},
 				MetricKind: mpb.MetricDescriptor_GAUGE,
 			}),
-			output: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
-
-`,
-
+			output:      `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
 			expectError: false,
 		},
 		{
@@ -197,12 +195,13 @@ func TestAppendSSHArgs(t *testing.T) {
 
 func TestCollectAndSendRemoteMetrics(t *testing.T) {
 	tests := []struct {
-		name       string
-		config     *cfgpb.Configuration
-		execOutput string
-		wantCount  int
-		execError  error
-		cmdExists  bool
+		name         string
+		config       *cfgpb.Configuration
+		execOutput   string
+		wlmInterface *testWLMInterface
+		wantCount    int
+		execError    error
+		cmdExists    bool
 	}{
 		{
 			name: "returnsZeroWhenNotConfigured",
@@ -214,10 +213,11 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: "",
-			wantCount:  0,
-			execError:  nil,
-			cmdExists:  true,
+			execOutput:   "",
+			wlmInterface: &testWLMInterface{},
+			wantCount:    0,
+			execError:    nil,
+			cmdExists:    true,
 		},
 		{
 			name: "returnsSentWhenConfigured",
@@ -242,9 +242,31 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 				},
 			},
 			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
-			wantCount:  1,
-			execError:  nil,
-			cmdExists:  true,
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{
+					Project:  "projectId",
+					Location: "some-region",
+					Req: &workloadmanager.WriteInsightRequest{
+						Insight: &workloadmanager.Insight{
+							InstanceId: "instanceId",
+							SapValidation: &workloadmanager.SapValidation{
+								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
+									Details: map[string]string{
+										"agent":         "gcagent",
+										"instance_name": "test-instance",
+										"os":            `"sles"-"15"`,
+									},
+									SapValidationType: "SYSTEM",
+								}},
+							},
+						},
+					},
+				}},
+				WriteInsightErrs: []error{nil},
+			},
+			wantCount: 1,
+			execError: nil,
+			cmdExists: true,
 		},
 		{
 			name: "returnsZeroWithErrorFromRemote",
@@ -265,10 +287,11 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: "ERROR something did not work",
-			wantCount:  0,
-			execError:  nil,
-			cmdExists:  true,
+			execOutput:   "ERROR something did not work",
+			wlmInterface: &testWLMInterface{},
+			wantCount:    0,
+			execError:    nil,
+			cmdExists:    true,
 		},
 		{
 			name: "returnsZeroWithErrorExec",
@@ -292,12 +315,11 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
-
-`,
-			wantCount: 0,
-			execError: errors.New("Error executing"),
-			cmdExists: true,
+			execOutput:   `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
+			wlmInterface: &testWLMInterface{},
+			wantCount:    0,
+			execError:    errors.New("Error executing"),
+			cmdExists:    true,
 		},
 		{
 			name: "gcloudNotFound",
@@ -321,12 +343,11 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
-
-`,
-			wantCount: 0,
-			execError: nil,
-			cmdExists: false,
+			execOutput:   `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
+			wlmInterface: &testWLMInterface{},
+			wantCount:    0,
+			execError:    nil,
+			cmdExists:    false,
 		},
 		{
 			name: "returnsSentWhenConfiguredSSH",
@@ -350,9 +371,29 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
-
-`,
+			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{
+					Project:  "projectId",
+					Location: "some-region",
+					Req: &workloadmanager.WriteInsightRequest{
+						Insight: &workloadmanager.Insight{
+							InstanceId: "instanceId",
+							SapValidation: &workloadmanager.SapValidation{
+								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
+									SapValidationType: "SYSTEM",
+									Details: map[string]string{
+										"agent":         "gcagent",
+										"instance_name": "test-instance",
+										"os":            `"sles"-"15"`,
+									},
+								}},
+							},
+						},
+					},
+				}},
+				WriteInsightErrs: []error{nil},
+			},
 			wantCount: 1,
 			execError: nil,
 		},
@@ -379,8 +420,26 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 				},
 			},
 			execOutput: "ERROR something did not work",
-			wantCount:  0,
-			execError:  nil,
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{
+					Project:  "projectId",
+					Location: "some-region",
+					Req: &workloadmanager.WriteInsightRequest{
+						Insight: &workloadmanager.Insight{
+							InstanceId: "instanceId",
+							SapValidation: &workloadmanager.SapValidation{
+								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
+									SapValidationType: "SYSTEM",
+									Details:           map[string]string{},
+								}},
+							},
+						},
+					},
+				}},
+				WriteInsightErrs: []error{nil},
+			},
+			wantCount: 0,
+			execError: nil,
 		},
 		{
 			name: "returnsZeroWithErrorExec",
@@ -404,15 +463,15 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}
-
-`,
-			wantCount: 0,
-			execError: errors.New("Error executing"),
+			execOutput:   `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
+			wlmInterface: &testWLMInterface{},
+			wantCount:    0,
+			execError:    errors.New("Error executing"),
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.wlmInterface.T = t
 			p := Parameters{
 				Config: test.config,
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -427,7 +486,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				BackOffs:          defaultBackOffIntervals,
-				WLMService:        &testWLMInterface{},
+				WLMService:        test.wlmInterface,
 			}
 
 			want := test.wantCount

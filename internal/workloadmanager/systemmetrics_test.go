@@ -46,7 +46,7 @@ var (
 		CloudProperties: &iipb.CloudProperties{
 			InstanceName: "test-instance-name",
 			InstanceId:   "test-instance-id",
-			Zone:         "test-zone",
+			Zone:         "test-region-zone",
 			ProjectId:    "test-project-id",
 		},
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
@@ -65,7 +65,7 @@ func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) Work
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},

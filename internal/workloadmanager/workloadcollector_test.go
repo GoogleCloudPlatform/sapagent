@@ -52,7 +52,7 @@ var (
 		CloudProperties: &iipb.CloudProperties{
 			InstanceName: "test-instance-name",
 			InstanceId:   "test-instance-id",
-			Zone:         "test-zone",
+			Zone:         "test-region-zone",
 			ProjectId:    "test-project-id",
 		},
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
@@ -76,7 +76,7 @@ var (
 		CloudProperties: &iipb.CloudProperties{
 			InstanceName: "test-instance-name",
 			InstanceId:   "test-instance-id",
-			Zone:         "test-zone",
+			Zone:         "test-region-zone",
 			ProjectId:    "test-project-id",
 		},
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
@@ -100,12 +100,31 @@ var (
 	})
 )
 
+type WriteInsightArgs struct {
+	Project  string
+	Location string
+	Req      *workloadmanager.WriteInsightRequest
+}
+
 type testWLMInterface struct {
-	err error
+	T                     *testing.T
+	WriteInsightArgs      []WriteInsightArgs
+	WriteInsightErrs      []error
+	WriteInsightCallCount int
+}
+
+func validationDetailSort(a, b *workloadmanager.SapValidationValidationDetail) bool {
+	return a.SapValidationType < b.SapValidationType
 }
 
 func (t *testWLMInterface) WriteInsight(project string, location string, req *workloadmanager.WriteInsightRequest) error {
-	return t.err
+	defer func() { t.WriteInsightCallCount++ }()
+
+	if diff := cmp.Diff(t.WriteInsightArgs[t.WriteInsightCallCount], WriteInsightArgs{project, location, req}, cmpopts.SortSlices(validationDetailSort)); diff != "" {
+		t.T.Errorf("WriteInsight() arguments diff (-want +got):\n%s", diff)
+	}
+
+	return t.WriteInsightErrs[t.WriteInsightCallCount]
 }
 
 func TestSetOSReleaseInfo(t *testing.T) {
@@ -344,22 +363,41 @@ func TestOverrideMetrics(t *testing.T) {
 func TestSendMetrics(t *testing.T) {
 	tests := []struct {
 		name            string
+		wlmInterface    *testWLMInterface
 		params          sendMetricsParams
 		wantMetricCount int
 	}{
 		{
-			name: "succeedsWithZeroMetrics",
+			name:         "succeedsWithZeroMetrics",
+			wlmInterface: &testWLMInterface{},
 			params: sendMetricsParams{
 				wm:                WorkloadMetrics{},
 				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
-				wlmService:        &testWLMInterface{},
 			},
 			wantMetricCount: 0,
 		},
 		{
 			name: "succeedsWithMetrics",
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{
+					{
+						Project:  "test-project-id",
+						Location: "test-region",
+						Req: &workloadmanager.WriteInsightRequest{
+							Insight: &workloadmanager.Insight{
+								InstanceId: "test-instance-id",
+								SapValidation: &workloadmanager.SapValidation{
+									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
+										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+									},
+								},
+							},
+						},
+					}},
+				WriteInsightErrs: []error{nil},
+			},
 			params: sendMetricsParams{
 				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
@@ -369,12 +407,30 @@ func TestSendMetrics(t *testing.T) {
 				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
-				wlmService:        &testWLMInterface{},
 			},
 			wantMetricCount: 1,
 		},
 		{
 			name: "succeedsBareMetal",
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{
+					{
+						Project:  "bm-project-id",
+						Location: "us-central1",
+						Req: &workloadmanager.WriteInsightRequest{
+							Insight: &workloadmanager.Insight{
+								InstanceId: "bm-instance-id",
+								SapValidation: &workloadmanager.SapValidation{
+									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
+										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+									},
+								},
+							},
+						},
+					},
+				},
+				WriteInsightErrs: []error{nil},
+			},
 			params: sendMetricsParams{
 				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
@@ -385,12 +441,30 @@ func TestSendMetrics(t *testing.T) {
 				bareMetal:         true,
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
-				wlmService:        &testWLMInterface{},
 			},
 			wantMetricCount: 1,
 		},
 		{
 			name: "failsSendToCloudMonitoring",
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{
+					{
+						Project:  "test-project-id",
+						Location: "test-region",
+						Req: &workloadmanager.WriteInsightRequest{
+							Insight: &workloadmanager.Insight{
+								InstanceId: "test-instance-id",
+								SapValidation: &workloadmanager.SapValidation{
+									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
+										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+									},
+								},
+							},
+						},
+					},
+				},
+				WriteInsightErrs: []error{nil},
+			},
 			params: sendMetricsParams{
 				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
@@ -400,11 +474,27 @@ func TestSendMetrics(t *testing.T) {
 				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
 				backOffIntervals:  defaultBackOffIntervals,
-				wlmService:        &testWLMInterface{},
 			},
 			wantMetricCount: 0,
 		},
 		{
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{
+					Project:  "test-project-id",
+					Location: "test-region",
+					Req: &workloadmanager.WriteInsightRequest{
+						Insight: &workloadmanager.Insight{
+							InstanceId: "test-instance-id",
+							SapValidation: &workloadmanager.SapValidation{
+								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
+									&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+								},
+							},
+						},
+					},
+				}},
+				WriteInsightErrs: []error{cmpopts.AnyError},
+			},
 			name: "failsSendToDataWarehouse",
 			params: sendMetricsParams{
 				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
@@ -415,7 +505,6 @@ func TestSendMetrics(t *testing.T) {
 				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
 				backOffIntervals:  defaultBackOffIntervals,
-				wlmService:        &testWLMInterface{err: cmpopts.AnyError},
 			},
 			wantMetricCount: 0,
 		},
@@ -423,6 +512,8 @@ func TestSendMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.wlmInterface.T = t
+			test.params.wlmService = test.wlmInterface
 			got := sendMetrics(context.Background(), test.params)
 			if got != test.wantMetricCount {
 				t.Errorf("sendMetrics returned unexpected metric count for %s, got: %d, want: %d",
@@ -450,10 +541,11 @@ func TestAppendLabels(t *testing.T) {
 
 func TestStartMetricsCollection(t *testing.T) {
 	tests := []struct {
-		name   string
-		params Parameters
-		os     string
-		want   bool
+		name         string
+		params       Parameters
+		os           string
+		wlmInterface *testWLMInterface
+		want         bool
 	}{
 		{
 			name: "succeedsForLocal",
@@ -472,7 +564,10 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:            "linux",
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
-				WLMService:        &testWLMInterface{},
+			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{}},
+				WriteInsightErrs: []error{nil},
 			},
 			want: true,
 		},
@@ -493,7 +588,10 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:            "linux",
 				Remote:            true,
 				BackOffs:          defaultBackOffIntervals,
-				WLMService:        &testWLMInterface{},
+			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{}},
+				WriteInsightErrs: []error{nil},
 			},
 			want: true,
 		},
@@ -514,7 +612,10 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:            "linux",
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
-				WLMService:        &testWLMInterface{},
+			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{}},
+				WriteInsightErrs: []error{nil},
 			},
 			want: true,
 		},
@@ -525,19 +626,25 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: false,
 					}},
-				OSType:     "linux",
-				BackOffs:   defaultBackOffIntervals,
-				WLMService: &testWLMInterface{},
+				OSType:   "linux",
+				BackOffs: defaultBackOffIntervals,
+			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{}},
+				WriteInsightErrs: []error{nil},
 			},
 			want: false,
 		},
 		{
 			name: "failsDueToOS",
 			params: Parameters{
-				Config:     defaultConfiguration,
-				OSType:     "windows",
-				BackOffs:   defaultBackOffIntervals,
-				WLMService: &testWLMInterface{},
+				Config:   defaultConfiguration,
+				OSType:   "windows",
+				BackOffs: defaultBackOffIntervals,
+			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{}},
+				WriteInsightErrs: []error{nil},
 			},
 			want: false,
 		},
@@ -545,7 +652,11 @@ func TestStartMetricsCollection(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := StartMetricsCollection(context.Background(), test.params)
+			test.wlmInterface.T = t
+			test.params.WLMService = test.wlmInterface
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			got := StartMetricsCollection(ctx, test.params)
 			if got != test.want {
 				t.Errorf("StartMetricsCollection(%#v) returned unexpected result, got: %t, want: %t", test.params, got, test.want)
 			}
@@ -607,7 +718,45 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				OSType:            "linux",
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
-				WLMService:        &testWLMInterface{},
+				WLMService: &testWLMInterface{
+					T:                t,
+					WriteInsightErrs: []error{nil},
+					WriteInsightArgs: []WriteInsightArgs{{
+						Project:  "test-project-id",
+						Location: "test-region",
+						Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{
+							InstanceId: "test-instance-id",
+							SapValidation: &workloadmanager.SapValidation{
+								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
+									{
+										SapValidationType: "SYSTEM",
+										Details:           map[string]string{},
+									},
+									{
+										SapValidationType: "NETWEAVER",
+										Details:           map[string]string{},
+									},
+									{
+										SapValidationType: "HANA",
+										Details:           map[string]string{},
+									},
+									{
+										SapValidationType: "PACEMAKER",
+										Details:           map[string]string{},
+									},
+									{
+										SapValidationType: "COROSYNC",
+										Details:           map[string]string{},
+									},
+									{
+										SapValidationType: "CUSTOM",
+										Details:           map[string]string{},
+									},
+								},
+							}},
+						},
+					}},
+				},
 				HeartbeatSpec: &heartbeat.Spec{
 					BeatFunc: func() {
 						lock.Lock()

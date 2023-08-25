@@ -29,6 +29,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
@@ -67,7 +68,7 @@ func TestProcessInsights(t *testing.T) {
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},
@@ -90,19 +91,22 @@ func TestProcessInsights(t *testing.T) {
 
 func TestCollectDBMetricsOnce(t *testing.T) {
 	tests := []struct {
-		name   string
-		params Parameters
-		want   error
+		name         string
+		params       Parameters
+		wlmInterface *testWLMInterface
+		want         error
 	}{
 		{
-			name:   "HANAMetricsConfigNotSet",
-			params: Parameters{},
-			want:   cmpopts.AnyError,
+			name:         "HANAMetricsConfigNotSet",
+			params:       Parameters{},
+			wlmInterface: &testWLMInterface{},
+			want:         cmpopts.AnyError,
 		},
 		{
-			name:   "NoHANAInsightsRules",
-			params: Parameters{HANAInsightRules: []*rpb.Rule{}},
-			want:   cmpopts.AnyError,
+			name:         "NoHANAInsightsRules",
+			params:       Parameters{HANAInsightRules: []*rpb.Rule{}},
+			wlmInterface: &testWLMInterface{},
+			want:         cmpopts.AnyError,
 		},
 		{
 			name: "HANAMetricsConfigSetMetricOverride",
@@ -113,7 +117,6 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 				},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				BackOffs:          defaultBackOffIntervals,
-				WLMService:        &testWLMInterface{},
 				OSStatReader: func(string) (os.FileInfo, error) {
 					f, err := testFS.Open("test_data/metricoverride.yaml")
 					if err != nil {
@@ -122,6 +125,11 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 					return f.Stat()
 				},
 			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{}},
+				WriteInsightErrs: []error{nil},
+			},
+			want: nil,
 		},
 		{
 			name: "HANAMetricsConfigSetNoOverride",
@@ -132,16 +140,33 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 				},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				BackOffs:          defaultBackOffIntervals,
-				WLMService:        &testWLMInterface{},
 				OSStatReader: func(data string) (os.FileInfo, error) {
 					return nil, cmpopts.AnyError
 				},
+			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{
+					Project:  "test-project-id",
+					Location: "test-region",
+					Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{
+						InstanceId: "test-instance-id",
+						SapValidation: &workloadmanager.SapValidation{
+							ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
+								Details:           map[string]string{},
+								SapValidationType: "HANA_SECURITY",
+							}}},
+					}},
+				}},
+				WriteInsightErrs: []error{nil},
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.wlmInterface.T = t
+			test.params.WLMService = test.wlmInterface
+
 			got := collectDBMetricsOnce(context.Background(), test.params)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("collectDBMetricsOnce(%v)=%v, want: %v", test.params, got, test.want)

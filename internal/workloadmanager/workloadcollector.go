@@ -166,7 +166,7 @@ func (p *Parameters) SetOSReleaseInfo() {
 	}
 }
 
-// sendMetricsParams defines the set of paramaters required to call sendMetrics
+// sendMetricsParams defines the set of parameters required to call sendMetrics
 type sendMetricsParams struct {
 	wm                WorkloadMetrics
 	cp                *ipb.CloudProperties

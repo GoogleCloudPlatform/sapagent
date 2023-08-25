@@ -27,6 +27,7 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -80,9 +81,15 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 			// lock so we can update the metricsSent
 			mu.Lock()
 			defer mu.Unlock()
+			remoteCp := &ipb.CloudProperties{
+				ProjectId:    inst.GetProjectId(),
+				InstanceId:   inst.GetInstanceId(),
+				Zone:         inst.GetZone(),
+				InstanceName: inst.GetInstanceName(),
+			}
 			metricsSent += sendMetrics(ctx, sendMetricsParams{
 				wm:                wm,
-				cp:                params.Config.GetCloudProperties(),
+				cp:                remoteCp,
 				bareMetal:         params.Config.GetBareMetal(),
 				timeSeriesCreator: params.TimeSeriesCreator,
 				backOffIntervals:  params.BackOffs,

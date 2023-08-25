@@ -121,7 +121,7 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},
@@ -154,7 +154,7 @@ func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemake
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},
@@ -191,7 +191,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},
@@ -225,7 +225,7 @@ func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists 
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},
@@ -268,7 +268,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},
@@ -336,7 +336,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},

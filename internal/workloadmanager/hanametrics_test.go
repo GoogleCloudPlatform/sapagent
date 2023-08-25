@@ -61,7 +61,7 @@ func createHANAWorkloadMetrics(labels map[string]string, value float64) Workload
 				Type: "gce_instance",
 				Labels: map[string]string{
 					"instance_id": "test-instance-id",
-					"zone":        "test-zone",
+					"zone":        "test-region-zone",
 					"project_id":  "test-project-id",
 				},
 			},
