@@ -229,6 +229,7 @@ func TestApplyDefaults(t *testing.T) {
 					WorkloadValidationDbMetricsFrequency: 3600,
 					CollectProcessMetrics:                true,
 					ProcessMetricsFrequency:              5,
+					SlowProcessMetricsFrequency:          30,
 					CollectAgentMetrics:                  true,
 					AgentMetricsFrequency:                60,
 					AgentHealthFrequency:                 60,

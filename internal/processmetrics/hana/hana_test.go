@@ -173,11 +173,7 @@ func TestCollectHANAServiceMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics, got := collectHANAServiceMetrics(defaultInstanceProperties, test.testProcesses, tspb.Now())
-			if got != test.wantValue {
-				t.Errorf("collectHANAServiceMetrics() returned unexpected value, got=%d, want=%d",
-					got, test.wantValue)
-			}
+			metrics := collectHANAServiceMetrics(defaultInstanceProperties, test.testProcesses, tspb.Now())
 			if len(metrics) != test.wantMetricCount {
 				t.Errorf("collectHANAServiceMetrics() returned unexpected metric count, got=%d, want=%d",
 					len(metrics), test.wantMetricCount)
@@ -199,39 +195,12 @@ func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
 func TestCollectReplicationHA(t *testing.T) {
 	tests := []struct {
 		name               string
-		fakeExec           commandlineexecutor.Execute
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
 		instanceProperties *InstanceProperties
 	}{
 		{
-			name: "SuccessCommandLine",
-			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultSapControlOutput,
-				}
-			},
-			fakeClient: sapcontrolclienttest.Fake{
-				Processes: []sapcontrolclient.OSProcess{
-					{"hdbdaemon", "SAPControl-GREEN", 9609},
-					{"hdbcompileserver", "SAPControl-GREEN", 9972},
-					{"hdbindexserver", "SAPControl-GREEN", 10013},
-					{"hdbnameserver", "SAPControl-GREEN", 9642},
-					{"hdbpreprocessor", "SAPControl-GREEN", 9975},
-					{"hdbwebdispatcher", "SAPControl-GREEN", 666},
-					{"hdbxsengine", "SAPControl-GREEN", 777},
-				},
-			},
-			wantMetricCount:    10,
-			instanceProperties: defaultInstanceProperties,
-		},
-		{
 			name: "SuccessWebmethod",
-			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultSapControlOutput,
-				}
-			},
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
 					{"hdbdaemon", "SAPControl-GREEN", 9609},
@@ -243,40 +212,25 @@ func TestCollectReplicationHA(t *testing.T) {
 					{"hdbxsengine", "SAPControl-GREEN", 777},
 				},
 			},
-			wantMetricCount:    10,
+			wantMetricCount:    8,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
-			name:       "FailureWebmethodGetProcessList",
-			fakeClient: sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultSapControlOutput,
-				}
+			name:               "FailureWebmethodGetProcessList",
+			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
+			wantMetricCount:    1,
+			instanceProperties: defaultAPIInstanceProperties,
+		},
+		{
+			name: "FailureWebmethodExitStatus",
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}},
 			},
 			wantMetricCount:    2,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
-			name: "FailureWebmethodExitStatus",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
-			fakeClient: sapcontrolclienttest.Fake{
-				Processes: []sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}},
-			},
-			wantMetricCount:    3,
-			instanceProperties: defaultAPIInstanceProperties,
-		},
-		{
-			name: "FailureWebmethod",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
+			name:               "FailureWebmethod",
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
 			wantMetricCount:    1,
 			instanceProperties: defaultAPIInstanceProperties,
@@ -285,91 +239,11 @@ func TestCollectReplicationHA(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics := collectReplicationHA(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			metrics := collectReplicationHA(context.Background(), test.instanceProperties, test.fakeClient)
 			if len(metrics) != test.wantMetricCount {
 				t.Errorf("collectReplicationHA() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
 			}
 		})
-	}
-}
-
-func TestHaAvailabilityValue(t *testing.T) {
-	tests := []struct {
-		name              string
-		sapControlResult  int64
-		replicationStatus int64
-		want              int64
-	}{
-		{
-			name:              "PrimaryOnlineReplicationRunning",
-			sapControlResult:  sapControlAllProcessesRunning,
-			replicationStatus: replicationActive,
-			want:              primaryOnlineReplicationRunning,
-		},
-		{
-			name:              "PrimaryOnlineReplicationNotFunctional",
-			sapControlResult:  sapControlAllProcessesRunning,
-			replicationStatus: replicationOff,
-			want:              primaryOnlineReplicationNotFunctional,
-		},
-		{
-			name:              "PrimaryHasError",
-			sapControlResult:  sapControlAllProcessesStopped,
-			replicationStatus: replicationSyncing,
-			want:              primaryHasError,
-		},
-		{
-			name:              "UnknownState",
-			sapControlResult:  0,
-			replicationStatus: 0,
-			want:              unknownState,
-		},
-		{
-			name:              "ReplicationActivePrimaryHasError",
-			sapControlResult:  sapControlAllProcessesStopped,
-			replicationStatus: replicationActive,
-			want:              primaryHasError,
-		},
-		{
-			name:              "ReplicationUnknownPrimaryOnline",
-			sapControlResult:  sapControlAllProcessesRunning,
-			replicationStatus: replicationUnknown,
-			want:              primaryOnlineReplicationNotFunctional,
-		},
-		{
-			name:              "ReplicationUnknownPrimaryError",
-			sapControlResult:  sapControlAllProcessesStopped,
-			replicationStatus: replicationUnknown,
-			want:              primaryHasError,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-
-			got := haAvailabilityValue(defaultInstanceProperties, test.sapControlResult, test.replicationStatus)
-			if got != test.want {
-				t.Errorf("haAvailabilityValue(), got: %d want: %d.", got, test.want)
-			}
-		})
-	}
-}
-
-func TestHAAvailabilityValueSecondary(t *testing.T) {
-	p := &InstanceProperties{
-		Config: defaultConfig,
-		SAPInstance: &sapb.SAPInstance{
-			Sapsid:         "TST",
-			InstanceNumber: "00",
-			Type:           sapb.InstanceType_HANA,
-			Site:           sapb.InstanceSite_HANA_SECONDARY,
-			HanaHaMembers:  []string{"test-instance-1", "test-instance-2"},
-		},
-	}
-	got := haAvailabilityValue(p, sapControlAllProcessesStopped, replicationUnknown)
-	want := currentNodeSecondary
-	if got != want {
-		t.Errorf("haAvailabilityValue(), got: %d want: %d.", got, want)
 	}
 }
 

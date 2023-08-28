@@ -148,6 +148,9 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc.GetCollectProcessMetrics() && cc.GetProcessMetricsFrequency() <= 0 {
 		cc.ProcessMetricsFrequency = 5
 	}
+	if cc.GetCollectProcessMetrics() && cc.GetSlowProcessMetricsFrequency() <= 0 {
+		cc.SlowProcessMetricsFrequency = 30
+	}
 	if cc.GetCollectAgentMetrics() && cc.GetAgentMetricsFrequency() <= 0 {
 		cc.AgentMetricsFrequency = 60
 	}

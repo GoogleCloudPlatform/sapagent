@@ -178,11 +178,11 @@ var (
 	}
 )
 
-func TestNWAvailabilityValue(t *testing.T) {
+func TestCollectServiceMetrics(t *testing.T) {
 	tests := []struct {
-		name             string
-		fakeClient       sapcontrolclienttest.Fake
-		wantAvailability int64
+		name       string
+		fakeClient sapcontrolclienttest.Fake
+		wantCount  int
 	}{
 		{
 			name: "SapControlFailsTwoProcesses",
@@ -200,17 +200,17 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 2,
 		},
 		{
-			name:             "SapControlSucceedsAppSrv",
-			fakeClient:       defaultSapControlOutputAppSrvAPI,
-			wantAvailability: systemAllProcessesGreen,
+			name:       "SapControlSucceedsAppSrv",
+			fakeClient: defaultSapControlOutputAppSrvAPI,
+			wantCount:  6,
 		},
 		{
-			name:             "SapControlSucceedsJava",
-			fakeClient:       defaultSapControlOutputJavaAPI,
-			wantAvailability: systemAllProcessesGreen,
+			name:       "SapControlSucceedsJava",
+			fakeClient: defaultSapControlOutputJavaAPI,
+			wantCount:  5,
 		},
 		{
 			name: "SapControlSuccessMsg",
@@ -223,7 +223,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAllProcessesGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlFailsEnServer",
@@ -236,7 +236,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlFailEnRepServer",
@@ -249,7 +249,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlSuccessEnRepServer",
@@ -262,7 +262,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAllProcessesGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlFailsAppSrv",
@@ -275,7 +275,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlFailsJava",
@@ -288,7 +288,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlSuccessJava",
@@ -301,7 +301,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAllProcessesGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlSuccessAppSrv",
@@ -314,7 +314,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAllProcessesGreen,
+			wantCount: 1,
 		},
 		{
 			name: "InvalidProcess",
@@ -327,7 +327,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAllProcessesGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlSuccessEnqReplicator",
@@ -340,7 +340,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAllProcessesGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlFailsEnqReplicator",
@@ -353,7 +353,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlSuccessEnqServer",
@@ -366,7 +366,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAllProcessesGreen,
+			wantCount: 1,
 		},
 		{
 			name: "SapControlFailsEnqServer",
@@ -379,7 +379,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 		{
 			name: "WebDispatctherGrey",
@@ -392,7 +392,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 		{
 			name: "gwrdGrey",
@@ -405,7 +405,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 					},
 				},
 			},
-			wantAvailability: systemAtLeastOneProcessNotGreen,
+			wantCount: 1,
 		},
 	}
 
@@ -418,10 +418,10 @@ func TestNWAvailabilityValue(t *testing.T) {
 			if err != nil {
 				t.Errorf("ProcessList() failed with: %v.", err)
 			}
-			_, gotAvailability := collectServiceMetrics(defaultInstanceProperties, procs, timestamppb.Now())
-			if gotAvailability != test.wantAvailability {
-				t.Errorf("Failure in readNetWeaverProcessStatus(), gotAvailability: %d wantAvailability: %d.",
-					gotAvailability, test.wantAvailability)
+			got := collectServiceMetrics(defaultInstanceProperties, procs, timestamppb.Now())
+			if len(got) != test.wantCount {
+				t.Errorf("Failure in collectNWServiceMetrics(), got: %d want: %d.",
+					len(got), test.wantCount)
 			}
 		})
 	}
@@ -462,7 +462,6 @@ func TestNWServiceMetricLabelCount(t *testing.T) {
 func TestCollectNetWeaverMetrics(t *testing.T) {
 	tests := []struct {
 		name               string
-		fakeExec           commandlineexecutor.Execute
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
 		instanceProperties *InstanceProperties
@@ -477,7 +476,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 				{"hdbpreprocessor", "SAPControl-GREEN", 9975},
 			},
 			},
-			wantMetricCount:    6,
+			wantMetricCount:    5,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -490,7 +489,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics := collectNetWeaverMetrics(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			metrics := collectNetWeaverMetrics(context.Background(), test.instanceProperties, test.fakeClient)
 			if len(metrics) != test.wantMetricCount {
 				t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
 			}
@@ -691,7 +690,6 @@ func TestParseWorkProcessCount(t *testing.T) {
 func TestCollectABAPProcessStatus(t *testing.T) {
 	tests := []struct {
 		name               string
-		fakeExec           commandlineexecutor.Execute
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
 		instanceProperties *InstanceProperties
@@ -715,7 +713,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPProcessStatus(context.Background(), test.instanceProperties, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			got := collectABAPProcessStatus(context.Background(), test.instanceProperties, test.fakeClient)
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)

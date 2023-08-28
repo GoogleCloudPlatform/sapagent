@@ -83,24 +83,11 @@ var (
 // Returns a list of NetWeaver related metrics.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
-
-	processListParams := commandlineexecutor.Params{
-		User:        p.SAPInstance.GetUser(),
-		Executable:  p.SAPInstance.GetSapcontrolPath(),
-		ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", p.SAPInstance.GetInstanceNumber()),
-		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
-	}
-	metrics := collectNetWeaverMetrics(ctx, p, commandlineexecutor.ExecuteCommand, processListParams, scc)
+	metrics := collectNetWeaverMetrics(ctx, p, scc)
 
 	metrics = append(metrics, collectHTTPMetrics(p)...)
 
-	abapProcessParams := commandlineexecutor.Params{
-		User:        p.SAPInstance.GetUser(),
-		Executable:  p.SAPInstance.GetSapcontrolPath(),
-		ArgsToSplit: fmt.Sprintf("-nr %s -function ABAPGetWPTable", p.SAPInstance.GetInstanceNumber()),
-		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
-	}
-	metrics = append(metrics, collectABAPProcessStatus(ctx, p, commandlineexecutor.ExecuteCommand, abapProcessParams, scc)...)
+	metrics = append(metrics, collectABAPProcessStatus(ctx, p, scc)...)
 
 	metrics = append(metrics, collectABAPQueueStats(ctx, p, scc)...)
 
@@ -142,8 +129,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 }
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
-func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
-
+func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
@@ -155,25 +141,16 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, exec co
 		log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
 		return nil
 	}
-
-	metrics, availabilityValue := collectServiceMetrics(p, procs, now)
-	metrics = append(metrics, createMetrics(p, nwAvailabilityPath, nil, now, availabilityValue))
-
+	metrics := collectServiceMetrics(p, procs, now)
 	return metrics
 }
 
 // collectServiceMetrics collects NetWeaver "service" metrics describing Netweaver service
 // processes as managed by the sapcontrol program.
-func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries, availabilityValue int64) {
+func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries) {
 	start := tspb.Now()
-	availabilityValue = systemAllProcessesGreen
 
-	processNames := []string{"msg_server", "enserver", "enrepserver", "disp+work", "gwrd", "icman", "jstart", "jcontrol", "enq_replicator", "enq_server", "sapwebdisp"}
 	for _, proc := range procs {
-		if contains(processNames, proc.Name) && !proc.IsGreen {
-			availabilityValue = systemAtLeastOneProcessNotGreen
-		}
-
 		instanceType := p.SAPInstance.GetKind().String()
 		switch proc.Name {
 		case "gwrd", "sapwebdisp":
@@ -191,7 +168,7 @@ func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 		metrics = append(metrics, createMetrics(p, nwServicePath, extraLabels, now, value))
 	}
 	log.Logger.Debugw("Time taken to collect metrics in collectServiceMetrics()", "time", time.Since(start.AsTime()))
-	return metrics, availabilityValue
+	return metrics
 }
 
 // collectHTTPMetrics collects the HTTP health check metrics for different types of
@@ -294,7 +271,7 @@ func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 }
 
 // collectABAPProcessStatus collects the ABAP worker process status metrics.
-func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (

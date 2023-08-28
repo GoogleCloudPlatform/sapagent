@@ -47,16 +47,27 @@ var (
 
 	defaultConfig = &cpb.Configuration{
 		CollectionConfiguration: &cpb.CollectionConfiguration{
-			CollectProcessMetrics:   true,
-			ProcessMetricsFrequency: 5,
+			CollectProcessMetrics:       true,
+			ProcessMetricsFrequency:     5,
+			SlowProcessMetricsFrequency: 30,
 		},
 		CloudProperties: defaultCloudProperties,
 	}
 
 	quickTestConfig = &cpb.Configuration{
 		CollectionConfiguration: &cpb.CollectionConfiguration{
-			CollectProcessMetrics:   true,
-			ProcessMetricsFrequency: 1, //Use small value for quick unit tests.
+			CollectProcessMetrics:       true,
+			ProcessMetricsFrequency:     1, // Use small value for quick unit tests.
+			SlowProcessMetricsFrequency: 6,
+		},
+		CloudProperties: defaultCloudProperties,
+	}
+
+	invalidSlowFrequencyTestConfig = &cpb.Configuration{
+		CollectionConfiguration: &cpb.CollectionConfiguration{
+			CollectProcessMetrics:       true,
+			ProcessMetricsFrequency:     5,
+			SlowProcessMetricsFrequency: 1,
 		},
 		CloudProperties: defaultCloudProperties,
 	}
@@ -204,6 +215,17 @@ func TestStart(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "InvalidProcessMetricFrequencyForSlowMetrics",
+			parameters: Parameters{
+				Config:       invalidSlowFrequencyTestConfig,
+				OSType:       "linux",
+				MetricClient: fakeNewMetricClient,
+				SAPInstances: fakeSAPInstances("HANA"),
+				BackOffs:     defaultBackOffIntervals,
+			},
+			want: false,
+		},
+		{
 			name: "CreateMetricClientFailure",
 			parameters: Parameters{
 				Config:       defaultConfig,
@@ -241,29 +263,34 @@ func TestStart(t *testing.T) {
 
 func TestCreate(t *testing.T) {
 	tests := []struct {
-		name               string
-		sapInstances       *sapb.SAPInstances
-		wantCollectorCount int
+		name                   string
+		sapInstances           *sapb.SAPInstances
+		wantCollectorCount     int
+		wantFastCollectorCount int
 	}{
 		{
-			name:               "HANAStandaloneInstance",
-			sapInstances:       fakeSAPInstances("HANA"),
-			wantCollectorCount: 6,
+			name:                   "HANAStandaloneInstance",
+			sapInstances:           fakeSAPInstances("HANA"),
+			wantCollectorCount:     6,
+			wantFastCollectorCount: 1,
 		},
 		{
-			name:               "HANAClusterInstance",
-			sapInstances:       fakeSAPInstances("HANACluster"),
-			wantCollectorCount: 7,
+			name:                   "HANAClusterInstance",
+			sapInstances:           fakeSAPInstances("HANACluster"),
+			wantCollectorCount:     7,
+			wantFastCollectorCount: 1,
 		},
 		{
-			name:               "NetweaverClusterInstance",
-			sapInstances:       fakeSAPInstances("NetweaverCluster"),
-			wantCollectorCount: 7,
+			name:                   "NetweaverClusterInstance",
+			sapInstances:           fakeSAPInstances("NetweaverCluster"),
+			wantCollectorCount:     7,
+			wantFastCollectorCount: 1,
 		},
 		{
-			name:               "TwoNetweaverInstancesOnSameMachine",
-			sapInstances:       fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
-			wantCollectorCount: 9,
+			name:                   "TwoNetweaverInstancesOnSameMachine",
+			sapInstances:           fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
+			wantCollectorCount:     9,
+			wantFastCollectorCount: 2,
 		},
 	}
 
@@ -276,6 +303,9 @@ func TestCreate(t *testing.T) {
 
 			if len(got.Collectors) != test.wantCollectorCount {
 				t.Errorf("create() returned %d collectors, want %d", len(got.Collectors), test.wantCollectorCount)
+			}
+			if len(got.FastMovingCollectors) != test.wantFastCollectorCount {
+				t.Errorf("create() returned %d fast collectors, want %d", len(got.FastMovingCollectors), test.wantFastCollectorCount)
 			}
 		})
 	}
@@ -315,6 +345,15 @@ func TestCollectAndSend(t *testing.T) {
 			},
 			runtime: 2 * time.Second,
 			want:    cmpopts.AnyError,
+		},
+		{
+			name: "SlowCollectorsForThirtySeconds",
+			properties: &Properties{
+				Client:     &fake.TimeSeriesCreator{},
+				Collectors: fakeCollectors(9, 1),
+				Config:     quickTestConfig,
+			},
+			runtime: 30 * time.Second,
 		},
 	}
 	for _, test := range tests {
@@ -376,6 +415,56 @@ func TestCollectAndSendOnce(t *testing.T) {
 
 			if gotSent != test.wantSent {
 				t.Errorf("Failure in collectAndSendOnce(), gotSent: %v wantSent: %v.", gotSent, test.wantSent)
+			}
+		})
+	}
+}
+
+func TestCollectAndSendOnceFastMovingMetrics(t *testing.T) {
+	tests := []struct {
+		name           string
+		properties     *Properties
+		wantSent       int
+		wantBatchCount int
+		wantErr        error
+	}{
+		{
+			name: "ThreeCollectorsSuccess",
+			properties: &Properties{
+				Client:               &fake.TimeSeriesCreator{},
+				FastMovingCollectors: fakeCollectors(3, 1),
+				Config:               quickTestConfig,
+			},
+			wantSent:       3,
+			wantBatchCount: 1,
+		},
+		{
+			name: "SendFailure",
+			properties: &Properties{
+				Client:               &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
+				FastMovingCollectors: fakeCollectors(1, 1),
+				Config:               quickTestConfig,
+			},
+			wantErr:        cmpopts.AnyError,
+			wantBatchCount: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotSent, gotBatchCount, gotErr := test.properties.collectAndSendOnceFastMovingMetrics(context.Background(), defaultBackOffIntervals)
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Failure in collectAndSendOnceFastMovingMetrics(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
+			}
+
+			if gotBatchCount != test.wantBatchCount {
+				t.Errorf("Failure in collectAndSendOnceFastMovingMetrics(), gotBatchCount: %v wantBatchCount: %v.",
+					gotBatchCount, test.wantBatchCount)
+			}
+
+			if gotSent != test.wantSent {
+				t.Errorf("Failure in collectAndSendOnceFastMovingMetrics(), gotSent: %v wantSent: %v.", gotSent, test.wantSent)
 			}
 		})
 	}

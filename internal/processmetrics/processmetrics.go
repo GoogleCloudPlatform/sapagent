@@ -43,6 +43,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/cluster"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/fastmovingmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/hana"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/infra"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
@@ -68,11 +69,12 @@ type (
 
 	// Properties has necessary context for Metrics collection.
 	Properties struct {
-		SAPInstances  *sapb.SAPInstances // Optional for production use cases, used by unit tests.
-		Config        *cpb.Configuration
-		Client        cloudmonitoring.TimeSeriesCreator
-		Collectors    []Collector
-		HeartbeatSpec *heartbeat.Spec
+		SAPInstances         *sapb.SAPInstances // Optional for production use cases, used by unit tests.
+		Config               *cpb.Configuration
+		Client               cloudmonitoring.TimeSeriesCreator
+		Collectors           []Collector
+		FastMovingCollectors []Collector
+		HeartbeatSpec        *heartbeat.Spec
 	}
 
 	// CreateMetricClient provides an easily testable translation to the cloud monitoring API.
@@ -92,10 +94,9 @@ type (
 )
 
 const (
-	maxTSPerRequest  = 200 // Reference: https://cloud.google.com/monitoring/quotas
-	countReset       = 10000
-	bufferSize       = 10000
-	minimumFrequency = 5
+	maxTSPerRequest               = 200 // Reference: https://cloud.google.com/monitoring/quotas
+	minimumFrequency              = 5
+	minimumFrequencyForSlowMoving = 30
 )
 
 // mainUseSAPControlAPI is set to true if we want to obtain metrics using the SAPControl API,
@@ -116,6 +117,7 @@ Return false if the config option is not enabled.
 func Start(ctx context.Context, parameters Parameters) bool {
 	cpm := parameters.Config.GetCollectionConfiguration().GetCollectProcessMetrics()
 	cf := parameters.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
+	slowPmf := parameters.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
 
 	log.Logger.Infow("Configuration option for collect_process_metrics", "collectprocessmetrics", cpm)
 
@@ -128,6 +130,10 @@ func Start(ctx context.Context, parameters Parameters) bool {
 		return false
 	case cf < minimumFrequency:
 		log.Logger.Infow("Process metrics frequency is smaller than minimum supported value.", "frequency", cf, "minimumfrequency", minimumFrequency)
+		log.Logger.Info("Not collecting Process Metrics.")
+		return false
+	case slowPmf < minimumFrequencyForSlowMoving:
+		log.Logger.Infow("Slow process metrics frequency is smaller than minimum supported value.", "frequency", slowPmf, "minimumfrequency", minimumFrequencyForSlowMoving)
 		log.Logger.Info("Not collecting Process Metrics.")
 		return false
 	}
@@ -227,6 +233,14 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				HANAQueryFailCount: 0,
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
+
+			log.Logger.Infow("Creating FastMoving Collector for HANA", "instance", instance)
+			fmCollector := &fastmovingmetrics.InstanceProperties{
+				SAPInstance: instance,
+				Config:      p.Config,
+				Client:      p.Client,
+			}
+			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			log.Logger.Infow("Creating Netweaver per process CPU, memory usage metrics collector for instance.", "instance", instance)
@@ -259,6 +273,14 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Client:      p.Client,
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
+
+			log.Logger.Infow("Creating FastMoving Collector for Netweaver", "instance", instance)
+			fmCollector := &fastmovingmetrics.InstanceProperties{
+				SAPInstance: instance,
+				Config:      p.Config,
+				Client:      p.Client,
+			}
+			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
 	}
 
@@ -318,7 +340,11 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 
 	cf := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
 	collectTicker := time.NewTicker(time.Duration(cf) * time.Second)
+
+	slowProcessMetricsFrequency := p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
+	slowCollectTicker := time.NewTicker(time.Duration(slowProcessMetricsFrequency) * time.Second)
 	defer collectTicker.Stop()
+	defer slowCollectTicker.Stop()
 
 	heartbeatTicker := p.HeartbeatSpec.CreateTicker()
 	defer heartbeatTicker.Stop()
@@ -333,14 +359,41 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 			p.HeartbeatSpec.Beat()
 		case <-collectTicker.C:
 			p.HeartbeatSpec.Beat()
-			sent, batchCount, err := p.collectAndSendOnce(ctx, bo)
+			sent, batchCount, err := p.collectAndSendOnceFastMovingMetrics(ctx, bo)
 			if err != nil {
 				log.Logger.Errorw("Error sending metrics", "error", err)
 				lastErr = err
 			}
 			log.Logger.Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", cf)
+		case <-slowCollectTicker.C:
+			p.HeartbeatSpec.Beat()
+			sent, batchCount, err := p.collectAndSendOnce(ctx, bo)
+			if err != nil {
+				log.Logger.Errorw("Error sending metrics", "error", err)
+				lastErr = err
+			}
+			log.Logger.Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", slowProcessMetricsFrequency)
 		}
 	}
+}
+
+func (p *Properties) collectAndSendOnceFastMovingMetrics(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
+	var wg sync.WaitGroup
+	msgs := make([][]*mrpb.TimeSeries, len(p.FastMovingCollectors))
+	defer (func() { msgs = nil })() // free up reference in memory.
+	log.Logger.Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.Collectors))
+
+	for i, collector := range p.FastMovingCollectors {
+		wg.Add(1)
+		go func(slot int, c Collector) {
+			defer wg.Done()
+			msgs[slot] = c.Collect(ctx) // Each collector writes to its own slot.
+			log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
+		}(i, collector)
+	}
+	log.Logger.Debug("Waiting for fast moving collectors to finish.")
+	wg.Wait()
+	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
 }
 
 /*
@@ -357,7 +410,7 @@ func (p *Properties) collectAndSendOnce(ctx context.Context, bo *cloudmonitoring
 	var wg sync.WaitGroup
 	msgs := make([][]*mrpb.TimeSeries, len(p.Collectors))
 	defer (func() { msgs = nil })() // free up reference in memory.
-	log.Logger.Debugw("Starting collectors in parallel.", "numberofcollectors", len(p.Collectors))
+	log.Logger.Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.Collectors))
 
 	for i, collector := range p.Collectors {
 		wg.Add(1)

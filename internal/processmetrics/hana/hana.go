@@ -115,13 +115,7 @@ var (
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
 
-	processListParams := commandlineexecutor.Params{
-		User:        p.SAPInstance.GetUser(),
-		Executable:  p.SAPInstance.GetSapcontrolPath(),
-		ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", p.SAPInstance.GetInstanceNumber()),
-		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
-	}
-	metrics := collectReplicationHA(ctx, p, commandlineexecutor.ExecuteCommand, processListParams, scc)
+	metrics := collectReplicationHA(ctx, p, scc)
 
 	// Collect DB Query metrics only if credentials are set and NOT a HANA secondary.
 	if p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "" && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
@@ -132,17 +126,15 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	return metrics
 }
 
-func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectReplicationHA(ctx context.Context, ip *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{ip.SAPInstance}
 	var (
 		err               error
-		sapControlResult  int
 		processes         map[int]*sapcontrol.ProcessStatus
 		metrics           []*mrpb.TimeSeries
-		availabilityValue int64
 	)
 	processes, err = sc.GetProcessList(scc)
 	if err != nil {
@@ -151,8 +143,7 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e command
 
 	if err == nil {
 		// If GetProcessList via command line or API didn't return an error.
-		metrics, availabilityValue = collectHANAServiceMetrics(ip, processes, now)
-		metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
+		metrics = collectHANAServiceMetrics(ip, processes, now)
 	}
 
 	haReplicationValue := refreshHAReplicationConfig(ctx, ip)
@@ -160,13 +151,6 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e command
 		"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
 	}
 	metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
-	_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
-	if err != nil {
-		log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
-		return metrics
-	}
-	haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
-	metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))
 
 	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
 	return metrics
@@ -175,23 +159,19 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, e command
 // collectHANAServiceMetrics creates metrics for each of the services in
 // a HANA instance. Also returns availabilityValue a signal that depends
 // on the status of the HANA services.
-func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries, availabilityValue int64) {
+func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries) {
 	if len(processes) == 0 {
-		return nil, 0
+		return nil
 	}
 
-	availabilityValue = systemAllProcessesGreen
 	for _, process := range processes {
-		if !process.IsGreen {
-			availabilityValue = systemAtLeastOneProcessNotGreen
-		}
 		extraLabels := map[string]string{
 			"service_name": process.Name,
 			"pid":          process.PID,
 		}
 		metrics = append(metrics, createMetrics(p, servicePath, extraLabels, now, boolToInt64(process.IsGreen)))
 	}
-	return metrics, availabilityValue
+	return metrics
 }
 
 // collectHANAQueryMetrics collects the query state by running a HANA DB query.
@@ -295,39 +275,6 @@ func appendLabels(p *InstanceProperties, extraLabels map[string]string) map[stri
 		defaultLabels[k] = v
 	}
 	return defaultLabels
-}
-
-func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicationStatus int64) int64 {
-	var haAvVal int64 = unknownState
-	switch replicationStatus {
-	case replicationActive:
-		if sapControlResult == sapControlAllProcessesRunning {
-			haAvVal = primaryOnlineReplicationRunning
-		} else {
-			haAvVal = primaryHasError
-		}
-	case replicationUnknown:
-		if p.SAPInstance.GetSite() == sapb.InstanceSite_HANA_PRIMARY {
-			if sapControlResult == sapControlAllProcessesRunning {
-				haAvVal = primaryOnlineReplicationNotFunctional
-			} else {
-				haAvVal = primaryHasError
-			}
-		} else {
-			haAvVal = currentNodeSecondary
-		}
-	case replicationOff, replicationConnectionError, replicationInitialization, replicationSyncing:
-		if sapControlResult == sapControlAllProcessesRunning {
-			haAvVal = primaryOnlineReplicationNotFunctional
-		} else {
-			haAvVal = primaryHasError
-		}
-	default:
-		log.Logger.Warn("HANA HA availability state unknown.")
-	}
-	log.Logger.Debugw("HANA HA availability for sapcontrol",
-		"availability", haAvVal, "returncode", sapControlResult, "replicationcode", replicationStatus)
-	return haAvVal
 }
 
 // refreshHAReplicationConfig reads the current HA and replication config.
