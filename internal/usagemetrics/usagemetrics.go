@@ -92,6 +92,7 @@ const (
 	ReadMetricsQueryFailure
 	ReadMetricsWriteFileFailure
 	ReadMetricsBucketUploadFailure
+	InstallBackintFailure
 )
 
 // Agent wide action mappings.
@@ -117,6 +118,8 @@ const (
 	HANADiskRestore
 	ReadMetricsStarted
 	ReadMetricsFinished
+	InstallBackintStarted
+	InstallBackintFinished
 )
 
 var (

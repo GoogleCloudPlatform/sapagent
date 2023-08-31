@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/installbackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
@@ -56,6 +57,7 @@ func registerSubCommands() {
 		&supportbundle.SupportBundle{},
 		&restore.Restorer{},
 		&readmetrics.ReadMetrics{},
+		&installbackint.InstallBackint{},
 		subcommands.HelpCommand(),  // Implement "help"
 		subcommands.FlagsCommand(), // Implement "flags"
 	} {
