@@ -20,6 +20,7 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	"golang.org/x/exp/slices"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -76,8 +77,15 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeS
 		log.Logger.Debug("cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil
 	}
-	res := collectCPUPerProcess(ctx, params, processes)
-	res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
-	res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
+	res := []*mrpb.TimeSeries{}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwCPUPath) {
+		res = append(res, collectCPUPerProcess(ctx, params, processes)...)
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwMemoryPath) {
+		res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwIOPSReadsPath) || !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwIOPSWritePath) {
+		res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
+	}
 	return res
 }

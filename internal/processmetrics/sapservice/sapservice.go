@@ -23,6 +23,7 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -56,10 +57,14 @@ type (
 // responsible for collecting sap service statuses metric.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
-	isFailedMetrics := queryInstanceState(ctx, p, "is-failed")
-	metrics = append(metrics, isFailedMetrics...)
-	isDisabledMetrics := queryInstanceState(ctx, p, "is-enabled")
-	metrics = append(metrics, isDisabledMetrics...)
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), failedMPath) {
+		isFailedMetrics := queryInstanceState(ctx, p, "is-failed")
+		metrics = append(metrics, isFailedMetrics...)
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), disabledMPath) {
+		isDisabledMetrics := queryInstanceState(ctx, p, "is-disabled")
+		metrics = append(metrics, isDisabledMetrics...)
+	}
 	return metrics
 }
 

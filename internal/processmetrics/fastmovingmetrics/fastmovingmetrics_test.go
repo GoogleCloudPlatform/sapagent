@@ -487,7 +487,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 	}
 }
 
-func TestCollectHANAServiceMetrics(t *testing.T) {
+func TestHANAAvailabilityMetrics(t *testing.T) {
 	tests := []struct {
 		name          string
 		testProcesses map[int]*sapcontrol.ProcessStatus
@@ -608,6 +608,19 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 			}},
 			wantCount: 2,
 		},
+		{
+			name: "SkipMetrics",
+			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath, availabilityPath}},
+			}},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{ExitCode: 0, Error: nil}
+			},
+			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
+				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
+			}},
+			wantCount: 0,
+		},
 	}
 
 	for _, test := range tests {
@@ -643,6 +656,21 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
 			}},
 			wantCount: 1,
+		},
+		{
+			name: "SkipNetweaverMetrics",
+			ip: &InstanceProperties{
+				SAPInstance: defaultSAPInstance,
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwAvailabilityPath},
+					},
+				},
+			},
+			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
+				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
+			}},
+			wantCount: 0,
 		},
 	}
 

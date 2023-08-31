@@ -60,22 +60,22 @@ var (
 
 func TestCollectForHANA(t *testing.T) {
 	tests := []struct {
-		name             string
-		executor         commandlineexecutor.Execute
-		useSAPControlAPI bool
-		fakeClient       sapcontrolclienttest.Fake
-		wantCount        int
-		lastValue        map[string]*process.IOCountersStat
+		name       string
+		config     *cpb.Configuration
+		executor   commandlineexecutor.Execute
+		fakeClient sapcontrolclienttest.Fake
+		wantCount  int
+		lastValue  map[string]*process.IOCountersStat
 	}{
 		{
-			name:             "EmptyPIDsMapWebmethod",
-			useSAPControlAPI: true,
-			fakeClient:       sapcontrolclienttest.Fake{},
-			wantCount:        0,
+			name:       "EmptyPIDsMapWebmethod",
+			config:     defaultConfig,
+			fakeClient: sapcontrolclienttest.Fake{},
+			wantCount:  0,
 		},
 		{
-			name:             "OnlyMemoryPerProcessMetricAvailableWebmethod",
-			useSAPControlAPI: true,
+			name:   "OnlyMemoryPerProcessMetricAvailableWebmethod",
+			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
 					{"hdbdaemon", "SAPControl-GREEN", 111},
@@ -86,8 +86,8 @@ func TestCollectForHANA(t *testing.T) {
 			wantCount: 3,
 		},
 		{
-			name:             "OnlyCPUPerProcessMetricAvailableWebmethod",
-			useSAPControlAPI: true,
+			name:   "OnlyCPUPerProcessMetricAvailableWebmethod",
+			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
 					{"msg_server", "SAPControl-GREEN", 111},
@@ -98,8 +98,8 @@ func TestCollectForHANA(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name:             "FetchedAllMetricsSuccessfullyWebmethod",
-			useSAPControlAPI: true,
+			name:   "FetchedAllMetricsSuccessfullyWebmethod",
+			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
 					{"hdbdaemon", "SAPControl-GREEN", 555},
@@ -118,18 +118,30 @@ func TestCollectForHANA(t *testing.T) {
 			},
 			wantCount: 12,
 		},
+		{
+			name: "MetricsSkipped",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       false,
+					ProcessMetricsFrequency:     5,
+					ProcessMetricsSendFrequency: 60,
+					ProcessMetricsToSkip:        []string{hanaCPUPath, hanaMemoryPath, hanaIOPSReadsPath, hanaIOPSWritesPath},
+				},
+			}, wantCount: 0,
+			lastValue:  make(map[string]*process.IOCountersStat),
+			fakeClient: sapcontrolclienttest.Fake{},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testHanaInstanceProps := &HanaInstanceProperties{
-				Config:           defaultConfig,
+				Config:           test.config,
 				Client:           &fake.TimeSeriesCreator{},
 				Executor:         test.executor,
 				SAPInstance:      defaultSAPInstanceHANA,
 				NewProcHelper:    newProcessWithContextHelperTest,
 				SAPControlClient: test.fakeClient,
-				UseSAPControlAPI: test.useSAPControlAPI,
 				LastValue:        test.lastValue,
 			}
 			got := testHanaInstanceProps.Collect(context.Background())

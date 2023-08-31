@@ -20,6 +20,7 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -58,5 +59,12 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*mrpb.
 		log.Logger.Debug("Cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil
 	}
-	return append(collectCPUPerProcess(ctx, params, processes), collectMemoryPerProcess(ctx, params, processes)...)
+	res := []*mrpb.TimeSeries{}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), sapCTRLCPUPath) {
+		res = append(res, collectCPUPerProcess(ctx, params, processes)...)
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), sapCtrlMemoryPath) {
+		res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
+	}
+	return res
 }

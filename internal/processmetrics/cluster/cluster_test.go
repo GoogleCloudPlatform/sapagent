@@ -24,7 +24,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 
-	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -43,12 +42,14 @@ var defaultInstanceProperties = &InstanceProperties{
 func TestCollectNodeState(t *testing.T) {
 	tests := []struct {
 		name            string
+		properties      *InstanceProperties
 		fakeNodeState   readPacemakerNodeState
 		wantValues      []int
 		wantMetricCount int
 	}{
 		{
-			name: "StateUncleanAndShutdown",
+			name:       "StateUncleanAndShutdown",
+			properties: defaultInstanceProperties,
 			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
 				return map[string]string{
 					"test-instance-1": "unclean",
@@ -59,7 +60,8 @@ func TestCollectNodeState(t *testing.T) {
 			wantMetricCount: 2,
 		},
 		{
-			name: "StateStandbyAndOnlineUnknown",
+			name:       "StateStandbyAndOnlineUnknown",
+			properties: defaultInstanceProperties,
 			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
 				return map[string]string{
 					"test-instance-1": "standby",
@@ -71,15 +73,33 @@ func TestCollectNodeState(t *testing.T) {
 			wantMetricCount: 3,
 		},
 		{
-			name: "PacemekerReadFailure",
+			name:       "PacemekerReadFailure",
+			properties: defaultInstanceProperties,
 			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
 				return nil, cmpopts.AnyError
 			},
 		},
+		{
+			name: "MetricSkipped",
+			properties: &InstanceProperties{
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{
+							nodesPath,
+						},
+					},
+				},
+			},
+			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
+				return nil, nil
+			},
+			wantMetricCount: 0,
+			wantValues:      nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectNodeState(defaultInstanceProperties, test.fakeNodeState, nil)
+			gotMetrics, gotValues := collectNodeState(test.properties, test.fakeNodeState, nil)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
@@ -96,12 +116,14 @@ func TestCollectNodeState(t *testing.T) {
 func TestCollectResourceState(t *testing.T) {
 	tests := []struct {
 		name              string
+		properties        *InstanceProperties
 		fakeResourceState readPacemakerResourceState
 		wantValues        []int
 		wantMetricCount   int
 	}{
 		{
-			name: "SuccessStartedStartingMasterSlave",
+			name:       "SuccessStartedStartingMasterSlave",
+			properties: defaultInstanceProperties,
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
 				rs := []pacemaker.Resource{
 					{
@@ -131,7 +153,8 @@ func TestCollectResourceState(t *testing.T) {
 			wantMetricCount: 4,
 		},
 		{
-			name: "SuccessStoppedFailedUnknown",
+			name:       "SuccessStoppedFailedUnknown",
+			properties: defaultInstanceProperties,
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
 				rs := []pacemaker.Resource{
 					{
@@ -156,7 +179,8 @@ func TestCollectResourceState(t *testing.T) {
 			wantMetricCount: 3,
 		},
 		{
-			name: "SuccessDuplicateResources",
+			name:       "SuccessDuplicateResources",
+			properties: defaultInstanceProperties,
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
 				rs := []pacemaker.Resource{
 					{
@@ -176,16 +200,45 @@ func TestCollectResourceState(t *testing.T) {
 			wantMetricCount: 1,
 		},
 		{
-			name: "PacemakerReadFailure",
+			name:       "PacemakerReadFailure",
+			properties: defaultInstanceProperties,
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
 				return nil, cmpopts.AnyError
 			},
+		},
+		{
+			name: "MetricSkipped",
+			properties: &InstanceProperties{
+				SAPInstance: &sapb.SAPInstance{Sapsid: "TST", Type: sapb.InstanceType_HANA},
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{resourcesPath},
+					},
+				},
+			},
+			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
+				rs := []pacemaker.Resource{
+					{
+						Name: "resource1",
+						Role: "Stopped",
+						Node: "test-instance-1",
+					},
+					{
+						Name: "resource1",
+						Role: "Stopped",
+						Node: "test-instance-1",
+					},
+				}
+				return rs, nil
+			},
+			wantValues:      nil,
+			wantMetricCount: 0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectResourceState(defaultInstanceProperties, test.fakeResourceState, nil)
+			gotMetrics, gotValues := collectResourceState(test.properties, test.fakeResourceState, nil)
 
 			if diff := cmp.Diff(test.wantValues, gotValues); diff != "" {
 				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
@@ -248,20 +301,22 @@ func TestMetricLabels(t *testing.T) {
 // never reach here.
 func TestCollect(t *testing.T) {
 	tests := []struct {
-		name string
-		want []*mrpb.TimeSeries
+		name      string
+		ip        *InstanceProperties
+		wantCount int
 	}{
 		{
-			name: "EmptyMetricsWhenNoPacmaker",
-			want: nil,
+			name:      "EmptyMetricsWhenNoPacmaker",
+			ip:        defaultInstanceProperties,
+			wantCount: 0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := defaultInstanceProperties.Collect(context.Background())
-			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Errorf("Collect() returned unexpected diff (-want,+got): %s\n", diff)
+			got := test.ip.Collect(context.Background())
+			if len(got) != test.wantCount {
+				t.Errorf("Collect() = %v, want %v", len(got), test.wantCount)
 			}
 		})
 	}
@@ -270,12 +325,14 @@ func TestCollect(t *testing.T) {
 func TestCollectFailCount(t *testing.T) {
 	tests := []struct {
 		name              string
+		properties        *InstanceProperties
 		fakeReadFailCount readPacemakerFailCount
 		wantValues        []int
 		wantMetricCount   int
 	}{
 		{
-			name: "SuccessOneResource",
+			name:       "SuccessOneResource",
+			properties: defaultInstanceProperties,
 			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
 				return []pacemaker.ResourceFailCount{
 					{
@@ -289,7 +346,8 @@ func TestCollectFailCount(t *testing.T) {
 			wantMetricCount: 1,
 		},
 		{
-			name: "MultipleFailedResources",
+			name:       "MultipleFailedResources",
+			properties: defaultInstanceProperties,
 			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
 				return []pacemaker.ResourceFailCount{
 					{
@@ -307,22 +365,51 @@ func TestCollectFailCount(t *testing.T) {
 			wantMetricCount: 2,
 		},
 		{
-			name: "ReadFailCountFailure",
+			name:       "ReadFailCountFailure",
+			properties: defaultInstanceProperties,
 			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
 				return nil, cmpopts.AnyError
 			},
 		},
 		{
-			name: "NoFailedResource",
+			name:       "NoFailedResource",
+			properties: defaultInstanceProperties,
 			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
 				return nil, nil
 			},
+		},
+		{
+			name: "MetricsSkipped",
+			properties: &InstanceProperties{
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{
+							failCountsPath,
+						},
+					},
+				},
+			},
+			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
+				return []pacemaker.ResourceFailCount{
+					{
+						Node:         "test-instance-1",
+						ResourceName: "resource-1",
+						FailCount:    1,
+					}, {
+						Node:         "test-instance-2",
+						ResourceName: "resource-2",
+						FailCount:    2,
+					},
+				}, nil
+			},
+			wantValues:      nil,
+			wantMetricCount: 0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectFailCount(defaultInstanceProperties, test.fakeReadFailCount, nil)
+			gotMetrics, gotValues := collectFailCount(test.properties, test.fakeReadFailCount, nil)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectFailCount() returned unexpected diff (-want,+got): %s\n", diff)

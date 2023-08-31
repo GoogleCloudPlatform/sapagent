@@ -124,25 +124,25 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		metrics           []*mrpb.TimeSeries
 		availabilityValue int64
 	)
-	processes, err = sc.GetProcessList(scc)
-	if err != nil {
-		log.Logger.Errorw("Error executing GetProcessList SAPControl API", log.Error(err))
+	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), availabilityPath) {
+		processes, err = sc.GetProcessList(scc)
+		if err == nil {
+			// If GetProcessList API didn't return an error.
+			availabilityValue = hanaAvailability(ip, processes)
+			metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
+		}
 	}
 
-	if err == nil {
-		// If GetProcessList API didn't return an error.
-		availabilityValue = hanaAvailability(ip, processes)
-		metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
+	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), haAvailabilityPath) {
+		haReplicationValue := refreshHAReplicationConfig(ctx, ip)
+		_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
+		if err != nil {
+			log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
+			return metrics
+		}
+		haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
+		metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))
 	}
-
-	haReplicationValue := refreshHAReplicationConfig(ctx, ip)
-	_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
-	if err != nil {
-		log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
-		return metrics
-	}
-	haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
-	metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))
 
 	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
 	return metrics
@@ -215,6 +215,9 @@ func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) int6
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
 func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwAvailabilityPath) {
+		return nil
+	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (

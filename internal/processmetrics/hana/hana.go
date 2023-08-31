@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -97,8 +98,6 @@ const (
 	metricURL            = "workload.googleapis.com"
 	servicePath          = "/sap/hana/service"
 	haReplicationPath    = "/sap/hana/ha/replication"
-	availabilityPath     = "/sap/hana/availability"
-	haAvailabilityPath   = "/sap/hana/ha/availability"
 	queryStatePath       = "/sap/hana/query/state"
 	queryOverallTimePath = "/sap/hana/query/overalltime"
 	queryServerTimePath  = "/sap/hana/query/servertime"
@@ -132,26 +131,27 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, scc sapco
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{ip.SAPInstance}
 	var (
-		err               error
-		processes         map[int]*sapcontrol.ProcessStatus
-		metrics           []*mrpb.TimeSeries
+		err       error
+		processes map[int]*sapcontrol.ProcessStatus
+		metrics   []*mrpb.TimeSeries
 	)
-	processes, err = sc.GetProcessList(scc)
-	if err != nil {
-		log.Logger.Errorw("Error executing GetProcessList SAPControl API", log.Error(err))
+
+	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), servicePath) {
+		processes, err = sc.GetProcessList(scc)
+		if err == nil {
+			// If GetProcessList via command line or API didn't return an error.
+			metrics = collectHANAServiceMetrics(ip, processes, now)
+		}
 	}
 
-	if err == nil {
-		// If GetProcessList via command line or API didn't return an error.
-		metrics = collectHANAServiceMetrics(ip, processes, now)
-	}
+	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), haReplicationPath) {
+		haReplicationValue := refreshHAReplicationConfig(ctx, ip)
+		extraLabels := map[string]string{
+			"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
+		}
+		metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
 
-	haReplicationValue := refreshHAReplicationConfig(ctx, ip)
-	extraLabels := map[string]string{
-		"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
 	}
-	metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
-
 	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
 	return metrics
 }
@@ -179,6 +179,11 @@ func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcont
 //   - overall time: Overall time taken by query in micro seconds.
 //   - servertime: Time spent on the server side in micro seconds.
 func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) []*mrpb.TimeSeries {
+	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
+	skippedList := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
+	if slices.Contains(skippedList, queryStatePath) || slices.Contains(skippedList, queryOverallTimePath) || slices.Contains(skippedList, queryServerTimePath) {
+		return nil
+	}
 	now := tspb.Now()
 	if p.HANAQueryFailCount >= maxHANAQueryFailCount {
 		// if HANAQueryFailCount reaches maxHANAQueryFailCount we should not let it

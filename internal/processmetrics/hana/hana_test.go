@@ -235,6 +235,28 @@ func TestCollectReplicationHA(t *testing.T) {
 			wantMetricCount:    1,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
+		{
+			name: "MetricsSkipped",
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{
+					{"hdbdaemon", "SAPControl-GREEN", 9609},
+					{"hdbcompileserver", "SAPControl-GREEN", 9972},
+					{"hdbindexserver", "SAPControl-GREEN", 10013},
+					{"hdbnameserver", "SAPControl-GREEN", 9642},
+					{"hdbpreprocessor", "SAPControl-GREEN", 9975},
+					{"hdbwebdispatcher", "SAPControl-GREEN", 666},
+				},
+			},
+			instanceProperties: &InstanceProperties{
+				SAPInstance: defaultSAPInstance,
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{haReplicationPath, servicePath},
+					},
+				},
+			},
+			wantMetricCount: 0,
+		},
 	}
 
 	for _, test := range tests {

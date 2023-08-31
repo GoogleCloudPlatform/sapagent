@@ -22,23 +22,27 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 func TestCollectForSAPControlProcesses(t *testing.T) {
 	tests := []struct {
 		name      string
+		config    *cpb.Configuration
 		executor  commandlineexecutor.Execute
 		wantCount int
 	}{
 		{
-			name: "EmptyPIDsMap",
+			name:   "EmptyPIDsMap",
+			config: defaultConfig,
 			executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
 			wantCount: 0,
 		},
 		{
-			name: "OnlyMemoryPerProcessMetricAvailable",
+			name:   "OnlyMemoryPerProcessMetricAvailable",
+			config: defaultConfig,
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
@@ -54,7 +58,8 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			wantCount: 3,
 		},
 		{
-			name: "OnlyCPUPerProcessMetricAvailable",
+			name:   "OnlyCPUPerProcessMetricAvailable",
+			config: defaultConfig,
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
@@ -70,7 +75,8 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name: "FetchedBothCPUAndMemoryMetricsSuccessfully",
+			name:   "FetchedBothCPUAndMemoryMetricsSuccessfully",
+			config: defaultConfig,
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
@@ -85,12 +91,27 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			},
 			wantCount: 4,
 		},
+		{
+			name: "MetricsSkipped",
+			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{}
+			},
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       false,
+					ProcessMetricsFrequency:     5,
+					ProcessMetricsSendFrequency: 60,
+					ProcessMetricsToSkip:        []string{sapCTRLCPUPath, sapCtrlMemoryPath},
+				},
+			},
+			wantCount: 0,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testProps := &SAPControlProcInstanceProperties{
-				Config:        defaultConfig,
+				Config:        test.config,
 				Client:        &fake.TimeSeriesCreator{},
 				Executor:      test.executor,
 				NewProcHelper: newProcessWithContextHelperTest,

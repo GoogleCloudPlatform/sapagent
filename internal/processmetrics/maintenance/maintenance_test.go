@@ -275,6 +275,7 @@ func TestUpdateMaintenanceMode(t *testing.T) {
 func TestCollect(t *testing.T) {
 	tests := []struct {
 		name      string
+		config    *cpb.Configuration
 		fr        mockedFileReader
 		sids      map[string]bool
 		wantCount int
@@ -282,22 +283,36 @@ func TestCollect(t *testing.T) {
 	}{
 		{
 			name:      "CannotReadMaintenanceModeJSONFile",
+			config:    defaultConfig,
 			fr:        mockedFileReader{expectedErr: os.ErrPermission},
 			wantCount: 0,
 		},
 		{
 			name:      "CanReadMaintenanceModeJSONFile",
+			config:    defaultConfig,
 			fr:        mockedFileReader{expectedData: []byte(`{"sids":["deh"]}`)},
 			sids:      map[string]bool{"deh": true, "abc": true},
 			wantCount: 2,
 			trueCount: 1,
+		},
+		{
+			name: "SkippedMetric",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					ProcessMetricsToSkip: []string{mntmodePath},
+				},
+			},
+			fr:        mockedFileReader{expectedData: []byte(`{"sids":["deh"]}`)},
+			sids:      map[string]bool{"deh": true, "abc": true},
+			wantCount: 0,
+			trueCount: 0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testInstanceProperties := &InstanceProperties{
-				Config: defaultConfig,
+				Config: test.config,
 				Client: &fakeTimeSeriesCreator{},
 				Reader: test.fr,
 				Sids:   test.sids,

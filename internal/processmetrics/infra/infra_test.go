@@ -136,29 +136,45 @@ func TestCollect(t *testing.T) {
 func TestCollectScheduledMigration_MetricCount(t *testing.T) {
 	tests := []struct {
 		name                   string
+		properties             *Properties
 		fakeMetadataServerCall func() (string, error)
 		wantCount              int
 	}{
 		{
 			name:                   "noMigration",
+			properties:             defaultProperties,
 			fakeMetadataServerCall: func() (string, error) { return "NONE", nil },
 			wantCount:              1,
 		},
 		{
 			name:                   "scheduledMigration",
+			properties:             defaultProperties,
 			fakeMetadataServerCall: func() (string, error) { return metadataMigrationResponse, nil },
 			wantCount:              1,
 		},
 		{
 			name:                   "error",
+			properties:             defaultProperties,
 			fakeMetadataServerCall: func() (string, error) { return "", errors.New("Error") },
+			wantCount:              0,
+		},
+		{
+			name: "MetricsSkipped",
+			properties: &Properties{
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{migrationPath},
+					},
+				},
+			},
+			fakeMetadataServerCall: func() (string, error) { return metadataMigrationResponse, nil },
 			wantCount:              0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectScheduledMigration(defaultProperties, test.fakeMetadataServerCall)
+			got := collectScheduledMigration(test.properties, test.fakeMetadataServerCall)
 			// Test one metric is exported in case of successful call to the metadata server.
 			if len(got) != test.wantCount {
 				t.Errorf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), test.wantCount)
@@ -245,6 +261,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		cloudProperties     *iipb.CloudProperties
 		gceService          *fakegcealpha.TestGCE
 		upcomingMaintenance *compute.UpcomingMaintenance
+		skipMetrics         []string
 		wantValues          map[string]string
 		wantErr             error
 	}{{
@@ -267,67 +284,194 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 			metricURL + maintPath + "/maintenance_status":       "1",
 			metricURL + maintPath + "/type":                     "1",
 		},
-	}, {
-		name:                "NoMaint",
-		cloudProperties:     defaultCloudProperties,
-		gceService:          soleTenantGCE,
-		upcomingMaintenance: nil,
-		wantValues:          map[string]string{},
-	}, {
-		name:            "NotSoleTenant",
-		cloudProperties: defaultCloudProperties,
-		gceService: &fakegcealpha.TestGCE{
-			Project: "test-project",
-			Zone:    "test-zone",
-			Instances: []*compute.Instance{{
-				Name: "test-instance-name",
-			}},
-		},
-		wantErr:    cmpopts.AnyError,
-		wantValues: map[string]string{},
-	}, {
-		name:                "errParseError",
-		cloudProperties:     defaultCloudProperties,
-		gceService:          soleTenantGCE,
-		upcomingMaintenance: &compute.UpcomingMaintenance{WindowStartTime: "bogus"},
-		wantValues: map[string]string{
-			metricURL + maintPath + "/can_reschedule":           "false",
-			metricURL + maintPath + "/window_start_time":        "0",
-			metricURL + maintPath + "/window_end_time":          "0",
-			metricURL + maintPath + "/latest_window_start_time": "0",
-			metricURL + maintPath + "/maintenance_status":       "0",
-			metricURL + maintPath + "/type":                     "0",
-		},
-	}, {
-		name:            "errGetInstance",
-		cloudProperties: defaultCloudProperties,
-		gceService:      &fakegcealpha.TestGCE{},
-		wantValues:      map[string]string{},
-		wantErr:         cmpopts.AnyError,
-	}, {
-		name:            "errResolveNodeGroup",
-		cloudProperties: defaultCloudProperties,
-		gceService: &fakegcealpha.TestGCE{
-			Instances: []*compute.Instance{{
-				Scheduling: &compute.Scheduling{
-					NodeAffinities: []*compute.SchedulingNodeAffinity{{
-						Key:      "compute.googleapis.com/node-group-name",
-						Operator: "IN",
-						Values:   []string{"test-node-group"},
-					}},
-				},
-				SelfLink: defaultInstanceLink,
-			}},
-		},
-		wantValues: map[string]string{},
-		wantErr:    cmpopts.AnyError,
 	},
+		{
+			name:            "CanRescheduleSkipped",
+			cloudProperties: defaultCloudProperties,
+			gceService:      soleTenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			skipMetrics: []string{maintPath + "/can_reschedule"},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/window_start_time":        "1687363073",
+				metricURL + maintPath + "/window_end_time":          "1687391873",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/maintenance_status":       "1",
+				metricURL + maintPath + "/type":                     "1",
+			},
+		},
+		{
+			name:            "WindowStartTimeSkipped",
+			cloudProperties: defaultCloudProperties,
+			gceService:      soleTenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			skipMetrics: []string{maintPath + "/window_start_time"},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "true",
+				metricURL + maintPath + "/window_end_time":          "1687391873",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/maintenance_status":       "1",
+				metricURL + maintPath + "/type":                     "1",
+			},
+		},
+		{
+			name:            "WindowEndTimeSkipped",
+			cloudProperties: defaultCloudProperties,
+			gceService:      soleTenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			skipMetrics: []string{maintPath + "/window_end_time"},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "true",
+				metricURL + maintPath + "/window_start_time":        "1687363073",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/maintenance_status":       "1",
+				metricURL + maintPath + "/type":                     "1",
+			},
+		},
+		{
+			name:            "LatestWindowStartTimeSkipped",
+			cloudProperties: defaultCloudProperties,
+			gceService:      soleTenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			skipMetrics: []string{maintPath + "/latest_window_start_time"},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":     "true",
+				metricURL + maintPath + "/window_start_time":  "1687363073",
+				metricURL + maintPath + "/window_end_time":    "1687391873",
+				metricURL + maintPath + "/maintenance_status": "1",
+				metricURL + maintPath + "/type":               "1",
+			},
+		},
+		{
+			name:            "MaintenanceStatusSkipped",
+			cloudProperties: defaultCloudProperties,
+			gceService:      soleTenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			skipMetrics: []string{maintPath + "/maintenance_status"},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "true",
+				metricURL + maintPath + "/window_start_time":        "1687363073",
+				metricURL + maintPath + "/window_end_time":          "1687391873",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/type":                     "1",
+			},
+		},
+		{
+			name:            "TypeSkipped",
+			cloudProperties: defaultCloudProperties,
+			gceService:      soleTenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			skipMetrics: []string{maintPath + "/type"},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "true",
+				metricURL + maintPath + "/window_start_time":        "1687363073",
+				metricURL + maintPath + "/window_end_time":          "1687391873",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/maintenance_status":       "1",
+			},
+		},
+		{
+			name:                "NoMaint",
+			cloudProperties:     defaultCloudProperties,
+			gceService:          soleTenantGCE,
+			upcomingMaintenance: nil,
+			wantValues:          map[string]string{},
+		}, {
+			name:            "NotSoleTenant",
+			cloudProperties: defaultCloudProperties,
+			gceService: &fakegcealpha.TestGCE{
+				Project: "test-project",
+				Zone:    "test-zone",
+				Instances: []*compute.Instance{{
+					Name: "test-instance-name",
+				}},
+			},
+			wantErr:    cmpopts.AnyError,
+			wantValues: map[string]string{},
+		}, {
+			name:                "errParseError",
+			cloudProperties:     defaultCloudProperties,
+			gceService:          soleTenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{WindowStartTime: "bogus"},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "false",
+				metricURL + maintPath + "/window_start_time":        "0",
+				metricURL + maintPath + "/window_end_time":          "0",
+				metricURL + maintPath + "/latest_window_start_time": "0",
+				metricURL + maintPath + "/maintenance_status":       "0",
+				metricURL + maintPath + "/type":                     "0",
+			},
+		}, {
+			name:            "errGetInstance",
+			cloudProperties: defaultCloudProperties,
+			gceService:      &fakegcealpha.TestGCE{},
+			wantValues:      map[string]string{},
+			wantErr:         cmpopts.AnyError,
+		}, {
+			name:            "errResolveNodeGroup",
+			cloudProperties: defaultCloudProperties,
+			gceService: &fakegcealpha.TestGCE{
+				Instances: []*compute.Instance{{
+					Scheduling: &compute.Scheduling{
+						NodeAffinities: []*compute.SchedulingNodeAffinity{{
+							Key:      "compute.googleapis.com/node-group-name",
+							Operator: "IN",
+							Values:   []string{"test-node-group"},
+						}},
+					},
+					SelfLink: defaultInstanceLink,
+				}},
+			},
+			wantValues: map[string]string{},
+			wantErr:    cmpopts.AnyError,
+		},
 	}
 	for _, tc := range tests {
 		if tc.gceService != nil && tc.gceService.NodeGroupNodes != nil {
 			tc.gceService.NodeGroupNodes.Items[0].UpcomingMaintenance = tc.upcomingMaintenance
 		}
-		p := New(&cpb.Configuration{CloudProperties: tc.cloudProperties}, nil, tc.gceService)
+		p := New(&cpb.Configuration{CloudProperties: tc.cloudProperties, CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: tc.skipMetrics}}, nil, tc.gceService)
 		m, err := p.collectUpcomingMaintenance()
 		if d := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); d != "" {
 			t.Errorf("collectUpcomingMaintenance(%s) error mismatch (-want, +got):\n%s", tc.name, d)

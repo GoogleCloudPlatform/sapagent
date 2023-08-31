@@ -178,6 +178,9 @@ func removeSID(SIDs []string, ind int) []string {
 // list.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), mntmodePath) {
+		return metrics
+	}
 	log.Logger.Debug("Starting maintenancemode metric collection.")
 	sidsUnderMaintenance, err := ReadMaintenanceMode(p.Reader)
 	if err != nil {

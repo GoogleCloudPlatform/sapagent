@@ -166,6 +166,7 @@ func NewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, er
 }
 
 // create sets up the processmetrics properties and metric collectors for SAP Instances.
+// TODO: Create a map from skipped list metrics and pass it to collectors.
 func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
 		SAPInstances:  sapInstances,

@@ -24,6 +24,7 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	"golang.org/x/exp/slices"
 	compute "google.golang.org/api/compute/v0.alpha"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -105,6 +106,9 @@ func (p *Properties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 }
 
 func collectScheduledMigration(p *Properties, f func() (string, error)) []*mrpb.TimeSeries {
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), migrationPath) {
+		return []*mrpb.TimeSeries{}
+	}
 	event, err := f()
 	if err != nil {
 		return []*mrpb.TimeSeries{}
@@ -149,13 +153,25 @@ func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {
 
 	log.Logger.Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
 
-	m := []*mrpb.TimeSeries{
-		p.createBoolMetric(maintPath+"/can_reschedule", n.UpcomingMaintenance.CanReschedule),
-		p.createIntMetric(maintPath+"/type", enumToInt(n.UpcomingMaintenance.Type, MaintenanceTypes)),
-		p.createIntMetric(maintPath+"/window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowStartTime)),
-		p.createIntMetric(maintPath+"/window_end_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowEndTime)),
-		p.createIntMetric(maintPath+"/latest_window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.LatestWindowStartTime)),
-		p.createIntMetric(maintPath+"/maintenance_status", enumToInt(n.UpcomingMaintenance.MaintenanceStatus, MaintenanceStatuses)),
+	m := []*mrpb.TimeSeries{}
+
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/can_reschedule") {
+		m = append(m, p.createBoolMetric(maintPath+"/can_reschedule", n.UpcomingMaintenance.CanReschedule))
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/type") {
+		m = append(m, p.createIntMetric(maintPath+"/type", enumToInt(n.UpcomingMaintenance.Type, MaintenanceTypes)))
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/maintenance_status") {
+		m = append(m, p.createIntMetric(maintPath+"/maintenance_status", enumToInt(n.UpcomingMaintenance.MaintenanceStatus, MaintenanceStatuses)))
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/window_start_time") {
+		m = append(m, p.createIntMetric(maintPath+"/window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowStartTime)))
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/window_end_time") {
+		m = append(m, p.createIntMetric(maintPath+"/window_end_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowEndTime)))
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/latest_window_start_time") {
+		m = append(m, p.createIntMetric(maintPath+"/latest_window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.LatestWindowStartTime)))
 	}
 	return m, nil
 }

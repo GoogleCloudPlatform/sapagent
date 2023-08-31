@@ -485,6 +485,18 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 			wantMetricCount:    0,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
+		{
+			name:            "MetricsSkipped",
+			fakeClient:      sapcontrolclienttest.Fake{},
+			wantMetricCount: 0,
+			instanceProperties: &InstanceProperties{
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwServicePath},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -508,28 +520,53 @@ func TestCollect(t *testing.T) {
 func TestCollectHTTPMetrics(t *testing.T) {
 	tests := []struct {
 		name        string
+		config      *cpb.Configuration
 		serviceName string
 		emptyURL    bool
 		wantCount   int
 	}{
 		{
 			name:        "ICMServer",
+			config:      defaultConfig,
 			serviceName: "SAP-ICM-ABAP",
 			wantCount:   2,
 		},
 		{
 			name:        "MessageServer",
+			config:      defaultConfig,
 			serviceName: "SAP-CS",
 			wantCount:   2,
 		},
 		{
 			name:        "UnknownServer",
+			config:      defaultConfig,
 			serviceName: "SAP-XYZ",
 			wantCount:   0,
 		},
 		{
 			name:      "EmptyURL",
+			config:    defaultConfig,
 			emptyURL:  true,
+			wantCount: 0,
+		},
+		{
+			name:        "SkipNWICMRMetrics",
+			serviceName: "SAP-ICM-ABAP",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					ProcessMetricsToSkip: []string{nwICMRCodePath},
+				},
+			},
+			wantCount: 0,
+		},
+		{
+			name:        "SkipNWMessageServerMetrics",
+			serviceName: "SAP-CS",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					ProcessMetricsToSkip: []string{nwMSResponseCodePath},
+				},
+			},
 			wantCount: 0,
 		},
 	}
@@ -546,7 +583,7 @@ func TestCollectHTTPMetrics(t *testing.T) {
 			}
 
 			p := &InstanceProperties{
-				Config: defaultConfig,
+				Config: test.config,
 				SAPInstance: &sapb.SAPInstance{
 					ServiceName:             test.serviceName,
 					NetweaverHealthCheckUrl: url,
@@ -709,6 +746,54 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 			wantMetricCount:    8,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
+		{
+			name: "SkipNwABAPProcCount",
+			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
+				{0, "DIA", 7488, "Run", "4", ""},
+				{1, "BTC", 7489, "Wait", "", ""},
+			}},
+			wantMetricCount: 0,
+			instanceProperties: &InstanceProperties{
+				SAPInstance: defaultAPIInstanceProperties.SAPInstance,
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwABAPProcCountPath},
+					},
+				},
+			},
+		},
+		{
+			name: "SkipNwABAPProcBusy",
+			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
+				{0, "DIA", 7488, "Run", "4", ""},
+				{1, "BTC", 7489, "Wait", "", ""},
+			}},
+			wantMetricCount: 0,
+			instanceProperties: &InstanceProperties{
+				SAPInstance: defaultAPIInstanceProperties.SAPInstance,
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwABAPProcBusyPath},
+					},
+				},
+			},
+		},
+		{
+			name: "SkipNwABAPProcUtil",
+			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
+				{0, "DIA", 7488, "Run", "4", ""},
+				{1, "BTC", 7489, "Wait", "", ""},
+			}},
+			wantMetricCount: 0,
+			instanceProperties: &InstanceProperties{
+				SAPInstance: defaultAPIInstanceProperties.SAPInstance,
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwABAPProcUtilPath},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -755,6 +840,36 @@ func TestCollectABAPQueueStats(t *testing.T) {
 			wantMetricCount:    6,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
+		{
+			name: "SkipNwABAPProcQueueCurrentPath",
+			fakeClient: sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{
+				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
+			}},
+			wantMetricCount: 0,
+			instanceProperties: &InstanceProperties{
+				SAPInstance: defaultAPIInstanceProperties.SAPInstance,
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwABAPProcQueueCurrentPath},
+					},
+				},
+			},
+		},
+		{
+			name: "SkipNwABAPProcQueuePeakPath",
+			fakeClient: sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{
+				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
+			}},
+			wantMetricCount: 0,
+			instanceProperties: &InstanceProperties{
+				SAPInstance: defaultAPIInstanceProperties.SAPInstance,
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwABAPProcQueuePeakPath},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -774,11 +889,13 @@ var dpmonOutputABAPSessions string
 func TestCollectABAPSessionStats(t *testing.T) {
 	tests := []struct {
 		name            string
+		properties      *InstanceProperties
 		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
 	}{
 		{
-			name: "DPMONFailure",
+			name:       "DPMONFailure",
+			properties: defaultAPIInstanceProperties,
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
@@ -787,7 +904,8 @@ func TestCollectABAPSessionStats(t *testing.T) {
 			wantMetricCount: 0,
 		},
 		{
-			name: "DPMonFailsWithStdOut",
+			name:       "DPMonFailsWithStdOut",
+			properties: defaultAPIInstanceProperties,
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonOutputABAPSessions,
@@ -796,7 +914,8 @@ func TestCollectABAPSessionStats(t *testing.T) {
 			},
 		},
 		{
-			name: "ZeroSessions",
+			name:       "ZeroSessions",
+			properties: defaultAPIInstanceProperties,
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "InvalidOutput",
@@ -805,7 +924,8 @@ func TestCollectABAPSessionStats(t *testing.T) {
 			wantMetricCount: 0,
 		},
 		{
-			name: "DPMONSuccess",
+			name:       "DPMONSuccess",
+			properties: defaultAPIInstanceProperties,
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonOutputABAPSessions,
@@ -813,11 +933,27 @@ func TestCollectABAPSessionStats(t *testing.T) {
 			},
 			wantMetricCount: 4,
 		},
+		{
+			name: "SkipABAPSessionStats",
+			properties: &InstanceProperties{
+				SAPInstance: defaultAPIInstanceProperties.SAPInstance,
+				Config: &cpb.Configuration{CollectionConfiguration: &cpb.CollectionConfiguration{
+					ProcessMetricsToSkip: []string{nwABAPSessionsPath},
+				}},
+			},
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: dpmonOutputABAPSessions,
+				}
+			},
+
+			wantMetricCount: 0,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPSessionStats(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
+			got := collectABAPSessionStats(context.Background(), test.properties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPSessionStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -832,11 +968,13 @@ var dpmonRFCConnectionsOutput string
 func TestCollectRFCConnections(t *testing.T) {
 	tests := []struct {
 		name            string
+		properties      *InstanceProperties
 		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
 	}{
 		{
-			name: "DPMONSuccess",
+			name:       "DPMONSuccess",
+			properties: defaultAPIInstanceProperties,
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonRFCConnectionsOutput,
@@ -845,7 +983,8 @@ func TestCollectRFCConnections(t *testing.T) {
 			wantMetricCount: 4,
 		},
 		{
-			name: "DPMONFailure",
+			name:       "DPMONFailure",
+			properties: defaultAPIInstanceProperties,
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error: cmpopts.AnyError,
@@ -854,7 +993,8 @@ func TestCollectRFCConnections(t *testing.T) {
 			wantMetricCount: 0,
 		},
 		{
-			name: "DPMONFailsWithStdOut",
+			name:       "DPMONFailsWithStdOut",
+			properties: defaultAPIInstanceProperties,
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonRFCConnectionsOutput,
@@ -863,11 +1003,26 @@ func TestCollectRFCConnections(t *testing.T) {
 			},
 			wantMetricCount: 0,
 		},
+		{
+			name: "SkipRFCConnectionsMetric",
+			properties: &InstanceProperties{
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						ProcessMetricsToSkip: []string{nwABAPRFCPath},
+					},
+				}},
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: dpmonRFCConnectionsOutput,
+				}
+			},
+			wantMetricCount: 0,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectRFCConnections(context.Background(), defaultInstanceProperties, test.fakeExec, commandlineexecutor.Params{})
+			got := collectRFCConnections(context.Background(), test.properties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectRFCConnections() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
@@ -1000,6 +1155,36 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 				ErrEnqGetLockTable: cmpopts.AnyError,
 			},
 			wantMetricCount: 0,
+		},
+		{
+			name: "SkipEnqLockMetrics",
+			props: &InstanceProperties{
+				Config: &cpb.Configuration{CollectionConfiguration: &cpb.CollectionConfiguration{
+					ProcessMetricsToSkip: []string{nwEnqLocksPath},
+				}},
+				SAPInstance: &sapb.SAPInstance{
+					InstanceId: "ERS01",
+				},
+			},
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "USR04, 000DDIC, E, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, SAP*, SU01, E_USR04, FALSE",
+				}
+			},
+			wantMetricCount: 0,
+			fakeClient: sapcontrolclienttest.Fake{
+				EnqLocks: []sapcontrolclient.EnqLock{
+					sapcontrolclient.EnqLock{
+						LockName:        "USR04",
+						LockArg:         "000DDIC",
+						LockMode:        "E",
+						Owner:           "dnwh75ldbci",
+						OwnerVB:         "dnwh75ldbci",
+						UseCountOwner:   1,
+						UseCountOwnerVB: 1,
+					},
+				},
+			},
 		},
 	}
 	for _, test := range tests {

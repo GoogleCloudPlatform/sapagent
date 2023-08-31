@@ -49,12 +49,14 @@ var (
 func TestCollect(t *testing.T) {
 	tests := []struct {
 		name      string
+		config    *cpb.Configuration
 		execute   commandlineexecutor.Execute
 		exitCode  commandlineexecutor.ExitCode
 		wantCount int
 	}{
 		{
-			name: "CollectMetricsWithFailureExitCodeInIsFailedAndIsDisabled",
+			name:   "CollectMetricsWithFailureExitCodeInIsFailedAndIsDisabled",
+			config: defaultConfig,
 			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if strings.HasPrefix(params.ArgsToSplit, "is-failed") {
 					// a zero exit code will represent an error here
@@ -73,7 +75,8 @@ func TestCollect(t *testing.T) {
 			wantCount: 10,
 		},
 		{
-			name: "CollectMetricsWithFailuresInExitCodeInIsFailed",
+			name:   "CollectMetricsWithFailuresInExitCodeInIsFailed",
+			config: defaultConfig,
 			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
@@ -86,7 +89,8 @@ func TestCollect(t *testing.T) {
 			wantCount: 5,
 		},
 		{
-			name: "NoMetricsCollectedFromIsFailedAndIsDisabled",
+			name:   "NoMetricsCollectedFromIsFailedAndIsDisabled",
+			config: defaultConfig,
 			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if strings.HasPrefix(params.ArgsToSplit, "is-failed") {
 					// a zero exit code will represent an error here
@@ -107,13 +111,50 @@ func TestCollect(t *testing.T) {
 			wantCount: 0,
 		},
 		{
-			name: "CollectMetricsWithFailureInIsDisabled",
+			name:   "CollectMetricsWithFailureInIsDisabled",
+			config: defaultConfig,
 			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					Error:            errors.New("unable to execute command"),
 					ExitStatusParsed: true,
 					ExitCode:         1,
 				}
+			},
+			exitCode: func(err error) int {
+				if err == nil {
+					return 0
+				}
+				return 1
+			},
+			wantCount: 5,
+		},
+		{
+			name: "SkipIsFailedMetrics",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					ProcessMetricsToSkip: []string{failedMPath},
+				},
+			},
+			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{}
+			},
+			exitCode: func(err error) int {
+				if err == nil {
+					return 0
+				}
+				return 1
+			},
+			wantCount: 5,
+		},
+		{
+			name: "SkipIsDisableddMetrics",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					ProcessMetricsToSkip: []string{disabledMPath},
+				},
+			},
+			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{}
 			},
 			exitCode: func(err error) int {
 				if err == nil {

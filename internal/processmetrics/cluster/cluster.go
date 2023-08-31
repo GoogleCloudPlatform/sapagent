@@ -25,6 +25,7 @@ import (
 	"context"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -113,6 +114,9 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 // collectNodeState returns the Linux cluster node state metrics as time series.
 // The integer values are returned as an array for testability.
 func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nodesPath) {
+		return nil, nil
+	}
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
 
@@ -139,6 +143,9 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *p
 // collectResourceState returns the Linux cluster resource state metrics as time series.
 // The integer values of metric are returned as an array for testability.
 func collectResourceState(p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), resourcesPath) {
+		return nil, nil
+	}
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
 
@@ -182,6 +189,9 @@ func stateFromString(m map[string]int, val string) int {
 // The metrics are returned only for resources with a failcount entry in
 // crm_mon history.
 func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), failCountsPath) {
+		return nil, nil
+	}
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
 

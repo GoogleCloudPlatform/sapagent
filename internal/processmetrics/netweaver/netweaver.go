@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -58,7 +59,6 @@ const (
 
 const (
 	metricURL                  = "workload.googleapis.com"
-	nwAvailabilityPath         = "/sap/nw/availability"
 	nwServicePath              = "/sap/nw/service"
 	nwICMRCodePath             = "/sap/nw/icm/rcode"
 	nwICMRTimePath             = "/sap/nw/icm/rtime"
@@ -130,6 +130,9 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
 func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwServicePath) {
+		return nil
+	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
@@ -195,6 +198,10 @@ func collectHTTPMetrics(p *InstanceProperties) []*mrpb.TimeSeries {
 //   - HTTP response code.
 //   - Total time taken by the request.
 func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
+	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwICMRCodePath) {
+		return nil
+	}
 	now := tspb.Now()
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
@@ -219,6 +226,10 @@ func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 //   - Additional work process count as reported by the message server info page on StatusOK(200).
 //   - A nil in case of errors in HTTP GET request failures.
 func collectMessageServerMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
+	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwMSResponseCodePath) {
+		return nil
+	}
 	now := tspb.Now()
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
@@ -273,6 +284,11 @@ func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 // collectABAPProcessStatus collects the ABAP worker process status metrics.
 func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	now := tspb.Now()
+	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
+	skippedList := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
+	if slices.Contains(skippedList, nwABAPProcCountPath) || slices.Contains(skippedList, nwABAPProcBusyPath) || slices.Contains(skippedList, nwABAPProcUtilPath) {
+		return nil
+	}
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
 		err              error
@@ -317,6 +333,11 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 // collectABAPQueueStats collects ABAP Queue utilization metrics using dpmon tool.
 func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	now := tspb.Now()
+	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
+	skippedList := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
+	if slices.Contains(skippedList, nwABAPProcQueueCurrentPath) || slices.Contains(skippedList, nwABAPProcQueuePeakPath) {
+		return nil
+	}
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
 		err               error
@@ -352,7 +373,9 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 // collectABAPSessionStats collects ABAP session related metrics using dpmon tool.
 func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
-
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwABAPSessionsPath) {
+		return nil
+	}
 	results := exec(ctx, params)
 	log.Logger.Debugw("DPMON for sessionStat output", "stdout", results.StdOut, "stderr", results.StdErr, "exitcode", results.ExitCode, "error", results.Error)
 	if results.Error != nil {
@@ -388,7 +411,9 @@ func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec co
 // collectRFCConnections collects the ABAP RFC connection metrics using dpmon tool.
 func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
-
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwABAPRFCPath) {
+		return nil
+	}
 	result := exec(ctx, params)
 	log.Logger.Debugw("DPMON for RFC output", "stdout", result.StdOut, "stderr", result.StdErr, "exitcode", result.ExitCode, "error", result.Error)
 	if result.Error != nil {
@@ -410,6 +435,9 @@ func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec comm
 
 // collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
 func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwEnqLocksPath) {
+		return nil
+	}
 	instance := p.SAPInstance.GetInstanceId()
 	if !strings.HasPrefix(instance, "ASCS") && !strings.HasPrefix(instance, "ERS") {
 		log.Logger.Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)

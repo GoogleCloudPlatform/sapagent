@@ -20,6 +20,7 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	"golang.org/x/exp/slices"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -76,8 +77,15 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries
 		log.Logger.Debug("Cannot collect CPU and memory per process for hana, empty process list.")
 		return nil
 	}
-	res := collectCPUPerProcess(ctx, params, processes)
-	res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
-	res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
+	res := make([]*mrpb.TimeSeries, 0)
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaCPUPath) {
+		res = append(res, collectCPUPerProcess(ctx, params, processes)...)	
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaMemoryPath) {
+		res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
+	}
+	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaIOPSReadsPath) || !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaIOPSWritesPath) {
+		res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
+	}
 	return res
 }
