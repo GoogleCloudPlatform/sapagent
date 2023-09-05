@@ -97,7 +97,6 @@ const (
 const (
 	metricURL            = "workload.googleapis.com"
 	servicePath          = "/sap/hana/service"
-	haReplicationPath    = "/sap/hana/ha/replication"
 	queryStatePath       = "/sap/hana/query/state"
 	queryOverallTimePath = "/sap/hana/query/overalltime"
 	queryServerTimePath  = "/sap/hana/query/servertime"
@@ -114,7 +113,7 @@ var (
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
 
-	metrics := collectReplicationHA(ctx, p, scc)
+	metrics := collectHANAServiceMetrics(ctx, p, scc)
 
 	// Collect DB Query metrics only if credentials are set and NOT a HANA secondary.
 	if p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "" && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
@@ -125,7 +124,10 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	return metrics
 }
 
-func collectReplicationHA(ctx context.Context, ip *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+// collectHANAServiceMetrics creates metrics for each of the services in
+// a HANA instance. Also returns availabilityValue a signal that depends
+// on the status of the HANA services.
+func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
@@ -140,37 +142,20 @@ func collectReplicationHA(ctx context.Context, ip *InstanceProperties, scc sapco
 		processes, err = sc.GetProcessList(scc)
 		if err == nil {
 			// If GetProcessList via command line or API didn't return an error.
-			metrics = collectHANAServiceMetrics(ip, processes, now)
-		}
-	}
+			if len(processes) == 0 {
+				return nil
+			}
 
-	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), haReplicationPath) {
-		haReplicationValue := refreshHAReplicationConfig(ctx, ip)
-		extraLabels := map[string]string{
-			"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
+			for _, process := range processes {
+				extraLabels := map[string]string{
+					"service_name": process.Name,
+					"pid":          process.PID,
+				}
+				metrics = append(metrics, createMetrics(ip, servicePath, extraLabels, now, boolToInt64(process.IsGreen)))
+			}
 		}
-		metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
-
 	}
 	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
-	return metrics
-}
-
-// collectHANAServiceMetrics creates metrics for each of the services in
-// a HANA instance. Also returns availabilityValue a signal that depends
-// on the status of the HANA services.
-func collectHANAServiceMetrics(p *InstanceProperties, processes map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries) {
-	if len(processes) == 0 {
-		return nil
-	}
-
-	for _, process := range processes {
-		extraLabels := map[string]string{
-			"service_name": process.Name,
-			"pid":          process.PID,
-		}
-		metrics = append(metrics, createMetrics(p, servicePath, extraLabels, now, boolToInt64(process.IsGreen)))
-	}
 	return metrics
 }
 

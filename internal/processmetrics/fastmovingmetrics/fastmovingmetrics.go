@@ -21,6 +21,7 @@ package fastmovingmetrics
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/exp/slices"
@@ -84,6 +85,7 @@ const (
 const (
 	metricURL          = "workload.googleapis.com"
 	availabilityPath   = "/sap/hana/availability"
+	haReplicationPath  = "/sap/hana/ha/replication"
 	haAvailabilityPath = "/sap/hana/ha/availability"
 	nwAvailabilityPath = "/sap/nw/availability"
 )
@@ -117,6 +119,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{ip.SAPInstance}
+	skipMetrics := ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
 	var (
 		err               error
 		sapControlResult  int
@@ -124,7 +127,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		metrics           []*mrpb.TimeSeries
 		availabilityValue int64
 	)
-	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), availabilityPath) {
+	if !slices.Contains(skipMetrics, availabilityPath) {
 		processes, err = sc.GetProcessList(scc)
 		if err == nil {
 			// If GetProcessList API didn't return an error.
@@ -133,7 +136,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		}
 	}
 
-	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), haAvailabilityPath) {
+	if !slices.Contains(skipMetrics, haAvailabilityPath) && !slices.Contains(skipMetrics, haReplicationPath) {
 		haReplicationValue := refreshHAReplicationConfig(ctx, ip)
 		_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
 		if err != nil {
@@ -141,6 +144,10 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 			return metrics
 		}
 		haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
+		extraLabels := map[string]string{
+			"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
+		}
+		metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
 		metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))
 	}
 

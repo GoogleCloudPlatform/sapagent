@@ -606,7 +606,7 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
 				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
 			}},
-			wantCount: 2,
+			wantCount: 3,
 		},
 		{
 			name: "SkipMetrics",
@@ -614,11 +614,40 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath, availabilityPath}},
 			}},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{ExitCode: 0, Error: nil}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
 			},
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
-				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
+				sapcontrolclient.OSProcess{
+					Name:       "hdbdaemon",
+					Dispstatus: "SAPControl-GREEN",
+					Pid:        111,
+				},
+			},
+			},
+			wantCount: 0,
+		},
+		{
+			name: "SkipMetricsHAReplicationPath",
+			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haReplicationPath, availabilityPath}},
 			}},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
+				sapcontrolclient.OSProcess{
+					Name:       "hdbdaemon",
+					Dispstatus: "SAPControl-GREEN",
+					Pid:        111,
+				},
+			},
+			},
 			wantCount: 0,
 		},
 	}

@@ -24,12 +24,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -97,91 +95,6 @@ var (
 		6 pid: 777`
 )
 
-func TestCollectHANAServiceMetrics(t *testing.T) {
-	tests := []struct {
-		name            string
-		testProcesses   map[int]*sapcontrol.ProcessStatus
-		wantMetricCount int
-		wantValue       int64
-	}{
-		{
-			name: "AllProcessesGreen",
-			testProcesses: map[int]*sapcontrol.ProcessStatus{
-				0: &sapcontrol.ProcessStatus{Name: "hdbdaemon", IsGreen: true},
-				1: &sapcontrol.ProcessStatus{Name: "hdbindexserver", IsGreen: true},
-				2: &sapcontrol.ProcessStatus{Name: "hdbnameserver", IsGreen: true},
-			},
-			wantMetricCount: 3,
-			wantValue:       systemAllProcessesGreen,
-		},
-		{
-			name: "ThreeProcessGreenOneProcessNotGreen",
-			testProcesses: map[int]*sapcontrol.ProcessStatus{
-				0: &sapcontrol.ProcessStatus{Name: "hdbindexserver", IsGreen: true},
-				1: &sapcontrol.ProcessStatus{Name: "hdbnameserver", IsGreen: true},
-				2: &sapcontrol.ProcessStatus{Name: "hdbpreprosessor", IsGreen: true},
-				3: &sapcontrol.ProcessStatus{Name: "hdbwebdispatcher", IsGreen: false},
-			},
-			wantMetricCount: 4,
-			wantValue:       systemAtLeastOneProcessNotGreen,
-		},
-		{
-			name: "IndexServerAndNameServerGreen",
-			testProcesses: map[int]*sapcontrol.ProcessStatus{
-				0: &sapcontrol.ProcessStatus{Name: "hdbindexserver", IsGreen: true},
-				1: &sapcontrol.ProcessStatus{Name: "hdbnameserver", IsGreen: true},
-				2: &sapcontrol.ProcessStatus{Name: "hdbxsengine", IsGreen: false},
-			},
-			wantMetricCount: 3,
-			wantValue:       systemAtLeastOneProcessNotGreen,
-		},
-		{
-			name: "IndexServerNotGreen",
-			testProcesses: map[int]*sapcontrol.ProcessStatus{
-				0: &sapcontrol.ProcessStatus{Name: "hdbindexserver", IsGreen: false},
-				1: &sapcontrol.ProcessStatus{Name: "hdbnameserver", IsGreen: true},
-			},
-			wantMetricCount: 2,
-			wantValue:       systemAtLeastOneProcessNotGreen,
-		},
-		{
-			name: "NameServerNotGreen",
-			testProcesses: map[int]*sapcontrol.ProcessStatus{
-				0: &sapcontrol.ProcessStatus{Name: "hdbnameserver", IsGreen: false},
-				1: &sapcontrol.ProcessStatus{Name: "hdbindexserver", IsGreen: true},
-			},
-			wantMetricCount: 2,
-			wantValue:       systemAtLeastOneProcessNotGreen,
-		},
-		{
-			name:            "ProcessMapEmpty",
-			testProcesses:   map[int]*sapcontrol.ProcessStatus{},
-			wantMetricCount: 0,
-			wantValue:       systemAtLeastOneProcessNotGreen,
-		},
-		{
-			name: "IndexServerAndNameServerRED",
-			testProcesses: map[int]*sapcontrol.ProcessStatus{
-				0: &sapcontrol.ProcessStatus{Name: "hdbindexserver", IsGreen: false},
-				1: &sapcontrol.ProcessStatus{Name: "hdbnameserver", IsGreen: false},
-				2: &sapcontrol.ProcessStatus{Name: "hdbxsengine", IsGreen: true},
-			},
-			wantMetricCount: 3,
-			wantValue:       systemAtLeastOneProcessNotGreen,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			metrics := collectHANAServiceMetrics(defaultInstanceProperties, test.testProcesses, tspb.Now())
-			if len(metrics) != test.wantMetricCount {
-				t.Errorf("collectHANAServiceMetrics() returned unexpected metric count, got=%d, want=%d",
-					len(metrics), test.wantMetricCount)
-			}
-		})
-	}
-}
-
 type fakeRunner struct {
 	stdOut, stdErr string
 	exitCode       int
@@ -192,7 +105,7 @@ func (f *fakeRunner) RunWithEnv() (string, string, int, error) {
 	return f.stdOut, f.stdErr, f.exitCode, f.err
 }
 
-func TestCollectReplicationHA(t *testing.T) {
+func TestCollectHANAServiceMetrics(t *testing.T) {
 	tests := []struct {
 		name               string
 		fakeClient         sapcontrolclienttest.Fake
@@ -212,13 +125,21 @@ func TestCollectReplicationHA(t *testing.T) {
 					{"hdbxsengine", "SAPControl-GREEN", 777},
 				},
 			},
-			wantMetricCount:    8,
+			wantMetricCount:    7,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
 			name:               "FailureWebmethodGetProcessList",
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
-			wantMetricCount:    1,
+			wantMetricCount:    0,
+			instanceProperties: defaultAPIInstanceProperties,
+		},
+		{
+			name: "EmptyProcessList",
+			fakeClient: sapcontrolclienttest.Fake{
+				Processes: []sapcontrolclient.OSProcess{},
+			},
+			wantMetricCount:    0,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -226,13 +147,13 @@ func TestCollectReplicationHA(t *testing.T) {
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}},
 			},
-			wantMetricCount:    2,
+			wantMetricCount:    1,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
 			name:               "FailureWebmethod",
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
-			wantMetricCount:    1,
+			wantMetricCount:    0,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -251,7 +172,7 @@ func TestCollectReplicationHA(t *testing.T) {
 				SAPInstance: defaultSAPInstance,
 				Config: &cpb.Configuration{
 					CollectionConfiguration: &cpb.CollectionConfiguration{
-						ProcessMetricsToSkip: []string{haReplicationPath, servicePath},
+						ProcessMetricsToSkip: []string{servicePath},
 					},
 				},
 			},
@@ -261,7 +182,7 @@ func TestCollectReplicationHA(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics := collectReplicationHA(context.Background(), test.instanceProperties, test.fakeClient)
+			metrics := collectHANAServiceMetrics(context.Background(), test.instanceProperties, test.fakeClient)
 			if len(metrics) != test.wantMetricCount {
 				t.Errorf("collectReplicationHA() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
 			}
@@ -437,7 +358,7 @@ func TestCollect(t *testing.T) {
 		{
 			name:       "MetricCountTest",
 			properties: defaultInstanceProperties,
-			wantCount:  2, // Without HANA setup in unit test ENV, only query/state metric is generated.
+			wantCount:  1, // Without HANA setup in unit test ENV, only query/state metric is generated.
 		},
 		{
 			name: "NoHANADBUserAndKey",
@@ -448,7 +369,7 @@ func TestCollect(t *testing.T) {
 					InstanceNumber: "00",
 				},
 			},
-			wantCount: 1, // Query state metric not generated without credentials.
+			wantCount: 0, // Query state metric not generated without credentials.
 		},
 		{
 			name: "NoHANADBUser",
@@ -460,7 +381,7 @@ func TestCollect(t *testing.T) {
 					HanaDbPassword: "test-pass",
 				},
 			},
-			wantCount: 1, // Query state metric not generated without credentials.
+			wantCount: 0, // Query state metric not generated without credentials.
 		},
 		{
 			name: "NoHANADBPassword",
@@ -472,7 +393,7 @@ func TestCollect(t *testing.T) {
 					HanaDbUser:     "test-user",
 				},
 			},
-			wantCount: 1, // Query state metric not generated without credentials.
+			wantCount: 0, // Query state metric not generated without credentials.
 		},
 		{
 			name: "HANASecondaryNode",
@@ -486,7 +407,7 @@ func TestCollect(t *testing.T) {
 					Site:           sapb.InstanceSite_HANA_SECONDARY,
 				},
 			},
-			wantCount: 1, // Query state metric not generated for HANA secondary.
+			wantCount: 0, // Query state metric not generated for HANA secondary.
 		},
 	}
 
