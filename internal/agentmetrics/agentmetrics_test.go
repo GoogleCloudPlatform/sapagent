@@ -111,10 +111,11 @@ var (
 		parameters.timeSeriesCreator = &fake.TimeSeriesCreator{}
 		parameters.Config.BareMetal = false
 		parameters.Config.CloudProperties = &ipb.CloudProperties{
-			InstanceId: "test-instance",
-			ProjectId:  "test-project",
-			Zone:       "test-zone",
-			Region:     "test-region",
+			InstanceId:   "test-instance",
+			ProjectId:    "test-project",
+			Zone:         "test-zone",
+			Region:       "test-region",
+			InstanceName: "test-instance-name",
 		}
 		return parameters
 	}
@@ -122,8 +123,8 @@ var (
 	bareMetalLabels = map[string]string{
 		"project_id": "test-project",
 		"location":   "test-region",
-		"namespace":  "test-instance",
-		"node_id":    "test-instance",
+		"namespace":  "test-instance-name",
+		"node_id":    "test-instance-name",
 	}
 	vmLabels = map[string]string{
 		"instance_id": "test-instance",

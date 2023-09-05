@@ -121,8 +121,8 @@ func monitoredResource(cp *ipb.CloudProperties, bareMetal bool) *mrpb.MonitoredR
 			Labels: map[string]string{
 				"project_id": cp.GetProjectId(),
 				"location":   cp.GetRegion(),
-				"namespace":  cp.GetInstanceId(),
-				"node_id":    cp.GetInstanceId(),
+				"namespace":  cp.GetInstanceName(),
+				"node_id":    cp.GetInstanceName(),
 			},
 		}
 	}

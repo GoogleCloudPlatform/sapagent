@@ -44,8 +44,8 @@ var (
 	bmsLabels = map[string]string{
 		"project_id": "test-project",
 		"location":   "test-location",
-		"namespace":  "9876543",
-		"node_id":    "9876543",
+		"namespace":  "test-bms",
+		"node_id":    "test-bms",
 	}
 	defaultCloudProperties = &ipb.CloudProperties{
 		ProjectId:  "test-project",
@@ -53,9 +53,9 @@ var (
 		InstanceId: "123456",
 	}
 	bmsCloudProperties = &ipb.CloudProperties{
-		ProjectId:  "test-project",
-		Region:     "test-location",
-		InstanceId: "9876543",
+		ProjectId:    "test-project",
+		Region:       "test-location",
+		InstanceName: "test-bms",
 	}
 	now = &tpb.Timestamp{
 		Seconds: 1234,
