@@ -88,7 +88,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 			return err
 		}
 		return nil
-	}, shortConstantBackOffPolicy(ctx, bo.ShortConstant))
+	}, ShortConstantBackOffPolicy(ctx, bo.ShortConstant))
 
 	if err != nil {
 		log.Logger.Errorw("CreateTimeSeries retry limit exceeded", "request", req)
@@ -119,7 +119,7 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 			attempt++
 		}
 		return err
-	}, longExponentialBackOffPolicy(ctx, bo.LongExponential))
+	}, LongExponentialBackOffPolicy(ctx, bo.LongExponential))
 	if err != nil {
 		log.Logger.Errorw("QueryTimeSeries retry limit exceeded", "request", req, "error", err, "attempt", attempt)
 		return nil, err
@@ -127,8 +127,8 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 	return res, nil
 }
 
-// longExponentialBackOffPolicy returns a backoff policy with a One Minute MaxElapsedTime.
-func longExponentialBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
+// LongExponentialBackOffPolicy returns a backoff policy with a One Minute MaxElapsedTime.
+func LongExponentialBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
 	exp := backoff.NewExponentialBackOff()
 	exp.InitialInterval = initial
 	exp.MaxInterval = 15 * time.Second
@@ -136,8 +136,8 @@ func longExponentialBackOffPolicy(ctx context.Context, initial time.Duration) ba
 	return backoff.WithContext(backoff.WithMaxRetries(exp, 4), ctx) // 4 retries = 5 total attempts
 }
 
-// shortConstantBackOffPolicy returns a backoff policy with 15s MaxElapsedTime.
-func shortConstantBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
+// ShortConstantBackOffPolicy returns a backoff policy with 15s MaxElapsedTime.
+func ShortConstantBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
 	constantBackoff := backoff.NewConstantBackOff(initial)
 	return backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 2), ctx) // 2 retries = 3 total attempts
 }
