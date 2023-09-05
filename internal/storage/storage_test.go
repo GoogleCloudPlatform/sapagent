@@ -295,13 +295,25 @@ func TestUpload(t *testing.T) {
 			wantError: nil,
 		},
 		{
-			name: "EncryptionKeyUploadSuccess",
+			name: "EncryptionKeyUploadFailure",
 			rw: &ReadWriter{
 				BucketHandle:  defaultBucketHandle,
 				Copier:        io.Copy,
 				Reader:        defaultBuffer(),
 				ObjectName:    "object.txt",
 				EncryptionKey: "this-is-a-fake-key-with-32-bytes",
+			},
+			want:      0,
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name: "EncryptionKeyUploadSuccess",
+			rw: &ReadWriter{
+				BucketHandle:  defaultBucketHandle,
+				Copier:        io.Copy,
+				Reader:        defaultBuffer(),
+				ObjectName:    "object.txt",
+				EncryptionKey: "dGhpcy1pcy1hLWZha2Uta2V5LXdpdGgtMzItYnl0ZXM=",
 			},
 			want:      int64(defaultBuffer().Len()),
 			wantError: nil,
@@ -418,7 +430,7 @@ func TestDownload(t *testing.T) {
 			wantError: nil,
 		},
 		{
-			name: "EncryptionKeyDownloadSuccess",
+			name: "EncryptionKeyDownloadFailure",
 			rw: &ReadWriter{
 				BucketHandle:  defaultBucketHandle,
 				ObjectName:    "object.txt",
@@ -426,6 +438,19 @@ func TestDownload(t *testing.T) {
 				Copier:        io.Copy,
 				LogDelay:      time.Nanosecond,
 				EncryptionKey: "this-is-a-fake-key-with-32-bytes",
+			},
+			want:      0,
+			wantError: cmpopts.AnyError,
+		},
+		{
+			name: "EncryptionKeyDownloadSuccess",
+			rw: &ReadWriter{
+				BucketHandle:  defaultBucketHandle,
+				ObjectName:    "object.txt",
+				Writer:        defaultBuffer(),
+				Copier:        io.Copy,
+				LogDelay:      time.Nanosecond,
+				EncryptionKey: "dGhpcy1pcy1hLWZha2Uta2V5LXdpdGgtMzItYnl0ZXM=",
 			},
 			want:      int64(len(defaultContent)),
 			wantError: nil,

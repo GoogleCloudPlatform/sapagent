@@ -20,6 +20,7 @@ package storage
 import (
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -175,14 +176,18 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	object := rw.BucketHandle.Object(rw.ObjectName).Retryer(rw.retryOptions("Failed to upload data to Google Cloud Storage, retrying.")...)
 	var writer io.WriteCloser
 	if rw.EncryptionKey != "" || rw.KMSKey != "" {
-		log.Logger.Infow("Encryption enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName, "encryptionKey", rw.EncryptionKey, "kmsKey", rw.KMSKey)
+		log.Logger.Infow("Encryption enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 	}
 	if rw.DumpData {
 		log.Logger.Warnw("dump_data set to true, discarding data during upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		writer = discardCloser{}
 	} else {
 		if rw.EncryptionKey != "" {
-			object = object.Key([]byte(rw.EncryptionKey))
+			decodedKey, err := base64.StdEncoding.DecodeString(rw.EncryptionKey)
+			if err != nil {
+				return 0, err
+			}
+			object = object.Key(decodedKey)
 		}
 		objectWriter := object.NewWriter(ctx)
 		objectWriter.KMSKeyName = rw.KMSKey
@@ -252,7 +257,11 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	}
 	object := rw.BucketHandle.Object(rw.ObjectName)
 	if rw.EncryptionKey != "" {
-		object = object.Key([]byte(rw.EncryptionKey))
+		decodedKey, err := base64.StdEncoding.DecodeString(rw.EncryptionKey)
+		if err != nil {
+			return 0, err
+		}
+		object = object.Key(decodedKey)
 	}
 	object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
 	reader, err := object.NewReader(ctx)
