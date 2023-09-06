@@ -137,6 +137,7 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	return d.startdaemonHandler(ctx)
 }
 
+// startdaemonHandler starts up the main daemon for SAP Agent.
 func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus {
 	// Daemon mode operation
 	d.config = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
@@ -180,6 +181,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 	return subcommands.ExitSuccess
 }
 
+// configureUsageMetricsForDaemon sets up UsageMetrics for Daemon.
 func configureUsageMetricsForDaemon(cp *iipb.CloudProperties) {
 	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
 		Name:            configuration.AgentName,
@@ -189,6 +191,7 @@ func configureUsageMetricsForDaemon(cp *iipb.CloudProperties) {
 	usagemetrics.SetCloudProperties(cp)
 }
 
+// startServices starts underlying services of SAP Agent.
 func (d *Daemon) startServices(ctx context.Context, goos string) {
 	if d.config.GetCloudProperties() == nil {
 		log.Logger.Error("Cloud properties are not set, cannot start services.")
@@ -294,15 +297,18 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	}
 
 	// start the Host Metrics Collection
-	if err = startHostMetricsCollection(ctx, d.config, instanceInfoReader, cmr, healthMonitor); err != nil {
+	hmp := HostMetricsParams{d.config, instanceInfoReader, cmr, healthMonitor}
+	if err = hmp.startCollection(ctx); err != nil {
 		return
 	}
 
 	// Start the Workload Manager metrics collection
-	startWorkloadManagerMetricsCollection(ctx, wlmparams, instanceInfoReader, goos)
+	wmp := WorkloadManagerParams{wlmparams, instanceInfoReader, goos}
+	wmp.startCollection(ctx)
 
 	// Start Process Metrics Collection
-	if err = startProcessMetricsCollection(ctx, d.config, goos, healthMonitor, gceService); err != nil {
+	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService}
+	if err = pmp.startCollection(ctx); err != nil {
 		return
 	}
 
@@ -329,6 +335,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	waitForShutdown(ctx, shutdownch)
 }
 
+// startAgentMetricsService returns health monitor for services.
 func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heartbeat.Monitor, error) {
 	var healthMonitor *heartbeat.Monitor
 	heartbeatParams := heartbeat.Parameters{
@@ -356,45 +363,71 @@ func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heart
 	return healthMonitor, nil
 }
 
-func startProcessMetricsCollection(ctx context.Context, config *cpb.Configuration, goos string, healthMonitor agentmetrics.HealthMonitor, gceService *gce.GCE) error {
-	pmHeartbeatSpec, err := healthMonitor.Register(processMetricsServiceName)
+// ProcessMetricsParams has arguments for startProcessMetricsCollection.
+type ProcessMetricsParams struct {
+	config        *cpb.Configuration
+	goos          string
+	healthMonitor agentmetrics.HealthMonitor
+	gceService    *gce.GCE
+}
+
+// startCollection for ProcessMetricsParams initiates collection of ProcessMetrics.
+func (pmp ProcessMetricsParams) startCollection(ctx context.Context) error {
+	pmHeartbeatSpec, err := pmp.healthMonitor.Register(processMetricsServiceName)
 	if err != nil {
 		log.Logger.Error("Failed to register process metrics service", log.Error(err))
 		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
 		return err
 	}
 	processmetrics.Start(ctx, processmetrics.Parameters{
-		Config:        config,
-		OSType:        goos,
+		Config:        pmp.config,
+		OSType:        pmp.goos,
 		MetricClient:  processmetrics.NewMetricClient,
 		BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
 		HeartbeatSpec: pmHeartbeatSpec,
-		GCEService:    gceService,
+		GCEService:    pmp.gceService,
 	})
 	return nil
 }
 
-func startHostMetricsCollection(ctx context.Context, config *cpb.Configuration, instanceInfoReader *instanceinfo.Reader, cmr *cloudmetricreader.CloudMetricReader, healthMonitor agentmetrics.HealthMonitor) error {
-	hmHeartbeatSpec, err := healthMonitor.Register(hostMetricsServiceName)
+// HostMetricsParams has arguments for startHostMetricsCollection.
+type HostMetricsParams struct {
+	config             *cpb.Configuration
+	instanceInfoReader *instanceinfo.Reader
+	cmr                *cloudmetricreader.CloudMetricReader
+	healthMonitor      agentmetrics.HealthMonitor
+}
+
+// startCollection for HostMetricsParams initiates collection of HostMetrics.
+func (hmp HostMetricsParams) startCollection(ctx context.Context) error {
+	hmHeartbeatSpec, err := hmp.healthMonitor.Register(hostMetricsServiceName)
 	if err != nil {
 		log.Logger.Error("Failed to register host metrics service", log.Error(err))
 		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
 		return err
 	}
 	hostmetrics.StartSAPHostAgentProvider(ctx, hostmetrics.Parameters{
-		Config:             config,
-		InstanceInfoReader: *instanceInfoReader,
-		CloudMetricReader:  *cmr,
+		Config:             hmp.config,
+		InstanceInfoReader: *hmp.instanceInfoReader,
+		CloudMetricReader:  *hmp.cmr,
 		AgentTime:          *agenttime.New(agenttime.Clock{}),
 		HeartbeatSpec:      hmHeartbeatSpec,
 	})
 	return nil
 }
 
-func startWorkloadManagerMetricsCollection(ctx context.Context, wlmparams workloadmanager.Parameters, instanceInfoReader *instanceinfo.Reader, goos string) {
+// WorkloadManagerParams has arguments for startWorkloadManagerMetricsCollection.
+type WorkloadManagerParams struct {
+	wlmparams          workloadmanager.Parameters
+	instanceInfoReader *instanceinfo.Reader
+	goos               string
+}
+
+// startCollection for WorkLoadManagerParams initiates collection of WorkloadManagerMetrics.
+func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
 	cd, err := collectiondefinition.Load(collectiondefinition.LoadOptions{
 		ReadFile: os.ReadFile,
-		OSType:   goos,
+		OSType:   wmp.goos,
 		Version:  configuration.AgentVersion,
 	})
 	if err != nil {
@@ -407,19 +440,19 @@ func startWorkloadManagerMetricsCollection(ctx context.Context, wlmparams worklo
 		usagemetrics.Error(id)
 		log.Logger.Error(err)
 	} else {
-		wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
-		wlmparams.OSType = goos
-		wlmparams.ConfigFileReader = configFileReader
-		wlmparams.InstanceInfoReader = *instanceInfoReader
-		wlmparams.OSStatReader = osStatReader
-		wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
-		wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
-		wlmparams.DefaultTokenGetter = defaultTokenGetter
-		wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
-		wlmparams.SetOSReleaseInfo()
-		wlmparams.DiscoverNetWeaver(ctx)
-		wlmparams.ReadHANAInsightsRules()
-		workloadmanager.StartMetricsCollection(ctx, wlmparams)
+		wmp.wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
+		wmp.wlmparams.OSType = wmp.goos
+		wmp.wlmparams.ConfigFileReader = configFileReader
+		wmp.wlmparams.InstanceInfoReader = *wmp.instanceInfoReader
+		wmp.wlmparams.OSStatReader = osStatReader
+		wmp.wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
+		wmp.wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
+		wmp.wlmparams.DefaultTokenGetter = defaultTokenGetter
+		wmp.wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
+		wmp.wlmparams.SetOSReleaseInfo()
+		wmp.wlmparams.DiscoverNetWeaver(ctx)
+		wmp.wlmparams.ReadHANAInsightsRules()
+		workloadmanager.StartMetricsCollection(ctx, wmp.wlmparams)
 	}
 }
 
@@ -432,6 +465,7 @@ func waitForShutdown(ctx context.Context, ch <-chan os.Signal) {
 	defer handleShutdown(cancel)
 }
 
+// handleShutdown shuts down the Agent.
 func handleShutdown(cancel context.CancelFunc) {
 	log.Logger.Info("Shutting down...")
 	usagemetrics.Stopped()
