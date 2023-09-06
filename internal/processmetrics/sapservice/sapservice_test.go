@@ -48,11 +48,12 @@ var (
 
 func TestCollect(t *testing.T) {
 	tests := []struct {
-		name      string
-		config    *cpb.Configuration
-		execute   commandlineexecutor.Execute
-		exitCode  commandlineexecutor.ExitCode
-		wantCount int
+		name           string
+		config         *cpb.Configuration
+		skippedMetrics map[string]bool
+		execute        commandlineexecutor.Execute
+		exitCode       commandlineexecutor.ExitCode
+		wantCount      int
 	}{
 		{
 			name:   "CollectMetricsWithFailureExitCodeInIsFailedAndIsDisabled",
@@ -135,6 +136,7 @@ func TestCollect(t *testing.T) {
 					ProcessMetricsToSkip: []string{failedMPath},
 				},
 			},
+			skippedMetrics: map[string]bool{failedMPath: true},
 			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
@@ -153,6 +155,7 @@ func TestCollect(t *testing.T) {
 					ProcessMetricsToSkip: []string{disabledMPath},
 				},
 			},
+			skippedMetrics: map[string]bool{disabledMPath: true},
 			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
@@ -168,10 +171,11 @@ func TestCollect(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testInstanceProperties := &InstanceProperties{
-				Config:   defaultConfig,
-				Execute:  test.execute,
-				ExitCode: test.exitCode,
-				Client:   &fake.TimeSeriesCreator{},
+				Config:         defaultConfig,
+				Execute:        test.execute,
+				ExitCode:       test.exitCode,
+				Client:         &fake.TimeSeriesCreator{},
+				SkippedMetrics: test.skippedMetrics,
 			}
 			got := testInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {

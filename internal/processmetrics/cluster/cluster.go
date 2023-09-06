@@ -65,9 +65,10 @@ type (
 	// InstanceProperties has necessary context for metrics collection.
 	// InstanceProperties implements Collector interface for cluster metrics.
 	InstanceProperties struct {
-		SAPInstance *sapb.SAPInstance
-		Config      *cnfpb.Configuration
-		Client      cloudmonitoring.TimeSeriesCreator
+		SAPInstance    *sapb.SAPInstance
+		Config         *cnfpb.Configuration
+		Client         cloudmonitoring.TimeSeriesCreator
+		SkippedMetrics map[string]bool
 	}
 	readPacemakerNodeState     func(crm *pacemaker.CRMMon) (map[string]string, error)
 	readPacemakerResourceState func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error)
@@ -114,7 +115,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 // collectNodeState returns the Linux cluster node state metrics as time series.
 // The integer values are returned as an array for testability.
 func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nodesPath) {
+	if _, ok := p.SkippedMetrics[nodesPath]; ok {
 		return nil, nil
 	}
 	var metricValues []int

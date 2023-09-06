@@ -27,10 +27,11 @@ import (
 
 func TestCollectForSAPControlProcesses(t *testing.T) {
 	tests := []struct {
-		name      string
-		config    *cpb.Configuration
-		executor  commandlineexecutor.Execute
-		wantCount int
+		name           string
+		config         *cpb.Configuration
+		skippedMetrics map[string]bool
+		executor       commandlineexecutor.Execute
+		wantCount      int
 	}{
 		{
 			name:   "EmptyPIDsMap",
@@ -103,6 +104,10 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 					ProcessMetricsSendFrequency: 60,
 					ProcessMetricsToSkip:        []string{sapCTRLCPUPath, sapCtrlMemoryPath},
 				},
+			},
+			skippedMetrics: map[string]bool{
+				sapCTRLCPUPath:    true,
+				sapCtrlMemoryPath: true,
 			},
 			wantCount: 0,
 		},

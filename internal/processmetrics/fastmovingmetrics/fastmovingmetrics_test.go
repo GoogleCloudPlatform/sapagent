@@ -612,28 +612,7 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 			name: "SkipMetrics",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath, availabilityPath}},
-			}},
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: 0,
-					Error:    nil,
-				}
-			},
-			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
-				sapcontrolclient.OSProcess{
-					Name:       "hdbdaemon",
-					Dispstatus: "SAPControl-GREEN",
-					Pid:        111,
-				},
-			},
-			},
-			wantCount: 0,
-		},
-		{
-			name: "SkipMetricsHAReplicationPath",
-			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
-				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haReplicationPath, availabilityPath}},
-			}},
+			}, SkippedMetrics: map[string]bool{haAvailabilityPath: true, availabilityPath: true}},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					ExitCode: 0,
@@ -695,6 +674,9 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 						ProcessMetricsToSkip: []string{nwAvailabilityPath},
 					},
 				},
+				SkippedMetrics: map[string]bool{
+					nwAvailabilityPath: true,
+				},
 			},
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
 				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
@@ -709,6 +691,36 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 			if len(got) != test.wantCount {
 				t.Errorf("collectNetWeaverMetrics() returned unexpected value, got=%d, want=%d",
 					len(got), test.wantCount)
+			}
+		})
+	}
+}
+
+func TestContains(t *testing.T) {
+	tests := []struct {
+		name string
+		list []string
+		item string
+		want bool
+	}{
+		{
+			name: "ReturnsTrue",
+			list: []string{"hdbdaemon", "hdbnameserver"},
+			item: "hdbdaemon",
+			want: true,
+		},
+		{name: "ReturnsFalse",
+			list: []string{"hdbdaemon", "hdbnameserver"},
+			item: "random",
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := contains(test.list, test.item)
+			if got != test.want {
+				t.Errorf("contains(%v, %v) returned unexpected value, got=%t, want=%t", test.list, test.item, got, test.want)
 			}
 		})
 	}

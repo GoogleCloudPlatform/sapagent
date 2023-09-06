@@ -495,6 +495,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 						ProcessMetricsToSkip: []string{nwServicePath},
 					},
 				},
+				SkippedMetrics: map[string]bool{nwServicePath: true},
 			},
 		},
 	}
@@ -519,11 +520,12 @@ func TestCollect(t *testing.T) {
 
 func TestCollectHTTPMetrics(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      *cpb.Configuration
-		serviceName string
-		emptyURL    bool
-		wantCount   int
+		name           string
+		config         *cpb.Configuration
+		skippedMetrics map[string]bool
+		serviceName    string
+		emptyURL       bool
+		wantCount      int
 	}{
 		{
 			name:        "ICMServer",
@@ -557,7 +559,8 @@ func TestCollectHTTPMetrics(t *testing.T) {
 					ProcessMetricsToSkip: []string{nwICMRCodePath},
 				},
 			},
-			wantCount: 0,
+			skippedMetrics: map[string]bool{nwICMRCodePath: true},
+			wantCount:      0,
 		},
 		{
 			name:        "SkipNWMessageServerMetrics",
@@ -567,7 +570,8 @@ func TestCollectHTTPMetrics(t *testing.T) {
 					ProcessMetricsToSkip: []string{nwMSResponseCodePath},
 				},
 			},
-			wantCount: 0,
+			skippedMetrics: map[string]bool{nwMSResponseCodePath: true},
+			wantCount:      0,
 		},
 	}
 
@@ -588,6 +592,7 @@ func TestCollectHTTPMetrics(t *testing.T) {
 					ServiceName:             test.serviceName,
 					NetweaverHealthCheckUrl: url,
 				},
+				SkippedMetrics: test.skippedMetrics,
 			}
 
 			got := collectHTTPMetrics(p)
@@ -760,6 +765,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 						ProcessMetricsToSkip: []string{nwABAPProcCountPath},
 					},
 				},
+				SkippedMetrics: map[string]bool{nwABAPProcCountPath: true},
 			},
 		},
 		{
@@ -776,6 +782,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 						ProcessMetricsToSkip: []string{nwABAPProcBusyPath},
 					},
 				},
+				SkippedMetrics: map[string]bool{nwABAPProcBusyPath: true},
 			},
 		},
 		{
@@ -792,6 +799,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 						ProcessMetricsToSkip: []string{nwABAPProcUtilPath},
 					},
 				},
+				SkippedMetrics: map[string]bool{nwABAPProcUtilPath: true},
 			},
 		},
 	}
@@ -853,6 +861,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 						ProcessMetricsToSkip: []string{nwABAPProcQueueCurrentPath},
 					},
 				},
+				SkippedMetrics: map[string]bool{nwABAPProcQueueCurrentPath: true},
 			},
 		},
 		{
@@ -868,6 +877,7 @@ func TestCollectABAPQueueStats(t *testing.T) {
 						ProcessMetricsToSkip: []string{nwABAPProcQueuePeakPath},
 					},
 				},
+				SkippedMetrics: map[string]bool{nwABAPProcQueuePeakPath: true},
 			},
 		},
 	}
@@ -940,6 +950,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 				Config: &cpb.Configuration{CollectionConfiguration: &cpb.CollectionConfiguration{
 					ProcessMetricsToSkip: []string{nwABAPSessionsPath},
 				}},
+				SkippedMetrics: map[string]bool{nwABAPSessionsPath: true},
 			},
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1010,7 +1021,9 @@ func TestCollectRFCConnections(t *testing.T) {
 					CollectionConfiguration: &cpb.CollectionConfiguration{
 						ProcessMetricsToSkip: []string{nwABAPRFCPath},
 					},
-				}},
+				},
+				SkippedMetrics: map[string]bool{nwABAPRFCPath: true},
+			},
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: dpmonRFCConnectionsOutput,
@@ -1165,6 +1178,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 				SAPInstance: &sapb.SAPInstance{
 					InstanceId: "ERS01",
 				},
+				SkippedMetrics: map[string]bool{nwEnqLocksPath: true},
 			},
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{

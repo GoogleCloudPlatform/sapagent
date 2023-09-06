@@ -31,7 +31,6 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -104,10 +103,11 @@ func (mmw ModeWriter) MakeDirs(path string, perm os.FileMode) error {
 
 // InstanceProperties have the necessary context for maintenance mode metric collection
 type InstanceProperties struct {
-	Config *cnfpb.Configuration
-	Client cloudmonitoring.TimeSeriesCreator
-	Reader FileReader
-	Sids   map[string]bool
+	Config         *cnfpb.Configuration
+	Client         cloudmonitoring.TimeSeriesCreator
+	Reader         FileReader
+	Sids           map[string]bool
+	SkippedMetrics map[string]bool
 }
 
 // ReadMaintenanceMode reads the current value for the SIDs under maintenance persisted in
@@ -138,7 +138,7 @@ func UpdateMaintenanceMode(mntmode bool, sid string, fr FileReader, fw FileWrite
 		log.Logger.Errorw("Could not read maintenance.json file", log.Error(err))
 		return nil, err
 	}
-	ind := slices.Index(sidsUnderMaintenance, sid)
+	ind := indexOf(sidsUnderMaintenance, sid)
 	// SID not found in the slice
 	if ind == -1 {
 		if !mntmode {
@@ -178,7 +178,7 @@ func removeSID(SIDs []string, ind int) []string {
 // list.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), mntmodePath) {
+	if _, ok := p.SkippedMetrics[mntmodePath]; ok {
 		return metrics
 	}
 	log.Logger.Debug("Starting maintenancemode metric collection.")
@@ -187,7 +187,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		return nil
 	}
 	for sid := range p.Sids {
-		mntmode := slices.Contains(sidsUnderMaintenance, sid)
+		mntmode := contains(sidsUnderMaintenance, sid)
 		labels := make(map[string]string)
 		labels["sid"] = sid
 		log.Logger.Debugw("MaintenanceMode metric for SID", "sid", sid, "maintenancemode", mntmode)
@@ -202,4 +202,22 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		metrics = append(metrics, timeseries.BuildBool(params))
 	}
 	return metrics
+}
+
+func contains(list []string, item string) bool {
+	for _, v := range list {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
+func indexOf(list []string, item string) int {
+	for i, v := range list {
+		if v == item {
+			return i
+		}
+	}
+	return -1
 }

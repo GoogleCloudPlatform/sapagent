@@ -60,12 +60,13 @@ var (
 
 func TestCollectForHANA(t *testing.T) {
 	tests := []struct {
-		name       string
-		config     *cpb.Configuration
-		executor   commandlineexecutor.Execute
-		fakeClient sapcontrolclienttest.Fake
-		wantCount  int
-		lastValue  map[string]*process.IOCountersStat
+		name           string
+		config         *cpb.Configuration
+		skippedMetrics map[string]bool
+		executor       commandlineexecutor.Execute
+		fakeClient     sapcontrolclienttest.Fake
+		wantCount      int
+		lastValue      map[string]*process.IOCountersStat
 	}{
 		{
 			name:       "EmptyPIDsMapWebmethod",
@@ -127,7 +128,14 @@ func TestCollectForHANA(t *testing.T) {
 					ProcessMetricsSendFrequency: 60,
 					ProcessMetricsToSkip:        []string{hanaCPUPath, hanaMemoryPath, hanaIOPSReadsPath, hanaIOPSWritesPath},
 				},
-			}, wantCount: 0,
+			},
+			skippedMetrics: map[string]bool{
+				hanaCPUPath:        true,
+				hanaMemoryPath:     true,
+				hanaIOPSReadsPath:  true,
+				hanaIOPSWritesPath: true,
+			},
+			wantCount:  0,
 			lastValue:  make(map[string]*process.IOCountersStat),
 			fakeClient: sapcontrolclienttest.Fake{},
 		},

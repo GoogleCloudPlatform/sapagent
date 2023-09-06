@@ -20,7 +20,6 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	"golang.org/x/exp/slices"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -51,7 +50,7 @@ type (
 		LastValue         map[string]*process.IOCountersStat
 		NewProcHelper     newProcessWithContextHelper
 		SAPControlClient  sapcontrol.ClientInterface
-		UseSAPControlAPI  bool
+		SkippedMetrics    map[string]bool
 	}
 )
 
@@ -78,13 +77,14 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries
 		return nil
 	}
 	res := make([]*mrpb.TimeSeries, 0)
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaCPUPath) {
-		res = append(res, collectCPUPerProcess(ctx, params, processes)...)	
+	if _, ok := p.SkippedMetrics[hanaCPUPath]; !ok {
+		res = append(res, collectCPUPerProcess(ctx, params, processes)...)
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaMemoryPath) {
+	if _, ok := p.SkippedMetrics[hanaMemoryPath]; !ok {
 		res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaIOPSReadsPath) || !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), hanaIOPSWritesPath) {
+	skipIOPS := p.SkippedMetrics[hanaIOPSReadsPath] || p.SkippedMetrics[hanaIOPSWritesPath]
+	if !skipIOPS {
 		res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
 	}
 	return res

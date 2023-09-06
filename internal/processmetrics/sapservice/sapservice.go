@@ -23,7 +23,6 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -46,10 +45,11 @@ type (
 	// InstanceProperties has the necessary context for Metrics collection.
 	// InstanceProperties implements the Collector interface for sapservice.
 	InstanceProperties struct {
-		Config   *cnfpb.Configuration
-		Client   cloudmonitoring.TimeSeriesCreator
-		Execute  commandlineexecutor.Execute
-		ExitCode commandlineexecutor.ExitCode
+		Config         *cnfpb.Configuration
+		Client         cloudmonitoring.TimeSeriesCreator
+		Execute        commandlineexecutor.Execute
+		ExitCode       commandlineexecutor.ExitCode
+		SkippedMetrics map[string]bool
 	}
 )
 
@@ -57,11 +57,11 @@ type (
 // responsible for collecting sap service statuses metric.
 func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 	var metrics []*mrpb.TimeSeries
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), failedMPath) {
+	if _, ok := mPathMap[failedMPath]; !ok {
 		isFailedMetrics := queryInstanceState(ctx, p, "is-failed")
 		metrics = append(metrics, isFailedMetrics...)
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), disabledMPath) {
+	if _, ok := mPathMap[disabledMPath]; !ok {
 		isDisabledMetrics := queryInstanceState(ctx, p, "is-disabled")
 		metrics = append(metrics, isDisabledMetrics...)
 	}

@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -45,9 +44,10 @@ import (
 type (
 	// InstanceProperties struct has necessary context for Metrics collection.
 	InstanceProperties struct {
-		SAPInstance *sapb.SAPInstance
-		Config      *cnfpb.Configuration
-		Client      cloudmonitoring.TimeSeriesCreator
+		SAPInstance    *sapb.SAPInstance
+		Config         *cnfpb.Configuration
+		Client         cloudmonitoring.TimeSeriesCreator
+		SkippedMetrics map[string]bool
 	}
 )
 
@@ -130,7 +130,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
 func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwServicePath) {
+	if _, ok := p.SkippedMetrics[nwServicePath]; ok {
 		return nil
 	}
 	now := tspb.Now()
@@ -199,7 +199,7 @@ func collectHTTPMetrics(p *InstanceProperties) []*mrpb.TimeSeries {
 //   - Total time taken by the request.
 func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwICMRCodePath) {
+	if _, ok := p.SkippedMetrics[nwICMRCodePath]; ok {
 		return nil
 	}
 	now := tspb.Now()
@@ -227,7 +227,7 @@ func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 //   - A nil in case of errors in HTTP GET request failures.
 func collectMessageServerMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwMSResponseCodePath) {
+	if _, ok := p.SkippedMetrics[nwMSResponseCodePath]; ok {
 		return nil
 	}
 	now := tspb.Now()
@@ -285,8 +285,8 @@ func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
-	skippedList := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
-	if slices.Contains(skippedList, nwABAPProcCountPath) || slices.Contains(skippedList, nwABAPProcBusyPath) || slices.Contains(skippedList, nwABAPProcUtilPath) {
+	skipABAPProcessStatus := p.SkippedMetrics[nwABAPProcCountPath] || p.SkippedMetrics[nwABAPProcBusyPath] || p.SkippedMetrics[nwABAPProcUtilPath]
+	if skipABAPProcessStatus {
 		return nil
 	}
 	sc := &sapcontrol.Properties{p.SAPInstance}
@@ -334,8 +334,8 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
 	now := tspb.Now()
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
-	skippedList := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
-	if slices.Contains(skippedList, nwABAPProcQueueCurrentPath) || slices.Contains(skippedList, nwABAPProcQueuePeakPath) {
+	skipABAPQueue := p.SkippedMetrics[nwABAPProcQueueCurrentPath] || p.SkippedMetrics[nwABAPProcQueuePeakPath]
+	if skipABAPQueue {
 		return nil
 	}
 	sc := &sapcontrol.Properties{p.SAPInstance}
@@ -373,7 +373,7 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 // collectABAPSessionStats collects ABAP session related metrics using dpmon tool.
 func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwABAPSessionsPath) {
+	if _, ok := p.SkippedMetrics[nwABAPSessionsPath]; ok {
 		return nil
 	}
 	results := exec(ctx, params)
@@ -411,7 +411,7 @@ func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec co
 // collectRFCConnections collects the ABAP RFC connection metrics using dpmon tool.
 func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
 	now := tspb.Now()
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwABAPRFCPath) {
+	if _, ok := p.SkippedMetrics[nwABAPRFCPath]; ok {
 		return nil
 	}
 	result := exec(ctx, params)
@@ -435,7 +435,7 @@ func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec comm
 
 // collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
 func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwEnqLocksPath) {
+	if _, ok := p.SkippedMetrics[nwEnqLocksPath]; ok {
 		return nil
 	}
 	instance := p.SAPInstance.GetInstanceId()

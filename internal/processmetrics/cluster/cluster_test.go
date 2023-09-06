@@ -89,6 +89,9 @@ func TestCollectNodeState(t *testing.T) {
 						},
 					},
 				},
+				SkippedMetrics: map[string]bool{
+					nodesPath: true,
+				},
 			},
 			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
 				return nil, nil
@@ -215,6 +218,7 @@ func TestCollectResourceState(t *testing.T) {
 						ProcessMetricsToSkip: []string{resourcesPath},
 					},
 				},
+				SkippedMetrics: map[string]bool{resourcesPath: true},
 			},
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
 				rs := []pacemaker.Resource{
@@ -387,6 +391,9 @@ func TestCollectFailCount(t *testing.T) {
 							failCountsPath,
 						},
 					},
+				},
+				SkippedMetrics: map[string]bool{
+					failCountsPath: true,
 				},
 			},
 			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {

@@ -44,13 +44,14 @@ var (
 
 func TestCollectForNetweaver(t *testing.T) {
 	tests := []struct {
-		name          string
-		config        *cpb.Configuration
-		executor      commandlineexecutor.Execute
-		fakeClient    sapcontrolclienttest.Fake
-		wantCount     int
-		processParams commandlineexecutor.Params
-		lastValue     map[string]*process.IOCountersStat
+		name           string
+		config         *cpb.Configuration
+		executor       commandlineexecutor.Execute
+		skippedMetrics map[string]bool
+		fakeClient     sapcontrolclienttest.Fake
+		wantCount      int
+		processParams  commandlineexecutor.Params
+		lastValue      map[string]*process.IOCountersStat
 	}{
 		{
 			name:       "EmptyPIDsMapWebmethod",
@@ -92,7 +93,14 @@ func TestCollectForNetweaver(t *testing.T) {
 					ProcessMetricsSendFrequency: 60,
 					ProcessMetricsToSkip:        []string{nwCPUPath, nwMemoryPath, nwIOPSReadsPath, nwIOPSWritePath},
 				},
-			}, wantCount: 0,
+			},
+			skippedMetrics: map[string]bool{
+				nwCPUPath:       true,
+				nwMemoryPath:    true,
+				nwIOPSReadsPath: true,
+				nwIOPSWritePath: true,
+			},
+			wantCount:  0,
 			lastValue:  make(map[string]*process.IOCountersStat),
 			fakeClient: sapcontrolclienttest.Fake{},
 		},
@@ -108,6 +116,7 @@ func TestCollectForNetweaver(t *testing.T) {
 				LastValue:               test.lastValue,
 				NewProcHelper:           newProcessWithContextHelperTest,
 				SAPControlProcessParams: test.processParams,
+				SkippedMetrics:          test.skippedMetrics,
 				SAPControlClient:        test.fakeClient,
 			}
 

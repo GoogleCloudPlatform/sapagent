@@ -20,7 +20,6 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	"golang.org/x/exp/slices"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -49,8 +48,8 @@ type (
 		SAPControlProcessParams commandlineexecutor.Params
 		ABAPProcessParams       commandlineexecutor.Params
 		SAPControlClient        sapcontrol.ClientInterface
-		UseSAPControlAPI        bool
 		LastValue               map[string]*process.IOCountersStat
+		SkippedMetrics          map[string]bool
 	}
 )
 
@@ -78,13 +77,14 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeS
 		return nil
 	}
 	res := []*mrpb.TimeSeries{}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwCPUPath) {
+	if _, ok := p.SkippedMetrics[nwCPUPath]; !ok {
 		res = append(res, collectCPUPerProcess(ctx, params, processes)...)
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwMemoryPath) {
+	if _, ok := p.SkippedMetrics[nwMemoryPath]; !ok {
 		res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwIOPSReadsPath) || !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwIOPSWritePath) {
+	skipIOPS := p.SkippedMetrics[nwIOPSReadsPath] || p.SkippedMetrics[nwIOPSWritePath]
+	if !skipIOPS {
 		res = append(res, collectIOPSPerProcess(ctx, params, processes)...)
 	}
 	return res

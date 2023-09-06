@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -54,6 +53,7 @@ type (
 		Config             *cnfpb.Configuration
 		Client             cloudmonitoring.TimeSeriesCreator
 		HANAQueryFailCount int64
+		SkippedMetrics     map[string]bool
 	}
 )
 
@@ -138,7 +138,7 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 		metrics   []*mrpb.TimeSeries
 	)
 
-	if !slices.Contains(ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), servicePath) {
+	if _, ok := ip.SkippedMetrics[servicePath]; !ok {
 		processes, err = sc.GetProcessList(scc)
 		if err == nil {
 			// If GetProcessList via command line or API didn't return an error.
@@ -165,8 +165,8 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 //   - servertime: Time spent on the server side in micro seconds.
 func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) []*mrpb.TimeSeries {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
-	skippedList := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
-	if slices.Contains(skippedList, queryStatePath) || slices.Contains(skippedList, queryOverallTimePath) || slices.Contains(skippedList, queryServerTimePath) {
+	skipQueryMetrics := p.SkippedMetrics[queryStatePath] || p.SkippedMetrics[queryOverallTimePath] || p.SkippedMetrics[queryServerTimePath]
+	if skipQueryMetrics {
 		return nil
 	}
 	now := tspb.Now()

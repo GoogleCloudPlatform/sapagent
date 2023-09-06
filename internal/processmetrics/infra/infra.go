@@ -24,7 +24,6 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	"golang.org/x/exp/slices"
 	compute "google.golang.org/api/compute/v0.alpha"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -81,14 +80,16 @@ type Properties struct {
 	Config          *cnfpb.Configuration
 	Client          cloudmonitoring.TimeSeriesCreator
 	gceAlphaService GCEAlphaInterface
+	skippedMetrics  map[string]bool
 }
 
 // New creates a new instance of Properties
-func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceAlphaService GCEAlphaInterface) *Properties {
+func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceAlphaService GCEAlphaInterface, sm map[string]bool) *Properties {
 	return &Properties{
 		Config:          config,
 		Client:          client,
 		gceAlphaService: gceAlphaService,
+		skippedMetrics:  sm,
 	}
 }
 
@@ -106,7 +107,7 @@ func (p *Properties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 }
 
 func collectScheduledMigration(p *Properties, f func() (string, error)) []*mrpb.TimeSeries {
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), migrationPath) {
+	if _, ok := p.skippedMetrics[migrationPath]; ok {
 		return []*mrpb.TimeSeries{}
 	}
 	event, err := f()
@@ -155,22 +156,22 @@ func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {
 
 	m := []*mrpb.TimeSeries{}
 
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/can_reschedule") {
+	if _, ok := p.skippedMetrics[maintPath+"/can_reschedule"]; !ok {
 		m = append(m, p.createBoolMetric(maintPath+"/can_reschedule", n.UpcomingMaintenance.CanReschedule))
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/type") {
+	if _, ok := p.skippedMetrics[maintPath+"/type"]; !ok {
 		m = append(m, p.createIntMetric(maintPath+"/type", enumToInt(n.UpcomingMaintenance.Type, MaintenanceTypes)))
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/maintenance_status") {
+	if _, ok := p.skippedMetrics[maintPath+"/maintenance_status"]; !ok {
 		m = append(m, p.createIntMetric(maintPath+"/maintenance_status", enumToInt(n.UpcomingMaintenance.MaintenanceStatus, MaintenanceStatuses)))
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/window_start_time") {
+	if _, ok := p.skippedMetrics[maintPath+"/window_start_time"]; !ok {
 		m = append(m, p.createIntMetric(maintPath+"/window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowStartTime)))
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/window_end_time") {
+	if _, ok := p.skippedMetrics[maintPath+"/window_end_time"]; !ok {
 		m = append(m, p.createIntMetric(maintPath+"/window_end_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowEndTime)))
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), maintPath+"/latest_window_start_time") {
+	if _, ok := p.skippedMetrics[maintPath+"/latest_window_start_time"]; !ok {
 		m = append(m, p.createIntMetric(maintPath+"/latest_window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.LatestWindowStartTime)))
 	}
 	return m, nil

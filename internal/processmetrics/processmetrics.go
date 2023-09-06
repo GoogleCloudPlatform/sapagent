@@ -99,12 +99,6 @@ const (
 	minimumFrequencyForSlowMoving = 30
 )
 
-// mainUseSAPControlAPI is set to true if we want to obtain metrics using the SAPControl API,
-// and false if we want to get metrics using the command line interface.
-// It will be removed once migration from command line to web interface is complete.
-// This variable is used to initialize `UseSAPControlAPI` in instance properties.
-var mainUseSAPControlAPI = true
-
 /*
 Start starts collection if collect_process_metrics config option is enabled
 in the configuration. The function is a NO-OP if the config option is not enabled.
@@ -166,7 +160,6 @@ func NewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, er
 }
 
 // create sets up the processmetrics properties and metric collectors for SAP Instances.
-// TODO: Create a map from skipped list metrics and pass it to collectors.
 func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
 		SAPInstances:  sapInstances,
@@ -175,22 +168,30 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		HeartbeatSpec: params.HeartbeatSpec,
 	}
 
+	skippedMetrics := make(map[string]bool)
+	sl := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
+	for _, metric := range sl {
+		skippedMetrics[metric] = true
+	}
+
 	log.Logger.Info("Creating SAP additional metrics collector for sapservices (active and enabled metric).")
 	sapServiceCollector := &sapservice.InstanceProperties{
-		Config:  p.Config,
-		Client:  p.Client,
-		Execute: commandlineexecutor.ExecuteCommand,
+		Config:         p.Config,
+		Client:         p.Client,
+		Execute:        commandlineexecutor.ExecuteCommand,
+		SkippedMetrics: skippedMetrics,
 	}
 
 	log.Logger.Info("Creating SAP control processes per process CPU, memory usage metrics collector.")
 	sapStartCollector := &computeresources.SAPControlProcInstanceProperties{
-		Config:   p.Config,
-		Client:   p.Client,
-		Executor: commandlineexecutor.ExecuteCommand,
+		Config:         p.Config,
+		Client:         p.Client,
+		Executor:       commandlineexecutor.ExecuteCommand,
+		SkippedMetrics: skippedMetrics,
 	}
 
 	log.Logger.Info("Creating infra migration event metrics collector.")
-	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService)
+	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics)
 
 	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector, migrationCollector)
 
@@ -201,9 +202,10 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		if p.SAPInstances.GetLinuxClusterMember() && clusterCollectorCreated == false {
 			log.Logger.Infow("Creating cluster collector for instance", "instance", instance)
 			clusterCollector := &cluster.InstanceProperties{
-				SAPInstance: instance,
-				Config:      p.Config,
-				Client:      p.Client,
+				SAPInstance:    instance,
+				Config:         p.Config,
+				Client:         p.Client,
+				SkippedMetrics: skippedMetrics,
 			}
 			p.Collectors = append(p.Collectors, clusterCollector)
 			clusterCollectorCreated = true
@@ -222,8 +224,8 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 					Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
-				UseSAPControlAPI: mainUseSAPControlAPI,
 				LastValue:        make(map[string]*process.IOCountersStat),
+				SkippedMetrics:   skippedMetrics,
 			}
 
 			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
@@ -232,6 +234,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Config:             p.Config,
 				Client:             p.Client,
 				HANAQueryFailCount: 0,
+				SkippedMetrics:     skippedMetrics,
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 
@@ -263,23 +266,25 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 					Env:         []string{"LD_LIBRARY_PATH=" + instance.GetLdLibraryPath()},
 				},
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
-				UseSAPControlAPI: mainUseSAPControlAPI,
 				LastValue:        make(map[string]*process.IOCountersStat),
+				SkippedMetrics:   skippedMetrics,
 			}
 
 			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)
 			netweaverCollector := &netweaver.InstanceProperties{
-				SAPInstance: instance,
-				Config:      p.Config,
-				Client:      p.Client,
+				SAPInstance:    instance,
+				Config:         p.Config,
+				Client:         p.Client,
+				SkippedMetrics: skippedMetrics,
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
 
 			log.Logger.Infow("Creating FastMoving Collector for Netweaver", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance: instance,
-				Config:      p.Config,
-				Client:      p.Client,
+				SAPInstance:    instance,
+				Config:         p.Config,
+				Client:         p.Client,
+				SkippedMetrics: skippedMetrics,
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -288,10 +293,11 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	if len(sids) != 0 {
 		log.Logger.Info("Creating maintenance mode collector.")
 		maintenanceModeCollector := &maintenance.InstanceProperties{
-			Config: p.Config,
-			Client: p.Client,
-			Reader: maintenance.ModeReader{},
-			Sids:   sids,
+			Config:         p.Config,
+			Client:         p.Client,
+			Reader:         maintenance.ModeReader{},
+			Sids:           sids,
+			SkippedMetrics: skippedMetrics,
 		}
 		p.Collectors = append(p.Collectors, maintenanceModeCollector)
 	}

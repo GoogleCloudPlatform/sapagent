@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -44,9 +43,10 @@ type (
 	// InstanceProperties has necessary context for Metrics collection.
 	// InstanceProperties implements Collector interface for HANA and Netweaver.
 	InstanceProperties struct {
-		SAPInstance *sapb.SAPInstance
-		Config      *cnfpb.Configuration
-		Client      cloudmonitoring.TimeSeriesCreator
+		SAPInstance    *sapb.SAPInstance
+		Config         *cnfpb.Configuration
+		Client         cloudmonitoring.TimeSeriesCreator
+		SkippedMetrics map[string]bool
 	}
 )
 
@@ -119,7 +119,6 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{ip.SAPInstance}
-	skipMetrics := ip.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
 	var (
 		err               error
 		sapControlResult  int
@@ -127,7 +126,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		metrics           []*mrpb.TimeSeries
 		availabilityValue int64
 	)
-	if !slices.Contains(skipMetrics, availabilityPath) {
+	if _, ok := ip.SkippedMetrics[availabilityPath]; !ok {
 		processes, err = sc.GetProcessList(scc)
 		if err == nil {
 			// If GetProcessList API didn't return an error.
@@ -136,7 +135,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		}
 	}
 
-	if !slices.Contains(skipMetrics, haAvailabilityPath) && !slices.Contains(skipMetrics, haReplicationPath) {
+	if _, ok := ip.SkippedMetrics[haAvailabilityPath]; !ok {
 		haReplicationValue := refreshHAReplicationConfig(ctx, ip)
 		_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
 		if err != nil {
@@ -222,7 +221,7 @@ func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) int6
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
 func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
-	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), nwAvailabilityPath) {
+	if _, ok := p.SkippedMetrics[nwAvailabilityPath]; ok {
 		return nil
 	}
 	now := tspb.Now()
@@ -250,7 +249,7 @@ func collectNWAvailability(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 
 	processNames := []string{"msg_server", "enserver", "enrepserver", "disp+work", "gwrd", "icman", "jstart", "jcontrol", "enq_replicator", "enq_server", "sapwebdisp"}
 	for _, proc := range procs {
-		if slices.Contains(processNames, proc.Name) && !proc.IsGreen {
+		if contains(processNames, proc.Name) && !proc.IsGreen {
 			availabilityValue = systemAtLeastOneProcessNotGreen
 		}
 	}
@@ -284,4 +283,13 @@ func appendLabels(p *InstanceProperties, extraLabels map[string]string) map[stri
 		defaultLabels[k] = v
 	}
 	return defaultLabels
+}
+
+func contains(list []string, item string) bool {
+	for _, v := range list {
+		if v == item {
+			return true
+		}
+	}
+	return false
 }

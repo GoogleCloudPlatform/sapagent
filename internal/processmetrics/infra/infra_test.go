@@ -166,6 +166,7 @@ func TestCollectScheduledMigration_MetricCount(t *testing.T) {
 						ProcessMetricsToSkip: []string{migrationPath},
 					},
 				},
+				skippedMetrics: map[string]bool{migrationPath: true},
 			},
 			fakeMetadataServerCall: func() (string, error) { return metadataMigrationResponse, nil },
 			wantCount:              0,
@@ -261,7 +262,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		cloudProperties     *iipb.CloudProperties
 		gceService          *fakegcealpha.TestGCE
 		upcomingMaintenance *compute.UpcomingMaintenance
-		skipMetrics         []string
+		skipMetrics         map[string]bool
 		wantValues          map[string]string
 		wantErr             error
 	}{{
@@ -297,7 +298,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				MaintenanceStatus:     "PENDING",
 				Type:                  "SCHEDULED",
 			},
-			skipMetrics: []string{maintPath + "/can_reschedule"},
+			skipMetrics: map[string]bool{maintPath + "/can_reschedule": true},
 			wantValues: map[string]string{
 				metricURL + maintPath + "/window_start_time":        "1687363073",
 				metricURL + maintPath + "/window_end_time":          "1687391873",
@@ -318,7 +319,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				MaintenanceStatus:     "PENDING",
 				Type:                  "SCHEDULED",
 			},
-			skipMetrics: []string{maintPath + "/window_start_time"},
+			skipMetrics: map[string]bool{maintPath + "/window_start_time": true},
 			wantValues: map[string]string{
 				metricURL + maintPath + "/can_reschedule":           "true",
 				metricURL + maintPath + "/window_end_time":          "1687391873",
@@ -339,7 +340,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				MaintenanceStatus:     "PENDING",
 				Type:                  "SCHEDULED",
 			},
-			skipMetrics: []string{maintPath + "/window_end_time"},
+			skipMetrics: map[string]bool{maintPath + "/window_end_time": true},
 			wantValues: map[string]string{
 				metricURL + maintPath + "/can_reschedule":           "true",
 				metricURL + maintPath + "/window_start_time":        "1687363073",
@@ -360,7 +361,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				MaintenanceStatus:     "PENDING",
 				Type:                  "SCHEDULED",
 			},
-			skipMetrics: []string{maintPath + "/latest_window_start_time"},
+			skipMetrics: map[string]bool{maintPath + "/latest_window_start_time": true},
 			wantValues: map[string]string{
 				metricURL + maintPath + "/can_reschedule":     "true",
 				metricURL + maintPath + "/window_start_time":  "1687363073",
@@ -381,7 +382,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				MaintenanceStatus:     "PENDING",
 				Type:                  "SCHEDULED",
 			},
-			skipMetrics: []string{maintPath + "/maintenance_status"},
+			skipMetrics: map[string]bool{maintPath + "/maintenance_status": true},
 			wantValues: map[string]string{
 				metricURL + maintPath + "/can_reschedule":           "true",
 				metricURL + maintPath + "/window_start_time":        "1687363073",
@@ -402,7 +403,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				MaintenanceStatus:     "PENDING",
 				Type:                  "SCHEDULED",
 			},
-			skipMetrics: []string{maintPath + "/type"},
+			skipMetrics: map[string]bool{maintPath + "/type": true},
 			wantValues: map[string]string{
 				metricURL + maintPath + "/can_reschedule":           "true",
 				metricURL + maintPath + "/window_start_time":        "1687363073",
@@ -471,7 +472,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		if tc.gceService != nil && tc.gceService.NodeGroupNodes != nil {
 			tc.gceService.NodeGroupNodes.Items[0].UpcomingMaintenance = tc.upcomingMaintenance
 		}
-		p := New(&cpb.Configuration{CloudProperties: tc.cloudProperties, CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: tc.skipMetrics}}, nil, tc.gceService)
+		p := New(&cpb.Configuration{CloudProperties: tc.cloudProperties}, nil, tc.gceService, tc.skipMetrics)
 		m, err := p.collectUpcomingMaintenance()
 		if d := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); d != "" {
 			t.Errorf("collectUpcomingMaintenance(%s) error mismatch (-want, +got):\n%s", tc.name, d)
@@ -491,7 +492,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 // in a valid struct pointer to a nil value, which does _not_ equal nil nor is safely comparable.
 // Further background: https://groups.google.com/g/golang-nuts/c/wnH302gBa4I
 func TestCollectUpcomingMaintenanceNotInitialized(t *testing.T) {
-	p := New(&cpb.Configuration{}, nil, nil)
+	p := New(&cpb.Configuration{}, nil, nil, nil)
 	_, err := p.collectUpcomingMaintenance()
 	if err == nil {
 		t.Error("collectUpcomingMaintenance(NotInitialized) got success expected error")
@@ -550,7 +551,7 @@ func TestResolveNodeGroup(t *testing.T) {
 		if tc.upcomingMaintenance != nil {
 			tc.gceService.NodeGroupNodes.Items[0].UpcomingMaintenance = tc.upcomingMaintenance
 		}
-		p := New(nil, nil, tc.gceService)
+		p := New(nil, nil, tc.gceService, nil)
 		got, err := p.resolveNodeGroup(tc.project, tc.zone, tc.instanceLink)
 		if diff := cmp.Diff(tc.wantErr, err, cmpCodeOnly, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("ListNodeGroups(%s) returned an unexpected error (-want +got): %v", tc.name, diff)

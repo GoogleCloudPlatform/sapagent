@@ -20,7 +20,6 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -36,10 +35,11 @@ type (
 	// SAPControlProcInstanceProperties have the required context for collecting metrics for cpu
 	// and memory per process for SAPControl processes.
 	SAPControlProcInstanceProperties struct {
-		Config        *cnfpb.Configuration
-		Client        cloudmonitoring.TimeSeriesCreator
-		Executor      commandlineexecutor.Execute
-		NewProcHelper newProcessWithContextHelper
+		Config         *cnfpb.Configuration
+		Client         cloudmonitoring.TimeSeriesCreator
+		Executor       commandlineexecutor.Execute
+		NewProcHelper  newProcessWithContextHelper
+		SkippedMetrics map[string]bool
 	}
 )
 
@@ -60,10 +60,10 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*mrpb.
 		return nil
 	}
 	res := []*mrpb.TimeSeries{}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), sapCTRLCPUPath) {
+	if _, ok := p.SkippedMetrics[sapCTRLCPUPath]; !ok {
 		res = append(res, collectCPUPerProcess(ctx, params, processes)...)
 	}
-	if !slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), sapCtrlMemoryPath) {
+	if _, ok := p.SkippedMetrics[sapCtrlMemoryPath]; !ok {
 		res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
 	}
 	return res

@@ -274,12 +274,13 @@ func TestUpdateMaintenanceMode(t *testing.T) {
 
 func TestCollect(t *testing.T) {
 	tests := []struct {
-		name      string
-		config    *cpb.Configuration
-		fr        mockedFileReader
-		sids      map[string]bool
-		wantCount int
-		trueCount int
+		name           string
+		config         *cpb.Configuration
+		fr             mockedFileReader
+		sids           map[string]bool
+		skippedMetrics map[string]bool
+		wantCount      int
+		trueCount      int
 	}{
 		{
 			name:      "CannotReadMaintenanceModeJSONFile",
@@ -302,6 +303,9 @@ func TestCollect(t *testing.T) {
 					ProcessMetricsToSkip: []string{mntmodePath},
 				},
 			},
+			skippedMetrics: map[string]bool{
+				mntmodePath: true,
+			},
 			fr:        mockedFileReader{expectedData: []byte(`{"sids":["deh"]}`)},
 			sids:      map[string]bool{"deh": true, "abc": true},
 			wantCount: 0,
@@ -312,10 +316,11 @@ func TestCollect(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testInstanceProperties := &InstanceProperties{
-				Config: test.config,
-				Client: &fakeTimeSeriesCreator{},
-				Reader: test.fr,
-				Sids:   test.sids,
+				Config:         test.config,
+				Client:         &fakeTimeSeriesCreator{},
+				Reader:         test.fr,
+				Sids:           test.sids,
+				SkippedMetrics: test.skippedMetrics,
 			}
 			got := testInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
@@ -329,6 +334,67 @@ func TestCollect(t *testing.T) {
 			}
 			if trueCount != test.trueCount {
 				t.Errorf("Got TrueCount (%d) != WantTrueCount (%d)", trueCount, test.trueCount)
+			}
+		})
+	}
+}
+
+func TestContains(t *testing.T) {
+	tests := []struct {
+		name string
+		list []string
+		item string
+		want bool
+	}{
+		{
+			name: "ReturnsTrue",
+			list: []string{"hdbdaemon", "hdbnameserver"},
+			item: "hdbdaemon",
+			want: true,
+		},
+		{name: "ReturnsFalse",
+			list: []string{"hdbdaemon", "hdbnameserver"},
+			item: "random",
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := contains(test.list, test.item)
+			if got != test.want {
+				t.Errorf("contains(%v, %v) returned unexpected value, got=%t, want=%t", test.list, test.item, got, test.want)
+			}
+		})
+	}
+}
+
+func TestIndexOf(t *testing.T) {
+	tests := []struct {
+		name string
+		list []string
+		item string
+		want int
+	}{
+		{
+			name: "ReturnsIndex",
+			list: []string{"hdbdaemon", "hdbnameserver"},
+			item: "hdbdaemon",
+			want: 0,
+		},
+		{
+			name: "IndexNotFound",
+			list: []string{"hdbdaemon", "hdbnameserver"},
+			item: "random",
+			want: -1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := indexOf(tc.list, tc.item)
+			if got != tc.want {
+				t.Errorf("indexOf(%v, %v) = %v, want: %v", tc.list, tc.item, got, tc.want)
 			}
 		})
 	}
