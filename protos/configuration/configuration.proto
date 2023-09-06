@@ -15,7 +15,7 @@ limitations under the License.
 */
 syntax = "proto3";
 
-package cloud.partners.sap.gcagent.protos.configuration;
+package sapagent.protos.configuration;
 
 import "google/protobuf/wrappers.proto";
 import "instanceinfo/instanceinfo.proto";

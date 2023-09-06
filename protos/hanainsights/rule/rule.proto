@@ -15,7 +15,7 @@ limitations under the License.
 */
 syntax = "proto3";
 
-package third_party_sapagent_protos_rules;
+package sapagent.protos.hanainsights.rule;
 
 option java_multiple_files = true;
 
@@ -31,7 +31,8 @@ message Rule {
 }
 
 message Query {
-  string name = 1;  //  Required: Unique within this rule and global knowledgebase.
+  string name =
+      1;  //  Required: Unique within this rule and global knowledgebase.
   string description = 2;
   repeated string dependent_on_queries =
       3;           // names of the queries that must be run prior to this.
