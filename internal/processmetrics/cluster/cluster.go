@@ -68,6 +68,7 @@ type (
 		SAPInstance    *sapb.SAPInstance
 		Config         *cnfpb.Configuration
 		Client         cloudmonitoring.TimeSeriesCreator
+		pmbo           *cloudmonitoring.BackOffIntervals
 		SkippedMetrics map[string]bool
 	}
 	readPacemakerNodeState     func(crm *pacemaker.CRMMon) (map[string]string, error)

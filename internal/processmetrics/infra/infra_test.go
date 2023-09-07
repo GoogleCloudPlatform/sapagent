@@ -472,7 +472,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		if tc.gceService != nil && tc.gceService.NodeGroupNodes != nil {
 			tc.gceService.NodeGroupNodes.Items[0].UpcomingMaintenance = tc.upcomingMaintenance
 		}
-		p := New(&cpb.Configuration{CloudProperties: tc.cloudProperties}, nil, tc.gceService, tc.skipMetrics)
+		p := New(&cpb.Configuration{CloudProperties: tc.cloudProperties}, nil, tc.gceService, tc.skipMetrics, nil)
 		m, err := p.collectUpcomingMaintenance()
 		if d := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); d != "" {
 			t.Errorf("collectUpcomingMaintenance(%s) error mismatch (-want, +got):\n%s", tc.name, d)
@@ -492,7 +492,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 // in a valid struct pointer to a nil value, which does _not_ equal nil nor is safely comparable.
 // Further background: https://groups.google.com/g/golang-nuts/c/wnH302gBa4I
 func TestCollectUpcomingMaintenanceNotInitialized(t *testing.T) {
-	p := New(&cpb.Configuration{}, nil, nil, nil)
+	p := New(&cpb.Configuration{}, nil, nil, nil, nil)
 	_, err := p.collectUpcomingMaintenance()
 	if err == nil {
 		t.Error("collectUpcomingMaintenance(NotInitialized) got success expected error")
@@ -551,7 +551,7 @@ func TestResolveNodeGroup(t *testing.T) {
 		if tc.upcomingMaintenance != nil {
 			tc.gceService.NodeGroupNodes.Items[0].UpcomingMaintenance = tc.upcomingMaintenance
 		}
-		p := New(nil, nil, tc.gceService, nil)
+		p := New(nil, nil, tc.gceService, nil, nil)
 		got, err := p.resolveNodeGroup(tc.project, tc.zone, tc.instanceLink)
 		if diff := cmp.Diff(tc.wantErr, err, cmpCodeOnly, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("ListNodeGroups(%s) returned an unexpected error (-want +got): %v", tc.name, diff)

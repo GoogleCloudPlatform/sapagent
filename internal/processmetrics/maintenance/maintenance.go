@@ -108,6 +108,7 @@ type InstanceProperties struct {
 	Reader         FileReader
 	Sids           map[string]bool
 	SkippedMetrics map[string]bool
+	pmbo           *cloudmonitoring.BackOffIntervals
 }
 
 // ReadMaintenanceMode reads the current value for the SIDs under maintenance persisted in

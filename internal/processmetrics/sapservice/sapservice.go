@@ -50,6 +50,7 @@ type (
 		Execute        commandlineexecutor.Execute
 		ExitCode       commandlineexecutor.ExitCode
 		SkippedMetrics map[string]bool
+		pmbo           *cloudmonitoring.BackOffIntervals
 	}
 )
 

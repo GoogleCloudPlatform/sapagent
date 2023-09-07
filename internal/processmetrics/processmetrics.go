@@ -191,7 +191,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	}
 
 	log.Logger.Info("Creating infra migration event metrics collector.")
-	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics)
+	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics, nil)
 
 	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector, migrationCollector)
 

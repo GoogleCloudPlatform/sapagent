@@ -54,6 +54,7 @@ type (
 		Client             cloudmonitoring.TimeSeriesCreator
 		HANAQueryFailCount int64
 		SkippedMetrics     map[string]bool
+		pmbo               *cloudmonitoring.BackOffIntervals
 	}
 )
 

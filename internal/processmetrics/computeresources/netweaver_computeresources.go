@@ -50,6 +50,7 @@ type (
 		SAPControlClient        sapcontrol.ClientInterface
 		LastValue               map[string]*process.IOCountersStat
 		SkippedMetrics          map[string]bool
+		pmbo                    *cloudmonitoring.BackOffIntervals
 	}
 )
 

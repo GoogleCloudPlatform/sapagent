@@ -51,6 +51,7 @@ type (
 		NewProcHelper     newProcessWithContextHelper
 		SAPControlClient  sapcontrol.ClientInterface
 		SkippedMetrics    map[string]bool
+		pmbo              *cloudmonitoring.BackOffIntervals
 	}
 )
 

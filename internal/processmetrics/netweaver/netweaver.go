@@ -48,6 +48,7 @@ type (
 		Config         *cnfpb.Configuration
 		Client         cloudmonitoring.TimeSeriesCreator
 		SkippedMetrics map[string]bool
+		pmbo           *cloudmonitoring.BackOffIntervals
 	}
 )
 

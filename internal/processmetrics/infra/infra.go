@@ -81,15 +81,17 @@ type Properties struct {
 	Client          cloudmonitoring.TimeSeriesCreator
 	gceAlphaService GCEAlphaInterface
 	skippedMetrics  map[string]bool
+	pmbo            *cloudmonitoring.BackOffIntervals
 }
 
 // New creates a new instance of Properties
-func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceAlphaService GCEAlphaInterface, sm map[string]bool) *Properties {
+func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceAlphaService GCEAlphaInterface, sm map[string]bool, bo *cloudmonitoring.BackOffIntervals) *Properties {
 	return &Properties{
 		Config:          config,
 		Client:          client,
 		gceAlphaService: gceAlphaService,
 		skippedMetrics:  sm,
+		pmbo:            bo,
 	}
 }
 

@@ -40,6 +40,7 @@ type (
 		Executor       commandlineexecutor.Execute
 		NewProcHelper  newProcessWithContextHelper
 		SkippedMetrics map[string]bool
+		pmbo           *cloudmonitoring.BackOffIntervals
 	}
 )
 
