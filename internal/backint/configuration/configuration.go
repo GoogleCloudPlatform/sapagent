@@ -103,6 +103,7 @@ func (p *Parameters) parseCommandLineArgs() error {
 		DatabaseObjectCount: p.Count,
 		BackupLevel:         p.BackupLevel,
 		Function:            function,
+		LogToCloud:          true,
 	}
 	return nil
 }

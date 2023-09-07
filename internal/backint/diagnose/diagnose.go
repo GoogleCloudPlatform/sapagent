@@ -81,9 +81,9 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 		output.Write([]byte(fmt.Sprintf("\nDIAGNOSE failed: %v\n", err.Error())))
 		return false
 	}
-	log.Logger.Infow("DIAGNOSE finished", "outFile", config.GetOutputFile())
+	log.Logger.Infow("DIAGNOSE succeeded", "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintDiagnoseFinished)
-	output.Write([]byte("\nDIAGNOSE finished\n"))
+	output.Write([]byte("\nDIAGNOSE succeeded\n"))
 	return true
 }
 

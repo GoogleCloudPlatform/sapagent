@@ -1,0 +1,25 @@
+{
+  "displayName": "BackintFailure",
+  "documentation": {
+    "content": "# BackintFailure\n\nAn alert is triggered if Backint writes an ERROR log to Cloud Logging.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {},
+  "conditions": [
+    {
+      "displayName": "BackintFailure",
+      "conditionMatchedLog": {
+        "filter": "logName:\"google-cloud-sap-agent-backint\" AND severity=\"ERROR\""
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationRateLimit": {
+      "period": "300s"
+    },
+    "autoClose": "604800s"
+  },
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": []
+}

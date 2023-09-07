@@ -33,3 +33,12 @@ workload.googleapis.com/sap/hana/ha/availability
     value = 4 -- system available (primary online & replication running)
     value < 4 -- there is some issue with primary or replication
 ```
+
+##Backint Failure
+**Filename**: [backint_failure.json](backint_failure.json)
+
+This file contains a json representation for cloud monitoring alert for `Backint Failure`.
+
+**Alert Description**: An alert is triggered if Backint writes an ERROR log to Cloud Logging.
+`log_to_cloud` must be enabled in the parameters file before running Backint to enable writing
+logs to Cloud Logging. By default, the notification rate limit is set to 300 seconds (5 minutes).

@@ -40,9 +40,10 @@ var (
 		Function:  "backup",
 	}
 	defaultConfigArgsParsed = &bpb.BackintConfiguration{
-		UserId:    "testUser",
-		Function:  bpb.Function_BACKUP,
-		ParamFile: "testParamsFile",
+		UserId:     "testUser",
+		Function:   bpb.Function_BACKUP,
+		ParamFile:  "testParamsFile",
+		LogToCloud: true,
 	}
 	defaultThreads = func() int64 {
 		numThreads := int64(runtime.NumCPU())
@@ -136,6 +137,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				Bucket:        "testBucket",
 				EncryptionKey: "testKey",
 				KmsKey:        "testKey",
+				LogToCloud:    true,
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "encryption_key": "testKey", "kms_key": "testKey"}`), nil
@@ -152,6 +154,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				Bucket:          "testBucket",
 				ParallelStreams: 2,
 				Compress:        true,
+				LogToCloud:      true,
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "parallel_streams": 2, "compress": true}`), nil
@@ -168,6 +171,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				Bucket:          "testBucket",
 				ParallelStreams: 2,
 				EncryptionKey:   "testKey",
+				LogToCloud:      true,
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "parallel_streams": 2, "encryption_key": "testKey"}`), nil
@@ -184,6 +188,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				Bucket:          "testBucket",
 				ParallelStreams: 2,
 				KmsKey:          "testKey",
+				LogToCloud:      true,
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "parallel_streams": 2, "kms_key": "testKey"}`), nil
@@ -206,6 +211,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				RateLimitMb:       0,
 				InputFile:         "/dev/stdin",
 				OutputFile:        "/dev/stdout",
+				LogToCloud:        true,
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "rate_limit_mb": -1}`), nil
@@ -236,6 +242,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				KmsKey:            "testKey",
 				InputFile:         "/input.txt",
 				OutputFile:        "/output.txt",
+				LogToCloud:        true,
 			},
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 2, "rate_limit_mb": 200}`), nil
