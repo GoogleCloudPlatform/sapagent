@@ -17,10 +17,12 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -117,8 +119,14 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 		return 0.0, l
 	}
 
+	instances := clusterNodes(pacemakerDocument.Configuration.Nodes)
+	// Sort VM instance names by length, descending.
+	// This should prevent collisions when searching within a substring.
+	// Ex: instance11, ... , instance1
+	slices.SortFunc(instances, func(a, b string) int { return cmp.Compare(len(a), len(b)) })
+
 	primitives := pacemakerDocument.Configuration.Resources.Primitives
-	results := setPacemakerPrimitives(l, primitives, params.Config)
+	results := setPacemakerPrimitives(l, primitives, instances, params.Config)
 
 	if id, ok := results["projectId"]; ok {
 		projectID = id
@@ -158,6 +166,14 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	pacemakerHanaTopology(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHanaTopology"))
 
 	return 1.0, l
+}
+
+func clusterNodes(nodes []CIBNode) []string {
+	instances := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		instances = append(instances, node.Uname)
+	}
+	return instances
 }
 
 func filterPrimitiveOpsByType(primitives []PrimitiveClass, primitiveType string) []Op {
@@ -288,7 +304,7 @@ func setLabelsForRSCNVPairs(l map[string]string, rscOptionNvPairs []NVPair, name
 	}
 }
 
-func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c *cnfpb.Configuration) map[string]string {
+func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, instances []string, c *cnfpb.Configuration) map[string]string {
 	returnMap := map[string]string{}
 	var pcmkDelayMax []string
 	serviceAccountJSONFile := ""
@@ -299,7 +315,7 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c 
 		classNode := primitive.Class
 		typeNode := primitive.ClassType
 		attribute := primitive.InstanceAttributes
-		instanceName := instanceNameFromPrimitiveID(idNode)
+		instanceName := instanceNameFromPrimitiveID(idNode, instances)
 
 		// Collector for pcmk_delay_max should report the value for each instance
 		// in a HA cluster, rather than just the value for the local instance.
@@ -325,11 +341,14 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, c 
 
 // instanceNameFromPrimitiveID extracts the instance name from a Primitive ID.
 //
-// The ID string is expected in the following format: "prefix-instanceName".
-// An instance name may itself contain '-' characters.
-func instanceNameFromPrimitiveID(id string) string {
-	if _, instanceName, ok := strings.Cut(id, "-"); ok {
-		return instanceName
+// The ID string is expected to contain the instance name as a substring.
+// There does not appear to be a way to programmatically parse the instance
+// name from the primitive ID alone.
+func instanceNameFromPrimitiveID(id string, instances []string) string {
+	for _, instance := range instances {
+		if strings.Contains(id, instance) {
+			return instance
+		}
 	}
 	return ""
 }

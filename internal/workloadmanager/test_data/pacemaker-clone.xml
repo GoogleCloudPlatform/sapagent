@@ -30,7 +30,7 @@ limitations under the License.
       </cluster_property_set>
     </crm_config>
     <nodes>
-      <node id="1" uname="rhel-ha1">
+      <node id="1" uname="instance-name-1">
         <instance_attributes id="nodes-1">
           <nvpair id="nodes-1-hana_har_op_mode" name="hana_har_op_mode" value="logreplay"/>
           <nvpair id="nodes-1-lpa_har_lpt" name="lpa_har_lpt" value="30"/>
@@ -54,19 +54,19 @@ limitations under the License.
       </node>
     </nodes>
     <resources>
-      <primitive class="stonith" id="STONITH-instanceName" type="fence_gce">
-        <instance_attributes id="STONITH-instanceName-instance_attributes">
-          <nvpair id="STONITH-instanceName-instance_attributes-instance_name"name="instance_name" value="instanceName"/>
-          <nvpair id="STONITH-instanceName-instance_attributes-pcmk_delay_max" name="pcmk_delay_max" value="30"/>
-          <nvpair id="STONITH-instanceName-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
-          <nvpair id="STONITH-instanceName-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
-          <nvpair id="STONITH-instanceName-instance_attributes-port" name="port" value="rhel-ha1"/>
-          <nvpair id="STONITH-instanceName-instance_attributes-project" name="project" value="core-connect-dev"/>
-          <nvpair id="STONITH-instanceName-instance_attributes-zone" name="zone" value="us-east4-a"/>
+      <primitive class="stonith" id="STONITH-instance-name-1" type="fence_gce">
+        <instance_attributes id="STONITH-instance-name-1-instance_attributes">
+          <nvpair id="STONITH-instance-name-1-instance_attributes-instance_name"name="instance_name" value="instance-name-1"/>
+          <nvpair id="STONITH-instance-name-1-instance_attributes-pcmk_delay_max" name="pcmk_delay_max" value="30"/>
+          <nvpair id="STONITH-instance-name-1-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
+          <nvpair id="STONITH-instance-name-1-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
+          <nvpair id="STONITH-instance-name-1-instance_attributes-port" name="port" value="rhel-ha1"/>
+          <nvpair id="STONITH-instance-name-1-instance_attributes-project" name="project" value="core-connect-dev"/>
+          <nvpair id="STONITH-instance-name-1-instance_attributes-zone" name="zone" value="us-east4-a"/>
         </instance_attributes>
         <operations>
-          <op id="STONITH-instanceName-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
-          <op id="STONITH-instanceName-start-interval-0" interval="0" name="start" timeout="60s"/>
+          <op id="STONITH-instance-name-1-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
+          <op id="STONITH-instance-name-1-start-interval-0" interval="0" name="start" timeout="60s"/>
         </operations>
       </primitive>
       <primitive class="stonith" id="STONITH-rhel-ha2" type="fence_gce">

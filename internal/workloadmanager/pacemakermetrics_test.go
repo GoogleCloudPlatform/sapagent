@@ -146,7 +146,7 @@ func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemake
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
-					"pcmk_delay_max": "vm1=45",
+					"pcmk_delay_max": "instance-name-1=45",
 				},
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -179,7 +179,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
-					"pcmk_delay_max":                 "vm1=45",
+					"pcmk_delay_max":                 "instance-name-1=45",
 					"fence_agent_compute_api_access": "false",
 					"fence_agent_logging_api_access": "false",
 					"location_preference_set":        locationPref,
@@ -250,7 +250,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
-					"pcmk_delay_max":                   "instanceName=30",
+					"pcmk_delay_max":                   "instance-name-1=30",
 					"migration_threshold":              "5000",
 					"fence_agent_compute_api_access":   "false",
 					"fence_agent_logging_api_access":   "false",
@@ -326,7 +326,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
-					"pcmk_delay_max":                 "vm1=45",
+					"pcmk_delay_max":                 "instance-name-1=45",
 					"fence_agent_compute_api_access": "true",
 					"fence_agent_logging_api_access": "true",
 					"location_preference_set":        locationPref,
@@ -860,13 +860,15 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 	tests := []struct {
 		name       string
 		c          *cnfpb.Configuration
+		instances  []string
 		primitives []PrimitiveClass
 		want       map[string]string
 		wantLabels map[string]string
 	}{
 		{
-			name: "TestSetPacemakerPrimitivesImproperTypes",
-			c:    defaultConfiguration,
+			name:      "TestSetPacemakerPrimitivesImproperTypes",
+			c:         defaultConfiguration,
+			instances: []string{"fake-id"},
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fake-type",
@@ -887,8 +889,9 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			wantLabels: map[string]string{},
 		},
 		{
-			name: "TestSetPacemakerPrimitivesNoMatch",
-			c:    defaultConfiguration,
+			name:      "TestSetPacemakerPrimitivesNoMatch",
+			c:         defaultConfiguration,
+			instances: []string{"fake-id"},
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fence_gce",
@@ -904,8 +907,9 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			wantLabels: map[string]string{},
 		},
 		{
-			name: "TestSetPacemakerPrimitivesBasicMatch1",
-			c:    defaultConfiguration,
+			name:      "TestSetPacemakerPrimitivesBasicMatch1",
+			c:         defaultConfiguration,
+			instances: []string{"instance-name"},
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fake-type",
@@ -926,8 +930,9 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			wantLabels: map[string]string{},
 		},
 		{
-			name: "TestSetPacemakerPrimitivesBasicMatch2",
-			c:    defaultConfiguration,
+			name:      "TestSetPacemakerPrimitivesBasicMatch2",
+			c:         defaultConfiguration,
+			instances: []string{"instance-name", "fake-id"},
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "fake-type",
@@ -955,8 +960,9 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			wantLabels: map[string]string{},
 		},
 		{
-			name: "pcmkDelayMaxSingleValue",
-			c:    defaultConfiguration,
+			name:      "pcmkDelayMaxSingleValue",
+			c:         defaultConfiguration,
+			instances: []string{"instance-name-1", "instance-name-2", "instance-name-3", "instance-name-4"},
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "stonith",
@@ -1005,8 +1011,9 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			},
 		},
 		{
-			name: "pcmkDelayMaxMultipleValues",
-			c:    defaultConfiguration,
+			name:      "pcmkDelayMaxMultipleValues",
+			c:         defaultConfiguration,
+			instances: []string{"instance-name-1", "instance-name-2"},
 			primitives: []PrimitiveClass{
 				{
 					ClassType: "stonith",
@@ -1041,7 +1048,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gotLabels := map[string]string{}
-			got := setPacemakerPrimitives(gotLabels, test.primitives, test.c)
+			got := setPacemakerPrimitives(gotLabels, test.primitives, test.instances, test.c)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerPrimitives() returned unexpected return map diff (-want +got):\n%s", diff)
