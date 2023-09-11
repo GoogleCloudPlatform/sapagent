@@ -714,6 +714,20 @@
               "label": "saphana_demote_timeout"
             },
             "value": "SAPHANA_DEMOTE_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_monitor_interval"
+            },
+            "value": "SAPHANATOPOLOGY_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_monitor_timeout"
+            },
+            "value": "SAPHANATOPOLOGY_MONITOR_TIMEOUT"
           }
         ],
         "fence_agent_metrics": [
