@@ -23,6 +23,7 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -56,7 +57,7 @@ type (
 
 // Collect is an implementation of Collector interface from processmetrics
 // responsible for collecting sap service statuses metric.
-func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
 	if _, ok := mPathMap[failedMPath]; !ok {
 		isFailedMetrics := queryInstanceState(ctx, p, "is-failed")
@@ -66,7 +67,28 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		isDisabledMetrics := queryInstanceState(ctx, p, "is-disabled")
 		metrics = append(metrics, isDisabledMetrics...)
 	}
-	return metrics
+	return metrics, nil
+}
+
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	return res, err
 }
 
 // queryInstanceState is responsible for collecting is_failed / is_enabled state of OS

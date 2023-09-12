@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -82,15 +83,32 @@ var (
 
 // Collect is Netweaver implementation of Collector interface from processmetrics.go.
 // Returns a list of NetWeaver related metrics.
-func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
-	metrics := collectNetWeaverMetrics(ctx, p, scc)
+	metrics, err := collectNetWeaverMetrics(ctx, p, scc)
 
-	metrics = append(metrics, collectHTTPMetrics(p)...)
+	if err != nil {
+		return nil, err
+	}
 
-	metrics = append(metrics, collectABAPProcessStatus(ctx, p, scc)...)
+	httpMetrics, err := collectHTTPMetrics(p)
+	if err != nil {
+		return nil, err
+	}
+	metrics = append(metrics, httpMetrics...)
 
-	metrics = append(metrics, collectABAPQueueStats(ctx, p, scc)...)
+	abapProcessStatusMetrics, err := collectABAPProcessStatus(ctx, p, scc)
+	if err != nil {
+		return nil, err
+	}
+
+	metrics = append(metrics, abapProcessStatusMetrics...)
+
+	abapQueueStats, err := collectABAPQueueStats(ctx, p, scc)
+	if err != nil {
+		return nil, err
+	}
+	metrics = append(metrics, abapQueueStats...)
 
 	dpmonPath := `/usr/sap/` + p.SAPInstance.GetSapsid() + `/SYS/exe/run/dpmon`
 	command := `-c 'echo q | %s pf=%s v'`
@@ -103,7 +121,11 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 			"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath(),
 		},
 	}
-	metrics = append(metrics, collectABAPSessionStats(ctx, p, commandlineexecutor.ExecuteCommand, abapSessionParams)...)
+	abapSessionStats, err := collectABAPSessionStats(ctx, p, commandlineexecutor.ExecuteCommand, abapSessionParams)
+	if err != nil {
+		return nil, err
+	}
+	metrics = append(metrics, abapSessionStats...)
 
 	command = `-c 'echo q | %s pf=%s c'`
 	abapRFCParams := commandlineexecutor.Params{
@@ -116,7 +138,11 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		},
 	}
 
-	metrics = append(metrics, collectRFCConnections(ctx, p, commandlineexecutor.ExecuteCommand, abapRFCParams)...)
+	rffcConnectionsMetric, err := collectRFCConnections(ctx, p, commandlineexecutor.ExecuteCommand, abapRFCParams)
+	if err != nil {
+		return nil, err
+	}
+	metrics = append(metrics, rffcConnectionsMetric...)
 
 	enqLockParams := commandlineexecutor.Params{
 		User:        p.SAPInstance.GetUser(),
@@ -124,15 +150,40 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		ArgsToSplit: fmt.Sprintf("-nr %s -function EnqGetLockTable", p.SAPInstance.GetInstanceNumber()),
 		Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 	}
-	metrics = append(metrics, collectEnqLockMetrics(ctx, p, commandlineexecutor.ExecuteCommand, enqLockParams, scc)...)
+	enqLockMetrics, err := collectEnqLockMetrics(ctx, p, commandlineexecutor.ExecuteCommand, enqLockParams, scc)
+	if err != nil {
+		return nil, err
+	}
+	metrics = append(metrics, enqLockMetrics...)
 
-	return metrics
+	return metrics, nil
+}
+
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	return res, err
 }
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
-func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
 	if _, ok := p.SkippedMetrics[nwServicePath]; ok {
-		return nil
+		return nil, nil
 	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
@@ -143,10 +194,10 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	procs, err = sc.GetProcessList(scc)
 	if err != nil {
 		log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
-		return nil
+		return nil, err
 	}
 	metrics := collectServiceMetrics(p, procs, now)
-	return metrics
+	return metrics, nil
 }
 
 // collectServiceMetrics collects NetWeaver "service" metrics describing Netweaver service
@@ -177,10 +228,11 @@ func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 
 // collectHTTPMetrics collects the HTTP health check metrics for different types of
 // Netweaver instances based on their types.
-func collectHTTPMetrics(p *InstanceProperties) []*mrpb.TimeSeries {
+func collectHTTPMetrics(p *InstanceProperties) ([]*mrpb.TimeSeries, error) {
 	url := p.SAPInstance.GetNetweaverHealthCheckUrl()
 	if url == "" {
-		return nil
+		log.Logger.Debugw("SAP Instance HTTP health check URL is empty", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
+		return nil, fmt.Errorf("SAP Instance HTTP health check URL is empty %s", p.SAPInstance.GetInstanceId())
 	}
 	log.Logger.Debugw("SAP Instance HTTP health check", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
 
@@ -190,7 +242,8 @@ func collectHTTPMetrics(p *InstanceProperties) []*mrpb.TimeSeries {
 	case "SAP-CS":
 		return collectMessageServerMetrics(p, url)
 	default:
-		return nil
+		log.Logger.Debugw("unsupported service name: %s", p.SAPInstance.GetServiceName())
+		return nil, fmt.Errorf("unsupported service name: %s", p.SAPInstance.GetServiceName())
 	}
 }
 
@@ -198,17 +251,17 @@ func collectHTTPMetrics(p *InstanceProperties) []*mrpb.TimeSeries {
 // Returns metrics built using:
 //   - HTTP response code.
 //   - Total time taken by the request.
-func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
+func collectICMMetrics(p *InstanceProperties, url string) ([]*mrpb.TimeSeries, error) {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
 	if _, ok := p.SkippedMetrics[nwICMRCodePath]; ok {
-		return nil
+		return nil, nil
 	}
 	now := tspb.Now()
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
 	if err != nil {
 		log.Logger.Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
-		return nil
+		return nil, err
 	}
 	defer response.Body.Close()
 
@@ -218,7 +271,7 @@ func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 	return []*mrpb.TimeSeries{
 		createMetrics(p, nwICMRCodePath, extraLabels, now, int64(response.StatusCode)),
 		createMetrics(p, nwICMRTimePath, extraLabels, now, timeTaken.Milliseconds()),
-	}
+	}, nil
 }
 
 // collectMessageServerMetrics uses HTTP GET on given URL to collect message server metrics.
@@ -226,17 +279,17 @@ func collectICMMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
 //   - Two metrics - HTTP response code and response time for all HTTP status codes.
 //   - Additional work process count as reported by the message server info page on StatusOK(200).
 //   - A nil in case of errors in HTTP GET request failures.
-func collectMessageServerMetrics(p *InstanceProperties, url string) []*mrpb.TimeSeries {
+func collectMessageServerMetrics(p *InstanceProperties, url string) ([]*mrpb.TimeSeries, error) {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
 	if _, ok := p.SkippedMetrics[nwMSResponseCodePath]; ok {
-		return nil
+		return nil, nil
 	}
 	now := tspb.Now()
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
 	if err != nil {
 		log.Logger.Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
-		return nil
+		return nil, err
 	}
 	defer response.Body.Close()
 
@@ -250,17 +303,17 @@ func collectMessageServerMetrics(p *InstanceProperties, url string) []*mrpb.Time
 	if response.StatusCode != http.StatusOK {
 		log.Logger.Debugw("HTTP GET failed", "statuscode", response.StatusCode, "response", response)
 		log.Logger.Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
-		return metrics
+		return nil, fmt.Errorf("HTTP GET failed code: %d", response.StatusCode)
 	}
 
 	workProcessCount, err := parseWorkProcessCount(response.Body)
 	if err != nil {
 		log.Logger.Debugw("Reading work process count from message server info page failed", "error", err)
-		return metrics
+		return nil, err
 	}
 	log.Logger.Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
 
-	return append(metrics, createMetrics(p, nwMSWorkProcessesPath, extraLabels, now, int64(workProcessCount)))
+	return append(metrics, createMetrics(p, nwMSWorkProcessesPath, extraLabels, now, int64(workProcessCount))), nil
 }
 
 // parseWorkProcessCount processes the HTTP text/plain response body one line at a time
@@ -283,12 +336,12 @@ func parseWorkProcessCount(r io.ReadCloser) (count int, err error) {
 }
 
 // collectABAPProcessStatus collects the ABAP worker process status metrics.
-func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
 	now := tspb.Now()
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
 	skipABAPProcessStatus := p.SkippedMetrics[nwABAPProcCountPath] || p.SkippedMetrics[nwABAPProcBusyPath] || p.SkippedMetrics[nwABAPProcUtilPath]
 	if skipABAPProcessStatus {
-		return nil
+		return nil, nil
 	}
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
@@ -300,7 +353,7 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 	wpDetails, err := sc.ABAPGetWPTable(scc)
 	if err != nil {
 		log.Logger.Debugw("Sapcontrol web method failed", "error", err)
-		return nil
+		return nil, err
 	}
 	processCount = wpDetails.Processes
 	busyProcessCount = wpDetails.BusyProcesses
@@ -328,16 +381,16 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 		metrics = append(metrics, createMetrics(p, nwABAPProcUtilPath, extraLabels, now, int64(v)))
 	}
 	log.Logger.Debugw("Time taken to collect metrics in collectABAPProcessStatus()", "time", time.Since(now.AsTime()))
-	return metrics
+	return metrics, nil
 }
 
 // collectABAPQueueStats collects ABAP Queue utilization metrics using dpmon tool.
-func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
 	now := tspb.Now()
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
 	skipABAPQueue := p.SkippedMetrics[nwABAPProcQueueCurrentPath] || p.SkippedMetrics[nwABAPProcQueuePeakPath]
 	if skipABAPQueue {
-		return nil
+		return nil, nil
 	}
 	sc := &sapcontrol.Properties{p.SAPInstance}
 	var (
@@ -348,7 +401,7 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 	currentQueueUsage, peakQueueUsage, err = sc.GetQueueStatistic(scc)
 	if err != nil {
 		log.Logger.Debugw("Sapcontrol web method failed", "error", err)
-		return nil
+		return nil, err
 	}
 
 	var metrics []*mrpb.TimeSeries
@@ -368,27 +421,27 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 		metrics = append(metrics, createMetrics(p, nwABAPProcQueuePeakPath, extraLabels, now, int64(v)))
 	}
 	log.Logger.Debugw("Time taken to collect metrics in collectABAPQueueStats()", "time", time.Since(now.AsTime()))
-	return metrics
+	return metrics, nil
 }
 
 // collectABAPSessionStats collects ABAP session related metrics using dpmon tool.
-func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) ([]*mrpb.TimeSeries, error) {
 	now := tspb.Now()
 	if _, ok := p.SkippedMetrics[nwABAPSessionsPath]; ok {
-		return nil
+		return nil, nil
 	}
 	results := exec(ctx, params)
 	log.Logger.Debugw("DPMON for sessionStat output", "stdout", results.StdOut, "stderr", results.StdErr, "exitcode", results.ExitCode, "error", results.Error)
 	if results.Error != nil {
 		log.Logger.Debugw("DPMON failed", log.Error(results.Error))
-		return nil
+		return nil, results.Error
 	}
 
 	var metrics []*mrpb.TimeSeries
 	sessionCounts, totalCount, err := parseABAPSessionStats(results.StdOut)
 	if err != nil {
 		log.Logger.Debugw("DPMON ran successfully, but no ABAP session currently active", log.Error(err))
-		return nil
+		return nil, err
 	}
 
 	for k, v := range sessionCounts {
@@ -406,20 +459,20 @@ func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec co
 	metrics = append(metrics, createMetrics(p, nwABAPSessionsPath, extraLabels, now, int64(totalCount)))
 
 	log.Logger.Debugw("Time taken to collect metrics in collectABAPSessionStats()", "time", time.Since(now.AsTime()))
-	return metrics
+	return metrics, nil
 }
 
 // collectRFCConnections collects the ABAP RFC connection metrics using dpmon tool.
-func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) []*mrpb.TimeSeries {
+func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params) ([]*mrpb.TimeSeries, error) {
 	now := tspb.Now()
 	if _, ok := p.SkippedMetrics[nwABAPRFCPath]; ok {
-		return nil
+		return nil, nil
 	}
 	result := exec(ctx, params)
 	log.Logger.Debugw("DPMON for RFC output", "stdout", result.StdOut, "stderr", result.StdErr, "exitcode", result.ExitCode, "error", result.Error)
 	if result.Error != nil {
 		log.Logger.Debugw("DPMON for RFC failed", log.Error(result.Error))
-		return nil
+		return nil, result.Error
 	}
 
 	var metrics []*mrpb.TimeSeries
@@ -431,18 +484,18 @@ func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec comm
 		metrics = append(metrics, createMetrics(p, nwABAPRFCPath, extraLabels, now, int64(v)))
 	}
 	log.Logger.Debugw("Time taken to collect metrics in collectRFCConnections()", "time", time.Since(now.AsTime()))
-	return metrics
+	return metrics, nil
 }
 
 // collectEnqLockMetrics builds Enq Locks for SAP Netweaver ASCS instances.
-func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute, params commandlineexecutor.Params, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
 	if _, ok := p.SkippedMetrics[nwEnqLocksPath]; ok {
-		return nil
+		return nil, nil
 	}
 	instance := p.SAPInstance.GetInstanceId()
 	if !strings.HasPrefix(instance, "ASCS") && !strings.HasPrefix(instance, "ERS") {
 		log.Logger.Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)
-		return nil
+		return nil, fmt.Errorf("enq Lock metric is only applicable for application type: ASCS")
 	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
@@ -451,7 +504,7 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 
 	enqLocks, err = sc.EnqGetLockTable(scc)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	var metrics []*mrpb.TimeSeries
@@ -475,7 +528,7 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 		metrics = append(metrics, createMetrics(p, nwEnqLocksPath, extraLabels, now, lock.UserCountOwner))
 
 	}
-	return metrics
+	return metrics, nil
 }
 
 // createMetrics - create mrpb.TimeSeries object for the given metric.

@@ -26,11 +26,11 @@ import (
 	"strings"
 	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -111,24 +111,51 @@ var (
 
 // Collect is HANA implementation of Collector interface from processmetrics.go.
 // Returns a list of HANA related metrics.
-func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
 
-	metrics := collectHANAServiceMetrics(ctx, p, scc)
+	metrics, err := collectHANAServiceMetrics(ctx, p, scc)
+	if err != nil {
+		return nil, err
+	}
 
 	// Collect DB Query metrics only if credentials are set and NOT a HANA secondary.
 	if p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "" && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
-		queryMetrics := collectHANAQueryMetrics(ctx, p, commandlineexecutor.ExecuteCommand)
+		queryMetrics, err := collectHANAQueryMetrics(ctx, p, commandlineexecutor.ExecuteCommand)
+		if err != nil {
+			return nil, err
+		}
 		metrics = append(metrics, queryMetrics...)
 	}
 
-	return metrics
+	return metrics, nil
+}
+
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	return res, err
 }
 
 // collectHANAServiceMetrics creates metrics for each of the services in
 // a HANA instance. Also returns availabilityValue a signal that depends
 // on the status of the HANA services.
-func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
 	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
@@ -141,47 +168,51 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 
 	if _, ok := ip.SkippedMetrics[servicePath]; !ok {
 		processes, err = sc.GetProcessList(scc)
-		if err == nil {
-			// If GetProcessList via command line or API didn't return an error.
-			if len(processes) == 0 {
-				return nil
-			}
+		if err != nil {
+			return nil, err
+		}
+		// If GetProcessList via command line or API didn't return an error.
+		if len(processes) == 0 {
+			log.Logger.Debugw("Empty list of process returned")
+			return nil, nil
+		}
 
-			for _, process := range processes {
-				extraLabels := map[string]string{
-					"service_name": process.Name,
-					"pid":          process.PID,
-				}
-				metrics = append(metrics, createMetrics(ip, servicePath, extraLabels, now, boolToInt64(process.IsGreen)))
+		for _, process := range processes {
+			extraLabels := map[string]string{
+				"service_name": process.Name,
+				"pid":          process.PID,
 			}
+			metrics = append(metrics, createMetrics(ip, servicePath, extraLabels, now, boolToInt64(process.IsGreen)))
 		}
 	}
 	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
-	return metrics
+	return metrics, nil
 }
 
 // collectHANAQueryMetrics collects the query state by running a HANA DB query.
 //   - state : Value is 0 in case of successful query.
 //   - overall time: Overall time taken by query in micro seconds.
 //   - servertime: Time spent on the server side in micro seconds.
-func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) []*mrpb.TimeSeries {
+func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) ([]*mrpb.TimeSeries, error) {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
 	skipQueryMetrics := p.SkippedMetrics[queryStatePath] || p.SkippedMetrics[queryOverallTimePath] || p.SkippedMetrics[queryServerTimePath]
 	if skipQueryMetrics {
-		return nil
+		return nil, nil
 	}
 	now := tspb.Now()
 	if p.HANAQueryFailCount >= maxHANAQueryFailCount {
 		// if HANAQueryFailCount reaches maxHANAQueryFailCount we should not let it
 		// query again, because the user can be locked out.
 		log.Logger.Debugw("Not queryig for HANAQuery Metrics as failcount has reached max allowed fail count.", "instanceid", p.SAPInstance.GetInstanceId(), "failcount", p.HANAQueryFailCount)
-		return nil
+		return nil, nil
 	}
 	queryState, err := runHANAQuery(ctx, p, exec)
 	if err != nil {
 		log.Logger.Errorw("Error in running query", log.Error(err))
 		// Return a non-zero state in case of query failure.
-		return []*mrpb.TimeSeries{createMetrics(p, queryStatePath, nil, now, 1)}
+		// Not following the convention of process metrics here because if we return the error here
+		// query state metric will never get collected in an error state which can mask failures.
+		return []*mrpb.TimeSeries{createMetrics(p, queryStatePath, nil, now, 1)}, nil
 	}
 
 	log.Logger.Debugw("HANA query metrics for instance", "instanceid", p.SAPInstance.GetInstanceId(), "querystate", queryState)
@@ -189,7 +220,7 @@ func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec co
 		createMetrics(p, queryStatePath, nil, now, queryState.state),
 		createMetrics(p, queryOverallTimePath, nil, now, queryState.overallTime),
 		createMetrics(p, queryServerTimePath, nil, now, queryState.serverTime),
-	}
+	}, nil
 }
 
 // runHANAQuery runs the hana query and returns the state and time taken in a struct.
@@ -266,27 +297,6 @@ func appendLabels(p *InstanceProperties, extraLabels map[string]string) map[stri
 		defaultLabels[k] = v
 	}
 	return defaultLabels
-}
-
-// refreshHAReplicationConfig reads the current HA and replication config.
-// Updates the Site, HanaHaMembers entries in the SAP instance proto.
-// Returns the exit code of systemReplicationStatus.py.
-func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) int64 {
-	mode, haMembers, replicationStatus, err := sapdiscovery.HANAReplicationConfig(
-		ctx,
-		p.SAPInstance.GetUser(),
-		p.SAPInstance.GetSapsid(),
-		p.SAPInstance.GetInstanceId())
-
-	//This is not in-band error handling. Metric should be zero in case of failures.
-	if err != nil {
-		log.Logger.Debugw("Failed to refresh HANA HA Replication config for instance", "instanceid", p.SAPInstance.GetInstanceId())
-		return 0
-	}
-
-	p.SAPInstance.Site = sapdiscovery.HANASite(mode)
-	p.SAPInstance.HanaHaMembers = haMembers
-	return int64(replicationStatus)
 }
 
 // boolToInt64 converts bool to int64.

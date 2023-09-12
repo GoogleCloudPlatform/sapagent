@@ -177,10 +177,30 @@ func TestCollect(t *testing.T) {
 				Client:         &fake.TimeSeriesCreator{},
 				SkippedMetrics: test.skippedMetrics,
 			}
-			got := testInstanceProperties.Collect(context.Background())
+			got, _ := testInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Got %d != want %d", len(got), test.wantCount)
 			}
 		})
+	}
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	p := &InstanceProperties{
+		Config: defaultConfig,
+		Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{}
+		},
+		ExitCode: func(err error) int {
+			if err == nil {
+				return 0
+			}
+			return 1
+		},
+		Client: &fake.TimeSeriesCreator{},
+	}
+	_, err := p.CollectWithRetry(context.Background())
+	if err != nil {
+		t.Errorf("CollectWithRetry returned unexpected error: %v", err)
 	}
 }

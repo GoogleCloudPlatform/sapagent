@@ -20,6 +20,7 @@ import (
 	"context"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -46,7 +47,7 @@ type (
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP Control Processes.
-func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	params := parameters{
 		executor:         p.Executor,
 		config:           p.Config,
@@ -58,14 +59,43 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) []*mrpb.
 	processes := collectControlProcesses(ctx, params)
 	if len(processes) == 0 {
 		log.Logger.Debug("Cannot collect CPU and memory per process for Netweaver, empty process list.")
-		return nil
+		return nil, nil
 	}
 	res := []*mrpb.TimeSeries{}
 	if _, ok := p.SkippedMetrics[sapCTRLCPUPath]; !ok {
-		res = append(res, collectCPUPerProcess(ctx, params, processes)...)
+		cpuMetrics, err := collectCPUPerProcess(ctx, params, processes)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, cpuMetrics...)
 	}
 	if _, ok := p.SkippedMetrics[sapCtrlMemoryPath]; !ok {
-		res = append(res, collectMemoryPerProcess(ctx, params, processes)...)
+		memoryMetrics, err := collectMemoryPerProcess(ctx, params, processes)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, memoryMetrics...)
 	}
-	return res
+	return res, nil
+}
+
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *SAPControlProcInstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	return res, err
 }

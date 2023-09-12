@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -66,6 +68,7 @@ func TestCollectForHANA(t *testing.T) {
 		executor       commandlineexecutor.Execute
 		fakeClient     sapcontrolclienttest.Fake
 		wantCount      int
+		wantErr        error
 		lastValue      map[string]*process.IOCountersStat
 	}{
 		{
@@ -79,9 +82,13 @@ func TestCollectForHANA(t *testing.T) {
 			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"hdbdaemon", "SAPControl-GREEN", 111},
 					{"hdbcompileserver", "SAPControl-GREEN", 222},
 				},
+			},
+			skippedMetrics: map[string]bool{
+				hanaCPUPath:        true,
+				hanaIOPSReadsPath:  true,
+				hanaIOPSWritesPath: true,
 			},
 			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 3,
@@ -91,9 +98,13 @@ func TestCollectForHANA(t *testing.T) {
 			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"msg_server", "SAPControl-GREEN", 111},
 					{"enserver", "SAPControl-GREEN", 333},
 				},
+			},
+			skippedMetrics: map[string]bool{
+				hanaMemoryPath:     true,
+				hanaIOPSReadsPath:  true,
+				hanaIOPSWritesPath: true,
 			},
 			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 1,
@@ -151,10 +162,15 @@ func TestCollectForHANA(t *testing.T) {
 				NewProcHelper:    newProcessWithContextHelperTest,
 				SAPControlClient: test.fakeClient,
 				LastValue:        test.lastValue,
+				SkippedMetrics:   test.skippedMetrics,
 			}
-			got := testHanaInstanceProps.Collect(context.Background())
+			got, err := testHanaInstanceProps.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() = %d , want %d", len(got), test.wantCount)
+			}
+
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Collect() = %v, want %v", err, test.wantErr)
 			}
 
 			for _, metric := range got {
@@ -164,5 +180,20 @@ func TestCollectForHANA(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCollectWithRetryHANA(t *testing.T) {
+	hp := &HanaInstanceProperties{
+		Config:           defaultConfig,
+		Client:           &fake.TimeSeriesCreator{},
+		Executor:         commandlineexecutor.ExecuteCommand,
+		SAPInstance:      defaultSAPInstanceHANA,
+		NewProcHelper:    newProcessWithContextHelperTest,
+		SAPControlClient: sapcontrolclienttest.Fake{},
+	}
+	_, err := hp.CollectWithRetry(context.Background())
+	if err != nil {
+		t.Errorf("CollectWithRetry() = %v, want nil", err)
 	}
 }

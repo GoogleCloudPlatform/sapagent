@@ -110,6 +110,7 @@ func TestCollectHANAServiceMetrics(t *testing.T) {
 		name               string
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
+		wantErr            error
 		instanceProperties *InstanceProperties
 	}{
 		{
@@ -132,6 +133,7 @@ func TestCollectHANAServiceMetrics(t *testing.T) {
 			name:               "FailureWebmethodGetProcessList",
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
 			wantMetricCount:    0,
+			wantErr:            cmpopts.AnyError,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -139,20 +141,6 @@ func TestCollectHANAServiceMetrics(t *testing.T) {
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{},
 			},
-			wantMetricCount:    0,
-			instanceProperties: defaultAPIInstanceProperties,
-		},
-		{
-			name: "FailureWebmethodExitStatus",
-			fakeClient: sapcontrolclienttest.Fake{
-				Processes: []sapcontrolclient.OSProcess{{"hdbdaemon", "SAPControl-GREEN", 9609}},
-			},
-			wantMetricCount:    1,
-			instanceProperties: defaultAPIInstanceProperties,
-		},
-		{
-			name:               "FailureWebmethod",
-			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
 			wantMetricCount:    0,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
@@ -183,9 +171,12 @@ func TestCollectHANAServiceMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics := collectHANAServiceMetrics(context.Background(), test.instanceProperties, test.fakeClient)
+			metrics, err := collectHANAServiceMetrics(context.Background(), test.instanceProperties, test.fakeClient)
 			if len(metrics) != test.wantMetricCount {
-				t.Errorf("collectReplicationHA() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
+				t.Errorf("collectHANAServiceMetrics() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
+			}
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectHANAServiceMetrics() gotErr: %v wantErr: %v.", err, test.wantErr)
 			}
 		})
 	}
@@ -322,7 +313,7 @@ func TestCollectHANAQueryMetrics(t *testing.T) {
 			ExitCode: 0,
 		}
 	}
-	got := collectHANAQueryMetrics(context.Background(), defaultInstanceProperties, fakeExec)
+	got, _ := collectHANAQueryMetrics(context.Background(), defaultInstanceProperties, fakeExec)
 	if len(got) != 3 {
 		t.Errorf("collectHANAQueryMetrics(), got: %d want: 3.", len(got))
 	}
@@ -342,7 +333,7 @@ func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		got := collectHANAQueryMetrics(context.Background(), ip, fakeExec)
+		got, _ := collectHANAQueryMetrics(context.Background(), ip, fakeExec)
 		switch i {
 		case 0, 1:
 			ts := got[0].GetPoints()[0].GetInterval().GetEndTime()
@@ -363,11 +354,24 @@ func TestCollect(t *testing.T) {
 		name       string
 		properties *InstanceProperties
 		wantCount  int
+		wantErr    error
 	}{
 		{
-			name:       "MetricCountTest",
-			properties: defaultInstanceProperties,
-			wantCount:  1, // Without HANA setup in unit test ENV, only query/state metric is generated.
+			name: "MetricCountTest",
+			properties: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					Sapsid:         "TST",
+					InstanceNumber: "00",
+					HanaDbUser:     "test-user",
+					HanaDbPassword: "test-pass",
+				},
+				SkippedMetrics: map[string]bool{
+					servicePath: true,
+				},
+			},
+			wantCount: 1, // Without HANA setup in unit test ENV, only query/state metric is generated.
+			wantErr:   nil,
 		},
 		{
 			name: "NoHANADBUserAndKey",
@@ -376,6 +380,9 @@ func TestCollect(t *testing.T) {
 				SAPInstance: &sapb.SAPInstance{
 					Sapsid:         "TST",
 					InstanceNumber: "00",
+				},
+				SkippedMetrics: map[string]bool{
+					servicePath: true,
 				},
 			},
 			wantCount: 0, // Query state metric not generated without credentials.
@@ -389,6 +396,9 @@ func TestCollect(t *testing.T) {
 					InstanceNumber: "00",
 					HanaDbPassword: "test-pass",
 				},
+				SkippedMetrics: map[string]bool{
+					servicePath: true,
+				},
 			},
 			wantCount: 0, // Query state metric not generated without credentials.
 		},
@@ -400,6 +410,9 @@ func TestCollect(t *testing.T) {
 					Sapsid:         "TST",
 					InstanceNumber: "00",
 					HanaDbUser:     "test-user",
+				},
+				SkippedMetrics: map[string]bool{
+					servicePath: true,
 				},
 			},
 			wantCount: 0, // Query state metric not generated without credentials.
@@ -415,6 +428,9 @@ func TestCollect(t *testing.T) {
 					HanaDbPassword: "test-pass",
 					Site:           sapb.InstanceSite_HANA_SECONDARY,
 				},
+				SkippedMetrics: map[string]bool{
+					servicePath: true,
+				},
 			},
 			wantCount: 0, // Query state metric not generated for HANA secondary.
 		},
@@ -422,9 +438,12 @@ func TestCollect(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotCount := len(test.properties.Collect(context.Background()))
-			if gotCount != test.wantCount {
-				t.Errorf("Collect(), got: %d want: %d.", gotCount, test.wantCount)
+			got, gotErr := test.properties.Collect(context.Background())
+			if len(got) != test.wantCount {
+				t.Errorf("Collect(), got: %d want: %d.", len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Collect(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
 			}
 		})
 	}

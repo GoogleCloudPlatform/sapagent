@@ -46,6 +46,7 @@ func TestCollectNodeState(t *testing.T) {
 		fakeNodeState   readPacemakerNodeState
 		wantValues      []int
 		wantMetricCount int
+		wantErr         error
 	}{
 		{
 			name:       "StateUncleanAndShutdown",
@@ -78,6 +79,7 @@ func TestCollectNodeState(t *testing.T) {
 			fakeNodeState: func(crm *pacemaker.CRMMon) (map[string]string, error) {
 				return nil, cmpopts.AnyError
 			},
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "MetricSkipped",
@@ -102,10 +104,14 @@ func TestCollectNodeState(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectNodeState(test.properties, test.fakeNodeState, nil)
+			gotMetrics, gotValues, gotErr := collectNodeState(test.properties, test.fakeNodeState, nil)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
+			}
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectNodeState() returned unexpected error. got: %v, want: %v", gotErr, test.wantErr)
 			}
 
 			if len(gotMetrics) != test.wantMetricCount {
@@ -123,6 +129,7 @@ func TestCollectResourceState(t *testing.T) {
 		fakeResourceState readPacemakerResourceState
 		wantValues        []int
 		wantMetricCount   int
+		wantErr           error
 	}{
 		{
 			name:       "SuccessStartedStartingMasterSlave",
@@ -208,6 +215,7 @@ func TestCollectResourceState(t *testing.T) {
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
 				return nil, cmpopts.AnyError
 			},
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "MetricSkipped",
@@ -242,10 +250,14 @@ func TestCollectResourceState(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectResourceState(test.properties, test.fakeResourceState, nil)
+			gotMetrics, gotValues, gotErr := collectResourceState(test.properties, test.fakeResourceState, nil)
 
 			if diff := cmp.Diff(test.wantValues, gotValues); diff != "" {
 				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
+			}
+
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("resourceState() returned unexpected error. got: %v, want: %v", gotErr, test.wantErr)
 			}
 
 			if len(gotMetrics) != test.wantMetricCount {
@@ -308,19 +320,24 @@ func TestCollect(t *testing.T) {
 		name      string
 		ip        *InstanceProperties
 		wantCount int
+		wantErr   error
 	}{
 		{
 			name:      "EmptyMetricsWhenNoPacmaker",
 			ip:        defaultInstanceProperties,
 			wantCount: 0,
+			wantErr:   cmpopts.AnyError,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.ip.Collect(context.Background())
+			got, gotErr := test.ip.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() = %v, want %v", len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Collect() returned unexpected error. got: %v, want: %v", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -333,6 +350,7 @@ func TestCollectFailCount(t *testing.T) {
 		fakeReadFailCount readPacemakerFailCount
 		wantValues        []int
 		wantMetricCount   int
+		wantErr           error
 	}{
 		{
 			name:       "SuccessOneResource",
@@ -374,6 +392,7 @@ func TestCollectFailCount(t *testing.T) {
 			fakeReadFailCount: func(crm *pacemaker.CRMMon) ([]pacemaker.ResourceFailCount, error) {
 				return nil, cmpopts.AnyError
 			},
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:       "NoFailedResource",
@@ -416,7 +435,7 @@ func TestCollectFailCount(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues := collectFailCount(test.properties, test.fakeReadFailCount, nil)
+			gotMetrics, gotValues, gotErr := collectFailCount(test.properties, test.fakeReadFailCount, nil)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectFailCount() returned unexpected diff (-want,+got): %s\n", diff)
@@ -425,6 +444,17 @@ func TestCollectFailCount(t *testing.T) {
 				t.Errorf("collectFailCount() returned unexpected number of metrics. got: %d, want: %d. Got Metrics: %v",
 					len(gotMetrics), test.wantMetricCount, gotMetrics)
 			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectFailCount() returned unexpected error. got: %v, want: %v", gotErr, test.wantErr)
+			}
 		})
+	}
+}
+
+// In Non Production setup CollectWithRetry should keep on retrying till the limit is reached.
+func TestCollectWithRetry(t *testing.T) {
+	_, err := defaultInstanceProperties.CollectWithRetry(context.Background())
+	if err == nil {
+		t.Errorf("CollectWithRetry() = nil, want error")
 	}
 }

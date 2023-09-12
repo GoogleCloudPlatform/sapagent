@@ -281,12 +281,15 @@ func TestCollect(t *testing.T) {
 		skippedMetrics map[string]bool
 		wantCount      int
 		trueCount      int
+		wantErr        error
 	}{
 		{
 			name:      "CannotReadMaintenanceModeJSONFile",
 			config:    defaultConfig,
 			fr:        mockedFileReader{expectedErr: os.ErrPermission},
 			wantCount: 0,
+			wantErr:   cmpopts.AnyError,
+			trueCount: 0,
 		},
 		{
 			name:      "CanReadMaintenanceModeJSONFile",
@@ -322,9 +325,12 @@ func TestCollect(t *testing.T) {
 				Sids:           test.sids,
 				SkippedMetrics: test.skippedMetrics,
 			}
-			got := testInstanceProperties.Collect(context.Background())
+			got, gotErr := testInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Got (%d) != Want (%d)", len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Got (%v) != Want (%v)", gotErr, test.wantErr)
 			}
 			trueCount := 0
 			for _, v := range got {
@@ -397,5 +403,20 @@ func TestIndexOf(t *testing.T) {
 				t.Errorf("indexOf(%v, %v) = %v, want: %v", tc.list, tc.item, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	p := &InstanceProperties{
+		Config: defaultConfig,
+		Client: &fakeTimeSeriesCreator{},
+		Reader: mockedFileReader{
+			expectedData: []byte(`{"sids":["deh"]}`),
+			expectedErr:  os.ErrPermission,
+		},
+	}
+	_, err := p.CollectWithRetry(context.Background())
+	if err == nil {
+		t.Errorf("CollectWithRetry() = nil, want error")
 	}
 }

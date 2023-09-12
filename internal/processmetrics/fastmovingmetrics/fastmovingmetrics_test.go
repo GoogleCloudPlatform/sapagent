@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -571,6 +572,7 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 		exec       commandlineexecutor.Execute
 		fakeClient sapcontrolclienttest.Fake
 		wantCount  int
+		wantErr    error
 	}{
 		{
 			name: "ErrorInMetricsCollection",
@@ -585,10 +587,14 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 				ErrGetProcessList: cmpopts.AnyError,
 			},
 			wantCount: 0,
+			wantErr:   cmpopts.AnyError,
 		},
 		{
 			name: "SuccessHANAAvailability",
-			ip:   defaultInstanceProperties,
+			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath}}},
+				SkippedMetrics: map[string]bool{haAvailabilityPath: true},
+			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{ExitCode: 1, Error: cmpopts.AnyError}
 			},
@@ -596,17 +602,6 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
 			}},
 			wantCount: 1,
-		},
-		{
-			name: "SuccessHANAHAAvailability",
-			ip:   defaultInstanceProperties,
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{ExitCode: 0, Error: nil}
-			},
-			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
-				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
-			}},
-			wantCount: 3,
 		},
 		{
 			name: "SkipMetrics",
@@ -629,14 +624,39 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 			},
 			wantCount: 0,
 		},
+		{
+			name: "SkipMetricsHAReplication",
+			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath, availabilityPath}},
+			}, SkippedMetrics: map[string]bool{haAvailabilityPath: true, haReplicationPath: true}},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
+				sapcontrolclient.OSProcess{
+					Name:       "hdbdaemon",
+					Dispstatus: "SAPControl-GREEN",
+					Pid:        111,
+				},
+			},
+			},
+			wantCount: 1,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectHANAAvailabilityMetrics(context.Background(), test.ip, test.exec, commandlineexecutor.Params{}, test.fakeClient)
+			got, err := collectHANAAvailabilityMetrics(context.Background(), test.ip, test.exec, commandlineexecutor.Params{}, test.fakeClient)
 			if len(got) != test.wantCount {
 				t.Errorf("collectHANAAvailabilityMetrics() returned unexpected value, got=%d, want=%d",
 					len(got), test.wantCount)
+			}
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectHANAAvailabilityMetrics() returned unexpected error, got=%v, want=%v",
+					err, test.wantErr)
 			}
 		})
 	}
@@ -648,6 +668,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		ip         *InstanceProperties
 		fakeClient sapcontrolclienttest.Fake
 		wantCount  int
+		wantErr    error
 	}{
 		{
 			name: "ErrorInMetricsCollection",
@@ -656,6 +677,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 				ErrGetProcessList: cmpopts.AnyError,
 			},
 			wantCount: 0,
+			wantErr:   cmpopts.AnyError,
 		},
 		{
 			name: "SuccessNetWeaverMetrics",
@@ -687,10 +709,14 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectNetWeaverMetrics(context.Background(), test.ip, test.fakeClient)
+			got, err := collectNetWeaverMetrics(context.Background(), test.ip, test.fakeClient)
 			if len(got) != test.wantCount {
 				t.Errorf("collectNetWeaverMetrics() returned unexpected value, got=%d, want=%d",
 					len(got), test.wantCount)
+			}
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectNetWeaverMetrics() returned unexpected error, got=%v, want=%v",
+					err, cmpopts.AnyError)
 			}
 		})
 	}
@@ -723,5 +749,14 @@ func TestContains(t *testing.T) {
 				t.Errorf("contains(%v, %v) returned unexpected value, got=%t, want=%t", test.list, test.item, got, test.want)
 			}
 		})
+	}
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	p := &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{}}
+	got, _ := p.CollectWithRetry(context.Background())
+	want := 2
+	if len(got) != want {
+		t.Errorf("CollectWithRetry() returned unexpected value, got=%d, want=%d", len(got), want)
 	}
 }

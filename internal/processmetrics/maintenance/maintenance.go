@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"reflect"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -177,15 +178,15 @@ func removeSID(SIDs []string, ind int) []string {
 // Collect is a MaintenanceMode implementation of the Collector interface from
 // processmetrics. It returns the value of current maintenancemode configured per sid as a metric
 // list.
-func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
 	if _, ok := p.SkippedMetrics[mntmodePath]; ok {
-		return metrics
+		return metrics, nil
 	}
 	log.Logger.Debug("Starting maintenancemode metric collection.")
 	sidsUnderMaintenance, err := ReadMaintenanceMode(p.Reader)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	for sid := range p.Sids {
 		mntmode := contains(sidsUnderMaintenance, sid)
@@ -202,7 +203,28 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 		}
 		metrics = append(metrics, timeseries.BuildBool(params))
 	}
-	return metrics
+	return metrics, nil
+}
+
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	return res, err
 }
 
 func contains(list []string, item string) bool {

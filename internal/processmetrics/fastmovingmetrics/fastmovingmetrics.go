@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
@@ -97,9 +98,12 @@ const (
 // - /sap/hana/ha/availability
 // - /sap/nw/availability
 // Returns a list of HANA and Netweaver related availability metrics.
-func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
-	var metrics []*mrpb.TimeSeries
+	var (
+		metrics []*mrpb.TimeSeries
+		err     error
+	)
 	switch p.SAPInstance.GetType() {
 	case sapb.InstanceType_HANA:
 		processListParams := commandlineexecutor.Params{
@@ -108,14 +112,50 @@ func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
 			ArgsToSplit: fmt.Sprintf("-nr %s -function GetProcessList -format script", p.SAPInstance.GetInstanceNumber()),
 			Env:         []string{"LD_LIBRARY_PATH=" + p.SAPInstance.GetLdLibraryPath()},
 		}
-		metrics = collectHANAAvailabilityMetrics(ctx, p, commandlineexecutor.ExecuteCommand, processListParams, scc)
+		metrics, err = collectHANAAvailabilityMetrics(ctx, p, commandlineexecutor.ExecuteCommand, processListParams, scc)
 	case sapb.InstanceType_NETWEAVER:
-		metrics = collectNetWeaverMetrics(ctx, p, scc)
+		metrics, err = collectNetWeaverMetrics(ctx, p, scc)
 	}
-	return metrics
+	return metrics, err
 }
 
-func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	if err != nil {
+		// this is a special case in which fast moving metrics should return the HANA HA Availability
+		// and HA Replication metrics even after errors following retries because Smoke detector systems
+		// rely on these metrics.
+		if p.SAPInstance.GetType() == sapb.InstanceType_NETWEAVER {
+			return nil, err
+		}
+
+		extraLabels := map[string]string{
+			"ha_members": strings.Join(p.SAPInstance.GetHanaHaMembers(), ","),
+		}
+		now := tspb.Now()
+		res = append(res, createMetrics(p, haReplicationPath, extraLabels, now, 0))
+		res = append(res, createMetrics(p, haAvailabilityPath, nil, now, 0))
+	}
+	return res, nil
+}
+
+func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
 	log.Logger.Debugw("Collecting HANA Availability and HA Availability metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
@@ -129,19 +169,25 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 	)
 	if _, ok := ip.SkippedMetrics[availabilityPath]; !ok {
 		processes, err = sc.GetProcessList(scc)
-		if err == nil {
-			// If GetProcessList API didn't return an error.
-			availabilityValue = hanaAvailability(ip, processes)
-			metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
+		if err != nil {
+			return nil, err
 		}
+		// If GetProcessList API didn't return an error.
+		availabilityValue = hanaAvailability(ip, processes)
+		metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
 	}
 
-	if _, ok := ip.SkippedMetrics[haAvailabilityPath]; !ok {
-		haReplicationValue := refreshHAReplicationConfig(ctx, ip)
+	skipHAAvailability := ip.SkippedMetrics[haAvailabilityPath]
+	skipHAReplication := ip.SkippedMetrics[haReplicationPath]
+	if !skipHAAvailability && !skipHAReplication {
+		haReplicationValue, err := refreshHAReplicationConfig(ctx, ip)
+		if err != nil {
+			return nil, err
+		}
 		_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
 		if err != nil {
 			log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
-			return metrics
+			return nil, err
 		}
 		haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
 		extraLabels := map[string]string{
@@ -152,7 +198,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 	}
 
 	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
-	return metrics
+	return metrics, nil
 }
 
 func hanaAvailability(p *InstanceProperties, processes map[int]*sapcontrol.ProcessStatus) (value int64) {
@@ -202,7 +248,7 @@ func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicat
 	return value
 }
 
-func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) int64 {
+func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) (int64, error) {
 	mode, haMembers, replicationStatus, err := sapdiscovery.HANAReplicationConfig(
 		ctx,
 		p.SAPInstance.GetUser(),
@@ -212,18 +258,18 @@ func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) int6
 	// This is not in-band error handling. Metric should be zero in case of failures.
 	if err != nil {
 		log.Logger.Debugw("Failed to refresh HANA HA Replication config for instance", "instanceid", p.SAPInstance.GetInstanceId())
-		return 0
+		return 0, err
 	}
 
 	p.SAPInstance.Site = sapdiscovery.HANASite(mode)
 	p.SAPInstance.HanaHaMembers = haMembers
-	return int64(replicationStatus)
+	return int64(replicationStatus), nil
 }
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
-func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) []*mrpb.TimeSeries {
+func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
 	if _, ok := p.SkippedMetrics[nwAvailabilityPath]; ok {
-		return nil
+		return nil, nil
 	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{p.SAPInstance}
@@ -235,13 +281,13 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	procs, err = sc.GetProcessList(scc)
 	if err != nil {
 		log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
-		return nil
+		return nil, err
 	}
 
 	availabilityValue := collectNWAvailability(p, procs)
 	metrics = append(metrics, createMetrics(p, nwAvailabilityPath, nil, now, availabilityValue))
 
-	return metrics
+	return metrics, nil
 }
 
 func collectNWAvailability(p *InstanceProperties, procs map[int]*sapcontrol.ProcessStatus) (availabilityValue int64) {

@@ -25,6 +25,7 @@ import (
 	"context"
 	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
@@ -95,29 +96,60 @@ var (
 
 // Collect is cluster metrics implementation of Collector interface from
 // processmetrics.go. Returns a list of Linux cluster related metrics.
-func (p *InstanceProperties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
 	// we only want to run crm_mon once
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
 		log.Logger.Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
-		return metrics
+		return metrics, err
 	}
-	nodeMetrics, _ := collectNodeState(p, pacemaker.NodeState, data)
+	// TODO: b/300027574 - Test actual timeseries in unit test instead of returning an extra int.
+	nodeMetrics, _, err := collectNodeState(p, pacemaker.NodeState, data)
+	if err != nil {
+		return nil, err
+	}
 	metrics = append(metrics, nodeMetrics...)
-	resourceMetrics, _ := collectResourceState(p, pacemaker.ResourceState, data)
+	resourceMetrics, _, err := collectResourceState(p, pacemaker.ResourceState, data)
+	if err != nil {
+		return nil, err
+	}
 	metrics = append(metrics, resourceMetrics...)
-	failCountMetrics, _ := collectFailCount(p, pacemaker.FailCount, data)
+	failCountMetrics, _, err := collectFailCount(p, pacemaker.FailCount, data)
+	if err != nil {
+		return nil, err
+	}
 	metrics = append(metrics, failCountMetrics...)
-	return metrics
+	return metrics, nil
+}
+
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	return res, err
 }
 
 // collectNodeState returns the Linux cluster node state metrics as time series.
 // The integer values are returned as an array for testability.
-func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
+func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if _, ok := p.SkippedMetrics[nodesPath]; ok {
-		return nil, nil
+		return nil, nil, nil
 	}
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
@@ -126,7 +158,7 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *p
 	nodeState, err := read(crm)
 	if err != nil {
 		log.Logger.Errorw("Failure in reading pacemaker node state", log.Error(err))
-		return nil, nil
+		return nil, nil, err
 	}
 
 	for name, value := range nodeState {
@@ -139,14 +171,14 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *p
 		metrics = append(metrics, nodeMetric)
 	}
 	log.Logger.Debugw("Time taken to collect metrics in nodeState()", "time", time.Since(now.AsTime()))
-	return metrics, metricValues
+	return metrics, metricValues, nil
 }
 
 // collectResourceState returns the Linux cluster resource state metrics as time series.
 // The integer values of metric are returned as an array for testability.
-func collectResourceState(p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
+func collectResourceState(p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), resourcesPath) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
@@ -155,7 +187,7 @@ func collectResourceState(p *InstanceProperties, read readPacemakerResourceState
 	resourceState, err := read(crm)
 	if err != nil {
 		log.Logger.Errorw("Failure in reading pacemaker resource state", log.Error(err))
-		return nil, nil
+		return nil, nil, err
 	}
 
 	resourceNames := make(map[string]bool)
@@ -175,7 +207,7 @@ func collectResourceState(p *InstanceProperties, read readPacemakerResourceState
 		metrics = append(metrics, resourceMetric)
 	}
 	log.Logger.Debugw("Time taken to collect metrics in resourceState()", "time", time.Since(now.AsTime()))
-	return metrics, metricValues
+	return metrics, metricValues, nil
 }
 
 // stateFromString converts state string value to integer value.
@@ -190,9 +222,9 @@ func stateFromString(m map[string]int, val string) int {
 // collectFailCount returns the Linux cluster resource failcounts.
 // The metrics are returned only for resources with a failcount entry in
 // crm_mon history.
-func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int) {
+func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), failCountsPath) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
@@ -201,7 +233,7 @@ func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *p
 	resourceFailCounts, err := read(crm)
 	if err != nil {
 		log.Logger.Debugw("Failure reading pacemaker resource fail-count", log.Error(err))
-		return nil, nil
+		return nil, nil, err
 	}
 
 	for _, r := range resourceFailCounts {
@@ -213,7 +245,7 @@ func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *p
 		metricValues = append(metricValues, r.FailCount)
 	}
 	log.Logger.Debugw("Time taken to collect metrics in collectFailCount()", "time", time.Since(now.AsTime()))
-	return metrics, metricValues
+	return metrics, metricValues, nil
 }
 
 // createMetricsInt creates mrpb.TimeSeries for the given metric.
@@ -231,7 +263,7 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 
 /*
 metricLabels combines the default SAP Instance labels and extra labels
-to return a consilidated map of metric labels.
+to return a consolidated map of metric labels.
 */
 func metricLabels(p *InstanceProperties, extraLabels map[string]string) map[string]string {
 	defaultLabels := map[string]string{

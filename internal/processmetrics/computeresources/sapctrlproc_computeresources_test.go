@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -32,6 +34,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 		skippedMetrics map[string]bool
 		executor       commandlineexecutor.Execute
 		wantCount      int
+		wantErr        error
 	}{
 		{
 			name:   "EmptyPIDsMap",
@@ -47,7 +50,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
-						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   111\nsapstart    222\n",
+						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstart    222\n",
 					}
 				} else if params.Executable == "getconf" {
 					return commandlineexecutor.Result{
@@ -55,6 +58,9 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{}
+			},
+			skippedMetrics: map[string]bool{
+				sapCTRLCPUPath: true,
 			},
 			wantCount: 3,
 		},
@@ -64,7 +70,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "ps" {
 					return commandlineexecutor.Result{
-						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nhdbindexserver   9603\nsapstart    333\n",
+						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstart    333\n",
 					}
 				} else if params.Executable == "getconf" {
 					return commandlineexecutor.Result{
@@ -73,7 +79,8 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 				}
 				return commandlineexecutor.Result{}
 			},
-			wantCount: 1,
+			skippedMetrics: map[string]bool{sapCtrlMemoryPath: true},
+			wantCount:      1,
 		},
 		{
 			name:   "FetchedBothCPUAndMemoryMetricsSuccessfully",
@@ -116,16 +123,19 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testProps := &SAPControlProcInstanceProperties{
-				Config:        test.config,
-				Client:        &fake.TimeSeriesCreator{},
-				Executor:      test.executor,
-				NewProcHelper: newProcessWithContextHelperTest,
+				Config:         test.config,
+				Client:         &fake.TimeSeriesCreator{},
+				Executor:       test.executor,
+				NewProcHelper:  newProcessWithContextHelperTest,
+				SkippedMetrics: test.skippedMetrics,
 			}
-			got := testProps.Collect(context.Background())
+			got, gotErr := testProps.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() = %d , want %d", len(got), test.wantCount)
 			}
-
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Collect() = %v, want %v", gotErr, test.wantErr)
+			}
 			for _, metric := range got {
 				points := metric.GetPoints()
 				if points[0].GetValue().GetDoubleValue() < 0 {
@@ -135,4 +145,21 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 		})
 	}
 
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	sapctrl := &SAPControlProcInstanceProperties{
+		Config: defaultConfig,
+		Client: &fake.TimeSeriesCreator{},
+		Executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstart    111\n",
+			}
+		},
+		NewProcHelper: newProcessWithContextHelperTest,
+	}
+	_, err := sapctrl.CollectWithRetry(context.Background())
+	if err == nil {
+		t.Errorf("CollectWithRetry() = nil, want error")
+	}
 }

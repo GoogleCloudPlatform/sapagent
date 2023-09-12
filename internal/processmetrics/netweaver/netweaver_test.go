@@ -464,6 +464,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		name               string
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
+		wantErr            error
 		instanceProperties *InstanceProperties
 	}{
 		{
@@ -484,6 +485,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
 			wantMetricCount:    0,
 			instanceProperties: defaultAPIInstanceProperties,
+			wantErr:            cmpopts.AnyError,
 		},
 		{
 			name:            "MetricsSkipped",
@@ -502,9 +504,12 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics := collectNetWeaverMetrics(context.Background(), test.instanceProperties, test.fakeClient)
+			metrics, gotErr := collectNetWeaverMetrics(context.Background(), test.instanceProperties, test.fakeClient)
 			if len(metrics) != test.wantMetricCount {
 				t.Errorf("collectNetWeaverMetrics() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectNetWeaverMetrics() error mismatch, got: %v want: %v.", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -512,7 +517,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 
 func TestCollect(t *testing.T) {
 	// Production API returns no metrics in unit test setup.
-	metrics := defaultInstanceProperties.Collect(context.Background())
+	metrics, _ := defaultInstanceProperties.Collect(context.Background())
 	if len(metrics) != 0 {
 		t.Errorf("Collect() metric count mismatch, got: %v want: 0.", len(metrics))
 	}
@@ -526,6 +531,7 @@ func TestCollectHTTPMetrics(t *testing.T) {
 		serviceName    string
 		emptyURL       bool
 		wantCount      int
+		wantErr        error
 	}{
 		{
 			name:        "ICMServer",
@@ -537,19 +543,22 @@ func TestCollectHTTPMetrics(t *testing.T) {
 			name:        "MessageServer",
 			config:      defaultConfig,
 			serviceName: "SAP-CS",
-			wantCount:   2,
+			wantCount:   0,
+			wantErr:     cmpopts.AnyError,
 		},
 		{
 			name:        "UnknownServer",
 			config:      defaultConfig,
 			serviceName: "SAP-XYZ",
 			wantCount:   0,
+			wantErr:     cmpopts.AnyError,
 		},
 		{
 			name:      "EmptyURL",
 			config:    defaultConfig,
 			emptyURL:  true,
 			wantCount: 0,
+			wantErr:   cmpopts.AnyError,
 		},
 		{
 			name:        "SkipNWICMRMetrics",
@@ -595,11 +604,13 @@ func TestCollectHTTPMetrics(t *testing.T) {
 				SkippedMetrics: test.skippedMetrics,
 			}
 
-			got := collectHTTPMetrics(p)
+			got, gotErr := collectHTTPMetrics(p)
 			if len(got) != test.wantCount {
 				t.Errorf("collectHTTPMetrics() metric count mismatch, got: %v want: %v.", len(got), test.wantCount)
 			}
-
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectHTTPMetrics() error mismatch, got: %v want: %v.", gotErr, test.wantErr)
+			}
 		})
 	}
 }
@@ -609,6 +620,7 @@ func TestCollectICMPMetrics(t *testing.T) {
 		name      string
 		url       string
 		wantCount int
+		wantErr   error
 	}{
 		{
 			name:      "Success",
@@ -618,6 +630,7 @@ func TestCollectICMPMetrics(t *testing.T) {
 			name:      "InvalidURL",
 			url:       "InvalidURL",
 			wantCount: 0,
+			wantErr:   cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
@@ -630,9 +643,12 @@ func TestCollectICMPMetrics(t *testing.T) {
 				url = test.url
 			}
 
-			got := collectICMMetrics(defaultInstanceProperties, url)
+			got, gotErr := collectICMMetrics(defaultInstanceProperties, url)
 			if len(got) != test.wantCount {
 				t.Errorf("collectICMMetrics() metric count mismatch, got: %v want: %v.", len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectICMMetrics() error mismatch, got: %v want: %v.", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -645,16 +661,19 @@ func TestCollectMessageServerMetrics(t *testing.T) {
 		responseBody string
 		statusCode   int
 		wantCount    int
+		wantErr      error
 	}{
 		{
 			name:      "InvalidURL",
 			url:       "InvalidURL",
 			wantCount: 0,
+			wantErr:   cmpopts.AnyError,
 		},
 		{
 			name:       "HTTPGETFailure",
 			statusCode: http.StatusInternalServerError,
-			wantCount:  2,
+			wantCount:  0,
+			wantErr:    cmpopts.AnyError,
 		},
 		{
 			name:         "Success",
@@ -677,9 +696,12 @@ func TestCollectMessageServerMetrics(t *testing.T) {
 				url = test.url
 			}
 
-			got := collectMessageServerMetrics(defaultInstanceProperties, url)
+			got, gotErr := collectMessageServerMetrics(defaultInstanceProperties, url)
 			if len(got) != test.wantCount {
 				t.Errorf("collectMessageServerMetrics() metric count mismatch, got: %v want: %v.", len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectMessageServerMetrics() error mismatch, got: %v want: %v.", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -734,6 +756,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		name               string
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
+		wantErr            error
 		instanceProperties *InstanceProperties
 	}{
 		{
@@ -741,6 +764,7 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 			fakeClient:         sapcontrolclienttest.Fake{ErrABAPGetWPTable: cmpopts.AnyError},
 			wantMetricCount:    0,
 			instanceProperties: defaultAPIInstanceProperties,
+			wantErr:            cmpopts.AnyError,
 		},
 		{
 			name: "SuccessWebmethod",
@@ -806,10 +830,13 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPProcessStatus(context.Background(), test.instanceProperties, test.fakeClient)
+			got, err := collectABAPProcessStatus(context.Background(), test.instanceProperties, test.fakeClient)
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPProcessStatus produced unexpected number of metrics, got: %v want: %v.", len(got), test.wantMetricCount)
+			}
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectABAPProcessStatus produced unexpected error, got: %v want: %v.", err, test.wantErr)
 			}
 		})
 	}
@@ -820,18 +847,21 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		name               string
 		fakeClient         sapcontrolclienttest.Fake
 		wantMetricCount    int
+		wantErr            error
 		instanceProperties *InstanceProperties
 	}{
 		{
 			name:               "DPMONFailureWebmethod",
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetQueueStatistic: cmpopts.AnyError},
 			wantMetricCount:    0,
+			wantErr:            cmpopts.AnyError,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
 			name:               "DPMonFailsWithTasksWebmethod",
 			fakeClient:         sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{{"ICM/Intern", 0, 7}}, ErrGetQueueStatistic: cmpopts.AnyError},
 			wantMetricCount:    0,
+			wantErr:            cmpopts.AnyError,
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
@@ -884,10 +914,13 @@ func TestCollectABAPQueueStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPQueueStats(context.Background(), test.instanceProperties, test.fakeClient)
+			got, gotErr := collectABAPQueueStats(context.Background(), test.instanceProperties, test.fakeClient)
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPQueueStats() unexpected metric count using webmethod, got: %d, want: %d.", len(got), test.wantMetricCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectABAPQueueStats() unexpected error, got: %v, want: %v.", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -902,6 +935,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 		properties      *InstanceProperties
 		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
+		wantErr         error
 	}{
 		{
 			name:       "DPMONFailure",
@@ -912,6 +946,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 				}
 			},
 			wantMetricCount: 0,
+			wantErr:         cmpopts.AnyError,
 		},
 		{
 			name:       "DPMonFailsWithStdOut",
@@ -922,6 +957,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 					Error:  cmpopts.AnyError,
 				}
 			},
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:       "ZeroSessions",
@@ -932,6 +968,7 @@ func TestCollectABAPSessionStats(t *testing.T) {
 				}
 			},
 			wantMetricCount: 0,
+			wantErr:         cmpopts.AnyError,
 		},
 		{
 			name:       "DPMONSuccess",
@@ -964,10 +1001,13 @@ func TestCollectABAPSessionStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectABAPSessionStats(context.Background(), test.properties, test.fakeExec, commandlineexecutor.Params{})
+			got, gotErr := collectABAPSessionStats(context.Background(), test.properties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectABAPSessionStats() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectABAPSessionStats() unexpected error, got: %v, want: %v.", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -982,6 +1022,7 @@ func TestCollectRFCConnections(t *testing.T) {
 		properties      *InstanceProperties
 		fakeExec        commandlineexecutor.Execute
 		wantMetricCount int
+		wantErr         error
 	}{
 		{
 			name:       "DPMONSuccess",
@@ -1002,6 +1043,7 @@ func TestCollectRFCConnections(t *testing.T) {
 				}
 			},
 			wantMetricCount: 0,
+			wantErr:         cmpopts.AnyError,
 		},
 		{
 			name:       "DPMONFailsWithStdOut",
@@ -1013,6 +1055,7 @@ func TestCollectRFCConnections(t *testing.T) {
 				}
 			},
 			wantMetricCount: 0,
+			wantErr:         cmpopts.AnyError,
 		},
 		{
 			name: "SkipRFCConnectionsMetric",
@@ -1035,10 +1078,13 @@ func TestCollectRFCConnections(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectRFCConnections(context.Background(), test.properties, test.fakeExec, commandlineexecutor.Params{})
+			got, gotErr := collectRFCConnections(context.Background(), test.properties, test.fakeExec, commandlineexecutor.Params{})
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectRFCConnections() unexpected metric count, got: %d, want: %d.", len(got), test.wantMetricCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectRFCConnections() unexpected error, got: %v, want: %v.", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -1051,6 +1097,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 		fakeExec        commandlineexecutor.Execute
 		fakeClient      sapcontrolclienttest.Fake
 		wantMetricCount int
+		wantErr         error
 	}{
 		{
 			name: "ASCSInstanceSuccess",
@@ -1168,6 +1215,7 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 				ErrEnqGetLockTable: cmpopts.AnyError,
 			},
 			wantMetricCount: 0,
+			wantErr:         cmpopts.AnyError,
 		},
 		{
 			name: "SkipEnqLockMetrics",
@@ -1203,11 +1251,22 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectEnqLockMetrics(context.Background(), test.props, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
+			got, gotErr := collectEnqLockMetrics(context.Background(), test.props, test.fakeExec, commandlineexecutor.Params{}, test.fakeClient)
 
 			if len(got) != test.wantMetricCount {
 				t.Errorf("collectEnqLockMetrics()=%d, want: %d.", len(got), test.wantMetricCount)
 			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectEnqLockMetrics() unexpected error, got: %v, want: %v.", gotErr, test.wantErr)
+			}
 		})
+	}
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	p := &InstanceProperties{}
+	_, err := p.CollectWithRetry(context.Background())
+	if err == nil {
+		t.Errorf("CollectWithRetry() unexpected success, want error.")
 	}
 }

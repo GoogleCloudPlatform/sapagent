@@ -24,6 +24,7 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	backoff "github.com/cenkalti/backoff/v4"
 	compute "google.golang.org/api/compute/v0.alpha"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -97,30 +98,57 @@ func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, 
 
 // Collect is an implementation of Collector interface from processmetrics
 // responsible for collecting infra migration event metrics.
-func (p *Properties) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	if p.Config.BareMetal {
-		return nil
+		return nil, nil
 	}
 	log.Logger.Info("Collecting infrastructure metrics")
 
-	scheduledMigration := collectScheduledMigration(p, metadataServerCall)
-	upcomingMaintenance, _ := p.collectUpcomingMaintenance()
-	return append(scheduledMigration, upcomingMaintenance...)
+	scheduledMigration, err := collectScheduledMigration(p, metadataServerCall)
+	if err != nil {
+		return nil, err
+	}
+	upcomingMaintenance, err := p.collectUpcomingMaintenance()
+	if err != nil {
+		return nil, err
+	}
+	return append(scheduledMigration, upcomingMaintenance...), nil
 }
 
-func collectScheduledMigration(p *Properties, f func() (string, error)) []*mrpb.TimeSeries {
+// CollectWithRetry decorates the Collect method with retry mechanism.
+func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var (
+		attempt = 1
+		res     []*mrpb.TimeSeries
+	)
+	if p.pmbo == nil {
+		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
+	}
+	err := backoff.Retry(func() error {
+		var err error
+		res, err = p.Collect(ctx)
+		if err != nil {
+			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	return res, err
+}
+
+func collectScheduledMigration(p *Properties, f func() (string, error)) ([]*mrpb.TimeSeries, error) {
 	if _, ok := p.skippedMetrics[migrationPath]; ok {
-		return []*mrpb.TimeSeries{}
+		return []*mrpb.TimeSeries{}, nil
 	}
 	event, err := f()
 	if err != nil {
-		return []*mrpb.TimeSeries{}
+		return []*mrpb.TimeSeries{}, err
 	}
 	var scheduledMigration int64
 	if event == metadataMigrationResponse {
 		scheduledMigration = 1
 	}
-	return []*mrpb.TimeSeries{p.createIntMetric(migrationPath, scheduledMigration)}
+	return []*mrpb.TimeSeries{p.createIntMetric(migrationPath, scheduledMigration)}, nil
 }
 
 func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {

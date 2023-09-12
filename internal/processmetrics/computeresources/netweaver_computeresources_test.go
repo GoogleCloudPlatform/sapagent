@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
@@ -50,6 +52,7 @@ func TestCollectForNetweaver(t *testing.T) {
 		skippedMetrics map[string]bool
 		fakeClient     sapcontrolclienttest.Fake
 		wantCount      int
+		wantErr        error
 		processParams  commandlineexecutor.Params
 		lastValue      map[string]*process.IOCountersStat
 	}{
@@ -65,9 +68,13 @@ func TestCollectForNetweaver(t *testing.T) {
 			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"hdbdaemon", "SAPControl-GREEN", 111},
 					{"hdbcompileserver", "SAPControl-GREEN", 222},
 				},
+			},
+			skippedMetrics: map[string]bool{
+				nwCPUPath:       true,
+				nwIOPSReadsPath: true,
+				nwIOPSWritePath: true,
 			},
 			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 3,
@@ -77,9 +84,13 @@ func TestCollectForNetweaver(t *testing.T) {
 			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"msg_server", "SAPControl-GREEN", 111},
 					{"enserver", "SAPControl-GREEN", 333},
 				},
+			},
+			skippedMetrics: map[string]bool{
+				nwMemoryPath:    true,
+				nwIOPSReadsPath: true,
+				nwIOPSWritePath: true,
 			},
 			lastValue: make(map[string]*process.IOCountersStat),
 			wantCount: 1,
@@ -120,9 +131,13 @@ func TestCollectForNetweaver(t *testing.T) {
 				SAPControlClient:        test.fakeClient,
 			}
 
-			got := testNetweaverInstanceProperties.Collect(context.Background())
+			got, err := testNetweaverInstanceProperties.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() = %d , want %d", len(got), test.wantCount)
+			}
+
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Collect() = %v, want %v", err, test.wantErr)
 			}
 
 			for _, metric := range got {
@@ -132,5 +147,24 @@ func TestCollectForNetweaver(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCollectWithRetryNW(t *testing.T) {
+	nwp := &NetweaverInstanceProperties{
+		Config:        defaultConfig,
+		Client:        &fake.TimeSeriesCreator{},
+		Executor:      commandlineexecutor.ExecuteCommand,
+		NewProcHelper: newProcessWithContextHelperTest,
+		SAPInstance:   defaultSAPInstanceNetWeaver,
+		SAPControlClient: sapcontrolclienttest.Fake{
+			Processes: []sapcontrolclient.OSProcess{
+				{"msg_server", "SAPControl-GREEN", 111},
+			},
+		},
+	}
+	_, err := nwp.CollectWithRetry(context.Background())
+	if err == nil {
+		t.Errorf("CollectWithRetry() = %v, want error", err)
 	}
 }

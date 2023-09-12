@@ -85,14 +85,33 @@ type (
 	fakeCollector struct {
 		timeSeriesCount int
 	}
+
+	fakeCollectorError struct {
+	}
 )
 
-func (f *fakeCollector) Collect(ctx context.Context) []*mrpb.TimeSeries {
+func (f *fakeCollector) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	m := make([]*mrpb.TimeSeries, f.timeSeriesCount)
 	for i := 0; i < f.timeSeriesCount; i++ {
 		m[i] = &mrpb.TimeSeries{}
 	}
-	return m
+	return m, nil
+}
+
+func (f *fakeCollector) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	m := make([]*mrpb.TimeSeries, f.timeSeriesCount)
+	for i := 0; i < f.timeSeriesCount; i++ {
+		m[i] = &mrpb.TimeSeries{}
+	}
+	return m, nil
+}
+
+func (f *fakeCollectorError) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	return nil, cmpopts.AnyError
+}
+
+func (f *fakeCollectorError) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	return nil, cmpopts.AnyError
 }
 
 func fakeCollectors(count, timeSerisCountPerCollector int) []Collector {
@@ -370,23 +389,38 @@ func TestCollectAndSend(t *testing.T) {
 	}
 }
 
-func TestCollectAndSendOnce(t *testing.T) {
+func TestCollectAndSendSlowMovingMetricsOnce(t *testing.T) {
 	tests := []struct {
 		name           string
 		properties     *Properties
+		collector      Collector
 		wantSent       int
 		wantBatchCount int
 		wantErr        error
 	}{
 		{
-			name: "TenCollectorsSuccess",
+			name: "CollectorSuccess",
 			properties: &Properties{
 				Client:     &fake.TimeSeriesCreator{},
 				Collectors: fakeCollectors(10, 1),
 				Config:     quickTestConfig,
 			},
+			collector: &fakeCollector{
+				timeSeriesCount: 10,
+			},
 			wantSent:       10,
 			wantBatchCount: 1,
+		},
+		{
+			name: "CollectorFailure",
+			properties: &Properties{
+				Client:     &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
+				Collectors: fakeCollectors(1, 1),
+				Config:     quickTestConfig,
+			},
+			collector:      &fakeCollectorError{},
+			wantErr:        cmpopts.AnyError,
+			wantBatchCount: 0,
 		},
 		{
 			name: "SendFailure",
@@ -395,6 +429,9 @@ func TestCollectAndSendOnce(t *testing.T) {
 				Collectors: fakeCollectors(1, 1),
 				Config:     quickTestConfig,
 			},
+			collector: &fakeCollector{
+				timeSeriesCount: 10,
+			},
 			wantErr:        cmpopts.AnyError,
 			wantBatchCount: 1,
 		},
@@ -402,7 +439,7 @@ func TestCollectAndSendOnce(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotSent, gotBatchCount, gotErr := test.properties.collectAndSendOnce(context.Background(), defaultBackOffIntervals)
+			gotSent, gotBatchCount, gotErr := collectAndSendSlowMovingMetricsOnce(context.Background(), test.properties, test.collector, defaultBackOffIntervals)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("Failure in collectAndSendOnce(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)
@@ -452,7 +489,7 @@ func TestCollectAndSendOnceFastMovingMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotSent, gotBatchCount, gotErr := test.properties.collectAndSendOnceFastMovingMetrics(context.Background(), defaultBackOffIntervals)
+			gotSent, gotBatchCount, gotErr := test.properties.collectAndSendFastMovingMetricsOnce(context.Background(), defaultBackOffIntervals)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("Failure in collectAndSendOnceFastMovingMetrics(), gotErr: %v wantErr: %v.", gotErr, test.wantErr)

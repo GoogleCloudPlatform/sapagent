@@ -94,6 +94,7 @@ func TestCollect(t *testing.T) {
 		fakeMetadataServerCall func() (string, error)
 		gceService             *fakegcealpha.TestGCE
 		wantCount              int
+		wantErr                error
 	}{
 		{
 			name:       "bareMetal",
@@ -107,7 +108,8 @@ func TestCollect(t *testing.T) {
 			gceService: &fakegcealpha.TestGCE{
 				Instances: []*compute.Instance{},
 			},
-			wantCount: 1,
+			wantCount: 0,
+			wantErr:   cmpopts.AnyError, // p.collectUpcomingMaintenance returns an error
 		},
 		{
 			name:                   "soleTenant",
@@ -125,9 +127,12 @@ func TestCollect(t *testing.T) {
 				p.gceAlphaService = test.gceService
 			}
 			p.gceAlphaService = test.gceService
-			got := p.Collect(context.Background())
+			got, gotErr := p.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() returned unexpected metric count: got=%+v, want=%d", got, test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Collect() returned unexpected error: got=%+v, want=%+v", gotErr, test.wantErr)
 			}
 		})
 	}
@@ -175,7 +180,7 @@ func TestCollectScheduledMigration_MetricCount(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectScheduledMigration(test.properties, test.fakeMetadataServerCall)
+			got, _ := collectScheduledMigration(test.properties, test.fakeMetadataServerCall)
 			// Test one metric is exported in case of successful call to the metadata server.
 			if len(got) != test.wantCount {
 				t.Errorf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), test.wantCount)
@@ -204,7 +209,7 @@ func TestCollectScheduledMigration_MetricValue(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectScheduledMigration(defaultProperties, test.fakeMetadataServerCall)
+			got, _ := collectScheduledMigration(defaultProperties, test.fakeMetadataServerCall)
 			if len(got) != 1 {
 				t.Fatalf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), 1)
 			}
@@ -223,7 +228,7 @@ func TestCollectScheduledMigration_MetricValue(t *testing.T) {
 
 func TestCollectScheduledMigration_MetricType(t *testing.T) {
 	want := "workload.googleapis.com/sap/infra/migration"
-	got := collectScheduledMigration(defaultProperties, func() (string, error) { return "", nil })
+	got, _ := collectScheduledMigration(defaultProperties, func() (string, error) { return "", nil })
 	if len(got) != 1 {
 		t.Fatalf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), 1)
 	}
@@ -605,5 +610,13 @@ func TestEnumToInt(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("enumToInt(%v, %v) = %v, want: %v", tc.s, tc.m, got, tc.want)
 		}
+	}
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	p := New(&cpb.Configuration{}, nil, nil, nil, nil)
+	_, err := p.CollectWithRetry(context.Background())
+	if err == nil {
+		t.Error("CollectWithRetry() got success expected error")
 	}
 }

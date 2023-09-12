@@ -311,6 +311,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 		params      parameters
 		processList []*ProcessInfo
 		wantCount   int
+		wantError   error
 	}{
 		{
 			name: "FetchCPUPercentageMetricSuccessfully",
@@ -323,6 +324,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
 			wantCount:   1,
+			wantError:   nil,
 		},
 		{
 			name: "CPUMetricsNotFetched",
@@ -335,6 +337,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 			// For 64-bit systems, pid_max is 2^22. Set to max int32 to ensure it does not exist.
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "2147483647"}},
 			wantCount:   0,
+			wantError:   cmpopts.AnyError,
 		},
 		{
 			name: "InvalidPID",
@@ -347,6 +350,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "abc"}},
 			wantCount:   0,
+			wantError:   nil,
 		},
 		{
 			name: "ErrorInNewProcessPsUtil",
@@ -359,6 +363,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
 			wantCount:   0,
+			wantError:   cmpopts.AnyError,
 		},
 		{
 			name: "ErrorInCPUPercentage",
@@ -371,13 +376,17 @@ func TestCollectCPUPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "222"}},
 			wantCount:   0,
+			wantError:   cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectCPUPerProcess(context.Background(), test.params, test.processList)
+			got, gotErr := collectCPUPerProcess(context.Background(), test.params, test.processList)
 			if len(got) != test.wantCount {
 				t.Errorf("collectCPUPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantError, cmpopts.EquateErrors()) {
+				t.Errorf("collectCPUPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantError)
 			}
 		})
 	}
@@ -392,9 +401,10 @@ func TestCollectCPUPerProcessValues(t *testing.T) {
 	}
 	ProcessList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
 	want := float64(expectedCPUPercentage)
-	got := collectCPUPerProcess(context.Background(), params, ProcessList)[0].GetPoints()[0].GetValue().GetDoubleValue()
-	if got != want {
-		t.Errorf("collectCPUPerProcess(%v, %v) = %f , want %f", params, ProcessList, got, want)
+	got, _ := collectCPUPerProcess(context.Background(), params, ProcessList)
+	gotVal := got[0].GetPoints()[0].GetValue().GetDoubleValue()
+	if gotVal != want {
+		t.Errorf("collectCPUPerProcess(%v, %v) = %f , want %f", params, ProcessList, gotVal, want)
 	}
 }
 
@@ -404,6 +414,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 		params      parameters
 		processList []*ProcessInfo
 		wantCount   int
+		wantErr     error
 	}{
 		{
 			name: "FetchMemoryUsageMetricSuccessfully",
@@ -440,6 +451,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
 			wantCount:   0,
+			wantErr:     cmpopts.AnyError,
 		},
 		{
 			name: "ErrorInMemeoryUsage",
@@ -452,14 +464,18 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "333"}},
 			wantCount:   0,
+			wantErr:     cmpopts.AnyError,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectMemoryPerProcess(context.Background(), test.params, test.processList)
+			got, gotErr := collectMemoryPerProcess(context.Background(), test.params, test.processList)
 			if len(got) != test.wantCount {
 				t.Errorf("collectMemoryPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectMemoryPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantErr)
 			}
 		})
 	}
@@ -479,7 +495,7 @@ func TestMemoryPerProcessValues(t *testing.T) {
 		"VmSwap": 6,
 	}
 	memoryUtilMap := make(map[string]float64)
-	got := collectMemoryPerProcess(context.Background(), params, processList)
+	got, _ := collectMemoryPerProcess(context.Background(), params, processList)
 	for _, item := range got {
 		key := item.GetMetric().GetLabels()["memType"]
 		val := item.GetPoints()[0].GetValue().GetDoubleValue()
@@ -503,8 +519,9 @@ func TestCollectMemoryPerProcessLabels(t *testing.T) {
 	want["memType"] = "VmSize"
 	want["sid"] = "HDB"
 	want["instance_nr"] = "001"
-	got := collectMemoryPerProcess(context.Background(), params, processList)[0].GetMetric().GetLabels()
-	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+	got, _ := collectMemoryPerProcess(context.Background(), params, processList)
+	gotVal := got[0].GetMetric().GetLabels()
+	if diff := cmp.Diff(want, gotVal, protocmp.Transform()); diff != "" {
 		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
 	}
 }
@@ -515,6 +532,7 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 		params      parameters
 		processList []*ProcessInfo
 		wantCount   int
+		wantErr     error
 	}{
 		{
 			name: "FetchIOPSMetricSuccessfully",
@@ -545,6 +563,7 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
 			wantCount:   0,
+			wantErr:     cmpopts.AnyError,
 		},
 		{
 			name: "InvalidPID",
@@ -557,6 +576,7 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "abc"}},
 			wantCount:   0,
+			wantErr:     nil,
 		},
 		{
 			name: "ErrorInFetchingIOPSMetric",
@@ -575,14 +595,18 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "444"}},
 			wantCount:   0,
+			wantErr:     cmpopts.AnyError,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectIOPSPerProcess(context.Background(), test.params, test.processList)
+			got, gotErr := collectIOPSPerProcess(context.Background(), test.params, test.processList)
 			if len(got) != test.wantCount {
 				t.Errorf("collectIOPSPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
+			}
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectIOPSPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantErr)
 			}
 		})
 	}
@@ -603,7 +627,7 @@ func TestCollectIOPSPerProcessValues(t *testing.T) {
 		newProc: newProcessWithContextHelperTest,
 	}
 	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
-	got := collectIOPSPerProcess(context.Background(), params, processList)
+	got, _ := collectIOPSPerProcess(context.Background(), params, processList)
 	want := []float64{0.4, 0.8}
 	for i, item := range got {
 		if item.GetPoints()[0].GetValue().GetDoubleValue() != want[i] {

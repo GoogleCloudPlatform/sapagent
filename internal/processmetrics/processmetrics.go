@@ -38,6 +38,7 @@ import (
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -64,7 +65,8 @@ type (
 	// This needs to be implemented by application specific modules that want to leverage
 	// startMetricGroup functionality.
 	Collector interface {
-		Collect(context.Context) []*mrpb.TimeSeries
+		Collect(context.Context) ([]*mrpb.TimeSeries, error)
+		CollectWithRetry(context.Context) ([]*mrpb.TimeSeries, error)
 	}
 
 	// Properties has necessary context for Metrics collection.
@@ -151,6 +153,11 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	p := create(ctx, parameters, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
 	go p.collectAndSend(ctx, parameters.BackOffs)
+	// createWorkerPool creates a pool of workers to start collecting slow moving metrics in parallel
+	// each collector has its own job of collecting and then sending the metrics to cloudmonitoring.
+	// So after an error is encountered during metrics collection within a collector, while it retried
+	// as per the retry policy, other collectors remain unaffected.
+	go createWorkerPoolForSlowMetrics(ctx, p, parameters.BackOffs)
 	return true
 }
 
@@ -331,7 +338,7 @@ func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAP
 /*
 collectAndSend runs the perpetual collect metrics and send to cloud monitoring workflow.
 
-The collectAndSendOnce workflow is called once every process_metrics_frequency.
+The collectAndSendFastMovingMetricsOnce workflow is called once every process_metrics_frequency.
 The function returns an error if no collectors exist. If any errors
 occur during collect or send, they are logged and the workflow continues.
 
@@ -366,25 +373,17 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 			p.HeartbeatSpec.Beat()
 		case <-collectTicker.C:
 			p.HeartbeatSpec.Beat()
-			sent, batchCount, err := p.collectAndSendOnceFastMovingMetrics(ctx, bo)
+			sent, batchCount, err := p.collectAndSendFastMovingMetricsOnce(ctx, bo)
 			if err != nil {
 				log.Logger.Errorw("Error sending metrics", "error", err)
 				lastErr = err
 			}
 			log.Logger.Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", cf)
-		case <-slowCollectTicker.C:
-			p.HeartbeatSpec.Beat()
-			sent, batchCount, err := p.collectAndSendOnce(ctx, bo)
-			if err != nil {
-				log.Logger.Errorw("Error sending metrics", "error", err)
-				lastErr = err
-			}
-			log.Logger.Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", slowProcessMetricsFrequency)
 		}
 	}
 }
 
-func (p *Properties) collectAndSendOnceFastMovingMetrics(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
+func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
 	var wg sync.WaitGroup
 	msgs := make([][]*mrpb.TimeSeries, len(p.FastMovingCollectors))
 	defer (func() { msgs = nil })() // free up reference in memory.
@@ -394,7 +393,10 @@ func (p *Properties) collectAndSendOnceFastMovingMetrics(ctx context.Context, bo
 		wg.Add(1)
 		go func(slot int, c Collector) {
 			defer wg.Done()
-			msgs[slot] = c.Collect(ctx) // Each collector writes to its own slot.
+			msgs[slot], err = c.CollectWithRetry(ctx) // Each collector writes to its own slot.
+			if err != nil {
+				log.Logger.Errorw("Error collecting fast moving metrics", "error", err)
+			}
 			log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
 		}(i, collector)
 	}
@@ -403,33 +405,37 @@ func (p *Properties) collectAndSendOnceFastMovingMetrics(ctx context.Context, bo
 	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
 }
 
-/*
-collectAndSendOnce implements the collect(from all collectors) and send workflow
-exactly once.
-
-Calls all the registered collectors (HANA, Cluster, etc.) asynchronously
-to collect the metrics. A single call to send() uses synchronous Cloud
-Monitoring API calls to send the metrics.
-
-Return values are pass-through from send().
-*/
-func (p *Properties) collectAndSendOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
-	var wg sync.WaitGroup
-	msgs := make([][]*mrpb.TimeSeries, len(p.Collectors))
-	defer (func() { msgs = nil })() // free up reference in memory.
-	log.Logger.Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.Collectors))
-
-	for i, collector := range p.Collectors {
-		wg.Add(1)
-		go func(slot int, c Collector) {
-			defer wg.Done()
-			msgs[slot] = c.Collect(ctx) // Each collector writes to its own slot.
-			log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
-		}(i, collector)
+func createWorkerPoolForSlowMetrics(ctx context.Context, p *Properties, bo *cloudmonitoring.BackOffIntervals) {
+	wp := workerpool.New(len(p.Collectors))
+	for _, collector := range p.Collectors {
+		collector := collector
+		// Since wp.Submit() is non-blocking, the for loop might progress before the
+		// task is executed in the workerpool. Creating a copy of Collector outside
+		// of Submit() to ensure we copy the collector into the call.
+		// Reference: https://go.dev/doc/faq#closures_and_goroutines
+		wp.Submit(func() {
+			collectAndSendSlowMovingMetrics(ctx, p, collector, bo, wp)
+		})
 	}
-	log.Logger.Debug("Waiting for collectors to finish.")
-	wg.Wait()
-	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
+}
+
+func collectAndSendSlowMovingMetrics(ctx context.Context, p *Properties, c Collector, bo *cloudmonitoring.BackOffIntervals, wp *workerpool.WorkerPool) error {
+	sent, batchCount, err := collectAndSendSlowMovingMetricsOnce(ctx, p, c, bo)
+	log.Logger.Debugw("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "error", err)
+	time.AfterFunc(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency())*time.Second, func() {
+		wp.Submit(func() {
+			collectAndSendSlowMovingMetrics(ctx, p, c, bo, wp)
+		})
+	})
+	return err
+}
+
+func collectAndSendSlowMovingMetricsOnce(ctx context.Context, p *Properties, c Collector, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
+	metrics, err := c.CollectWithRetry(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	return cloudmonitoring.SendTimeSeries(ctx, metrics, p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
 }
 
 // flatten converts an 2D array of metric slices to a flat 1D array of metrics.
