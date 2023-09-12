@@ -104,12 +104,12 @@ func (mmw ModeWriter) MakeDirs(path string, perm os.FileMode) error {
 
 // InstanceProperties have the necessary context for maintenance mode metric collection
 type InstanceProperties struct {
-	Config         *cnfpb.Configuration
-	Client         cloudmonitoring.TimeSeriesCreator
-	Reader         FileReader
-	Sids           map[string]bool
-	SkippedMetrics map[string]bool
-	pmbo           *cloudmonitoring.BackOffIntervals
+	Config          *cnfpb.Configuration
+	Client          cloudmonitoring.TimeSeriesCreator
+	Reader          FileReader
+	Sids            map[string]bool
+	SkippedMetrics  map[string]bool
+	PMBackoffPolicy backoff.BackOffContext
 }
 
 // ReadMaintenanceMode reads the current value for the SIDs under maintenance persisted in
@@ -212,9 +212,6 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -223,7 +220,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }
 

@@ -148,6 +148,7 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 }
 
 func TestCollectWithRetry(t *testing.T) {
+	c := context.Background()
 	sapctrl := &SAPControlProcInstanceProperties{
 		Config: defaultConfig,
 		Client: &fake.TimeSeriesCreator{},
@@ -156,9 +157,10 @@ func TestCollectWithRetry(t *testing.T) {
 				StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstart    111\n",
 			}
 		},
-		NewProcHelper: newProcessWithContextHelperTest,
+		NewProcHelper:   newProcessWithContextHelperTest,
+		PMBackoffPolicy: defaultBOPolicy(c),
 	}
-	_, err := sapctrl.CollectWithRetry(context.Background())
+	_, err := sapctrl.CollectWithRetry(c)
 	if err == nil {
 		t.Errorf("CollectWithRetry() = nil, want error")
 	}

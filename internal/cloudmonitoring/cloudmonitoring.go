@@ -88,7 +88,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 			return err
 		}
 		return nil
-	}, ShortConstantBackOffPolicy(ctx, bo.ShortConstant))
+	}, ShortConstantBackOffPolicy(ctx, bo.ShortConstant, 2))
 
 	if err != nil {
 		log.Logger.Errorw("CreateTimeSeries retry limit exceeded", "request", req)
@@ -119,7 +119,7 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 			attempt++
 		}
 		return err
-	}, LongExponentialBackOffPolicy(ctx, bo.LongExponential))
+	}, LongExponentialBackOffPolicy(ctx, bo.LongExponential, 4, time.Minute, 15*time.Second))
 	if err != nil {
 		log.Logger.Errorw("QueryTimeSeries retry limit exceeded", "request", req, "error", err, "attempt", attempt)
 		return nil, err
@@ -128,18 +128,18 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 }
 
 // LongExponentialBackOffPolicy returns a backoff policy with a One Minute MaxElapsedTime.
-func LongExponentialBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
+func LongExponentialBackOffPolicy(ctx context.Context, initial time.Duration, retries uint64, maxElapsedTime time.Duration, maxInterval time.Duration) backoff.BackOffContext {
 	exp := backoff.NewExponentialBackOff()
 	exp.InitialInterval = initial
-	exp.MaxInterval = 15 * time.Second
-	exp.MaxElapsedTime = time.Minute
-	return backoff.WithContext(backoff.WithMaxRetries(exp, 4), ctx) // 4 retries = 5 total attempts
+	exp.MaxInterval = maxInterval
+	exp.MaxElapsedTime = maxElapsedTime
+	return backoff.WithContext(backoff.WithMaxRetries(exp, retries), ctx)
 }
 
 // ShortConstantBackOffPolicy returns a backoff policy with 15s MaxElapsedTime.
-func ShortConstantBackOffPolicy(ctx context.Context, initial time.Duration) backoff.BackOffContext {
+func ShortConstantBackOffPolicy(ctx context.Context, initial time.Duration, retries uint64) backoff.BackOffContext {
 	constantBackoff := backoff.NewConstantBackOff(initial)
-	return backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 2), ctx) // 2 retries = 3 total attempts
+	return backoff.WithContext(backoff.WithMaxRetries(constantBackoff, retries), ctx)
 }
 
 // SendTimeSeries sends all the time series objects to cloud monitoring.

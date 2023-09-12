@@ -151,6 +151,7 @@ func TestCollectForNetweaver(t *testing.T) {
 }
 
 func TestCollectWithRetryNW(t *testing.T) {
+	c := context.Background()
 	nwp := &NetweaverInstanceProperties{
 		Config:        defaultConfig,
 		Client:        &fake.TimeSeriesCreator{},
@@ -162,8 +163,9 @@ func TestCollectWithRetryNW(t *testing.T) {
 				{"msg_server", "SAPControl-GREEN", 111},
 			},
 		},
+		PMBackoffPolicy: defaultBOPolicy(c),
 	}
-	_, err := nwp.CollectWithRetry(context.Background())
+	_, err := nwp.CollectWithRetry(c)
 	if err == nil {
 		t.Errorf("CollectWithRetry() = %v, want error", err)
 	}

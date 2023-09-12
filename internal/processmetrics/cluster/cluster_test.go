@@ -19,9 +19,12 @@ package cluster
 import (
 	"context"
 	"testing"
+	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -37,6 +40,11 @@ var defaultInstanceProperties = &InstanceProperties{
 			InstanceId: "test-instance",
 		},
 	},
+	PMBackoffPolicy: defaultBOPolicy(context.Background()),
+}
+
+func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
+	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
 }
 
 func TestCollectNodeState(t *testing.T) {

@@ -19,10 +19,13 @@ package computeresources
 import (
 	"context"
 	"testing"
+	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
@@ -59,6 +62,10 @@ var (
 		1 dispstatus: GREEN
 		1 pid: 222`
 )
+
+func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
+	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+}
 
 func TestCollectForHANA(t *testing.T) {
 	tests := []struct {
@@ -184,6 +191,7 @@ func TestCollectForHANA(t *testing.T) {
 }
 
 func TestCollectWithRetryHANA(t *testing.T) {
+	c := context.Background()
 	hp := &HanaInstanceProperties{
 		Config:           defaultConfig,
 		Client:           &fake.TimeSeriesCreator{},
@@ -191,8 +199,9 @@ func TestCollectWithRetryHANA(t *testing.T) {
 		SAPInstance:      defaultSAPInstanceHANA,
 		NewProcHelper:    newProcessWithContextHelperTest,
 		SAPControlClient: sapcontrolclienttest.Fake{},
+		PMBackoffPolicy:  defaultBOPolicy(c),
 	}
-	_, err := hp.CollectWithRetry(context.Background())
+	_, err := hp.CollectWithRetry(c)
 	if err != nil {
 		t.Errorf("CollectWithRetry() = %v, want nil", err)
 	}

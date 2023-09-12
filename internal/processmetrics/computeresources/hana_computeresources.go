@@ -52,7 +52,7 @@ type (
 		NewProcHelper     newProcessWithContextHelper
 		SAPControlClient  sapcontrol.ClientInterface
 		SkippedMetrics    map[string]bool
-		pmbo              *cloudmonitoring.BackOffIntervals
+		PMBackoffPolicy   backoff.BackOffContext
 	}
 )
 
@@ -110,9 +110,6 @@ func (p *HanaInstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -121,6 +118,6 @@ func (p *HanaInstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }

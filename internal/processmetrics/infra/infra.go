@@ -82,17 +82,17 @@ type Properties struct {
 	Client          cloudmonitoring.TimeSeriesCreator
 	gceAlphaService GCEAlphaInterface
 	skippedMetrics  map[string]bool
-	pmbo            *cloudmonitoring.BackOffIntervals
+	PMBackoffPolicy backoff.BackOffContext
 }
 
 // New creates a new instance of Properties
-func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceAlphaService GCEAlphaInterface, sm map[string]bool, bo *cloudmonitoring.BackOffIntervals) *Properties {
+func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceAlphaService GCEAlphaInterface, sm map[string]bool, bo backoff.BackOffContext) *Properties {
 	return &Properties{
 		Config:          config,
 		Client:          client,
 		gceAlphaService: gceAlphaService,
 		skippedMetrics:  sm,
-		pmbo:            bo,
+		PMBackoffPolicy: bo,
 	}
 }
 
@@ -121,9 +121,6 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -132,7 +129,7 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }
 

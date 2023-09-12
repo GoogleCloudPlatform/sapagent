@@ -19,9 +19,12 @@ package fastmovingmetrics
 import (
 	"context"
 	"testing"
+	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
@@ -158,6 +161,10 @@ var (
 		},
 	}
 )
+
+func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
+	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+}
 
 func TestHaAvailabilityValue(t *testing.T) {
 	tests := []struct {
@@ -753,8 +760,9 @@ func TestContains(t *testing.T) {
 }
 
 func TestCollectWithRetry(t *testing.T) {
-	p := &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{}}
-	got, _ := p.CollectWithRetry(context.Background())
+	c := context.Background()
+	p := &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{}, PMBackoffPolicy: defaultBOPolicy(c)}
+	got, _ := p.CollectWithRetry(c)
 	want := 2
 	if len(got) != want {
 		t.Errorf("CollectWithRetry() returned unexpected value, got=%d, want=%d", len(got), want)

@@ -36,12 +36,12 @@ type (
 	// SAPControlProcInstanceProperties have the required context for collecting metrics for cpu
 	// and memory per process for SAPControl processes.
 	SAPControlProcInstanceProperties struct {
-		Config         *cnfpb.Configuration
-		Client         cloudmonitoring.TimeSeriesCreator
-		Executor       commandlineexecutor.Execute
-		NewProcHelper  newProcessWithContextHelper
-		SkippedMetrics map[string]bool
-		pmbo           *cloudmonitoring.BackOffIntervals
+		Config          *cnfpb.Configuration
+		Client          cloudmonitoring.TimeSeriesCreator
+		Executor        commandlineexecutor.Execute
+		NewProcHelper   newProcessWithContextHelper
+		SkippedMetrics  map[string]bool
+		PMBackoffPolicy backoff.BackOffContext
 	}
 )
 
@@ -85,9 +85,6 @@ func (p *SAPControlProcInstanceProperties) CollectWithRetry(ctx context.Context)
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -96,6 +93,6 @@ func (p *SAPControlProcInstanceProperties) CollectWithRetry(ctx context.Context)
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }

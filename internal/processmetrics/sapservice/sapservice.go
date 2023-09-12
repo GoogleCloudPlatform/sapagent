@@ -46,12 +46,12 @@ type (
 	// InstanceProperties has the necessary context for Metrics collection.
 	// InstanceProperties implements the Collector interface for sapservice.
 	InstanceProperties struct {
-		Config         *cnfpb.Configuration
-		Client         cloudmonitoring.TimeSeriesCreator
-		Execute        commandlineexecutor.Execute
-		ExitCode       commandlineexecutor.ExitCode
-		SkippedMetrics map[string]bool
-		pmbo           *cloudmonitoring.BackOffIntervals
+		Config          *cnfpb.Configuration
+		Client          cloudmonitoring.TimeSeriesCreator
+		Execute         commandlineexecutor.Execute
+		ExitCode        commandlineexecutor.ExitCode
+		SkippedMetrics  map[string]bool
+		PMBackoffPolicy backoff.BackOffContext
 	}
 )
 
@@ -64,7 +64,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		metrics = append(metrics, isFailedMetrics...)
 	}
 	if _, ok := mPathMap[disabledMPath]; !ok {
-		isDisabledMetrics := queryInstanceState(ctx, p, "is-disabled")
+		isDisabledMetrics := queryInstanceState(ctx, p, "is-enabled")
 		metrics = append(metrics, isDisabledMetrics...)
 	}
 	return metrics, nil
@@ -76,9 +76,6 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -87,7 +84,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }
 

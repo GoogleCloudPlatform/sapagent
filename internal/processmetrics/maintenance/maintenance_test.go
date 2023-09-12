@@ -20,12 +20,15 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/googleapis/gax-go/v2"
 	"golang.org/x/exp/slices"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -45,6 +48,10 @@ type (
 		calls []*monitoringpb.CreateTimeSeriesRequest
 	}
 )
+
+func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
+	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+}
 
 func (f *fakeTimeSeriesCreator) CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
 	f.calls = append(f.calls, req)
@@ -407,6 +414,7 @@ func TestIndexOf(t *testing.T) {
 }
 
 func TestCollectWithRetry(t *testing.T) {
+	c := context.Background()
 	p := &InstanceProperties{
 		Config: defaultConfig,
 		Client: &fakeTimeSeriesCreator{},
@@ -414,8 +422,9 @@ func TestCollectWithRetry(t *testing.T) {
 			expectedData: []byte(`{"sids":["deh"]}`),
 			expectedErr:  os.ErrPermission,
 		},
+		PMBackoffPolicy: defaultBOPolicy(c),
 	}
-	_, err := p.CollectWithRetry(context.Background())
+	_, err := p.CollectWithRetry(c)
 	if err == nil {
 		t.Errorf("CollectWithRetry() = nil, want error")
 	}

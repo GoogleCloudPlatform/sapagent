@@ -51,7 +51,7 @@ type (
 		SAPControlClient        sapcontrol.ClientInterface
 		LastValue               map[string]*process.IOCountersStat
 		SkippedMetrics          map[string]bool
-		pmbo                    *cloudmonitoring.BackOffIntervals
+		PMBackoffPolicy         backoff.BackOffContext
 	}
 )
 
@@ -110,9 +110,6 @@ func (p *NetweaverInstanceProperties) CollectWithRetry(ctx context.Context) ([]*
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -121,6 +118,6 @@ func (p *NetweaverInstanceProperties) CollectWithRetry(ctx context.Context) ([]*
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }

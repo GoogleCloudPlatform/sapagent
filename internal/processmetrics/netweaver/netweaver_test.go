@@ -25,9 +25,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
@@ -177,6 +180,10 @@ var (
 		},
 	}
 )
+
+func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
+	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+}
 
 func TestCollectServiceMetrics(t *testing.T) {
 	tests := []struct {
@@ -1264,8 +1271,9 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 }
 
 func TestCollectWithRetry(t *testing.T) {
-	p := &InstanceProperties{}
-	_, err := p.CollectWithRetry(context.Background())
+	c := context.Background()
+	p := &InstanceProperties{PMBackoffPolicy: defaultBOPolicy(c)}
+	_, err := p.CollectWithRetry(c)
 	if err == nil {
 		t.Errorf("CollectWithRetry() unexpected success, want error.")
 	}

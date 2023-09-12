@@ -45,11 +45,11 @@ import (
 type (
 	// InstanceProperties struct has necessary context for Metrics collection.
 	InstanceProperties struct {
-		SAPInstance    *sapb.SAPInstance
-		Config         *cnfpb.Configuration
-		Client         cloudmonitoring.TimeSeriesCreator
-		SkippedMetrics map[string]bool
-		pmbo           *cloudmonitoring.BackOffIntervals
+		SAPInstance     *sapb.SAPInstance
+		Config          *cnfpb.Configuration
+		Client          cloudmonitoring.TimeSeriesCreator
+		SkippedMetrics  map[string]bool
+		PMBackoffPolicy backoff.BackOffContext
 	}
 )
 
@@ -165,9 +165,6 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -176,7 +173,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }
 

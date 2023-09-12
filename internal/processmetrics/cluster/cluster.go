@@ -66,11 +66,11 @@ type (
 	// InstanceProperties has necessary context for metrics collection.
 	// InstanceProperties implements Collector interface for cluster metrics.
 	InstanceProperties struct {
-		SAPInstance    *sapb.SAPInstance
-		Config         *cnfpb.Configuration
-		Client         cloudmonitoring.TimeSeriesCreator
-		pmbo           *cloudmonitoring.BackOffIntervals
-		SkippedMetrics map[string]bool
+		SAPInstance     *sapb.SAPInstance
+		Config          *cnfpb.Configuration
+		Client          cloudmonitoring.TimeSeriesCreator
+		PMBackoffPolicy backoff.BackOffContext
+		SkippedMetrics  map[string]bool
 	}
 	readPacemakerNodeState     func(crm *pacemaker.CRMMon) (map[string]string, error)
 	readPacemakerResourceState func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error)
@@ -105,7 +105,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		log.Logger.Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
 		return metrics, err
 	}
-	// TODO: b/300027574 - Test actual timeseries in unit test instead of returning an extra int.
+	// TODO: Test actual timeseries in unit test instead of returning an extra int.
 	nodeMetrics, _, err := collectNodeState(p, pacemaker.NodeState, data)
 	if err != nil {
 		return nil, err
@@ -130,9 +130,6 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		attempt = 1
 		res     []*mrpb.TimeSeries
 	)
-	if p.pmbo == nil {
-		p.pmbo = cloudmonitoring.NewDefaultBackOffIntervals()
-	}
 	err := backoff.Retry(func() error {
 		var err error
 		res, err = p.Collect(ctx)
@@ -141,7 +138,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 			attempt++
 		}
 		return err
-	}, cloudmonitoring.LongExponentialBackOffPolicy(ctx, p.pmbo.LongExponential))
+	}, p.PMBackoffPolicy)
 	return res, err
 }
 

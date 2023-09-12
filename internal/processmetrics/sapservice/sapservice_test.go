@@ -21,7 +21,10 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -45,6 +48,10 @@ var (
 		},
 	}
 )
+
+func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
+	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+}
 
 func TestCollect(t *testing.T) {
 	tests := []struct {
@@ -186,6 +193,7 @@ func TestCollect(t *testing.T) {
 }
 
 func TestCollectWithRetry(t *testing.T) {
+	c := context.Background()
 	p := &InstanceProperties{
 		Config: defaultConfig,
 		Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
@@ -197,9 +205,10 @@ func TestCollectWithRetry(t *testing.T) {
 			}
 			return 1
 		},
-		Client: &fake.TimeSeriesCreator{},
+		Client:          &fake.TimeSeriesCreator{},
+		PMBackoffPolicy: defaultBOPolicy(c),
 	}
-	_, err := p.CollectWithRetry(context.Background())
+	_, err := p.CollectWithRetry(c)
 	if err != nil {
 		t.Errorf("CollectWithRetry returned unexpected error: %v", err)
 	}

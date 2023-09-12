@@ -175,6 +175,20 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		HeartbeatSpec: params.HeartbeatSpec,
 	}
 
+	pmSlowFreq := p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
+	pmFastFreq := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
+
+	// For fast moving process metrics we are going ahead with 3 retries on failures, which means 4 attempts in total.
+	// Attempt - 1 Failure: wait for 30 seconds
+	// Attempt - 2 Failure: wait for 60 seconds
+	// Attempt - 3 Failure: wait for 120 seconds
+	slowProcessMetricsBOPolicy := cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+
+	// For fast moving process metrics we are going ahead with 3 retries on failures, which means 4 attempts in total.
+	// Attempt - 1 Failure: wait for 5 seconds
+	// Attempt - 2 Failure: wait for 10 seconds
+	// Attempt - 3 Failure: wait for 20 seconds
+	fastProcessMetricsBOPolicy := cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second)
 	skippedMetrics := make(map[string]bool)
 	sl := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
 	for _, metric := range sl {
@@ -183,22 +197,25 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 
 	log.Logger.Info("Creating SAP additional metrics collector for sapservices (active and enabled metric).")
 	sapServiceCollector := &sapservice.InstanceProperties{
-		Config:         p.Config,
-		Client:         p.Client,
-		Execute:        commandlineexecutor.ExecuteCommand,
-		SkippedMetrics: skippedMetrics,
+		Config:          p.Config,
+		Client:          p.Client,
+		Execute:         commandlineexecutor.ExecuteCommand,
+		SkippedMetrics:  skippedMetrics,
+		PMBackoffPolicy: slowProcessMetricsBOPolicy,
 	}
 
 	log.Logger.Info("Creating SAP control processes per process CPU, memory usage metrics collector.")
 	sapStartCollector := &computeresources.SAPControlProcInstanceProperties{
-		Config:         p.Config,
-		Client:         p.Client,
-		Executor:       commandlineexecutor.ExecuteCommand,
-		SkippedMetrics: skippedMetrics,
+		Config:          p.Config,
+		Client:          p.Client,
+		Executor:        commandlineexecutor.ExecuteCommand,
+		SkippedMetrics:  skippedMetrics,
+		PMBackoffPolicy: slowProcessMetricsBOPolicy,
 	}
 
 	log.Logger.Info("Creating infra migration event metrics collector.")
-	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics, nil)
+	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics,
+		slowProcessMetricsBOPolicy)
 
 	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector, migrationCollector)
 
@@ -209,10 +226,11 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		if p.SAPInstances.GetLinuxClusterMember() && clusterCollectorCreated == false {
 			log.Logger.Infow("Creating cluster collector for instance", "instance", instance)
 			clusterCollector := &cluster.InstanceProperties{
-				SAPInstance:    instance,
-				Config:         p.Config,
-				Client:         p.Client,
-				SkippedMetrics: skippedMetrics,
+				SAPInstance:     instance,
+				Config:          p.Config,
+				Client:          p.Client,
+				SkippedMetrics:  skippedMetrics,
+				PMBackoffPolicy: slowProcessMetricsBOPolicy,
 			}
 			p.Collectors = append(p.Collectors, clusterCollector)
 			clusterCollectorCreated = true
@@ -233,6 +251,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				LastValue:        make(map[string]*process.IOCountersStat),
 				SkippedMetrics:   skippedMetrics,
+				PMBackoffPolicy:  slowProcessMetricsBOPolicy,
 			}
 
 			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
@@ -242,14 +261,16 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Client:             p.Client,
 				HANAQueryFailCount: 0,
 				SkippedMetrics:     skippedMetrics,
+				PMBackoffPolicy:    slowProcessMetricsBOPolicy,
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 
 			log.Logger.Infow("Creating FastMoving Collector for HANA", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance: instance,
-				Config:      p.Config,
-				Client:      p.Client,
+				SAPInstance:     instance,
+				Config:          p.Config,
+				Client:          p.Client,
+				PMBackoffPolicy: fastProcessMetricsBOPolicy,
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -275,23 +296,26 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				LastValue:        make(map[string]*process.IOCountersStat),
 				SkippedMetrics:   skippedMetrics,
+				PMBackoffPolicy:  slowProcessMetricsBOPolicy,
 			}
 
 			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)
 			netweaverCollector := &netweaver.InstanceProperties{
-				SAPInstance:    instance,
-				Config:         p.Config,
-				Client:         p.Client,
-				SkippedMetrics: skippedMetrics,
+				SAPInstance:     instance,
+				Config:          p.Config,
+				Client:          p.Client,
+				SkippedMetrics:  skippedMetrics,
+				PMBackoffPolicy: slowProcessMetricsBOPolicy,
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
 
 			log.Logger.Infow("Creating FastMoving Collector for Netweaver", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance:    instance,
-				Config:         p.Config,
-				Client:         p.Client,
-				SkippedMetrics: skippedMetrics,
+				SAPInstance:     instance,
+				Config:          p.Config,
+				Client:          p.Client,
+				SkippedMetrics:  skippedMetrics,
+				PMBackoffPolicy: fastProcessMetricsBOPolicy,
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -300,11 +324,12 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	if len(sids) != 0 {
 		log.Logger.Info("Creating maintenance mode collector.")
 		maintenanceModeCollector := &maintenance.InstanceProperties{
-			Config:         p.Config,
-			Client:         p.Client,
-			Reader:         maintenance.ModeReader{},
-			Sids:           sids,
-			SkippedMetrics: skippedMetrics,
+			Config:          p.Config,
+			Client:          p.Client,
+			Reader:          maintenance.ModeReader{},
+			Sids:            sids,
+			SkippedMetrics:  skippedMetrics,
+			PMBackoffPolicy: slowProcessMetricsBOPolicy,
 		}
 		p.Collectors = append(p.Collectors, maintenanceModeCollector)
 	}

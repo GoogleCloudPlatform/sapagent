@@ -22,13 +22,16 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v0.alpha"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcealpha/fakegcealpha"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -86,6 +89,10 @@ var (
 		"err",
 	)
 )
+
+func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
+	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+}
 
 func TestCollect(t *testing.T) {
 	tests := []struct {
@@ -614,8 +621,9 @@ func TestEnumToInt(t *testing.T) {
 }
 
 func TestCollectWithRetry(t *testing.T) {
-	p := New(&cpb.Configuration{}, nil, nil, nil, nil)
-	_, err := p.CollectWithRetry(context.Background())
+	c := context.Background()
+	p := New(&cpb.Configuration{}, nil, nil, nil, defaultBOPolicy(c))
+	_, err := p.CollectWithRetry(c)
 	if err == nil {
 		t.Error("CollectWithRetry() got success expected error")
 	}
