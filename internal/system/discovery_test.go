@@ -2305,6 +2305,7 @@ func TestDiscoverDBNodes(t *testing.T) {
 		zone           string
 		execute        commandlineexecutor.Execute
 		gceService     *fake.TestGCE
+		resolver       func(string) ([]string, error)
 		want           []*spb.SapDiscovery_Resource
 	}{{
 		name:           "discoverSingleNode",
@@ -2322,6 +2323,13 @@ func TestDiscoverDBNodes(t *testing.T) {
 				SelfLink: "some/compute/instance",
 			}},
 			GetInstanceErr: []error{nil},
+			GetInstanceByIPResp: []*compute.Instance{{
+				Name: "some/compute/instance",
+			}},
+			GetInstanceByIPErr: []error{nil},
+		},
+		resolver: func(string) ([]string, error) {
+			return []string{"1.2.3.4"}, nil
 		},
 		want: []*spb.SapDiscovery_Resource{{
 			ResourceUri:  "some/compute/instance",
@@ -2350,6 +2358,13 @@ func TestDiscoverDBNodes(t *testing.T) {
 				SelfLink: "some/compute/instance4",
 			}},
 			GetInstanceErr: []error{nil, nil, nil, nil},
+			GetInstanceByIPResp: []*compute.Instance{{
+				Name: "some/compute/instance",
+			}},
+			GetInstanceByIPErr: []error{nil},
+		},
+		resolver: func(string) ([]string, error) {
+			return []string{"1.2.3.4"}, nil
 		},
 		want: []*spb.SapDiscovery_Resource{{
 			ResourceUri:  "some/compute/instance",
@@ -2386,6 +2401,13 @@ func TestDiscoverDBNodes(t *testing.T) {
 				SelfLink: "some/compute/instance",
 			}},
 			GetInstanceErr: []error{nil},
+			GetInstanceByIPResp: []*compute.Instance{{
+				Name: "some/compute/instance",
+			}},
+			GetInstanceByIPErr: []error{nil},
+		},
+		resolver: func(string) ([]string, error) {
+			return []string{"1.2.3.4"}, nil
 		},
 		want: []*spb.SapDiscovery_Resource{{
 			ResourceUri:  "some/compute/instance",
@@ -2461,12 +2483,65 @@ func TestDiscoverDBNodes(t *testing.T) {
 			}
 		},
 		want: nil,
+	}, {
+		name:           "hostResolverError",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
+		gceService: &fake.TestGCE{},
+		resolver: func(string) ([]string, error) {
+			return []string{}, errors.New("Host not found")
+		},
+	}, {
+		name:           "hostResolverReturnsEmpty",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
+		gceService: &fake.TestGCE{},
+		resolver: func(string) ([]string, error) {
+			return []string{}, nil
+		},
+	}, {
+		name:           "instanceByIPError",
+		sid:            defaultSID,
+		instanceNumber: defaultInstanceNumber,
+		project:        defaultProjectID,
+		zone:           defaultZone,
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultLandscapeOutputSingleNode,
+			}
+		},
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "some/compute/instance",
+			}},
+			GetInstanceErr:      []error{nil},
+			GetInstanceByIPResp: []*compute.Instance{nil},
+			GetInstanceByIPErr:  []error{errors.New("No instance found")},
+		},
+		resolver: func(string) ([]string, error) {
+			return []string{"1.2.3.4"}, nil
+		},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := Discovery{
-				execute:    test.execute,
-				gceService: test.gceService,
+				execute:      test.execute,
+				hostResolver: test.resolver,
+				gceService:   test.gceService,
 			}
 			got := d.discoverDBNodes(context.Background(), test.sid, test.instanceNumber, test.project, test.zone)
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {

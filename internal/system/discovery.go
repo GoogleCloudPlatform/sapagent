@@ -1088,7 +1088,17 @@ func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, pr
 	log.Logger.Infow("Discovered other hosts", "sid", sid, "hosts", hosts)
 
 	for _, host := range hosts {
-		iRes, _, _ := d.discoverInstance(project, zone, host)
+		hostAddrs, err := d.hostResolver(host)
+		if len(hostAddrs) == 0 || err != nil {
+			log.Logger.Warnw("Unable to resolve host", "host", host, "error", err)
+			continue
+		}
+		i, err := d.gceService.GetInstanceByIP(project, hostAddrs[0])
+		if err != nil {
+			log.Logger.Warnw("Error retrieving instance by IP", "IP", hostAddrs[0], "error", err)
+			continue
+		}
+		iRes, _, _ := d.discoverInstance(project, zone, i.Name)
 		res = append(res, iRes...)
 	}
 
