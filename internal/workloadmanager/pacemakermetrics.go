@@ -17,12 +17,11 @@ limitations under the License.
 package workloadmanager
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -123,7 +122,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	// Sort VM instance names by length, descending.
 	// This should prevent collisions when searching within a substring.
 	// Ex: instance11, ... , instance1
-	slices.SortFunc(instances, func(a, b string) int { return cmp.Compare(len(a), len(b)) })
+	sort.Slice(instances, func(i, j int) bool { return len(instances[i]) > len(instances[j]) })
 
 	primitives := pacemakerDocument.Configuration.Resources.Primitives
 	results := setPacemakerPrimitives(l, primitives, instances, params.Config)
