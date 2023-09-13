@@ -67,6 +67,57 @@ func defaultSymlink(numNil int) func(string, string) error {
 	}
 }
 
+func defaultStat(numNil int) func(string) (os.FileInfo, error) {
+	return func(string) (os.FileInfo, error) {
+		if numNil > 0 {
+			numNil--
+			return nil, nil
+		}
+		return nil, cmpopts.AnyError
+	}
+}
+
+func defaultRename(numNil int) func(string, string) error {
+	return func(string, string) error {
+		if numNil > 0 {
+			numNil--
+			return nil
+		}
+		return cmpopts.AnyError
+	}
+}
+
+func defaultGlob(numNil int) func(string) ([]string, error) {
+	return func(string) ([]string, error) {
+		if numNil > 0 {
+			numNil--
+			return []string{"/backint/backint-gcs/parameters.txt", "/backint/backint-gcs/VERSION.txt"}, nil
+		}
+		return nil, cmpopts.AnyError
+	}
+}
+
+func defaultReadFile(numNil int) func(string) ([]byte, error) {
+	return func(string) ([]byte, error) {
+		if numNil > 0 {
+			numNil--
+			return nil, nil
+		}
+		return nil, cmpopts.AnyError
+	}
+}
+
+// defaultStatNotExist returns os.ErrNotExist after numNil is exhausted.
+func defaultStatNotExist(numNil int) func(string) (os.FileInfo, error) {
+	return func(string) (os.FileInfo, error) {
+		if numNil > 0 {
+			numNil--
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+}
+
 func TestExecuteInstallBackint(t *testing.T) {
 	tests := []struct {
 		name string
@@ -163,19 +214,21 @@ func TestSetFlagsForInstallBackint(t *testing.T) {
 
 func TestInstallBackintHandler(t *testing.T) {
 	tests := []struct {
-		name           string
-		baseInstallDir string
-		b              InstallBackint
-		want           error
+		name string
+		b    InstallBackint
+		want error
 	}{
 		{
-			name:           "FailStat",
-			baseInstallDir: "/does/not/exist",
-			want:           cmpopts.AnyError,
+			name: "FailStat",
+			b: InstallBackint{
+				stat: defaultStat(0),
+			},
+			want: cmpopts.AnyError,
 		},
 		{
 			name: "FailMakeBackintInstallDir",
 			b: InstallBackint{
+				stat:  defaultStatNotExist(1),
 				mkdir: defaultMkdir(0),
 			},
 			want: cmpopts.AnyError,
@@ -183,6 +236,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailMakeHdbconfigInstallDir",
 			b: InstallBackint{
+				stat:  defaultStatNotExist(1),
 				mkdir: defaultMkdir(1),
 			},
 			want: cmpopts.AnyError,
@@ -190,6 +244,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailWriteBackintFile",
 			b: InstallBackint{
+				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(0),
 			},
@@ -198,6 +253,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailWriteParameterFile",
 			b: InstallBackint{
+				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(1),
 			},
@@ -206,6 +262,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailWriteBackintSymlink",
 			b: InstallBackint{
+				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(2),
 				symlink:   defaultSymlink(0),
@@ -215,6 +272,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailWriteParametersSymlink",
 			b: InstallBackint{
+				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(2),
 				symlink:   defaultSymlink(1),
@@ -222,10 +280,81 @@ func TestInstallBackintHandler(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "Success",
+			name: "SuccessNoMigration",
 			b: InstallBackint{
+				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(2),
+				symlink:   defaultSymlink(2),
+			},
+			want: nil,
+		},
+		{
+			name: "FailedToStatOldAgent",
+			b: InstallBackint{
+				stat: defaultStat(1),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToRename",
+			b: InstallBackint{
+				stat:   defaultStat(2),
+				rename: defaultRename(0),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToMkdir",
+			b: InstallBackint{
+				stat:   defaultStat(2),
+				rename: defaultRename(1),
+				mkdir:  defaultMkdir(0),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToGlob",
+			b: InstallBackint{
+				stat:   defaultStat(2),
+				rename: defaultRename(1),
+				mkdir:  defaultMkdir(1),
+				glob:   defaultGlob(0),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToReadFile",
+			b: InstallBackint{
+				stat:     defaultStat(2),
+				rename:   defaultRename(1),
+				mkdir:    defaultMkdir(1),
+				glob:     defaultGlob(1),
+				readFile: defaultReadFile(0),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToWriteFile",
+			b: InstallBackint{
+				stat:      defaultStat(2),
+				rename:    defaultRename(1),
+				mkdir:     defaultMkdir(1),
+				glob:      defaultGlob(1),
+				readFile:  defaultReadFile(1),
+				writeFile: defaultWriteFile(0),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessWithMigration",
+			b: InstallBackint{
+				stat:      defaultStat(2),
+				rename:    defaultRename(1),
+				mkdir:     defaultMkdir(3),
+				glob:      defaultGlob(1),
+				readFile:  defaultReadFile(1),
+				writeFile: defaultWriteFile(3),
 				symlink:   defaultSymlink(2),
 			},
 			want: nil,
@@ -233,7 +362,7 @@ func TestInstallBackintHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.b.installBackintHandler(context.Background(), t.TempDir()+"/"+test.baseInstallDir)
+			got := test.b.installBackintHandler(context.Background(), t.TempDir())
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("installBackintHandler()=%v want %v", got, test.want)
 			}

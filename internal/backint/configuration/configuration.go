@@ -19,7 +19,10 @@ package configuration
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -52,7 +55,7 @@ func (p *Parameters) ParseArgsAndValidateConfig(read ReadConfigFile) (*bpb.Backi
 	}
 
 	if code, err := p.readParametersFile(read); err != nil {
-		log.Logger.Errorf("Parameters JSON at '%s' has error: %v. Please fix the JSON and restart backint", p.ParamFile, err)
+		log.Logger.Errorf("Parameters file at '%s' has error: %v. Please fix the error and restart backint", p.ParamFile, err)
 		usagemetrics.Error(code)
 		return p.Config, false
 	}
@@ -118,18 +121,18 @@ func (p *Parameters) readParametersFile(read ReadConfigFile) (int, error) {
 		return usagemetrics.BackintConfigReadFailure, errors.New("empty parameters file")
 	}
 
-	config := &bpb.BackintConfiguration{}
-	err = protojson.Unmarshal(content, config)
+	config, err := unmarshal(p.ParamFile, content)
 	if err != nil {
-		log.Logger.Errorw("Invalid content in the parameters file", "file", p.ParamFile, "content", string(content))
 		return usagemetrics.BackintMalformedConfigFile, err
 	}
 	proto.Merge(p.Config, config)
-
 	if err := p.validateParameters(); err != nil {
 		return usagemetrics.BackintMalformedConfigFile, err
 	}
 
+	if strings.HasSuffix(p.ParamFile, ".txt") {
+		marshalLegacyParameters(p.ParamFile, config)
+	}
 	return 0, nil
 }
 
@@ -175,6 +178,10 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		log.Logger.Warnf("threads defaulted to %d", numCPU)
 		p.Config.Threads = numCPU
 	}
+	if p.Config.GetThreads() > 64 {
+		log.Logger.Warnf("threads capped to 64")
+		p.Config.Threads = 64
+	}
 	if p.Config.GetBufferSizeMb() <= 0 {
 		log.Logger.Warn("buffer_size_mb defaulted to 100")
 		p.Config.BufferSizeMb = 100
@@ -199,4 +206,95 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		log.Logger.Warn("output_file defaulted to /dev/stdout")
 		p.Config.OutputFile = "/dev/stdout"
 	}
+}
+
+// unmarshal reads the content into a BackintConfiguration proto.
+// If a .json file is supplied, protojson handles the unmarshaling.
+// If a .txt file is provided, a custom parse is used.
+func unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration, error) {
+	config := &bpb.BackintConfiguration{}
+	var err error
+	if strings.HasSuffix(parameterFile, ".json") {
+		log.Logger.Infow("Unmarshalling JSON parameters file", "configPath", parameterFile)
+		if err = protojson.Unmarshal(content, config); err != nil {
+			log.Logger.Errorw("Invalid content in the JSON parameters file", "configPath", parameterFile)
+			return nil, err
+		}
+		return config, nil
+	}
+
+	log.Logger.Infow("Parsing legacy parameters file", "configPath", parameterFile)
+	config.Compress = true
+	config.LogToCloud = true
+	for _, line := range strings.Split(string(content), "\n") {
+		if line == "" {
+			continue
+		}
+		split := strings.Split(line, " ")
+		if len(split) < 2 && line != "#DISABLE_COMPRESSION" && line != "#DUMP_DATA" && line != "#DISABLE_CLOUD_LOGGING" {
+			return nil, fmt.Errorf("empty value for parameter: %s", line)
+		}
+		switch split[0] {
+		case "#DISABLE_COMPRESSION":
+			config.Compress = false
+		case "#DISABLE_CLOUD_LOGGING":
+			config.LogToCloud = false
+		case "#DUMP_DATA":
+			config.DumpData = true
+		case "#BUCKET":
+			config.Bucket = split[1]
+		case "#SERVICE_ACCOUNT":
+			config.ServiceAccount = split[1]
+		case "#ENCRYPTION_KEY":
+			config.EncryptionKey = split[1]
+		case "#KMS_KEY_NAME":
+			config.KmsKey = split[1]
+		case "#LOG_LEVEL":
+			config.LogLevel = bpb.LogLevel(bpb.LogLevel_value[split[1]])
+		case "#READ_IDLE_TIMEOUT":
+			if config.FileReadTimeoutMs, err = strconv.ParseInt(split[1], 10, 64); err != nil {
+				return nil, fmt.Errorf("failed to parse #READ_IDLE_TIMEOUT as int64, err: %v", err)
+			}
+		case "#CHUNK_SIZE_MB":
+			if config.BufferSizeMb, err = strconv.ParseInt(split[1], 10, 64); err != nil {
+				return nil, fmt.Errorf("failed to parse #CHUNK_SIZE_MB as int64, err: %v", err)
+			}
+		case "#RATE_LIMIT_MB":
+			if config.RateLimitMb, err = strconv.ParseInt(split[1], 10, 64); err != nil {
+				return nil, fmt.Errorf("failed to parse #RATE_LIMIT_MB as int64, err: %v", err)
+			}
+		case "#MAX_GCS_RETRY":
+			if config.Retries, err = strconv.ParseInt(split[1], 10, 64); err != nil {
+				return nil, fmt.Errorf("failed to parse #MAX_GCS_RETRY as int64, err: %v", err)
+			}
+		case "#PARALLEL_FACTOR":
+			if config.ParallelStreams, err = strconv.ParseInt(split[1], 10, 64); err != nil {
+				return nil, fmt.Errorf("failed to parse #PARALLEL_FACTOR as int64, err: %v", err)
+			}
+		case "#THREADS":
+			if config.Threads, err = strconv.ParseInt(split[1], 10, 64); err != nil {
+				return nil, fmt.Errorf("failed to parse #THREADS as int64, err: %v", err)
+			}
+		case "#PARALLEL_PART_SIZE_MB":
+			log.Logger.Warnw("#PARALLEL_PART_SIZE_MB has been deprecated and can be removed from the configuration", "line", line)
+		default:
+			log.Logger.Warnw("Unexpected line in parameters file", "line", line)
+		}
+	}
+	return config, nil
+}
+
+// marshalLegacyParameters attempts to save the legacy .txt parameters
+// as a .json file. If an error occurs, allow Backint to continue execution.
+func marshalLegacyParameters(parameterFile string, config *bpb.BackintConfiguration) {
+	configPath := strings.TrimSuffix(parameterFile, ".txt") + ".json"
+	log.Logger.Infow("Saving legacy parameters as JSON", "configPath", configPath)
+	configData, err := protojson.MarshalOptions{Indent: "  "}.Marshal(config)
+	if err != nil {
+		log.Logger.Errorw("Unable to marshal config", "err", err)
+	}
+	if err := os.WriteFile(configPath, configData, 0666); err != nil {
+		log.Logger.Errorw("Unable to write JSON parameters file", "configPath", configPath, "err", err)
+	}
+	log.Logger.Infow("Successfully translated text parameters file to JSON", "parameterFileText", parameterFile, "parameterFileJSON", configPath)
 }

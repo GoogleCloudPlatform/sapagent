@@ -36,13 +36,24 @@ var (
 	}
 	defaultParameters = &Parameters{
 		User:      "testUser",
-		ParamFile: "testParamsFile",
+		ParamFile: "testParamsFile.json",
+		Function:  "backup",
+	}
+	defaultLegacyParameters = &Parameters{
+		User:      "testUser",
+		ParamFile: "testParamsFile.txt",
 		Function:  "backup",
 	}
 	defaultConfigArgsParsed = &bpb.BackintConfiguration{
 		UserId:     "testUser",
 		Function:   bpb.Function_BACKUP,
-		ParamFile:  "testParamsFile",
+		ParamFile:  "testParamsFile.json",
+		LogToCloud: true,
+	}
+	defaultLegacyConfigArgsParsed = &bpb.BackintConfiguration{
+		UserId:     "testUser",
+		Function:   bpb.Function_BACKUP,
+		ParamFile:  "testParamsFile.txt",
 		LogToCloud: true,
 	}
 	defaultThreads = func() int64 {
@@ -81,7 +92,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			name: "NoFunction",
 			params: &Parameters{
 				User:      "testUser",
-				ParamFile: "testParamsFile",
+				ParamFile: "testParamsFile.json",
 				Function:  "",
 			},
 			wantOk: false,
@@ -90,7 +101,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			name: "InvalidFunction",
 			params: &Parameters{
 				User:      "testUser",
-				ParamFile: "testParamsFile",
+				ParamFile: "testParamsFile.json",
 				Function:  "testFunction",
 			},
 			wantOk: false,
@@ -133,7 +144,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			want: &bpb.BackintConfiguration{
 				UserId:        "testUser",
 				Function:      bpb.Function_BACKUP,
-				ParamFile:     "testParamsFile",
+				ParamFile:     "testParamsFile.json",
 				Bucket:        "testBucket",
 				EncryptionKey: "testKey",
 				KmsKey:        "testKey",
@@ -150,7 +161,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
 				Function:        bpb.Function_BACKUP,
-				ParamFile:       "testParamsFile",
+				ParamFile:       "testParamsFile.json",
 				Bucket:          "testBucket",
 				ParallelStreams: 2,
 				Compress:        true,
@@ -167,7 +178,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
 				Function:        bpb.Function_BACKUP,
-				ParamFile:       "testParamsFile",
+				ParamFile:       "testParamsFile.json",
 				Bucket:          "testBucket",
 				ParallelStreams: 2,
 				EncryptionKey:   "testKey",
@@ -184,7 +195,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
 				Function:        bpb.Function_BACKUP,
-				ParamFile:       "testParamsFile",
+				ParamFile:       "testParamsFile.json",
 				Bucket:          "testBucket",
 				ParallelStreams: 2,
 				KmsKey:          "testKey",
@@ -201,7 +212,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			want: &bpb.BackintConfiguration{
 				UserId:            "testUser",
 				Function:          bpb.Function_BACKUP,
-				ParamFile:         "testParamsFile",
+				ParamFile:         "testParamsFile.json",
 				Bucket:            "testBucket",
 				ParallelStreams:   1,
 				BufferSizeMb:      100,
@@ -222,7 +233,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			name: "SuccessfullyParseNoDefaults",
 			params: &Parameters{
 				User:      "testUser",
-				ParamFile: "testParamsFile",
+				ParamFile: "testParamsFile.json",
 				Function:  "restore",
 				InFile:    "/input.txt",
 				OutFile:   "/output.txt",
@@ -230,13 +241,13 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			want: &bpb.BackintConfiguration{
 				UserId:            "testUser",
 				Function:          bpb.Function_RESTORE,
-				ParamFile:         "testParamsFile",
+				ParamFile:         "testParamsFile.json",
 				Bucket:            "testBucket",
 				ParallelStreams:   32,
 				BufferSizeMb:      250,
 				FileReadTimeoutMs: 2000,
 				Retries:           25,
-				Threads:           2,
+				Threads:           64,
 				RateLimitMb:       200,
 				Compress:          true,
 				KmsKey:            "testKey",
@@ -245,7 +256,161 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				LogToCloud:        true,
 			},
 			read: func(p string) ([]byte, error) {
-				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 2, "rate_limit_mb": 200}`), nil
+				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 200, "rate_limit_mb": 200}`), nil
+			},
+			wantOk: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read)
+			if gotOk != test.wantOk {
+				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotOk, test.wantOk)
+			}
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("%#v.ParseArgsAndValidateConfig() had unexpected diff (-want +got):\n%s", test.params, diff)
+			}
+		})
+	}
+}
+
+func TestLegacyParameters(t *testing.T) {
+	tests := []struct {
+		name   string
+		params *Parameters
+		read   ReadConfigFile
+		want   *bpb.BackintConfiguration
+		wantOk bool
+	}{
+		{
+			name:   "EmptyValueForParameter",
+			params: defaultLegacyParameters,
+			want:   defaultLegacyConfigArgsParsed,
+			read: func(p string) ([]byte, error) {
+				return []byte(`#BUCKET`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "FailedToParseReadIdleTimeout",
+			params: defaultLegacyParameters,
+			want:   defaultLegacyConfigArgsParsed,
+			read: func(p string) ([]byte, error) {
+				return []byte(`#READ_IDLE_TIMEOUT abc`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "FailedToParseChunkSize",
+			params: defaultLegacyParameters,
+			want:   defaultLegacyConfigArgsParsed,
+			read: func(p string) ([]byte, error) {
+				return []byte(`#CHUNK_SIZE_MB abc`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "FailedToParseRateLimit",
+			params: defaultLegacyParameters,
+			want:   defaultLegacyConfigArgsParsed,
+			read: func(p string) ([]byte, error) {
+				return []byte(`#RATE_LIMIT_MB abc`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "FailedToParseRetries",
+			params: defaultLegacyParameters,
+			want:   defaultLegacyConfigArgsParsed,
+			read: func(p string) ([]byte, error) {
+				return []byte(`#MAX_GCS_RETRY abc`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "FailedToParseParallelFactor",
+			params: defaultLegacyParameters,
+			want:   defaultLegacyConfigArgsParsed,
+			read: func(p string) ([]byte, error) {
+				return []byte(`#PARALLEL_FACTOR abc`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "FailedToParseThreads",
+			params: defaultLegacyParameters,
+			want:   defaultLegacyConfigArgsParsed,
+			read: func(p string) ([]byte, error) {
+				return []byte(`#THREADS abc`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "EncyptionKeyAndKmsKeyDefined",
+			params: defaultLegacyParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:        "testUser",
+				Function:      bpb.Function_BACKUP,
+				ParamFile:     "testParamsFile.txt",
+				Bucket:        "testBucket",
+				EncryptionKey: "testKey",
+				KmsKey:        "testKey",
+				LogToCloud:    true,
+				Compress:      true,
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`#BUCKET testBucket
+#ENCRYPTION_KEY testKey
+#KMS_KEY_NAME testKey`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name: "SuccessfullyParseAllArgs",
+			params: &Parameters{
+				User:      "testUser",
+				ParamFile: "testParamsFile.txt",
+				Function:  "restore",
+				InFile:    "/input.txt",
+				OutFile:   "/output.txt",
+			},
+			want: &bpb.BackintConfiguration{
+				UserId:            "testUser",
+				Function:          bpb.Function_RESTORE,
+				ParamFile:         "testParamsFile.txt",
+				Bucket:            "testBucket",
+				ParallelStreams:   32,
+				BufferSizeMb:      250,
+				FileReadTimeoutMs: 2000,
+				Retries:           25,
+				Threads:           64,
+				RateLimitMb:       200,
+				Compress:          false,
+				DumpData:          true,
+				EncryptionKey:     "testKey",
+				InputFile:         "/input.txt",
+				OutputFile:        "/output.txt",
+				LogToCloud:        true,
+				ServiceAccount:    "testAccount",
+				LogLevel:          bpb.LogLevel_DEBUG,
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`#DISABLE_COMPRESSION
+#DISABLE_CLOUD_LOGGING
+#DUMP_DATA
+#BUCKET testBucket
+#SERVICE_ACCOUNT testAccount
+#ENCRYPTION_KEY testKey
+#LOG_LEVEL DEBUG
+#READ_IDLE_TIMEOUT 2000
+#CHUNK_SIZE_MB 250
+#RATE_LIMIT_MB 200
+#MAX_GCS_RETRY 25
+#PARALLEL_FACTOR 32
+#THREADS 64
+#PARALLEL_PART_SIZE_MB 150
+#FAKE_PARAMETER 123
+`), nil
 			},
 			wantOk: true,
 		},

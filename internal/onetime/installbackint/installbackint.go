@@ -23,6 +23,8 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"flag"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -45,6 +47,18 @@ type (
 
 	// symlinkFunc provides a testable replacement for os.Symlink.
 	symlinkFunc func(string, string) error
+
+	// statFunc provides a testable replacement for os.Stat.
+	statFunc func(string) (os.FileInfo, error)
+
+	// renameFunc provides a testable replacement for os.Rename.
+	renameFunc func(string, string) error
+
+	// globFunc provides a testable replacement for filepath.Glob.
+	globFunc func(string) ([]string, error)
+
+	// readFileFunc provides a testable replacement for os.ReadFile.
+	readFileFunc func(string) ([]byte, error)
 )
 
 // InstallBackint has args for installbackint subcommands.
@@ -55,6 +69,10 @@ type InstallBackint struct {
 	mkdir     mkdirFunc
 	writeFile writeFileFunc
 	symlink   symlinkFunc
+	stat      statFunc
+	rename    renameFunc
+	glob      globFunc
+	readFile  readFileFunc
 }
 
 // Name implements the subcommand interface for installbackint.
@@ -113,7 +131,12 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	b.mkdir = os.MkdirAll
 	b.writeFile = os.WriteFile
 	b.symlink = os.Symlink
+	b.stat = os.Stat
+	b.rename = os.Rename
+	b.glob = filepath.Glob
+	b.readFile = os.ReadFile
 	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.sid)); err != nil {
+		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent-bakint.log")
 		log.Logger.Errorw("InstallBackint failed", "sid", b.sid, "err", err)
 		usagemetrics.Error(usagemetrics.InstallBackintFailure)
 		return subcommands.ExitFailure
@@ -126,34 +149,34 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallDir string) error {
 	log.Logger.Info("InstallBackint starting")
 	usagemetrics.Action(usagemetrics.InstallBackintStarted)
-	if _, err := os.Stat(baseInstallDir); err != nil {
-		return fmt.Errorf("Unable to stat base install directory: %s, ensure the sid is correct. err: %v", baseInstallDir, err)
+	if _, err := b.stat(baseInstallDir); err != nil {
+		return fmt.Errorf("unable to stat base install directory: %s, ensure the sid is correct. err: %v", baseInstallDir, err)
 	}
+	if err := b.migrateOldAgent(ctx, baseInstallDir); err != nil {
+		return fmt.Errorf("unable to migrate old agent. err: %v", err)
+	}
+
 	backintInstallDir := baseInstallDir + "/backint/backint-gcs"
 	if err := b.mkdir(backintInstallDir, os.ModePerm); err != nil {
-		return fmt.Errorf("Unable to create backint install directory: %s. err: %v", backintInstallDir, err)
+		return fmt.Errorf("unable to create backint install directory: %s. err: %v", backintInstallDir, err)
 	}
 	if err := b.mkdir(baseInstallDir+"/hdbconfig", os.ModePerm); err != nil {
-		return fmt.Errorf("Unable to create hdbconfig install directory: %s. err: %v", baseInstallDir+"/hdbconfig", err)
+		return fmt.Errorf("unable to create hdbconfig install directory: %s. err: %v", baseInstallDir+"/hdbconfig", err)
 	}
 
 	log.Logger.Infow("Creating Backint files", "dir", backintInstallDir)
 	backintPath := backintInstallDir + "/backint"
 	parameterPath := backintInstallDir + "/parameters.json"
 	if err := b.writeFile(backintPath, hdbbackintScript, os.ModePerm); err != nil {
-		return fmt.Errorf("Unable to write backint script: %s. err: %v", backintPath, err)
+		return fmt.Errorf("unable to write backint script: %s. err: %v", backintPath, err)
 	}
-	// TODO: Migrate from the old agent by moving the backint-gcs
-	// folder to backint-gcs-old if it contains the old agent code. Also need to
-	// convert the parameters.txt file to the new proto. Lastly, have a
-	// 'revert/uninstall' option to revert the symlinks back to the old agent.
-	config := &bpb.BackintConfiguration{Bucket: "<GCS Bucket Name>"}
+	config := &bpb.BackintConfiguration{Bucket: "<GCS Bucket Name>", LogToCloud: true}
 	configData, err := protojson.MarshalOptions{Indent: "  "}.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("Unable to marshal config: %v. err: %v", config, err)
+		return fmt.Errorf("unable to marshal config, err: %v", err)
 	}
 	if err := b.writeFile(parameterPath, configData, 0666); err != nil {
-		return fmt.Errorf("Unable to write parameters.json file: %s. err: %v", parameterPath, err)
+		return fmt.Errorf("unable to write parameters.json file: %s. err: %v", parameterPath, err)
 	}
 
 	log.Logger.Infow("Creating Backint symlinks", "dir", baseInstallDir)
@@ -162,13 +185,57 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	os.Remove(backintSymlink)
 	os.Remove(parameterSymlink)
 	if err := b.symlink(backintPath, backintSymlink); err != nil {
-		return fmt.Errorf("Unable to create hdbbackint symlink: %s for: %s. err: %v", backintSymlink, backintPath, err)
+		return fmt.Errorf("unable to create hdbbackint symlink: %s for: %s. err: %v", backintSymlink, backintPath, err)
 	}
 	if err := b.symlink(parameterPath, parameterSymlink); err != nil {
-		return fmt.Errorf("Unable to create parameters.json symlink: %s for %s. err: %v", parameterSymlink, parameterPath, err)
+		return fmt.Errorf("unable to create parameters.json symlink: %s for %s. err: %v", parameterSymlink, parameterPath, err)
 	}
 
+	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent-bakint.log")
 	log.Logger.Info("InstallBackint succeeded")
 	usagemetrics.Action(usagemetrics.InstallBackintFinished)
+	return nil
+}
+
+// migrateOldAgent moves the backint-gcs folder to backint-gcs-old if it
+// contains the old agent code (a jre directory is present). If migrating, all
+// parameter.txt files are then copied to the backint-gcs folder.
+func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir string) error {
+	backintInstallDir := baseInstallDir + "/backint/backint-gcs"
+	backintOldDir := baseInstallDir + "/backint/backint-gcs-old"
+	jreInstallDir := backintInstallDir + "/jre"
+
+	if _, err := b.stat(jreInstallDir); os.IsNotExist(err) {
+		log.Logger.Infow("Old Backint agent not found, skipping migration", "jreInstallDir", jreInstallDir)
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("unable to stat jre install directory: %s, err: %v", jreInstallDir, err)
+	}
+
+	log.Logger.Infow("Old Backint agent found, migrating files", "oldpath", backintInstallDir, "newpath", backintOldDir)
+	if err := b.rename(backintInstallDir, backintOldDir); err != nil {
+		return fmt.Errorf("unable to move old backint install directory, oldpath: %s newpath: %s, err: %v", backintInstallDir, backintOldDir, err)
+	}
+	if err := b.mkdir(backintInstallDir, os.ModePerm); err != nil {
+		return fmt.Errorf("unable to create backint install directory: %s, err: %v", backintInstallDir, err)
+	}
+	txtFiles, err := b.glob(backintOldDir + "/*.txt")
+	if err != nil {
+		return fmt.Errorf("unable to glob .txt files: %s, err: %v", backintOldDir+"/*.txt", err)
+	}
+	for _, fileName := range txtFiles {
+		if strings.HasSuffix(fileName, "VERSION.txt") {
+			continue
+		}
+		data, err := b.readFile(fileName)
+		if err != nil {
+			return fmt.Errorf("unable to read parameter file: %s, err: %v", fileName, err)
+		}
+		destination := backintInstallDir + "/" + filepath.Base(fileName)
+		if err := b.writeFile(destination, data, os.ModePerm); err != nil {
+			return fmt.Errorf("unable to write parameter file: %s, err: %v", destination, err)
+		}
+	}
+	log.Logger.Infow("Successfully migrated old agent")
 	return nil
 }
