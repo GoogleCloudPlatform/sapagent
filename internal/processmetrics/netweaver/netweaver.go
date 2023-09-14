@@ -166,6 +166,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		res     []*mrpb.TimeSeries
 	)
 	err := backoff.Retry(func() error {
+		log.Logger.Infof("Attempting collector retry", "attempt", attempt)
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
@@ -174,6 +175,9 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		}
 		return err
 	}, p.PMBackoffPolicy)
+	if err != nil {
+		log.Logger.Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId(), "error", err)
+	}
 	return res, err
 }
 

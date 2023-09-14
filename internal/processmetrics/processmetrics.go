@@ -175,20 +175,22 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		HeartbeatSpec: params.HeartbeatSpec,
 	}
 
-	pmSlowFreq := p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
-	pmFastFreq := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
-
+	// For retries logic and backoff policy:
 	// For fast moving process metrics we are going ahead with 3 retries on failures, which means 4 attempts in total.
 	// Attempt - 1 Failure: wait for 30 seconds
 	// Attempt - 2 Failure: wait for 60 seconds
 	// Attempt - 3 Failure: wait for 120 seconds
-	slowProcessMetricsBOPolicy := cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 5*time.Minute, 2*time.Minute)
 
 	// For fast moving process metrics we are going ahead with 3 retries on failures, which means 4 attempts in total.
 	// Attempt - 1 Failure: wait for 5 seconds
 	// Attempt - 2 Failure: wait for 10 seconds
 	// Attempt - 3 Failure: wait for 20 seconds
-	fastProcessMetricsBOPolicy := cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second)
+	// Note: There is also randomization factor associated with exponential backoffs the intervals can
+	// have a delta of 3-4 seconds, which does not affect the overall process.
+
+	pmSlowFreq := p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
+	pmFastFreq := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
+
 	skippedMetrics := make(map[string]bool)
 	sl := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
 	for _, metric := range sl {
@@ -201,7 +203,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		Client:          p.Client,
 		Execute:         commandlineexecutor.ExecuteCommand,
 		SkippedMetrics:  skippedMetrics,
-		PMBackoffPolicy: slowProcessMetricsBOPolicy,
+		PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 	}
 
 	log.Logger.Info("Creating SAP control processes per process CPU, memory usage metrics collector.")
@@ -210,12 +212,12 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		Client:          p.Client,
 		Executor:        commandlineexecutor.ExecuteCommand,
 		SkippedMetrics:  skippedMetrics,
-		PMBackoffPolicy: slowProcessMetricsBOPolicy,
+		PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 	}
 
 	log.Logger.Info("Creating infra migration event metrics collector.")
 	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics,
-		slowProcessMetricsBOPolicy)
+		cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute))
 
 	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector, migrationCollector)
 
@@ -230,7 +232,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Config:          p.Config,
 				Client:          p.Client,
 				SkippedMetrics:  skippedMetrics,
-				PMBackoffPolicy: slowProcessMetricsBOPolicy,
+				PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 			p.Collectors = append(p.Collectors, clusterCollector)
 			clusterCollectorCreated = true
@@ -251,7 +253,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				LastValue:        make(map[string]*process.IOCountersStat),
 				SkippedMetrics:   skippedMetrics,
-				PMBackoffPolicy:  slowProcessMetricsBOPolicy,
+				PMBackoffPolicy:  cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 
 			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
@@ -261,7 +263,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Client:             p.Client,
 				HANAQueryFailCount: 0,
 				SkippedMetrics:     skippedMetrics,
-				PMBackoffPolicy:    slowProcessMetricsBOPolicy,
+				PMBackoffPolicy:    cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 
@@ -270,7 +272,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				SAPInstance:     instance,
 				Config:          p.Config,
 				Client:          p.Client,
-				PMBackoffPolicy: fastProcessMetricsBOPolicy,
+				PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -296,7 +298,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				LastValue:        make(map[string]*process.IOCountersStat),
 				SkippedMetrics:   skippedMetrics,
-				PMBackoffPolicy:  slowProcessMetricsBOPolicy,
+				PMBackoffPolicy:  cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 
 			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)
@@ -305,7 +307,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Config:          p.Config,
 				Client:          p.Client,
 				SkippedMetrics:  skippedMetrics,
-				PMBackoffPolicy: slowProcessMetricsBOPolicy,
+				PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
 
@@ -315,7 +317,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				Config:          p.Config,
 				Client:          p.Client,
 				SkippedMetrics:  skippedMetrics,
-				PMBackoffPolicy: fastProcessMetricsBOPolicy,
+				PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -329,7 +331,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 			Reader:          maintenance.ModeReader{},
 			Sids:            sids,
 			SkippedMetrics:  skippedMetrics,
-			PMBackoffPolicy: slowProcessMetricsBOPolicy,
+			PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 		}
 		p.Collectors = append(p.Collectors, maintenanceModeCollector)
 	}
@@ -431,6 +433,7 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 }
 
 func createWorkerPoolForSlowMetrics(ctx context.Context, p *Properties, bo *cloudmonitoring.BackOffIntervals) {
+	log.Logger.Infow("Creating worker pool for slow metrics.", "numberofCollectors", len(p.Collectors))
 	wp := workerpool.New(len(p.Collectors))
 	for _, collector := range p.Collectors {
 		collector := collector
@@ -446,7 +449,7 @@ func createWorkerPoolForSlowMetrics(ctx context.Context, p *Properties, bo *clou
 
 func collectAndSendSlowMovingMetrics(ctx context.Context, p *Properties, c Collector, bo *cloudmonitoring.BackOffIntervals, wp *workerpool.WorkerPool) error {
 	sent, batchCount, err := collectAndSendSlowMovingMetricsOnce(ctx, p, c, bo)
-	log.Logger.Debugw("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "error", err)
+	log.Logger.Infow("Sent metrics from collectAndSendSlowMovingMetrics.", "sent", sent, "batches", batchCount, "error", err)
 	time.AfterFunc(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency())*time.Second, func() {
 		wp.Submit(func() {
 			collectAndSendSlowMovingMetrics(ctx, p, c, bo, wp)

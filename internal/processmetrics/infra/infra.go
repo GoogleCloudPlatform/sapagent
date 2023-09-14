@@ -130,6 +130,9 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 		}
 		return err
 	}, p.PMBackoffPolicy)
+	if err != nil {
+		log.Logger.Infow("Retry limit exceeded", "error", err)
+	}
 	return res, err
 }
 

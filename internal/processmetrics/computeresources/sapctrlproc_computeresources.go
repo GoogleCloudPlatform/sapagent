@@ -94,5 +94,8 @@ func (p *SAPControlProcInstanceProperties) CollectWithRetry(ctx context.Context)
 		}
 		return err
 	}, p.PMBackoffPolicy)
+	if err != nil {
+		log.Logger.Debugw("Retry limit exceeded")
+	}
 	return res, err
 }

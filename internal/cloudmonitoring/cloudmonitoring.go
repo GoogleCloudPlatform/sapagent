@@ -127,12 +127,24 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 	return res, nil
 }
 
-// LongExponentialBackOffPolicy returns a backoff policy with a One Minute MaxElapsedTime.
+// LongExponentialBackOffPolicy returns a backoff policy with exponential backoff.
 func LongExponentialBackOffPolicy(ctx context.Context, initial time.Duration, retries uint64, maxElapsedTime time.Duration, maxInterval time.Duration) backoff.BackOffContext {
 	exp := backoff.NewExponentialBackOff()
 	exp.InitialInterval = initial
 	exp.MaxInterval = maxInterval
 	exp.MaxElapsedTime = maxElapsedTime
+	log.Logger.Info("LongExponentialBackOffPolicy", "exp", exp)
+	return backoff.WithContext(backoff.WithMaxRetries(exp, retries), ctx)
+}
+
+// LongExponentialBackOffPolicyForProcessMetrics returns a backoff policy with exponential backoff.
+func LongExponentialBackOffPolicyForProcessMetrics(ctx context.Context, initial time.Duration, retries uint64, maxElapsedTime time.Duration, maxInterval time.Duration) backoff.BackOffContext {
+	exp := backoff.NewExponentialBackOff()
+	exp.InitialInterval = initial
+	exp.MaxInterval = maxInterval
+	exp.MaxElapsedTime = maxElapsedTime
+	exp.Multiplier = 2
+	log.Logger.Info("LongExponentialBackOffPolicyForProcessMetrics", "exp", exp)
 	return backoff.WithContext(backoff.WithMaxRetries(exp, retries), ctx)
 }
 

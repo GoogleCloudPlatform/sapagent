@@ -139,6 +139,9 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		}
 		return err
 	}, p.PMBackoffPolicy)
+	if err != nil {
+		log.Logger.Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetSapsid())
+	}
 	return res, err
 }
 

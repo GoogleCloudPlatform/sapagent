@@ -119,5 +119,8 @@ func (p *NetweaverInstanceProperties) CollectWithRetry(ctx context.Context) ([]*
 		}
 		return err
 	}, p.PMBackoffPolicy)
+	if err != nil {
+		log.Logger.Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId())
+	}
 	return res, err
 }

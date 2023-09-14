@@ -221,6 +221,9 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		}
 		return err
 	}, p.PMBackoffPolicy)
+	if err != nil {
+		log.Logger.Debug("Retry limit exceeded", "error", err)
+	}
 	return res, err
 }
 
