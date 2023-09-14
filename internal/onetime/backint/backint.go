@@ -134,7 +134,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
 	log.Logger.Infow("Args parsed and config validated", "config", config)
 
-	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket(), userAgent)
+	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket(), userAgent, true)
 	if !ok {
 		return subcommands.ExitUsageError
 	}

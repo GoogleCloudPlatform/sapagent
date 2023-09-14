@@ -44,7 +44,14 @@ var (
 		"default_hana_ha_availability": defaultHanaHAAvailability,
 	}
 	defaultBackoff      = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
-	defaultBucketHandle = fakestorage.NewServer([]fakestorage.Object{}).Client().Bucket("default-bucket")
+	defaultBucketHandle = fakestorage.NewServer([]fakestorage.Object{
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "default-bucket",
+				Name:       "/object.json",
+			},
+			Content: []byte("test content"),
+		}}).Client().Bucket("default-bucket")
 )
 
 func TestExecuteReadMetrics(t *testing.T) {
@@ -181,9 +188,10 @@ func TestSetFlagsForReadMetrics(t *testing.T) {
 
 func TestReadMetricsHandler(t *testing.T) {
 	tests := []struct {
-		name string
-		r    ReadMetrics
-		want subcommands.ExitStatus
+		name   string
+		r      ReadMetrics
+		copier storage.IOFileCopier
+		want   subcommands.ExitStatus
 	}{
 		{
 			name: "NoOutputFolder",
@@ -242,6 +250,9 @@ func TestReadMetricsHandler(t *testing.T) {
 				},
 				bucket: defaultBucketHandle,
 			},
+			copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+				return 0, cmpopts.AnyError
+			},
 			want: subcommands.ExitFailure,
 		},
 		{
@@ -260,7 +271,7 @@ func TestReadMetricsHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.r.readMetricsHandler(context.Background())
+			got := test.r.readMetricsHandler(context.Background(), test.copier)
 			if got != test.want {
 				t.Errorf("readMetricsHandler()=%v want %v", got, test.want)
 			}
@@ -441,7 +452,17 @@ func TestUploadFile(t *testing.T) {
 			},
 			want: cmpopts.AnyError,
 		},
-		// Cannot unit test successful upload since object Attrs cannot be acquired in fakestorage
+		{
+			name: "UploadSuccess",
+			r: ReadMetrics{
+				bucket: defaultBucketHandle,
+			},
+			fileName: t.TempDir() + "/object.json",
+			copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+				return 0, nil
+			},
+			want: nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

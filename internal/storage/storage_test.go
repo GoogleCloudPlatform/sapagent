@@ -97,6 +97,7 @@ func TestConnectToBucket(t *testing.T) {
 		name   string
 		config *bpb.BackintConfiguration
 		client Client
+		verify bool
 		want   *storage.BucketHandle
 		wantOk bool
 	}{
@@ -106,6 +107,7 @@ func TestConnectToBucket(t *testing.T) {
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return nil, errors.New("client create error")
 			},
+			verify: true,
 			want:   nil,
 			wantOk: false,
 		},
@@ -117,6 +119,7 @@ func TestConnectToBucket(t *testing.T) {
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return nil, errors.New("client create error")
 			},
+			verify: true,
 			want:   nil,
 			wantOk: false,
 		},
@@ -126,8 +129,19 @@ func TestConnectToBucket(t *testing.T) {
 				Bucket: "fake-bucket",
 			},
 			client: defaultStorageClient,
+			verify: true,
 			want:   nil,
 			wantOk: false,
+		},
+		{
+			name: "ConnectFailNoVerify",
+			config: &bpb.BackintConfiguration{
+				Bucket: "fake-bucket",
+			},
+			client: defaultStorageClient,
+			verify: false,
+			want:   emptyServer("fake-bucket").Client().Bucket("fake-bucket"),
+			wantOk: true,
 		},
 		{
 			name: "ConnectSuccess",
@@ -135,6 +149,7 @@ func TestConnectToBucket(t *testing.T) {
 				Bucket: "test-bucket",
 			},
 			client: defaultStorageClient,
+			verify: true,
 			want:   fakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
@@ -150,6 +165,7 @@ func TestConnectToBucket(t *testing.T) {
 				}
 				return fakeServer.Client(), nil
 			},
+			verify: true,
 			want:   fakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
@@ -161,13 +177,14 @@ func TestConnectToBucket(t *testing.T) {
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return emptyServer("empty-bucket").Client(), nil
 			},
+			verify: true,
 			want:   emptyServer("empty-bucket").Client().Bucket("empty-bucket"),
 			wantOk: true,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config.GetServiceAccount(), test.config.GetBucket(), "test-user-agent")
+			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config.GetServiceAccount(), test.config.GetBucket(), "test-user-agent", test.verify)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.IgnoreUnexported(storage.BucketHandle{})); diff != "" {
 				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.config.GetServiceAccount(), test.config.GetBucket(), diff)
 			}

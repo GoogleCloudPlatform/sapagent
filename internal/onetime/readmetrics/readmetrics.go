@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"flag"
@@ -134,7 +135,7 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	}
 
 	if r.bucketName != "" {
-		if r.bucket, ok = storage.ConnectToBucket(ctx, s.NewClient, r.serviceAccount, r.bucketName, userAgent); !ok {
+		if r.bucket, ok = storage.ConnectToBucket(ctx, s.NewClient, r.serviceAccount, r.bucketName, userAgent, false); !ok {
 			log.Logger.Errorw("Failed to connect to bucket", "bucketName", r.bucketName)
 			return subcommands.ExitFailure
 		}
@@ -161,12 +162,12 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
 	}
 
-	return r.readMetricsHandler(ctx)
+	return r.readMetricsHandler(ctx, io.Copy)
 }
 
 // readMetricsHandler executes all queries, saves results to the local
 // filesystem, and optionally uploads results to a GCS bucket.
-func (r *ReadMetrics) readMetricsHandler(ctx context.Context) subcommands.ExitStatus {
+func (r *ReadMetrics) readMetricsHandler(ctx context.Context, copier storage.IOFileCopier) subcommands.ExitStatus {
 	usagemetrics.Action(usagemetrics.ReadMetricsStarted)
 	if err := os.MkdirAll(r.outputFolder, os.ModePerm); err != nil {
 		log.Logger.Errorw("Failed to create output folder", "outputFolder", r.outputFolder, "err", err)
@@ -195,7 +196,7 @@ func (r *ReadMetrics) readMetricsHandler(ctx context.Context) subcommands.ExitSt
 		}
 
 		if r.bucket != nil {
-			if err := r.uploadFile(ctx, fileName, io.Copy); err != nil {
+			if err := r.uploadFile(ctx, fileName, copier); err != nil {
 				log.Logger.Errorw("Failed to upload file", "fileName", fileName, "err", err)
 				usagemetrics.Error(usagemetrics.ReadMetricsBucketUploadFailure)
 				return subcommands.ExitFailure
@@ -300,16 +301,17 @@ func (r *ReadMetrics) uploadFile(ctx context.Context, fileName string, copier st
 		BucketHandle: r.bucket,
 		BucketName:   r.bucketName,
 		ChunkSizeMb:  100,
-		ObjectName:   fileName,
+		ObjectName:   filepath.Base(fileName),
 		TotalBytes:   fileInfo.Size(),
 		MaxRetries:   5,
 		LogDelay:     30 * time.Second,
+		VerifyUpload: false,
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {
 		return err
 	}
-	log.Logger.Infow("File uploaded", "bucket", r.bucketName, "fileName", fileName, "bytesWritten", bytesWritten, "fileSize", fileInfo.Size())
+	log.Logger.Infow("File uploaded", "bucket", r.bucketName, "fileName", fileName, "objectName", rw.ObjectName, "bytesWritten", bytesWritten, "fileSize", fileInfo.Size())
 	return nil
 }
 

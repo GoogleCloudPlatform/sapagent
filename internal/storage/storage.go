@@ -109,6 +109,10 @@ type ReadWriter struct {
 	// Providing both EncryptionKey and KMSKey will result in an error.
 	KMSKey string
 
+	// VerifyUpload ensures the object is in the bucket and bytesWritten matches
+	// the object's size in the bucket. Read access on the bucket is required.
+	VerifyUpload bool
+
 	// DumpData discards bytes during upload rather than write to the bucket.
 	DumpData bool
 
@@ -140,7 +144,8 @@ func (discardCloser) Write(p []byte) (int, error) { return len(p), nil }
 // attempts to connect to the GCS bucket. Returns false if there is a connection
 // failure (bucket does not exist, invalid credentials, etc.)
 // userAgentSuffix is an optional parameter to set the User-Agent header.
-func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName, userAgentSuffix string) (*storage.BucketHandle, bool) {
+// verifyConnection requires bucket read access to list the bucket's objects.
+func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName, userAgentSuffix string, verifyConnection bool) (*storage.BucketHandle, bool) {
 	var opts []option.ClientOption
 	userAgent := fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", configuration.AgentVersion)
 	if userAgentSuffix != "" {
@@ -158,6 +163,10 @@ func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, 
 	}
 
 	bucket := client.Bucket(bucketName)
+	if !verifyConnection {
+		log.Logger.Infow("Created bucket but did not verify connection. Read/write calls may fail.", "bucket", bucketName)
+		return bucket, true
+	}
 	if _, err := bucket.Objects(ctx, nil).Next(); err != nil && err != iterator.Done {
 		log.Logger.Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", bucketName, "error", err)
 		return nil, false
@@ -230,7 +239,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	}
 	// Verify object is in the bucket and bytesWritten matches the object's size in the bucket.
 	objectSize := int64(0)
-	if !rw.DumpData {
+	if !rw.DumpData && rw.VerifyUpload {
 		attrs, err := rw.BucketHandle.Object(rw.ObjectName).Attrs(ctx)
 		if err != nil {
 			return bytesWritten, err
