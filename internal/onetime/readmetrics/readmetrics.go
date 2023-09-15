@@ -301,7 +301,7 @@ func (r *ReadMetrics) uploadFile(ctx context.Context, fileName string, copier st
 		BucketHandle: r.bucket,
 		BucketName:   r.bucketName,
 		ChunkSizeMb:  100,
-		ObjectName:   filepath.Base(fileName),
+		ObjectName:   r.cloudProps.GetNumericProjectId() + "/" + filepath.Base(fileName),
 		TotalBytes:   fileInfo.Size(),
 		MaxRetries:   5,
 		LogDelay:     30 * time.Second,
