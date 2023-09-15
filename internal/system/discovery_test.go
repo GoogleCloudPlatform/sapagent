@@ -28,6 +28,7 @@ import (
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v3"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -141,11 +142,13 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gceService := &fake.TestGCE{
-				GetInstanceResp: []*compute.Instance{nil},
-				GetInstanceErr:  []error{errors.New("Instance not found")},
+				GetProjectResp: []*cloudresourcemanager.Project{&cloudresourcemanager.Project{}},
+				GetProjectErr:  []error{nil},
 			}
 
-			got := StartSAPSystemDiscovery(context.Background(), test.config, gceService, nil, test.testLog)
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			got := StartSAPSystemDiscovery(ctx, test.config, gceService, nil, test.testLog)
 			if got != test.want {
 				t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", test.config, got, test.want)
 			}
