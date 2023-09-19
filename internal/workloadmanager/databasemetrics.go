@@ -34,7 +34,7 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 		return fmt.Errorf("Cannot collect database metrics without DB credentials")
 	}
 
-	if len(params.HANAInsightRules) == 0 {
+	if len(params.hanaInsightRules) == 0 {
 		log.Logger.Debug("HANA Insights rules not found")
 		return fmt.Errorf("HANA Insights rules not found")
 	}
@@ -60,7 +60,7 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 		return err
 	}
 
-	insights, err := ruleengine.Run(ctx, db, params.HANAInsightRules)
+	insights, err := ruleengine.Run(ctx, db, params.hanaInsightRules)
 	if err != nil {
 		log.Logger.Error(err)
 		return err

@@ -30,6 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 
 	"github.com/google/go-cmp/cmp"
@@ -79,6 +80,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 	tests := []struct {
 		name       string
 		params     Parameters
+		wantValue  float64
 		wantLabels map[string]string
 	}{
 		{
@@ -86,23 +88,31 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 			params: Parameters{
 				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
-				osVendorID:     "rhel",
+				sapApplications: &sapb.SAPInstances{
+					Instances: []*sapb.SAPInstance{
+						&sapb.SAPInstance{Type: sapb.InstanceType_NETWEAVER},
+					},
+				},
+				osVendorID: "rhel",
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 			},
+			wantValue:  1,
 			wantLabels: map[string]string{},
 		},
 		{
 			name: "NetWeaverMetricsEmpty",
 			params: Parameters{
-				Config:         defaultConfiguration,
-				WorkloadConfig: &wlmpb.WorkloadValidation{},
-				osVendorID:     "rhel",
+				Config:          defaultConfiguration,
+				WorkloadConfig:  &wlmpb.WorkloadValidation{},
+				osVendorID:      "rhel",
+				sapApplications: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
 			},
+			wantValue:  0,
 			wantLabels: map[string]string{},
 		},
 		{
@@ -139,12 +149,18 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "rhel",
+				sapApplications: &sapb.SAPInstances{
+					Instances: []*sapb.SAPInstance{
+						&sapb.SAPInstance{Type: sapb.InstanceType_NETWEAVER},
+					},
+				},
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "bar",
 					}
 				},
 			},
+			wantValue: 1,
 			wantLabels: map[string]string{
 				"foo": "bar",
 			},
@@ -153,7 +169,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			want := createNetWeaverWorkloadMetrics(test.wantLabels, 0)
+			want := createNetWeaverWorkloadMetrics(test.wantLabels, test.wantValue)
 			got := CollectNetWeaverMetricsFromConfig(context.Background(), test.params)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectNetWeaverMetricsFromConfig() returned unexpected metric labels diff (-want +got):\n%s", diff)

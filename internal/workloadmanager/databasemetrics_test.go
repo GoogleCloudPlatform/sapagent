@@ -104,7 +104,7 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 		},
 		{
 			name:         "NoHANAInsightsRules",
-			params:       Parameters{HANAInsightRules: []*rpb.Rule{}},
+			params:       Parameters{hanaInsightRules: []*rpb.Rule{}},
 			wlmInterface: &testWLMInterface{},
 			want:         cmpopts.AnyError,
 		},
@@ -112,7 +112,7 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 			name: "HANAMetricsConfigSetMetricOverride",
 			params: Parameters{
 				Config: defaultConfigurationDBMetrics,
-				HANAInsightRules: []*rpb.Rule{
+				hanaInsightRules: []*rpb.Rule{
 					&rpb.Rule{},
 				},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
@@ -135,7 +135,7 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 			name: "HANAMetricsConfigSetNoOverride",
 			params: Parameters{
 				Config: defaultConfigurationDBMetrics,
-				HANAInsightRules: []*rpb.Rule{
+				hanaInsightRules: []*rpb.Rule{
 					&rpb.Rule{},
 				},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},

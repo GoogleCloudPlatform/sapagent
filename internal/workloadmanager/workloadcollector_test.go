@@ -44,6 +44,7 @@ import (
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
@@ -127,83 +128,6 @@ func (t *testWLMInterface) WriteInsight(project string, location string, req *wo
 	return t.WriteInsightErrs[t.WriteInsightCallCount]
 }
 
-func TestSetOSReleaseInfo(t *testing.T) {
-	defaultFileReader := ConfigFileReader(func(path string) (io.ReadCloser, error) {
-		file, err := testFS.Open(path)
-		var f io.ReadCloser = file
-		return f, err
-	})
-
-	tests := []struct {
-		name        string
-		filePath    string
-		reader      ConfigFileReader
-		wantID      string
-		wantVersion string
-	}{
-		{
-			name:        "Success",
-			filePath:    "test_data/os-release.txt",
-			reader:      defaultFileReader,
-			wantID:      "debian",
-			wantVersion: "11",
-		},
-		{
-			name:        "ConfigFileReaderNil",
-			filePath:    "test_data/os-release.txt",
-			reader:      nil,
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:        "OSReleaseFilePathEmpty",
-			filePath:    "",
-			reader:      defaultFileReader,
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:     "FileReadError",
-			filePath: "test_data/os-release.txt",
-			reader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-				return nil, errors.New("File Read Error")
-			}),
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:        "FileParseError",
-			filePath:    "test_data/os-release-bad.txt",
-			reader:      defaultFileReader,
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:        "FieldsEmpty",
-			filePath:    "test_data/os-release-empty.txt",
-			reader:      defaultFileReader,
-			wantID:      "",
-			wantVersion: "",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			params := Parameters{
-				OSReleaseFilePath: test.filePath,
-				ConfigFileReader:  test.reader,
-			}
-			params.SetOSReleaseInfo()
-			if params.osVendorID != test.wantID {
-				t.Errorf("SetOSReleaseInfo() unexpected osVendorID, got %q want %q", params.osVendorID, test.wantID)
-			}
-			if params.osVersion != test.wantVersion {
-				t.Errorf("SetOSReleaseInfo() unexpected osVersion, got %q want %q", params.osVersion, test.wantVersion)
-			}
-		})
-	}
-}
-
 func TestCollectMetricsFromConfig(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -264,6 +188,7 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 				},
 				OSStatReader:       func(data string) (os.FileInfo, error) { return nil, nil },
 				InstanceInfoReader: *instanceinfo.New(&fakeDiskMapper{}, defaultGCEService),
+				sapApplications:    &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 			},
 			want: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{
 				createTimeSeries(
@@ -714,6 +639,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				Exists:            func(string) bool { return true },
 				ConfigFileReader:  DefaultTestReader,
 				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
+				sapApplications:   &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				OSType:            "linux",
 				Remote:            false,
@@ -776,13 +702,5 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				t.Errorf("collectAndSend() heartbeat mismatch got %d, want %d", got, test.want)
 			}
 		})
-	}
-}
-
-func TestReadHANAInsightsRules(t *testing.T) {
-	params := Parameters{Config: defaultConfiguration}
-	params.ReadHANAInsightsRules()
-	if len(params.HANAInsightRules) != 20 {
-		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(params.HANAInsightRules), 20)
 	}
 }

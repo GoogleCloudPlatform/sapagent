@@ -26,8 +26,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 const sapValidationHANA = "workload.googleapis.com/sap/validation/hana"
@@ -56,15 +58,12 @@ type lsblk struct {
 // be uploaded to a Collection Storage mechanism.
 func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager HANA metrics...")
+	l := map[string]string{}
 	hanaVal := 0.0
 
-	hanaProcessOrGlobalIni := hanaProcessOrGlobalINI(ctx, params.Execute)
-	globalINILocationVal := globalINILocation(hanaProcessOrGlobalIni)
-
-	l := map[string]string{}
-	if hanaProcessOrGlobalIni == "" || strings.Contains(hanaProcessOrGlobalIni, "cannot access") {
-		// No HANA INI file or processes were identified on the current host.
-		log.Logger.Debug("HANA process and global.ini not found, no HANA")
+	globalINILocationVal := globalINIfromSAPsid(params)
+	if globalINILocationVal == "" {
+		log.Logger.Debug("Skipping HANA metrics collection, HANA not active on instance.")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 	if _, err := params.OSStatReader(globalINILocationVal); err != nil {
@@ -113,76 +112,16 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 }
 
-/*
-hanaProcessOrGlobalINI obtains hana cluster data from a running hana process or a "global" INI file
-if hana is not running on the current VM.
-*/
-func hanaProcessOrGlobalINI(ctx context.Context, exec commandlineexecutor.Execute) string {
-	presult := exec(ctx, commandlineexecutor.Params{
-		Executable:  "pidof",
-		ArgsToSplit: "-s sapstartsrv",
-	})
-	hanaProcessOrGlobalINI := ""
-	if presult.StdOut != "" {
-		hpresult := exec(ctx, commandlineexecutor.Params{
-			Executable:  "ps",
-			ArgsToSplit: fmt.Sprintf("-p %s -o cmd --no-headers", strings.TrimSpace(presult.StdOut)),
-		})
-		hanaProcessOrGlobalINI = hpresult.StdOut
-		if hanaProcessOrGlobalINI != "" && !strings.Contains(hanaProcessOrGlobalINI, "HDB") {
-			// No HDB services in this process.
-			hanaProcessOrGlobalINI = ""
+// globalINIfromSAPsid returns the path to the global.ini file using the
+// SAP sid from the discovered HANA instance.
+func globalINIfromSAPsid(params Parameters) string {
+	for _, instance := range params.sapApplications.Instances {
+		if instance.GetType() == sapb.InstanceType_HANA && instance.GetSapsid() != "" {
+			log.Logger.Infow("Found HANA instance.", "sapsid", instance.GetSapsid())
+			return fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config/global.ini", instance.GetSapsid())
 		}
 	}
-	if hanaProcessOrGlobalINI == "" {
-		// Check for the global.ini even if the process isn't running.
-		// Invoke the shell in order to expand the `*` wildcard.
-		hpresult := exec(ctx, commandlineexecutor.Params{
-			Executable:  "/bin/sh",
-			ArgsToSplit: "-c 'ls /usr/sap/*/SYS/global/hdb/custom/config/global.ini'",
-		})
-		hanaProcessOrGlobalINI = hpresult.StdOut
-	}
-	return hanaProcessOrGlobalINI
-}
-
-/*
-globalINILocation builds an INI path location from an input string consisting of a either a
-HANA command or a config file location
-*/
-func globalINILocation(hanaProcessOrGlobalINI string) string {
-	// There is no Hana implementation that we can derive.
-	if hanaProcessOrGlobalINI == "" {
-		return ""
-	}
-	pathSplit := strings.Fields(hanaProcessOrGlobalINI)
-	sid := ""
-	globalINILocation := ""
-	commandOrFileLocation := pathSplit[0]
-	pathParts := strings.Split(commandOrFileLocation, "/")
-	log.Logger.Debugw("HANA commandOrFileLocation", "commandorfilelocation", commandOrFileLocation)
-	if len(pathSplit) == 1 {
-		// This is just the global.ini path already.
-		globalINILocation = strings.TrimSpace(hanaProcessOrGlobalINI)
-		// NOMUTANTS--we are only logging the SID so we cannot add a test for it
-		for _, pathPart := range pathParts {
-			if strings.HasPrefix(pathPart, "SYS") {
-				break
-			}
-			sid = pathPart
-		}
-	} else {
-		for _, pathPart := range pathParts {
-			if strings.HasPrefix(pathPart, "HDB") {
-				break
-			}
-			sid = pathPart
-			globalINILocation += pathPart + "/"
-		}
-		globalINILocation += "SYS/global/hdb/custom/config/global.ini"
-	}
-	log.Logger.Debugw("HANA sid and global.ini file", "sid", sid, "globalinilocation", globalINILocation)
-	return globalINILocation
+	return ""
 }
 
 func diskInfo(ctx context.Context, basepathVolume string, globalINILocation string, exec commandlineexecutor.Execute, iir instanceinfo.Reader) map[string]string {

@@ -41,6 +41,7 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 // fakeDiskMapper provides a testable fake implementation of the DiskMapper interface
@@ -291,95 +292,6 @@ func GlobalINITest4Exec(ctx context.Context, params commandlineexecutor.Params) 
 	return commandlineexecutor.Result{
 		StdOut: "",
 		StdErr: "",
-	}
-}
-
-func TestHanaProcessOrGlobalINI(t *testing.T) {
-	tests := []struct {
-		name string
-		exec commandlineexecutor.Execute
-		want string
-	}{
-		{
-			name: "GlobalINITest1",
-			exec: GlobalINITest1Exec,
-			want: "",
-		},
-		{
-			name: "GlobalINITest2",
-			exec: GlobalINITest2Exec,
-			want: "Global INI contents",
-		},
-		{
-			name: "GlobalINITest3",
-			exec: GlobalINITest3Exec,
-			want: "",
-		},
-		{
-			name: "GlobalINITest4",
-			exec: GlobalINITest4Exec,
-			want: "HDB_INFO",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := hanaProcessOrGlobalINI(context.Background(), test.exec)
-
-			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%s failed, hanaProcessOrGlobalINI returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
-			}
-		})
-	}
-}
-
-func TestGlobalINILocation(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "GlobalINILocation1",
-			input: "/etc/config/test.ini",
-			want:  "/etc/config/test.ini",
-		},
-		{
-			name:  "GlobalINILocation2",
-			input: "SYS/etc/config/test.ini",
-			want:  "SYS/etc/config/test.ini",
-		},
-		{
-			name:  "GlobalINILocation3",
-			input: "/etc/config/test.ini hana_test",
-			want:  "/etc/config/test.ini/SYS/global/hdb/custom/config/global.ini",
-		},
-		{
-			name:  "GlobalINILocation4",
-			input: "hana_test /etc/config/test.ini",
-			want:  "hana_test/SYS/global/hdb/custom/config/global.ini",
-		},
-		{
-			name:  "GlobalINILocation5",
-			input: "/etc/config/HDB/dir/test.ini hana_test",
-			want:  "/etc/config/SYS/global/hdb/custom/config/global.ini",
-		},
-		{
-			name:  "NoGlobalINILocation",
-			input: "",
-			want:  "",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := globalINILocation(test.input)
-			want := test.want
-
-			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("%s returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
-			}
-		})
 	}
 }
 
@@ -766,6 +678,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		exec             commandlineexecutor.Execute
 		osStatReader     OSStatReader
 		configFileReader ConfigFileReader
+		sapApplications  *sapb.SAPInstances
 		wantHanaExists   float64
 		wantLabels       map[string]string
 	}{
@@ -779,18 +692,13 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
+			sapApplications:  &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 			wantHanaExists:   float64(0.0),
 			wantLabels:       map[string]string{},
 		},
 		{
-			name: "TestHanaNoINI",
+			name: "TestHanaNoSAPsid",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
-				}
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -798,8 +706,13 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     os.Stat,
 			configFileReader: defaultFileReader,
-			wantHanaExists:   float64(0.0),
-			wantLabels:       map[string]string{},
+			sapApplications: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					&sapb.SAPInstance{Type: sapb.InstanceType_HANA},
+				},
+			},
+			wantHanaExists: float64(0.0),
+			wantLabels:     map[string]string{},
 		},
 		{
 			name: "StatReaderError",
@@ -817,18 +730,17 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, errors.New("error") },
 			configFileReader: defaultFileReader,
-			wantHanaExists:   float64(0.0),
-			wantLabels:       map[string]string{},
+			sapApplications: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+				},
+			},
+			wantHanaExists: float64(0.0),
+			wantLabels:     map[string]string{},
 		},
 		{
 			name: "TestHanaAllLabelsDisabled",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
-				}
 				return commandlineexecutor.Result{
 					StdOut: "",
 					StdErr: "",
@@ -836,7 +748,12 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
-			wantHanaExists:   float64(1.0),
+			sapApplications: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+				},
+			},
+			wantHanaExists: float64(1.0),
 			wantLabels: map[string]string{
 				"disk_data_mount":       "",
 				"disk_data_pd_size":     "",
@@ -855,12 +772,6 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		{
 			name: "TestHanaAllLabelsEnabled",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "/bin/sh" {
-					return commandlineexecutor.Result{
-						StdOut: "/etc/config/this_ini_does_not_exist.ini",
-						StdErr: "",
-					}
-				}
 				if params.Executable == "grep" {
 					return commandlineexecutor.Result{
 						StdOut: "basepath location /hana/data",
@@ -906,6 +817,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			configFileReader: ConfigFileReader(func(data string) (io.ReadCloser, error) {
 				return io.NopCloser(strings.NewReader(defaultHanaINI)), nil
 			}),
+			sapApplications: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+				},
+			},
 			wantHanaExists: float64(1.0),
 			wantLabels: map[string]string{
 				"disk_data_mount":       "/hana/data",
@@ -941,6 +857,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				Execute:            test.exec,
 				OSType:             "linux",
 				osVendorID:         "rhel",
+				sapApplications:    test.sapApplications,
 				WorkloadConfig:     collectionDefinition.GetWorkloadValidation(),
 				ConfigFileReader:   test.configFileReader,
 			}

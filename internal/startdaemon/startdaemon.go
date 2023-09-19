@@ -449,9 +449,7 @@ func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
 		wmp.wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
 		wmp.wlmparams.DefaultTokenGetter = defaultTokenGetter
 		wmp.wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
-		wmp.wlmparams.SetOSReleaseInfo()
-		wmp.wlmparams.DiscoverNetWeaver(ctx)
-		wmp.wlmparams.ReadHANAInsightsRules()
+		wmp.wlmparams.Init(ctx)
 		workloadmanager.StartMetricsCollection(ctx, wmp.wlmparams)
 	}
 }

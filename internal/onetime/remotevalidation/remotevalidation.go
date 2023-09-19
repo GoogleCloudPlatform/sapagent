@@ -153,8 +153,7 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 		OSReleaseFilePath:     workloadmanager.OSReleaseFilePath,
 		InterfaceAddrsGetter:  net.InterfaceAddrs,
 	}
-	wlmparams.SetOSReleaseInfo()
-	wlmparams.DiscoverNetWeaver(ctx)
+	wlmparams.Init(ctx)
 	fmt.Println(workloadmanager.CollectMetricsToJSON(ctx, wlmparams))
 	return subcommands.ExitSuccess
 }

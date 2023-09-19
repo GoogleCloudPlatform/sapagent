@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,24 +30,14 @@ import (
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	"github.com/zieckey/goini"
-	"golang.org/x/oauth2/google"
-	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
-	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -64,21 +53,6 @@ ConfigFileReader abstracts loading and reading files into an io.ReadCloser objec
 type ConfigFileReader func(string) (io.ReadCloser, error)
 
 /*
-OSStatReader abstracts os.FileInfo reading. OSStatReader Example usage:
-
-	OSStatReader(func(f string) (os.FileInfo, error) {
-		return os.Stat(f)
-	})
-*/
-type OSStatReader func(string) (os.FileInfo, error)
-
-// DefaultTokenGetter obtains a "default" oauth2 token source within the getDefaultBearerToken function.
-type DefaultTokenGetter func(context.Context, ...string) (oauth2.TokenSource, error)
-
-// JSONCredentialsGetter obtains a JSON oauth2 google credentials within the getJSONBearerToken function.
-type JSONCredentialsGetter func(context.Context, []byte, ...string) (*google.Credentials, error)
-
-/*
 WorkloadMetrics is a container for monitoring TimeSeries metrics.
 */
 type WorkloadMetrics struct {
@@ -91,79 +65,8 @@ type metricEmitter struct {
 	tmpMetricName string
 }
 
-type gceInterface interface {
-	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
-}
-
 type wlmInterface interface {
 	WriteInsight(project, location string, writeInsightRequest *workloadmanager.WriteInsightRequest) error
-}
-
-/*
-Parameters holds the parameters for all of the Collect* function calls.
-*/
-type Parameters struct {
-	Config                *cnfpb.Configuration
-	WorkloadConfig        *wlmpb.WorkloadValidation
-	Remote                bool
-	ConfigFileReader      ConfigFileReader
-	OSStatReader          OSStatReader
-	Execute               commandlineexecutor.Execute
-	Exists                commandlineexecutor.Exists
-	InstanceInfoReader    instanceinfo.Reader
-	TimeSeriesCreator     cloudmonitoring.TimeSeriesCreator
-	DefaultTokenGetter    DefaultTokenGetter
-	JSONCredentialsGetter JSONCredentialsGetter
-	OSType                string
-	BackOffs              *cloudmonitoring.BackOffIntervals
-	HeartbeatSpec         *heartbeat.Spec
-	InterfaceAddrsGetter  InterfaceAddrsGetter
-	OSReleaseFilePath     string
-	netweaverPresent      float64
-	GCEService            gceInterface
-	HANAInsightRules      []*rpb.Rule
-	WLMService            wlmInterface
-	// fields derived from parsing the file specified by OSReleaseFilePath
-	osVendorID string
-	osVersion  string
-}
-
-// SetOSReleaseInfo parses the OS release file and sets the values for the
-// osVendorID and osVersion fields in the Parameters struct.
-func (p *Parameters) SetOSReleaseInfo() {
-	if p.ConfigFileReader == nil || p.OSReleaseFilePath == "" {
-		log.Logger.Debug("A ConfigFileReader and OSReleaseFilePath must be set.")
-		return
-	}
-
-	file, err := p.ConfigFileReader(p.OSReleaseFilePath)
-	if err != nil {
-		log.Logger.Warnw(fmt.Sprintf("Could not read from %s", p.OSReleaseFilePath), "error", err)
-		return
-	}
-	defer file.Close()
-
-	ini := goini.New()
-	if err := ini.ParseFrom(file, "\n", "="); err != nil {
-		log.Logger.Warnw(fmt.Sprintf("Failed to parse from %s", p.OSReleaseFilePath), "error", err)
-		return
-	}
-
-	id, ok := ini.Get("ID")
-	if !ok {
-		log.Logger.Warn(fmt.Sprintf("Could not read ID from %s", p.OSReleaseFilePath))
-		id = ""
-	}
-	p.osVendorID = strings.ReplaceAll(strings.TrimSpace(id), `"`, "")
-
-	version, ok := ini.Get("VERSION")
-	if !ok {
-		log.Logger.Warn(fmt.Sprintf("Could not read VERSION from %s", p.OSReleaseFilePath))
-		version = ""
-	}
-	if vf := strings.Fields(version); len(vf) > 0 {
-		p.osVersion = strings.ReplaceAll(strings.TrimSpace(vf[0]), `"`, "")
-	}
 }
 
 // sendMetricsParams defines the set of parameters required to call sendMetrics
@@ -491,26 +394,6 @@ func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configu
 		Float64Value: v,
 	}
 	return []*monitoringresourcespb.TimeSeries{timeseries.BuildFloat64(p)}
-}
-
-// DiscoverNetWeaver updates a field in Parameters struct based on presence of a Netweaver instance.
-func (p *Parameters) DiscoverNetWeaver(ctx context.Context) {
-	log.Logger.Info("Discovering Netweaver instances for Workload Manager Metrics.")
-	for _, instance := range sapdiscovery.SAPApplications(ctx).Instances {
-		if instance.Type == sapb.InstanceType_NETWEAVER {
-			log.Logger.Info("Found Netweaver instance.")
-			p.netweaverPresent = 1
-			break
-		}
-	}
-}
-
-// ReadHANAInsightsRules reads the HANA Insights rules.
-func (p *Parameters) ReadHANAInsightsRules() {
-	var err error
-	if p.HANAInsightRules, err = preprocessor.ReadRules(preprocessor.RuleFilenames); err != nil {
-		log.Logger.Errorw("Error Reading HANA Insights rules", "error", err)
-	}
 }
 
 // createWriteInsightRequest converts a WorkloadMetrics time series into a WriteInsightRequest.

@@ -35,6 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 func TestCollectMetricsToJSON(t *testing.T) {
@@ -56,6 +57,7 @@ func TestCollectMetricsToJSON(t *testing.T) {
 		BackOffs:         defaultBackOffIntervals,
 		osVendorID:       "test-os",
 		osVersion:        "version",
+		sapApplications:  &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 	}
 	got := strings.TrimSpace(CollectMetricsToJSON(context.Background(), p))
 	if !strings.HasPrefix(got, "{") || !strings.HasSuffix(got, "}") {

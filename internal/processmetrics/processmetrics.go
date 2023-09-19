@@ -345,6 +345,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAPInstances {
 	// For unit tests we do not want to run sap discovery, caller will pass the SAPInstances.
 	if params.SAPInstances == nil {
+		// TODO: Share SAP System Discovery results across agent.
 		params.SAPInstances = sapdiscovery.SAPApplications(ctx)
 	}
 	for _, instance := range params.SAPInstances.GetInstances() {

@@ -21,6 +21,8 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 const sapValidationNetweaver = "workload.googleapis.com/sap/validation/netweaver"
@@ -31,6 +33,20 @@ const sapValidationNetweaver = "workload.googleapis.com/sap/validation/netweaver
 func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
 	log.Logger.Info("Collecting Workload Manager NetWeaver metrics...")
 	l := make(map[string]string)
+	netweaverVal := 0.0
+
+	for _, instance := range params.sapApplications.Instances {
+		if instance.GetType() == sapb.InstanceType_NETWEAVER {
+			log.Logger.Info("Found Netweaver instance.")
+			netweaverVal = 1.0
+			break
+		}
+	}
+
+	if netweaverVal == 0.0 {
+		log.Logger.Debug("Skipping NetWeaver metrics collection, NetWeaver not active on instance.")
+		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, netweaverVal, params.Config)}
+	}
 
 	netweaver := params.WorkloadConfig.GetValidationNetweaver()
 	for _, m := range netweaver.GetOsCommandMetrics() {
@@ -40,5 +56,5 @@ func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) W
 		}
 	}
 
-	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, params.netweaverPresent, params.Config)}
+	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, netweaverVal, params.Config)}
 }
