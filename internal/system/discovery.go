@@ -32,7 +32,6 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	logging "cloud.google.com/go/logging"
 	"golang.org/x/exp/slices"
-	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v3"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -66,7 +65,6 @@ type gceInterface interface {
 	ListInstanceGroupInstances(project, zone, name string) (*compute.InstanceGroupsListInstances, error)
 	GetFilestoreByIP(project, location, ip string) (*file.ListInstancesResponse, error)
 	GetURIForIP(project, ip string) (string, error)
-	GetProject(project string) (*cloudresourcemanager.Project, error)
 }
 
 type cloudLogInterface interface {
@@ -187,19 +185,6 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 		return
 	}
 
-	proj, err := d.gceService.GetProject(cp.GetProjectId())
-	if err != nil {
-		log.Logger.Errorw("Unable to retrieve project information, cannot proceed with discovery", "error", err)
-		return
-	}
-	// proj.Name is expected to be in the format projects/<number>
-	parts := strings.Split(proj.Name, "/")
-	if len(parts) != 2 {
-		log.Logger.Errorw("Project name in unexpected format, cannot proceed with discovery", "error", err)
-		return
-	}
-	projectNumber := parts[1]
-
 	for {
 		// Discover instance and immediately adjacent resources (disks, addresses, networks)
 		res, ci, ir := d.discoverInstance(cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
@@ -255,7 +240,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 						Sid:         dbSid,
 						Resources:   dbRes,
 						Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{}},
-						HostProject: projectNumber,
+						HostProject: config.GetCloudProperties().GetProjectId(),
 					}
 				}
 				// See if a system with the same SID already exists
@@ -276,7 +261,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 					}},
-					HostProject: projectNumber,
+					HostProject: config.GetCloudProperties().GetProjectId(),
 				}
 				err := d.discoverASCS(ctx, app.Sapsid, system.GetApplicationLayer(), cp)
 				if err != nil {
@@ -312,7 +297,6 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 							DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						},
 					},
-					HostProject: projectNumber,
 				}
 				if err := d.discoverDatabaseNFS(ctx, system.GetDatabaseLayer(), cp); err != nil {
 					log.Logger.Warnw("Unable to discover database NFS", "error", err)
@@ -468,10 +452,10 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 		addr, err := d.gceService.GetAddressByIP(projectID, netRegion, ip)
 		if err != nil {
 			log.Logger.Warnw("Error locating Address by IP",
-				"project", projectID,
-				"region", netRegion,
-				"ip", ip,
-				"error", err)
+				log.String("project", projectID),
+				log.String("region", netRegion),
+				log.String("ip", ip),
+				log.Error(err))
 			continue
 		}
 		ar := &spb.SapDiscovery_Resource{

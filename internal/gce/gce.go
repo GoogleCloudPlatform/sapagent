@@ -24,17 +24,15 @@ import (
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/pkg/errors"
 	smpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
-	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v3"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 )
 
 // GCE is a wrapper for Google Compute Engine services.
 type GCE struct {
-	service         *compute.Service
-	file            *file.Service
-	secret          *secretmanager.Client
-	resourcemanager *cloudresourcemanager.Service
+	service *compute.Service
+	file    *file.Service
+	secret  *secretmanager.Client
 }
 
 // NewGCEClient creates a new GCE service wrapper.
@@ -51,12 +49,8 @@ func NewGCEClient(ctx context.Context) (*GCE, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating secret manager client")
 	}
-	rm, err := cloudresourcemanager.NewService(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating resource manager client")
-	}
 
-	return &GCE{s, f, sm, rm}, nil
+	return &GCE{s, f, sm}, nil
 }
 
 // OverrideComputeBasePath overrides the base path of the GCE clients.
@@ -201,10 +195,4 @@ func (g *GCE) GetSecret(ctx context.Context, projectID, secretName string) (stri
 		return "", err
 	}
 	return string(result.Payload.Data), nil
-}
-
-// GetProject retrieves project information from the resource manager API.
-func (g *GCE) GetProject(project string) (*cloudresourcemanager.Project, error) {
-	name := fmt.Sprintf("projects/%s", project)
-	return g.resourcemanager.Projects.Get(name).Do()
 }

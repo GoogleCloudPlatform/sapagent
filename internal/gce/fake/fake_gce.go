@@ -21,7 +21,6 @@ import (
 	"context"
 	"testing"
 
-	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v3"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 )
@@ -92,10 +91,6 @@ type TestGCE struct {
 	GetSecretResp      []string
 	GetSecretErr       []error
 	GetSecretCallCount int
-
-	GetProjectResp      []*cloudresourcemanager.Project
-	GetProjectErr       []error
-	GetProjectCallCount int
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -262,15 +257,4 @@ func (g *TestGCE) GetSecret(ctx context.Context, projectID, secretName string) (
 		}
 	}()
 	return g.GetSecretResp[g.GetSecretCallCount], g.GetSecretErr[g.GetSecretCallCount]
-}
-
-// GetProject fakes calls to resource manager API to retrieve project information.
-func (g *TestGCE) GetProject(project string) (*cloudresourcemanager.Project, error) {
-	defer func() {
-		g.GetProjectCallCount++
-		if g.GetProjectCallCount >= len(g.GetProjectResp) || g.GetProjectCallCount >= len(g.GetProjectErr) {
-			g.GetProjectCallCount = 0
-		}
-	}()
-	return g.GetProjectResp[g.GetProjectCallCount], g.GetProjectErr[g.GetProjectCallCount]
 }
