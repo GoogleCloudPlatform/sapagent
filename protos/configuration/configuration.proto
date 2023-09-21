@@ -64,9 +64,8 @@ message CollectionConfiguration {
   string data_warehouse_endpoint = 17;
   int64 slow_process_metrics_frequency = 18;
   repeated string process_metrics_to_skip =
-      19;  // List of process metrics which
-  // are skipped during metrics collection Ex: ["/nw/availability",
-  // "/hana/availability"].
+      19;  // List of process metrics to skip during metrics collection
+           // Ex: ["/sap/nw/abap/sessions", "/sap/nw/abap/rfc"].
 }
 
 message AgentProperties {

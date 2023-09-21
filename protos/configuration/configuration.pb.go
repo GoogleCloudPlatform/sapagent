@@ -333,7 +333,7 @@ type CollectionConfiguration struct {
 	WorkloadValidationDbMetricsConfig    *HANAMetricsConfig                  `protobuf:"bytes,16,opt,name=workload_validation_db_metrics_config,json=workloadValidationDbMetricsConfig,proto3" json:"workload_validation_db_metrics_config,omitempty"` // HANA DB user credentials for WLM DB based metrics
 	DataWarehouseEndpoint                string                              `protobuf:"bytes,17,opt,name=data_warehouse_endpoint,json=dataWarehouseEndpoint,proto3" json:"data_warehouse_endpoint,omitempty"`
 	SlowProcessMetricsFrequency          int64                               `protobuf:"varint,18,opt,name=slow_process_metrics_frequency,json=slowProcessMetricsFrequency,proto3" json:"slow_process_metrics_frequency,omitempty"`
-	ProcessMetricsToSkip                 []string                            `protobuf:"bytes,19,rep,name=process_metrics_to_skip,json=processMetricsToSkip,proto3" json:"process_metrics_to_skip,omitempty"` // List of process metrics which
+	ProcessMetricsToSkip                 []string                            `protobuf:"bytes,19,rep,name=process_metrics_to_skip,json=processMetricsToSkip,proto3" json:"process_metrics_to_skip,omitempty"` // List of process metrics to skip during metrics collection
 }
 
 func (x *CollectionConfiguration) Reset() {
