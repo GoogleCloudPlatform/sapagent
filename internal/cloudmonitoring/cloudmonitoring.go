@@ -80,7 +80,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 	err := backoff.Retry(func() error {
 		if err := client.CreateTimeSeries(ctx, req); err != nil {
 			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.Logger.Errorw("Error in CreateTimeSeries, Permission denided - Enable the Monitoring Metrics Writer IAM role for the Service Account", "attempt", attempt, "error", err)
+				log.Logger.Errorw("Error in CreateTimeSeries, Permission denied - Enable the Monitoring Metrics Writer IAM role for the Service Account", "attempt", attempt, "error", err)
 			} else {
 				log.Logger.Errorw("Error in CreateTimeSeries", "attempt", attempt, "error", err)
 			}

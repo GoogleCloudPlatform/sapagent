@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"flag"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -170,7 +171,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	if err := b.writeFile(backintPath, hdbbackintScript, os.ModePerm); err != nil {
 		return fmt.Errorf("unable to write backint script: %s. err: %v", backintPath, err)
 	}
-	config := &bpb.BackintConfiguration{Bucket: "<GCS Bucket Name>", LogToCloud: true}
+	config := &bpb.BackintConfiguration{Bucket: "<GCS Bucket Name>", LogToCloud: wpb.Bool(true)}
 	configData, err := protojson.MarshalOptions{Indent: "  "}.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("unable to marshal config, err: %v", err)

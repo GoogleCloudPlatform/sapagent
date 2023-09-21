@@ -25,6 +25,7 @@ import (
 
 	"flag"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
@@ -98,7 +99,7 @@ func migrationConfig(ssl bool) *hmmpb.HANAMonitoringConfiguration {
 
 func agentForSAPConf() *cpb.Configuration {
 	conf := &cpb.Configuration{
-		ProvideSapHostAgentMetrics: true,
+		ProvideSapHostAgentMetrics: wpb.Bool(true),
 		CloudProperties: &iipb.CloudProperties{
 			ProjectId:  "config-project-id",
 			InstanceId: "config-instance-id",

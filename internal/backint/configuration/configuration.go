@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"go.uber.org/zap/zapcore"
@@ -106,7 +107,6 @@ func (p *Parameters) parseCommandLineArgs() error {
 		DatabaseObjectCount: p.Count,
 		BackupLevel:         p.BackupLevel,
 		Function:            function,
-		LogToCloud:          true,
 	}
 	return nil
 }
@@ -159,6 +159,9 @@ func (p *Parameters) validateParameters() error {
 // applyDefaults will apply the default configuration settings to the Backint configuration.
 // The defaults are set only if the values passed are undefined or invalid.
 func (p *Parameters) applyDefaults(numCPU int64) {
+	if p.Config.GetLogToCloud() == nil {
+		p.Config.LogToCloud = wpb.Bool(true)
+	}
 	if p.Config.GetRetries() <= 0 {
 		log.Logger.Warn("retries defaulted to 5")
 		p.Config.Retries = 5
@@ -225,7 +228,7 @@ func unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration,
 
 	log.Logger.Infow("Parsing legacy parameters file", "configPath", parameterFile)
 	config.Compress = true
-	config.LogToCloud = true
+	config.LogToCloud = wpb.Bool(true)
 	for _, line := range strings.Split(string(content), "\n") {
 		if line == "" {
 			continue
@@ -238,7 +241,7 @@ func unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration,
 		case "#DISABLE_COMPRESSION":
 			config.Compress = false
 		case "#DISABLE_CLOUD_LOGGING":
-			config.LogToCloud = false
+			config.LogToCloud = wpb.Bool(false)
 		case "#DUMP_DATA":
 			config.DumpData = true
 		case "#BUCKET":

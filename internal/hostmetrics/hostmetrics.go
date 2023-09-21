@@ -68,7 +68,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 // StartSAPHostAgentProvider will startup the http server and collect metrics for the sap host agent
 // if enabled in the configuration. Returns true if the collection goroutine is started, and false otherwise.
 func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, params Parameters) bool {
-	if !params.Config.GetProvideSapHostAgentMetrics() {
+	if !params.Config.GetProvideSapHostAgentMetrics().GetValue() {
 		log.Logger.Info("Not providing SAP Host Agent metrics")
 		return false
 	}

@@ -130,7 +130,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 	if !ok {
 		return subcommands.ExitUsageError
 	}
-	lp.LogToCloud = config.GetLogToCloud()
+	lp.LogToCloud = config.GetLogToCloud().GetValue()
 	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
 	log.Logger.Infow("Args parsed and config validated", "config", config)
 

@@ -83,9 +83,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 		return nil
 	}
 
-	// The fields provide_sap_host_agent_metrics and log_to_cloud are special defaults that need to be
-	// initialized before reading into proto. All other defaults are set later.
-	config := &cpb.Configuration{ProvideSapHostAgentMetrics: true, LogToCloud: true}
+	config := &cpb.Configuration{}
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
@@ -119,10 +117,19 @@ func LogLevelToZapcore(level cpb.Configuration_LogLevel) zapcore.Level {
 func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProperties) *cpb.Configuration {
 	config := configFromFile
 	if config == nil {
-		config = &cpb.Configuration{ProvideSapHostAgentMetrics: true, LogToCloud: true}
+		config = &cpb.Configuration{}
 	}
 	// Always set the agent name and version.
 	config.AgentProperties = &cpb.AgentProperties{Name: AgentName, Version: AgentVersion}
+
+	// The fields provide_sap_host_agent_metrics and log_to_cloud will be
+	// defaulted to true if a user does not provide a value in the config.
+	if config.GetProvideSapHostAgentMetrics() == nil {
+		config.ProvideSapHostAgentMetrics = wpb.Bool(true)
+	}
+	if config.GetLogToCloud() == nil {
+		config.LogToCloud = wpb.Bool(true)
+	}
 
 	// If the user did not pass cloud properties, set the values read from the metadata server.
 	if config.GetCloudProperties() == nil {

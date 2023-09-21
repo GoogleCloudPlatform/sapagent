@@ -87,6 +87,7 @@ func TestReadFromFile(t *testing.T) {
 					InstanceId: "config-instance-id",
 					Zone:       "config-zone",
 				},
+				ProvideSapHostAgentMetrics: wpb.Bool(false),
 			},
 		},
 		{
@@ -95,6 +96,7 @@ func TestReadFromFile(t *testing.T) {
 				return testConfigWithHANAMonitoringConfigJSON, nil
 			},
 			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(false),
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
 					SampleIntervalSec: 300,
 					QueryTimeoutSec:   300,
@@ -143,7 +145,7 @@ func TestReadFromFile(t *testing.T) {
 				fileContent := `{"provide_sap_host_agent_metrics": true, "cloud_properties": {"project_id": "config-project-id", "instance_id": "config-instance-id", "zone": "config-zone", } }`
 				return []byte(fileContent), nil
 			},
-			want: &cpb.Configuration{ProvideSapHostAgentMetrics: true},
+			want: &cpb.Configuration{ProvideSapHostAgentMetrics: wpb.Bool(true)},
 		},
 		{
 			name: "ConfigWithSapSystem",
@@ -151,6 +153,7 @@ func TestReadFromFile(t *testing.T) {
 				return testConfigWithSapSystemConfigJSON, nil
 			},
 			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(false),
 				CloudProperties: &iipb.CloudProperties{
 					ProjectId:  "config-project-id",
 					InstanceId: "config-instance-id",
@@ -184,8 +187,8 @@ func TestApplyDefaults(t *testing.T) {
 			name:           "EmptyConfigFile",
 			configFromFile: nil,
 			want: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: true,
-				LogToCloud:                 true,
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
@@ -197,12 +200,12 @@ func TestApplyDefaults(t *testing.T) {
 		{
 			name: "ConfigFileWithOverride",
 			configFromFile: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: false,
-				LogToCloud:                 false,
+				ProvideSapHostAgentMetrics: wpb.Bool(false),
+				LogToCloud:                 wpb.Bool(false),
 			},
 			want: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: false,
-				LogToCloud:                 false,
+				ProvideSapHostAgentMetrics: wpb.Bool(false),
+				LogToCloud:                 wpb.Bool(false),
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
@@ -238,15 +241,17 @@ func TestApplyDefaults(t *testing.T) {
 					SapSystemDiscovery:                   wpb.Bool(false),
 					DataWarehouseEndpoint:                "https://other-workloadmanager-datawarehouse.googleapis.com/",
 				},
-				AgentProperties: testAgentProps,
-				CloudProperties: testCloudProps,
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
 			},
 		},
 		{
 			name: "ConfigWithCloudProperties",
 			configFromFile: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: false,
-				LogToCloud:                 false,
+				ProvideSapHostAgentMetrics: wpb.Bool(false),
+				LogToCloud:                 wpb.Bool(false),
 				CloudProperties: &iipb.CloudProperties{
 					ProjectId:  "config-project-id",
 					InstanceId: "config-instance-id",
@@ -254,8 +259,8 @@ func TestApplyDefaults(t *testing.T) {
 				},
 			},
 			want: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: false,
-				LogToCloud:                 false,
+				ProvideSapHostAgentMetrics: wpb.Bool(false),
+				LogToCloud:                 wpb.Bool(false),
 				AgentProperties:            testAgentProps,
 				CloudProperties: &iipb.CloudProperties{
 					ProjectId:  "config-project-id",
@@ -271,8 +276,8 @@ func TestApplyDefaults(t *testing.T) {
 		{
 			name: "ConfigWithoutHANAMonitoringDefaults",
 			configFromFile: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: true,
-				LogToCloud:                 true,
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
 				CloudProperties:            testCloudProps,
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
 					HanaInstances: []*cpb.HANAInstance{
@@ -291,8 +296,8 @@ func TestApplyDefaults(t *testing.T) {
 				},
 			},
 			want: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: true,
-				LogToCloud:                 true,
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{

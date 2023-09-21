@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/jonboulle/clockwork"
 	"github.com/google/go-cmp/cmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -54,7 +55,7 @@ func TestStartSAPHostAgentProvider(t *testing.T) {
 			name: "succeeds",
 			params: Parameters{
 				Config: &cpb.Configuration{
-					ProvideSapHostAgentMetrics: true,
+					ProvideSapHostAgentMetrics: wpb.Bool(true),
 				},
 				AgentTime: *at,
 			},
@@ -64,7 +65,7 @@ func TestStartSAPHostAgentProvider(t *testing.T) {
 			name: "failsDueToParams",
 			params: Parameters{
 				Config: &cpb.Configuration{
-					ProvideSapHostAgentMetrics: false,
+					ProvideSapHostAgentMetrics: wpb.Bool(false),
 				},
 				AgentTime: *at,
 			},
@@ -79,7 +80,7 @@ func TestStartSAPHostAgentProvider(t *testing.T) {
 			defer cancel()
 			got := StartSAPHostAgentProvider(ctx, cancel, test.params)
 			if got != test.want {
-				t.Errorf("StartSAPHostAgentProvider(ProvideSapHostAgentMetrics: %t) = %t, want: %t", test.params.Config.ProvideSapHostAgentMetrics, got, test.want)
+				t.Errorf("StartSAPHostAgentProvider(ProvideSapHostAgentMetrics: %t) = %t, want: %t", test.params.Config.ProvideSapHostAgentMetrics.GetValue(), got, test.want)
 			}
 		})
 	}
