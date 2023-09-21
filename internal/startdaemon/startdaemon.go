@@ -84,6 +84,11 @@ var (
 	})
 )
 
+type serviceNameKeyType string
+
+// service is a key of the type serviceNameKeyType for context logging.
+const service serviceNameKeyType = "ServiceName"
+
 // Daemon has args for startdaemon subcommand.
 type Daemon struct {
 	configFilePath string
@@ -208,7 +213,8 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	var healthMonitor agentmetrics.HealthMonitor = &heartbeat.NullMonitor{}
 	var err error
 	if d.config.GetCollectionConfiguration().GetCollectAgentMetrics() {
-		healthMonitor, err = startAgentMetricsService(ctx, d.config)
+		amCtx := context.WithValue(ctx, service, "AgentMetrics")
+		healthMonitor, err = startAgentMetricsService(amCtx, d.config)
 		if err != nil {
 			return
 		}
@@ -273,7 +279,8 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.
 		wlmparams.Remote = true
 		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
-		workloadmanager.StartMetricsCollection(ctx, wlmparams)
+		wmCtx := context.WithValue(ctx, service, "WorkloadManagerMetrics")
+		workloadmanager.StartMetricsCollection(wmCtx, wlmparams)
 		go usagemetrics.LogRunningDaily()
 		waitForShutdown(ctx, shutdownch)
 		return
@@ -297,34 +304,35 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	}
 
 	// start the Host Metrics Collection
+	hmCtx := context.WithValue(ctx, service, "HostMetrics")
 	hmp := HostMetricsParams{d.config, instanceInfoReader, cmr, healthMonitor}
-	if err = hmp.startCollection(ctx); err != nil {
-		return
-	}
+	hmp.startCollection(hmCtx)
 
 	// Start the Workload Manager metrics collection
+	wmCtx := context.WithValue(ctx, service, "WorkloadManagerMetrics")
 	wmp := WorkloadManagerParams{wlmparams, instanceInfoReader, goos}
-	wmp.startCollection(ctx)
+	wmp.startCollection(wmCtx)
 
 	// Start Process Metrics Collection
+	pmCtx := context.WithValue(ctx, service, "ProcessMetrics")
 	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService}
-	if err = pmp.startCollection(ctx); err != nil {
-		return
-	}
+	pmp.startCollection(pmCtx)
 
 	// Start SAP System Discovery
 	// TODO: Use the global cloud logging client for sap system.
 	logClient := log.CloudLoggingClient(ctx, d.config.GetCloudProperties().ProjectId)
+	ssdCtx := context.WithValue(ctx, service, "SAPSystemDiscovery")
 	if logClient != nil {
-		system.StartSAPSystemDiscovery(ctx, d.config, gceService, wlmService, logClient.Logger("google-cloud-sap-agent"))
+		system.StartSAPSystemDiscovery(ssdCtx, d.config, gceService, wlmService, logClient.Logger("google-cloud-sap-agent"))
 		log.FlushCloudLog()
 		defer logClient.Close()
 	} else {
-		system.StartSAPSystemDiscovery(ctx, d.config, gceService, wlmService, nil)
+		system.StartSAPSystemDiscovery(ssdCtx, d.config, gceService, wlmService, nil)
 	}
 
 	// Start HANA Monitoring
-	hanamonitoring.Start(ctx, hanamonitoring.Parameters{
+	hanaCtx := context.WithValue(ctx, service, "HANAMonitoring")
+	hanamonitoring.Start(hanaCtx, hanamonitoring.Parameters{
 		Config:            d.config,
 		GCEService:        gceService,
 		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
@@ -372,22 +380,24 @@ type ProcessMetricsParams struct {
 }
 
 // startCollection for ProcessMetricsParams initiates collection of ProcessMetrics.
-func (pmp ProcessMetricsParams) startCollection(ctx context.Context) error {
+func (pmp ProcessMetricsParams) startCollection(ctx context.Context) {
 	pmHeartbeatSpec, err := pmp.healthMonitor.Register(processMetricsServiceName)
 	if err != nil {
 		log.Logger.Error("Failed to register process metrics service", log.Error(err))
 		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
-		return err
+		log.Logger.Error("Process metrics collection could not be started")
+		return
 	}
-	processmetrics.Start(ctx, processmetrics.Parameters{
+	if success := processmetrics.Start(ctx, processmetrics.Parameters{
 		Config:        pmp.config,
 		OSType:        pmp.goos,
 		MetricClient:  processmetrics.NewMetricClient,
 		BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
 		HeartbeatSpec: pmHeartbeatSpec,
 		GCEService:    pmp.gceService,
-	})
-	return nil
+	}); success != true {
+		log.Logger.Error("Process metrics context cancelled")
+	}
 }
 
 // HostMetricsParams has arguments for startHostMetricsCollection.
@@ -399,21 +409,22 @@ type HostMetricsParams struct {
 }
 
 // startCollection for HostMetricsParams initiates collection of HostMetrics.
-func (hmp HostMetricsParams) startCollection(ctx context.Context) error {
+func (hmp HostMetricsParams) startCollection(ctx context.Context) {
 	hmHeartbeatSpec, err := hmp.healthMonitor.Register(hostMetricsServiceName)
 	if err != nil {
 		log.Logger.Error("Failed to register host metrics service", log.Error(err))
 		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
-		return err
+		log.Logger.Error("Failed to start host metrics collection")
+		return
 	}
-	hostmetrics.StartSAPHostAgentProvider(ctx, hostmetrics.Parameters{
+	hmCtx, hmCancel := context.WithCancel(ctx)
+	hostmetrics.StartSAPHostAgentProvider(hmCtx, hmCancel, hostmetrics.Parameters{
 		Config:             hmp.config,
 		InstanceInfoReader: *hmp.instanceInfoReader,
 		CloudMetricReader:  *hmp.cmr,
 		AgentTime:          *agenttime.New(agenttime.Clock{}),
 		HeartbeatSpec:      hmHeartbeatSpec,
 	})
-	return nil
 }
 
 // WorkloadManagerParams has arguments for startWorkloadManagerMetricsCollection.

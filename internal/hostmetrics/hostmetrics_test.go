@@ -77,7 +77,7 @@ func TestStartSAPHostAgentProvider(t *testing.T) {
 			defer func(s string) { metricsXML = s }(metricsXML)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 			defer cancel()
-			got := StartSAPHostAgentProvider(ctx, test.params)
+			got := StartSAPHostAgentProvider(ctx, cancel, test.params)
 			if got != test.want {
 				t.Errorf("StartSAPHostAgentProvider(ProvideSapHostAgentMetrics: %t) = %t, want: %t", test.params.Config.ProvideSapHostAgentMetrics, got, test.want)
 			}

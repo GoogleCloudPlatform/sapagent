@@ -67,23 +67,26 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 // StartSAPHostAgentProvider will startup the http server and collect metrics for the sap host agent
 // if enabled in the configuration. Returns true if the collection goroutine is started, and false otherwise.
-func StartSAPHostAgentProvider(ctx context.Context, params Parameters) bool {
+func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, params Parameters) bool {
 	if !params.Config.GetProvideSapHostAgentMetrics() {
 		log.Logger.Info("Not providing SAP Host Agent metrics")
 		return false
 	}
 	log.Logger.Info("Starting provider for SAP Host Agent metrics")
-	go runHTTPServer()
+	go runHTTPServer(ctx, cancel)
 	go collectHostMetrics(ctx, params)
 	return true
 }
 
 // runHTTPServer starts an HTTP server on localhost:18181 that stays alive forever.
-func runHTTPServer() {
+func runHTTPServer(ctx context.Context, cancel context.CancelFunc) {
 	http.HandleFunc("/", requestHandler)
 	if err := http.ListenAndServe("localhost:18181", nil); err != nil {
 		usagemetrics.Error(usagemetrics.LocalHTTPListenerCreateFailure) // Could not create HTTP listener
-		log.Logger.Fatalw("Could not start HTTP server on localhost:18181", log.Error(err))
+		log.Logger.Errorw("Could not start HTTP server on localhost:18181", "error", log.Error(err))
+		log.Logger.Info("Cancelling Host Metrics Context")
+		cancel()
+		return
 	}
 	log.Logger.Info("HTTP server listening on localhost:18181 for SAP Host Agent connections")
 }
@@ -107,7 +110,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 	// Do not wait for the first 60s tick and start collection immediately
 	select {
 	case <-ctx.Done():
-		log.Logger.Info("cancellation requested")
+		log.Logger.Info("Host metrics cancellation requested")
 		return
 	default:
 		collectHostMetricsOnce(ctx, params, readers)
@@ -117,7 +120,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Info("cancellation requested")
+			log.Logger.Info("Host metrics cancellation requested")
 			return
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()

@@ -114,7 +114,7 @@ func start(ctx context.Context, params Parameters) {
 	// Do not wait for the first tick and start metric collection immediately.
 	select {
 	case <-ctx.Done():
-		log.Logger.Debug("cancellation requested")
+		log.Logger.Debug("Workload metrics cancellation requested")
 		return
 	default:
 		collectWorkloadMetricsOnce(ctx, params)
@@ -124,7 +124,7 @@ func start(ctx context.Context, params Parameters) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Debug("cancellation requested")
+			log.Logger.Debug("Workload metrics cancellation requested")
 			return
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
@@ -238,7 +238,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	return WorkloadMetrics{Metrics: allMetrics}
 }
 
-func appendLabels(dst map[string]string, src map[string]string) {
+func appendLabels(dst, src map[string]string) {
 	for k, v := range src {
 		dst[k] = v
 	}

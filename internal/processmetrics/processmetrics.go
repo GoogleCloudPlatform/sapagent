@@ -395,7 +395,7 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Info("Context cancelled, exiting collectAndSend.")
+			log.Logger.Info("Process metrics context cancelled, exiting collectAndSend.")
 			return lastErr
 		case <-heartbeatTicker.C:
 			p.HeartbeatSpec.Beat()

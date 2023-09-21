@@ -110,7 +110,7 @@ func (m *Monitor) Register(name string) (*Spec, error) {
 	return &reg.spec, nil
 }
 
-// Run will begin the asynchonous monitoring of registered services.
+// Run will begin the asynchronous monitoring of registered services.
 func (m *Monitor) Run(ctx context.Context) {
 	go m.run(ctx)
 }
