@@ -33,6 +33,9 @@ type TestGCE struct {
 	Zone           string
 }
 
+// Initialized fakes a check if the fake has been initialized.
+func (g *TestGCE) Initialized() bool { return true }
+
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
 func (g *TestGCE) GetInstance(project, zone, instance string) (*compute.Instance, error) {
 	if project != g.Project || zone != g.Zone || g.Instances == nil {

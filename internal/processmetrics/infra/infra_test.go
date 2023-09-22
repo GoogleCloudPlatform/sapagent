@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcealpha/fakegcealpha"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcealpha"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -499,12 +500,8 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 	}
 }
 
-// TestCollectUpcomingMaintenanceNotInitialized is not implemented as a test case of
-// TestCollectUpcomingMaintenance because the interface indirection of gceAlphaInterface results
-// in a valid struct pointer to a nil value, which does _not_ equal nil nor is safely comparable.
-// Further background: https://groups.google.com/g/golang-nuts/c/wnH302gBa4I
 func TestCollectUpcomingMaintenanceNotInitialized(t *testing.T) {
-	p := New(&cpb.Configuration{}, nil, nil, nil, nil)
+	p := New(&cpb.Configuration{}, nil, &gcealpha.GCEAlpha{}, nil, nil)
 	_, err := p.collectUpcomingMaintenance()
 	if err == nil {
 		t.Error("collectUpcomingMaintenance(NotInitialized) got success expected error")

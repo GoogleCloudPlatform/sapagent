@@ -35,6 +35,7 @@ import (
 
 // GCEAlphaInterface provides a testable interface to gcealpha.
 type GCEAlphaInterface interface {
+	Initialized() bool
 	GetInstance(project, zone, instance string) (*compute.Instance, error)
 	ListNodeGroups(project, zone string) (*compute.NodeGroupList, error)
 	ListNodeGroupNodes(project, zone, nodeGroup string) (*compute.NodeGroupsListNodes, error)
@@ -157,7 +158,7 @@ func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {
 
 	// TODO : use the regular GCE service once the UpcomingMaintenance API
 	// is available there.
-	if p.gceAlphaService == nil {
+	if p.gceAlphaService == nil || !p.gceAlphaService.Initialized() {
 		log.Logger.Debug("compute alpha API not initialized; skipping maint checks.")
 		return []*mrpb.TimeSeries{}, fmt.Errorf("compute alpha API not initialized; skipping maint checks")
 	}

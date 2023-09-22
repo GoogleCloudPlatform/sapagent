@@ -226,7 +226,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 		return
 	}
-	var gceAlphaService *gcealpha.GCEAlpha
+	gceAlphaService := &gcealpha.GCEAlpha{}
 	if d.config.GetServiceEndpointOverride() != "" {
 		gceAlphaService, err = gcealpha.NewGCEClient(ctx)
 		if err != nil {
@@ -234,8 +234,6 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 			usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 			return
 		}
-	}
-	if d.config.GetServiceEndpointOverride() != "" {
 		log.Logger.Infow("Service endpoint override", "endpoint", d.config.GetServiceEndpointOverride())
 		gceService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
 		if gceAlphaService != nil {
@@ -315,7 +313,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 
 	// Start Process Metrics Collection
 	pmCtx := context.WithValue(ctx, service, "ProcessMetrics")
-	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService}
+	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceAlphaService}
 	pmp.startCollection(pmCtx)
 
 	// Start SAP System Discovery
@@ -373,10 +371,11 @@ func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heart
 
 // ProcessMetricsParams has arguments for startProcessMetricsCollection.
 type ProcessMetricsParams struct {
-	config        *cpb.Configuration
-	goos          string
-	healthMonitor agentmetrics.HealthMonitor
-	gceService    *gce.GCE
+	config          *cpb.Configuration
+	goos            string
+	healthMonitor   agentmetrics.HealthMonitor
+	gceService      *gce.GCE
+	gceAlphaService *gcealpha.GCEAlpha
 }
 
 // startCollection for ProcessMetricsParams initiates collection of ProcessMetrics.
@@ -389,12 +388,13 @@ func (pmp ProcessMetricsParams) startCollection(ctx context.Context) {
 		return
 	}
 	if success := processmetrics.Start(ctx, processmetrics.Parameters{
-		Config:        pmp.config,
-		OSType:        pmp.goos,
-		MetricClient:  processmetrics.NewMetricClient,
-		BackOffs:      cloudmonitoring.NewDefaultBackOffIntervals(),
-		HeartbeatSpec: pmHeartbeatSpec,
-		GCEService:    pmp.gceService,
+		Config:          pmp.config,
+		OSType:          pmp.goos,
+		MetricClient:    processmetrics.NewMetricClient,
+		BackOffs:        cloudmonitoring.NewDefaultBackOffIntervals(),
+		HeartbeatSpec:   pmHeartbeatSpec,
+		GCEService:      pmp.gceService,
+		GCEAlphaService: pmp.gceAlphaService,
 	}); success != true {
 		log.Logger.Error("Process metrics context cancelled")
 	}

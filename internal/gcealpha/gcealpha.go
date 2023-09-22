@@ -39,6 +39,11 @@ func NewGCEClient(ctx context.Context) (*GCEAlpha, error) {
 	return &GCEAlpha{s}, nil
 }
 
+// Initialized checks if the compute service has been initialized.
+func (g *GCEAlpha) Initialized() bool {
+	return g.service != nil
+}
+
 // OverrideComputeBasePath overrides the base path of the GCE clients.
 func (g *GCEAlpha) OverrideComputeBasePath(basePath string) {
 	g.service.BasePath = basePath
