@@ -19,6 +19,7 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -66,14 +67,18 @@ var (
 	metadataServerCall = metadataserver.FetchGCEMaintenanceEvent
 	// MaintenanceTypes map upcoming maintenance types to int metric values.
 	MaintenanceTypes = map[string]int64{
+		"NONE":        0,
 		"SCHEDULED":   1,
 		"UNSCHEDULED": 2,
 	}
 	// MaintenanceStatuses map upcoming maintenance status to int metric values.
 	MaintenanceStatuses = map[string]int64{
+		"NONE":    0,
 		"PENDING": 1,
 		"ONGOING": 2,
 	}
+	// ErrNoStamMatch indicates that a matching STAM node group could not be found.
+	ErrNoStamMatch = errors.New("no STAM node group found")
 )
 
 // Properties struct has necessary context for Metrics collection.
@@ -174,16 +179,18 @@ func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {
 	}
 
 	n, err := p.resolveNodeGroup(project, zone, instance.SelfLink)
-	if err != nil {
+	if errors.Is(err, ErrNoStamMatch) {
+		return []*mrpb.TimeSeries{}, err
+	} else if err != nil {
 		log.Logger.Errorw("Could not resolve node", "link", instance.SelfLink, "error", err)
 		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not resolve node: %w", err)
 	}
 	if n.UpcomingMaintenance == nil {
 		log.Logger.Debugw("No upcoming maintenance", "cp", cp)
-		return []*mrpb.TimeSeries{}, nil
+		n.UpcomingMaintenance = &compute.UpcomingMaintenance{}
+	} else {
+		log.Logger.Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
 	}
-
-	log.Logger.Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
 
 	m := []*mrpb.TimeSeries{}
 
@@ -232,11 +239,15 @@ func (p *Properties) createBoolMetric(mPath string, val bool) *mrpb.TimeSeries {
 	return timeseries.BuildBool(params)
 }
 
-// rfc3339ToUnix converts a RFC3339 date into a Unix timestamp;  unparseable dates return 0
+// rfc3339ToUnix converts a RFC3339 date into a Unix timestamp.
+// Empty values and unparseable dates return 0.
 func rfc3339ToUnix(rfc3339 string) int64 {
+	if rfc3339 == "" {
+		return 0
+	}
 	t, err := time.Parse(time.RFC3339, rfc3339)
 	if err != nil {
-		log.Logger.Warnf("Could not parse date", "date", rfc3339, "error", err)
+		log.Logger.Warnw("Could not parse date", "date", rfc3339, "error", err)
 		return 0
 	}
 	return t.Unix()
@@ -251,13 +262,17 @@ func enumToInt(s string, m map[string]int64) int64 {
 	return e
 }
 
-// resolveNodeGroup looks up the sole tenancy node group and nodes data for a given instance.
+// resolveNodeGroup looks up the STAM node group and matching node data for a given instance.
 func (p *Properties) resolveNodeGroup(project, zone, instanceLink string) (*compute.NodeGroupNode, error) {
 	nodeGroups, err := p.gceAlphaService.ListNodeGroups(project, zone)
 	if err != nil {
 		return nil, fmt.Errorf("could not get node groups: %w", err)
 	}
 	for _, nodeGroup := range nodeGroups.Items {
+		if nodeGroup.MaintenanceInterval == "" {
+			log.Logger.Debugw("Skipping non-STAM node group", "name", nodeGroup.Name)
+			continue
+		}
 		nodes, err := p.gceAlphaService.ListNodeGroupNodes(project, zone, nodeGroup.Name)
 		if err != nil {
 			return nil, fmt.Errorf("could not get node group nodes from cloud API: %w", err)
@@ -266,11 +281,11 @@ func (p *Properties) resolveNodeGroup(project, zone, instanceLink string) (*comp
 			for _, i := range node.Instances {
 				log.Logger.Debugw("Comparing nodes", "nodeGroupInstances", i, "instance", instanceLink)
 				if i == instanceLink {
-					log.Logger.Debugw("Found sole tenant node group", "nodeGroup", nodeGroup)
+					log.Logger.Debugw("Found STAM node group", "nodeGroup", nodeGroup)
 					return node, nil
 				}
 			}
 		}
 	}
-	return nil, fmt.Errorf("no matching node groups")
+	return nil, ErrNoStamMatch
 }

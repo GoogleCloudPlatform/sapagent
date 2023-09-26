@@ -49,6 +49,17 @@ var (
 		Zone:         "test-zone",
 		ProjectId:    "test-project",
 	}
+	stamGCE = &fakegcealpha.TestGCE{
+		Project:   "test-project",
+		Zone:      "test-zone",
+		Instances: soleTenantGCE.Instances,
+		NodeGroups: []*compute.NodeGroup{{
+			Name:                "test-node-group",
+			Zone:                "test-zone",
+			MaintenanceInterval: "RECURRING",
+		}},
+		NodeGroupNodes: soleTenantGCE.NodeGroupNodes,
+	}
 	soleTenantGCE = &fakegcealpha.TestGCE{
 		Project: "test-project",
 		Zone:    "test-zone",
@@ -123,7 +134,7 @@ func TestCollect(t *testing.T) {
 			name:                   "soleTenant",
 			properties:             defaultProperties,
 			fakeMetadataServerCall: func() (string, error) { return "", nil },
-			gceService:             soleTenantGCE,
+			gceService:             stamGCE,
 			wantCount:              7,
 		},
 	}
@@ -281,7 +292,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 	}{{
 		name:            "UpcomingMaint",
 		cloudProperties: defaultCloudProperties,
-		gceService:      soleTenantGCE,
+		gceService:      stamGCE,
 		upcomingMaintenance: &compute.UpcomingMaintenance{
 			CanReschedule:         true,
 			WindowStartTime:       "2023-06-21T15:57:53Z",
@@ -302,7 +313,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		{
 			name:            "CanRescheduleSkipped",
 			cloudProperties: defaultCloudProperties,
-			gceService:      soleTenantGCE,
+			gceService:      stamGCE,
 			upcomingMaintenance: &compute.UpcomingMaintenance{
 				CanReschedule:         true,
 				WindowStartTime:       "2023-06-21T15:57:53Z",
@@ -323,7 +334,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		{
 			name:            "WindowStartTimeSkipped",
 			cloudProperties: defaultCloudProperties,
-			gceService:      soleTenantGCE,
+			gceService:      stamGCE,
 			upcomingMaintenance: &compute.UpcomingMaintenance{
 				CanReschedule:         true,
 				WindowStartTime:       "2023-06-21T15:57:53Z",
@@ -344,7 +355,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		{
 			name:            "WindowEndTimeSkipped",
 			cloudProperties: defaultCloudProperties,
-			gceService:      soleTenantGCE,
+			gceService:      stamGCE,
 			upcomingMaintenance: &compute.UpcomingMaintenance{
 				CanReschedule:         true,
 				WindowStartTime:       "2023-06-21T15:57:53Z",
@@ -365,7 +376,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		{
 			name:            "LatestWindowStartTimeSkipped",
 			cloudProperties: defaultCloudProperties,
-			gceService:      soleTenantGCE,
+			gceService:      stamGCE,
 			upcomingMaintenance: &compute.UpcomingMaintenance{
 				CanReschedule:         true,
 				WindowStartTime:       "2023-06-21T15:57:53Z",
@@ -386,7 +397,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		{
 			name:            "MaintenanceStatusSkipped",
 			cloudProperties: defaultCloudProperties,
-			gceService:      soleTenantGCE,
+			gceService:      stamGCE,
 			upcomingMaintenance: &compute.UpcomingMaintenance{
 				CanReschedule:         true,
 				WindowStartTime:       "2023-06-21T15:57:53Z",
@@ -407,7 +418,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		{
 			name:            "TypeSkipped",
 			cloudProperties: defaultCloudProperties,
-			gceService:      soleTenantGCE,
+			gceService:      stamGCE,
 			upcomingMaintenance: &compute.UpcomingMaintenance{
 				CanReschedule:         true,
 				WindowStartTime:       "2023-06-21T15:57:53Z",
@@ -428,9 +439,16 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		{
 			name:                "NoMaint",
 			cloudProperties:     defaultCloudProperties,
-			gceService:          soleTenantGCE,
+			gceService:          stamGCE,
 			upcomingMaintenance: nil,
-			wantValues:          map[string]string{},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "false",
+				metricURL + maintPath + "/window_start_time":        "0",
+				metricURL + maintPath + "/window_end_time":          "0",
+				metricURL + maintPath + "/latest_window_start_time": "0",
+				metricURL + maintPath + "/maintenance_status":       "0",
+				metricURL + maintPath + "/type":                     "0",
+			},
 		}, {
 			name:            "NotSoleTenant",
 			cloudProperties: defaultCloudProperties,
@@ -444,9 +462,15 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 			wantErr:    cmpopts.AnyError,
 			wantValues: map[string]string{},
 		}, {
+			name:            "NonStamSoleTenant",
+			cloudProperties: defaultCloudProperties,
+			gceService:      soleTenantGCE,
+			wantErr:         ErrNoStamMatch,
+			wantValues:      map[string]string{},
+		}, {
 			name:                "errParseError",
 			cloudProperties:     defaultCloudProperties,
-			gceService:          soleTenantGCE,
+			gceService:          stamGCE,
 			upcomingMaintenance: &compute.UpcomingMaintenance{WindowStartTime: "bogus"},
 			wantValues: map[string]string{
 				metricURL + maintPath + "/can_reschedule":           "false",
@@ -523,7 +547,7 @@ func TestResolveNodeGroup(t *testing.T) {
 		project:             "test-project",
 		zone:                "test-zone",
 		instanceLink:        defaultInstanceLink,
-		gceService:          soleTenantGCE,
+		gceService:          stamGCE,
 		upcomingMaintenance: sampleUpcomingMaintenance,
 		wantNode: &compute.NodeGroupNode{
 			Instances:           []string{defaultInstanceLink},
@@ -552,7 +576,7 @@ func TestResolveNodeGroup(t *testing.T) {
 		project:      "test-project",
 		zone:         "test-zone",
 		instanceLink: "non-matching-instance-link",
-		gceService:   soleTenantGCE,
+		gceService:   stamGCE,
 		wantErr:      cmpopts.AnyError,
 	},
 	}
