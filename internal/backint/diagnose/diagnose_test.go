@@ -130,6 +130,7 @@ func TestExecute(t *testing.T) {
 func TestCreateFiles(t *testing.T) {
 	tests := []struct {
 		name      string
+		dir       string
 		fileName1 string
 		fileSize1 int64
 		fileName2 string
@@ -138,40 +139,49 @@ func TestCreateFiles(t *testing.T) {
 		wantError error
 	}{
 		{
+			name:      "MkdirFail",
+			wantError: cmpopts.AnyError,
+		},
+		{
 			name:      "CreateFile1Fail",
+			dir:       t.TempDir(),
 			wantError: cmpopts.AnyError,
 		},
 		{
 			name:      "TruncateFile1Fail",
-			fileName1: t.TempDir() + "/object1.txt",
+			dir:       t.TempDir(),
+			fileName1: "/object1.txt",
 			fileSize1: -1,
 			wantError: cmpopts.AnyError,
 		},
 		{
 			name:      "CreateFile2Fail",
-			fileName1: t.TempDir() + "/object1.txt",
+			dir:       t.TempDir(),
+			fileName1: "/object1.txt",
 			wantError: cmpopts.AnyError,
 		},
 		{
 			name:      "TruncateFile2Fail",
-			fileName1: t.TempDir() + "/object1.txt",
-			fileName2: t.TempDir() + "/object2.txt",
+			dir:       t.TempDir(),
+			fileName1: "/object1.txt",
+			fileName2: "/object2.txt",
 			fileSize2: -1,
 			wantError: cmpopts.AnyError,
 		},
 		{
 			name:      "Success",
-			fileName1: t.TempDir() + "/object1.txt",
-			fileName2: t.TempDir() + "/object2.txt",
+			dir:       t.TempDir(),
+			fileName1: "/object1.txt",
+			fileName2: "/object2.txt",
 			want:      3,
 			wantError: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotError := createFiles(context.Background(), test.fileName1, test.fileName2, test.fileSize1, test.fileSize2)
+			got, gotError := createFiles(context.Background(), test.dir, test.fileName1, test.fileName2, test.fileSize1, test.fileSize2)
 			if len(got) != test.want {
-				t.Errorf("createFiles(%s, %s) returned %d files, want: %d", test.fileName1, test.fileName2, len(got), test.want)
+				t.Errorf("createFiles(%s, %s, %s) returned %d files, want: %d", test.dir, test.fileName1, test.fileName2, len(got), test.want)
 			}
 			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
 				t.Errorf("createFiles(%s, %s) = %v, wantError: %v", test.fileName1, test.fileName2, gotError, test.wantError)

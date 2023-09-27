@@ -25,7 +25,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	store "cloud.google.com/go/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/backup"
@@ -40,10 +42,10 @@ import (
 )
 
 var (
-	oneGB         = int64(1024 * 1024 * 1024)
-	sixteenGB     = 16 * oneGB
-	fileName1     = "/tmp/backint-diagnose-file1.txt"
-	fileName2     = "/tmp/backint-diagnose-file2.txt"
+	oneGB         = int64(1024 * 1024)
+	sixteenGB     = 1 * oneGB
+	fileName1     = "backint-diagnose-file1.txt"
+	fileName2     = "backint-diagnose-file2.txt"
 	fileNotExists = "/tmp/backint-diagnose-file-not-exists.txt"
 )
 
@@ -92,7 +94,8 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 // Results are written to the output. Any issues will return errors after
 // attempting to clean up the temporary files locally and in the bucket.
 func diagnose(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, output io.Writer) error {
-	files, err := createFiles(ctx, fileName1, fileName2, oneGB, sixteenGB)
+	dir := fmt.Sprintf("/tmp/backint-diagnose/%s/", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	files, err := createFiles(ctx, dir, fileName1, fileName2, oneGB, sixteenGB)
 	if err != nil {
 		return fmt.Errorf("createFiles error: %v", err)
 	}
@@ -120,8 +123,13 @@ func diagnose(ctx context.Context, config *bpb.BackintConfiguration, bucketHandl
 
 // createFiles creates 2 files filled with '0's of different sizes.
 // Issues with file operations will return errors.
-func createFiles(ctx context.Context, fileName1, fileName2 string, fileSize1, fileSize2 int64) ([]*diagnoseFile, error) {
-	log.Logger.Infow("Creating files for diagnostics.")
+func createFiles(ctx context.Context, dir, fileName1, fileName2 string, fileSize1, fileSize2 int64) ([]*diagnoseFile, error) {
+	fileName1 = dir + fileName1
+	fileName2 = dir + fileName2
+	log.Logger.Infow("Creating files for diagnostics.", "fileName1", fileName1, "fileName2", fileName2)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
 	file1, err := os.Create(fileName1)
 	if err != nil {
 		return nil, err
@@ -158,6 +166,7 @@ func removeFiles(ctx context.Context, opts diagnoseOptions, remove removeFunc) b
 	log.Logger.Infow("Cleaning up files created for diagnostics.")
 	allFilesDeleted := true
 	for _, file := range opts.files {
+		log.Logger.Infow("Removing local file", "file", file.fileName)
 		if !strings.HasPrefix(file.fileName, "/tmp/") {
 			log.Logger.Errorw(`File not located in "/tmp/", cannot remove`, "file", file.fileName)
 			allFilesDeleted = false
@@ -169,8 +178,9 @@ func removeFiles(ctx context.Context, opts diagnoseOptions, remove removeFunc) b
 		}
 		if opts.bucketHandle != nil {
 			object := opts.config.GetUserId() + file.fileName + "/" + file.externalBackupID + ".bak"
+			log.Logger.Infow("Removing Cloud Storage Bucket file", "object", object)
 			if err := opts.bucketHandle.Object(object).Delete(ctx); err != nil && !errors.Is(err, store.ErrObjectNotExist) {
-				log.Logger.Errorw("Failed to remove bucket file", "object", object, "err", err)
+				log.Logger.Errorw("Failed to remove Cloud Storage Bucket file", "link", fmt.Sprintf("https://console.cloud.google.com/storage/browser/_details/%s/%s", opts.config.GetBucket(), object), "object", object, "err", err)
 				allFilesDeleted = false
 			}
 		}
