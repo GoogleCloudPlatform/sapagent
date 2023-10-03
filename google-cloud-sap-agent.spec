@@ -25,7 +25,7 @@ Obsoletes: google-sapnetweavermonitoring-agent
 
 %files
 %defattr(-,root,root)
-%attr(0744,root,root) %{_bindir}/google_cloud_sap_agent
+%attr(755,root,root) %{_bindir}/google_cloud_sap_agent
 %config(noreplace) %attr(0644,root,root) %{_confdir}/configuration.json
 %attr(0644,root,root) %{_servicedir}/%{name}.service
 %attr(0744,root,root) %{_docdir}/LICENSE
