@@ -166,6 +166,7 @@ var (
 		"776752604875":  true,
 		"743463339463":  true,
 		"771731819498":  true,
+		"124631552650":  true,
 	}
 	imageProjects [12]string = [12]string{
 		"centos-cloud",
