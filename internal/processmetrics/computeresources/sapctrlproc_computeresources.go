@@ -47,6 +47,8 @@ type (
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP Control Processes.
+// Collect method keeps on collecting all the metrics it can, logs errors if it encounters
+// any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	params := parameters{
 		executor:         p.Executor,
@@ -57,6 +59,7 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb
 		newProc:          p.NewProcHelper,
 	}
 	processes := collectControlProcesses(ctx, params)
+	var metricsCollectionError error
 	if len(processes) == 0 {
 		log.Logger.Debug("Cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil, nil
@@ -65,18 +68,22 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb
 	if _, ok := p.SkippedMetrics[sapCTRLCPUPath]; !ok {
 		cpuMetrics, err := collectCPUPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionError = err
 		}
-		res = append(res, cpuMetrics...)
+		if cpuMetrics != nil {
+			res = append(res, cpuMetrics...)
+		}
 	}
 	if _, ok := p.SkippedMetrics[sapCtrlMemoryPath]; !ok {
 		memoryMetrics, err := collectMemoryPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionError = err
 		}
-		res = append(res, memoryMetrics...)
+		if memoryMetrics != nil {
+			res = append(res, memoryMetrics...)
+		}
 	}
-	return res, nil
+	return res, metricsCollectionError
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.

@@ -58,6 +58,8 @@ type (
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP HANA Processes.
+// Collect method keeps on collecting all the metrics it can, logs errors if it encounters
+// any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	params := parameters{
 		executor:             p.Executor,
@@ -73,6 +75,7 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 		getProcessListParams: p.ProcessListParams,
 		SAPControlClient:     p.SAPControlClient,
 	}
+	var metricsCollectionErr error
 	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {
 		log.Logger.Debug("Cannot collect CPU and memory per process for hana, empty process list.")
@@ -82,26 +85,33 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 	if _, ok := p.SkippedMetrics[hanaCPUPath]; !ok {
 		cpuMetrics, err := collectCPUPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionErr = err
 		}
-		res = append(res, cpuMetrics...)
+		if cpuMetrics != nil {
+			res = append(res, cpuMetrics...)
+		}
 	}
 	if _, ok := p.SkippedMetrics[hanaMemoryPath]; !ok {
 		memoryMetrics, err := collectMemoryPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionErr = err
 		}
-		res = append(res, memoryMetrics...)
+		if memoryMetrics != nil {
+			res = append(res, memoryMetrics...)
+		}
 	}
 	skipIOPS := p.SkippedMetrics[hanaIOPSReadsPath] || p.SkippedMetrics[hanaIOPSWritesPath]
 	if !skipIOPS {
 		iopsMetrics, err := collectIOPSPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionErr = err
 		}
-		res = append(res, iopsMetrics...)
+		if iopsMetrics != nil {
+			res = append(res, iopsMetrics...)
+		}
+
 	}
-	return res, nil
+	return res, metricsCollectionErr
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.

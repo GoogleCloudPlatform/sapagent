@@ -127,7 +127,7 @@ func TestCollect(t *testing.T) {
 			gceService: &fakegcealpha.TestGCE{
 				Instances: []*compute.Instance{},
 			},
-			wantCount: 0,
+			wantCount: 1,
 			wantErr:   cmpopts.AnyError, // p.collectUpcomingMaintenance returns an error
 		},
 		{

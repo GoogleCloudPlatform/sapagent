@@ -57,6 +57,8 @@ type (
 
 // Collect SAP additional metrics like per process CPU and per process memory
 // utilization of SAP Netweaver processes.
+// Collect method keeps on collecting all the metrics it can, logs errors if it encounters
+// any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	params := parameters{
 		executor:             p.Executor,
@@ -74,6 +76,7 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 		SAPControlClient:     p.SAPControlClient,
 	}
 	processes := collectProcessesForInstance(ctx, params)
+	var metricsCollectionErr error
 	if len(processes) == 0 {
 		log.Logger.Debug("cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil, nil
@@ -82,26 +85,32 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 	if _, ok := p.SkippedMetrics[nwCPUPath]; !ok {
 		cpuMetrics, err := collectCPUPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionErr = err
 		}
-		res = append(res, cpuMetrics...)
+		if cpuMetrics != nil {
+			res = append(res, cpuMetrics...)
+		}
 	}
 	if _, ok := p.SkippedMetrics[nwMemoryPath]; !ok {
 		memoryMetrics, err := collectMemoryPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionErr = err
 		}
-		res = append(res, memoryMetrics...)
+		if memoryMetrics != nil {
+			res = append(res, memoryMetrics...)
+		}
 	}
 	skipIOPS := p.SkippedMetrics[nwIOPSReadsPath] || p.SkippedMetrics[nwIOPSWritePath]
 	if !skipIOPS {
 		iopsMetrics, err := collectIOPSPerProcess(ctx, params, processes)
 		if err != nil {
-			return nil, err
+			metricsCollectionErr = err
 		}
-		res = append(res, iopsMetrics...)
+		if iopsMetrics != nil {
+			res = append(res, iopsMetrics...)
+		}
 	}
-	return res, nil
+	return res, metricsCollectionErr
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.

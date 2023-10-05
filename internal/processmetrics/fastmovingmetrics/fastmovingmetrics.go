@@ -156,7 +156,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 	log.Logger.Debugw("Collecting HANA Availability and HA Availability metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
-	sc := &sapcontrol.Properties{ip.SAPInstance}
+	sc := &sapcontrol.Properties{Instance: ip.SAPInstance}
 	var (
 		err               error
 		sapControlResult  int
@@ -269,7 +269,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 		return nil, nil
 	}
 	now := tspb.Now()
-	sc := &sapcontrol.Properties{p.SAPInstance}
+	sc := &sapcontrol.Properties{Instance: p.SAPInstance}
 	var (
 		err     error
 		procs   map[int]*sapcontrol.ProcessStatus

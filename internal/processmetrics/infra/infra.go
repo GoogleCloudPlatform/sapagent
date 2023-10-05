@@ -104,7 +104,11 @@ func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, 
 
 // Collect is an implementation of Collector interface from processmetrics
 // responsible for collecting infra migration event metrics.
+// Collect method keeps on collecting all the metrics it can, logs errors if it encounters
+// any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var metricsCollectionErr error
+	var metrics []*mrpb.TimeSeries
 	if p.Config.BareMetal {
 		return nil, nil
 	}
@@ -112,13 +116,19 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 
 	scheduledMigration, err := collectScheduledMigration(p, metadataServerCall)
 	if err != nil {
-		return nil, err
+		metricsCollectionErr = err
+	}
+	if scheduledMigration != nil {
+		metrics = append(metrics, scheduledMigration...)
 	}
 	upcomingMaintenance, err := p.collectUpcomingMaintenance()
 	if err != nil {
-		return nil, err
+		metricsCollectionErr = err
 	}
-	return append(scheduledMigration, upcomingMaintenance...), nil
+	if upcomingMaintenance != nil {
+		metrics = append(metrics, upcomingMaintenance...)
+	}
+	return metrics, metricsCollectionErr
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.

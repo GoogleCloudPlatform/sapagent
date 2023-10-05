@@ -83,32 +83,39 @@ var (
 
 // Collect is Netweaver implementation of Collector interface from processmetrics.go.
 // Returns a list of NetWeaver related metrics.
+// Collect method keeps on collecting all the metrics it can, logs errors if it encounters
+// any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
+	var metricsCollectionError error
 	metrics, err := collectNetWeaverMetrics(ctx, p, scc)
-
 	if err != nil {
-		return nil, err
+		metricsCollectionError = err
 	}
 
 	httpMetrics, err := collectHTTPMetrics(p)
 	if err != nil {
-		return nil, err
+		metricsCollectionError = err
 	}
-	metrics = append(metrics, httpMetrics...)
+	if httpMetrics != nil {
+		metrics = append(metrics, httpMetrics...)
+	}
 
 	abapProcessStatusMetrics, err := collectABAPProcessStatus(ctx, p, scc)
 	if err != nil {
-		return nil, err
+		metricsCollectionError = err
 	}
-
-	metrics = append(metrics, abapProcessStatusMetrics...)
+	if abapProcessStatusMetrics != nil {
+		metrics = append(metrics, abapProcessStatusMetrics...)
+	}
 
 	abapQueueStats, err := collectABAPQueueStats(ctx, p, scc)
 	if err != nil {
-		return nil, err
+		metricsCollectionError = err
 	}
-	metrics = append(metrics, abapQueueStats...)
+	if abapQueueStats != nil {
+		metrics = append(metrics, abapQueueStats...)
+	}
 
 	dpmonPath := `/usr/sap/` + p.SAPInstance.GetSapsid() + `/SYS/exe/run/dpmon`
 	command := `-c 'echo q | %s pf=%s v'`
@@ -123,9 +130,11 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	}
 	abapSessionStats, err := collectABAPSessionStats(ctx, p, commandlineexecutor.ExecuteCommand, abapSessionParams)
 	if err != nil {
-		return nil, err
+		metricsCollectionError = err
 	}
-	metrics = append(metrics, abapSessionStats...)
+	if abapSessionStats != nil {
+		metrics = append(metrics, abapSessionStats...)
+	}
 
 	command = `-c 'echo q | %s pf=%s c'`
 	abapRFCParams := commandlineexecutor.Params{
@@ -140,9 +149,11 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 
 	rffcConnectionsMetric, err := collectRFCConnections(ctx, p, commandlineexecutor.ExecuteCommand, abapRFCParams)
 	if err != nil {
-		return nil, err
+		metricsCollectionError = err
 	}
-	metrics = append(metrics, rffcConnectionsMetric...)
+	if rffcConnectionsMetric != nil {
+		metrics = append(metrics, rffcConnectionsMetric...)
+	}
 
 	enqLockParams := commandlineexecutor.Params{
 		User:        p.SAPInstance.GetUser(),
@@ -152,11 +163,13 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	}
 	enqLockMetrics, err := collectEnqLockMetrics(ctx, p, commandlineexecutor.ExecuteCommand, enqLockParams, scc)
 	if err != nil {
-		return nil, err
+		metricsCollectionError = err
 	}
-	metrics = append(metrics, enqLockMetrics...)
+	if enqLockMetrics != nil {
+		metrics = append(metrics, enqLockMetrics...)
+	}
 
-	return metrics, nil
+	return metrics, metricsCollectionError
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.
@@ -187,7 +200,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 		return nil, nil
 	}
 	now := tspb.Now()
-	sc := &sapcontrol.Properties{p.SAPInstance}
+	sc := &sapcontrol.Properties{Instance: p.SAPInstance}
 	var (
 		err   error
 		procs map[int]*sapcontrol.ProcessStatus
@@ -344,7 +357,7 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 	if skipABAPProcessStatus {
 		return nil, nil
 	}
-	sc := &sapcontrol.Properties{p.SAPInstance}
+	sc := &sapcontrol.Properties{Instance: p.SAPInstance}
 	var (
 		err              error
 		processCount     map[string]int
@@ -393,7 +406,7 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 	if skipABAPQueue {
 		return nil, nil
 	}
-	sc := &sapcontrol.Properties{p.SAPInstance}
+	sc := &sapcontrol.Properties{Instance: p.SAPInstance}
 	var (
 		err               error
 		currentQueueUsage map[string]int64
@@ -496,10 +509,10 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 	instance := p.SAPInstance.GetInstanceId()
 	if !strings.HasPrefix(instance, "ASCS") && !strings.HasPrefix(instance, "ERS") {
 		log.Logger.Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)
-		return nil, fmt.Errorf("enq Lock metric is only applicable for application type: ASCS")
+		return nil, nil
 	}
 	now := tspb.Now()
-	sc := &sapcontrol.Properties{p.SAPInstance}
+	sc := &sapcontrol.Properties{Instance: p.SAPInstance}
 	var enqLocks []*sapcontrol.EnqLock
 	var err error
 

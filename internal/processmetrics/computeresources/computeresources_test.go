@@ -53,8 +53,8 @@ var (
 	1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`
 
 	defaultGetProcessListResponse = []sapcontrolclient.OSProcess{
-		{"hdbdaemon", "SAPControl-GREEN", 111},
-		{"hdbcompileserver", "SAPControl-GREEN", 222},
+		{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
+		{Name: "hdbcompileserver", Dispstatus: "SAPControl-GREEN", Pid: 222},
 	}
 )
 
@@ -252,8 +252,8 @@ func TestCollectProcessesForInstance(t *testing.T) {
 				SAPControlClient: sapcontrolclienttest.Fake{
 					Processes: defaultGetProcessListResponse,
 					WorkProcesses: []sapcontrolclient.WorkProcess{
-						{0, "DIA", 7488, "Run", "4", ""},
-						{1, "BTC", 7489, "Wait", "", ""},
+						{No: 0, Type: "DIA", Pid: 7488, Status: "Run", Time: "4", User: ""},
+						{No: 1, Type: "BTC", Pid: 7489, Status: "Wait", Time: "", User: ""},
 					},
 				},
 			},

@@ -1272,7 +1272,10 @@ func TestCollectEnqLockMetrics(t *testing.T) {
 
 func TestCollectWithRetry(t *testing.T) {
 	c := context.Background()
-	p := &InstanceProperties{PMBackoffPolicy: defaultBOPolicy(c)}
+	p := &InstanceProperties{
+		SAPInstance:     defaultSAPInstance,
+		PMBackoffPolicy: defaultBOPolicy(c),
+	}
 	_, err := p.CollectWithRetry(c)
 	if err == nil {
 		t.Errorf("CollectWithRetry() unexpected success, want error.")

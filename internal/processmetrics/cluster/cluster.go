@@ -96,8 +96,11 @@ var (
 
 // Collect is cluster metrics implementation of Collector interface from
 // processmetrics.go. Returns a list of Linux cluster related metrics.
+// Collect method keeps on collecting all the metrics it can, logs errors if it encounters
+// any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
+	var metricsCollectionErr error
 	// we only want to run crm_mon once
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
@@ -108,20 +111,26 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	// TODO: Test actual timeseries in unit test instead of returning an extra int.
 	nodeMetrics, _, err := collectNodeState(p, pacemaker.NodeState, data)
 	if err != nil {
-		return nil, err
+		metricsCollectionErr = err
 	}
-	metrics = append(metrics, nodeMetrics...)
+	if nodeMetrics != nil {
+		metrics = append(metrics, nodeMetrics...)
+	}
 	resourceMetrics, _, err := collectResourceState(p, pacemaker.ResourceState, data)
 	if err != nil {
-		return nil, err
+		metricsCollectionErr = err
 	}
-	metrics = append(metrics, resourceMetrics...)
+	if resourceMetrics != nil {
+		metrics = append(metrics, resourceMetrics...)
+	}
 	failCountMetrics, _, err := collectFailCount(p, pacemaker.FailCount, data)
 	if err != nil {
-		return nil, err
+		metricsCollectionErr = err
 	}
-	metrics = append(metrics, failCountMetrics...)
-	return metrics, nil
+	if failCountMetrics != nil {
+		metrics = append(metrics, failCountMetrics...)
+	}
+	return metrics, metricsCollectionErr
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.
@@ -149,6 +158,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 // The integer values are returned as an array for testability.
 func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if _, ok := p.SkippedMetrics[nodesPath]; ok {
+		log.Logger.Debugw("Skipping collection for", "metric", nodesPath)
 		return nil, nil, nil
 	}
 	var metricValues []int
@@ -178,6 +188,7 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *p
 // The integer values of metric are returned as an array for testability.
 func collectResourceState(p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), resourcesPath) {
+		log.Logger.Debugw("Skipping collection for", "metric", resourcesPath)
 		return nil, nil, nil
 	}
 	var metricValues []int
@@ -224,6 +235,7 @@ func stateFromString(m map[string]int, val string) int {
 // crm_mon history.
 func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), failCountsPath) {
+		log.Logger.Debugw("Skipping collection for", "metric", failCountsPath)
 		return nil, nil, nil
 	}
 	var metricValues []int

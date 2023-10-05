@@ -111,24 +111,29 @@ var (
 
 // Collect is HANA implementation of Collector interface from processmetrics.go.
 // Returns a list of HANA related metrics.
+// Collect method keeps on collecting all the metrics it can, logs errors if it encounters
+// any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	scc := sapcontrolclient.New(p.SAPInstance.GetInstanceNumber())
+	var metricsCollectionErr error
 
 	metrics, err := collectHANAServiceMetrics(ctx, p, scc)
 	if err != nil {
-		return nil, err
+		metricsCollectionErr = err
 	}
 
 	// Collect DB Query metrics only if credentials are set and NOT a HANA secondary.
 	if p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "" && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
 		queryMetrics, err := collectHANAQueryMetrics(ctx, p, commandlineexecutor.ExecuteCommand)
 		if err != nil {
-			return nil, err
+			metricsCollectionErr = err
 		}
-		metrics = append(metrics, queryMetrics...)
+		if queryMetrics != nil {
+			metrics = append(metrics, queryMetrics...)
+		}
 	}
 
-	return metrics, nil
+	return metrics, metricsCollectionErr
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.
@@ -159,7 +164,7 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
-	sc := &sapcontrol.Properties{ip.SAPInstance}
+	sc := &sapcontrol.Properties{Instance: ip.SAPInstance}
 	var (
 		err       error
 		processes map[int]*sapcontrol.ProcessStatus

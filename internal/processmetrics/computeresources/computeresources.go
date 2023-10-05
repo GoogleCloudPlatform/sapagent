@@ -144,7 +144,7 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 		err          error
 		processInfos []*ProcessInfo
 	)
-	sc := &sapcontrol.Properties{p.sapInstance}
+	sc := &sapcontrol.Properties{Instance: p.sapInstance}
 	scc := p.SAPControlClient
 	processes, err = sc.GetProcessList(scc)
 	if err != nil {
@@ -168,6 +168,7 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 // collectCPUPerProcess collects CPU utilization per process for HANA, Netweaver and SAP control processes.
 func collectCPUPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
+	var metricsCollectionErr error
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
@@ -177,7 +178,8 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 		proc, err := newProc(ctx, p.newProc, int32(pid))
 		if err != nil {
 			log.Logger.Errorw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
-			return nil, err
+			metricsCollectionErr = err
+			continue
 		}
 		labels := map[string]string{
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
@@ -185,12 +187,13 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 		cpuusage, err := proc.CPUPercentWithContext(ctx)
 		if err != nil {
 			log.Logger.Errorw("Could not get process CPU stats", "pid", pid, "error", err)
-			return nil, err
+			metricsCollectionErr = err
+			continue
 		}
 		cpuusage = cpuusage / float64(runtime.NumCPU())
 		metrics = append(metrics, createMetrics(p.cpuMetricPath, labels, cpuusage, p))
 	}
-	return metrics, nil
+	return metrics, metricsCollectionErr
 }
 
 // collectMemoryPerProcess is a function responsible for collecting memory utilization
@@ -198,6 +201,7 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 // utilization in megabytes.
 func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
+	var metricsCollectionErr error
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
@@ -207,12 +211,14 @@ func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*Pro
 		proc, err := newProc(ctx, p.newProc, int32(pid))
 		if err != nil {
 			log.Logger.Debugw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
-			return nil, err
+			metricsCollectionErr = err
+			continue
 		}
 		memoryUsage, err := proc.MemoryInfoWithContext(ctx)
 		if err != nil {
 			log.Logger.Debugw("Could not get process memory stats", "pid", pid, "error", err)
-			return nil, err
+			metricsCollectionErr = err
+			continue
 		}
 		vmSizeLables := map[string]string{
 			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
@@ -231,13 +237,14 @@ func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*Pro
 		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap)/million, p)
 		metrics = append(metrics, vmSizeMetrics, rSSMetrics, swapMetrics)
 	}
-	return metrics, nil
+	return metrics, metricsCollectionErr
 }
 
 // collectIOPSPerProcess is responsible for collecting IOPS per process using gopsutil IOCounters data
 // and computing the delta between current value and last value of bytes read and written.
 func collectIOPSPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
+	var metricsCollectionErr error
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
@@ -247,12 +254,14 @@ func collectIOPSPerProcess(ctx context.Context, p parameters, processes []*Proce
 		proc, err := newProc(ctx, p.newProc, int32(pid))
 		if err != nil {
 			log.Logger.Debugw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
-			return nil, err
+			metricsCollectionErr = err
+			continue
 		}
 		currVal, err := proc.IOCountersWithContext(ctx)
 		if err != nil {
 			log.Logger.Debugw("Could not get process IOPS stats", "pid", pid, "process", processInfo.Name, "error", err)
-			return nil, err
+			metricsCollectionErr = err
+			continue
 		}
 		key := fmt.Sprintf("%s:%s", processInfo.Name, processInfo.PID)
 		if _, ok := p.lastValue[key]; !ok {
@@ -271,7 +280,7 @@ func collectIOPSPerProcess(ctx context.Context, p parameters, processes []*Proce
 		writes := createMetrics(p.iopsWritesMetricPath, labels, deltaWrites/float64(freq), p)
 		metrics = append(metrics, reads, writes)
 	}
-	return metrics, nil
+	return metrics, metricsCollectionErr
 }
 
 func createMetrics(mPath string, labels map[string]string, val float64, p parameters) *mrpb.TimeSeries {
