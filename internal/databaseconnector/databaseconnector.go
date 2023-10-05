@@ -21,6 +21,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -61,6 +62,8 @@ func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
 		log.Logger.Debug("Read from secret manager successful")
 	}
 
+	// Escape the special characters in the password string, HANA studio does this implicitly.
+	p.Password = url.QueryEscape(p.Password)
 	dataSource := "hdb://" + p.Username + ":" + p.Password + "@" + p.Host + ":" + p.Port
 	if p.EnableSSL {
 		dataSource = dataSource + "?TLSServerName=" + p.HostNameInCert + "&TLSRootCAFile=" + p.RootCAFile
