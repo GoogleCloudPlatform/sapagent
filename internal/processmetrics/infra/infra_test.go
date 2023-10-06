@@ -28,12 +28,12 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	compute "google.golang.org/api/compute/v0.alpha"
+	compute "google.golang.org/api/compute/v0.beta"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gcealpha/fakegcealpha"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gcealpha"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta/fakegcebeta"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -49,7 +49,7 @@ var (
 		Zone:         "test-zone",
 		ProjectId:    "test-project",
 	}
-	stamGCE = &fakegcealpha.TestGCE{
+	stamGCE = &fakegcebeta.TestGCE{
 		Project:   "test-project",
 		Zone:      "test-zone",
 		Instances: soleTenantGCE.Instances,
@@ -60,7 +60,7 @@ var (
 		}},
 		NodeGroupNodes: soleTenantGCE.NodeGroupNodes,
 	}
-	soleTenantGCE = &fakegcealpha.TestGCE{
+	soleTenantGCE = &fakegcebeta.TestGCE{
 		Project: "test-project",
 		Zone:    "test-zone",
 		Instances: []*compute.Instance{{
@@ -111,7 +111,7 @@ func TestCollect(t *testing.T) {
 		name                   string
 		properties             *Properties
 		fakeMetadataServerCall func() (string, error)
-		gceService             *fakegcealpha.TestGCE
+		gceService             *fakegcebeta.TestGCE
 		wantCount              int
 		wantErr                error
 	}{
@@ -124,7 +124,7 @@ func TestCollect(t *testing.T) {
 			name:                   "GCE",
 			properties:             defaultProperties,
 			fakeMetadataServerCall: func() (string, error) { return "", nil },
-			gceService: &fakegcealpha.TestGCE{
+			gceService: &fakegcebeta.TestGCE{
 				Instances: []*compute.Instance{},
 			},
 			wantCount: 1,
@@ -143,9 +143,9 @@ func TestCollect(t *testing.T) {
 			metadataServerCall = test.fakeMetadataServerCall
 			p := test.properties
 			if test.gceService != nil {
-				p.gceAlphaService = test.gceService
+				p.gceBetaService = test.gceService
 			}
-			p.gceAlphaService = test.gceService
+			p.gceBetaService = test.gceService
 			got, gotErr := p.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() returned unexpected metric count: got=%+v, want=%d", got, test.wantCount)
@@ -284,7 +284,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 	tests := []struct {
 		name                string
 		cloudProperties     *iipb.CloudProperties
-		gceService          *fakegcealpha.TestGCE
+		gceService          *fakegcebeta.TestGCE
 		upcomingMaintenance *compute.UpcomingMaintenance
 		skipMetrics         map[string]bool
 		wantValues          map[string]string
@@ -452,7 +452,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		}, {
 			name:            "NotSoleTenant",
 			cloudProperties: defaultCloudProperties,
-			gceService: &fakegcealpha.TestGCE{
+			gceService: &fakegcebeta.TestGCE{
 				Project: "test-project",
 				Zone:    "test-zone",
 				Instances: []*compute.Instance{{
@@ -483,13 +483,13 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		}, {
 			name:            "errGetInstance",
 			cloudProperties: defaultCloudProperties,
-			gceService:      &fakegcealpha.TestGCE{},
+			gceService:      &fakegcebeta.TestGCE{},
 			wantValues:      map[string]string{},
 			wantErr:         cmpopts.AnyError,
 		}, {
 			name:            "errResolveNodeGroup",
 			cloudProperties: defaultCloudProperties,
-			gceService: &fakegcealpha.TestGCE{
+			gceService: &fakegcebeta.TestGCE{
 				Instances: []*compute.Instance{{
 					Scheduling: &compute.Scheduling{
 						NodeAffinities: []*compute.SchedulingNodeAffinity{{
@@ -525,7 +525,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 }
 
 func TestCollectUpcomingMaintenanceNotInitialized(t *testing.T) {
-	p := New(&cpb.Configuration{}, nil, &gcealpha.GCEAlpha{}, nil, nil)
+	p := New(&cpb.Configuration{}, nil, &gcebeta.GCEBeta{}, nil, nil)
 	_, err := p.collectUpcomingMaintenance()
 	if err == nil {
 		t.Error("collectUpcomingMaintenance(NotInitialized) got success expected error")
@@ -538,7 +538,7 @@ func TestResolveNodeGroup(t *testing.T) {
 		project             string
 		zone                string
 		instanceLink        string
-		gceService          *fakegcealpha.TestGCE
+		gceService          *fakegcebeta.TestGCE
 		upcomingMaintenance *compute.UpcomingMaintenance
 		wantNode            *compute.NodeGroupNode
 		wantErr             error
@@ -558,14 +558,14 @@ func TestResolveNodeGroup(t *testing.T) {
 		project:      "test-project",
 		zone:         "test-zone",
 		instanceLink: defaultInstanceLink,
-		gceService:   &fakegcealpha.TestGCE{},
+		gceService:   &fakegcebeta.TestGCE{},
 		wantErr:      cmpopts.AnyError,
 	}, {
 		name:         "errListModeGroupNodes",
 		project:      "test-project",
 		zone:         "test-zone",
 		instanceLink: defaultInstanceLink,
-		gceService: &fakegcealpha.TestGCE{
+		gceService: &fakegcebeta.TestGCE{
 			NodeGroups: []*compute.NodeGroup{{
 				Name: "test-node-group-name",
 			}},

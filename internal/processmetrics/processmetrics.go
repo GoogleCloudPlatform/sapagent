@@ -84,14 +84,14 @@ type (
 
 	// Parameters has parameters necessary to invoke Start().
 	Parameters struct {
-		Config          *cpb.Configuration
-		OSType          string
-		MetricClient    CreateMetricClient
-		SAPInstances    *sapb.SAPInstances
-		BackOffs        *cloudmonitoring.BackOffIntervals
-		HeartbeatSpec   *heartbeat.Spec
-		GCEService      sapdiscovery.GCEInterface
-		GCEAlphaService infra.GCEAlphaInterface
+		Config         *cpb.Configuration
+		OSType         string
+		MetricClient   CreateMetricClient
+		SAPInstances   *sapb.SAPInstances
+		BackOffs       *cloudmonitoring.BackOffIntervals
+		HeartbeatSpec  *heartbeat.Spec
+		GCEService     sapdiscovery.GCEInterface
+		GCEBetaService infra.GCEBetaInterface
 	}
 )
 
@@ -216,7 +216,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	}
 
 	log.CtxLogger(ctx).Info("Creating infra migration event metrics collector.")
-	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics,
+	migrationCollector := infra.New(p.Config, p.Client, params.GCEBetaService, skippedMetrics,
 		cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute))
 
 	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector, migrationCollector)

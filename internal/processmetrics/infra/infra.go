@@ -26,7 +26,7 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	backoff "github.com/cenkalti/backoff/v4"
-	compute "google.golang.org/api/compute/v0.alpha"
+	compute "google.golang.org/api/compute/v0.beta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -34,8 +34,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
-// GCEAlphaInterface provides a testable interface to gcealpha.
-type GCEAlphaInterface interface {
+// GCEBetaInterface provides a testable interface to gcebeta.
+type GCEBetaInterface interface {
 	Initialized() bool
 	GetInstance(project, zone, instance string) (*compute.Instance, error)
 	ListNodeGroups(project, zone string) (*compute.NodeGroupList, error)
@@ -86,17 +86,17 @@ var (
 type Properties struct {
 	Config          *cnfpb.Configuration
 	Client          cloudmonitoring.TimeSeriesCreator
-	gceAlphaService GCEAlphaInterface
+	gceBetaService  GCEBetaInterface
 	skippedMetrics  map[string]bool
 	PMBackoffPolicy backoff.BackOffContext
 }
 
 // New creates a new instance of Properties
-func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceAlphaService GCEAlphaInterface, sm map[string]bool, bo backoff.BackOffContext) *Properties {
+func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, gceBetaService GCEBetaInterface, sm map[string]bool, bo backoff.BackOffContext) *Properties {
 	return &Properties{
 		Config:          config,
 		Client:          client,
-		gceAlphaService: gceAlphaService,
+		gceBetaService: gceBetaService,
 		skippedMetrics:  sm,
 		PMBackoffPolicy: bo,
 	}
@@ -173,12 +173,12 @@ func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {
 
 	// TODO : use the regular GCE service once the UpcomingMaintenance API
 	// is available there.
-	if p.gceAlphaService == nil || !p.gceAlphaService.Initialized() {
-		log.Logger.Debug("compute alpha API not initialized; skipping maint checks.")
-		return []*mrpb.TimeSeries{}, fmt.Errorf("compute alpha API not initialized; skipping maint checks")
+	if (p.gceBetaService == nil || !p.gceBetaService.Initialized()) {
+		log.Logger.Debug("compute beta API not initialized; skipping maint checks.")
+		return []*mrpb.TimeSeries{}, fmt.Errorf("compute beta API not initialized; skipping maint checks")
 	}
 
-	instance, err := p.gceAlphaService.GetInstance(project, zone, instName)
+	instance, err := p.gceBetaService.GetInstance(project, zone, instName)
 	if err != nil {
 		log.Logger.Errorw("Could not get instance from compute API", "project", project, "zone", zone, "instance", instName, "error", err)
 		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not get instance from compute API: %w", err)
@@ -274,7 +274,7 @@ func enumToInt(s string, m map[string]int64) int64 {
 
 // resolveNodeGroup looks up the STAM node group and matching node data for a given instance.
 func (p *Properties) resolveNodeGroup(project, zone, instanceLink string) (*compute.NodeGroupNode, error) {
-	nodeGroups, err := p.gceAlphaService.ListNodeGroups(project, zone)
+	nodeGroups, err := p.gceBetaService.ListNodeGroups(project, zone)
 	if err != nil {
 		return nil, fmt.Errorf("could not get node groups: %w", err)
 	}
@@ -283,7 +283,7 @@ func (p *Properties) resolveNodeGroup(project, zone, instanceLink string) (*comp
 			log.Logger.Debugw("Skipping non-STAM node group", "name", nodeGroup.Name)
 			continue
 		}
-		nodes, err := p.gceAlphaService.ListNodeGroupNodes(project, zone, nodeGroup.Name)
+		nodes, err := p.gceBetaService.ListNodeGroupNodes(project, zone, nodeGroup.Name)
 		if err != nil {
 			return nil, fmt.Errorf("could not get node group nodes from cloud API: %w", err)
 		}

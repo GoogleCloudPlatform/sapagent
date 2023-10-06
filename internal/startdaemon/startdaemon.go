@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -38,7 +39,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gcealpha"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
@@ -221,18 +222,18 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 		return
 	}
-	gceAlphaService := &gcealpha.GCEAlpha{}
-	if d.config.GetServiceEndpointOverride() != "" {
-		gceAlphaService, err = gcealpha.NewGCEClient(ctx)
+	gceBetaService := &gcebeta.GCEBeta{}
+	if strings.Contains(d.config.GetServiceEndpointOverride(), "beta") {
+		gceBetaService, err = gcebeta.NewGCEClient(ctx)
 		if err != nil {
-			log.Logger.Errorw("Failed to create GCE alpha service", "error", err)
+			log.Logger.Errorw("Failed to create GCE beta service", "error", err)
 			usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 			return
 		}
 		log.Logger.Infow("Service endpoint override", "endpoint", d.config.GetServiceEndpointOverride())
 		gceService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
-		if gceAlphaService != nil {
-			gceAlphaService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
+		if gceBetaService != nil {
+			gceBetaService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
 		}
 	}
 	ppr := &instanceinfo.PhysicalPathReader{goos}
@@ -308,7 +309,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 
 	// Start Process Metrics Collection
 	pmCtx := log.SetCtx(ctx, "context", "ProcessMetrics")
-	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceAlphaService}
+	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceBetaService}
 	pmp.startCollection(pmCtx)
 
 	// Start SAP System Discovery
@@ -366,11 +367,11 @@ func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heart
 
 // ProcessMetricsParams has arguments for startProcessMetricsCollection.
 type ProcessMetricsParams struct {
-	config          *cpb.Configuration
-	goos            string
-	healthMonitor   agentmetrics.HealthMonitor
-	gceService      *gce.GCE
-	gceAlphaService *gcealpha.GCEAlpha
+	config         *cpb.Configuration
+	goos           string
+	healthMonitor  agentmetrics.HealthMonitor
+	gceService     *gce.GCE
+	gceBetaService *gcebeta.GCEBeta
 }
 
 // startCollection for ProcessMetricsParams initiates collection of ProcessMetrics.
@@ -383,13 +384,13 @@ func (pmp ProcessMetricsParams) startCollection(ctx context.Context) {
 		return
 	}
 	if success := processmetrics.Start(ctx, processmetrics.Parameters{
-		Config:          pmp.config,
-		OSType:          pmp.goos,
-		MetricClient:    processmetrics.NewMetricClient,
-		BackOffs:        cloudmonitoring.NewDefaultBackOffIntervals(),
-		HeartbeatSpec:   pmHeartbeatSpec,
-		GCEService:      pmp.gceService,
-		GCEAlphaService: pmp.gceAlphaService,
+		Config:         pmp.config,
+		OSType:         pmp.goos,
+		MetricClient:   processmetrics.NewMetricClient,
+		BackOffs:       cloudmonitoring.NewDefaultBackOffIntervals(),
+		HeartbeatSpec:  pmHeartbeatSpec,
+		GCEService:     pmp.gceService,
+		GCEBetaService: pmp.gceBetaService,
 	}); success != true {
 		log.Logger.Error("Process metrics context cancelled")
 	}
