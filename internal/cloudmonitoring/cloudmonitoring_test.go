@@ -241,3 +241,392 @@ func TestSendTimeSeries(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareKey(t *testing.T) {
+	tests := []struct {
+		name string
+		ts   *mrpb.TimeSeries
+		want timeSeriesKey
+	}{
+		{
+			name: "TestEmptyKey",
+			ts:   &mrpb.TimeSeries{},
+			want: timeSeriesKey{
+				MetricKind:        metricpb.MetricDescriptor_METRIC_KIND_UNSPECIFIED.String(),
+				MetricType:        "",
+				MetricLabels:      "",
+				MonitoredResource: "",
+				ResourceLabels:    "",
+			},
+		},
+		{
+			name: "TestKey",
+			ts: &mrpb.TimeSeries{
+				Metric: &metricpb.Metric{
+					Type:   "custom.googleapis.com/invoice/paid/amount",
+					Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+				},
+				MetricKind: metricpb.MetricDescriptor_CUMULATIVE,
+				Resource: &monitoredresourcepb.MonitoredResource{
+					Type:   "datastream.googleapis.com/Stream",
+					Labels: map[string]string{"abc": "def", "sample": "labels"},
+				},
+			},
+			want: timeSeriesKey{
+				MetricKind:        metricpb.MetricDescriptor_CUMULATIVE.String(),
+				MetricType:        "custom.googleapis.com/invoice/paid/amount",
+				MetricLabels:      "abc+def,sample+labels,sample2+labels2",
+				MonitoredResource: "datastream.googleapis.com/Stream",
+				ResourceLabels:    "abc+def,sample+labels",
+			},
+		},
+		{
+			name: "TestKeyWithUnsortedLabels",
+			ts: &mrpb.TimeSeries{
+				Metric: &metricpb.Metric{
+					Type:   "custom.googleapis.com/invoice/paid/amount",
+					Labels: map[string]string{"sample": "labels", "abc": "def", "sample2": "labels2"},
+				},
+				MetricKind: metricpb.MetricDescriptor_GAUGE,
+				Resource: &monitoredresourcepb.MonitoredResource{
+					Type:   "datastream.googleapis.com/Stream",
+					Labels: map[string]string{"sample": "labels", "abc": "def"},
+				},
+			},
+			want: timeSeriesKey{
+				MetricKind:        metricpb.MetricDescriptor_GAUGE.String(),
+				MetricType:        "custom.googleapis.com/invoice/paid/amount",
+				MetricLabels:      "abc+def,sample+labels,sample2+labels2",
+				MonitoredResource: "datastream.googleapis.com/Stream",
+				ResourceLabels:    "abc+def,sample+labels",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := prepareKey(test.ts)
+			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
+				t.Errorf("prepareKey() mismatch (-want, +got):\n%s", d)
+			}
+		})
+	}
+}
+
+func TestPruneBatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		batch []*mrpb.TimeSeries
+		want  []*mrpb.TimeSeries
+	}{
+		{
+			name:  "EmptyBatch",
+			batch: []*mrpb.TimeSeries{},
+			want:  nil,
+		},
+		{
+			name: "SingleTS",
+			batch: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_CUMULATIVE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_CUMULATIVE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+		},
+		{
+			name: "MultipleTSWithDifferentMetricTypes",
+			batch: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "appengine.googleapis.com/http/server/response_latencies",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "appengine.googleapis.com/http/server/response_latencies",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+		},
+		{
+			name: "MultipleTSWithDifferentMetricKinds",
+			batch: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_CUMULATIVE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_CUMULATIVE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+		},
+		{
+			name: "MultipleTSWithDifferentMetricLabels",
+			batch: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abcd": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abcd": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_DELTA,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+		},
+		{
+			name: "MultipleTSWithDifferentResourceLabels",
+			batch: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abcd": "def", "sample": "labels"},
+					},
+				},
+			},
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abcd": "def", "sample": "labels"},
+					},
+				},
+			},
+		},
+		{
+			name: "MultipleTSWithIdenticalTS",
+			batch: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"sample": "labels", "abc": "def", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "external.googleapis.com/prometheus/up",
+						Labels: map[string]string{"sample": "labels", "abc": "def", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_CUMULATIVE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "custom.googleapis.com/invoice/paid/amount",
+						Labels: map[string]string{"abc": "def", "sample": "labels", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"sample": "labels", "abc": "def"},
+					},
+				},
+				&mrpb.TimeSeries{
+					Metric: &metricpb.Metric{
+						Type:   "external.googleapis.com/prometheus/up",
+						Labels: map[string]string{"sample": "labels", "abc": "def", "sample2": "labels2"},
+					},
+					MetricKind: metricpb.MetricDescriptor_CUMULATIVE,
+					Resource: &monitoredresourcepb.MonitoredResource{
+						Type:   "datastream.googleapis.com/Stream",
+						Labels: map[string]string{"abc": "def", "sample": "labels"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := pruneBatch(test.batch)
+			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
+				t.Errorf("pruneBatch() mismatch (-want, +got):\n%s", d)
+			}
+		})
+	}
+}

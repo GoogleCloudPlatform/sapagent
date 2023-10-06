@@ -20,6 +20,7 @@ package cloudmonitoring
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,6 +31,16 @@ import (
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
+
+// timeSeriesKey is a struct which holds the information which can uniquely identify each timeseries
+// and can be used as a Map key since every field is comparable.
+type timeSeriesKey struct {
+	MetricType        string
+	MetricKind        string
+	MetricLabels      string
+	MonitoredResource string
+	ResourceLabels    string
+}
 
 // BackOffIntervals holds the initial intervals for the different back off mechanisms.
 type BackOffIntervals struct {
@@ -156,6 +167,33 @@ func ShortConstantBackOffPolicy(ctx context.Context, initial time.Duration, retr
 	return backoff.WithContext(backoff.WithMaxRetries(constantBackoff, retries), ctx)
 }
 
+func flattenLabels(labels map[string]string) string {
+	var metricLabels []string
+	for k, v := range labels {
+		metricLabels = append(metricLabels, k+"+"+v)
+	}
+	sort.Strings(metricLabels)
+	return strings.Join(metricLabels, ",")
+}
+
+// prepareKey creates the key which can be used to group a timeseries
+// based on MetricType, MetricKind, MetricLabels, MonitoredResource and ResourceLabels.
+func prepareKey(t *mrpb.TimeSeries) timeSeriesKey {
+	mtype := t.GetMetric().GetType()
+	mkind := t.GetMetricKind().String()
+	mresource := t.GetResource().GetType()
+	tsk := timeSeriesKey{
+		MetricType:        mtype,
+		MetricKind:        mkind,
+		MonitoredResource: mresource,
+	}
+
+	tsk.MetricLabels = flattenLabels(t.GetMetric().GetLabels())
+	tsk.ResourceLabels = flattenLabels(t.GetResource().GetLabels())
+
+	return tsk
+}
+
 // SendTimeSeries sends all the time series objects to cloud monitoring.
 // maxTSPerRequest is used as an upper limit to batch send time series values per request.
 // If a cloud monitoring API call fails even after retries, the remaining measurements are discarded.
@@ -191,8 +229,24 @@ func sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, timeSeri
 
 	req := &monitoringpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", projectID),
-		TimeSeries: batchTimeSeries,
+		TimeSeries: pruneBatch(batchTimeSeries),
 	}
 
 	return CreateTimeSeriesWithRetry(ctx, timeSeriesCreator, req, bo)
+}
+
+func pruneBatch(batchTimeSeries []*mrpb.TimeSeries) []*mrpb.TimeSeries {
+	ts := make(map[timeSeriesKey]bool)
+	var finalBatch []*mrpb.TimeSeries
+	for _, t := range batchTimeSeries {
+		tsk := prepareKey(t)
+		if _, ok := ts[tsk]; ok {
+			log.Logger.Debug("Pruned a duplicate time series", "tsk:", tsk)
+			continue
+		}
+		ts[tsk] = true
+
+		finalBatch = append(finalBatch, t)
+	}
+	return finalBatch
 }
