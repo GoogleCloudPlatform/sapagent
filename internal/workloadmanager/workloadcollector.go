@@ -52,9 +52,7 @@ ConfigFileReader abstracts loading and reading files into an io.ReadCloser objec
 */
 type ConfigFileReader func(string) (io.ReadCloser, error)
 
-/*
-WorkloadMetrics is a container for monitoring TimeSeries metrics.
-*/
+// WorkloadMetrics is a container for monitoring TimeSeries metrics.
 type WorkloadMetrics struct {
 	Metrics []*monitoringresourcespb.TimeSeries
 }
@@ -80,7 +78,7 @@ type sendMetricsParams struct {
 }
 
 var (
-	now = currentTime
+	now    = currentTime
 )
 
 const metricOverridePath = "/etc/google-cloud-sap-agent/wlmmetricoverride.yaml"
@@ -91,7 +89,7 @@ func currentTime() int64 {
 }
 
 func start(ctx context.Context, params Parameters) {
-	log.Logger.Info("Starting collection of Workload Manager metrics")
+	log.CtxLogger(ctx).Info("Starting collection of Workload Manager metrics")
 	cmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 	if cmf <= 0 {
 		// default it to 5 minutes
@@ -114,7 +112,7 @@ func start(ctx context.Context, params Parameters) {
 	// Do not wait for the first tick and start metric collection immediately.
 	select {
 	case <-ctx.Done():
-		log.Logger.Debug("Workload metrics cancellation requested")
+		log.CtxLogger(ctx).Debug("Workload metrics cancellation requested")
 		return
 	default:
 		collectWorkloadMetricsOnce(ctx, params)
@@ -124,7 +122,7 @@ func start(ctx context.Context, params Parameters) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Debug("Workload metrics cancellation requested")
+			log.CtxLogger(ctx).Debug("Workload metrics cancellation requested")
 			return
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
@@ -140,11 +138,11 @@ func start(ctx context.Context, params Parameters) {
 func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 	params.HeartbeatSpec.Beat()
 	if params.Remote {
-		log.Logger.Info("Collecting metrics from remote instances")
+		log.CtxLogger(ctx).Info("Collecting metrics from remote instances")
 		collectAndSendRemoteMetrics(ctx, params)
 		return
 	}
-	log.Logger.Info("Collecting metrics from this instance")
+	log.CtxLogger(ctx).Info("Collecting metrics from this instance")
 	metrics := collectMetricsFromConfig(ctx, params, metricOverridePath)
 	sendMetrics(ctx, sendMetricsParams{
 		wm:                metrics,
@@ -161,11 +159,11 @@ func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 	if (params.Config.GetCollectionConfiguration() == nil || params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() == nil) &&
 		!params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics() {
-		log.Logger.Info("Not collecting Workload Manager metrics")
+		log.CtxLogger(ctx).Info("Not collecting Workload Manager metrics")
 		return false
 	}
 	if params.OSType == "windows" {
-		log.Logger.Info("Workload Manager metrics collection is not supported for windows platform.")
+		log.CtxLogger(ctx).Info("Workload Manager metrics collection is not supported for windows platform.")
 		return false
 	}
 	go usagemetrics.LogActionDaily(usagemetrics.CollectWLMMetrics)
@@ -178,9 +176,9 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 //
 // The results of this function can be overridden using a metricOverride file.
 func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOverride string) WorkloadMetrics {
-	log.Logger.Info("Collecting Workload Manager metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager metrics...")
 	if fileInfo, err := params.OSStatReader(metricOverride); fileInfo != nil && err == nil {
-		log.Logger.Info("Using override metrics from yaml file")
+		log.CtxLogger(ctx).Info("Using override metrics from yaml file")
 		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
 	}
 
@@ -333,35 +331,35 @@ func parseScannedText(text string) (key, value string, found bool) {
 
 func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	if params.wm.Metrics == nil || len(params.wm.Metrics) == 0 {
-		log.Logger.Info("No metrics to send to Cloud Monitoring")
+		log.CtxLogger(ctx).Info("No metrics to send to Cloud Monitoring")
 		return 0
 	}
 
 	// debugging metric data being sent
 	for _, m := range params.wm.Metrics {
 		if len(m.GetPoints()) == 0 {
-			log.Logger.Debugw("  Metric has no point data", "metric", m.GetMetric().GetType())
+			log.CtxLogger(ctx).Debugw("  Metric has no point data", "metric", m.GetMetric().GetType())
 			continue
 		}
-		log.Logger.Debugw("  Metric", "metric", m.GetMetric().GetType(), "value", m.GetPoints()[0].GetValue().GetDoubleValue())
+		log.CtxLogger(ctx).Debugw("  Metric", "metric", m.GetMetric().GetType(), "value", m.GetPoints()[0].GetValue().GetDoubleValue())
 		for k, v := range m.GetMetric().GetLabels() {
-			log.Logger.Debugw("    Label", "key", k, "value", v)
+			log.CtxLogger(ctx).Debugw("    Label", "key", k, "value", v)
 		}
 	}
 
-	log.Logger.Infow("Sending metrics to Cloud Monitoring...", "number", len(params.wm.Metrics))
+	log.CtxLogger(ctx).Infow("Sending metrics to Cloud Monitoring...", "number", len(params.wm.Metrics))
 	request := monitoringpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", params.cp.GetProjectId()),
 		TimeSeries: params.wm.Metrics,
 	}
 	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, params.timeSeriesCreator, &request, params.backOffIntervals); err != nil {
-		log.Logger.Errorw("Failed to send metrics to Cloud Monitoring", "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to send metrics to Cloud Monitoring", "error", err)
 		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
 		return 0
 	}
-	log.Logger.Infow("Sent metrics to Cloud Monitoring.", "number", len(params.wm.Metrics))
+	log.CtxLogger(ctx).Infow("Sent metrics to Cloud Monitoring.", "number", len(params.wm.Metrics))
 
-	log.Logger.Debugw("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
+	log.CtxLogger(ctx).Debugw("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
 	// Send request to regional endpoint. Ex: "us-central1-a" -> "us-central1"
 	location := params.cp.GetZone()
 	if params.bareMetal {
@@ -371,11 +369,11 @@ func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	location = strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 	req := createWriteInsightRequest(params.wm, params.cp.GetInstanceId())
 	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
-		log.Logger.Debugw("Failed to send metrics to Data Warehouse", "error", err)
+		log.CtxLogger(ctx).Debugw("Failed to send metrics to Data Warehouse", "error", err)
 		// Do not log a usagemetrics error until this is the primary data pipeline.
 		return 0
 	}
-	log.Logger.Debugw("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
+	log.CtxLogger(ctx).Debugw("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
 
 	return len(params.wm.Metrics)
 }

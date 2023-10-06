@@ -161,7 +161,7 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface, wlmService wlmInterface, cloudLogService cloudLogInterface) bool {
 	// Start SAP system discovery only if sap_system_discovery is enabled.
 	if !config.GetCollectionConfiguration().GetSapSystemDiscovery().GetValue() {
-		log.Logger.Info("Not starting SAP system discovery.")
+		log.CtxLogger(ctx).Info("Not starting SAP system discovery.")
 		return false
 	}
 
@@ -181,7 +181,7 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gce
 func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 	cp := config.GetCloudProperties()
 	if cp == nil {
-		log.Logger.Warn("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
+		log.CtxLogger(ctx).Warn("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
 		return
 	}
 
@@ -190,7 +190,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 		res, ci, ir := d.discoverInstance(cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
 
 		if ci == nil {
-			log.Logger.Warn("Unable to discover current instance, cannot complete discovery")
+			log.CtxLogger(ctx).Warn("Unable to discover current instance, cannot complete discovery")
 			continue
 		}
 
@@ -233,7 +233,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 					// NW instance is connected to a database
 					dbSid, err := d.discoverDatabaseSID(ctx, app.Sapsid)
 					if err != nil {
-						log.Logger.Warnw("Encountered error discovering database SID", "error", err)
+						log.CtxLogger(ctx).Warnw("Encountered error discovering database SID", "error", err)
 						continue
 					}
 					dbComp = &spb.SapDiscovery_Component{
@@ -265,11 +265,11 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 				}
 				err := d.discoverASCS(ctx, app.Sapsid, system.GetApplicationLayer(), cp)
 				if err != nil {
-					log.Logger.Warnw("Error discovering ascs", "error", err)
+					log.CtxLogger(ctx).Warnw("Error discovering ascs", "error", err)
 				}
 				err = d.discoverAppNFS(ctx, app, system.GetApplicationLayer(), cp)
 				if err != nil {
-					log.Logger.Warnw("Error discovering app NFS", "error", err)
+					log.CtxLogger(ctx).Warnw("Error discovering app NFS", "error", err)
 				}
 				if dbComp != nil {
 					system.DatabaseLayer = dbComp
@@ -299,7 +299,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 					},
 				}
 				if err := d.discoverDatabaseNFS(ctx, system.GetDatabaseLayer(), cp); err != nil {
-					log.Logger.Warnw("Unable to discover database NFS", "error", err)
+					log.CtxLogger(ctx).Warnw("Unable to discover database NFS", "error", err)
 				}
 				system.UpdateTime = timestamppb.Now()
 			}
@@ -308,7 +308,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 		locationParts := strings.Split(cp.GetZone(), "-")
 		region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 
-		log.Logger.Info("Sending systems to WLM API")
+		log.CtxLogger(ctx).Info("Sending systems to WLM API")
 		for _, sys := range sapSystems {
 			// Send System to DW API
 			req := &workloadmanager.WriteInsightRequest{
@@ -318,7 +318,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 
 			err := d.wlmService.WriteInsight(cp.ProjectId, region, req)
 			if err != nil {
-				log.Logger.Warnw("Encountered error writing to WLM", "error", err)
+				log.CtxLogger(ctx).Warnw("Encountered error writing to WLM", "error", err)
 			}
 
 			if d.cloudLogInterface == nil {
@@ -326,11 +326,11 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 			}
 			err = d.writeToCloudLogging(sys)
 			if err != nil {
-				log.Logger.Warnw("Encountered error writing to cloud logging", "error", err)
+				log.CtxLogger(ctx).Warnw("Encountered error writing to cloud logging", "error", err)
 			}
 		}
 
-		log.Logger.Info("Done SAP System Discovery")
+		log.CtxLogger(ctx).Info("Done SAP System Discovery")
 		// Perform discovery at most every 4 hours.
 		time.Sleep(4 * 60 * 60 * time.Second)
 	}
@@ -477,7 +477,7 @@ func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID
 	var res []*spb.SapDiscovery_Resource
 	lbAddress, err := d.discoverCluster(ctx)
 	if err != nil || lbAddress == "" {
-		log.Logger.Warnw("Encountered error discovering cluster address", log.Error(err))
+		log.CtxLogger(ctx).Warnw("Encountered error discovering cluster address", log.Error(err))
 		return res, nil, nil
 	}
 
@@ -486,7 +486,7 @@ func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID
 	// Check Network Interface address to see if it exists as a resource
 	addr, err := d.gceService.GetAddressByIP(projectID, region, lbAddress)
 	if err != nil {
-		log.Logger.Warnw("Error locating Address by IP",
+		log.CtxLogger(ctx).Warnw("Error locating Address by IP",
 			log.String("project", projectID),
 			log.String("region", region),
 			log.String("ip", lbAddress),
@@ -503,7 +503,7 @@ func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID
 	res = append(res, ar)
 
 	if len(addr.Users) == 0 {
-		log.Logger.Warn("Cluster address not in use by anything")
+		log.CtxLogger(ctx).Warn("Cluster address not in use by anything")
 		return res, nil, nil
 	}
 
@@ -511,12 +511,12 @@ func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID
 	user := addr.Users[0]
 	name := extractFromURI(user, "forwardingRules")
 	if name == "" {
-		log.Logger.Infow("Cluster address not in use by forwarding rule", log.String("user", user))
+		log.CtxLogger(ctx).Infow("Cluster address not in use by forwarding rule", log.String("user", user))
 		return res, nil, nil
 	}
 	fwr, err := d.gceService.GetForwardingRule(projectID, region, name)
 	if err != nil {
-		log.Logger.Warnw("Error retrieving forwarding rule", log.Error(err))
+		log.CtxLogger(ctx).Warnw("Error retrieving forwarding rule", log.Error(err))
 		return res, nil, nil
 	}
 
@@ -543,7 +543,7 @@ func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.Forwardi
 	bEName := extractFromURI(b, "backendServices")
 	if bEName == "" {
 		log.Logger.Infow("Forwarding rule does not have a backend service",
-			log.String("bakendService", b))
+			log.String("backendService", b))
 		return res
 	}
 
@@ -668,7 +668,7 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 }
 
 func (d *Discovery) discoverCluster(ctx context.Context) (string, error) {
-	log.Logger.Info("Discovering cluster")
+	log.CtxLogger(ctx).Info("Discovering cluster")
 	if d.exists("crm") {
 		return d.discoverClusterCRM(ctx)
 	}
@@ -729,10 +729,10 @@ func (d *Discovery) discoverClusterPCS(ctx context.Context) (string, error) {
 }
 
 func (d *Discovery) discoverFilestores(ctx context.Context, projectID string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
-	log.Logger.Info("Discovering mounted file stores")
+	log.CtxLogger(ctx).Info("Discovering mounted file stores")
 	var res []*spb.SapDiscovery_Resource
 	if !d.exists("df") {
-		log.Logger.Warn("Cannot access command df to discover mounted file stores")
+		log.CtxLogger(ctx).Warn("Cannot access command df to discover mounted file stores")
 		return res
 	}
 
@@ -741,7 +741,7 @@ func (d *Discovery) discoverFilestores(ctx context.Context, projectID string, pa
 		Args:       []string{"-h"},
 	})
 	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving mounts", "error", result.Error)
+		log.CtxLogger(ctx).Warnw("Error retrieving mounts", "error", result.Error)
 		return res
 	}
 	for _, l := range strings.Split(result.StdOut, "\n") {
@@ -753,10 +753,10 @@ func (d *Discovery) discoverFilestores(ctx context.Context, projectID string, pa
 		address := matches[1]
 		fs, err := d.gceService.GetFilestoreByIP(projectID, "-", address)
 		if err != nil {
-			log.Logger.Errorw("Error retrieving filestore by IP", "error", err)
+			log.CtxLogger(ctx).Errorw("Error retrieving filestore by IP", "error", err)
 			continue
 		} else if len(fs.Instances) == 0 {
-			log.Logger.Warnw("No filestore found with IP", "address", address)
+			log.CtxLogger(ctx).Warnw("No filestore found with IP", "address", address)
 			continue
 		}
 		for _, i := range fs.Instances {
@@ -785,13 +785,13 @@ func (d *Discovery) discoverAppToDBConnection(ctx context.Context, cp *ipb.Cloud
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list", "DEFAULT"},
 	})
 	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
+		log.CtxLogger(ctx).Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
 		return res
 	}
 
 	dbHosts := parseDBHosts(result.StdOut)
 	if len(dbHosts) == 0 {
-		log.Logger.Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
+		log.CtxLogger(ctx).Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
 		return res
 	}
 
@@ -992,13 +992,13 @@ func (d *Discovery) discoverDatabaseSID(ctx context.Context, appSID string) (str
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list"},
 	})
 	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
 	re, err := regexp.Compile(`DATABASE\s*:\s*([a-zA-Z][a-zA-Z0-9]{2})`)
 	if err != nil {
-		log.Logger.Warnw("Error compiling regex", "error", err)
+		log.CtxLogger(ctx).Warnw("Error compiling regex", "error", err)
 		return "", err
 	}
 	sid := re.FindStringSubmatch(result.StdOut)
@@ -1014,18 +1014,18 @@ func (d *Discovery) discoverDatabaseSID(ctx context.Context, appSID string) (str
 	})
 
 	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Warnw("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
 	re, err = regexp.Compile(`(dbid|dbms\/name)\s*=\s*([a-zA-Z][a-zA-Z0-9]{2})`)
 	if err != nil {
-		log.Logger.Warnw("Error compiling regex", "error", err)
+		log.CtxLogger(ctx).Warnw("Error compiling regex", "error", err)
 		return "", err
 	}
 	sid = re.FindStringSubmatch(result.StdOut)
 	if len(sid) > 2 {
-		log.Logger.Infow("Found DB SID", "sid", sid[2])
+		log.CtxLogger(ctx).Infow("Found DB SID", "sid", sid[2])
 		return sid[2], nil
 	}
 
@@ -1035,7 +1035,7 @@ func (d *Discovery) discoverDatabaseSID(ctx context.Context, appSID string) (str
 func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, project, zone string) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	if sid == "" || instanceNumber == "" || project == "" || zone == "" {
-		log.Logger.Warn("To discover additional HANA nodes SID, instance number, project, and zone must be provided")
+		log.CtxLogger(ctx).Warn("To discover additional HANA nodes SID, instance number, project, and zone must be provided")
 		return res
 	}
 	sidLower := strings.ToLower(sid)
@@ -1051,7 +1051,7 @@ func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, pr
 	// has an exit status != 0. However, only 0 and 1 are considered true
 	// error exit codes for this script.
 	if result.Error != nil && result.ExitCode < 2 {
-		log.Logger.Warnw("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
 		return res
 	}
 
@@ -1068,10 +1068,10 @@ func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, pr
 	lines := strings.Split(result.StdOut, "\n")
 	pastHeaders := false
 	for _, line := range lines {
-		log.Logger.Info(line)
+		log.CtxLogger(ctx).Info(line)
 		cols := strings.Split(line, "|")
 		if len(cols) < 2 {
-			log.Logger.Info("Line has too few columns")
+			log.CtxLogger(ctx).Info("Line has too few columns")
 			continue
 		}
 		trimmed := strings.TrimSpace(cols[1])
@@ -1085,17 +1085,17 @@ func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, pr
 
 		hosts = append(hosts, trimmed)
 	}
-	log.Logger.Infow("Discovered other hosts", "sid", sid, "hosts", hosts)
+	log.CtxLogger(ctx).Infow("Discovered other hosts", "sid", sid, "hosts", hosts)
 
 	for _, host := range hosts {
 		hostAddrs, err := d.hostResolver(host)
 		if len(hostAddrs) == 0 || err != nil {
-			log.Logger.Warnw("Unable to resolve host", "host", host, "error", err)
+			log.CtxLogger(ctx).Warnw("Unable to resolve host", "host", host, "error", err)
 			continue
 		}
 		i, err := d.gceService.GetInstanceByIP(project, hostAddrs[0])
 		if err != nil {
-			log.Logger.Warnw("Error retrieving instance by IP", "IP", hostAddrs[0], "error", err)
+			log.CtxLogger(ctx).Warnw("Error retrieving instance by IP", "IP", hostAddrs[0], "error", err)
 			continue
 		}
 		iRes, _, _ := d.discoverInstance(project, zone, i.Name)
@@ -1143,7 +1143,7 @@ func (d *Discovery) discoverASCS(ctx context.Context, sid string, appComp *spb.S
 	}
 	res := d.execute(ctx, p)
 	if res.Error != nil {
-		log.Logger.Warnw("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return res.Error
 	}
 
@@ -1165,12 +1165,12 @@ func (d *Discovery) discoverASCS(ctx context.Context, sid string, appComp *spb.S
 
 	ascsURI, err := d.resolveHostToResource(ascsHost, cp)
 	if err != nil {
-		log.Logger.Warnw("Error resolving host to resource", "host", ascsHost, "error", err)
+		log.CtxLogger(ctx).Warnw("Error resolving host to resource", "host", ascsHost, "error", err)
 		return err
 	}
 	appComp.GetApplicationProperties().AscsUri = ascsURI
 
-	log.Logger.Infow("Discovered ASCS URI", "ascsURI", ascsURI)
+	log.CtxLogger(ctx).Infow("Discovered ASCS URI", "ascsURI", ascsURI)
 	return nil
 }
 
@@ -1215,7 +1215,7 @@ func (d *Discovery) discoverAppNFS(ctx context.Context, app *sappb.SAPInstance, 
 	}
 	res := d.execute(ctx, p)
 	if res.Error != nil {
-		log.Logger.Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return res.Error
 	}
 
@@ -1232,10 +1232,10 @@ func (d *Discovery) discoverAppNFS(ctx context.Context, app *sappb.SAPInstance, 
 			address := matches[1]
 			fs, err := d.gceService.GetFilestoreByIP(cp.GetProjectId(), "-", address)
 			if err != nil {
-				log.Logger.Errorw("Error retrieving filestore by IP", "error", err)
+				log.CtxLogger(ctx).Errorw("Error retrieving filestore by IP", "error", err)
 				continue
 			} else if len(fs.Instances) == 0 {
-				log.Logger.Warnw("No filestore found with IP", "address", address)
+				log.CtxLogger(ctx).Warnw("No filestore found with IP", "address", address)
 				continue
 			}
 
@@ -1266,7 +1266,7 @@ func (d *Discovery) discoverDatabaseNFS(ctx context.Context, dbComp *spb.SapDisc
 	}
 	res := d.execute(ctx, p)
 	if res.Error != nil {
-		log.Logger.Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return res.Error
 	}
 
@@ -1282,14 +1282,14 @@ func (d *Discovery) discoverDatabaseNFS(ctx context.Context, dbComp *spb.SapDisc
 			address := matches[1]
 			fs, err := d.gceService.GetFilestoreByIP(cp.GetProjectId(), "-", address)
 			if err != nil {
-				log.Logger.Errorw("Error retrieving filestore by IP", "error", err)
+				log.CtxLogger(ctx).Errorw("Error retrieving filestore by IP", "error", err)
 				continue
 			} else if len(fs.Instances) == 0 {
-				log.Logger.Warnw("No filestore found with IP", "address", address)
+				log.CtxLogger(ctx).Warnw("No filestore found with IP", "address", address)
 				continue
 			}
 
-			log.Logger.Infow("Discovered primary DB NFS", "address", address, "nfs", fs.Instances[0].Name)
+			log.CtxLogger(ctx).Infow("Discovered primary DB NFS", "address", address, "nfs", fs.Instances[0].Name)
 			dbComp.GetDatabaseProperties().SharedNfsUri = fs.Instances[0].Name
 			return nil
 		}

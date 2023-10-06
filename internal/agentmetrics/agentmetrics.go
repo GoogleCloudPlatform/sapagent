@@ -145,10 +145,10 @@ func validateParameters(params Parameters) error {
 // Start performs any initial checks and then begins the collect-submit loop.
 func (s *Service) Start(ctx context.Context) {
 	if !s.config.GetCollectionConfiguration().GetCollectAgentMetrics() {
-		log.Logger.Info("Agent process metrics not configured for collection")
+		log.CtxLogger(ctx).Info("Agent process metrics not configured for collection")
 		return
 	}
-	log.Logger.Info("Agent process metric collection beginning")
+	log.CtxLogger(ctx).Info("Agent process metric collection beginning")
 	go s.collectAndSubmitLoop(ctx)
 }
 
@@ -167,17 +167,17 @@ func (s *Service) collectAndSubmitLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Infow("Stopping agent metrics service", "reason", ctx.Err())
+			log.CtxLogger(ctx).Infow("Stopping agent metrics service", "reason", ctx.Err())
 			return
 		case <-healthTicker.C:
-			log.Logger.Debug("Collecting and submitting agent health")
+			log.CtxLogger(ctx).Debug("Collecting and submitting agent health")
 			if err := s.collectAndSubmitHealth(ctx); err != nil {
-				log.Logger.Warnw("Failure during agent health collection and submission", "error", err)
+				log.CtxLogger(ctx).Warnw("Failure during agent health collection and submission", "error", err)
 			}
 		case <-metricTicker.C:
-			log.Logger.Debug("Collecting and submitting agent metrics")
+			log.CtxLogger(ctx).Debug("Collecting and submitting agent metrics")
 			if err := s.collectAndSubmitMetrics(ctx); err != nil {
-				log.Logger.Warnw("Failure during agent metrics collection and submission", "error", err)
+				log.CtxLogger(ctx).Warnw("Failure during agent metrics collection and submission", "error", err)
 			}
 		}
 	}
@@ -189,7 +189,7 @@ func (s *Service) collectHealthStatus(ctx context.Context) bool {
 	healthy := true
 	for registrant, health := range statuses {
 		if !health {
-			log.Logger.Warnw("Registered service is unhealthy", "name", registrant)
+			log.CtxLogger(ctx).Warnw("Registered service is unhealthy", "name", registrant)
 			healthy = false
 		}
 	}
@@ -313,6 +313,6 @@ func (u *defaultUsageReader) read(ctx context.Context) (usage, error) {
 	if err != nil {
 		return usage{}, err
 	}
-	log.Logger.Debugw("Collected agent metrics", "cpu", cpu, "memory", mem)
+	log.CtxLogger(ctx).Debugw("Collected agent metrics", "cpu", cpu, "memory", mem)
 	return usage{cpu: cpu, memory: mem}, nil
 }

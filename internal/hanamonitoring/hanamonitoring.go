@@ -100,22 +100,22 @@ type database struct {
 func Start(ctx context.Context, params Parameters) bool {
 	cfg := params.Config.GetHanaMonitoringConfiguration()
 	if !cfg.GetEnabled() {
-		log.Logger.Info("HANA Monitoring disabled, not starting HANA Monitoring.")
+		log.CtxLogger(ctx).Info("HANA Monitoring disabled, not starting HANA Monitoring.")
 		return false
 	}
 	if len(cfg.GetQueries()) == 0 {
-		log.Logger.Info("HANA Monitoring enabled but no queries defined, not starting HANA Monitoring.")
+		log.CtxLogger(ctx).Info("HANA Monitoring enabled but no queries defined, not starting HANA Monitoring.")
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		return false
 	}
 	databases := connectToDatabases(ctx, params)
 	if len(databases) == 0 {
-		log.Logger.Info("No HANA databases to query, not starting HANA Monitoring.")
+		log.CtxLogger(ctx).Info("No HANA databases to query, not starting HANA Monitoring.")
 		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
 		return false
 	}
 
-	log.Logger.Info("Starting HANA Monitoring.")
+	log.CtxLogger(ctx).Info("Starting HANA Monitoring.")
 	go usagemetrics.LogActionDaily(usagemetrics.CollectHANAMonitoringMetrics)
 	go createWorkerPool(ctx, params, databases)
 	return true
@@ -132,7 +132,7 @@ func createWorkerPool(ctx context.Context, params Parameters, databases []*datab
 			sid, err := fetchSID(ctxTimeout, db)
 			cancel()
 			if err != nil {
-				log.Logger.Errorw("Error while fetching SID for HANA Instance", "host", db.instance.GetHost(), "error", err)
+				log.CtxLogger(ctx).Errorw("Error while fetching SID for HANA Instance", "host", db.instance.GetHost(), "error", err)
 			}
 			db.instance.Sid = sid
 		}
@@ -173,15 +173,15 @@ func queryAndSend(ctx context.Context, opts queryOptions) (bool, error) {
 	cancel()
 	if err != nil {
 		opts.failCount++
-		log.Logger.Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount, "error", err)
+		log.CtxLogger(ctx).Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount, "error", err)
 		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
 	} else {
 		opts.failCount = 0
-		log.Logger.Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", opts.sampleInterval)
+		log.CtxLogger(ctx).Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", opts.sampleInterval)
 	}
 
 	if opts.failCount >= maxQueryFailures {
-		log.Logger.Errorw("Query reached max failure count, not restarting.", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount)
+		log.CtxLogger(ctx).Errorw("Query reached max failure count, not restarting.", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount)
 		return false, err
 	}
 	// Schedule to insert this query back into the task queue after the sampleInterval.
@@ -200,7 +200,7 @@ func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, param
 	if err != nil {
 		return 0, 0, err
 	}
-	log.Logger.Infow("Successfuly executed: ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort())
+	log.CtxLogger(ctx).Infow("Successfuly executed: ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort())
 	var metrics []*mrpb.TimeSeries
 	for rows.Next() {
 		if err := rows.Scan(cols...); err != nil {
@@ -273,7 +273,7 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 		}
 		handle, err := databaseconnector.Connect(ctx, dbp)
 		if err != nil {
-			log.Logger.Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
+			log.CtxLogger(ctx).Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
 			continue
 		}
 		databases = append(databases, &database{queryFunc: handle.QueryContext, instance: i})

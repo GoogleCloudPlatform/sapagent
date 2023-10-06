@@ -115,40 +115,40 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	cf := parameters.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
 	slowPmf := parameters.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
 
-	log.Logger.Infow("Configuration option for collect_process_metrics", "collectprocessmetrics", cpm)
+	log.CtxLogger(ctx).Infow("Configuration option for collect_process_metrics", "collectprocessmetrics", cpm)
 
 	switch {
 	case !cpm:
-		log.Logger.Info("Not collecting Process Metrics.")
+		log.CtxLogger(ctx).Info("Not collecting Process Metrics.")
 		return false
 	case parameters.OSType == "windows":
-		log.Logger.Info("Process Metrics collection is not supported for windows platform.")
+		log.CtxLogger(ctx).Info("Process Metrics collection is not supported for windows platform.")
 		return false
 	case cf < minimumFrequency:
-		log.Logger.Infow("Process metrics frequency is smaller than minimum supported value.", "frequency", cf, "minimumfrequency", minimumFrequency)
-		log.Logger.Info("Not collecting Process Metrics.")
+		log.CtxLogger(ctx).Infow("Process metrics frequency is smaller than minimum supported value.", "frequency", cf, "minimumfrequency", minimumFrequency)
+		log.CtxLogger(ctx).Info("Not collecting Process Metrics.")
 		return false
 	case slowPmf < minimumFrequencyForSlowMoving:
-		log.Logger.Infow("Slow process metrics frequency is smaller than minimum supported value.", "frequency", slowPmf, "minimumfrequency", minimumFrequencyForSlowMoving)
-		log.Logger.Info("Not collecting Process Metrics.")
+		log.CtxLogger(ctx).Infow("Slow process metrics frequency is smaller than minimum supported value.", "frequency", slowPmf, "minimumfrequency", minimumFrequencyForSlowMoving)
+		log.CtxLogger(ctx).Info("Not collecting Process Metrics.")
 		return false
 	}
 
 	mc, err := parameters.MetricClient(ctx)
 	if err != nil {
-		log.Logger.Errorw("Failed to create Cloud Monitoring client", "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring client", "error", err)
 		usagemetrics.Error(usagemetrics.ProcessMetricsMetricClientCreateFailure) // Failed to create Cloud Monitoring client
 		return false
 	}
 
 	sapInstances := instancesWithCredentials(ctx, &parameters)
 	if len(sapInstances.GetInstances()) == 0 {
-		log.Logger.Error("No SAP Instances found. Cannot start process metrics collection.")
+		log.CtxLogger(ctx).Error("No SAP Instances found. Cannot start process metrics collection.")
 		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
 		return false
 	}
 
-	log.Logger.Info("Starting process metrics collection in background.")
+	log.CtxLogger(ctx).Info("Starting process metrics collection in background.")
 	go usagemetrics.LogActionDaily(usagemetrics.CollectProcessMetrics)
 	p := create(ctx, parameters, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
@@ -197,7 +197,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		skippedMetrics[metric] = true
 	}
 
-	log.Logger.Info("Creating SAP additional metrics collector for sapservices (active and enabled metric).")
+	log.CtxLogger(ctx).Info("Creating SAP additional metrics collector for sapservices (active and enabled metric).")
 	sapServiceCollector := &sapservice.InstanceProperties{
 		Config:          p.Config,
 		Client:          p.Client,
@@ -206,7 +206,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 	}
 
-	log.Logger.Info("Creating SAP control processes per process CPU, memory usage metrics collector.")
+	log.CtxLogger(ctx).Info("Creating SAP control processes per process CPU, memory usage metrics collector.")
 	sapStartCollector := &computeresources.SAPControlProcInstanceProperties{
 		Config:          p.Config,
 		Client:          p.Client,
@@ -215,7 +215,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 	}
 
-	log.Logger.Info("Creating infra migration event metrics collector.")
+	log.CtxLogger(ctx).Info("Creating infra migration event metrics collector.")
 	migrationCollector := infra.New(p.Config, p.Client, params.GCEAlphaService, skippedMetrics,
 		cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute))
 
@@ -226,7 +226,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	for _, instance := range p.SAPInstances.GetInstances() {
 		sids[instance.GetSapsid()] = true
 		if p.SAPInstances.GetLinuxClusterMember() && clusterCollectorCreated == false {
-			log.Logger.Infow("Creating cluster collector for instance", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating cluster collector for instance", "instance", instance)
 			clusterCollector := &cluster.InstanceProperties{
 				SAPInstance:     instance,
 				Config:          p.Config,
@@ -238,7 +238,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 			clusterCollectorCreated = true
 		}
 		if instance.GetType() == sapb.InstanceType_HANA {
-			log.Logger.Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", instance)
 			hanaComputeresourcesCollector := &computeresources.HanaInstanceProperties{
 				Config:      p.Config,
 				Client:      p.Client,
@@ -256,7 +256,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				PMBackoffPolicy:  cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 
-			log.Logger.Infow("Creating HANA collector for instance.", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating HANA collector for instance.", "instance", instance)
 			hanaCollector := &hana.InstanceProperties{
 				SAPInstance:        instance,
 				Config:             p.Config,
@@ -267,7 +267,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 
-			log.Logger.Infow("Creating FastMoving Collector for HANA", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for HANA", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
 				SAPInstance:     instance,
 				Config:          p.Config,
@@ -277,7 +277,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
-			log.Logger.Infow("Creating Netweaver per process CPU, memory usage metrics collector for instance.", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating Netweaver per process CPU, memory usage metrics collector for instance.", "instance", instance)
 			netweaverComputeresourcesCollector := &computeresources.NetweaverInstanceProperties{
 				Config:      p.Config,
 				Client:      p.Client,
@@ -301,7 +301,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 				PMBackoffPolicy:  cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 
-			log.Logger.Infow("Creating Netweaver collector for instance.", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating Netweaver collector for instance.", "instance", instance)
 			netweaverCollector := &netweaver.InstanceProperties{
 				SAPInstance:     instance,
 				Config:          p.Config,
@@ -311,7 +311,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
 
-			log.Logger.Infow("Creating FastMoving Collector for Netweaver", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for Netweaver", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
 				SAPInstance:     instance,
 				Config:          p.Config,
@@ -324,7 +324,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	}
 
 	if len(sids) != 0 {
-		log.Logger.Info("Creating maintenance mode collector.")
+		log.CtxLogger(ctx).Info("Creating maintenance mode collector.")
 		maintenanceModeCollector := &maintenance.InstanceProperties{
 			Config:          p.Config,
 			Client:          p.Client,
@@ -336,7 +336,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		p.Collectors = append(p.Collectors, maintenanceModeCollector)
 	}
 
-	log.Logger.Infow("Created process metrics collectors.", "numberofcollectors", len(p.Collectors))
+	log.CtxLogger(ctx).Infow("Created process metrics collectors.", "numberofcollectors", len(p.Collectors))
 	return p
 }
 
@@ -356,7 +356,7 @@ func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAP
 
 			instance.HanaDbUser, instance.HanaDbPassword, err = sapdiscovery.ReadHANACredentials(ctx, projectID, hanaConfig, params.GCEService)
 			if err != nil {
-				log.Logger.Warnw("HANA DB Credentials not set, will not collect HANA DB Query related metrics.", "error", err)
+				log.CtxLogger(ctx).Warnw("HANA DB Credentials not set, will not collect HANA DB Query related metrics.", "error", err)
 			}
 		}
 	}
@@ -395,7 +395,7 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Info("Process metrics context cancelled, exiting collectAndSend.")
+			log.CtxLogger(ctx).Info("Process metrics context cancelled, exiting collectAndSend.")
 			return lastErr
 		case <-heartbeatTicker.C:
 			p.HeartbeatSpec.Beat()
@@ -403,10 +403,10 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 			p.HeartbeatSpec.Beat()
 			sent, batchCount, err := p.collectAndSendFastMovingMetricsOnce(ctx, bo)
 			if err != nil {
-				log.Logger.Errorw("Error sending metrics", "error", err)
+				log.CtxLogger(ctx).Errorw("Error sending metrics", "error", err)
 				lastErr = err
 			}
-			log.Logger.Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", cf)
+			log.CtxLogger(ctx).Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", cf)
 		}
 	}
 }
@@ -415,7 +415,7 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 	var wg sync.WaitGroup
 	msgs := make([][]*mrpb.TimeSeries, len(p.FastMovingCollectors))
 	defer (func() { msgs = nil })() // free up reference in memory.
-	log.Logger.Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.Collectors))
+	log.CtxLogger(ctx).Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.Collectors))
 
 	for i, collector := range p.FastMovingCollectors {
 		wg.Add(1)
@@ -423,18 +423,18 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 			defer wg.Done()
 			msgs[slot], err = c.CollectWithRetry(ctx) // Each collector writes to its own slot.
 			if err != nil {
-				log.Logger.Errorw("Error collecting fast moving metrics", "error", err)
+				log.CtxLogger(ctx).Errorw("Error collecting fast moving metrics", "error", err)
 			}
-			log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
+			log.CtxLogger(ctx).Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
 		}(i, collector)
 	}
-	log.Logger.Debug("Waiting for fast moving collectors to finish.")
+	log.CtxLogger(ctx).Debug("Waiting for fast moving collectors to finish.")
 	wg.Wait()
 	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
 }
 
 func createWorkerPoolForSlowMetrics(ctx context.Context, p *Properties, bo *cloudmonitoring.BackOffIntervals) {
-	log.Logger.Infow("Creating worker pool for slow metrics.", "numberofCollectors", len(p.Collectors))
+	log.CtxLogger(ctx).Infow("Creating worker pool for slow metrics.", "numberofCollectors", len(p.Collectors))
 	wp := workerpool.New(len(p.Collectors))
 	for _, collector := range p.Collectors {
 		collector := collector
@@ -450,7 +450,7 @@ func createWorkerPoolForSlowMetrics(ctx context.Context, p *Properties, bo *clou
 
 func collectAndSendSlowMovingMetrics(ctx context.Context, p *Properties, c Collector, bo *cloudmonitoring.BackOffIntervals, wp *workerpool.WorkerPool) error {
 	sent, batchCount, err := collectAndSendSlowMovingMetricsOnce(ctx, p, c, bo)
-	log.Logger.Infow("Sent metrics from collectAndSendSlowMovingMetrics.", "sent", sent, "batches", batchCount, "error", err)
+	log.CtxLogger(ctx).Infow("Sent metrics from collectAndSendSlowMovingMetrics.", "sent", sent, "batches", batchCount, "error", err)
 	time.AfterFunc(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency())*time.Second, func() {
 		wp.Submit(func() {
 			collectAndSendSlowMovingMetrics(ctx, p, c, bo, wp)

@@ -58,7 +58,9 @@ type hostMetricsReaders struct {
 	dsr      *diskstatsreader.Reader
 }
 
-var metricsXML string = "<metrics></metrics>"
+var (
+	metricsXML string = "<metrics></metrics>"
+)
 
 func requestHandler(w http.ResponseWriter, r *http.Request) {
 	log.Logger.Debug("Writing metrics XML response")
@@ -69,10 +71,9 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 // if enabled in the configuration. Returns true if the collection goroutine is started, and false otherwise.
 func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, params Parameters) bool {
 	if !params.Config.GetProvideSapHostAgentMetrics().GetValue() {
-		log.Logger.Info("Not providing SAP Host Agent metrics")
+		log.CtxLogger(ctx).Info("Not providing SAP Host Agent metrics")
 		return false
 	}
-	log.Logger.Info("Starting provider for SAP Host Agent metrics")
 	go runHTTPServer(ctx, cancel)
 	go collectHostMetrics(ctx, params)
 	return true
@@ -83,12 +84,12 @@ func runHTTPServer(ctx context.Context, cancel context.CancelFunc) {
 	http.HandleFunc("/", requestHandler)
 	if err := http.ListenAndServe("localhost:18181", nil); err != nil {
 		usagemetrics.Error(usagemetrics.LocalHTTPListenerCreateFailure) // Could not create HTTP listener
-		log.Logger.Errorw("Could not start HTTP server on localhost:18181", "error", log.Error(err))
-		log.Logger.Info("Cancelling Host Metrics Context")
+		log.CtxLogger(ctx).Errorw("Could not start HTTP server on localhost:18181", "error", log.Error(err))
+		log.CtxLogger(ctx).Info("Cancelling Host Metrics Context")
 		cancel()
 		return
 	}
-	log.Logger.Info("HTTP server listening on localhost:18181 for SAP Host Agent connections")
+	log.CtxLogger(ctx).Info("HTTP server listening on localhost:18181 for SAP Host Agent connections")
 }
 
 // collectHostMetrics continuously collects metrics for the SAP Host Agent.
@@ -110,7 +111,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 	// Do not wait for the first 60s tick and start collection immediately
 	select {
 	case <-ctx.Done():
-		log.Logger.Info("Host metrics cancellation requested")
+		log.CtxLogger(ctx).Info("Host metrics cancellation requested")
 		return
 	default:
 		collectHostMetricsOnce(ctx, params, readers)
@@ -120,7 +121,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Logger.Info("Host metrics cancellation requested")
+			log.CtxLogger(ctx).Info("Host metrics cancellation requested")
 			return
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
@@ -131,7 +132,7 @@ func collectHostMetrics(ctx context.Context, params Parameters) {
 }
 
 func collectHostMetricsOnce(ctx context.Context, params Parameters, readers hostMetricsReaders) {
-	log.Logger.Info("Collecting host metrics...")
+	log.CtxLogger(ctx).Info("Collecting host metrics...")
 	params.HeartbeatSpec.Beat()
 
 	params.InstanceInfoReader.Read(ctx, params.Config, instanceinfo.NetworkInterfaceAddressMap)
@@ -154,5 +155,5 @@ func collectHostMetricsOnce(ctx context.Context, params Parameters, readers host
 	metricsCollection := &mpb.MetricsCollection{Metrics: allMetrics}
 	metricsXML = GenerateXML(metricsCollection)
 
-	log.Logger.Infow("Metrics collection complete", "metricscollected", len(metricsCollection.GetMetrics()))
+	log.CtxLogger(ctx).Infow("Metrics collection complete", "metricscollected", len(metricsCollection.GetMetrics()))
 }

@@ -72,6 +72,7 @@ type TimeSeriesQuerier interface {
 
 // CreateTimeSeriesWithRetry decorates TimeSeriesCreator.CreateTimeSeries with a retry mechanism.
 func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, req *monitoringpb.CreateTimeSeriesRequest, bo *BackOffIntervals) error {
+
 	attempt := 1
 	if bo == nil {
 		bo = NewDefaultBackOffIntervals()
@@ -80,9 +81,9 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 	err := backoff.Retry(func() error {
 		if err := client.CreateTimeSeries(ctx, req); err != nil {
 			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.Logger.Errorw("Error in CreateTimeSeries, Permission denied - Enable the Monitoring Metrics Writer IAM role for the Service Account", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Errorw("Error in CreateTimeSeries, Permission denied - Enable the Monitoring Metrics Writer IAM role for the Service Account", "attempt", attempt, "error", err)
 			} else {
-				log.Logger.Errorw("Error in CreateTimeSeries", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Errorw("Error in CreateTimeSeries", "attempt", attempt, "error", err)
 			}
 			attempt++
 			return err
@@ -91,7 +92,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 	}, ShortConstantBackOffPolicy(ctx, bo.ShortConstant, 2))
 
 	if err != nil {
-		log.Logger.Errorw("CreateTimeSeries retry limit exceeded", "request", req)
+		log.CtxLogger(ctx).Errorw("CreateTimeSeries retry limit exceeded", "request", req)
 		return err
 	}
 	return nil
@@ -103,6 +104,7 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 		attempt = 1
 		res     []*mrpb.TimeSeriesData
 	)
+
 	if bo == nil {
 		bo = NewDefaultBackOffIntervals()
 	}
@@ -112,16 +114,16 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 		res, err = client.QueryTimeSeries(ctx, req)
 		if err != nil {
 			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.Logger.Errorw("Error in QueryTimeSeries, Permission denied - Enable the Monitoring Viewer IAM role for the Service Account", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Errorw("Error in QueryTimeSeries, Permission denied - Enable the Monitoring Viewer IAM role for the Service Account", "attempt", attempt, "error", err)
 			} else {
-				log.Logger.Errorw("Error in QueryTimeSeries", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Errorw("Error in QueryTimeSeries", "attempt", attempt, "error", err)
 			}
 			attempt++
 		}
 		return err
 	}, LongExponentialBackOffPolicy(ctx, bo.LongExponential, 4, time.Minute, 15*time.Second))
 	if err != nil {
-		log.Logger.Errorw("QueryTimeSeries retry limit exceeded", "request", req, "error", err, "attempt", attempt)
+		log.CtxLogger(ctx).Errorw("QueryTimeSeries retry limit exceeded", "request", req, "error", err, "attempt", attempt)
 		return nil, err
 	}
 	return res, nil
@@ -133,7 +135,7 @@ func LongExponentialBackOffPolicy(ctx context.Context, initial time.Duration, re
 	exp.InitialInterval = initial
 	exp.MaxInterval = maxInterval
 	exp.MaxElapsedTime = maxElapsedTime
-	log.Logger.Info("LongExponentialBackOffPolicy", "exp", exp)
+	log.CtxLogger(ctx).Info("LongExponentialBackOffPolicy", "exp", exp)
 	return backoff.WithContext(backoff.WithMaxRetries(exp, retries), ctx)
 }
 
@@ -144,7 +146,7 @@ func LongExponentialBackOffPolicyForProcessMetrics(ctx context.Context, initial 
 	exp.MaxInterval = maxInterval
 	exp.MaxElapsedTime = maxElapsedTime
 	exp.Multiplier = 2
-	log.Logger.Info("LongExponentialBackOffPolicyForProcessMetrics", "exp", exp)
+	log.CtxLogger(ctx).Info("LongExponentialBackOffPolicyForProcessMetrics", "exp", exp)
 	return backoff.WithContext(backoff.WithMaxRetries(exp, retries), ctx)
 }
 
@@ -164,7 +166,7 @@ func SendTimeSeries(ctx context.Context, timeSeries []*mrpb.TimeSeries, timeSeri
 		batchTimeSeries = append(batchTimeSeries, t)
 
 		if len(batchTimeSeries) == maxTSPerRequest {
-			log.Logger.Debug("Maximum batch size has been reached, sending the batch.")
+			log.CtxLogger(ctx).Debug("Maximum batch size has been reached, sending the batch.")
 			batchCount++
 			if err := sendBatch(ctx, batchTimeSeries, timeSeriesCreator, bo, projectID); err != nil {
 				return sent, batchCount, err
@@ -185,7 +187,7 @@ func SendTimeSeries(ctx context.Context, timeSeries []*mrpb.TimeSeries, timeSeri
 
 // sendBatch sends one batch of metrics to cloud monitoring using an API call with retries. Returns an error in case of failures.
 func sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, timeSeriesCreator TimeSeriesCreator, bo *BackOffIntervals, projectID string) error {
-	log.Logger.Debugw("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
+	log.CtxLogger(ctx).Infow("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
 
 	req := &monitoringpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", projectID),

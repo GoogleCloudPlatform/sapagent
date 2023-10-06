@@ -54,6 +54,7 @@ Note:
 package log
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
@@ -64,11 +65,16 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Logger used for logging structured messages
-var Logger *zap.SugaredLogger
-var level string
-var logfile string
-var cloudCore *CloudCore
+var (
+	// Logger used for logging structured messages
+	Logger    *zap.SugaredLogger
+	level     string
+	logfile   string
+	cloudCore *CloudCore
+
+	// loggerMap maps services identified by their serviceNames to respective SugaredLoggers.
+	loggerMap map[string]*zap.SugaredLogger
+)
 
 type (
 	// Parameters for setting up logging
@@ -86,10 +92,18 @@ type (
 	}
 )
 
+// contextKeyType represents context key Service
+type contextKeyType string
+
+// CtxKey is a key of the type contextKeyType for context logging.
+const CtxKey contextKeyType = "context"
+
+// init returns default logger with no context.
 func init() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 	Logger = logger.Sugar()
+	loggerMap = make(map[string]*zap.SugaredLogger)
 }
 
 // SetupLogging uses the agent configuration to set up the file Logger.
@@ -180,6 +194,23 @@ func SetupLoggingToDiscard() {
 	defer coreLogger.Sync()
 	Logger = coreLogger.Sugar()
 	log.SetFlags(0)
+}
+
+// SetCtx returns context objects with additional key value pairs.
+func SetCtx(ctx context.Context, key, value string) context.Context {
+	return context.WithValue(ctx, contextKeyType(key), value)
+}
+
+// CtxLogger  returns a zap logger with as much context as possible
+func CtxLogger(ctx context.Context) *zap.SugaredLogger {
+	if serviceName, ok := ctx.Value(CtxKey).(string); ok {
+		if logger, exists := loggerMap[serviceName]; exists {
+			return logger
+		}
+		loggerMap[serviceName] = Logger.With(zap.String("context", serviceName))
+		return loggerMap[serviceName]
+	}
+	return Logger
 }
 
 // GetLevel will return the current logging level as a string.

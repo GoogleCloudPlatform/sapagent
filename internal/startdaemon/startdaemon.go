@@ -84,11 +84,6 @@ var (
 	})
 )
 
-type serviceNameKeyType string
-
-// service is a key of the type serviceNameKeyType for context logging.
-const service serviceNameKeyType = "ServiceName"
-
 // Daemon has args for startdaemon subcommand.
 type Daemon struct {
 	configFilePath string
@@ -213,7 +208,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	var healthMonitor agentmetrics.HealthMonitor = &heartbeat.NullMonitor{}
 	var err error
 	if d.config.GetCollectionConfiguration().GetCollectAgentMetrics() {
-		amCtx := context.WithValue(ctx, service, "AgentMetrics")
+		amCtx := log.SetCtx(ctx, "context", "AgentMetrics")
 		healthMonitor, err = startAgentMetricsService(amCtx, d.config)
 		if err != nil {
 			return
@@ -277,7 +272,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.
 		wlmparams.Remote = true
 		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
-		wmCtx := context.WithValue(ctx, service, "WorkloadManagerMetrics")
+		wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
 		workloadmanager.StartMetricsCollection(wmCtx, wlmparams)
 		go usagemetrics.LogRunningDaily()
 		waitForShutdown(ctx, shutdownch)
@@ -302,24 +297,24 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	}
 
 	// start the Host Metrics Collection
-	hmCtx := context.WithValue(ctx, service, "HostMetrics")
+	hmCtx := log.SetCtx(ctx, "context", "HostMetrics")
 	hmp := HostMetricsParams{d.config, instanceInfoReader, cmr, healthMonitor}
 	hmp.startCollection(hmCtx)
 
 	// Start the Workload Manager metrics collection
-	wmCtx := context.WithValue(ctx, service, "WorkloadManagerMetrics")
+	wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
 	wmp := WorkloadManagerParams{wlmparams, instanceInfoReader, goos}
 	wmp.startCollection(wmCtx)
 
 	// Start Process Metrics Collection
-	pmCtx := context.WithValue(ctx, service, "ProcessMetrics")
+	pmCtx := log.SetCtx(ctx, "context", "ProcessMetrics")
 	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceAlphaService}
 	pmp.startCollection(pmCtx)
 
 	// Start SAP System Discovery
 	// TODO: Use the global cloud logging client for sap system.
 	logClient := log.CloudLoggingClient(ctx, d.config.GetCloudProperties().ProjectId)
-	ssdCtx := context.WithValue(ctx, service, "SAPSystemDiscovery")
+	ssdCtx := log.SetCtx(ctx, "context", "SAPSystemDiscovery")
 	if logClient != nil {
 		system.StartSAPSystemDiscovery(ssdCtx, d.config, gceService, wlmService, logClient.Logger("google-cloud-sap-agent"))
 		log.FlushCloudLog()
@@ -329,7 +324,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	}
 
 	// Start HANA Monitoring
-	hanaCtx := context.WithValue(ctx, service, "HANAMonitoring")
+	hanaCtx := log.SetCtx(ctx, "context", "HANAMonitoring")
 	hanamonitoring.Start(hanaCtx, hanamonitoring.Parameters{
 		Config:            d.config,
 		GCEService:        gceService,
@@ -350,7 +345,7 @@ func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heart
 	heartMonitor, err := heartbeat.NewMonitor(heartbeatParams)
 	healthMonitor = heartMonitor
 	if err != nil {
-		log.Logger.Error("Failed to create heartbeat monitor", log.Error(err))
+		log.CtxLogger(ctx).Error("Failed to create heartbeat monitor", log.Error(err))
 		usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
 		return nil, err
 	}
@@ -361,7 +356,7 @@ func startAgentMetricsService(ctx context.Context, c *cpb.Configuration) (*heart
 	}
 	agentmetricsService, err := agentmetrics.NewService(ctx, agentMetricsParams)
 	if err != nil {
-		log.Logger.Error("Failed to create agent metrics service", log.Error(err))
+		log.CtxLogger(ctx).Error("Failed to create agent metrics service", log.Error(err))
 		usagemetrics.Error(usagemetrics.AgentMetricsServiceCreateFailure)
 		return nil, err
 	}
@@ -449,7 +444,7 @@ func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
 			id = usagemetrics.CollectionDefinitionValidateFailure
 		}
 		usagemetrics.Error(id)
-		log.Logger.Error(err)
+		log.CtxLogger(ctx).Error(err)
 	} else {
 		wmp.wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
 		wmp.wlmparams.OSType = wmp.goos
