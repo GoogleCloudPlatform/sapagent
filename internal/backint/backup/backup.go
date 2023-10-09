@@ -222,6 +222,11 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 	chunkError := false
 	log.Logger.Infow("Sectioning file into equal sized chunks for parallel upload", "fileName", p.fileName, "fileSize", p.fileSize, "parallelStreams", p.config.GetParallelStreams(), "sectionLength", sectionLength, "externalBackupID", p.externalBackupID)
 	for i := int64(0); i < p.config.GetParallelStreams(); i++ {
+		// Since wp.Submit() is non-blocking, the for loop might progress before
+		// the task is executed in the workerpool. Create a copy of the loop
+		// variable outside of Submit() to ensure we use the correct value.
+		// Reference: https://go.dev/doc/faq#closures_and_goroutines
+		i := i
 		p.wp.Submit(func() {
 			offset := sectionLength * i
 			length := sectionLength
