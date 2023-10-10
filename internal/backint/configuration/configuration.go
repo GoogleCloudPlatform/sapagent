@@ -299,5 +299,8 @@ func marshalLegacyParameters(parameterFile string, config *bpb.BackintConfigurat
 	if err := os.WriteFile(configPath, configData, 0666); err != nil {
 		log.Logger.Errorw("Unable to write JSON parameters file", "configPath", configPath, "err", err)
 	}
+	if err := os.Chmod(configPath, 0666); err != nil {
+		log.Logger.Errorw("Unable to change permissions on JSON parameters file", "configPath", configPath, "err", err)
+	}
 	log.Logger.Infow("Successfully translated text parameters file to JSON", "parameterFileText", parameterFile, "parameterFileJSON", configPath)
 }

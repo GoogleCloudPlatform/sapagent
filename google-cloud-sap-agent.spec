@@ -26,11 +26,11 @@ Obsoletes: google-sapnetweavermonitoring-agent
 %files
 %defattr(-,root,root)
 %attr(755,root,root) %{_bindir}/google_cloud_sap_agent
-%config(noreplace) %attr(0644,root,root) %{_confdir}/configuration.json
+%config(noreplace) %attr(0666,root,root) %{_confdir}/configuration.json
 %attr(0644,root,root) %{_servicedir}/%{name}.service
-%attr(0744,root,root) %{_docdir}/LICENSE
-%attr(0744,root,root) %{_docdir}/README.md
-%attr(0744,root,root) %{_docdir}/THIRD_PARTY_NOTICES
+%attr(0644,root,root) %{_docdir}/LICENSE
+%attr(0644,root,root) %{_docdir}/README.md
+%attr(0644,root,root) %{_docdir}/THIRD_PARTY_NOTICES
 
 %pre
 # If we need to check install / upgrade ($1 = 1 is install, $1 = 2 is upgrade)

@@ -107,6 +107,16 @@ func defaultReadFile(numNil int) func(string) ([]byte, error) {
 	}
 }
 
+func defaultChmod(numNil int) func(string, os.FileMode) error {
+	return func(string, os.FileMode) error {
+		if numNil > 0 {
+			numNil--
+			return nil
+		}
+		return cmpopts.AnyError
+	}
+}
+
 // defaultStatNotExist returns os.ErrNotExist after numNil is exhausted.
 func defaultStatNotExist(numNil int) func(string) (os.FileInfo, error) {
 	return func(string) (os.FileInfo, error) {
@@ -260,11 +270,22 @@ func TestInstallBackintHandler(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "FailChmodParameterFile",
+			b: InstallBackint{
+				stat:      defaultStatNotExist(1),
+				mkdir:     defaultMkdir(2),
+				writeFile: defaultWriteFile(2),
+				chmod:     defaultChmod(0),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "FailWriteBackintSymlink",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(2),
+				chmod:     defaultChmod(1),
 				symlink:   defaultSymlink(0),
 			},
 			want: cmpopts.AnyError,
@@ -275,6 +296,7 @@ func TestInstallBackintHandler(t *testing.T) {
 				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(2),
+				chmod:     defaultChmod(1),
 				symlink:   defaultSymlink(1),
 			},
 			want: cmpopts.AnyError,
@@ -285,6 +307,7 @@ func TestInstallBackintHandler(t *testing.T) {
 				stat:      defaultStatNotExist(1),
 				mkdir:     defaultMkdir(2),
 				writeFile: defaultWriteFile(2),
+				chmod:     defaultChmod(1),
 				symlink:   defaultSymlink(2),
 			},
 			want: nil,
@@ -347,6 +370,19 @@ func TestInstallBackintHandler(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "FailedToChmodFile",
+			b: InstallBackint{
+				stat:      defaultStat(2),
+				rename:    defaultRename(1),
+				mkdir:     defaultMkdir(1),
+				glob:      defaultGlob(1),
+				readFile:  defaultReadFile(1),
+				writeFile: defaultWriteFile(3),
+				chmod:     defaultChmod(0),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "SuccessWithMigration",
 			b: InstallBackint{
 				stat:      defaultStat(2),
@@ -355,6 +391,7 @@ func TestInstallBackintHandler(t *testing.T) {
 				glob:      defaultGlob(1),
 				readFile:  defaultReadFile(1),
 				writeFile: defaultWriteFile(3),
+				chmod:     defaultChmod(2),
 				symlink:   defaultSymlink(2),
 			},
 			want: nil,

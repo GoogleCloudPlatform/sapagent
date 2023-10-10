@@ -60,6 +60,9 @@ type (
 
 	// readFileFunc provides a testable replacement for os.ReadFile.
 	readFileFunc func(string) ([]byte, error)
+
+	// chmodFunc provides a testable replacement for os.Chmod.
+	chmodFunc func(string, os.FileMode) error
 )
 
 // InstallBackint has args for installbackint subcommands.
@@ -74,6 +77,7 @@ type InstallBackint struct {
 	rename    renameFunc
 	glob      globFunc
 	readFile  readFileFunc
+	chmod     chmodFunc
 }
 
 // Name implements the subcommand interface for installbackint.
@@ -136,8 +140,9 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	b.rename = os.Rename
 	b.glob = filepath.Glob
 	b.readFile = os.ReadFile
+	b.chmod = os.Chmod
 	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.sid)); err != nil {
-		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent-backint.log")
+		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent-installbackint.log")
 		log.Logger.Errorw("InstallBackint failed", "sid", b.sid, "err", err)
 		usagemetrics.Error(usagemetrics.InstallBackintFailure)
 		return subcommands.ExitFailure
@@ -157,7 +162,9 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return fmt.Errorf("unable to migrate old agent. err: %v", err)
 	}
 
-	backintInstallDir := baseInstallDir + "/backint/backint-gcs"
+	// Ensure we don't trip the Kokoro replace_func by separating the strings.
+	backintInstallDir := baseInstallDir + "/backint" + "/backint-gcs"
+	log.Logger.Infow("Creating Backint directories", "backintInstallDir", backintInstallDir, "hdbconfigDir", baseInstallDir+"/hdbconfig")
 	if err := b.mkdir(backintInstallDir, os.ModePerm); err != nil {
 		return fmt.Errorf("unable to create backint install directory: %s. err: %v", backintInstallDir, err)
 	}
@@ -179,6 +186,9 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	if err := b.writeFile(parameterPath, configData, 0666); err != nil {
 		return fmt.Errorf("unable to write parameters.json file: %s. err: %v", parameterPath, err)
 	}
+	if err := b.chmod(parameterPath, 0666); err != nil {
+		return fmt.Errorf("unable to chmod parameters.json file: %s. err: %v", parameterPath, err)
+	}
 
 	log.Logger.Infow("Creating Backint symlinks", "dir", baseInstallDir)
 	backintSymlink := baseInstallDir + "/hdbbackint"
@@ -192,7 +202,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return fmt.Errorf("unable to create parameters.json symlink: %s for %s. err: %v", parameterSymlink, parameterPath, err)
 	}
 
-	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent-backint.log")
+	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent-installbackint.log")
 	log.Logger.Info("InstallBackint succeeded")
 	usagemetrics.Action(usagemetrics.InstallBackintFinished)
 	return nil
@@ -202,8 +212,9 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 // contains the old agent code (a jre directory is present). If migrating, all
 // parameter.txt files are then copied to the backint-gcs folder.
 func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir string) error {
-	backintInstallDir := baseInstallDir + "/backint/backint-gcs"
-	backintOldDir := baseInstallDir + "/backint/backint-gcs-old"
+	// Ensure we don't trip the Kokoro replace_func by separating the strings.
+	backintInstallDir := baseInstallDir + "/backint" + "/backint-gcs"
+	backintOldDir := baseInstallDir + "/backint" + "/backint-gcs-old"
 	jreInstallDir := backintInstallDir + "/jre"
 
 	if _, err := b.stat(jreInstallDir); os.IsNotExist(err) {
@@ -233,8 +244,11 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 			return fmt.Errorf("unable to read parameter file: %s, err: %v", fileName, err)
 		}
 		destination := backintInstallDir + "/" + filepath.Base(fileName)
-		if err := b.writeFile(destination, data, os.ModePerm); err != nil {
+		if err := b.writeFile(destination, data, 0666); err != nil {
 			return fmt.Errorf("unable to write parameter file: %s, err: %v", destination, err)
+		}
+		if err := b.chmod(destination, 0666); err != nil {
+			return fmt.Errorf("unable to chmod parameters file: %s. err: %v", destination, err)
 		}
 	}
 	log.Logger.Infow("Successfully migrated old agent")
