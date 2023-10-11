@@ -45,6 +45,7 @@ message BackintConfiguration {
   string backup_level = 21;
   int64 log_delay_sec = 22;
   google.protobuf.BoolValue log_to_cloud = 23;
+  string recovery_bucket = 24;
 }
 
 enum LogLevel {

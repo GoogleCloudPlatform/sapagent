@@ -172,9 +172,9 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return fmt.Errorf("unable to create hdbconfig install directory: %s. err: %v", baseInstallDir+"/hdbconfig", err)
 	}
 
-	log.Logger.Infow("Creating Backint files", "dir", backintInstallDir)
 	backintPath := backintInstallDir + "/backint"
 	parameterPath := backintInstallDir + "/parameters.json"
+	log.Logger.Infow("Creating Backint files", "backintPath", backintPath, "parameterPath", parameterPath)
 	if err := b.writeFile(backintPath, hdbbackintScript, os.ModePerm); err != nil {
 		return fmt.Errorf("unable to write backint script: %s. err: %v", backintPath, err)
 	}
@@ -190,9 +190,9 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return fmt.Errorf("unable to chmod parameters.json file: %s. err: %v", parameterPath, err)
 	}
 
-	log.Logger.Infow("Creating Backint symlinks", "dir", baseInstallDir)
 	backintSymlink := baseInstallDir + "/hdbbackint"
 	parameterSymlink := baseInstallDir + "/hdbconfig/parameters.json"
+	log.Logger.Infow("Creating Backint symlinks", "backintSymlink", backintSymlink, "parameterSymlink", parameterSymlink)
 	os.Remove(backintSymlink)
 	os.Remove(parameterSymlink)
 	if err := b.symlink(backintPath, backintSymlink); err != nil {

@@ -126,6 +126,11 @@ func (p *Parameters) readParametersFile(read ReadConfigFile) (int, error) {
 		return usagemetrics.BackintMalformedConfigFile, err
 	}
 	proto.Merge(p.Config, config)
+
+	if p.Config.GetFunction() == bpb.Function_RESTORE && p.Config.GetRecoveryBucket() != "" {
+		p.Config.Bucket = p.Config.GetRecoveryBucket()
+		log.Logger.Warnw("bucket overridden by recovery_bucket for RESTORE operation", "bucket", p.Config.GetBucket())
+	}
 	if err := p.validateParameters(); err != nil {
 		return usagemetrics.BackintMalformedConfigFile, err
 	}
@@ -233,7 +238,7 @@ func unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration,
 		if line == "" {
 			continue
 		}
-		split := strings.Split(line, " ")
+		split := strings.SplitN(line, " ", 2)
 		if len(split) < 2 && line != "#DISABLE_COMPRESSION" && line != "#DUMP_DATA" && line != "#DISABLE_CLOUD_LOGGING" {
 			return nil, fmt.Errorf("empty value for parameter: %s", line)
 		}
