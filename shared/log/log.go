@@ -83,7 +83,6 @@ type (
 		CloudLoggingClient *logging.Client
 		OSType             string
 		Level              zapcore.Level
-		SubCommandName     string
 		LogFileName        string
 		CloudLogName       string
 	}
@@ -120,8 +119,6 @@ func SetupLogging(params Parameters) {
 		MaxBackups: 3,
 	}
 	_, err := fileOrPrintLogger.Write(make([]byte, 0))
-	// make the log file world read+write
-	os.Chmod(params.LogFileName, 0666)
 	fileOrPrintLogWriter := zapcore.AddSync(fileOrPrintLogger)
 	if err != nil {
 		// Could not write to the log file, write to console instead

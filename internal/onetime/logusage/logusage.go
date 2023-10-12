@@ -82,7 +82,7 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
-	lp, ok := args[1].(log.Parameters)
+	_, ok := args[1].(log.Parameters)
 	if !ok {
 		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
@@ -100,7 +100,7 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
-	onetime.SetupOneTimeLogging(lp, l.Name(), log.StringLevelToZapcore(l.logLevel))
+	// Do not call SetupOnetimeLogging so file logging does not happen for this OTE
 	return l.logUsageHandler(cloudProps)
 }
 

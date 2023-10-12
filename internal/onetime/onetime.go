@@ -21,6 +21,7 @@ package onetime
 import (
 	"context"
 	"fmt"
+	"os"
 
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
@@ -84,6 +85,8 @@ func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zap
 	params.LogFileName = prefix + subcommandName + ".log"
 	params.CloudLogName = "google-cloud-sap-agent-" + subcommandName
 	log.SetupLogging(params)
+	// make all of the OTE log files global read + write
+	os.Chmod(params.LogFileName, 0666)
 	return params
 }
 
