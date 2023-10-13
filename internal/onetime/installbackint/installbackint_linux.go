@@ -28,6 +28,7 @@ import (
 
 	"flag"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
+	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -49,8 +50,8 @@ type (
 	// symlinkFunc provides a testable replacement for os.Symlink.
 	symlinkFunc func(string, string) error
 
-	// statFunc provides a testable replacement for os.Stat.
-	statFunc func(string) (os.FileInfo, error)
+	// statFunc provides a testable replacement for unix.Stat.
+	statFunc func(string, *unix.Stat_t) error
 
 	// renameFunc provides a testable replacement for os.Rename.
 	renameFunc func(string, string) error
@@ -63,6 +64,9 @@ type (
 
 	// chmodFunc provides a testable replacement for os.Chmod.
 	chmodFunc func(string, os.FileMode) error
+
+	// chownFunc provides a testable replacement for os.Chown.
+	chownFunc func(string, int, int) error
 )
 
 // InstallBackint has args for installbackint subcommands.
@@ -78,6 +82,7 @@ type InstallBackint struct {
 	glob      globFunc
 	readFile  readFileFunc
 	chmod     chmodFunc
+	chown     chownFunc
 }
 
 // Name implements the subcommand interface for installbackint.
@@ -136,11 +141,12 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	b.mkdir = os.MkdirAll
 	b.writeFile = os.WriteFile
 	b.symlink = os.Symlink
-	b.stat = os.Stat
+	b.stat = unix.Stat
 	b.rename = os.Rename
 	b.glob = filepath.Glob
 	b.readFile = os.ReadFile
 	b.chmod = os.Chmod
+	b.chown = os.Chown
 	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.sid)); err != nil {
 		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent-installbackint.log")
 		log.Logger.Errorw("InstallBackint failed", "sid", b.sid, "err", err)
@@ -155,21 +161,27 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallDir string) error {
 	log.Logger.Info("InstallBackint starting")
 	usagemetrics.Action(usagemetrics.InstallBackintStarted)
-	if _, err := b.stat(baseInstallDir); err != nil {
+	var stat unix.Stat_t
+	if err := b.stat(baseInstallDir, &stat); err != nil {
 		return fmt.Errorf("unable to stat base install directory: %s, ensure the sid is correct. err: %v", baseInstallDir, err)
 	}
-	if err := b.migrateOldAgent(ctx, baseInstallDir); err != nil {
+	log.Logger.Infow("Base directory info", "baseInstallDir", baseInstallDir, "uid", stat.Uid, "gid", stat.Gid)
+	if err := b.migrateOldAgent(ctx, baseInstallDir, int(stat.Uid), int(stat.Gid)); err != nil {
 		return fmt.Errorf("unable to migrate old agent. err: %v", err)
 	}
 
 	// Ensure we don't trip the Kokoro replace_func by separating the strings.
 	backintInstallDir := baseInstallDir + "/backint" + "/backint-gcs"
 	log.Logger.Infow("Creating Backint directories", "backintInstallDir", backintInstallDir, "hdbconfigDir", baseInstallDir+"/hdbconfig")
-	if err := b.mkdir(backintInstallDir, os.ModePerm); err != nil {
-		return fmt.Errorf("unable to create backint install directory: %s. err: %v", backintInstallDir, err)
+	// Create /backint first so permissions are set for the /backint-gcs subdir.
+	if err := b.createAndChownDir(ctx, baseInstallDir+"/backint", int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
 	}
-	if err := b.mkdir(baseInstallDir+"/hdbconfig", os.ModePerm); err != nil {
-		return fmt.Errorf("unable to create hdbconfig install directory: %s. err: %v", baseInstallDir+"/hdbconfig", err)
+	if err := b.createAndChownDir(ctx, backintInstallDir, int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
+	}
+	if err := b.createAndChownDir(ctx, baseInstallDir+"/hdbconfig", int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
 	}
 
 	backintPath := backintInstallDir + "/backint"
@@ -211,13 +223,13 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 // migrateOldAgent moves the backint-gcs folder to backint-gcs-old if it
 // contains the old agent code (a jre directory is present). If migrating, all
 // parameter.txt files are then copied to the backint-gcs folder.
-func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir string) error {
+func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir string, uid, gid int) error {
 	// Ensure we don't trip the Kokoro replace_func by separating the strings.
 	backintInstallDir := baseInstallDir + "/backint" + "/backint-gcs"
 	backintOldDir := baseInstallDir + "/backint" + "/backint-gcs-old"
 	jreInstallDir := backintInstallDir + "/jre"
 
-	if _, err := b.stat(jreInstallDir); os.IsNotExist(err) {
+	if err := b.stat(jreInstallDir, &unix.Stat_t{}); os.IsNotExist(err) {
 		log.Logger.Infow("Old Backint agent not found, skipping migration", "jreInstallDir", jreInstallDir)
 		return nil
 	} else if err != nil {
@@ -228,9 +240,17 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 	if err := b.rename(backintInstallDir, backintOldDir); err != nil {
 		return fmt.Errorf("unable to move old backint install directory, oldpath: %s newpath: %s, err: %v", backintInstallDir, backintOldDir, err)
 	}
-	if err := b.mkdir(backintInstallDir, os.ModePerm); err != nil {
-		return fmt.Errorf("unable to create backint install directory: %s, err: %v", backintInstallDir, err)
+	// Create /backint first so permissions are set for the /backint-gcs subdir.
+	if err := b.createAndChownDir(ctx, baseInstallDir+"/backint", uid, gid); err != nil {
+		return err
 	}
+	if err := b.createAndChownDir(ctx, backintInstallDir, uid, gid); err != nil {
+		return err
+	}
+	if err := b.createAndChownDir(ctx, backintOldDir, uid, gid); err != nil {
+		return err
+	}
+
 	txtFiles, err := b.glob(backintOldDir + "/*.txt")
 	if err != nil {
 		return fmt.Errorf("unable to glob .txt files: %s, err: %v", backintOldDir+"/*.txt", err)
@@ -252,5 +272,17 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 		}
 	}
 	log.Logger.Infow("Successfully migrated old agent")
+	return nil
+}
+
+// createAndChownDir creates the directory if it does not exist
+// and chowns to the user and group.
+func (b *InstallBackint) createAndChownDir(ctx context.Context, dir string, uid, gid int) error {
+	if err := b.mkdir(dir, os.ModePerm); err != nil {
+		return fmt.Errorf("unable to create directory: %s. err: %v", dir, err)
+	}
+	if err := b.chown(dir, uid, gid); err != nil {
+		return fmt.Errorf("unable to chown directory: %s, uid: %d, gid: %d, err: %v", dir, uid, gid, err)
+	}
 	return nil
 }
