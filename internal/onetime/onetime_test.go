@@ -35,14 +35,14 @@ func TestSetupOneTimeLogging(t *testing.T) {
 			name:             "Windows",
 			os:               "windows",
 			subCommandName:   "logusage",
-			want:             `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-logusage.log`,
+			want:             `C:\Program Files\Google\google-cloud-sap-agent\logs\logusage.log`,
 			wantcloudlogname: "google-cloud-sap-agent-logusage",
 		},
 		{
 			name:             "Linux",
 			os:               "linux",
 			subCommandName:   "snapshot",
-			want:             `/var/log/google-cloud-sap-agent-snapshot.log`,
+			want:             `/var/log/google-cloud-sap-agent/snapshot.log`,
 			wantcloudlogname: "google-cloud-sap-agent-snapshot",
 		},
 	}

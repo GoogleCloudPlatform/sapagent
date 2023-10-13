@@ -130,9 +130,14 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	// Setup demon logging with default config, till we read it from the config file.
 	d.lp.CloudLogName = `google-cloud-sap-agent`
 	d.lp.LogFileName = `/var/log/google-cloud-sap-agent.log`
+	oteDir := `/var/log/google-cloud-sap-agent`
 	if d.lp.OSType == "windows" {
 		d.lp.LogFileName = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent.log`
+		oteDir = `C:\Program Files\Google\google-cloud-sap-agent\logs`
 	}
+	// Create the directory for one time logs and let sidadm users create files under it.
+	os.MkdirAll(oteDir, 0755)
+	os.Chmod(oteDir, 0777)
 	log.SetupLogging(d.lp)
 
 	return d.startdaemonHandler(ctx)

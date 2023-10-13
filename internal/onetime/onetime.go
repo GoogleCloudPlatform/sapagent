@@ -46,13 +46,6 @@ type (
 	}
 )
 
-const (
-	// LinuxOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
-	LinuxOneTimeLogPrefix = `/var/log/google-cloud-sap-agent-`
-	// WindowsOneTimeLogPrefix is the prefix of the log path to be used by One Time Execution features.
-	WindowsOneTimeLogPrefix = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent-`
-)
-
 // ConfigureUsageMetricsForOTE configures usage metrics for Agent in one time execution mode.
 func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string) {
 	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
@@ -77,12 +70,12 @@ func LogMessageToFileAndConsole(msg string) {
 
 // SetupOneTimeLogging creates logging config for the agent's one time execution.
 func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zapcore.Level) log.Parameters {
-	prefix := LinuxOneTimeLogPrefix
+	oteDir := `/var/log/google-cloud-sap-agent/`
 	if params.OSType == "windows" {
-		prefix = WindowsOneTimeLogPrefix
+		oteDir = `C:\Program Files\Google\google-cloud-sap-agent\logs\`
 	}
 	params.Level = level
-	params.LogFileName = prefix + subcommandName + ".log"
+	params.LogFileName = oteDir + subcommandName + ".log"
 	params.CloudLogName = "google-cloud-sap-agent-" + subcommandName
 	log.SetupLogging(params)
 	// make all of the OTE log files global read + write

@@ -213,7 +213,7 @@ if [ "$1" = "0" ]; then
   rm -f /usr/lib/systemd/system/%{name}.service
   rm -fr %{_docdir}
   rm -fr %{_confdir}
-  rm -f /var/log/%{name}*
+  rm -fr /var/log/%{name}*
 else
   # log usage metrics for upgrade
   timeout 30 %{_bindir}/google_cloud_sap_agent logusage -s UPDATED -pv "%{name}-%{VERSION}-%{RELEASE}" &> /dev/null || true
