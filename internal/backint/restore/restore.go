@@ -120,7 +120,7 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	}
 
 	log.Logger.Infow("Restoring file", "userID", config.GetUserId(), "fileName", fileName, "destName", destName, "prefix", prefix, "externalBackupID", externalBackupID)
-	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, config.GetRetries())
+	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, "", config.GetRetries())
 	if err != nil {
 		log.Logger.Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))

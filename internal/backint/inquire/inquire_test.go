@@ -118,6 +118,12 @@ func TestInquire(t *testing.T) {
 			wantError: nil,
 		},
 		{
+			name:      "FormattedExternalBackupIDNoFileName",
+			input:     bytes.NewBufferString(`#EBID "12345"`),
+			want:      fmt.Sprintf(`#BACKUP "12345" "/object'with\"special\characters.txt"` + "\n" + `#BACKUP "12345" "/object.txt"` + "\n"),
+			wantError: nil,
+		},
+		{
 			name:      "EmptyInput",
 			input:     bytes.NewBufferString(""),
 			wantError: nil,
@@ -150,6 +156,7 @@ func TestInquireFiles(t *testing.T) {
 		fileName         string
 		externalBackupID string
 		backintVersion   string
+		filter           string
 		wantPrefix       string
 	}{
 		{
@@ -191,7 +198,7 @@ func TestInquireFiles(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID, test.backintVersion, 0)
+			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID, test.backintVersion, test.filter, 0)
 			if !strings.HasPrefix(string(got), test.wantPrefix) {
 				t.Errorf("inquireFiles(%s, %s, %s) = %s, wantPrefix: %s", test.prefix, test.fileName, test.externalBackupID, got, test.wantPrefix)
 			}

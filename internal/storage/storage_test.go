@@ -64,10 +64,12 @@ var (
 	defaultContent = []byte("test content")
 )
 
-func objectAttrs(object *storage.ObjectHandle) []*storage.ObjectAttrs {
+func objectAttrs(objects []*storage.ObjectHandle) []*storage.ObjectAttrs {
 	var attrs []*storage.ObjectAttrs
-	if attr, err := object.Attrs(context.Background()); err == nil {
-		attrs = append(attrs, attr)
+	for _, object := range objects {
+		if attr, err := object.Attrs(context.Background()); err == nil {
+			attrs = append(attrs, attr)
+		}
 	}
 	return attrs
 }
@@ -504,6 +506,7 @@ func TestListObjects(t *testing.T) {
 		name      string
 		bucket    *storage.BucketHandle
 		prefix    string
+		filter    string
 		want      []*storage.ObjectAttrs
 		wantError error
 	}{
@@ -523,13 +526,26 @@ func TestListObjects(t *testing.T) {
 			name:      "PrefixFound",
 			bucket:    defaultBucketHandle,
 			prefix:    "object.txt",
-			want:      objectAttrs(fakeServer.Client().Bucket("test-bucket").Object("object.txt")),
+			want:      objectAttrs([]*storage.ObjectHandle{fakeServer.Client().Bucket("test-bucket").Object("object.txt")}),
+			wantError: nil,
+		},
+		{
+			name:      "AllObjects",
+			bucket:    defaultBucketHandle,
+			want:      objectAttrs([]*storage.ObjectHandle{fakeServer.Client().Bucket("test-bucket").Object("object.txt"), fakeServer.Client().Bucket("test-bucket").Object("compressed-object.txt")}),
+			wantError: nil,
+		},
+		{
+			name:      "AllObjectsWithFilter",
+			bucket:    defaultBucketHandle,
+			filter:    "compressed",
+			want:      objectAttrs([]*storage.ObjectHandle{fakeServer.Client().Bucket("test-bucket").Object("compressed-object.txt")}),
 			wantError: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotError := ListObjects(context.Background(), test.bucket, test.prefix, 0)
+			got, gotError := ListObjects(context.Background(), test.bucket, test.prefix, test.filter, 0)
 			if !cmp.Equal(gotError, test.wantError, cmpopts.EquateErrors()) {
 				t.Errorf("ListObjects(%s) = %v, want %v", test.prefix, gotError, test.wantError)
 			}

@@ -308,8 +308,9 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 
 // ListObjects returns all objects in the bucket with the given prefix sorted by latest creation.
 // The prefix can be empty and can contain multiple folders separated by forward slashes.
+// The optional filter will only return filenames that contain the filter.
 // Errors are returned if no handle is defined or if there are iteration issues.
-func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix string, maxRetries int64) ([]*storage.ObjectAttrs, error) {
+func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix, filter string, maxRetries int64) ([]*storage.ObjectAttrs, error) {
 	if bucketHandle == nil {
 		return nil, errors.New("no bucket defined")
 	}
@@ -324,6 +325,10 @@ func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix
 		}
 		if err != nil {
 			return nil, fmt.Errorf("error while iterating objects for prefix: %s, err: %v", prefix, err)
+		}
+		if !strings.Contains(attrs.Name, filter) {
+			log.Logger.Debugw("Discarding object due to filter", "fileName", attrs.Name, "filter", filter)
+			continue
 		}
 		result = append(result, attrs)
 	}

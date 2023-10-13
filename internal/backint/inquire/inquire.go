@@ -73,21 +73,29 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			}
 			prefix := config.GetUserId() + parse.TrimAndClean(fileName)
 			wp.Submit(func() {
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion, config.GetRetries())
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion, "", config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
 			})
 		} else if strings.HasPrefix(line, "#EBID") {
 			s := parse.Split(line)
-			if len(s) < 3 {
-				return fmt.Errorf("malformed inquire input line, got: %s, want: #EBID <external_backup_id> <file_name>", line)
+			if len(s) < 2 {
+				return fmt.Errorf("malformed inquire input line, got: %s, want: #EBID <external_backup_id> <file_name> or #EBID <external_backup_id>", line)
 			}
 			externalBackupID := parse.TrimAndClean(s[1])
-			fileName := s[2]
-			prefix := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
+			// fileName is an optional parameter not present in Backint 1.00
+			fileName := ""
+			prefix := config.GetUserId()
+			filter := ""
+			if len(s) > 2 {
+				fileName = s[2]
+				prefix += parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
+			} else {
+				filter = externalBackupID + ".bak"
+			}
 			wp.Submit(func() {
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion, config.GetRetries())
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion, filter, config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -105,15 +113,15 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // inquireFiles queries the bucket with the specified prefix and returns all
 // objects found according to SAP HANA formatting specifications.
-func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion string, retries int64) []byte {
+func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion, filter string, retries int64) []byte {
 	var result []byte
-	log.Logger.Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
-	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, retries)
+	log.Logger.Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "filter", filter)
+	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, filter, retries)
 	if err != nil {
-		log.Logger.Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID)
+		log.Logger.Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID, "filter", filter)
 		result = []byte("#ERROR")
 	} else if len(objects) == 0 {
-		log.Logger.Warnw("No objects found", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
+		log.Logger.Warnw("No objects found", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "filter", filter)
 		result = []byte("#NOTFOUND")
 	}
 	// If there was an error or no objects were found, append the optional parameters and return.
