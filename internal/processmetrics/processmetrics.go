@@ -421,11 +421,12 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 		wg.Add(1)
 		go func(slot int, c Collector) {
 			defer wg.Done()
+			var err error
 			msgs[slot], err = c.CollectWithRetry(ctx) // Each collector writes to its own slot.
 			if err != nil {
 				log.CtxLogger(ctx).Errorw("Error collecting fast moving metrics", "error", err)
 			}
-			log.CtxLogger(ctx).Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
+			log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
 		}(i, collector)
 	}
 	log.CtxLogger(ctx).Debug("Waiting for fast moving collectors to finish.")

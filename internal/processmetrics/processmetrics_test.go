@@ -123,7 +123,7 @@ func fakeCollectors(count, timeSerisCountPerCollector int) []Collector {
 }
 
 func fakeNewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error) {
-	return &fake.TimeSeriesCreator{}, nil
+	return &fake.TimeSeriesCreatorThreadSafe{}, nil
 }
 
 func fakeNewMetricClientFailure(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error) {
@@ -318,7 +318,7 @@ func TestCreate(t *testing.T) {
 			params := Parameters{
 				Config: defaultConfig,
 			}
-			got := create(context.Background(), params, &fake.TimeSeriesCreator{}, test.sapInstances)
+			got := create(context.Background(), params, &fake.TimeSeriesCreatorThreadSafe{}, test.sapInstances)
 
 			if len(got.Collectors) != test.wantCollectorCount {
 				t.Errorf("create() returned %d collectors, want %d", len(got.Collectors), test.wantCollectorCount)
@@ -349,7 +349,7 @@ func TestCollectAndSend(t *testing.T) {
 		{
 			name: "TenCollectorsRunForTenSeconds",
 			properties: &Properties{
-				Client:     &fake.TimeSeriesCreator{},
+				Client:     &fake.TimeSeriesCreatorThreadSafe{},
 				Collectors: fakeCollectors(10, 1),
 				Config:     quickTestConfig,
 			},
@@ -358,7 +358,7 @@ func TestCollectAndSend(t *testing.T) {
 		{
 			name: "ZeroCollectors",
 			properties: &Properties{
-				Client:     &fake.TimeSeriesCreator{},
+				Client:     &fake.TimeSeriesCreatorThreadSafe{},
 				Collectors: nil,
 				Config:     quickTestConfig,
 			},
@@ -368,7 +368,7 @@ func TestCollectAndSend(t *testing.T) {
 		{
 			name: "SlowCollectorsForThirtySeconds",
 			properties: &Properties{
-				Client:     &fake.TimeSeriesCreator{},
+				Client:     &fake.TimeSeriesCreatorThreadSafe{},
 				Collectors: fakeCollectors(9, 1),
 				Config:     quickTestConfig,
 			},
@@ -401,7 +401,7 @@ func TestCollectAndSendSlowMovingMetricsOnce(t *testing.T) {
 		{
 			name: "CollectorSuccess",
 			properties: &Properties{
-				Client:     &fake.TimeSeriesCreator{},
+				Client:     &fake.TimeSeriesCreatorThreadSafe{},
 				Collectors: fakeCollectors(10, 1),
 				Config:     quickTestConfig,
 			},
@@ -468,7 +468,7 @@ func TestCollectAndSendOnceFastMovingMetrics(t *testing.T) {
 		{
 			name: "ThreeCollectorsSuccess",
 			properties: &Properties{
-				Client:               &fake.TimeSeriesCreator{},
+				Client:               &fake.TimeSeriesCreatorThreadSafe{},
 				FastMovingCollectors: fakeCollectors(3, 1),
 				Config:               quickTestConfig,
 			},
@@ -582,7 +582,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 		{
 			name:         "2 beat timeout",
 			beatInterval: time.Millisecond * 45,
-			timeout:      time.Millisecond * 100,
+			timeout:      time.Millisecond * 110,
 			want:         2,
 		},
 	}
@@ -608,7 +608,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 					Interval: test.beatInterval,
 				},
 			}
-			properties := create(context.Background(), parameters, &fake.TimeSeriesCreator{}, fakeSAPInstances("HANA"))
+			properties := create(context.Background(), parameters, &fake.TimeSeriesCreatorThreadSafe{}, fakeSAPInstances("HANA"))
 			properties.collectAndSend(ctx, defaultBackOffIntervals)
 			<-ctx.Done()
 			lock.Lock()

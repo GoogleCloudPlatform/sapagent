@@ -32,8 +32,18 @@ type TimeSeriesCreator struct {
 	Err   error
 }
 
+// TimeSeriesCreatorThreadSafe is a fake which implements a
+// thread safe implementation of TimeSeriesCreator interface.
+type TimeSeriesCreatorThreadSafe struct {
+	Err error
+}
+
 func (f *TimeSeriesCreator) CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
 	f.Calls = append(f.Calls, req)
+	return f.Err
+}
+
+func (f *TimeSeriesCreatorThreadSafe) CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
 	return f.Err
 }
 
