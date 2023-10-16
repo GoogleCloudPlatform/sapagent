@@ -24,10 +24,10 @@ import (
 	"time"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
-	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monrespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -80,19 +80,19 @@ func createService(ctx context.Context, params Parameters, t *testing.T) *Servic
 }
 
 var (
-	pointComparer = cmp.Comparer(func(a, b *monrespb.Point) bool {
+	pointComparer = cmp.Comparer(func(a, b *mrpb.Point) bool {
 		valueEqual := cmp.Equal(a.GetValue().GetDoubleValue(), b.GetValue().GetDoubleValue())
 		startTimeEqual := cmp.Equal(a.GetInterval().GetStartTime(), b.GetInterval().GetStartTime(), protocmp.Transform())
 		endTimeEqual := cmp.Equal(a.GetInterval().GetEndTime(), b.GetInterval().GetEndTime(), protocmp.Transform())
 		return valueEqual && startTimeEqual && endTimeEqual
 	})
 
-	resourceComparer = cmp.Comparer(func(a, b *mrpb.MonitoredResource) bool {
+	resourceComparer = cmp.Comparer(func(a, b *mrespb.MonitoredResource) bool {
 		typeEqual := cmp.Equal(a.GetType(), b.GetType())
 		labelsEqual := cmp.Equal(a.GetLabels(), b.GetLabels())
 		return typeEqual && labelsEqual
 	})
-	timeSeriesComparer = cmp.Comparer(func(a, b *monrespb.TimeSeries) bool {
+	timeSeriesComparer = cmp.Comparer(func(a, b *mrpb.TimeSeries) bool {
 		points := cmp.Equal(a.GetPoints(), b.GetPoints(), pointComparer)
 		metricType := cmp.Equal(a.GetMetric().GetType(), b.GetMetric().GetType())
 		metricLabel := cmp.Equal(a.GetMetric().GetLabels(), b.GetMetric().GetLabels())
@@ -241,7 +241,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 		health    bool
 		timestamp *tspb.Timestamp
 		params    Parameters
-		want      []*monrespb.TimeSeries
+		want      []*mrpb.TimeSeries
 	}{
 		{
 			testName:  "healthy baremetal",
@@ -252,16 +252,16 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 				p.Config.BareMetal = true
 				return p
 			}(),
-			want: []*monrespb.TimeSeries{
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "generic_node",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_BoolValue{true},
@@ -283,16 +283,16 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 				p.Config.BareMetal = false
 				return p
 			}(),
-			want: []*monrespb.TimeSeries{
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "gce_instance",
 						Labels: vmLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_BoolValue{true},
@@ -315,16 +315,16 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 				p.Config.BareMetal = true
 				return p
 			}(),
-			want: []*monrespb.TimeSeries{
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "generic_node",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_BoolValue{false},
@@ -346,16 +346,16 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 				p.Config.BareMetal = false
 				return p
 			}(),
-			want: []*monrespb.TimeSeries{
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "gce_instance",
 						Labels: vmLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_BoolValue{false},
@@ -390,7 +390,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 		memory    uint64
 		timestamp *tspb.Timestamp
 		params    Parameters
-		want      []*monrespb.TimeSeries
+		want      []*mrpb.TimeSeries
 	}{
 		{
 			testName:  "cpu 0.0 memory 0 baremetal",
@@ -402,16 +402,16 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 				p.Config.BareMetal = true
 				return p
 			}(),
-			want: []*monrespb.TimeSeries{
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "generic_node",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/cpu/utilization",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{0.0},
@@ -423,15 +423,15 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 						},
 					},
 				},
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "generic_node",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/memory/utilization",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{0},
@@ -454,16 +454,16 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 				p.Config.BareMetal = false
 				return p
 			}(),
-			want: []*monrespb.TimeSeries{
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+			want: []*mrpb.TimeSeries{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "gce_instance",
 						Labels: vmLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/cpu/utilization",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{1.2},
@@ -475,15 +475,15 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 						},
 					},
 				},
-				&monrespb.TimeSeries{
-					Resource: &mrpb.MonitoredResource{
+				&mrpb.TimeSeries{
+					Resource: &mrespb.MonitoredResource{
 						Type:   "gce_instance",
 						Labels: vmLabels,
 					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/memory/utilization",
 					},
-					Points: []*monrespb.Point{
+					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{1000},
@@ -607,7 +607,7 @@ func TestCollectAndSubmitHealth_shouldReturnErrorWhenSubmitFails(t *testing.T) {
 			ctx := context.Background()
 			params := basicParameters()
 			s := createService(ctx, params, t)
-			s.timeSeriesSubmitter = func(ctx context.Context, request *monpb.CreateTimeSeriesRequest) error {
+			s.timeSeriesSubmitter = func(ctx context.Context, request *mpb.CreateTimeSeriesRequest) error {
 				return d.submitRes
 			}
 			got := s.collectAndSubmitHealth(ctx)
@@ -640,7 +640,7 @@ func TestCollectAndSubmitMetrics_shouldReturnErrorWhenSubmitFails(t *testing.T) 
 			ctx := context.Background()
 			params := basicParameters()
 			s := createService(ctx, params, t)
-			s.timeSeriesSubmitter = func(ctx context.Context, request *monpb.CreateTimeSeriesRequest) error {
+			s.timeSeriesSubmitter = func(ctx context.Context, request *mpb.CreateTimeSeriesRequest) error {
 				return d.submitRes
 			}
 			got := s.collectAndSubmitMetrics(ctx)
@@ -690,7 +690,7 @@ func TestCollectAndSubmitMetrics_shouldFailWhenSubmitFails(t *testing.T) {
 		return usage{cpu: 0.0, memory: 0.0}, nil
 	}
 	expectedErr := errors.New("intentional failure")
-	params.timeSeriesSubmitter = func(ctx context.Context, request *monpb.CreateTimeSeriesRequest) error {
+	params.timeSeriesSubmitter = func(ctx context.Context, request *mpb.CreateTimeSeriesRequest) error {
 		return expectedErr
 	}
 	service := createService(ctx, params, t)
@@ -707,7 +707,7 @@ func TestCollectAndSubmit_shouldSucceedWhenSubmitSucceeds(t *testing.T) {
 		return usage{cpu: 5, memory: 6}, nil
 	}
 	submitCount := 0
-	params.timeSeriesSubmitter = func(ctx context.Context, request *monpb.CreateTimeSeriesRequest) error {
+	params.timeSeriesSubmitter = func(ctx context.Context, request *mpb.CreateTimeSeriesRequest) error {
 		submitCount++
 		return nil
 	}

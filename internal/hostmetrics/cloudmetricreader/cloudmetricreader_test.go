@@ -31,7 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 
-	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -235,27 +235,27 @@ var (
 		{
 			PointData: []*mrpb.TimeSeriesData_PointData{
 				{
-					Values: []*commonpb.TypedValue{
-						{Value: &commonpb.TypedValue_DoubleValue{0.12345}},
-						{Value: &commonpb.TypedValue_DoubleValue{1}},
-						{Value: &commonpb.TypedValue_DoubleValue{60}},
-						{Value: &commonpb.TypedValue_DoubleValue{90}},
+					Values: []*cpb.TypedValue{
+						{Value: &cpb.TypedValue_DoubleValue{0.12345}},
+						{Value: &cpb.TypedValue_DoubleValue{1}},
+						{Value: &cpb.TypedValue_DoubleValue{60}},
+						{Value: &cpb.TypedValue_DoubleValue{90}},
 					},
 				},
 				{
-					Values: []*commonpb.TypedValue{
-						{Value: &commonpb.TypedValue_DoubleValue{0.23456}},
-						{Value: &commonpb.TypedValue_DoubleValue{2}},
-						{Value: &commonpb.TypedValue_DoubleValue{120}},
-						{Value: &commonpb.TypedValue_DoubleValue{180}},
+					Values: []*cpb.TypedValue{
+						{Value: &cpb.TypedValue_DoubleValue{0.23456}},
+						{Value: &cpb.TypedValue_DoubleValue{2}},
+						{Value: &cpb.TypedValue_DoubleValue{120}},
+						{Value: &cpb.TypedValue_DoubleValue{180}},
 					},
 				},
 				{
-					Values: []*commonpb.TypedValue{
-						{Value: &commonpb.TypedValue_DoubleValue{0.34567}},
-						{Value: &commonpb.TypedValue_DoubleValue{3}},
-						{Value: &commonpb.TypedValue_DoubleValue{180}},
-						{Value: &commonpb.TypedValue_DoubleValue{360}},
+					Values: []*cpb.TypedValue{
+						{Value: &cpb.TypedValue_DoubleValue{0.34567}},
+						{Value: &cpb.TypedValue_DoubleValue{3}},
+						{Value: &cpb.TypedValue_DoubleValue{180}},
+						{Value: &cpb.TypedValue_DoubleValue{360}},
 					},
 				},
 			},
@@ -263,27 +263,27 @@ var (
 		{
 			PointData: []*mrpb.TimeSeriesData_PointData{
 				{
-					Values: []*commonpb.TypedValue{
-						{Value: &commonpb.TypedValue_DoubleValue{100}},
-						{Value: &commonpb.TypedValue_DoubleValue{200}},
-						{Value: &commonpb.TypedValue_DoubleValue{300}},
-						{Value: &commonpb.TypedValue_DoubleValue{400}},
+					Values: []*cpb.TypedValue{
+						{Value: &cpb.TypedValue_DoubleValue{100}},
+						{Value: &cpb.TypedValue_DoubleValue{200}},
+						{Value: &cpb.TypedValue_DoubleValue{300}},
+						{Value: &cpb.TypedValue_DoubleValue{400}},
 					},
 				},
 				{
-					Values: []*commonpb.TypedValue{
-						{Value: &commonpb.TypedValue_DoubleValue{500}},
-						{Value: &commonpb.TypedValue_DoubleValue{600}},
-						{Value: &commonpb.TypedValue_DoubleValue{700}},
-						{Value: &commonpb.TypedValue_DoubleValue{800}},
+					Values: []*cpb.TypedValue{
+						{Value: &cpb.TypedValue_DoubleValue{500}},
+						{Value: &cpb.TypedValue_DoubleValue{600}},
+						{Value: &cpb.TypedValue_DoubleValue{700}},
+						{Value: &cpb.TypedValue_DoubleValue{800}},
 					},
 				},
 				{
-					Values: []*commonpb.TypedValue{
-						{Value: &commonpb.TypedValue_DoubleValue{900}},
-						{Value: &commonpb.TypedValue_DoubleValue{1000}},
-						{Value: &commonpb.TypedValue_DoubleValue{1100}},
-						{Value: &commonpb.TypedValue_DoubleValue{1200}},
+					Values: []*cpb.TypedValue{
+						{Value: &cpb.TypedValue_DoubleValue{900}},
+						{Value: &cpb.TypedValue_DoubleValue{1000}},
+						{Value: &cpb.TypedValue_DoubleValue{1100}},
+						{Value: &cpb.TypedValue_DoubleValue{1200}},
 					},
 				},
 			},
@@ -361,7 +361,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 					{
 						PointData: []*mrpb.TimeSeriesData_PointData{
 							{
-								Values: []*commonpb.TypedValue{{Value: &commonpb.TypedValue_DoubleValue{5}}},
+								Values: []*cpb.TypedValue{{Value: &cpb.TypedValue_DoubleValue{5}}},
 							},
 						},
 					},

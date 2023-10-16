@@ -23,9 +23,9 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
-	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -64,17 +64,17 @@ var (
 
 func TestBuildInt(t *testing.T) {
 	// Not using table driven tests as we do not have conditional behavior based on inputs.
-	want := &monitoringresourcespb.TimeSeries{
+	want := &mrpb.TimeSeries{
 		Metric: &mpb.Metric{
 			Type:   mType,
 			Labels: mLabels,
 		},
 		MetricKind: mpb.MetricDescriptor_GAUGE,
-		Resource: &mrpb.MonitoredResource{
+		Resource: &mrespb.MonitoredResource{
 			Type:   "gce_instance",
 			Labels: gceLabels,
 		},
-		Points: []*monitoringresourcespb.Point{{
+		Points: []*mrpb.Point{{
 			Interval: &cpb.TimeInterval{
 				StartTime: now,
 				EndTime:   now,
@@ -102,17 +102,17 @@ func TestBuildInt(t *testing.T) {
 
 func TestBuildBool(t *testing.T) {
 	// Not using table driven tests as we do not have conditional behavior based on inputs.
-	want := &monitoringresourcespb.TimeSeries{
+	want := &mrpb.TimeSeries{
 		Metric: &mpb.Metric{
 			Type:   mType,
 			Labels: mLabels,
 		},
 		MetricKind: mpb.MetricDescriptor_GAUGE,
-		Resource: &mrpb.MonitoredResource{
+		Resource: &mrespb.MonitoredResource{
 			Type:   "gce_instance",
 			Labels: gceLabels,
 		},
-		Points: []*monitoringresourcespb.Point{{
+		Points: []*mrpb.Point{{
 			Interval: &cpb.TimeInterval{
 				StartTime: now,
 				EndTime:   now,
@@ -139,17 +139,17 @@ func TestBuildBool(t *testing.T) {
 }
 
 func TestBuildFloat64(t *testing.T) {
-	want := &monitoringresourcespb.TimeSeries{
+	want := &mrpb.TimeSeries{
 		Metric: &mpb.Metric{
 			Type:   mType,
 			Labels: mLabels,
 		},
 		MetricKind: mpb.MetricDescriptor_GAUGE,
-		Resource: &mrpb.MonitoredResource{
+		Resource: &mrespb.MonitoredResource{
 			Type:   "gce_instance",
 			Labels: gceLabels,
 		},
-		Points: []*monitoringresourcespb.Point{{
+		Points: []*mrpb.Point{{
 			Interval: &cpb.TimeInterval{
 				StartTime: now,
 				EndTime:   now,
@@ -180,13 +180,13 @@ func TestMonitoredResource(t *testing.T) {
 		name       string
 		cloudProps *ipb.CloudProperties
 		bareMetal  bool
-		want       *mrpb.MonitoredResource
+		want       *mrespb.MonitoredResource
 	}{
 		{
 			name:       "BareMetal",
 			cloudProps: bmsCloudProperties,
 			bareMetal:  true,
-			want: &mrpb.MonitoredResource{
+			want: &mrespb.MonitoredResource{
 				Type:   "generic_node",
 				Labels: bmsLabels,
 			},
@@ -195,7 +195,7 @@ func TestMonitoredResource(t *testing.T) {
 			name:       "GCE",
 			cloudProps: defaultCloudProperties,
 			bareMetal:  false,
-			want: &mrpb.MonitoredResource{
+			want: &mrespb.MonitoredResource{
 				Type:   "gce_instance",
 				Labels: gceLabels,
 			},

@@ -19,9 +19,9 @@ package timeseries
 
 import (
 	mpb "google.golang.org/genproto/googleapis/api/metric"
-	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
+	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -41,12 +41,12 @@ type Params struct {
 }
 
 // BuildInt builds a cloudmonitoring timeseries with Int64 point.
-func BuildInt(p Params) *monitoringresourcespb.TimeSeries {
+func BuildInt(p Params) *mrpb.TimeSeries {
 	ts := buildTimeSeries(p)
 	if p.StartTime == nil {
 		p.StartTime = p.Timestamp
 	}
-	ts.Points = []*monitoringresourcespb.Point{{
+	ts.Points = []*mrpb.Point{{
 		Interval: &cpb.TimeInterval{
 			StartTime: p.StartTime,
 			EndTime:   p.Timestamp,
@@ -61,12 +61,12 @@ func BuildInt(p Params) *monitoringresourcespb.TimeSeries {
 }
 
 // BuildBool builds a cloudmonitoring timeseries with boolean point.
-func BuildBool(p Params) *monitoringresourcespb.TimeSeries {
+func BuildBool(p Params) *mrpb.TimeSeries {
 	ts := buildTimeSeries(p)
 	if p.StartTime == nil {
 		p.StartTime = p.Timestamp
 	}
-	ts.Points = []*monitoringresourcespb.Point{{
+	ts.Points = []*mrpb.Point{{
 		Interval: &cpb.TimeInterval{
 			StartTime: p.StartTime,
 			EndTime:   p.Timestamp,
@@ -81,12 +81,12 @@ func BuildBool(p Params) *monitoringresourcespb.TimeSeries {
 }
 
 // BuildFloat64 builds a cloudmonitoring timeseries with float64 point.
-func BuildFloat64(p Params) *monitoringresourcespb.TimeSeries {
+func BuildFloat64(p Params) *mrpb.TimeSeries {
 	ts := buildTimeSeries(p)
 	if p.StartTime == nil {
 		p.StartTime = p.Timestamp
 	}
-	ts.Points = []*monitoringresourcespb.Point{{
+	ts.Points = []*mrpb.Point{{
 		Interval: &cpb.TimeInterval{
 			StartTime: p.StartTime,
 			EndTime:   p.Timestamp,
@@ -100,11 +100,11 @@ func BuildFloat64(p Params) *monitoringresourcespb.TimeSeries {
 	return ts
 }
 
-func buildTimeSeries(p Params) *monitoringresourcespb.TimeSeries {
+func buildTimeSeries(p Params) *mrpb.TimeSeries {
 	if p.MetricKind == mpb.MetricDescriptor_METRIC_KIND_UNSPECIFIED {
 		p.MetricKind = mpb.MetricDescriptor_GAUGE
 	}
-	return &monitoringresourcespb.TimeSeries{
+	return &mrpb.TimeSeries{
 		Metric: &mpb.Metric{
 			Type:   p.MetricType,
 			Labels: p.MetricLabels,
@@ -114,9 +114,9 @@ func buildTimeSeries(p Params) *monitoringresourcespb.TimeSeries {
 	}
 }
 
-func monitoredResource(cp *ipb.CloudProperties, bareMetal bool) *mrpb.MonitoredResource {
+func monitoredResource(cp *ipb.CloudProperties, bareMetal bool) *mrespb.MonitoredResource {
 	if bareMetal {
-		return &mrpb.MonitoredResource{
+		return &mrespb.MonitoredResource{
 			Type: "generic_node",
 			Labels: map[string]string{
 				"project_id": cp.GetProjectId(),
@@ -126,7 +126,7 @@ func monitoredResource(cp *ipb.CloudProperties, bareMetal bool) *mrpb.MonitoredR
 			},
 		}
 	}
-	return &mrpb.MonitoredResource{
+	return &mrespb.MonitoredResource{
 		Type: "gce_instance",
 		Labels: map[string]string{
 			"project_id":  cp.GetProjectId(),

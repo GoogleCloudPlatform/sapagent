@@ -29,8 +29,8 @@ import (
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
-	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
@@ -50,14 +50,14 @@ func TestCreateTimeSeriesWithRetry(t *testing.T) {
 	tests := []struct {
 		name          string
 		client        *fake.TimeSeriesCreator
-		req           *monitoringpb.CreateTimeSeriesRequest
+		req           *mpb.CreateTimeSeriesRequest
 		want          error
 		wantCallCount int
 	}{
 		{
 			name:   "succeedsWithEmpty",
 			client: &fake.TimeSeriesCreator{},
-			req: &monitoringpb.CreateTimeSeriesRequest{
+			req: &mpb.CreateTimeSeriesRequest{
 				Name:       "test-project",
 				TimeSeries: []*mrpb.TimeSeries{},
 			},
@@ -67,7 +67,7 @@ func TestCreateTimeSeriesWithRetry(t *testing.T) {
 		{
 			name:   "SucceedsWithOneTS",
 			client: &fake.TimeSeriesCreator{},
-			req: &monitoringpb.CreateTimeSeriesRequest{
+			req: &mpb.CreateTimeSeriesRequest{
 				Name: "test-project",
 				TimeSeries: []*mrpb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
@@ -80,7 +80,7 @@ func TestCreateTimeSeriesWithRetry(t *testing.T) {
 		{
 			name:   "retryLimitExceeded",
 			client: &fake.TimeSeriesCreator{Err: errors.New("CreateTimeSeries error")},
-			req: &monitoringpb.CreateTimeSeriesRequest{
+			req: &mpb.CreateTimeSeriesRequest{
 				Name:       "test-project",
 				TimeSeries: []*mrpb.TimeSeries{},
 			},
@@ -108,7 +108,7 @@ func TestQueryTimeSeriesWithRetry(t *testing.T) {
 			{
 				PointData: []*mrpb.TimeSeriesData_PointData{
 					{
-						Values: []*commonpb.TypedValue{{Value: &commonpb.TypedValue_DoubleValue{v}}},
+						Values: []*cpb.TypedValue{{Value: &cpb.TypedValue_DoubleValue{v}}},
 					},
 				},
 			},
@@ -118,7 +118,7 @@ func TestQueryTimeSeriesWithRetry(t *testing.T) {
 	tests := []struct {
 		name          string
 		client        *fake.TimeSeriesQuerier
-		req           *monitoringpb.QueryTimeSeriesRequest
+		req           *mpb.QueryTimeSeriesRequest
 		want          []*mrpb.TimeSeriesData
 		wantErr       error
 		wantCallCount int
@@ -126,7 +126,7 @@ func TestQueryTimeSeriesWithRetry(t *testing.T) {
 		{
 			name:          "succeeds",
 			client:        &fake.TimeSeriesQuerier{TS: newTimeSeriesData(0.12345)},
-			req:           &monitoringpb.QueryTimeSeriesRequest{},
+			req:           &mpb.QueryTimeSeriesRequest{},
 			want:          newTimeSeriesData(0.12345),
 			wantErr:       nil,
 			wantCallCount: 1,
@@ -134,7 +134,7 @@ func TestQueryTimeSeriesWithRetry(t *testing.T) {
 		{
 			name:          "retryLimitExceeded",
 			client:        &fake.TimeSeriesQuerier{Err: errors.New("QueryTimeSeries error")},
-			req:           &monitoringpb.QueryTimeSeriesRequest{},
+			req:           &mpb.QueryTimeSeriesRequest{},
 			want:          nil,
 			wantErr:       cmpopts.AnyError,
 			wantCallCount: 5,
@@ -158,14 +158,14 @@ func TestQueryTimeSeriesWithRetry(t *testing.T) {
 }
 
 func TestQueryTimeSeriesNilBackOffs(t *testing.T) {
-	_, err := QueryTimeSeriesWithRetry(context.Background(), &fake.TimeSeriesQuerier{}, &monitoringpb.QueryTimeSeriesRequest{}, nil)
+	_, err := QueryTimeSeriesWithRetry(context.Background(), &fake.TimeSeriesQuerier{}, &mpb.QueryTimeSeriesRequest{}, nil)
 	if err != nil {
 		t.Errorf("QueryTimeSeriesWithRetry() with nil back off intervals returned err: %v", err)
 	}
 }
 
 func TestCreateTimeSeriesNilBackOffs(t *testing.T) {
-	err := CreateTimeSeriesWithRetry(context.Background(), &fake.TimeSeriesCreator{}, &monitoringpb.CreateTimeSeriesRequest{Name: "test-project", TimeSeries: []*mrpb.TimeSeries{}}, nil)
+	err := CreateTimeSeriesWithRetry(context.Background(), &fake.TimeSeriesCreator{}, &mpb.CreateTimeSeriesRequest{Name: "test-project", TimeSeries: []*mrpb.TimeSeries{}}, nil)
 	if err != nil {
 		t.Errorf("CreateTimeSeriesWithRetry() with nil back off intervals returned err: %v", err)
 	}

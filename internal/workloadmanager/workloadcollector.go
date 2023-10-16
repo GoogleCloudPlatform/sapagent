@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 
@@ -54,7 +54,7 @@ type ConfigFileReader func(string) (io.ReadCloser, error)
 
 // WorkloadMetrics is a container for monitoring TimeSeries metrics.
 type WorkloadMetrics struct {
-	Metrics []*monitoringresourcespb.TimeSeries
+	Metrics []*mrpb.TimeSeries
 }
 
 // metricEmitter is a container for constructing metrics from an override configuration file
@@ -225,7 +225,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	appendLabels(custom.Metrics[0].Metric.Labels, systemLabels)
 
 	// Concatenate all of the metrics together.
-	allMetrics := []*monitoringresourcespb.TimeSeries{}
+	allMetrics := []*mrpb.TimeSeries{}
 	allMetrics = append(allMetrics, system.Metrics...)
 	allMetrics = append(allMetrics, corosync.Metrics...)
 	allMetrics = append(allMetrics, hana.Metrics...)
@@ -348,7 +348,7 @@ func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	}
 
 	log.CtxLogger(ctx).Infow("Sending metrics to Cloud Monitoring...", "number", len(params.wm.Metrics))
-	request := monitoringpb.CreateTimeSeriesRequest{
+	request := mpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", params.cp.GetProjectId()),
 		TimeSeries: params.wm.Metrics,
 	}
@@ -378,7 +378,7 @@ func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	return len(params.wm.Metrics)
 }
 
-func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configuration) []*monitoringresourcespb.TimeSeries {
+func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configuration) []*mrpb.TimeSeries {
 	now := &timestamppb.Timestamp{
 		Seconds: now(),
 	}
@@ -391,7 +391,7 @@ func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configu
 		Timestamp:    now,
 		Float64Value: v,
 	}
-	return []*monitoringresourcespb.TimeSeries{timeseries.BuildFloat64(p)}
+	return []*mrpb.TimeSeries{timeseries.BuildFloat64(p)}
 }
 
 // createWriteInsightRequest converts a WorkloadMetrics time series into a WriteInsightRequest.

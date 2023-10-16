@@ -34,12 +34,12 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 
-	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
+	metricspb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 )
 
 // QueryClient is a mockable wrapper around the cloud monitoring API Go client.
@@ -52,7 +52,7 @@ type QueryClient struct {
 }
 
 // QueryTimeSeries fetches time series data that matches a query.
-func (c *QueryClient) QueryTimeSeries(ctx context.Context, req *monitoringpb.QueryTimeSeriesRequest, opts ...gax.CallOption) ([]*mrpb.TimeSeriesData, error) {
+func (c *QueryClient) QueryTimeSeries(ctx context.Context, req *mpb.QueryTimeSeriesRequest, opts ...gax.CallOption) ([]*mrpb.TimeSeriesData, error) {
 	it := c.Client.QueryTimeSeries(ctx, req, opts...)
 	data := []*mrpb.TimeSeriesData{}
 	for timeseries, err := it.Next(); err != iterator.Done; timeseries, err = it.Next() {
@@ -80,20 +80,20 @@ type CloudMetricReader struct {
 }
 
 // Read reads metrics from the cloud monitoring API and returns a MetricsCollection.
-func (r *CloudMetricReader) Read(ctx context.Context, config *configpb.Configuration, ip *instancepb.InstanceProperties, at agenttime.AgentTime) *mpb.MetricsCollection {
+func (r *CloudMetricReader) Read(ctx context.Context, config *configpb.Configuration, ip *instancepb.InstanceProperties, at agenttime.AgentTime) *metricspb.MetricsCollection {
 	log.Logger.Debug("Getting metrics from cloud monitoring...")
 	return r.readQueryTimeSeries(ctx, config, ip, at)
 }
 
 // readQueryTimeSeries reads metrics from the cloud monitoring API and returns a MetricsCollection.
-func (r *CloudMetricReader) readQueryTimeSeries(ctx context.Context, config *configpb.Configuration, ip *instancepb.InstanceProperties, at agenttime.AgentTime) *mpb.MetricsCollection {
+func (r *CloudMetricReader) readQueryTimeSeries(ctx context.Context, config *configpb.Configuration, ip *instancepb.InstanceProperties, at agenttime.AgentTime) *metricspb.MetricsCollection {
 	// We do not collect any metrics from cloud monitoring on Bare Metal.
 	if config.GetBareMetal() == true {
-		return &mpb.MetricsCollection{}
+		return &metricspb.MetricsCollection{}
 	}
 
 	var (
-		metrics []*mpb.Metric
+		metrics []*metricspb.Metric
 		refresh = at.CloudMetricRefresh()
 	)
 
@@ -103,11 +103,11 @@ func (r *CloudMetricReader) readQueryTimeSeries(ctx context.Context, config *con
 	metrics = append(metrics, r.createNetworkMetrics(ctx, ip.GetNetworkAdapters(), config, refresh)...)
 	metrics = append(metrics, r.createDiskMetrics(ctx, ip.GetDisks(), config, refresh)...)
 
-	return &mpb.MetricsCollection{Metrics: metrics}
+	return &metricspb.MetricsCollection{Metrics: metrics}
 }
 
 // createPassthroughMetrics generates metrics associated with the overall state of the system.
-func (r *CloudMetricReader) createPassthroughMetrics(ctx context.Context, config *configpb.Configuration, refresh time.Time) []*mpb.Metric {
+func (r *CloudMetricReader) createPassthroughMetrics(ctx context.Context, config *configpb.Configuration, refresh time.Time) []*metricspb.Metric {
 	passthroughMetrics := []sapMetricKey{metricCPUUtilization}
 
 	var data []*mrpb.TimeSeriesData
@@ -124,7 +124,7 @@ func (r *CloudMetricReader) createPassthroughMetrics(ctx context.Context, config
 	metricValues := parseTimeSeriesData(passthroughMetrics, data)
 	log.Logger.Debugw("Metric values", "values", metricValues)
 
-	var metrics []*mpb.Metric
+	var metrics []*metricspb.Metric
 	for k, v := range metricValues {
 		metrics = append(metrics, buildMetric(k, v, refresh, ""))
 	}
@@ -132,8 +132,8 @@ func (r *CloudMetricReader) createPassthroughMetrics(ctx context.Context, config
 }
 
 // createNetworkMetrics generates metrics associated with each of the network adapters in use in the system.
-func (r *CloudMetricReader) createNetworkMetrics(ctx context.Context, adapters []*instancepb.NetworkAdapter, config *configpb.Configuration, refresh time.Time) []*mpb.Metric {
-	var metrics []*mpb.Metric
+func (r *CloudMetricReader) createNetworkMetrics(ctx context.Context, adapters []*instancepb.NetworkAdapter, config *configpb.Configuration, refresh time.Time) []*metricspb.Metric {
+	var metrics []*metricspb.Metric
 	if len(adapters) == 0 {
 		return metrics
 	}
@@ -166,8 +166,8 @@ func (r *CloudMetricReader) createNetworkMetrics(ctx context.Context, adapters [
 }
 
 // createDiskMetrics generates metrics associated with each of the disks in use in the system.
-func (r *CloudMetricReader) createDiskMetrics(ctx context.Context, disks []*instancepb.Disk, config *configpb.Configuration, refresh time.Time) []*mpb.Metric {
-	var metrics []*mpb.Metric
+func (r *CloudMetricReader) createDiskMetrics(ctx context.Context, disks []*instancepb.Disk, config *configpb.Configuration, refresh time.Time) []*metricspb.Metric {
+	var metrics []*metricspb.Metric
 	if len(disks) == 0 {
 		return metrics
 	}
@@ -266,7 +266,7 @@ func (r *CloudMetricReader) queryTimeSeriesData(ctx context.Context, metrics []s
 	if len(fetch) > 1 {
 		fmt.Fprintf(b, " | join")
 	}
-	req := &monitoringpb.QueryTimeSeriesRequest{
+	req := &mpb.QueryTimeSeriesRequest{
 		Name:  fmt.Sprintf("projects/%s", projectID),
 		Query: b.String(),
 	}
@@ -282,17 +282,17 @@ func (r *CloudMetricReader) queryTimeSeriesData(ctx context.Context, metrics []s
 }
 
 // buildMetric returns a formatted Metric proto containing the time series data value found for a given metric key and refresh time.
-func buildMetric(key sapMetricKey, value float64, refresh time.Time, deviceID string) *mpb.Metric {
+func buildMetric(key sapMetricKey, value float64, refresh time.Time, deviceID string) *metricspb.Metric {
 	log.Logger.Debugw("Building metric with value", "metric", key, "value", value)
 	sap := sapMetrics[key]
-	metric := &mpb.Metric{
+	metric := &metricspb.Metric{
 		Context:         sap.context,
 		Category:        sap.category,
 		Type:            sap.metricType,
 		Name:            sap.sapName,
 		LastRefresh:     refresh.Unix(),
 		Unit:            sap.unit,
-		RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
+		RefreshInterval: metricspb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
 	}
 
 	if deviceID != "" {
@@ -306,9 +306,9 @@ func buildMetric(key sapMetricKey, value float64, refresh time.Time, deviceID st
 		metric.Value = strconv.FormatInt(metricsformatter.PerMinuteToPerSec(value), 10)
 	case sap == sapMetrics[metricDiskReadOpsCount] || sap == sapMetrics[metricDiskWriteOpsCount]:
 		metric.Value = strconv.FormatInt(metricsformatter.PerMinuteToPerSec(value), 10)
-	case metric.GetType() == mpb.Type_TYPE_INT64:
+	case metric.GetType() == metricspb.Type_TYPE_INT64:
 		metric.Value = strconv.FormatInt(int64(value), 10)
-	case metric.GetUnit() == mpb.Unit_UNIT_PERCENT:
+	case metric.GetUnit() == metricspb.Unit_UNIT_PERCENT:
 		metric.Value = strconv.FormatFloat(metricsformatter.ToPercentage(math.Min(value, 1), 3), 'f', 1, 64)
 	default:
 		metric.Value = strconv.FormatFloat(value, 'f', -1, 64)
@@ -318,7 +318,7 @@ func buildMetric(key sapMetricKey, value float64, refresh time.Time, deviceID st
 }
 
 // buildVolumeUtilization returns a formatted Metric proto containing the calculated volume utilization.
-func buildVolumeUtilization(readOps, writeOps, maxReadOps, maxWriteOps float64, refresh time.Time, deviceID string) *mpb.Metric {
+func buildVolumeUtilization(readOps, writeOps, maxReadOps, maxWriteOps float64, refresh time.Time, deviceID string) *metricspb.Metric {
 	var (
 		readUtilization  = float64(0)
 		writeUtilization = float64(0)
@@ -332,14 +332,14 @@ func buildVolumeUtilization(readOps, writeOps, maxReadOps, maxWriteOps float64, 
 	}
 	volumeUtilization := metricsformatter.ToPercentage((readUtilization+writeUtilization)/2, 3)
 
-	return &mpb.Metric{
-		Context:         mpb.Context_CONTEXT_VM,
-		Category:        mpb.Category_CATEGORY_DISK,
-		Type:            mpb.Type_TYPE_DOUBLE,
+	return &metricspb.Metric{
+		Context:         metricspb.Context_CONTEXT_VM,
+		Category:        metricspb.Category_CATEGORY_DISK,
+		Type:            metricspb.Type_TYPE_DOUBLE,
 		Name:            "Volume Utilization",
 		LastRefresh:     refresh.Unix(),
-		Unit:            mpb.Unit_UNIT_PERCENT,
-		RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
+		Unit:            metricspb.Unit_UNIT_PERCENT,
+		RefreshInterval: metricspb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
 		DeviceId:        deviceID,
 		Value:           strconv.FormatFloat(volumeUtilization, 'f', 1, 64),
 	}
@@ -433,11 +433,11 @@ func parseTimeSeriesDataByDisk(deviceNames []string, metrics []sapMetricKey, dat
 // sapMetric defines the format of the metrics that are returned.
 type sapMetric struct {
 	sapName, name string
-	seriesAligner commonpb.Aggregation_Aligner
-	category      mpb.Category
-	metricType    mpb.Type
-	unit          mpb.Unit
-	context       mpb.Context
+	seriesAligner cpb.Aggregation_Aligner
+	category      metricspb.Category
+	metricType    metricspb.Type
+	unit          metricspb.Unit
+	context       metricspb.Context
 }
 
 type sapMetricKey string
@@ -460,100 +460,100 @@ var sapMetrics = map[sapMetricKey]sapMetric{
 	metricCPUUtilization: {
 		"VM Processing Power Consumption",
 		"compute.googleapis.com/instance/cpu/utilization",
-		commonpb.Aggregation_ALIGN_MEAN,
-		mpb.Category_CATEGORY_CPU,
-		mpb.Type_TYPE_DOUBLE,
-		mpb.Unit_UNIT_PERCENT,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_MEAN,
+		metricspb.Category_CATEGORY_CPU,
+		metricspb.Type_TYPE_DOUBLE,
+		metricspb.Unit_UNIT_PERCENT,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricRXBytesCount: {
 		"Network Read Throughput",
 		"compute.googleapis.com/instance/network/received_bytes_count",
-		commonpb.Aggregation_ALIGN_DELTA,
-		mpb.Category_CATEGORY_NETWORK,
-		mpb.Type_TYPE_INT64,
-		mpb.Unit_UNIT_BPS,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_DELTA,
+		metricspb.Category_CATEGORY_NETWORK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_BPS,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricTXBytesCount: {
 		"Network Write Throughput",
 		"compute.googleapis.com/instance/network/sent_bytes_count",
-		commonpb.Aggregation_ALIGN_DELTA,
-		mpb.Category_CATEGORY_NETWORK,
-		mpb.Type_TYPE_INT64,
-		mpb.Unit_UNIT_BPS,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_DELTA,
+		metricspb.Category_CATEGORY_NETWORK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_BPS,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskReadBytesCount: {
 		"Volume Read Throughput",
 		"compute.googleapis.com/instance/disk/read_bytes_count",
-		commonpb.Aggregation_ALIGN_DELTA,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_INT64,
-		mpb.Unit_UNIT_BPS,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_DELTA,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_BPS,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskWriteBytesCount: {
 		"Volume Write Throughput",
 		"compute.googleapis.com/instance/disk/write_bytes_count",
-		commonpb.Aggregation_ALIGN_DELTA,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_INT64,
-		mpb.Unit_UNIT_BPS,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_DELTA,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_BPS,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskReadOpsCount: {
 		"Volume Read Ops",
 		"compute.googleapis.com/instance/disk/read_ops_count",
-		commonpb.Aggregation_ALIGN_DELTA,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_INT64,
-		mpb.Unit_UNIT_OPS_PER_SEC,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_DELTA,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_OPS_PER_SEC,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskWriteOpsCount: {
 		"Volume Write Ops",
 		"compute.googleapis.com/instance/disk/write_ops_count",
-		commonpb.Aggregation_ALIGN_DELTA,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_INT64,
-		mpb.Unit_UNIT_OPS_PER_SEC,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_DELTA,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_OPS_PER_SEC,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskWriteOpsCountRate: {
 		"Write Ops Count Rate",
 		"compute.googleapis.com/instance/disk/write_ops_count",
-		commonpb.Aggregation_ALIGN_RATE,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_DOUBLE,
-		mpb.Unit_UNIT_OPS_PER_SEC,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_RATE,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_DOUBLE,
+		metricspb.Unit_UNIT_OPS_PER_SEC,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskMaxWriteOpsCount: {
 		"Max Write Ops Count",
 		"compute.googleapis.com/instance/disk/max_write_ops_count",
-		commonpb.Aggregation_ALIGN_MAX,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_DOUBLE,
-		mpb.Unit_UNIT_OPS_PER_SEC,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_MAX,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_DOUBLE,
+		metricspb.Unit_UNIT_OPS_PER_SEC,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskReadOpsCountRate: {
 		"Read Ops Count Rate",
 		"compute.googleapis.com/instance/disk/read_ops_count",
-		commonpb.Aggregation_ALIGN_RATE,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_DOUBLE,
-		mpb.Unit_UNIT_OPS_PER_SEC,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_RATE,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_DOUBLE,
+		metricspb.Unit_UNIT_OPS_PER_SEC,
+		metricspb.Context_CONTEXT_VM,
 	},
 	metricDiskMaxReadOpsCount: {
 		"Max Read Ops Count",
 		"compute.googleapis.com/instance/disk/max_read_ops_count",
-		commonpb.Aggregation_ALIGN_MAX,
-		mpb.Category_CATEGORY_DISK,
-		mpb.Type_TYPE_DOUBLE,
-		mpb.Unit_UNIT_OPS_PER_SEC,
-		mpb.Context_CONTEXT_VM,
+		cpb.Aggregation_ALIGN_MAX,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_DOUBLE,
+		metricspb.Unit_UNIT_OPS_PER_SEC,
+		metricspb.Context_CONTEXT_VM,
 	},
 }

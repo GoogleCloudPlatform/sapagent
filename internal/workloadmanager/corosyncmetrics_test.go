@@ -34,7 +34,7 @@ import (
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -67,7 +67,7 @@ quorum {
 }`
 	createWorkloadMetrics = func(labels map[string]string, value float64) WorkloadMetrics {
 		return WorkloadMetrics{
-			Metrics: []*monitoringresourcepb.TimeSeries{{
+			Metrics: []*mrpb.TimeSeries{{
 				Metric: &metricpb.Metric{
 					Type:   "workload.googleapis.com/sap/validation/corosync",
 					Labels: labels,
@@ -81,7 +81,7 @@ quorum {
 						"project_id":  "test-project-id",
 					},
 				},
-				Points: []*monitoringresourcepb.Point{{
+				Points: []*mrpb.Point{{
 					// We are choosing to ignore these timestamp values when performing a comparison via cmp.Diff().
 					Interval: &cpb.TimeInterval{
 						StartTime: &timestamppb.Timestamp{Seconds: time.Now().Unix()},

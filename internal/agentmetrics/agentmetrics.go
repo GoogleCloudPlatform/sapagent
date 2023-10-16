@@ -23,8 +23,8 @@ import (
 	"os"
 	"time"
 
-	monpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monrespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/shirou/gopsutil/v3/process"
@@ -70,7 +70,7 @@ type Parameters struct {
 }
 
 // timeSeriesSubmitter is a strategy by which metrics can be submitted to a monitoring service.
-type timeSeriesSubmitter func(ctx context.Context, request *monpb.CreateTimeSeriesRequest) error
+type timeSeriesSubmitter func(ctx context.Context, request *mpb.CreateTimeSeriesRequest) error
 
 // usageReader is a strategy through which agent process metrics can be read.
 type usageReader func(ctx context.Context) (usage, error)
@@ -109,7 +109,7 @@ func NewService(ctx context.Context, params Parameters) (*Service, error) {
 	}
 
 	if service.timeSeriesSubmitter == nil {
-		service.timeSeriesSubmitter = func(ctx context.Context, req *monpb.CreateTimeSeriesRequest) error {
+		service.timeSeriesSubmitter = func(ctx context.Context, req *mpb.CreateTimeSeriesRequest) error {
 			return cloudmonitoring.CreateTimeSeriesWithRetry(ctx, service.timeSeriesCreator, req, params.BackOffs)
 		}
 	}
@@ -222,17 +222,17 @@ func (s *Service) collectAndSubmitMetrics(ctx context.Context) error {
 }
 
 // createTimeSeriesRequestFactory creates a time series request for cloud monitoring from TimeSeries instances.
-func (s *Service) createTimeSeriesRequestFactory(timeSeries []*monrespb.TimeSeries) *monpb.CreateTimeSeriesRequest {
+func (s *Service) createTimeSeriesRequestFactory(timeSeries []*mrpb.TimeSeries) *mpb.CreateTimeSeriesRequest {
 	projectID := s.config.GetCloudProperties().GetProjectId()
-	return &monpb.CreateTimeSeriesRequest{
+	return &mpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", projectID),
 		TimeSeries: timeSeries,
 	}
 }
 
 // createHealthTimeSeries constructs TimeSeries instances from usage data.
-func (s *Service) createHealthTimeSeries(healthy bool) []*monrespb.TimeSeries {
-	var timeSeries []*monrespb.TimeSeries
+func (s *Service) createHealthTimeSeries(healthy bool) []*mrpb.TimeSeries {
+	var timeSeries []*mrpb.TimeSeries
 	params := timeseries.Params{
 		BareMetal:  s.config.BareMetal,
 		BoolValue:  healthy,
@@ -244,8 +244,8 @@ func (s *Service) createHealthTimeSeries(healthy bool) []*monrespb.TimeSeries {
 }
 
 // createMetricTimeSeries constructs TimeSeries instances from usage data.
-func (s *Service) createMetricTimeSeries(u usage) []*monrespb.TimeSeries {
-	timeSeries := make([]*monrespb.TimeSeries, 2)
+func (s *Service) createMetricTimeSeries(u usage) []*mrpb.TimeSeries {
+	timeSeries := make([]*mrpb.TimeSeries, 2)
 	now := s.now()
 	params := timeseries.Params{
 		BareMetal:    s.config.BareMetal,

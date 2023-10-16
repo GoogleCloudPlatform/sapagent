@@ -22,13 +22,13 @@ import (
 
 	"github.com/googleapis/gax-go/v2"
 
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 // TimeSeriesCreator is a fake which implements the TimeSeriesCreator interface.
 type TimeSeriesCreator struct {
-	Calls []*monitoringpb.CreateTimeSeriesRequest
+	Calls []*mpb.CreateTimeSeriesRequest
 	Err   error
 }
 
@@ -38,23 +38,23 @@ type TimeSeriesCreatorThreadSafe struct {
 	Err error
 }
 
-func (f *TimeSeriesCreator) CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
+func (f *TimeSeriesCreator) CreateTimeSeries(ctx context.Context, req *mpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
 	f.Calls = append(f.Calls, req)
 	return f.Err
 }
 
-func (f *TimeSeriesCreatorThreadSafe) CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
+func (f *TimeSeriesCreatorThreadSafe) CreateTimeSeries(ctx context.Context, req *mpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
 	return f.Err
 }
 
 // TimeSeriesQuerier is a fake which implements the TimeSeriesQuerier interface.
 type TimeSeriesQuerier struct {
-	Calls []*monitoringpb.QueryTimeSeriesRequest
+	Calls []*mpb.QueryTimeSeriesRequest
 	Err   error
 	TS    []*mrpb.TimeSeriesData
 }
 
-func (f *TimeSeriesQuerier) QueryTimeSeries(ctx context.Context, req *monitoringpb.QueryTimeSeriesRequest, ops ...gax.CallOption) ([]*mrpb.TimeSeriesData, error) {
+func (f *TimeSeriesQuerier) QueryTimeSeries(ctx context.Context, req *mpb.QueryTimeSeriesRequest, ops ...gax.CallOption) ([]*mrpb.TimeSeriesData, error) {
 	f.Calls = append(f.Calls, req)
 	return f.TS, f.Err
 }

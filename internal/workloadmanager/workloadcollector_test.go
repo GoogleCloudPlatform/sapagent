@@ -30,7 +30,7 @@ import (
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -190,7 +190,7 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 				InstanceInfoReader: *instanceinfo.New(&fakeDiskMapper{}, defaultGCEService),
 				sapApplications:    &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 			},
-			want: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{
+			want: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{
 				createTimeSeries(
 					"workload.googleapis.com/sap/validation/system",
 					map[string]string{"agent": "sapagent"},
@@ -324,10 +324,10 @@ func TestSendMetrics(t *testing.T) {
 				WriteInsightErrs: []error{nil},
 			},
 			params: sendMetricsParams{
-				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+				wm: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
 					Resource: &monitoredresourcepb.MonitoredResource{},
-					Points:   []*monitoringresourcespb.Point{},
+					Points:   []*mrpb.Point{},
 				}}},
 				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},
@@ -357,10 +357,10 @@ func TestSendMetrics(t *testing.T) {
 				WriteInsightErrs: []error{nil},
 			},
 			params: sendMetricsParams{
-				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+				wm: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
 					Resource: &monitoredresourcepb.MonitoredResource{},
-					Points:   []*monitoringresourcespb.Point{},
+					Points:   []*mrpb.Point{},
 				}}},
 				cp:                bmConfiguration.GetCloudProperties(),
 				bareMetal:         true,
@@ -391,10 +391,10 @@ func TestSendMetrics(t *testing.T) {
 				WriteInsightErrs: []error{nil},
 			},
 			params: sendMetricsParams{
-				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+				wm: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
 					Resource: &monitoredresourcepb.MonitoredResource{},
-					Points:   []*monitoringresourcespb.Point{},
+					Points:   []*mrpb.Point{},
 				}}},
 				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
@@ -422,10 +422,10 @@ func TestSendMetrics(t *testing.T) {
 			},
 			name: "failsSendToDataWarehouse",
 			params: sendMetricsParams{
-				wm: WorkloadMetrics{Metrics: []*monitoringresourcespb.TimeSeries{{
+				wm: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{{
 					Metric:   &metricpb.Metric{},
 					Resource: &monitoredresourcepb.MonitoredResource{},
-					Points:   []*monitoringresourcespb.Point{},
+					Points:   []*mrpb.Point{},
 				}}},
 				cp:                defaultConfiguration.GetCloudProperties(),
 				timeSeriesCreator: &fake.TimeSeriesCreator{},

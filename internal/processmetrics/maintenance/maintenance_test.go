@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -45,7 +45,7 @@ type (
 	}
 
 	fakeTimeSeriesCreator struct {
-		calls []*monitoringpb.CreateTimeSeriesRequest
+		calls []*mpb.CreateTimeSeriesRequest
 	}
 )
 
@@ -53,7 +53,7 @@ func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
 	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
 }
 
-func (f *fakeTimeSeriesCreator) CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
+func (f *fakeTimeSeriesCreator) CreateTimeSeries(ctx context.Context, req *mpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error {
 	f.calls = append(f.calls, req)
 	return nil
 }

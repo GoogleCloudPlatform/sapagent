@@ -25,8 +25,8 @@ import (
 	"testing"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
-	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
@@ -68,18 +68,18 @@ func TestCollectMetricsToJSON(t *testing.T) {
 func TestParseRemoteJSON(t *testing.T) {
 	tests := []struct {
 		name        string
-		want        []*monitoringresourcespb.TimeSeries
+		want        []*mrpb.TimeSeries
 		output      string
 		expectError bool
 	}{
 		{
 			name: "succeedsWithValidOutput",
-			want: append([]*monitoringresourcespb.TimeSeries{}, &monitoringresourcespb.TimeSeries{
+			want: append([]*mrpb.TimeSeries{}, &mrpb.TimeSeries{
 				Metric: &mpb.Metric{
 					Type:   "workload.googleapis.com/sap/validation/system",
 					Labels: map[string]string{"agent": "gcagent", "instance_name": "test-instance", "os": "\"sles\"-\"15\""},
 				},
-				Resource: &mrpb.MonitoredResource{
+				Resource: &mrespb.MonitoredResource{
 					Type:   "gce_instance",
 					Labels: map[string]string{"instance_id": "5555"},
 				},
@@ -90,13 +90,13 @@ func TestParseRemoteJSON(t *testing.T) {
 		},
 		{
 			name:        "succeedsWithEmpty",
-			want:        []*monitoringresourcespb.TimeSeries{},
+			want:        []*mrpb.TimeSeries{},
 			output:      "",
 			expectError: false,
 		},
 		{
 			name:        "failsWithBadInput",
-			want:        []*monitoringresourcespb.TimeSeries{},
+			want:        []*mrpb.TimeSeries{},
 			output:      "somebadstuff",
 			expectError: true,
 		},
@@ -104,7 +104,7 @@ func TestParseRemoteJSON(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := []*monitoringresourcespb.TimeSeries{}
+			got := []*mrpb.TimeSeries{}
 			err := parseRemoteJSON(test.output, &got)
 			if !test.expectError && err != nil {
 				t.Errorf("parseRemoteJSON returned an error: %s", err)

@@ -39,7 +39,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	s "cloud.google.com/go/storage"
@@ -233,7 +233,7 @@ func (r *ReadMetrics) createQueryMap() (map[string]string, error) {
 
 // executeQuery queries Cloud Monitoring and returns the results.
 func (r *ReadMetrics) executeQuery(ctx context.Context, identifier, query string) ([]*mrpb.TimeSeriesData, error) {
-	req := &monitoringpb.QueryTimeSeriesRequest{
+	req := &mpb.QueryTimeSeriesRequest{
 		Name:  fmt.Sprintf("projects/%s", r.projectID),
 		Query: query,
 	}

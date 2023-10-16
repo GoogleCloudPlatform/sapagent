@@ -28,7 +28,7 @@ import (
 	"github.com/googleapis/gax-go/v2"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
-	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
@@ -73,16 +73,16 @@ func NewDefaultBackOffIntervals() *BackOffIntervals {
 
 // TimeSeriesCreator provides an easily testable translation to the cloud monitoring API.
 type TimeSeriesCreator interface {
-	CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error
+	CreateTimeSeries(ctx context.Context, req *mpb.CreateTimeSeriesRequest, opts ...gax.CallOption) error
 }
 
 // TimeSeriesQuerier provides an easily testable translation to the cloud monitoring API.
 type TimeSeriesQuerier interface {
-	QueryTimeSeries(ctx context.Context, req *monitoringpb.QueryTimeSeriesRequest, opts ...gax.CallOption) ([]*mrpb.TimeSeriesData, error)
+	QueryTimeSeries(ctx context.Context, req *mpb.QueryTimeSeriesRequest, opts ...gax.CallOption) ([]*mrpb.TimeSeriesData, error)
 }
 
 // CreateTimeSeriesWithRetry decorates TimeSeriesCreator.CreateTimeSeries with a retry mechanism.
-func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, req *monitoringpb.CreateTimeSeriesRequest, bo *BackOffIntervals) error {
+func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, req *mpb.CreateTimeSeriesRequest, bo *BackOffIntervals) error {
 
 	attempt := 1
 	if bo == nil {
@@ -110,7 +110,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 }
 
 // QueryTimeSeriesWithRetry decorates TimeSeriesQuerier.QueryTimeSeries with a retry mechanism.
-func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req *monitoringpb.QueryTimeSeriesRequest, bo *BackOffIntervals) ([]*mrpb.TimeSeriesData, error) {
+func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req *mpb.QueryTimeSeriesRequest, bo *BackOffIntervals) ([]*mrpb.TimeSeriesData, error) {
 	var (
 		attempt = 1
 		res     []*mrpb.TimeSeriesData
@@ -227,7 +227,7 @@ func SendTimeSeries(ctx context.Context, timeSeries []*mrpb.TimeSeries, timeSeri
 func sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, timeSeriesCreator TimeSeriesCreator, bo *BackOffIntervals, projectID string) error {
 	log.CtxLogger(ctx).Infow("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
 
-	req := &monitoringpb.CreateTimeSeriesRequest{
+	req := &mpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", projectID),
 		TimeSeries: pruneBatch(batchTimeSeries),
 	}

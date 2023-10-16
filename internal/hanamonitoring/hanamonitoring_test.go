@@ -31,24 +31,24 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
-	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
-	commonpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringresourcespb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	gceFake "github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
-	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (
 	defaultParams = Parameters{
-		Config: &cpb.Configuration{
+		Config: &configpb.Configuration{
 			CloudProperties: &ipb.CloudProperties{
 				ProjectId:  "test-project",
 				Zone:       "test-zone",
 				InstanceId: "123456",
 			},
-			HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+			HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 				Enabled: true,
 			},
 		},
@@ -61,19 +61,19 @@ var (
 	defaultTimestamp = &tspb.Timestamp{Seconds: 123}
 	defaultDb        = &database{
 		queryFunc: fakeQueryFuncError,
-		instance:  &cpb.HANAInstance{Password: "fakePassword"},
+		instance:  &configpb.HANAInstance{Password: "fakePassword"},
 	}
-	defaultQuery = &cpb.Query{
-		Columns: []*cpb.Column{
-			&cpb.Column{},
+	defaultQuery = &configpb.Query{
+		Columns: []*configpb.Column{
+			&configpb.Column{},
 		},
 	}
 )
 
-func newDefaultCumulativeMetric(st, et int64) *monitoringresourcespb.TimeSeries {
-	return &monitoringresourcespb.TimeSeries{
+func newDefaultCumulativeMetric(st, et int64) *mrpb.TimeSeries {
+	return &mrpb.TimeSeries{
 		MetricKind: mpb.MetricDescriptor_CUMULATIVE,
-		Resource: &mrpb.MonitoredResource{
+		Resource: &mrespb.MonitoredResource{
 			Type: "gce_instance",
 			Labels: map[string]string{
 				"project_id":  "test-project",
@@ -81,13 +81,13 @@ func newDefaultCumulativeMetric(st, et int64) *monitoringresourcespb.TimeSeries 
 				"instance_id": "123456",
 			},
 		},
-		Points: []*monitoringresourcespb.Point{
+		Points: []*mrpb.Point{
 			{
-				Interval: &commonpb.TimeInterval{
+				Interval: &cpb.TimeInterval{
 					StartTime: tspb.New(time.Unix(st, 0)),
 					EndTime:   tspb.New(time.Unix(et, 0)),
 				},
-				Value: &commonpb.TypedValue{},
+				Value: &cpb.TypedValue{},
 			},
 		},
 	}
@@ -110,10 +110,10 @@ func fakeQueryFuncError(context.Context, string, ...any) (*sql.Rows, error) {
 	return nil, cmpopts.AnyError
 }
 
-func newDefaultMetrics() *monitoringresourcespb.TimeSeries {
-	return &monitoringresourcespb.TimeSeries{
+func newDefaultMetrics() *mrpb.TimeSeries {
+	return &mrpb.TimeSeries{
 		MetricKind: mpb.MetricDescriptor_GAUGE,
-		Resource: &mrpb.MonitoredResource{
+		Resource: &mrespb.MonitoredResource{
 			Type: "gce_instance",
 			Labels: map[string]string{
 				"project_id":  "test-project",
@@ -121,13 +121,13 @@ func newDefaultMetrics() *monitoringresourcespb.TimeSeries {
 				"instance_id": "123456",
 			},
 		},
-		Points: []*monitoringresourcespb.Point{
+		Points: []*mrpb.Point{
 			{
-				Interval: &commonpb.TimeInterval{
+				Interval: &cpb.TimeInterval{
 					StartTime: tspb.New(time.Unix(123, 0)),
 					EndTime:   tspb.New(time.Unix(123, 0)),
 				},
-				Value: &commonpb.TypedValue{},
+				Value: &cpb.TypedValue{},
 			},
 		},
 	}
@@ -142,15 +142,15 @@ func TestStart(t *testing.T) {
 		{
 			name: "FailsWithEmptyConfig",
 			params: Parameters{
-				Config: &cpb.Configuration{},
+				Config: &configpb.Configuration{},
 			},
 			want: false,
 		},
 		{
 			name: "FailsWithDisabled",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 						Enabled: false,
 					},
 				},
@@ -160,8 +160,8 @@ func TestStart(t *testing.T) {
 		{
 			name: "FailsWithEmptyQueries",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 						Enabled: true,
 					},
 				},
@@ -171,11 +171,11 @@ func TestStart(t *testing.T) {
 		{
 			name: "FailsWithEmptyDatabases",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 						Enabled: true,
-						Queries: []*cpb.Query{
-							&cpb.Query{},
+						Queries: []*configpb.Query{
+							&configpb.Query{},
 						},
 					},
 				},
@@ -185,14 +185,14 @@ func TestStart(t *testing.T) {
 		{
 			name: "FailedToFetchSID",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 						Enabled: true,
-						Queries: []*cpb.Query{
-							&cpb.Query{SampleIntervalSec: 5},
+						Queries: []*configpb.Query{
+							&configpb.Query{SampleIntervalSec: 5},
 						},
-						HanaInstances: []*cpb.HANAInstance{
-							&cpb.HANAInstance{Password: "fakePassword"},
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{Password: "fakePassword"},
 						},
 					},
 				},
@@ -202,14 +202,14 @@ func TestStart(t *testing.T) {
 		{
 			name: "Succeeds",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 						Enabled: true,
-						Queries: []*cpb.Query{
-							&cpb.Query{SampleIntervalSec: 5},
+						Queries: []*configpb.Query{
+							&configpb.Query{SampleIntervalSec: 5},
 						},
-						HanaInstances: []*cpb.HANAInstance{
-							&cpb.HANAInstance{Password: "fakePassword", Sid: "fakeSID"},
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{Password: "fakePassword", Sid: "fakeSID"},
 						},
 					},
 				},
@@ -285,7 +285,7 @@ func TestQueryAndSend(t *testing.T) {
 func TestCreateColumns(t *testing.T) {
 	tests := []struct {
 		name string
-		cols []*cpb.Column
+		cols []*configpb.Column
 		want []any
 	}{
 		{
@@ -295,21 +295,21 @@ func TestCreateColumns(t *testing.T) {
 		},
 		{
 			name: "ColumnsWithMultipleTypes",
-			cols: []*cpb.Column{
-				&cpb.Column{
-					ValueType: cpb.ValueType_VALUE_BOOL,
+			cols: []*configpb.Column{
+				&configpb.Column{
+					ValueType: configpb.ValueType_VALUE_BOOL,
 				},
-				&cpb.Column{
-					ValueType: cpb.ValueType_VALUE_STRING,
+				&configpb.Column{
+					ValueType: configpb.ValueType_VALUE_STRING,
 				},
-				&cpb.Column{
-					ValueType: cpb.ValueType_VALUE_INT64,
+				&configpb.Column{
+					ValueType: configpb.ValueType_VALUE_INT64,
 				},
-				&cpb.Column{
-					ValueType: cpb.ValueType_VALUE_DOUBLE,
+				&configpb.Column{
+					ValueType: configpb.ValueType_VALUE_DOUBLE,
 				},
-				&cpb.Column{
-					ValueType: cpb.ValueType_VALUE_UNSPECIFIED,
+				&configpb.Column{
+					ValueType: configpb.ValueType_VALUE_UNSPECIFIED,
 				},
 			},
 			want: []any{
@@ -338,7 +338,7 @@ func TestQueryDatabase(t *testing.T) {
 		name      string
 		params    Parameters
 		queryFunc queryFunc
-		query     *cpb.Query
+		query     *configpb.Query
 		want      error
 	}{
 		{
@@ -348,16 +348,16 @@ func TestQueryDatabase(t *testing.T) {
 		},
 		{
 			name: "FailsWithNilColumns",
-			query: &cpb.Query{
+			query: &configpb.Query{
 				Columns: nil,
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "FailsWithQueryError",
-			query: &cpb.Query{
-				Columns: []*cpb.Column{
-					&cpb.Column{},
+			query: &configpb.Query{
+				Columns: []*configpb.Column{
+					&configpb.Column{},
 				},
 			},
 			queryFunc: fakeQueryFuncError,
@@ -365,9 +365,9 @@ func TestQueryDatabase(t *testing.T) {
 		},
 		{
 			name: "Succeeds",
-			query: &cpb.Query{
-				Columns: []*cpb.Column{
-					&cpb.Column{},
+			query: &configpb.Query{
+				Columns: []*configpb.Column{
+					&configpb.Column{},
 				},
 			},
 			queryFunc: fakeQueryFunc,
@@ -397,12 +397,12 @@ func TestConnectToDatabases(t *testing.T) {
 		{
 			name: "ConnectValidatesDriver",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
-						HanaInstances: []*cpb.HANAInstance{
-							&cpb.HANAInstance{Password: "fakePassword"},
-							&cpb.HANAInstance{Password: "fakePassword"},
-							&cpb.HANAInstance{Password: "fakePassword"}},
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{Password: "fakePassword"},
+							&configpb.HANAInstance{Password: "fakePassword"},
+							&configpb.HANAInstance{Password: "fakePassword"}},
 					},
 				},
 			},
@@ -411,10 +411,10 @@ func TestConnectToDatabases(t *testing.T) {
 		{
 			name: "ConnectFailsEmptyInstance",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
-						HanaInstances: []*cpb.HANAInstance{
-							&cpb.HANAInstance{},
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{},
 						},
 					},
 				},
@@ -424,10 +424,10 @@ func TestConnectToDatabases(t *testing.T) {
 		{
 			name: "ConnectFailsPassword",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
-						HanaInstances: []*cpb.HANAInstance{
-							&cpb.HANAInstance{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{
 								User:     "fakeUser",
 								Password: "fakePassword",
 								Host:     "fakeHost",
@@ -442,10 +442,10 @@ func TestConnectToDatabases(t *testing.T) {
 		{
 			name: "ConnectFailsSecretNameOverride",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
-						HanaInstances: []*cpb.HANAInstance{
-							&cpb.HANAInstance{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{
 								User:       "fakeUser",
 								Host:       "fakeHost",
 								Port:       "fakePort",
@@ -464,10 +464,10 @@ func TestConnectToDatabases(t *testing.T) {
 		{
 			name: "SecretNameFailsToReadNoDBConnection",
 			params: Parameters{
-				Config: &cpb.Configuration{
-					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
-						HanaInstances: []*cpb.HANAInstance{
-							&cpb.HANAInstance{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{
 								SecretName: "fakeSecretName",
 							},
 						},
@@ -483,7 +483,7 @@ func TestConnectToDatabases(t *testing.T) {
 		{
 			name: "HANAMonitoringConfigNotSet",
 			params: Parameters{
-				Config: &cpb.Configuration{},
+				Config: &configpb.Configuration{},
 			},
 			want: 0,
 		},
@@ -503,17 +503,17 @@ func TestConnectToDatabases(t *testing.T) {
 func TestCreateMetricsForRow(t *testing.T) {
 	// This test simulates a row with several GAUGE metrics (3), a couple LABELs (2).
 	// The labels will be appended to each of the gauge metrics, making the number of gauge metrics (3) be the desired want value.
-	query := &cpb.Query{
+	query := &configpb.Query{
 		Name: "testQuery",
-		Columns: []*cpb.Column{
-			{ValueType: cpb.ValueType_VALUE_INT64, Name: "testColInt", MetricType: cpb.MetricType_METRIC_GAUGE},
-			{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testColDouble", MetricType: cpb.MetricType_METRIC_GAUGE},
-			{ValueType: cpb.ValueType_VALUE_BOOL, Name: "testColBool", MetricType: cpb.MetricType_METRIC_GAUGE},
-			{ValueType: cpb.ValueType_VALUE_STRING, Name: "stringLabel", MetricType: cpb.MetricType_METRIC_LABEL},
-			{ValueType: cpb.ValueType_VALUE_STRING, Name: "stringLabel2", MetricType: cpb.MetricType_METRIC_LABEL},
-			{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testColDouble2", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+		Columns: []*configpb.Column{
+			{ValueType: configpb.ValueType_VALUE_INT64, Name: "testColInt", MetricType: configpb.MetricType_METRIC_GAUGE},
+			{ValueType: configpb.ValueType_VALUE_DOUBLE, Name: "testColDouble", MetricType: configpb.MetricType_METRIC_GAUGE},
+			{ValueType: configpb.ValueType_VALUE_BOOL, Name: "testColBool", MetricType: configpb.MetricType_METRIC_GAUGE},
+			{ValueType: configpb.ValueType_VALUE_STRING, Name: "stringLabel", MetricType: configpb.MetricType_METRIC_LABEL},
+			{ValueType: configpb.ValueType_VALUE_STRING, Name: "stringLabel2", MetricType: configpb.MetricType_METRIC_LABEL},
+			{ValueType: configpb.ValueType_VALUE_DOUBLE, Name: "testColDouble2", MetricType: configpb.MetricType_METRIC_CUMULATIVE},
 			// Add a misconfigured column (STRING cannot be GAUGE. This would be caught in the config validator) to kill mutants.
-			{ValueType: cpb.ValueType_VALUE_STRING, Name: "misconfiguredCol", MetricType: cpb.MetricType_METRIC_GAUGE},
+			{ValueType: configpb.ValueType_VALUE_STRING, Name: "misconfiguredCol", MetricType: configpb.MetricType_METRIC_GAUGE},
 		},
 	}
 	cols := make([]any, len(query.Columns))
@@ -546,39 +546,39 @@ func TestCreateMetricsForRow(t *testing.T) {
 func TestCreateGaugeMetric(t *testing.T) {
 	tests := []struct {
 		name       string
-		column     *cpb.Column
+		column     *configpb.Column
 		val        any
-		want       *monitoringresourcespb.TimeSeries
+		want       *mrpb.TimeSeries
 		wantMetric *mpb.Metric
-		wantValue  *commonpb.TypedValue
+		wantValue  *cpb.TypedValue
 	}{
 		{
 			name:       "Int",
-			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol"},
+			column:     &configpb.Column{ValueType: configpb.ValueType_VALUE_INT64, Name: "testCol"},
 			val:        proto.Int64(123),
 			want:       newDefaultMetrics(),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 123}},
+			wantValue:  &cpb.TypedValue{Value: &cpb.TypedValue_Int64Value{Int64Value: 123}},
 		},
 		{
 			name:       "Double",
-			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testCol"},
+			column:     &configpb.Column{ValueType: configpb.ValueType_VALUE_DOUBLE, Name: "testCol"},
 			val:        proto.Float64(123.456),
 			want:       newDefaultMetrics(),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_DoubleValue{DoubleValue: 123.456}},
+			wantValue:  &cpb.TypedValue{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 123.456}},
 		},
 		{
 			name:       "BoolWithNameOverride",
-			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_BOOL, Name: "testCol", NameOverride: "override/metric/path"},
+			column:     &configpb.Column{ValueType: configpb.ValueType_VALUE_BOOL, Name: "testCol", NameOverride: "override/metric/path"},
 			val:        proto.Bool(true),
 			want:       newDefaultMetrics(),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/override/metric/path", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_BoolValue{BoolValue: true}},
+			wantValue:  &cpb.TypedValue{Value: &cpb.TypedValue_BoolValue{BoolValue: true}},
 		},
 		{
 			name:   "Fails",
-			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_STRING, Name: "testCol"},
+			column: &configpb.Column{ValueType: configpb.ValueType_VALUE_STRING, Name: "testCol"},
 			val:    proto.String("test"),
 		},
 	}
@@ -599,16 +599,16 @@ func TestCreateGaugeMetric(t *testing.T) {
 func TestCreateCumulativeMetric(t *testing.T) {
 	tests := []struct {
 		name       string
-		column     *cpb.Column
+		column     *configpb.Column
 		val        any
-		want       *monitoringresourcespb.TimeSeries
+		want       *mrpb.TimeSeries
 		runningSum map[timeSeriesKey]prevVal
 		wantMetric *mpb.Metric
-		wantValue  *commonpb.TypedValue
+		wantValue  *cpb.TypedValue
 	}{
 		{
 			name:       "FirstValueInCumulativeTimeSeriesInt",
-			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			column:     &configpb.Column{ValueType: configpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: configpb.MetricType_METRIC_CUMULATIVE},
 			val:        proto.Int64(123),
 			runningSum: map[timeSeriesKey]prevVal{},
 			want:       nil,
@@ -617,7 +617,7 @@ func TestCreateCumulativeMetric(t *testing.T) {
 		},
 		{
 			name:       "FirstValueInCumulativeTimeSeriesDouble",
-			column:     &cpb.Column{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			column:     &configpb.Column{ValueType: configpb.ValueType_VALUE_DOUBLE, Name: "testCol", MetricType: configpb.MetricType_METRIC_CUMULATIVE},
 			val:        proto.Float64(123.23),
 			runningSum: map[timeSeriesKey]prevVal{},
 			want:       nil,
@@ -626,40 +626,40 @@ func TestCreateCumulativeMetric(t *testing.T) {
 		},
 		{
 			name:   "KeyAlreadyExistInCumulativeTimeSeries",
-			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			column: &configpb.Column{ValueType: configpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: configpb.MetricType_METRIC_CUMULATIVE},
 			val:    proto.Int64(123),
 			runningSum: map[timeSeriesKey]prevVal{
 				newTimeSeriesKey("workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", "abc:def"): prevVal{val: int64(123), startTime: &tspb.Timestamp{Seconds: 0}},
 			},
 			want:       newDefaultCumulativeMetric(0, 123),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 246}},
+			wantValue:  &cpb.TypedValue{Value: &cpb.TypedValue_Int64Value{Int64Value: 246}},
 		},
 		{
 			name:   "CumulativeTimeSeriesDouble",
-			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_DOUBLE, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE},
+			column: &configpb.Column{ValueType: configpb.ValueType_VALUE_DOUBLE, Name: "testCol", MetricType: configpb.MetricType_METRIC_CUMULATIVE},
 			val:    proto.Float64(123.23),
 			runningSum: map[timeSeriesKey]prevVal{
 				newTimeSeriesKey("workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", "abc:def"): prevVal{val: float64(123.23), startTime: &tspb.Timestamp{Seconds: 0}},
 			},
 			want:       newDefaultCumulativeMetric(0, 123),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/testQuery/testCol", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_DoubleValue{DoubleValue: 246.46}},
+			wantValue:  &cpb.TypedValue{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 246.46}},
 		},
 		{
 			name:   "IntWithNameOverride",
-			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: cpb.MetricType_METRIC_CUMULATIVE, NameOverride: "override/path"},
+			column: &configpb.Column{ValueType: configpb.ValueType_VALUE_INT64, Name: "testCol", MetricType: configpb.MetricType_METRIC_CUMULATIVE, NameOverride: "override/path"},
 			val:    proto.Int64(123),
 			runningSum: map[timeSeriesKey]prevVal{
 				newTimeSeriesKey("workload.googleapis.com/sap/hanamonitoring/override/path", "abc:def"): prevVal{val: int64(123), startTime: &tspb.Timestamp{Seconds: 0}},
 			},
 			want:       newDefaultCumulativeMetric(0, 123),
 			wantMetric: &mpb.Metric{Type: "workload.googleapis.com/sap/hanamonitoring/override/path", Labels: map[string]string{"abc": "def"}},
-			wantValue:  &commonpb.TypedValue{Value: &commonpb.TypedValue_Int64Value{Int64Value: 246}},
+			wantValue:  &cpb.TypedValue{Value: &cpb.TypedValue_Int64Value{Int64Value: 246}},
 		},
 		{
 			name:   "Fails",
-			column: &cpb.Column{ValueType: cpb.ValueType_VALUE_STRING, Name: "testCol"},
+			column: &configpb.Column{ValueType: configpb.ValueType_VALUE_STRING, Name: "testCol"},
 			val:    proto.String("test"),
 		},
 	}

@@ -27,7 +27,7 @@ import (
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -55,7 +55,7 @@ var (
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type:   "workload.googleapis.com/sap/validation/system",
 				Labels: labels,
@@ -69,7 +69,7 @@ func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) Work
 					"project_id":  "test-project-id",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,

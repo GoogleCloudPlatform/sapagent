@@ -36,7 +36,7 @@ import (
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	monitoringresourcepb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -111,7 +111,7 @@ var (
 
 func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type:   "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{},
@@ -125,7 +125,7 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 					"project_id":  "test-project-id",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,
@@ -142,7 +142,7 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 
 func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
@@ -158,7 +158,7 @@ func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemake
 					"project_id":  "test-project-id",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,
@@ -175,7 +175,7 @@ func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemake
 
 func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
@@ -195,7 +195,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"project_id":  "test-project-id",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,
@@ -212,7 +212,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 
 func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
@@ -229,7 +229,7 @@ func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists 
 					"project_id":  "test-project-id",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,
@@ -246,7 +246,7 @@ func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists 
 
 func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
@@ -274,7 +274,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 					"project_id":  "test-project-id",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,
@@ -291,7 +291,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 
 func wantNoPropertiesPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type:   "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{},
@@ -305,7 +305,7 @@ func wantNoPropertiesPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists
 					"project_id":  "",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,
@@ -322,7 +322,7 @@ func wantNoPropertiesPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists
 
 func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) WorkloadMetrics {
 	return WorkloadMetrics{
-		Metrics: []*monitoringresourcepb.TimeSeries{{
+		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type: "workload.googleapis.com/sap/validation/pacemaker",
 				Labels: map[string]string{
@@ -342,7 +342,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 					"project_id":  "test-project-id",
 				},
 			},
-			Points: []*monitoringresourcepb.Point{{
+			Points: []*mrpb.Point{{
 				Interval: &cpb.TimeInterval{
 					StartTime: ts,
 					EndTime:   ts,
