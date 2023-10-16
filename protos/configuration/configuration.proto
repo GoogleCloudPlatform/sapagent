@@ -66,6 +66,8 @@ message CollectionConfiguration {
   repeated string process_metrics_to_skip =
       19;  // List of process metrics to skip during metrics collection
            // Ex: ["/sap/nw/abap/sessions", "/sap/nw/abap/rfc"].
+  WorkloadValidationCollectionDefinition
+      workload_validation_collection_definition = 20;
 }
 
 message AgentProperties {
@@ -102,6 +104,11 @@ message RemoteCollectionGcloud {
 message RemoteCollectionSsh {
   string ssh_username = 1;
   string ssh_private_key_path = 2;
+}
+
+message WorkloadValidationCollectionDefinition {
+  TargetEnvironment config_target_environment = 1;
+  bool disable_fetch_latest_config = 2;
 }
 
 message HANAMetricsConfig {
@@ -162,4 +169,11 @@ enum ValueType {
   VALUE_INT64 = 2;
   VALUE_STRING = 3;
   VALUE_DOUBLE = 4;
+}
+
+enum TargetEnvironment {
+  TARGET_ENVIRONMENT_UNSPECIFIED = 0;
+  PRODUCTION = 1;
+  STAGING = 2;
+  DEVELOPMENT = 3;
 }
