@@ -28,10 +28,10 @@ import (
 	"golang.org/x/oauth2/google"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

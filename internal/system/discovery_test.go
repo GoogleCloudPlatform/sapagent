@@ -32,7 +32,7 @@ import (
 	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

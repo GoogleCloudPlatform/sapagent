@@ -24,7 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"

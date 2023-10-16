@@ -38,7 +38,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -50,6 +49,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

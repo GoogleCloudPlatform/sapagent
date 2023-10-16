@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
 func TestConnectFailure(t *testing.T) {

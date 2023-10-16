@@ -35,9 +35,9 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	gceFake "github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	gcefake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
 var (
@@ -52,7 +52,7 @@ var (
 				Enabled: true,
 			},
 		},
-		GCEService: &gceFake.TestGCE{
+		GCEService: &gcefake.TestGCE{
 			GetSecretResp: []string{"fakePassword"},
 			GetSecretErr:  []error{nil},
 		},
@@ -454,7 +454,7 @@ func TestConnectToDatabases(t *testing.T) {
 						},
 					},
 				},
-				GCEService: &gceFake.TestGCE{
+				GCEService: &gcefake.TestGCE{
 					GetSecretResp: []string{"fakePassword"},
 					GetSecretErr:  []error{nil},
 				},
@@ -473,7 +473,7 @@ func TestConnectToDatabases(t *testing.T) {
 						},
 					},
 				},
-				GCEService: &gceFake.TestGCE{
+				GCEService: &gcefake.TestGCE{
 					GetSecretResp: []string{"fakePassword"},
 					GetSecretErr:  []error{errors.New("error")},
 				},

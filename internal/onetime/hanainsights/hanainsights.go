@@ -30,11 +30,11 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

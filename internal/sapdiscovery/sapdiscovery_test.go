@@ -25,7 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"

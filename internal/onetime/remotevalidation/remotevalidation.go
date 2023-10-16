@@ -33,10 +33,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

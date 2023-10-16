@@ -35,10 +35,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"

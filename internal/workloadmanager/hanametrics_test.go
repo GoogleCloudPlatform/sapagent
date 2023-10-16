@@ -31,8 +31,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"

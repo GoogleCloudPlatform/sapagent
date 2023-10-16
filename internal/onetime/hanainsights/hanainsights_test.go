@@ -25,11 +25,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

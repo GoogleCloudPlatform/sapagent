@@ -31,8 +31,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
