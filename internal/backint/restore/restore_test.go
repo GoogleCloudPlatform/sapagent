@@ -70,6 +70,14 @@ var (
 			},
 			Content: []byte("test content 2"),
 		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
+				Name:       "test@TST/object.txt_3/123456789012345.bak",
+				Created:    time.UnixMilli(123456789012345),
+			},
+			Content: []byte("test content 3"),
+		},
 	})
 	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
 	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST"}
@@ -107,6 +115,15 @@ func TestRestore(t *testing.T) {
 		// This test case will restore the latest created.
 		{
 			name:      "FormattedNull",
+			input:     `#NULL "/object.txt"`,
+			destName:  t.TempDir() + "/object.txt",
+			want:      `#RESTORED "1234567890" "/object.txt"` + "\n",
+			wantError: nil,
+		},
+		// There was a previous bug where both object.txt and object.txt_3 would
+		// have been returned in this case, and object.txt_3 would have been used.
+		{
+			name:      "SimilarFileNameReturned",
 			input:     `#NULL "/object.txt"`,
 			destName:  t.TempDir() + "/object.txt",
 			want:      `#RESTORED "1234567890" "/object.txt"` + "\n",
