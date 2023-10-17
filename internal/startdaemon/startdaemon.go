@@ -183,7 +183,8 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 	configureUsageMetricsForDaemon(d.config.GetCloudProperties())
 	usagemetrics.Configured()
 	usagemetrics.Started()
-	d.startServices(ctx, runtime.GOOS)
+	ctx, cancel := context.WithCancel(ctx)
+	d.startServices(ctx, cancel, runtime.GOOS)
 	return subcommands.ExitSuccess
 }
 
@@ -198,7 +199,7 @@ func configureUsageMetricsForDaemon(cp *iipb.CloudProperties) {
 }
 
 // startServices starts underlying services of SAP Agent.
-func (d *Daemon) startServices(ctx context.Context, goos string) {
+func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, goos string) {
 	if d.config.GetCloudProperties() == nil {
 		log.Logger.Error("Cloud properties are not set, cannot start services.")
 		usagemetrics.Error(usagemetrics.CloudPropertiesNotSet)
@@ -281,7 +282,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 		wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
 		workloadmanager.StartMetricsCollection(wmCtx, wlmparams)
 		go usagemetrics.LogRunningDaily()
-		waitForShutdown(ctx, shutdownch)
+		waitForShutdown(shutdownch, cancel)
 		return
 	}
 
@@ -339,7 +340,7 @@ func (d *Daemon) startServices(ctx context.Context, goos string) {
 	})
 
 	go usagemetrics.LogRunningDaily()
-	waitForShutdown(ctx, shutdownch)
+	waitForShutdown(shutdownch, cancel)
 }
 
 // startAgentMetricsService returns health monitor for services.
@@ -467,17 +468,13 @@ func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
 }
 
 // waitForShutdown observes a channel for a shutdown signal, then proceeds to shut down the Agent.
-func waitForShutdown(ctx context.Context, ch <-chan os.Signal) {
+func waitForShutdown(ch <-chan os.Signal, cancel context.CancelFunc) {
 	// wait for the shutdown signal
 	<-ch
-	// once we have a shutdown event we will wait for up to 3 seconds before for final terminations
-	_, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer handleShutdown(cancel)
-}
 
-// handleShutdown shuts down the Agent.
-func handleShutdown(cancel context.CancelFunc) {
-	log.Logger.Info("Shutting down...")
-	usagemetrics.Stopped()
+	log.Logger.Info("Shutdown signal observed, the agent will begin shutting down")
 	cancel()
+	usagemetrics.Stopped()
+	time.Sleep(3 * time.Second)
+	log.Logger.Info("Shutting down...")
 }
