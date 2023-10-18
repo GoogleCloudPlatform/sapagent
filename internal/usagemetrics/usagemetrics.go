@@ -120,6 +120,7 @@ const (
 	ReadMetricsFinished
 	InstallBackintStarted
 	InstallBackintFinished
+	RemoteWLMMetricsCollection
 )
 
 var (

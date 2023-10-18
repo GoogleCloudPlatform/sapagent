@@ -78,7 +78,7 @@ type sendMetricsParams struct {
 }
 
 var (
-	now    = currentTime
+	now = currentTime
 )
 
 const metricOverridePath = "/etc/google-cloud-sap-agent/wlmmetricoverride.yaml"
@@ -166,7 +166,11 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 		log.CtxLogger(ctx).Info("Workload Manager metrics collection is not supported for windows platform.")
 		return false
 	}
-	go usagemetrics.LogActionDaily(usagemetrics.CollectWLMMetrics)
+	if params.Remote {
+		go usagemetrics.LogActionDaily(usagemetrics.RemoteWLMMetricsCollection)
+	} else {
+		go usagemetrics.LogActionDaily(usagemetrics.CollectWLMMetrics)
+	}
 	go start(ctx, params)
 	return true
 }
