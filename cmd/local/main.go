@@ -21,6 +21,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"time"
 
 	"flag"
 
@@ -82,8 +83,13 @@ func main() {
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
 	if lp.CloudLoggingClient != nil {
+		flushTimer := time.AfterFunc(30*time.Second, func() {
+			log.Logger.Warn("Cloud logging client failed to flush before deadline, exiting.")
+			os.Exit(rc)
+		})
 		log.FlushCloudLog()
 		lp.CloudLoggingClient.Close()
+		flushTimer.Stop()
 	}
 	os.Exit(rc)
 }

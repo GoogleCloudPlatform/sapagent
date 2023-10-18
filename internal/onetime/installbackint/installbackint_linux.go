@@ -148,7 +148,7 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	b.chmod = os.Chmod
 	b.chown = os.Chown
 	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.sid)); err != nil {
-		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent-installbackint.log")
+		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
 		log.Logger.Errorw("InstallBackint failed", "sid", b.sid, "err", err)
 		usagemetrics.Error(usagemetrics.InstallBackintFailure)
 		return subcommands.ExitFailure
@@ -214,7 +214,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return fmt.Errorf("unable to create parameters.json symlink: %s for %s. err: %v", parameterSymlink, parameterPath, err)
 	}
 
-	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent-installbackint.log")
+	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
 	log.Logger.Info("InstallBackint succeeded")
 	usagemetrics.Action(usagemetrics.InstallBackintFinished)
 	return nil
