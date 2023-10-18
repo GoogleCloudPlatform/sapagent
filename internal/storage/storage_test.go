@@ -34,32 +34,45 @@ import (
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
-var (
-	fakeServer = fakestorage.NewServer([]fakestorage.Object{
+func fakeServer(bucketName string) *fakestorage.Server {
+	return fakestorage.NewServer([]fakestorage.Object{
 		{
 			ObjectAttrs: fakestorage.ObjectAttrs{
-				BucketName: "test-bucket",
+				BucketName: bucketName,
 				Name:       "object.txt",
 			},
 			Content: defaultContent,
 		},
 		{
 			ObjectAttrs: fakestorage.ObjectAttrs{
-				BucketName:  "test-bucket",
+				BucketName:  bucketName,
 				Name:        "compressed-object.txt",
 				ContentType: compressedContentType,
 			},
 			Content: defaultCompressedContent(),
 		},
 	})
-	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
-	defaultFileCopier   = func(dst io.Writer, src io.Reader) (written int64, err error) { return 1, nil }
-	defaultFileWriter   = func(dst io.Writer, src io.Reader) (written int64, err error) {
-		n, err := dst.Write(make([]byte, 1*1024*1024))
-		return int64(n), err
-	}
-	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
-		return fakeServer.Client(), nil
+}
+
+func bucketHandle(bucketName string, server *fakestorage.Server) *storage.BucketHandle {
+	return server.Client().Bucket(bucketName)
+}
+
+const (
+	defaultBucketName  = "test-bucket"
+	deletionBucketName = "test-bucket-deletion"
+	listingBucketName  = "test-bucket-listing"
+)
+
+var (
+	defaultFakeServer     = fakeServer(defaultBucketName)
+	fakeServerForDeletion = fakeServer(deletionBucketName)
+	fakeServerForListing  = fakeServer(listingBucketName)
+	defaultBucketHandle   = bucketHandle(defaultBucketName, defaultFakeServer)
+	deletionBucketHandle  = bucketHandle(deletionBucketName, fakeServerForDeletion)
+	listingBucketHandle   = bucketHandle(listingBucketName, fakeServerForListing)
+	defaultStorageClient  = func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+		return defaultFakeServer.Client(), nil
 	}
 	defaultContent = []byte("test content")
 )
@@ -152,7 +165,7 @@ func TestConnectToBucket(t *testing.T) {
 			},
 			client: defaultStorageClient,
 			verify: true,
-			want:   fakeServer.Client().Bucket("test-bucket"),
+			want:   defaultFakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
 		{
@@ -165,10 +178,10 @@ func TestConnectToBucket(t *testing.T) {
 				if opts == nil {
 					return nil, errors.New("client create error")
 				}
-				return fakeServer.Client(), nil
+				return defaultFakeServer.Client(), nil
 			},
 			verify: true,
-			want:   fakeServer.Client().Bucket("test-bucket"),
+			want:   defaultFakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
 		{
@@ -517,29 +530,29 @@ func TestListObjects(t *testing.T) {
 		},
 		{
 			name:      "PrefixNotFound",
-			bucket:    defaultBucketHandle,
+			bucket:    listingBucketHandle,
 			prefix:    "fake-object.txt",
 			want:      nil,
 			wantError: nil,
 		},
 		{
 			name:      "PrefixFound",
-			bucket:    defaultBucketHandle,
+			bucket:    listingBucketHandle,
 			prefix:    "object.txt",
-			want:      objectAttrs([]*storage.ObjectHandle{fakeServer.Client().Bucket("test-bucket").Object("object.txt")}),
+			want:      objectAttrs([]*storage.ObjectHandle{fakeServerForListing.Client().Bucket("test-bucket-listing").Object("object.txt")}),
 			wantError: nil,
 		},
 		{
 			name:      "AllObjects",
-			bucket:    defaultBucketHandle,
-			want:      objectAttrs([]*storage.ObjectHandle{fakeServer.Client().Bucket("test-bucket").Object("object.txt"), fakeServer.Client().Bucket("test-bucket").Object("compressed-object.txt")}),
+			bucket:    listingBucketHandle,
+			want:      objectAttrs([]*storage.ObjectHandle{fakeServerForListing.Client().Bucket("test-bucket-listing").Object("compressed-object.txt"), fakeServerForListing.Client().Bucket("test-bucket-listing").Object("object.txt")}),
 			wantError: nil,
 		},
 		{
 			name:      "AllObjectsWithFilter",
-			bucket:    defaultBucketHandle,
+			bucket:    listingBucketHandle,
 			filter:    "compressed",
-			want:      objectAttrs([]*storage.ObjectHandle{fakeServer.Client().Bucket("test-bucket").Object("compressed-object.txt")}),
+			want:      objectAttrs([]*storage.ObjectHandle{fakeServerForListing.Client().Bucket("test-bucket-listing").Object("compressed-object.txt")}),
 			wantError: nil,
 		},
 	}
@@ -550,7 +563,7 @@ func TestListObjects(t *testing.T) {
 				t.Errorf("ListObjects(%s) = %v, want %v", test.prefix, gotError, test.wantError)
 			}
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-				t.Errorf("ListObjects(%s) had unexpected diff (-want +got):\n%s", test.prefix, diff)
+				t.Errorf("ListObjects(%s) had unexpected diff (-want +got):\n%s", test.name, diff)
 			}
 		})
 	}
@@ -569,13 +582,13 @@ func TestDeleteObject(t *testing.T) {
 		},
 		{
 			name:   "FileNotFound",
-			bucket: defaultBucketHandle,
+			bucket: deletionBucketHandle,
 			object: "fake-object.txt",
 			want:   cmpopts.AnyError,
 		},
 		{
 			name:   "FileDeleted",
-			bucket: defaultBucketHandle,
+			bucket: deletionBucketHandle,
 			object: "object.txt",
 			want:   nil,
 		},
