@@ -205,6 +205,9 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		if rw.Compress {
 			objectWriter.ObjectAttrs.ContentType = compressedContentType
 		}
+		// Set an individual chunk retry deadline to 10 minutes.
+		// Note, even with custom retries declared this value must also be set.
+		objectWriter.ChunkRetryDeadline = 10 * time.Minute
 		writer = objectWriter
 	}
 	rw.Writer = writer

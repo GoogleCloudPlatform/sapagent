@@ -12,7 +12,7 @@ require (
   cloud.google.com/go/logging v1.7.0
   cloud.google.com/go/monitoring v1.15.1
   cloud.google.com/go/secretmanager v1.11.1
-  cloud.google.com/go/storage v1.30.1
+  cloud.google.com/go/storage v1.33.0
   github.com/SAP/go-hdb v1.1.6
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/fsouza/fake-gcs-server v1.45.2
