@@ -174,14 +174,15 @@ func (h zipperHelper) Close(w *zip.Writer) error {
 }
 
 const (
-	destFilePathPrefix  = `/tmp/google-cloud-sap-agent/`
-	linuxConfigFilePath = `/etc/google-cloud-sap-agent/configuration.json`
-	linuxLogFilesPath   = `/var/log/`
-	systemDBErrorsFile  = `_SYSTEM_DB_BACKUP_ERROR.txt`
-	tenantDBErrorsFile  = `_TENANT_DB_BACKUP_ERROR.txt`
-	backintErrorsFile   = `_BACKINT_ERROR.txt`
-	globalINIFile       = `/custom/config/global.ini`
-	backintGCSPath      = `/opt/backint/backint-gcs`
+	destFilePathPrefix    = `/tmp/google-cloud-sap-agent/`
+	linuxConfigFilePath   = `/etc/google-cloud-sap-agent/configuration.json`
+	linuxLogFilesPath     = `/var/log/`
+	agentOnetimeFilesPath = `/var/log/google-cloud-sap-agent/`
+	systemDBErrorsFile    = `_SYSTEM_DB_BACKUP_ERROR.txt`
+	tenantDBErrorsFile    = `_TENANT_DB_BACKUP_ERROR.txt`
+	backintErrorsFile     = `_BACKINT_ERROR.txt`
+	globalINIFile         = `/custom/config/global.ini`
+	backintGCSPath        = `/opt/backint/backint-gcs`
 )
 
 // Name implements the subcommand interface for collecting support bundle report collection for support team.
@@ -264,6 +265,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, agentLogFiles(linuxLogFilesPath, fs)...)
+	reqFilePaths = append(reqFilePaths, agentOTELogFiles(agentOnetimeFilesPath, fs)...)
 
 	for _, path := range reqFilePaths {
 		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Copying file %s ...", path))
@@ -440,6 +442,19 @@ func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.File
 		case "installation.log", "logs", "VERSION.txt", "logging.properties":
 			res = append(res, path.Join(globalPath, backintGCSPath, fd.Name()))
 		}
+	}
+	return res
+}
+
+func agentOTELogFiles(agentOTEFilesPath string, fu filesystem.FileSystem) []string {
+	res := []string{}
+	fds, err := fu.ReadDir(agentOTEFilesPath)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole("Error while reading directory: "+agentOTEFilesPath, err)
+		return res
+	}
+	for _, fd := range fds {
+		res = append(res, path.Join(agentOTEFilesPath, fd.Name()))
 	}
 	return res
 }
