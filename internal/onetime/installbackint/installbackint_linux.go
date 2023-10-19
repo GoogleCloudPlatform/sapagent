@@ -180,6 +180,9 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	if err := b.createAndChownDir(ctx, backintInstallDir, int(stat.Uid), int(stat.Gid)); err != nil {
 		return err
 	}
+	if err := b.createAndChownDir(ctx, backintInstallDir+"/logs", int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
+	}
 	if err := b.createAndChownDir(ctx, baseInstallDir+"/hdbconfig", int(stat.Uid), int(stat.Gid)); err != nil {
 		return err
 	}
@@ -204,14 +207,20 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 
 	backintSymlink := baseInstallDir + "/hdbbackint"
 	parameterSymlink := baseInstallDir + "/hdbconfig/parameters.json"
-	log.Logger.Infow("Creating Backint symlinks", "backintSymlink", backintSymlink, "parameterSymlink", parameterSymlink)
+	logSymlink := backintInstallDir + "/logs"
+	logPath := "/var/log/google-cloud-sap-agent/"
+	log.Logger.Infow("Creating Backint symlinks", "backintSymlink", backintSymlink, "parameterSymlink", parameterSymlink, "logSymlink", logSymlink)
 	os.Remove(backintSymlink)
 	os.Remove(parameterSymlink)
+	os.Remove(logSymlink)
 	if err := b.symlink(backintPath, backintSymlink); err != nil {
 		return fmt.Errorf("unable to create hdbbackint symlink: %s for: %s. err: %v", backintSymlink, backintPath, err)
 	}
 	if err := b.symlink(parameterPath, parameterSymlink); err != nil {
 		return fmt.Errorf("unable to create parameters.json symlink: %s for %s. err: %v", parameterSymlink, parameterPath, err)
+	}
+	if err := b.symlink(logPath, logSymlink); err != nil {
+		return fmt.Errorf("unable to create log symlink: %s for %s. err: %v", logSymlink, logPath, err)
 	}
 
 	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
