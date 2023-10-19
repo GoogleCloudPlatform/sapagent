@@ -279,7 +279,7 @@ func TestInstallBackintHandler(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "FailMakeLogDir",
+			name: "FailMakeHdbconfigInstallDir",
 			b: InstallBackint{
 				stat:  defaultStatNotExist(1),
 				mkdir: defaultMkdir(2),
@@ -288,20 +288,11 @@ func TestInstallBackintHandler(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "FailMakeHdbconfigInstallDir",
-			b: InstallBackint{
-				stat:  defaultStatNotExist(1),
-				mkdir: defaultMkdir(3),
-				chown: defaultChown(3),
-			},
-			want: cmpopts.AnyError,
-		},
-		{
 			name: "FailWriteBackintFile",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
-				mkdir:     defaultMkdir(4),
-				chown:     defaultChown(4),
+				mkdir:     defaultMkdir(3),
+				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(0),
 			},
 			want: cmpopts.AnyError,
@@ -310,8 +301,8 @@ func TestInstallBackintHandler(t *testing.T) {
 			name: "FailWriteParameterFile",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
-				mkdir:     defaultMkdir(4),
-				chown:     defaultChown(4),
+				mkdir:     defaultMkdir(3),
+				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(1),
 			},
 			want: cmpopts.AnyError,
@@ -320,8 +311,8 @@ func TestInstallBackintHandler(t *testing.T) {
 			name: "FailChmodParameterFile",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
-				mkdir:     defaultMkdir(4),
-				chown:     defaultChown(4),
+				mkdir:     defaultMkdir(3),
+				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(2),
 				chmod:     defaultChmod(0),
 			},
@@ -331,8 +322,8 @@ func TestInstallBackintHandler(t *testing.T) {
 			name: "FailWriteBackintSymlink",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
-				mkdir:     defaultMkdir(4),
-				chown:     defaultChown(4),
+				mkdir:     defaultMkdir(3),
+				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(2),
 				chmod:     defaultChmod(1),
 				symlink:   defaultSymlink(0),
@@ -343,8 +334,8 @@ func TestInstallBackintHandler(t *testing.T) {
 			name: "FailWriteParametersSymlink",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
-				mkdir:     defaultMkdir(4),
-				chown:     defaultChown(4),
+				mkdir:     defaultMkdir(3),
+				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(2),
 				chmod:     defaultChmod(1),
 				symlink:   defaultSymlink(1),
@@ -355,8 +346,8 @@ func TestInstallBackintHandler(t *testing.T) {
 			name: "FailWriteLogSymlink",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
-				mkdir:     defaultMkdir(4),
-				chown:     defaultChown(4),
+				mkdir:     defaultMkdir(3),
+				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(2),
 				chmod:     defaultChmod(1),
 				symlink:   defaultSymlink(2),
@@ -367,8 +358,8 @@ func TestInstallBackintHandler(t *testing.T) {
 			name: "SuccessNoMigration",
 			b: InstallBackint{
 				stat:      defaultStatNotExist(1),
-				mkdir:     defaultMkdir(4),
-				chown:     defaultChown(4),
+				mkdir:     defaultMkdir(3),
+				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(2),
 				chmod:     defaultChmod(1),
 				symlink:   defaultSymlink(3),
@@ -474,8 +465,8 @@ func TestInstallBackintHandler(t *testing.T) {
 			b: InstallBackint{
 				stat:      defaultStat(2),
 				rename:    defaultRename(1),
-				mkdir:     defaultMkdir(7),
-				chown:     defaultChown(7),
+				mkdir:     defaultMkdir(6),
+				chown:     defaultChown(6),
 				glob:      defaultGlob(1),
 				readFile:  defaultReadFile(1),
 				writeFile: defaultWriteFile(3),

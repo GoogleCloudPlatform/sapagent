@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"flag"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
@@ -39,6 +40,9 @@ import (
 
 //go:embed hdbbackint.sh
 var hdbbackintScript []byte
+
+// DateTimeMinutes is a reference for timestamps to minute granularity.
+const DateTimeMinutes = "2006-01-02T15:04"
 
 type (
 	// mkdirFunc provides a testable replacement for os.MkdirAll.
@@ -180,9 +184,6 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	if err := b.createAndChownDir(ctx, backintInstallDir, int(stat.Uid), int(stat.Gid)); err != nil {
 		return err
 	}
-	if err := b.createAndChownDir(ctx, backintInstallDir+"/logs", int(stat.Uid), int(stat.Gid)); err != nil {
-		return err
-	}
 	if err := b.createAndChownDir(ctx, baseInstallDir+"/hdbconfig", int(stat.Uid), int(stat.Gid)); err != nil {
 		return err
 	}
@@ -229,13 +230,13 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	return nil
 }
 
-// migrateOldAgent moves the backint-gcs folder to backint-gcs-old if it
-// contains the old agent code (a jre directory is present). If migrating, all
-// parameter.txt files are then copied to the backint-gcs folder.
+// migrateOldAgent moves the backint-gcs folder to backint-gcs-old-<timestamp>
+// if it contains the old agent code (a jre directory is present).If migrating,
+// all parameter.txt files are then copied to the backint-gcs folder.
 func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir string, uid, gid int) error {
 	// Ensure we don't trip the Kokoro replace_func by separating the strings.
 	backintInstallDir := baseInstallDir + "/backint" + "/backint-gcs"
-	backintOldDir := baseInstallDir + "/backint" + "/backint-gcs-old"
+	backintOldDir := baseInstallDir + "/backint" + "/backint-gcs-old-" + time.Now().Format(DateTimeMinutes)
 	jreInstallDir := backintInstallDir + "/jre"
 
 	if err := b.stat(jreInstallDir, &unix.Stat_t{}); os.IsNotExist(err) {
