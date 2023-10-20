@@ -30,7 +30,7 @@ import (
 )
 
 // BackintRFC3339Millis is a reference for timestamps to Backint specifications.
-const BackintRFC3339Millis = "2006-01-02T15:04:05.999Z07:00"
+const BackintRFC3339Millis = "2006-01-02T15:04:05.000Z07:00"
 
 // Split performs a custom split on spaces based on the following SAP HANA Backint specifications:
 //
