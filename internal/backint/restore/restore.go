@@ -146,7 +146,13 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		log.Logger.Errorw("Error opening dest file", "destName", destName, "err", err, "fileType", object.Metadata["X-Backup-Type"])
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	}
-	defer destFile.Close()
+	defer func() {
+		if err := destFile.Close(); err != nil {
+			log.Logger.Errorw("Error closing dest file", "destName", destName, "err", err)
+			return
+		}
+		log.Logger.Infow("Dest file closed successfully", "destName", destName)
+	}()
 	if fileInfo, err := destFile.Stat(); err != nil || fileInfo.Mode()&0222 == 0 {
 		log.Logger.Errorw("Dest file does not have writeable permissions", "destName", destName, "err", err)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
