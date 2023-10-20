@@ -142,7 +142,7 @@ func SetupLogging(params Parameters) {
 			zapcore.NewCore(logEncoder, fileOrPrintLogWriter, params.Level),
 		)
 	}
-	coreLogger := zap.New(core, zap.AddCaller())
+	coreLogger := zap.New(core, zap.AddCaller()).With(zap.Int("pid", os.Getpid()))
 	defer coreLogger.Sync()
 	// we use the sugared logger to allow for simpler field and message additions to logs
 	Logger = coreLogger.Sugar()
