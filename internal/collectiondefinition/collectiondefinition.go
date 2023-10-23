@@ -20,17 +20,22 @@ limitations under the License.
 package collectiondefinition
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
@@ -60,13 +65,102 @@ type ReadFile func(string) ([]byte, error)
 
 // LoadOptions define the parameters required to load a collection definition.
 type LoadOptions struct {
-	ReadFile ReadFile
-	OSType   string
-	Version  string
+	CollectionConfig *cpb.CollectionConfiguration
+	FetchOptions     FetchOptions
+	ReadFile         ReadFile
+	OSType           string
+	Version          string
+	DisableFallback  bool
+}
+
+// StartOptions define the parameters required to call collectiondefinition.Start
+type StartOptions struct {
+	HeartbeatSpec *heartbeat.Spec
+	LoadOptions   LoadOptions
 }
 
 // metricInfoMapper describes the structure of a map function which operates on a MetricInfo struct.
 type metricInfoMapper func(*cmpb.MetricInfo, cmpb.OSVendor)
+
+// Start prepares an initial CollectionDefinition ready for use by Agent for
+// SAP services, then sets up a goroutine that will perform a periodic
+// refresh to load new content from an external distribution mechanism.
+//
+// Services that wish to keep up to date with the latest collection definition
+// should supply a channel that this function will use to broadcast updates.
+func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts StartOptions) *cdpb.CollectionDefinition {
+	log.CtxLogger(ctx).Info("Starting initial load of collection definition")
+	cd, err := Load(ctx, opts.LoadOptions)
+	if err != nil {
+		// In the event of an error, log the problem that occurred but allow other
+		// agent services to attempt to start up.
+		id := usagemetrics.CollectionDefinitionLoadFailure
+		if _, ok := err.(ValidationError); ok {
+			id = usagemetrics.CollectionDefinitionValidateFailure
+		}
+		usagemetrics.Error(id)
+		log.CtxLogger(ctx).Error(err)
+		return nil
+	}
+
+	if opts.LoadOptions.CollectionConfig.GetWorkloadValidationCollectionDefinition().GetDisableFetchLatestConfig() {
+		log.CtxLogger(ctx).Debug("Fetch latest config option disabled, will not periodically refresh collection definition")
+		return cd
+	}
+
+	go periodicRefresh(ctx, chs, opts)
+	return cd
+}
+
+// periodicRefresh sets up an indefinite loop to retrieve the latest
+// CollectionDefinition configuration and broadcast the updates to a series of
+// subscribed channels.
+//
+// The periodic loop is safeguarded by a heartbeat monitor.
+func periodicRefresh(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts StartOptions) {
+	cdFetchTicker := time.NewTicker(24 * time.Hour)
+	defer cdFetchTicker.Stop()
+
+	heartbeatTicker := opts.HeartbeatSpec.CreateTicker()
+	defer heartbeatTicker.Stop()
+
+	for {
+		select {
+		case <-cdFetchTicker.C:
+			loadAndBroadcast(ctx, chs, opts)
+		case <-heartbeatTicker.C:
+			opts.HeartbeatSpec.Beat()
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Debug("Collection definition periodic fetch cancellation requested")
+			return
+		}
+	}
+}
+
+// loadAndBroadcast fetches a collection definition and broadcasts the result
+// to a series of subscribed channels.
+//
+// The 'DisableFallback' option is enforced so that we do not overwrite with a
+// default collection definition configuration.
+func loadAndBroadcast(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts StartOptions) {
+	log.CtxLogger(ctx).Info("Perform periodic refresh of collection definition configuration")
+	opts.HeartbeatSpec.Beat()
+	cd, err := Load(ctx, LoadOptions{
+		CollectionConfig: opts.LoadOptions.CollectionConfig,
+		FetchOptions:     opts.LoadOptions.FetchOptions,
+		ReadFile:         opts.LoadOptions.ReadFile,
+		OSType:           opts.LoadOptions.OSType,
+		Version:          opts.LoadOptions.Version,
+		DisableFallback:  true,
+	})
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Failed to retrieve updated collection definition", "error", err)
+		return
+	}
+	for _, ch := range chs {
+		ch <- cd
+	}
+}
 
 // FromJSONFile reads a CollectionDefinition JSON configuration file and
 // unmarshals the data into a CollectionDefinition proto.
@@ -95,9 +189,19 @@ func FromJSONFile(read ReadFile, path string) (*cdpb.CollectionDefinition, error
 //  2. Retrieve the configurable CollectionDefinition from the local filesystem.
 //  3. Merge the two definitions, giving preference to the agent defaults.
 //  4. Validate the merged CollectionDefinition and log any errors found.
-func Load(opts LoadOptions) (*cdpb.CollectionDefinition, error) {
-	agentCD, err := unmarshal(configuration.DefaultCollectionDefinition)
-	if err != nil {
+func Load(ctx context.Context, opts LoadOptions) (*cdpb.CollectionDefinition, error) {
+	var agentCD *cdpb.CollectionDefinition
+	var err error
+
+	if !opts.CollectionConfig.GetWorkloadValidationCollectionDefinition().GetDisableFetchLatestConfig() {
+		agentCD = fetchFromGCS(ctx, opts.FetchOptions)
+	}
+
+	if agentCD == nil && !opts.DisableFallback {
+		log.CtxLogger(ctx).Info("Falling back on default agent collection definition")
+		agentCD, _ = unmarshal(configuration.DefaultCollectionDefinition)
+	}
+	if agentCD == nil {
 		return nil, errors.New("Failed to load agent collection definition file")
 	}
 

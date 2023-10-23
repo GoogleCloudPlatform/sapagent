@@ -194,6 +194,10 @@ func TestApplyDefaults(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: true,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+					},
 				},
 			},
 		},
@@ -211,6 +215,10 @@ func TestApplyDefaults(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: true,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+					},
 				},
 			},
 		},
@@ -240,6 +248,10 @@ func TestApplyDefaults(t *testing.T) {
 					MissedHeartbeatThreshold:             10,
 					SapSystemDiscovery:                   wpb.Bool(false),
 					DataWarehouseEndpoint:                "https://other-workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: true,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+					},
 				},
 				ProvideSapHostAgentMetrics: wpb.Bool(true),
 				LogToCloud:                 wpb.Bool(true),
@@ -270,6 +282,10 @@ func TestApplyDefaults(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: true,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+					},
 				},
 			},
 		},
@@ -321,6 +337,10 @@ func TestApplyDefaults(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: true,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+					},
 				},
 			},
 		},

@@ -176,6 +176,12 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc.GetDataWarehouseEndpoint() == "" {
 		cc.DataWarehouseEndpoint = "https://workloadmanager-datawarehouse.googleapis.com/"
 	}
+	if cc.GetWorkloadValidationCollectionDefinition() == nil {
+		cc.WorkloadValidationCollectionDefinition = &cpb.WorkloadValidationCollectionDefinition{
+			DisableFetchLatestConfig: true,
+			ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+		}
+	}
 	return cc
 }
 

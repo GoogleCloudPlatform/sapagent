@@ -95,6 +95,12 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	log.SetupLoggingToDiscard()
 
 	loadOptions := collectiondefinition.LoadOptions{
+		// TODO: Remote collection should inherit configuration from host instance
+		CollectionConfig: &cpb.CollectionConfiguration{
+			WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+				DisableFetchLatestConfig: true,
+			},
+		},
 		ReadFile: os.ReadFile,
 		OSType:   runtime.GOOS,
 		Version:  configuration.AgentVersion,
@@ -132,7 +138,7 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 		return subcommands.ExitUsageError
 	}
 
-	cd, err := collectiondefinition.Load(opts)
+	cd, err := collectiondefinition.Load(ctx, opts)
 	if err != nil {
 		log.Print(fmt.Sprintf("ERROR: %v", err))
 		return subcommands.ExitFailure

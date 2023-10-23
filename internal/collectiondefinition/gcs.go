@@ -42,31 +42,32 @@ var (
 	pubkey []byte
 )
 
-// createTempFunc is a wrapper around os.CreateTemp.
-type createTempFunc func(dir, pattern string) (*os.File, error)
+// CreateTempFunc is a wrapper around os.CreateTemp.
+type CreateTempFunc func(dir, pattern string) (*os.File, error)
 
-// fetchOptions describes the required arguments for calling fetchFromGCS.
-type fetchOptions struct {
-	// operating system value as reported by runtime.GOOS
-	osType string
+// FetchOptions describes the required arguments for fetching collection
+// definition configuration from Cloud Storage.
+type FetchOptions struct {
+	// OSType holds the operating system value as reported by runtime.GOOS.
+	OSType string
 
-	// TargetEnvironment from configuration
-	env cpb.TargetEnvironment
+	// Env holds the TargetEnvironment as specified by agent configuration.
+	Env cpb.TargetEnvironment
 
-	// function for storage client creation
-	client storage.Client
+	// Client holds the function called for storage client creation.
+	Client storage.Client
 
-	// function for temporary file creation
-	createTemp createTempFunc
+	// CreateTemp holds the function called for temporary file creation.
+	CreateTemp CreateTempFunc
 
-	// command line execution function
-	execute commandlineexecutor.Execute
+	// Execute holds the command line execution function.
+	Execute commandlineexecutor.Execute
 }
 
 // fetchFromGCS retrieves and authenticates a collection definition from GCS.
-func fetchFromGCS(ctx context.Context, opts fetchOptions) *cdpb.CollectionDefinition {
-	bucketName := bucketEnvMap[opts.env]
-	bh, ok := storage.ConnectToBucket(ctx, opts.client, "", bucketName, "", true)
+func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefinition {
+	bucketName := bucketEnvMap[opts.Env]
+	bh, ok := storage.ConnectToBucket(ctx, opts.Client, "", bucketName, "", true)
 	if !ok {
 		return nil
 	}
@@ -76,7 +77,7 @@ func fetchFromGCS(ctx context.Context, opts fetchOptions) *cdpb.CollectionDefini
 	// Typically, a Reader computes the CRC of the downloaded content
 	// and compares it to the stored CRC, returning an error from Read
 	// if there is a mismatch.
-	cdJSON, err := opts.createTemp("", "collection-definition.*.json")
+	cdJSON, err := opts.CreateTemp("", "collection-definition.*.json")
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Could not create temporary JSON file", "error", err)
 		return nil
@@ -97,7 +98,7 @@ func fetchFromGCS(ctx context.Context, opts fetchOptions) *cdpb.CollectionDefini
 	}
 
 	// Download the signature file.
-	cdSignature, err := opts.createTemp("", "collection-definition.*.signature")
+	cdSignature, err := opts.CreateTemp("", "collection-definition.*.signature")
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Could not create temporary signature file", "error", err)
 		return nil
@@ -118,7 +119,7 @@ func fetchFromGCS(ctx context.Context, opts fetchOptions) *cdpb.CollectionDefini
 	}
 
 	// Verify using the public key embedded in the agent.
-	cdPub, err := opts.createTemp("", "public.*.pem")
+	cdPub, err := opts.CreateTemp("", "public.*.pem")
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Could not create temporary public key file", "error", err)
 		return nil
@@ -129,12 +130,12 @@ func fetchFromGCS(ctx context.Context, opts fetchOptions) *cdpb.CollectionDefini
 	}
 	defer os.Remove(cdPub.Name())
 	defer cdPub.Close()
-	if opts.osType == "windows" {
+	if opts.OSType == "windows" {
 		// TODO: Windows verification of downloaded content
 		log.CtxLogger(ctx).Warn("Windows signature verification is not supported")
 		return nil
 	}
-	result := opts.execute(ctx, commandlineexecutor.Params{
+	result := opts.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "openssl",
 		ArgsToSplit: fmt.Sprintf("dgst -sha256 -verify %s -signature %s %s", cdPub.Name(), cdSignature.Name(), cdJSON.Name()),
 	})
@@ -159,5 +160,7 @@ func fetchFromGCS(ctx context.Context, opts fetchOptions) *cdpb.CollectionDefini
 		log.CtxLogger(ctx).Warn(err)
 		return nil
 	}
+	
+	log.CtxLogger(ctx).Debug("Successfully downloaded and verified collection definition")
 	return cd
 }

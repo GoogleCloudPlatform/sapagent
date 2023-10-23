@@ -36,6 +36,11 @@ import (
 
 func TestRemoteValidationHandler(t *testing.T) {
 	defaultLoadOptions := collectiondefinition.LoadOptions{
+		CollectionConfig: &cpb.CollectionConfiguration{
+			WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+				DisableFetchLatestConfig: true,
+			},
+		},
 		ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
 		OSType:   "linux",
 		Version:  "1.0",
@@ -78,6 +83,11 @@ func TestRemoteValidationHandler(t *testing.T) {
 				zone:       "zone-1",
 			},
 			loadOptions: collectiondefinition.LoadOptions{
+				CollectionConfig: &cpb.CollectionConfiguration{
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: true,
+					},
+				},
 				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
 				OSType:   "linux",
 				Version:  "1.0",

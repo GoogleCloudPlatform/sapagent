@@ -17,23 +17,35 @@ limitations under the License.
 package collectiondefinition
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"io/fs"
+	"os"
+	"sync"
 	"testing"
+	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 var (
 	//go:embed test_data/test_collectiondefinition1.json
 	testCollectionDefinition1 []byte
+
+	//go:embed test_data/test_collectiondefinition2.json
+	testCollectionDefinition2 []byte
 
 	//go:embed test_data/invalid_collectiondefinition.json
 	invalidCollectionDefinition []byte
@@ -91,7 +103,230 @@ var (
 			},
 		}
 	}
+
+	disableFetchConfig = &cpb.CollectionConfiguration{
+		WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+			DisableFetchLatestConfig: true,
+		},
+	}
 )
+
+func TestStart(t *testing.T) {
+	wantCollectionDefinition, err := unmarshal(testCollectionDefinition2)
+	if err != nil {
+		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+
+	tests := []struct {
+		name string
+		opts StartOptions
+		want *cdpb.CollectionDefinition
+	}{
+		{
+			name: "InitialLoadReturnsNil",
+			opts: StartOptions{
+				LoadOptions: LoadOptions{
+					CollectionConfig: &cpb.CollectionConfiguration{
+						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+							DisableFetchLatestConfig: true,
+						},
+					},
+					ReadFile: func(s string) ([]byte, error) { return invalidCollectionDefinition, nil },
+					OSType:   "linux",
+					Version:  "1.4",
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "InitialLoadReturnsCollectionDefinition",
+			opts: StartOptions{
+				LoadOptions: LoadOptions{
+					CollectionConfig: &cpb.CollectionConfiguration{
+						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+							DisableFetchLatestConfig: true,
+						},
+					},
+					ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+					OSType:   "linux",
+					Version:  "1.4",
+				},
+			},
+			want: wantCollectionDefinition,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := Start(context.Background(), []chan<- *cdpb.CollectionDefinition{}, test.opts)
+			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
+				t.Errorf("Start() mismatch (-want, +got):\n%s", d)
+			}
+		})
+	}
+}
+
+func TestStart_HeartbeatSpec(t *testing.T) {
+	tests := []struct {
+		name         string
+		beatInterval time.Duration
+		timeout      time.Duration
+		want         int
+	}{
+		{
+			name:         "CancelBeforeHeartbeat",
+			beatInterval: time.Second,
+			timeout:      time.Second * 0,
+			want:         0,
+		},
+		{
+			name:         "CancelAfterOneBeat",
+			beatInterval: time.Millisecond * 50,
+			timeout:      time.Millisecond * 75,
+			want:         1,
+		},
+		{
+			name:         "CancelAfterTwoBeats",
+			beatInterval: time.Millisecond * 50,
+			timeout:      time.Millisecond * 125,
+			want:         2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := 0
+			lock := sync.Mutex{}
+			ctx, cancel := context.WithTimeout(context.Background(), test.timeout)
+			defer cancel()
+			opts := StartOptions{
+				HeartbeatSpec: &heartbeat.Spec{
+					BeatFunc: func() {
+						lock.Lock()
+						defer lock.Unlock()
+						got++
+					},
+					Interval: test.beatInterval,
+				},
+				LoadOptions: LoadOptions{
+					CollectionConfig: &cpb.CollectionConfiguration{
+						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+							DisableFetchLatestConfig: false,
+							ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+						},
+					},
+					FetchOptions: FetchOptions{
+						OSType: "linux",
+						Env:    cpb.TargetEnvironment_DEVELOPMENT,
+						Client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+							return nil, errors.New("client create error")
+						},
+						CreateTemp: os.CreateTemp,
+						Execute:    defaultExec,
+					},
+					ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+					OSType:   "linux",
+					Version:  "1.4",
+				},
+			}
+
+			Start(ctx, []chan<- *cdpb.CollectionDefinition{}, opts)
+			<-ctx.Done()
+			lock.Lock()
+			defer lock.Unlock()
+			if got != test.want {
+				t.Errorf("Start() heartbeat mismatch got %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestLoadAndBroadcast_Success(t *testing.T) {
+	want := &cdpb.CollectionDefinition{WorkloadValidation: &wlmpb.WorkloadValidation{}}
+	ch1, ch2 := make(chan *cdpb.CollectionDefinition), make(chan *cdpb.CollectionDefinition)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	opts := StartOptions{
+		HeartbeatSpec: &heartbeat.Spec{Interval: time.Second, BeatFunc: func() {}},
+		LoadOptions: LoadOptions{
+			CollectionConfig: &cpb.CollectionConfiguration{
+				WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+					DisableFetchLatestConfig: false,
+					ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+				},
+			},
+			FetchOptions: FetchOptions{
+				OSType:     "linux",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
+			},
+			ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+			OSType:   "linux",
+			Version:  "1.4",
+		},
+	}
+
+	go loadAndBroadcast(ctx, []chan<- *cdpb.CollectionDefinition{ch1, ch2}, opts)
+
+	var got1, got2 *cdpb.CollectionDefinition
+	for {
+		select {
+		case got1 = <-ch1:
+			t.Log("Received response from channel 1")
+		case got2 = <-ch2:
+			t.Log("Received response from channel 2")
+		case <-ctx.Done():
+			if d := cmp.Diff(want, got1, protocmp.Transform()); d != "" {
+				t.Errorf("loadAndBroadcast() mismatch (-want, +got):\n%s", d)
+			}
+			if d := cmp.Diff(want, got2, protocmp.Transform()); d != "" {
+				t.Errorf("loadAndBroadcast() mismatch (-want, +got):\n%s", d)
+			}
+			return
+		}
+	}
+}
+
+func TestLoadAndBroadcast_Failure(t *testing.T) {
+	ch1, ch2 := make(chan *cdpb.CollectionDefinition), make(chan *cdpb.CollectionDefinition)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	opts := StartOptions{
+		HeartbeatSpec: &heartbeat.Spec{Interval: time.Second, BeatFunc: func() {}},
+		LoadOptions: LoadOptions{
+			CollectionConfig: &cpb.CollectionConfiguration{
+				WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+					DisableFetchLatestConfig: false,
+					ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+				},
+			},
+			FetchOptions: FetchOptions{
+				OSType:     "linux",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{invalidJSON, validSignature}),
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
+			},
+			ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+			OSType:   "linux",
+			Version:  "1.4",
+		},
+	}
+
+	go loadAndBroadcast(ctx, []chan<- *cdpb.CollectionDefinition{ch1, ch2}, opts)
+
+	var got1, got2 *cdpb.CollectionDefinition
+	select {
+	case got1 = <-ch1:
+		t.Errorf("loadAndBroadcast() channel 1 should not have received a response. got: %v", got1)
+	case got2 = <-ch2:
+		t.Errorf("loadAndBroadcast() channel 2 should not have received a response. got: %v", got2)
+	case <-ctx.Done():
+		return
+	}
+}
 
 func TestFromJSONFile(t *testing.T) {
 	wantCollectionDefinition1, err := unmarshal(testCollectionDefinition1)
@@ -147,43 +382,130 @@ func TestFromJSONFile(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
+	wantCollectionDefinition, err := unmarshal(testCollectionDefinition2)
+	if err != nil {
+		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+
 	tests := []struct {
 		name    string
 		opts    LoadOptions
+		want    *cdpb.CollectionDefinition
 		wantErr error
 	}{
 		{
+			name: "FetchErrorNoFallback",
+			opts: LoadOptions{
+				CollectionConfig: &cpb.CollectionConfiguration{
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: false,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+					},
+				},
+				FetchOptions: FetchOptions{
+					OSType: "linux",
+					Env:    cpb.TargetEnvironment_DEVELOPMENT,
+					Client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+						return nil, errors.New("client create error")
+					},
+					CreateTemp: os.CreateTemp,
+					Execute:    defaultExec,
+				},
+				OSType:          "linux",
+				Version:         "1.4",
+				DisableFallback: true,
+			},
+			want:    nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "LocalReadFileError",
 			opts: LoadOptions{
-				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
-				OSType:   "windows",
-				Version:  "1.4",
+				CollectionConfig: disableFetchConfig,
+				ReadFile:         func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
+				OSType:           "windows",
+				Version:          "1.4",
 			},
+			want:    nil,
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "ValidationError",
 			opts: LoadOptions{
-				ReadFile: func(s string) ([]byte, error) { return invalidCollectionDefinition, nil },
-				OSType:   "linux",
-				Version:  "1.4",
+				CollectionConfig: disableFetchConfig,
+				ReadFile:         func(s string) ([]byte, error) { return invalidCollectionDefinition, nil },
+				OSType:           "linux",
+				Version:          "1.4",
 			},
+			want:    nil,
 			wantErr: ValidationError{FailureCount: 1},
 		},
 		{
-			name: "Success",
+			name: "SuccessDisableFetch",
 			opts: LoadOptions{
-				ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
-				OSType:   "linux",
-				Version:  "1.4",
+				CollectionConfig: disableFetchConfig,
+				ReadFile:         func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+				OSType:           "linux",
+				Version:          "1.4",
 			},
+			want:    wantCollectionDefinition,
+			wantErr: nil,
+		},
+		{
+			name: "SuccessWithFetch",
+			opts: LoadOptions{
+				CollectionConfig: &cpb.CollectionConfiguration{
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: false,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+					},
+				},
+				FetchOptions: FetchOptions{
+					OSType:     "linux",
+					Env:        cpb.TargetEnvironment_DEVELOPMENT,
+					Client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+					CreateTemp: os.CreateTemp,
+					Execute:    defaultExec,
+				},
+				ReadFile:        func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+				OSType:          "linux",
+				Version:         "1.4",
+				DisableFallback: true,
+			},
+			want:    &cdpb.CollectionDefinition{WorkloadValidation: &wlmpb.WorkloadValidation{}},
+			wantErr: nil,
+		},
+		{
+			name: "SuccessWithFallback",
+			opts: LoadOptions{
+				CollectionConfig: &cpb.CollectionConfiguration{
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						DisableFetchLatestConfig: false,
+						ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+					},
+				},
+				FetchOptions: FetchOptions{
+					OSType: "linux",
+					Env:    cpb.TargetEnvironment_DEVELOPMENT,
+					Client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+						return nil, errors.New("client create error")
+					},
+					CreateTemp: os.CreateTemp,
+					Execute:    defaultExec,
+				},
+				ReadFile:        func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+				OSType:          "linux",
+				Version:         "1.4",
+				DisableFallback: false,
+			},
+			want:    wantCollectionDefinition,
 			wantErr: nil,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, gotErr := Load(test.opts)
+			_, gotErr := Load(context.Background(), test.opts)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("Load() got %v want %v", gotErr, test.wantErr)
 			}

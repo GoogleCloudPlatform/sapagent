@@ -30,6 +30,7 @@ import (
 
 	"flag"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"cloud.google.com/go/storage"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/google/subcommands"
@@ -438,7 +439,15 @@ type WorkloadManagerParams struct {
 
 // startCollection for WorkLoadManagerParams initiates collection of WorkloadManagerMetrics.
 func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
-	cd, err := collectiondefinition.Load(collectiondefinition.LoadOptions{
+	cd, err := collectiondefinition.Load(ctx, collectiondefinition.LoadOptions{
+		CollectionConfig: wmp.wlmparams.Config.GetCollectionConfiguration(),
+		FetchOptions: collectiondefinition.FetchOptions{
+			OSType:     wmp.goos,
+			Env:        wmp.wlmparams.Config.GetCollectionConfiguration().GetWorkloadValidationCollectionDefinition().GetConfigTargetEnvironment(),
+			Client:     storage.NewClient,
+			CreateTemp: os.CreateTemp,
+			Execute:    execute,
+		},
 		ReadFile: os.ReadFile,
 		OSType:   wmp.goos,
 		Version:  configuration.AgentVersion,

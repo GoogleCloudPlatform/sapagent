@@ -72,111 +72,111 @@ var (
 func TestFetchFromGCS(t *testing.T) {
 	tests := []struct {
 		name string
-		opts fetchOptions
+		opts FetchOptions
 		want *cdpb.CollectionDefinition
 	}{
 		{
 			name: "ConnectToBucket_CreateClientFailure",
-			opts: fetchOptions{
-				osType: "linux",
-				env:    cpb.TargetEnvironment_DEVELOPMENT,
-				client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+			opts: FetchOptions{
+				OSType: "linux",
+				Env:    cpb.TargetEnvironment_DEVELOPMENT,
+				Client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 					return nil, errors.New("client create error")
 				},
-				createTemp: os.CreateTemp,
-				execute:    defaultExec,
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
 			},
 			want: nil,
 		},
 		{
 			name: "CreateTemp_JSON_Failure",
-			opts: fetchOptions{
-				osType: "linux",
-				env:    cpb.TargetEnvironment_DEVELOPMENT,
-				client: fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
-				createTemp: func(dir, pattern string) (*os.File, error) {
+			opts: FetchOptions{
+				OSType: "linux",
+				Env:    cpb.TargetEnvironment_DEVELOPMENT,
+				Client: fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+				CreateTemp: func(dir, pattern string) (*os.File, error) {
 					if pattern == "collection-definition.*.json" {
 						return nil, errors.New("temp file create error")
 					}
 					return os.CreateTemp(dir, pattern)
 				},
-				execute: defaultExec,
+				Execute: defaultExec,
 			},
 			want: nil,
 		},
 		{
 			name: "Download_JSON_ObjectDoesNotExist",
-			opts: fetchOptions{
-				osType:     "linux",
-				env:        cpb.TargetEnvironment_DEVELOPMENT,
-				client:     fakeStorageClient([]fakestorage.Object{validSignature}),
-				createTemp: os.CreateTemp,
-				execute:    defaultExec,
+			opts: FetchOptions{
+				OSType:     "linux",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{validSignature}),
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
 			},
 			want: nil,
 		},
 		{
 			name: "CreateTemp_Signature_Failure",
-			opts: fetchOptions{
-				osType: "linux",
-				env:    cpb.TargetEnvironment_DEVELOPMENT,
-				client: fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
-				createTemp: func(dir, pattern string) (*os.File, error) {
+			opts: FetchOptions{
+				OSType: "linux",
+				Env:    cpb.TargetEnvironment_DEVELOPMENT,
+				Client: fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+				CreateTemp: func(dir, pattern string) (*os.File, error) {
 					if pattern == "collection-definition.*.signature" {
 						return nil, errors.New("temp file create error")
 					}
 					return os.CreateTemp(dir, pattern)
 				},
-				execute: defaultExec,
+				Execute: defaultExec,
 			},
 			want: nil,
 		},
 		{
 			name: "Download_Signature_ObjectDoesNotExist",
-			opts: fetchOptions{
-				osType:     "linux",
-				env:        cpb.TargetEnvironment_DEVELOPMENT,
-				client:     fakeStorageClient([]fakestorage.Object{validJSON}),
-				createTemp: os.CreateTemp,
-				execute:    defaultExec,
+			opts: FetchOptions{
+				OSType:     "linux",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{validJSON}),
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
 			},
 			want: nil,
 		},
 		{
 			name: "CreateTemp_PublicKey_Failure",
-			opts: fetchOptions{
-				osType: "linux",
-				env:    cpb.TargetEnvironment_DEVELOPMENT,
-				client: fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
-				createTemp: func(dir, pattern string) (*os.File, error) {
+			opts: FetchOptions{
+				OSType: "linux",
+				Env:    cpb.TargetEnvironment_DEVELOPMENT,
+				Client: fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+				CreateTemp: func(dir, pattern string) (*os.File, error) {
 					if pattern == "public.*.pem" {
 						return nil, errors.New("temp file create error")
 					}
 					return os.CreateTemp(dir, pattern)
 				},
-				execute: defaultExec,
+				Execute: defaultExec,
 			},
 			want: nil,
 		},
 		{
-			name: "osType_windows",
-			opts: fetchOptions{
-				osType:     "windows",
-				env:        cpb.TargetEnvironment_DEVELOPMENT,
-				client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
-				createTemp: os.CreateTemp,
-				execute:    defaultExec,
+			name: "OSType_windows",
+			opts: FetchOptions{
+				OSType:     "windows",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
 			},
 			want: nil,
 		},
 		{
 			name: "Execute_Failure",
-			opts: fetchOptions{
-				osType:     "linux",
-				env:        cpb.TargetEnvironment_DEVELOPMENT,
-				client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
-				createTemp: os.CreateTemp,
-				execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			opts: FetchOptions{
+				OSType:     "linux",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+				CreateTemp: os.CreateTemp,
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{StdOut: "Verification failure"}
 				},
 			},
@@ -184,23 +184,23 @@ func TestFetchFromGCS(t *testing.T) {
 		},
 		{
 			name: "Unmarshal_Failure",
-			opts: fetchOptions{
-				osType:     "linux",
-				env:        cpb.TargetEnvironment_DEVELOPMENT,
-				client:     fakeStorageClient([]fakestorage.Object{invalidJSON, validSignature}),
-				createTemp: os.CreateTemp,
-				execute:    defaultExec,
+			opts: FetchOptions{
+				OSType:     "linux",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{invalidJSON, validSignature}),
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
 			},
 			want: nil,
 		},
 		{
 			name: "Success",
-			opts: fetchOptions{
-				osType:     "linux",
-				env:        cpb.TargetEnvironment_DEVELOPMENT,
-				client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
-				createTemp: os.CreateTemp,
-				execute:    defaultExec,
+			opts: FetchOptions{
+				OSType:     "linux",
+				Env:        cpb.TargetEnvironment_DEVELOPMENT,
+				Client:     fakeStorageClient([]fakestorage.Object{validJSON, validSignature}),
+				CreateTemp: os.CreateTemp,
+				Execute:    defaultExec,
 			},
 			want: &cdpb.CollectionDefinition{
 				WorkloadValidation: &wlmpb.WorkloadValidation{},
