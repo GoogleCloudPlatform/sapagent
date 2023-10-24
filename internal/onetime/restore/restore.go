@@ -27,7 +27,7 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"

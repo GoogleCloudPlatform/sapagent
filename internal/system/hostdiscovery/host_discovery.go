@@ -25,7 +25,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
 var (

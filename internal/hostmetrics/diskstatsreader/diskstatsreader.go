@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"golang.org/x/exp/maps"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 

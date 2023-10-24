@@ -25,9 +25,9 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/gammazero/workerpool"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -271,7 +271,7 @@ func collectRemoteSSH(ctx context.Context, params Parameters, rc *cnfpb.Workload
 
 	sshArgs := []string{}
 	sshArgs = appendSSHArgs(sshArgs, rc, i, false)
-	//append "remoteAgentBinary remote -h=false -p=projectID -i=instanceID -n=instanceName -z=zone"
+	// append "remoteAgentBinary remote -h=false -p=projectID -i=instanceID -n=instanceName -z=zone"
 	sshArgs = append(sshArgs, remoteAgentBinary, "remote", "-h=false", "-p="+projectID+" -i="+instanceID+" -n="+instanceName+" -z="+zone)
 	result = params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "ssh",

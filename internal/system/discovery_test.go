@@ -31,7 +31,7 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 
 	workloadmanager "google.golang.org/api/workloadmanager/v1"

@@ -37,7 +37,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/agentmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
-	"github.com/GoogleCloudPlatform/sapagent/internal/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
