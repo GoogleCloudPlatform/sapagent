@@ -82,6 +82,10 @@ type StartOptions struct {
 // metricInfoMapper describes the structure of a map function which operates on a MetricInfo struct.
 type metricInfoMapper func(*cmpb.MetricInfo, cmpb.OSVendor)
 
+type validationMetric interface {
+	GetMetricInfo() *cmpb.MetricInfo
+}
+
 // Start prepares an initial CollectionDefinition ready for use by Agent for
 // SAP services, then sets up a goroutine that will perform a periodic
 // refresh to load new content from an external distribution mechanism.
@@ -239,7 +243,81 @@ func Merge(primary, secondary *cdpb.CollectionDefinition) (merged *cdpb.Collecti
 	merged = &cdpb.CollectionDefinition{
 		WorkloadValidation: mergeWorkloadValidations(primary.GetWorkloadValidation(), secondary.GetWorkloadValidation()),
 	}
-	return merged
+
+	return filterMetrics(merged)
+}
+
+// Filter metrics to make sure we only keep metrics with valid minVersions that are not newer than the Agent Version.
+func filterMetrics(cd *cdpb.CollectionDefinition) *cdpb.CollectionDefinition {
+	if cd.WorkloadValidation == nil {
+		return cd
+	}
+	if cd.WorkloadValidation.GetValidationSystem() != nil {
+		cd.WorkloadValidation.GetValidationSystem().OsCommandMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationSystem().GetOsCommandMetrics())
+		cd.WorkloadValidation.GetValidationSystem().SystemMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationSystem().GetSystemMetrics())
+	}
+	if cd.WorkloadValidation.GetValidationCorosync() != nil {
+		cd.WorkloadValidation.GetValidationCorosync().OsCommandMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationCorosync().GetOsCommandMetrics())
+		cd.WorkloadValidation.GetValidationCorosync().ConfigMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationCorosync().GetConfigMetrics())
+	}
+	if cd.WorkloadValidation.GetValidationHana() != nil {
+		cd.WorkloadValidation.GetValidationHana().OsCommandMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetOsCommandMetrics())
+		cd.WorkloadValidation.GetValidationHana().GlobalIniMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetGlobalIniMetrics())
+		for _, m := range cd.WorkloadValidation.GetValidationHana().GetHanaDiskVolumeMetrics() {
+			if m != nil {
+				m.Metrics = filterBadVersionMetrics(m.GetMetrics())
+			}
+		}
+	}
+	if cd.WorkloadValidation.GetValidationNetweaver() != nil {
+		cd.WorkloadValidation.GetValidationNetweaver().OsCommandMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationNetweaver().GetOsCommandMetrics())
+	}
+	if cd.WorkloadValidation.GetValidationPacemaker() != nil {
+		cd.WorkloadValidation.GetValidationPacemaker().OsCommandMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetOsCommandMetrics())
+		cd.WorkloadValidation.GetValidationPacemaker().CibBootstrapOptionMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetCibBootstrapOptionMetrics())
+		if cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics() != nil {
+			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().PrimitiveMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetPrimitiveMetrics())
+			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().RscLocationMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetRscLocationMetrics())
+			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().RscOptionMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetRscOptionMetrics())
+			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().HanaOperationMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetHanaOperationMetrics())
+			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().FenceAgentMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetFenceAgentMetrics())
+		}
+	}
+	if cd.WorkloadValidation.GetValidationCustom() != nil {
+		cd.WorkloadValidation.GetValidationCustom().OsCommandMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationCustom().GetOsCommandMetrics())
+	}
+	return cd
+}
+
+func filterBadVersionMetrics[M validationMetric](metrics []M) []M {
+	var filteredMetrics []M
+	for _, m := range metrics {
+		if isValidVersion(m) {
+			filteredMetrics = append(filteredMetrics, m)
+		}
+	}
+	return filteredMetrics
+}
+
+func isValidVersion(metric validationMetric) bool {
+	info := metric.GetMetricInfo()
+	t := info.GetType()
+	l := info.GetLabel()
+	agentVersion := configuration.AgentVersion
+
+	// A metric should not have a min_version that exceeds the agent version.
+	minVersion := info.GetMinVersion()
+	if minVersion == "" {
+		return true
+	}
+	if !versionPattern.MatchString(minVersion) {
+		log.Logger.Warnw("Metric minVersion is of invalid format.", "minVersion", minVersion, "type", t, "label", l)
+		return false
+	} else if compareVersions(minVersion, agentVersion) == 1 {
+		log.Logger.Warnw("Metric minVersion exceeds the agent minVersion.", "metricVersion", minVersion, "agentVersion", agentVersion, "type", t, "label", l)
+		return false
+	}
+	return true
 }
 
 // mergeWorkloadValidations constructs a merged workload validation definition
@@ -431,6 +509,7 @@ func shouldMerge[M proto.Message](metric M, existing metricsMap) bool {
 	t := info.GetType()
 	l := info.GetLabel()
 	k := fmt.Sprintf("%s:%s", t, l)
+
 	if vendors, ok := existing[k]; ok {
 		vendor := osVendor(metric)
 		_, hasVendor := vendors[vendor]
@@ -448,7 +527,7 @@ func shouldMerge[M proto.Message](metric M, existing metricsMap) bool {
 // a CollectionDefinition message.
 func unmarshal(b []byte) (*cdpb.CollectionDefinition, error) {
 	cd := &cdpb.CollectionDefinition{}
-	if err := protojson.Unmarshal(b, cd); err != nil {
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(b, cd)); err != nil {
 		return nil, err
 	}
 	return cd, nil

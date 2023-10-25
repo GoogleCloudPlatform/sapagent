@@ -50,6 +50,9 @@ var (
 	//go:embed test_data/invalid_collectiondefinition.json
 	invalidCollectionDefinition []byte
 
+	//go:embed test_data/collectiondefinition_with_unknown_fields.json
+	collectionDefinitionWithUnknownFields []byte
+
 	createEvalMetric = func(metricType, label, contains string) *cmpb.EvalMetric {
 		return &cmpb.EvalMetric{
 			MetricInfo: &cmpb.MetricInfo{
@@ -78,8 +81,13 @@ var (
 		}
 	}
 	createOSCommandMetric = func(metricType, label, command string, vendor cmpb.OSVendor) *cmpb.OSCommandMetric {
+		return createOSCommandMetricWithVersion(metricType, label, command, vendor, "")
+	}
+
+	createOSCommandMetricWithVersion = func(metricType, label, command string, vendor cmpb.OSVendor, version string) *cmpb.OSCommandMetric {
+		metricInfo := &cmpb.MetricInfo{Type: metricType, Label: label, MinVersion: version}
 		return &cmpb.OSCommandMetric{
-			MetricInfo: &cmpb.MetricInfo{Type: metricType, Label: label},
+			MetricInfo: metricInfo,
 			OsVendor:   vendor,
 			Command:    command,
 			Args:       []string{"-v"},
@@ -363,6 +371,12 @@ func TestFromJSONFile(t *testing.T) {
 		{
 			name:   "Success",
 			reader: func(string) ([]byte, error) { return testCollectionDefinition1, nil },
+			path:   LinuxConfigPath,
+			want:   wantCollectionDefinition1,
+		},
+		{
+			name:   "IgnoreUnknownFields",
+			reader: func(string) ([]byte, error) { return collectionDefinitionWithUnknownFields, nil },
 			path:   LinuxConfigPath,
 			want:   wantCollectionDefinition1,
 		},
@@ -1135,6 +1149,155 @@ func TestMerge(t *testing.T) {
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
 							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Invalid_Version",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.6"),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "invalid_version"),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.6"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Primary_Too_New",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "9000.1"),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.1"),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.1"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Secondary_Too_New",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.6"),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "9000.1"),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.6"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Both_Too_New",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "9000.1"),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "9000.1"),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationCustom_Valid_Version_Merge",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.6"),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.1"),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom", "foo", "bar", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.6"),
+							createOSCommandMetricWithVersion("workload.googleapis.com/sap/validation/custom2", "foo2", "baz", cmpb.OSVendor_OS_VENDOR_UNSPECIFIED, "1.1"),
 						},
 					},
 				},
