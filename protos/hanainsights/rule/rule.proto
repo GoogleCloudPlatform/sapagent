@@ -19,6 +19,7 @@ package sapagent.protos.hanainsights.rule;
 
 option java_multiple_files = true;
 
+
 message Rule {
   string name = 1;  // Optional
   string id =
@@ -73,4 +74,5 @@ message Action {
   string description = 2;
   string statement = 3;
   string rollback = 4;
+  
 }

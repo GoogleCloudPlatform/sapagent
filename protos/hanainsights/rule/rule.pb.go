@@ -102,6 +102,7 @@ func (EvalNode_EvalType) EnumDescriptor() ([]byte, []int) {
 	return file_hanainsights_rule_rule_proto_rawDescGZIP(), []int{3, 0}
 }
 
+
 type Rule struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -443,7 +444,7 @@ type Action struct {
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	Statement   string `protobuf:"bytes,3,opt,name=statement,proto3" json:"statement,omitempty"`
-	Rollback    string `protobuf:"bytes,4,opt,name=rollback,proto3" json:"rollback,omitempty"`
+	Rollback    string `protobuf:"bytes,4,opt,name=rollback,proto3" json:"rollback,omitempty"` 
 }
 
 func (x *Action) Reset() {
