@@ -60,16 +60,16 @@ func Run(ctx context.Context, db SQLDBHandle, rules []*rpb.Rule) (Insights, erro
 	// Execute the queries to build knowledge base.
 	insights := make(Insights)
 	for _, rule := range rules {
-		log.Logger.Debugw("Building knowledgebase for rule", "rule", rule.Id)
+		log.CtxLogger(ctx).Debugw("Building knowledgebase for rule", "rule", rule.Id)
 		rkb := deepCopy(gkb)
 		if err := buildKnowledgeBase(ctx, db, rule.Queries, rkb); err != nil {
-			log.Logger.Debugw("Error building knowledge base", "rule", rule.Id, "error", err)
+			log.CtxLogger(ctx).Debugw("Error building knowledge base", "rule", rule.Id, "error", err)
 			continue
 		}
 		buildInsights(rule, rkb, insights)
-		log.Logger.Debugw("Evaluation completed", "rule", rule.Id)
+		log.CtxLogger(ctx).Debugw("Evaluation completed", "rule", rule.Id)
 	}
-	log.Logger.Infow("HANA Insights", "insights", insights)
+	log.CtxLogger(ctx).Infow("HANA Insights", "insights", insights)
 	return insights, nil
 }
 
@@ -78,7 +78,7 @@ func buildGlobalKnowledgeBase(ctx context.Context, db SQLDBHandle, rules []*rpb.
 	for _, rule := range rules {
 		if rule.Id == "knowledgebase" {
 			if err := buildKnowledgeBase(ctx, db, rule.Queries, gkb); err != nil {
-				log.Logger.Errorw("Error building global knowledge base", "rule", rule.Id, "error", err)
+				log.CtxLogger(ctx).Errorw("Error building global knowledge base", "rule", rule.Id, "error", err)
 			}
 			break
 		}
@@ -100,17 +100,17 @@ func buildKnowledgeBase(ctx context.Context, db SQLDBHandle, queries []*rpb.Quer
 		cols := createColumns(len(query.Columns))
 		rows, err := QueryDatabase(ctx, db.QueryContext, query.Sql)
 		if err != nil {
-			log.Logger.Debugw("Error running query", "query", query.Sql)
+			log.CtxLogger(ctx).Debugw("Error running query", "query", query.Sql)
 			return err
 		}
 		for rows.Next() {
 			if err := rows.Scan(cols...); err != nil {
-				log.Logger.Debugw("Error scanning query result", "query", query.Sql)
+				log.CtxLogger(ctx).Debugw("Error scanning query result", "query", query.Sql)
 				return err
 			}
 			addRow(cols, query, kb)
 		}
-		log.Logger.Debugw("Knowledge base built successfully", "query", query.Sql, "result", cols, "knowledgebase", kb)
+		log.CtxLogger(ctx).Debugw("Knowledge base built successfully", "query", query.Sql, "result", cols, "knowledgebase", kb)
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func QueryDatabase(ctx context.Context, queryFunc queryFunc, sql string) (*sql.R
 	if sql == "" {
 		return nil, errors.New("no query specified")
 	}
-	log.Logger.Debugw("Executing query", "query", sql)
+	log.CtxLogger(ctx).Debugw("Executing query", "query", sql)
 
 	rows, err := queryFunc(ctx, sql)
 	if err != nil {

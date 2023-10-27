@@ -78,7 +78,7 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 	var metricsCollectionErr error
 	processes := collectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {
-		log.Logger.Debug("Cannot collect CPU and memory per process for hana, empty process list.")
+		log.CtxLogger(ctx).Debug("Cannot collect CPU and memory per process for hana, empty process list.")
 		return nil, nil
 	}
 	res := make([]*mrpb.TimeSeries, 0)
@@ -124,13 +124,13 @@ func (p *HanaInstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId())
+		log.CtxLogger(ctx).Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId())
 	}
 	return res, err
 }

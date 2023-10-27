@@ -122,17 +122,17 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for snapshot.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 3 {
-		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
 	s.cloudProps, ok = args[2].(*ipb.CloudProperties)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
 	if s.help {
@@ -147,7 +147,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
-		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)
 		return subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
@@ -171,7 +171,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		return subcommands.ExitFailure
 	}
 
-	log.Logger.Infow("Starting disk snapshot for HANA", "sid", s.sid)
+	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.sid)
 	onetime.ConfigureUsageMetricsForOTE(s.cloudProps, "", "")
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
 	dbp := databaseconnector.Params{
@@ -250,7 +250,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	}
 
 	if err := s.createPDSnapshot(ctx); err != nil {
-		log.Logger.Errorw("Error creating persistent disk snapshot", "error", err)
+		log.CtxLogger(ctx).Errorw("Error creating persistent disk snapshot", "error", err)
 		usagemetrics.Error(usagemetrics.DiskSnapshotCreateFailure)
 		if _, err := run(s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`); err != nil {
 			usagemetrics.Error(usagemetrics.DiskSnapshotFailedDBNotComplete)
@@ -308,7 +308,7 @@ func (s *Snapshot) createNewHANASnapshot(run queryFunc) (snapshotID string, err 
 }
 
 func (s *Snapshot) createPDSnapshot(ctx context.Context) (err error) {
-	log.Logger.Infow("Creating persistent disk snapshot", "sourcedisk", s.disk, "sourcediskzone", s.diskZone, "snapshotname", s.snapshotName)
+	log.CtxLogger(ctx).Infow("Creating persistent disk snapshot", "sourcedisk", s.disk, "sourcediskzone", s.diskZone, "snapshotname", s.snapshotName)
 
 	var op *compute.Operation
 	snapshot := &compute.Snapshot{
@@ -361,7 +361,7 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 	if !s.sendToMonitoring {
 		return false
 	}
-	log.Logger.Infow("Sending HANA disk snapshot status to cloud monitoring", "status", s.status)
+	log.CtxLogger(ctx).Infow("Sending HANA disk snapshot status to cloud monitoring", "status", s.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
 			CloudProp:  s.cloudProps,
@@ -376,7 +376,7 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 		}),
 	}
 	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.project); err != nil {
-		log.Logger.Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
+		log.CtxLogger(ctx).Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
 		return false
 	}
 	return true

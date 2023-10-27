@@ -99,7 +99,7 @@ type (
 func ExecProcessList(ctx context.Context, exec commandlineexecutor.Execute, params commandlineexecutor.Params) (commandlineexecutor.Result, int, error) {
 	result := exec(ctx, params)
 	if result.Error != nil && !result.ExitStatusParsed {
-		log.Logger.Debugw("Failed to get SAP Process Status", log.Error(result.Error))
+		log.CtxLogger(ctx).Debugw("Failed to get SAP Process Status", log.Error(result.Error))
 		return result, 0, result.Error
 	}
 
@@ -107,7 +107,7 @@ func ExecProcessList(ctx context.Context, exec commandlineexecutor.Execute, para
 	if !ok {
 		return result, result.ExitCode, fmt.Errorf("invalid sapcontrol return code: %d", result.ExitCode)
 	}
-	log.Logger.Debugw("Sapcontrol ExitStatusProcessList", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
+	log.CtxLogger(ctx).Debugw("Sapcontrol ExitStatusProcessList", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
 
 	return result, result.ExitCode, nil
 }
@@ -228,7 +228,7 @@ func (p *Properties) ParseQueueStats(ctx context.Context, exec commandlineexecut
 
 	result := exec(ctx, params)
 	if result.Error != nil && !result.ExitStatusParsed {
-		log.Logger.Debugw("Failed to run GetQueueStatistic", log.Error(result.Error))
+		log.CtxLogger(ctx).Debugw("Failed to run GetQueueStatistic", log.Error(result.Error))
 		return nil, nil, result.Error
 	}
 
@@ -245,20 +245,20 @@ func (p *Properties) ParseQueueStats(ctx context.Context, exec commandlineexecut
 		queue, current, peak := row[typeColumn], row[currentQueueUsageColumn], row[peakQueueUsageColumn]
 		currentVal, err := strconv.Atoi(current)
 		if err != nil {
-			log.Logger.Debugw("Could not parse current queue usage", log.Error(err))
+			log.CtxLogger(ctx).Debugw("Could not parse current queue usage", log.Error(err))
 			continue
 		}
 		currentQueueUsage[queue] = currentVal
 
 		peakVal, err := strconv.Atoi(peak)
 		if err != nil {
-			log.Logger.Debugw("Could not parse peak queue usage", log.Error(err))
+			log.CtxLogger(ctx).Debugw("Could not parse peak queue usage", log.Error(err))
 			continue
 		}
 		peakQueueUsage[queue] = peakVal
 	}
 
-	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
+	log.CtxLogger(ctx).Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
 	return currentQueueUsage, peakQueueUsage, nil
 }
 

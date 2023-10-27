@@ -60,12 +60,12 @@ func (m *Mode) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for maintenance.
 func (m *Mode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 2 {
-		log.Logger.Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
 	if m.version {

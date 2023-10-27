@@ -91,13 +91,13 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// this check will never be hit when executing the command line
 	if len(args) < 2 {
-		log.Logger.Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	// this check will never be hit when executing the command line
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
 
@@ -115,7 +115,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 }
 
 func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client storage.Client) subcommands.ExitStatus {
-	log.Logger.Info("Backint starting")
+	log.CtxLogger(ctx).Info("Backint starting")
 	p := configuration.Parameters{
 		User:        b.user,
 		Function:    b.function,
@@ -132,7 +132,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 	}
 	lp.LogToCloud = config.GetLogToCloud().GetValue()
 	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
-	log.Logger.Infow("Args parsed and config validated", "config", config)
+	log.CtxLogger(ctx).Infow("Args parsed and config validated", "config", config)
 
 	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccount(), config.GetBucket(), userAgent, true)
 	if !ok {
@@ -144,7 +144,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 		return subcommands.ExitUsageError
 	}
 
-	log.Logger.Info("Backint finished")
+	log.CtxLogger(ctx).Info("Backint finished")
 	return subcommands.ExitSuccess
 }
 
@@ -152,25 +152,25 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 // to execute based on the configuration. Issues with file operations or config will return false.
 func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.BucketHandle) bool {
 	usagemetrics.Action(usagemetrics.BackintRunning)
-	log.Logger.Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	inFile, err := os.Open(config.GetInputFile())
 	if err != nil {
-		log.Logger.Errorw("Error opening input file", "fileName", config.GetInputFile(), "err", err)
+		log.CtxLogger(ctx).Errorw("Error opening input file", "fileName", config.GetInputFile(), "err", err)
 		return false
 	}
 	defer inFile.Close()
 	if fileInfo, err := inFile.Stat(); err != nil || fileInfo.Mode()&0222 == 0 {
-		log.Logger.Errorw("Input file does not have readable permissions", "fileName", config.GetInputFile(), "err", err)
+		log.CtxLogger(ctx).Errorw("Input file does not have readable permissions", "fileName", config.GetInputFile(), "err", err)
 		return false
 	}
 	outFile, err := os.Create(config.GetOutputFile())
 	if err != nil {
-		log.Logger.Errorw("Error opening output file", "fileName", config.GetOutputFile(), "err", err)
+		log.CtxLogger(ctx).Errorw("Error opening output file", "fileName", config.GetOutputFile(), "err", err)
 		return false
 	}
 	defer outFile.Close()
 	if fileInfo, err := outFile.Stat(); err != nil || fileInfo.Mode()&0444 == 0 {
-		log.Logger.Errorw("Output file does not have writable permissions", "fileName", config.GetOutputFile(), "err", err)
+		log.CtxLogger(ctx).Errorw("Output file does not have writable permissions", "fileName", config.GetOutputFile(), "err", err)
 		return false
 	}
 
@@ -186,7 +186,7 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.
 	case bpb.Function_DIAGNOSE:
 		return diagnose.Execute(ctx, config, bucketHandle, outFile)
 	default:
-		log.Logger.Errorw("Unsupported Backint function", "function", config.GetFunction().String())
+		log.CtxLogger(ctx).Errorw("Unsupported Backint function", "function", config.GetFunction().String())
 		return false
 	}
 }

@@ -67,14 +67,14 @@ type parameters struct {
 
 // Execute logs information and performs the requested backup. Returns false on failures.
 func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
-	log.Logger.Infow("BACKUP starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("BACKUP starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintBackupStarted)
 	if err := backup(ctx, config, bucketHandle, input, output); err != nil {
-		log.Logger.Errorw("BACKUP failed", "err", err)
+		log.CtxLogger(ctx).Errorw("BACKUP failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintBackupFailure)
 		return false
 	}
-	log.Logger.Infow("BACKUP finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("BACKUP finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintBackupFinished)
 	return true
 }
@@ -87,7 +87,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		log.Logger.Infow("Executing backup input", "line", line)
+		log.CtxLogger(ctx).Infow("Executing backup input", "line", line)
 		if strings.HasPrefix(line, "#SOFTWAREID") {
 			if _, err := parse.WriteSoftwareVersion(line, output); err != nil {
 				return err
@@ -135,7 +135,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 				mu.Unlock()
 			})
 		} else {
-			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
+			log.CtxLogger(ctx).Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
 	wp.StopWait()
@@ -150,16 +150,16 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 func backupFile(ctx context.Context, p parameters) string {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
 	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + p.extension
-	log.Logger.Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType)
+	log.CtxLogger(ctx).Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType)
 	if p.reader == nil {
 		f, err := parse.OpenFileWithRetries(fileNameTrim, os.O_RDONLY, 0, p.config.GetFileReadTimeoutMs())
 		if err != nil {
-			log.Logger.Errorw("Error opening backup file", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
+			log.CtxLogger(ctx).Errorw("Error opening backup file", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 			return fmt.Sprintf("#ERROR %s\n", p.fileName)
 		}
 		defer f.Close()
 		if fileInfo, err := f.Stat(); err != nil || fileInfo.Mode()&0444 == 0 {
-			log.Logger.Errorw("Backup file does not have readable permissions", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
+			log.CtxLogger(ctx).Errorw("Backup file does not have readable permissions", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 			return fmt.Sprintf("#ERROR %s\n", p.fileName)
 		}
 		p.reader = f
@@ -186,10 +186,10 @@ func backupFile(ctx context.Context, p parameters) string {
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {
-		log.Logger.Errorw("Error uploading file", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
+		log.CtxLogger(ctx).Errorw("Error uploading file", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 		return fmt.Sprintf("#ERROR %s\n", p.fileName)
 	}
-	log.Logger.Infow("File uploaded", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "bytesWritten", bytesWritten, "fileSize", p.fileSize, "fileType", p.fileType)
+	log.CtxLogger(ctx).Infow("File uploaded", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "bytesWritten", bytesWritten, "fileSize", p.fileSize, "fileType", p.fileType)
 	return fmt.Sprintf("#SAVED %q %s %s\n", p.externalBackupID, p.fileName, strconv.FormatInt(bytesWritten, 10))
 }
 
@@ -201,26 +201,26 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
 	f, err := parse.OpenFileWithRetries(fileNameTrim, os.O_RDONLY, 0, p.config.GetFileReadTimeoutMs())
 	if err != nil {
-		log.Logger.Errorw("Error opening backup file", "fileName", p.fileName, "err", err)
+		log.CtxLogger(ctx).Errorw("Error opening backup file", "fileName", p.fileName, "err", err)
 		return fmt.Sprintf("#ERROR %s\n", p.fileName), err
 	}
 	if p.fileSize == 0 {
 		fi, err := p.stat(fileNameTrim)
 		if err != nil {
-			log.Logger.Errorw("Cannot determine file size, cannot chunk file for parallel upload.", "fileName", p.fileName, "err", err)
+			log.CtxLogger(ctx).Errorw("Cannot determine file size, cannot chunk file for parallel upload.", "fileName", p.fileName, "err", err)
 			return fmt.Sprintf("#ERROR %s\n", p.fileName), err
 		}
 		p.fileSize = fi.Size()
 	}
 	if fileInfo, err := f.Stat(); err != nil || fileInfo.Mode()&0444 == 0 {
-		log.Logger.Errorw("Backup file does not have readable permissions", "fileName", p.fileName, "err", err)
+		log.CtxLogger(ctx).Errorw("Backup file does not have readable permissions", "fileName", p.fileName, "err", err)
 		return fmt.Sprintf("#ERROR %s\n", p.fileName), fmt.Errorf("backup file does not have readable permissions")
 	}
 
 	sectionLength := p.fileSize / p.config.GetParallelStreams()
 	chunksCompleted := int64(0)
 	chunkError := false
-	log.Logger.Infow("Sectioning file into equal sized chunks for parallel upload", "fileName", p.fileName, "fileSize", p.fileSize, "parallelStreams", p.config.GetParallelStreams(), "sectionLength", sectionLength, "externalBackupID", p.externalBackupID)
+	log.CtxLogger(ctx).Infow("Sectioning file into equal sized chunks for parallel upload", "fileName", p.fileName, "fileSize", p.fileSize, "parallelStreams", p.config.GetParallelStreams(), "sectionLength", sectionLength, "externalBackupID", p.externalBackupID)
 	for i := int64(0); i < p.config.GetParallelStreams(); i++ {
 		// Since wp.Submit() is non-blocking, the for loop might progress before
 		// the task is executed in the workerpool. Create a copy of the loop
@@ -244,10 +244,10 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 			if strings.HasPrefix(result, "#ERROR") {
-				log.Logger.Errorw("Error uploading chunk", "bucket", p.config.GetBucket(), "fileName", p.fileName, "err", err, "offset", offset, "sectionLength", length, "chunk", i)
+				log.CtxLogger(ctx).Errorw("Error uploading chunk", "bucket", p.config.GetBucket(), "fileName", p.fileName, "err", err, "offset", offset, "sectionLength", length, "chunk", i)
 				chunkError = true
 			} else {
-				log.Logger.Infow("Chunk uploaded", "bucket", p.config.GetBucket(), "fileName", p.fileName, "offset", offset, "sectionLength", length, "chunk", i)
+				log.CtxLogger(ctx).Infow("Chunk uploaded", "bucket", p.config.GetBucket(), "fileName", p.fileName, "offset", offset, "sectionLength", length, "chunk", i)
 			}
 			chunksCompleted++
 			if chunksCompleted == p.config.GetParallelStreams() {
@@ -272,11 +272,11 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
 		return fmt.Sprintf("#SAVED %q %s %s\n", p.externalBackupID, p.fileName, strconv.FormatInt(p.fileSize, 10))
 	}
 	if p.config.GetDumpData() {
-		log.Logger.Warnw("dump_data set to true, not composing objects.", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
+		log.CtxLogger(ctx).Warnw("dump_data set to true, not composing objects.", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
 		return ret()
 	}
 
-	log.Logger.Infow("All chunks uploaded, composing into 1 object", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
+	log.CtxLogger(ctx).Infow("All chunks uploaded, composing into 1 object", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
 	var srcs []*store.ObjectHandle
 	// The composer can take between 1 to 32 objects to compose into 1 object
 	// parallel_streams are limited to 32 in the configuration so only 1 compose call is needed.
@@ -292,16 +292,16 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
 	composer := p.bucketHandle.Object(object).ComposerFrom(srcs...)
 	composer.ObjectAttrs.ContentType = contentType
 	if _, err := composer.Run(ctx); err != nil {
-		log.Logger.Errorw("Error composing object", "object", object, "chunks", p.config.GetParallelStreams(), "err", err)
+		log.CtxLogger(ctx).Errorw("Error composing object", "object", object, "chunks", p.config.GetParallelStreams(), "err", err)
 		chunkError = true
 	} else {
-		log.Logger.Infow("Object composed", "object", object, "chunks", p.config.GetParallelStreams())
+		log.CtxLogger(ctx).Infow("Object composed", "object", object, "chunks", p.config.GetParallelStreams())
 	}
 
-	log.Logger.Infow("Deleting temporary chunked objects", "object", object, "chunks", p.config.GetParallelStreams())
+	log.CtxLogger(ctx).Infow("Deleting temporary chunked objects", "object", object, "chunks", p.config.GetParallelStreams())
 	for i := int64(0); i < p.config.GetParallelStreams(); i++ {
 		if err := storage.DeleteObject(ctx, p.bucketHandle, object+strconv.FormatInt(i, 10), p.config.GetRetries()); err != nil {
-			log.Logger.Errorw("Error deleting temporary chunked object", "object", object+strconv.FormatInt(i, 10), "err", err)
+			log.CtxLogger(ctx).Errorw("Error deleting temporary chunked object", "object", object+strconv.FormatInt(i, 10), "err", err)
 			chunkError = true
 		}
 	}

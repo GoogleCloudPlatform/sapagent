@@ -75,15 +75,15 @@ type diagnoseOptions struct {
 
 // Execute logs information and performs the diagnostic. Returns false on failures.
 func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, output io.Writer) bool {
-	log.Logger.Infow("DIAGNOSE starting", "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("DIAGNOSE starting", "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintDiagnoseStarted)
 	if err := diagnose(ctx, config, bucketHandle, output); err != nil {
-		log.Logger.Errorw("DIAGNOSE failed", "err", err)
+		log.CtxLogger(ctx).Errorw("DIAGNOSE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintDiagnoseFailure)
 		output.Write([]byte(fmt.Sprintf("\nDIAGNOSE failed: %v\n", err.Error())))
 		return false
 	}
-	log.Logger.Infow("DIAGNOSE succeeded", "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("DIAGNOSE succeeded", "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintDiagnoseFinished)
 	output.Write([]byte("\nDIAGNOSE succeeded\n"))
 	return true
@@ -126,7 +126,7 @@ func diagnose(ctx context.Context, config *bpb.BackintConfiguration, bucketHandl
 func createFiles(ctx context.Context, dir, fileName1, fileName2 string, fileSize1, fileSize2 int64) ([]*diagnoseFile, error) {
 	fileName1 = dir + fileName1
 	fileName2 = dir + fileName2
-	log.Logger.Infow("Creating files for diagnostics.", "fileName1", fileName1, "fileName2", fileName2)
+	log.CtxLogger(ctx).Infow("Creating files for diagnostics.", "fileName1", fileName1, "fileName2", fileName2)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
@@ -163,24 +163,24 @@ func createFiles(ctx context.Context, dir, fileName1, fileName2 string, fileSize
 // removeFiles cleans up the local and bucket files used for diagnostics.
 // Returns true if all files were deleted and false if there was a deletion error.
 func removeFiles(ctx context.Context, opts diagnoseOptions, remove removeFunc) bool {
-	log.Logger.Infow("Cleaning up files created for diagnostics.")
+	log.CtxLogger(ctx).Infow("Cleaning up files created for diagnostics.")
 	allFilesDeleted := true
 	for _, file := range opts.files {
-		log.Logger.Infow("Removing local file", "file", file.fileName)
+		log.CtxLogger(ctx).Infow("Removing local file", "file", file.fileName)
 		if !strings.HasPrefix(file.fileName, "/tmp/") {
-			log.Logger.Errorw(`File not located in "/tmp/", cannot remove`, "file", file.fileName)
+			log.CtxLogger(ctx).Errorw(`File not located in "/tmp/", cannot remove`, "file", file.fileName)
 			allFilesDeleted = false
 			continue
 		}
 		if err := remove(file.fileName); err != nil && !errors.Is(err, os.ErrNotExist) {
-			log.Logger.Errorw("Failed to remove local file", "file", file.fileName, "err", err)
+			log.CtxLogger(ctx).Errorw("Failed to remove local file", "file", file.fileName, "err", err)
 			allFilesDeleted = false
 		}
 		if opts.bucketHandle != nil {
 			object := opts.config.GetUserId() + file.fileName + "/" + file.externalBackupID + ".bak"
-			log.Logger.Infow("Removing Cloud Storage Bucket file", "object", object)
+			log.CtxLogger(ctx).Infow("Removing Cloud Storage Bucket file", "object", object)
 			if err := opts.bucketHandle.Object(object).Delete(ctx); err != nil && !errors.Is(err, store.ErrObjectNotExist) {
-				log.Logger.Errorw("Failed to remove Cloud Storage Bucket file", "link", fmt.Sprintf("https://console.cloud.google.com/storage/browser/_details/%s/%s", opts.config.GetBucket(), object), "object", object, "err", err)
+				log.CtxLogger(ctx).Errorw("Failed to remove Cloud Storage Bucket file", "link", fmt.Sprintf("https://console.cloud.google.com/storage/browser/_details/%s/%s", opts.config.GetBucket(), object), "object", object, "err", err)
 				allFilesDeleted = false
 			}
 		}

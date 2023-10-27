@@ -53,20 +53,20 @@ func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) 
 
 // MemoryStats reads metrics from the OS for Memory and returns a MemoryStats.
 func (r *Reader) MemoryStats(ctx context.Context) *mstatspb.MemoryStats {
-	log.Logger.Debug("Getting memory metrics...")
+	log.CtxLogger(ctx).Debug("Getting memory metrics...")
 	var ms *mstatspb.MemoryStats
 	if r.os == "windows" {
-		log.Logger.Debug("Geting memory stats for Windows")
+		log.CtxLogger(ctx).Debug("Geting memory stats for Windows")
 		ms = r.readMemoryStatsForWindows(ctx)
 	} else {
-		log.Logger.Debug("Geting memory stats for Linux")
+		log.CtxLogger(ctx).Debug("Geting memory stats for Linux")
 		ms = r.readMemoryStatsForLinux()
 	}
 	if ms.GetTotal() > 0 && ms.GetFree() > 0 {
 		ms.Used = ms.GetTotal() - ms.GetFree()
 	}
 	if ms != nil {
-		log.Logger.Debugw("Memory stats", "total", ms.GetTotal(), "free", ms.GetFree(), "used", ms.GetUsed())
+		log.CtxLogger(ctx).Debugw("Memory stats", "total", ms.GetTotal(), "free", ms.GetFree(), "used", ms.GetUsed())
 	}
 	return ms
 }
@@ -79,7 +79,7 @@ func (r *Reader) readMemoryStatsForWindows(ctx context.Context) *mstatspb.Memory
 		Args:       []string{"computersystem", "get", "TotalPhysicalMemory/Format:List"},
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not execute wmic get TotalPhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Errorw("Could not execute wmic get TotalPhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 		ms.Total = -1
 	} else {
 		// NOMUTANTS--precision is the same when dividend 1024*1024 is mutated to (1024*1024)-1
@@ -90,7 +90,7 @@ func (r *Reader) readMemoryStatsForWindows(ctx context.Context) *mstatspb.Memory
 		Args:       []string{"OS", "get", "FreePhysicalMemory/Format:List"},
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not execute wmic get FreePhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Errorw("Could not execute wmic get FreePhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 		ms.Free = -1
 	} else {
 		ms.Free = mbValueFromWmicOutput(result.StdOut, "FreePhysicalMemory", 1024)

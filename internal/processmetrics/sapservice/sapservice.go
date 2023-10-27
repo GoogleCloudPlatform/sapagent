@@ -80,13 +80,13 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Debugw("Retry limit exceeded", "error", err)
+		log.CtxLogger(ctx).Debugw("Retry limit exceeded", "error", err)
 	}
 	return res, err
 }
@@ -108,13 +108,13 @@ func queryInstanceState(ctx context.Context, p *InstanceProperties, metric strin
 			ArgsToSplit: args,
 		})
 		if metric == "is-failed" && result.ExitCode != 0 && result.ExitStatusParsed {
-			log.Logger.Debugw("No error while executing command, not sending is_failed metric", "command", command, "args", args)
+			log.CtxLogger(ctx).Debugw("No error while executing command, not sending is_failed metric", "command", command, "args", args)
 			continue
 		} else if metric != "is-failed" && result.Error == nil {
-			log.Logger.Debugw("No error while executing command, not sending is_disabled metric", "command", command, "args", args)
+			log.CtxLogger(ctx).Debugw("No error while executing command, not sending is_disabled metric", "command", command, "args", args)
 			continue
 		}
-		log.Logger.Debugw("Error while executing command", "command", command, "args", args, "stderr", result.StdErr)
+		log.CtxLogger(ctx).Debugw("Error while executing command", "command", command, "args", args, "stderr", result.StdErr)
 		params := timeseries.Params{
 			CloudProp:    p.Config.CloudProperties,
 			MetricType:   metricURL + mPathMap[metric],

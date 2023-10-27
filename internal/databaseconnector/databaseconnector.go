@@ -59,7 +59,7 @@ func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
 		if p.Password, err = p.GCEService.GetSecret(ctx, p.Project, p.PasswordSecret); err != nil {
 			return nil, err
 		}
-		log.Logger.Debug("Read from secret manager successful")
+		log.CtxLogger(ctx).Debug("Read from secret manager successful")
 	}
 
 	// Escape the special characters in the password string, HANA studio does this implicitly.
@@ -71,9 +71,9 @@ func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
 
 	db, err := sql.Open("hdb", dataSource)
 	if err != nil {
-		log.Logger.Errorw("Could not open connection to database.", "username", p.Username, "host", p.Host, "port", p.Port, "err", err)
+		log.CtxLogger(ctx).Errorw("Could not open connection to database.", "username", p.Username, "host", p.Host, "port", p.Port, "err", err)
 		return nil, err
 	}
-	log.Logger.Debug("Database connection successful")
+	log.CtxLogger(ctx).Debug("Database connection successful")
 	return db, nil
 }

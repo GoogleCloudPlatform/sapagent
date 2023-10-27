@@ -37,14 +37,14 @@ import (
 
 // Execute logs information and performs the requested deletion. Returns false on failures.
 func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
-	log.Logger.Infow("DELETE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("DELETE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintDeleteStarted)
 	if err := delete(ctx, config, bucketHandle, input, output); err != nil {
-		log.Logger.Errorw("DELETE failed", "err", err)
+		log.CtxLogger(ctx).Errorw("DELETE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintDeleteFailure)
 		return false
 	}
-	log.Logger.Infow("DELETE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("DELETE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintDeleteFinished)
 	return true
 }
@@ -57,7 +57,7 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		log.Logger.Infow("Executing delete input", "line", line)
+		log.CtxLogger(ctx).Infow("Executing delete input", "line", line)
 		if strings.HasPrefix(line, "#SOFTWAREID") {
 			if _, err := parse.WriteSoftwareVersion(line, output); err != nil {
 				return err
@@ -71,23 +71,23 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 			fileName := s[2]
 			object := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
 			wp.Submit(func() {
-				log.Logger.Infow("Deleting object", "object", object)
+				log.CtxLogger(ctx).Infow("Deleting object", "object", object)
 				err := storage.DeleteObject(ctx, bucketHandle, object, config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()
 				if errors.Is(err, store.ErrObjectNotExist) {
-					log.Logger.Errorw("Object not found", "object", object, "err", err)
+					log.CtxLogger(ctx).Errorw("Object not found", "object", object, "err", err)
 					output.Write([]byte(fmt.Sprintf("#NOTFOUND %q %s\n", externalBackupID, fileName)))
 				} else if err != nil {
-					log.Logger.Errorw("Error deleting object", "object", object, "err", err)
+					log.CtxLogger(ctx).Errorw("Error deleting object", "object", object, "err", err)
 					output.Write([]byte(fmt.Sprintf("#ERROR %q %s\n", externalBackupID, fileName)))
 				} else {
-					log.Logger.Infow("Object deleted", "object", object)
+					log.CtxLogger(ctx).Infow("Object deleted", "object", object)
 					output.Write([]byte(fmt.Sprintf("#DELETED %q %s\n", externalBackupID, fileName)))
 				}
 			})
 		} else {
-			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
+			log.CtxLogger(ctx).Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
 	wp.StopWait()

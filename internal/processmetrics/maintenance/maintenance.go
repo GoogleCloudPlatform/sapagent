@@ -183,7 +183,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	if _, ok := p.SkippedMetrics[mntmodePath]; ok {
 		return metrics, nil
 	}
-	log.Logger.Debug("Starting maintenancemode metric collection.")
+	log.CtxLogger(ctx).Debug("Starting maintenancemode metric collection.")
 	sidsUnderMaintenance, err := ReadMaintenanceMode(p.Reader)
 	if err != nil {
 		return nil, err
@@ -192,7 +192,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		mntmode := contains(sidsUnderMaintenance, sid)
 		labels := make(map[string]string)
 		labels["sid"] = sid
-		log.Logger.Debugw("MaintenanceMode metric for SID", "sid", sid, "maintenancemode", mntmode)
+		log.CtxLogger(ctx).Debugw("MaintenanceMode metric for SID", "sid", sid, "maintenancemode", mntmode)
 		params := timeseries.Params{
 			CloudProp:    p.Config.CloudProperties,
 			MetricType:   metricURL + mntmodePath,
@@ -216,13 +216,13 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Debug("Retry limit exceeded", "error", err)
+		log.CtxLogger(ctx).Debug("Retry limit exceeded", "error", err)
 	}
 	return res, err
 }

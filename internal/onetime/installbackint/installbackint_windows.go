@@ -41,6 +41,6 @@ func (b *InstallBackint) SetFlags(fs *flag.FlagSet) {}
 
 // Execute implements the subcommand interface for installbackint.
 func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	log.Logger.Info("Installbackint is not supported for windows platforms.")
+	log.CtxLogger(ctx).Info("Installbackint is not supported for windows platforms.")
 	return subcommands.ExitSuccess
 }

@@ -64,10 +64,10 @@ func CollectOSCommandMetric(ctx context.Context, m *cmpb.OSCommandMetric, exec c
 	osVendor := m.GetOsVendor()
 	switch {
 	case osVendor == cmpb.OSVendor_RHEL && vendor != "rhel":
-		log.Logger.Warnw(fmt.Sprintf("Skip metric collection, OS vendor of %q not detected for this system", cmpb.OSVendor_RHEL.String()), "vendor", vendor, "metric", m)
+		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Skip metric collection, OS vendor of %q not detected for this system", cmpb.OSVendor_RHEL.String()), "vendor", vendor, "metric", m)
 		return "", ""
 	case osVendor == cmpb.OSVendor_SLES && vendor != "sles":
-		log.Logger.Warnw(fmt.Sprintf("Skip metric collection, OS vendor of %q not detected for this system", cmpb.OSVendor_SLES.String()), "vendor", vendor, "metric", m)
+		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Skip metric collection, OS vendor of %q not detected for this system", cmpb.OSVendor_SLES.String()), "vendor", vendor, "metric", m)
 		return "", ""
 	}
 

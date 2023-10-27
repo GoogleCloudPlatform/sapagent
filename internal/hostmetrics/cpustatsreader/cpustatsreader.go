@@ -53,7 +53,7 @@ func New(os string, fileReader FileReader, execute commandlineexecutor.Execute) 
 
 // The Read method reads CPU metrics from the OS and returns a proto for CpuStats.
 func (r *Reader) Read(ctx context.Context) *statspb.CpuStats {
-	log.Logger.Debug("Reading CPU stats...")
+	log.CtxLogger(ctx).Debug("Reading CPU stats...")
 	var s *statspb.CpuStats
 	switch r.os {
 	case "linux":
@@ -61,12 +61,12 @@ func (r *Reader) Read(ctx context.Context) *statspb.CpuStats {
 	case "windows":
 		s = r.readCPUStatsForWindows(ctx)
 	default:
-		log.Logger.Errorw("Encountered an unexpected OS value", "value", r.os)
+		log.CtxLogger(ctx).Errorw("Encountered an unexpected OS value", "value", r.os)
 		return nil
 	}
 
 	if s != nil {
-		log.Logger.Debugw("Cpu stats", "type", s.GetProcessorType(), "count", s.GetCpuCount(), "cores", s.GetCpuCores(), "maxmhz", s.GetMaxMhz())
+		log.CtxLogger(ctx).Debugw("Cpu stats", "type", s.GetProcessorType(), "count", s.GetCpuCount(), "cores", s.GetCpuCores(), "maxmhz", s.GetMaxMhz())
 	}
 	return s
 }
@@ -82,7 +82,7 @@ func (r *Reader) readCPUStatsForWindows(ctx context.Context) *statspb.CpuStats {
 		Args:       args,
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not execute wmic get NumberOfLogicalProcessors/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Errorw("Could not execute wmic get NumberOfLogicalProcessors/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 		return s
 	}
 	o := strings.ReplaceAll(result.StdOut, "\r", "")
@@ -98,21 +98,21 @@ func (r *Reader) readCPUStatsForWindows(ctx context.Context) *statspb.CpuStats {
 		case "MaxClockSpeed":
 			n, err := strconv.ParseFloat(l[1], 64)
 			if err != nil {
-				log.Logger.Errorw("Could not parse MaxClockSpeed", "value", l[1], "error", err)
+				log.CtxLogger(ctx).Errorw("Could not parse MaxClockSpeed", "value", l[1], "error", err)
 				continue
 			}
 			s.MaxMhz = int64(math.Round(n))
 		case "NumberOfCores":
 			n, err := strconv.ParseInt(l[1], 10, 64)
 			if err != nil {
-				log.Logger.Errorw("Could not parse NumberOfCores", "value", l[1], "error", err)
+				log.CtxLogger(ctx).Errorw("Could not parse NumberOfCores", "value", l[1], "error", err)
 				continue
 			}
 			s.CpuCores = n
 		case "NumberOfLogicalProcessors":
 			n, err := strconv.ParseInt(l[1], 10, 64)
 			if err != nil {
-				log.Logger.Errorw("Could not parse NumberOfLogicalProcessors", "value", l[1], "error", err)
+				log.CtxLogger(ctx).Errorw("Could not parse NumberOfLogicalProcessors", "value", l[1], "error", err)
 				continue
 			}
 			s.CpuCount = n

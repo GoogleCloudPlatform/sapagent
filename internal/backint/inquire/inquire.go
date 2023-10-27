@@ -37,14 +37,14 @@ import (
 
 // Execute logs information and performs the requested inquiry. Returns false on failures.
 func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
-	log.Logger.Infow("INQUIRE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("INQUIRE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintInquireStarted)
 	if err := inquire(ctx, config, bucketHandle, input, output); err != nil {
-		log.Logger.Errorw("INQUIRE failed", "err", err)
+		log.CtxLogger(ctx).Errorw("INQUIRE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintInquireFailure)
 		return false
 	}
-	log.Logger.Infow("INQUIRE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("INQUIRE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintInquireFinished)
 	return true
 }
@@ -58,7 +58,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		log.Logger.Infow("Executing inquire input", "line", line)
+		log.CtxLogger(ctx).Infow("Executing inquire input", "line", line)
 		if strings.HasPrefix(line, "#SOFTWAREID") {
 			var err error
 			if backintVersion, err = parse.WriteSoftwareVersion(line, output); err != nil {
@@ -101,7 +101,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 				output.Write(out)
 			})
 		} else {
-			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
+			log.CtxLogger(ctx).Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
 	wp.StopWait()
@@ -115,13 +115,13 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 // objects found according to SAP HANA formatting specifications.
 func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion, filter string, retries int64) []byte {
 	var result []byte
-	log.Logger.Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "filter", filter)
+	log.CtxLogger(ctx).Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "filter", filter)
 	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, filter, retries)
 	if err != nil {
-		log.Logger.Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID, "filter", filter)
+		log.CtxLogger(ctx).Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID, "filter", filter)
 		result = []byte("#ERROR")
 	} else if len(objects) == 0 {
-		log.Logger.Warnw("No objects found", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "filter", filter)
+		log.CtxLogger(ctx).Warnw("No objects found", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "filter", filter)
 		result = []byte("#NOTFOUND")
 	}
 	// If there was an error or no objects were found, append the optional parameters and return.
@@ -140,12 +140,12 @@ func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix,
 		externalBackupID := strings.TrimSuffix(filepath.Base(object.Name), ".bak")
 		dirs := strings.SplitN(filepath.Dir(object.Name), "/", 2)
 		if len(dirs) < 2 {
-			log.Logger.Errorw("Unexpected object name, cannot generate original file name", "name", object.Name)
+			log.CtxLogger(ctx).Errorw("Unexpected object name, cannot generate original file name", "name", object.Name)
 			result = append(result, fmt.Sprintf("#ERROR %q %q\n", externalBackupID, object.Name)...)
 			continue
 		}
 		fileName = parse.RestoreFilename(dirs[1])
-		log.Logger.Infow("Found object", "name", object.Name, "externalBackupID", externalBackupID, "fileName", fileName)
+		log.CtxLogger(ctx).Infow("Found object", "name", object.Name, "externalBackupID", externalBackupID, "fileName", fileName)
 
 		// Backint versions prior to 1.50 do not include the creation timestamp in the INQUIRE output.
 		result = append(result, fmt.Sprintf("#BACKUP %q %s", externalBackupID, fileName)...)

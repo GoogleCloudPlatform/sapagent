@@ -111,15 +111,15 @@ func (d *sapDiscovery) discoverSAPApps(ctx context.Context, cp *ipb.CloudPropert
 	for _, app := range sapApps.Instances {
 		switch app.Type {
 		case sappb.InstanceType_NETWEAVER:
-			log.Logger.Infow("discovering netweaver", "sid", app.Sapsid)
+			log.CtxLogger(ctx).Infow("discovering netweaver", "sid", app.Sapsid)
 			sys := d.discoverNetweaver(ctx, app)
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
-				log.Logger.Infow("Comparing to system", "dbSID", s.dbSID, "appSID", s.appSID)
+				log.CtxLogger(ctx).Infow("Comparing to system", "dbSID", s.dbSID, "appSID", s.appSID)
 				if (s.appSID == "" || s.appSID == sys.appSID) &&
 					s.dbSID == sys.dbSID {
-					log.Logger.Infow("Found existing system", "sid", sys.appSID)
+					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.appSID)
 					sapSystems[i] = mergeSystemDetails(s, sys)
 					sapSystems[i].appOnHost = true
 					found = true
@@ -127,18 +127,18 @@ func (d *sapDiscovery) discoverSAPApps(ctx context.Context, cp *ipb.CloudPropert
 				}
 			}
 			if !found {
-				log.Logger.Infow("No existing system", "sid", app.Sapsid)
+				log.CtxLogger(ctx).Infow("No existing system", "sid", app.Sapsid)
 				sys.appOnHost = true
 				sapSystems = append(sapSystems, sys)
 			}
 		case sappb.InstanceType_HANA:
-			log.Logger.Infow("discovering hana", "sid", app.Sapsid)
+			log.CtxLogger(ctx).Infow("discovering hana", "sid", app.Sapsid)
 			sys := d.discoverHANA(ctx, app)
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
 				if s.dbSID == sys.dbSID {
-					log.Logger.Infow("Found existing system", "sid", sys.dbSID)
+					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.dbSID)
 					sapSystems[i] = mergeSystemDetails(s, sys)
 					sapSystems[i].dbOnHost = true
 					found = true
@@ -146,7 +146,7 @@ func (d *sapDiscovery) discoverSAPApps(ctx context.Context, cp *ipb.CloudPropert
 				}
 			}
 			if !found {
-				log.Logger.Infow("No existing system", "sid", app.Sapsid)
+				log.CtxLogger(ctx).Infow("No existing system", "sid", app.Sapsid)
 				sys.dbOnHost = true
 				sapSystems = append(sapSystems, sys)
 			}
@@ -158,27 +158,27 @@ func (d *sapDiscovery) discoverSAPApps(ctx context.Context, cp *ipb.CloudPropert
 func (d *sapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInstance) sapSystemDetails {
 	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)
 	if err != nil {
-		log.Logger.Warnw("Encountered error discovering database SID", "error", err)
+		log.CtxLogger(ctx).Warnw("Encountered error discovering database SID", "error", err)
 		return sapSystemDetails{}
 	}
 	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid)
 	if err != nil {
-		log.Logger.Warnw("Encountered error discovering app to database connection", "error", err)
+		log.CtxLogger(ctx).Warnw("Encountered error discovering app to database connection", "error", err)
 	}
 	ascsHost, err := d.discoverASCS(ctx, app.Sapsid)
 	if err != nil {
-		log.Logger.Warnw("Error discovering ascs", "error", err)
+		log.CtxLogger(ctx).Warnw("Error discovering ascs", "error", err)
 	}
 	nfsHost, err := d.discoverAppNFS(ctx, app.Sapsid)
 	if err != nil {
-		log.Logger.Warnw("Error discovering app NFS", "error", err)
+		log.CtxLogger(ctx).Warnw("Error discovering app NFS", "error", err)
 	}
 	appProps := &spb.SapDiscovery_Component_ApplicationProperties{
 		ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 		AscsUri:         ascsHost,
 		NfsUri:          nfsHost,
 	}
-	log.Logger.Infof("netweaver dbHosts: %v", dbHosts)
+	log.CtxLogger(ctx).Infof("netweaver dbHosts: %v", dbHosts)
 	return sapSystemDetails{
 		appSID:        app.Sapsid,
 		appProperties: appProps,
@@ -190,13 +190,13 @@ func (d *sapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 func (d *sapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance) sapSystemDetails {
 	dbHosts, err := d.discoverDBNodes(ctx, app.Sapsid, app.InstanceNumber)
 	if err != nil {
-		log.Logger.Warnw("Encountered error discovering DB nodes", "error", err)
+		log.CtxLogger(ctx).Warnw("Encountered error discovering DB nodes", "error", err)
 		return sapSystemDetails{}
 	}
-	log.Logger.Infof("hana dbHosts: %v", dbHosts)
+	log.CtxLogger(ctx).Infof("hana dbHosts: %v", dbHosts)
 	dbNFS, err := d.discoverDatabaseNFS(ctx)
 	if err != nil {
-		log.Logger.Warnw("Unable to discover database NFS", "error", err)
+		log.CtxLogger(ctx).Warnw("Unable to discover database NFS", "error", err)
 	}
 	dbProps := &spb.SapDiscovery_Component_DatabaseProperties{
 		DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
@@ -217,13 +217,13 @@ func (d *sapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list", "DEFAULT"},
 	})
 	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
+		log.CtxLogger(ctx).Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
 		return nil, result.Error
 	}
 
 	dbHosts := parseDBHosts(result.StdOut)
 	if len(dbHosts) == 0 {
-		log.Logger.Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
+		log.CtxLogger(ctx).Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
 		return nil, errors.New("Unable to find DB hostname and port in hdbuserstore output")
 	}
 
@@ -268,13 +268,13 @@ func (d *sapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list"},
 	})
 	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
 	re, err := regexp.Compile(`DATABASE\s*:\s*([a-zA-Z][a-zA-Z0-9]{2})`)
 	if err != nil {
-		log.Logger.Warnw("Error compiling regex", "error", err)
+		log.CtxLogger(ctx).Warnw("Error compiling regex", "error", err)
 		return "", err
 	}
 	sid := re.FindStringSubmatch(result.StdOut)
@@ -290,18 +290,18 @@ func (d *sapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 	})
 
 	if result.Error != nil {
-		log.Logger.Warnw("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Warnw("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
 	re, err = regexp.Compile(`(dbid|dbms\/name)\s*=\s*([a-zA-Z][a-zA-Z0-9]{2})`)
 	if err != nil {
-		log.Logger.Warnw("Error compiling regex", "error", err)
+		log.CtxLogger(ctx).Warnw("Error compiling regex", "error", err)
 		return "", err
 	}
 	sid = re.FindStringSubmatch(result.StdOut)
 	if len(sid) > 2 {
-		log.Logger.Infow("Found DB SID", "sid", sid[2])
+		log.CtxLogger(ctx).Infow("Found DB SID", "sid", sid[2])
 		return sid[2], nil
 	}
 
@@ -310,7 +310,7 @@ func (d *sapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 
 func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber string) ([]string, error) {
 	if sid == "" || instanceNumber == "" {
-		log.Logger.Warn("To discover additional HANA nodes SID, and instance number must be provided")
+		log.CtxLogger(ctx).Warn("To discover additional HANA nodes SID, and instance number must be provided")
 		return nil, errors.New("To discover additional HANA nodes SID, and instance number must be provided")
 	}
 	sidLower := strings.ToLower(sid)
@@ -326,7 +326,7 @@ func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 	// has an exit status != 0. However, only 0 and 1 are considered true
 	// error exit codes for this script.
 	if result.Error != nil && result.ExitCode < 2 {
-		log.Logger.Warnw("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
 		return nil, result.Error
 	}
 
@@ -343,10 +343,10 @@ func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 	lines := strings.Split(result.StdOut, "\n")
 	pastHeaders := false
 	for _, line := range lines {
-		log.Logger.Info(line)
+		log.CtxLogger(ctx).Info(line)
 		cols := strings.Split(line, "|")
 		if len(cols) < 2 {
-			log.Logger.Info("Line has too few columns")
+			log.CtxLogger(ctx).Info("Line has too few columns")
 			continue
 		}
 		trimmed := strings.TrimSpace(cols[1])
@@ -360,7 +360,7 @@ func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 
 		hosts = append(hosts, trimmed)
 	}
-	log.Logger.Infow("Discovered other hosts", "sid", sid, "hosts", hosts)
+	log.CtxLogger(ctx).Infow("Discovered other hosts", "sid", sid, "hosts", hosts)
 	return hosts, nil
 }
 
@@ -373,7 +373,7 @@ func (d *sapDiscovery) discoverASCS(ctx context.Context, sid string) (string, er
 	}
 	res := d.execute(ctx, p)
 	if res.Error != nil {
-		log.Logger.Warnw("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
 
@@ -398,7 +398,7 @@ func (d *sapDiscovery) discoverAppNFS(ctx context.Context, sid string) (string, 
 	}
 	res := d.execute(ctx, p)
 	if res.Error != nil {
-		log.Logger.Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
 
@@ -426,7 +426,7 @@ func (d *sapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) 
 	}
 	res := d.execute(ctx, p)
 	if res.Error != nil {
-		log.Logger.Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
 

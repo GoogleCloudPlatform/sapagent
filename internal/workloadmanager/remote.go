@@ -60,7 +60,7 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 	rc := params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection()
 	// make sure collection via gcloud or ssh is defined
 	if rc.GetRemoteCollectionSsh() == nil && rc.GetRemoteCollectionGcloud() == nil {
-		log.Logger.Error("remote_collection_gcloud and remote_collection_ssh are undefined for remote collection, one of them must be defined")
+		log.CtxLogger(ctx).Error("remote_collection_gcloud and remote_collection_ssh are undefined for remote collection, one of them must be defined")
 		return 0
 	}
 	wp := workerpool.New(int(params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection().GetConcurrentCollections()))
@@ -71,7 +71,7 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 		inst := inst
 		ch := make(chan WorkloadMetrics)
 		wp.Submit(func() {
-			log.Logger.Infow("Collecting metrics from", "instance", inst)
+			log.CtxLogger(ctx).Infow("Collecting metrics from", "instance", inst)
 			if rc.GetRemoteCollectionSsh() != nil {
 				go collectRemoteSSH(ctx, params, rc, inst, ch)
 			} else if rc.GetRemoteCollectionGcloud() != nil {
@@ -146,12 +146,12 @@ func gcloudInstanceName(rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.R
 func collectRemoteGcloud(ctx context.Context, params Parameters, rc *cnfpb.WorkloadValidationRemoteCollection, i *cnfpb.RemoteCollectionInstance, wm chan<- WorkloadMetrics) {
 	var metrics []*mrpb.TimeSeries
 	if !params.Exists("gcloud") {
-		log.Logger.Error("gcloud command not found. Ensure the google cloud SDK is installed and that the gcloud command is in systemd's PATH environment variable: `systemctl show-environment`, `systemctl set-environment PATH=</path:/another/path>")
+		log.CtxLogger(ctx).Error("gcloud command not found. Ensure the google cloud SDK is installed and that the gcloud command is in systemd's PATH environment variable: `systemctl show-environment`, `systemctl set-environment PATH=</path:/another/path>")
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 
-	log.Logger.Infow("Collecting remote metrics using gcloud", "instance", i)
+	log.CtxLogger(ctx).Infow("Collecting remote metrics using gcloud", "instance", i)
 	iName := gcloudInstanceName(rc, i)
 	// remove the binary just in case it still exists on the remote
 	sshArgs := []string{"compute", "ssh"}
@@ -162,20 +162,20 @@ func collectRemoteGcloud(ctx context.Context, params Parameters, rc *cnfpb.Workl
 		Args:       sshArgs,
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 	}
 
 	// gcloud compute scp --project someproject --zone somezone [--tunnel-through-iap] [--internal-ip] [otherargs] filetotranser [user@]instancename:path
 	scpArgs := []string{"compute", "scp"}
 	scpArgs = appendCommonGcloudArgs(scpArgs, rc, i)
 	scpArgs = append(scpArgs, agentBinary, fmt.Sprintf("%s:%s", iName, remoteAgentBinary))
-	log.Logger.Debugw("Sending binary to remote host", "instance", i)
+	log.CtxLogger(ctx).Debugw("Sending binary to remote host", "instance", i)
 	result = params.Execute(ctx, commandlineexecutor.Params{
 		Executable: "gcloud",
 		Args:       scpArgs,
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not copy binary to remote instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not copy binary to remote instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
@@ -189,23 +189,23 @@ func collectRemoteGcloud(ctx context.Context, params Parameters, rc *cnfpb.Workl
 		Args:       sshArgs,
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not execute remote collection on instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not execute remote collection on instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 	if strings.HasPrefix(result.StdOut, "ERROR") {
-		log.Logger.Errorw("Error encountered on remote instance", "instance", i, "error", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Error encountered on remote instance", "instance", i, "error", result.StdOut)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 
 	err := parseRemoteJSON(result.StdOut, &metrics)
 	if err != nil {
-		log.Logger.Errorw("Error parsing metrics collected from remote instance", "instance", i, "error", err)
+		log.CtxLogger(ctx).Errorw("Error parsing metrics collected from remote instance", "instance", i, "error", err)
 	}
 
 	if len(metrics) == 0 {
-		log.Logger.Warnw("No data collected from remote instance", "instance", i)
+		log.CtxLogger(ctx).Warnw("No data collected from remote instance", "instance", i)
 	}
 
 	wm <- WorkloadMetrics{Metrics: metrics}
@@ -241,7 +241,7 @@ func collectRemoteSSH(ctx context.Context, params Parameters, rc *cnfpb.Workload
 	instanceID := i.InstanceId
 	instanceName := i.InstanceName
 
-	log.Logger.Infow("Collecting remote metrics using ssh", "instance", i)
+	log.CtxLogger(ctx).Infow("Collecting remote metrics using ssh", "instance", i)
 
 	rmArgs := []string{}
 	rmArgs = appendSSHArgs(rmArgs, rc, i, false)
@@ -252,7 +252,7 @@ func collectRemoteSSH(ctx context.Context, params Parameters, rc *cnfpb.Workload
 		Args:       rmArgs,
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 	}
 
 	metrics := []*mrpb.TimeSeries{}
@@ -264,7 +264,7 @@ func collectRemoteSSH(ctx context.Context, params Parameters, rc *cnfpb.Workload
 		Args:       scpArgs,
 	})
 	if result.Error != nil {
-		log.Logger.Errorw("Could not copy binary to remote instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not copy binary to remote instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
@@ -279,24 +279,24 @@ func collectRemoteSSH(ctx context.Context, params Parameters, rc *cnfpb.Workload
 	})
 
 	if result.Error != nil {
-		log.Logger.Errorw("Could not execute remote collection on instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not execute remote collection on instance", "instance", i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 
 	if strings.HasPrefix(result.StdOut, "ERROR") {
-		log.Logger.Errorw("Error encountered on remote instance", "instance", i, "error", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Error encountered on remote instance", "instance", i, "error", result.StdOut)
 		wm <- WorkloadMetrics{Metrics: metrics}
 		return
 	}
 
 	err := parseRemoteJSON(result.StdOut, &metrics)
 	if err != nil {
-		log.Logger.Errorw("Error parsing metrics collected from remote instance", "instance", i, "error", err)
+		log.CtxLogger(ctx).Errorw("Error parsing metrics collected from remote instance", "instance", i, "error", err)
 	}
 
 	if len(metrics) == 0 {
-		log.Logger.Warnw("No data collected from remote instance", "instance", i)
+		log.CtxLogger(ctx).Warnw("No data collected from remote instance", "instance", i)
 	}
 
 	wm <- WorkloadMetrics{Metrics: metrics}

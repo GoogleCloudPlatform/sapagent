@@ -146,13 +146,13 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId(), "error", err)
+		log.CtxLogger(ctx).Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId(), "error", err)
 	}
 	return res, err
 }
@@ -161,7 +161,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 // a HANA instance. Also returns availabilityValue a signal that depends
 // on the status of the HANA services.
 func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
-	log.Logger.Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
+	log.CtxLogger(ctx).Debugw("Collecting HANA Replication HA metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{Instance: ip.SAPInstance}
@@ -178,7 +178,7 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 		}
 		// If GetProcessList via command line or API didn't return an error.
 		if len(processes) == 0 {
-			log.Logger.Debugw("Empty list of process returned")
+			log.CtxLogger(ctx).Debugw("Empty list of process returned")
 			return nil, nil
 		}
 
@@ -190,7 +190,7 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 			metrics = append(metrics, createMetrics(ip, servicePath, extraLabels, now, boolToInt64(process.IsGreen)))
 		}
 	}
-	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
 	return metrics, nil
 }
 
@@ -208,19 +208,19 @@ func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec co
 	if p.HANAQueryFailCount >= maxHANAQueryFailCount {
 		// if HANAQueryFailCount reaches maxHANAQueryFailCount we should not let it
 		// query again, because the user can be locked out.
-		log.Logger.Debugw("Not queryig for HANAQuery Metrics as failcount has reached max allowed fail count.", "instanceid", p.SAPInstance.GetInstanceId(), "failcount", p.HANAQueryFailCount)
+		log.CtxLogger(ctx).Debugw("Not queryig for HANAQuery Metrics as failcount has reached max allowed fail count.", "instanceid", p.SAPInstance.GetInstanceId(), "failcount", p.HANAQueryFailCount)
 		return nil, nil
 	}
 	queryState, err := runHANAQuery(ctx, p, exec)
 	if err != nil {
-		log.Logger.Errorw("Error in running query", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Error in running query", log.Error(err))
 		// Return a non-zero state in case of query failure.
 		// Not following the convention of process metrics here because if we return the error here
 		// query state metric will never get collected in an error state which can mask failures.
 		return []*mrpb.TimeSeries{createMetrics(p, queryStatePath, nil, now, 1)}, nil
 	}
 
-	log.Logger.Debugw("HANA query metrics for instance", "instanceid", p.SAPInstance.GetInstanceId(), "querystate", queryState)
+	log.CtxLogger(ctx).Debugw("HANA query metrics for instance", "instanceid", p.SAPInstance.GetInstanceId(), "querystate", queryState)
 	return []*mrpb.TimeSeries{
 		createMetrics(p, queryStatePath, nil, now, queryState.state),
 		createMetrics(p, queryOverallTimePath, nil, now, queryState.overallTime),
@@ -242,7 +242,7 @@ func runHANAQuery(ctx context.Context, p *InstanceProperties, exec commandlineex
 		ArgsToSplit: args,
 		User:        p.SAPInstance.GetUser(),
 	})
-	log.Logger.Errorw("HANA query command returned", "sql", hdbsql, "stdout", result.StdOut, "stderror", result.StdErr, "state", result.ExitCode, "err", result.Error)
+	log.CtxLogger(ctx).Errorw("HANA query command returned", "sql", hdbsql, "stdout", result.StdOut, "stderror", result.StdErr, "state", result.ExitCode, "err", result.Error)
 	if strings.Contains(result.StdErr, "authentication failed") {
 		p.HANAQueryFailCount++
 	}

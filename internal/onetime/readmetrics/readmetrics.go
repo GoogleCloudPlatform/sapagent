@@ -100,17 +100,17 @@ func (r *ReadMetrics) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for readmetrics.
 func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 3 {
-		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
 	r.cloudProps, ok = args[2].(*ipb.CloudProperties)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
 	if r.help {
@@ -122,21 +122,21 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, r.Name(), log.StringLevelToZapcore(r.logLevel))
-	log.Logger.Info("ReadMetrics starting")
+	log.CtxLogger(ctx).Info("ReadMetrics starting")
 	if r.projectID == "" {
 		r.projectID = r.cloudProps.GetProjectId()
-		log.Logger.Warnf("Project ID defaulted to: %s", r.projectID)
+		log.CtxLogger(ctx).Warnf("Project ID defaulted to: %s", r.projectID)
 	}
 
 	var err error
 	if r.queries, err = r.createQueryMap(); err != nil {
-		log.Logger.Errorw("Failed to create queries", "inputFile", r.inputFile, "err", err)
+		log.CtxLogger(ctx).Errorw("Failed to create queries", "inputFile", r.inputFile, "err", err)
 		return subcommands.ExitFailure
 	}
 
 	if r.bucketName != "" {
 		if r.bucket, ok = storage.ConnectToBucket(ctx, s.NewClient, r.serviceAccount, r.bucketName, userAgent, false); !ok {
-			log.Logger.Errorw("Failed to connect to bucket", "bucketName", r.bucketName)
+			log.CtxLogger(ctx).Errorw("Failed to connect to bucket", "bucketName", r.bucketName)
 			return subcommands.ExitFailure
 		}
 	}
@@ -146,14 +146,14 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		opts = append(opts, option.WithCredentialsFile(r.serviceAccount))
 	}
 	if r.timeSeriesCreator, err = monitoring.NewMetricClient(ctx, opts...); err != nil {
-		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return subcommands.ExitFailure
 	}
 
 	mqc, err := monitoring.NewQueryClient(ctx, opts...)
 	if err != nil {
-		log.Logger.Errorw("Failed to create Cloud Monitoring query client", "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring query client", "error", err)
 		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
 		return subcommands.ExitFailure
 	}
@@ -170,41 +170,41 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 func (r *ReadMetrics) readMetricsHandler(ctx context.Context, copier storage.IOFileCopier) subcommands.ExitStatus {
 	usagemetrics.Action(usagemetrics.ReadMetricsStarted)
 	if err := os.MkdirAll(r.outputFolder, os.ModePerm); err != nil {
-		log.Logger.Errorw("Failed to create output folder", "outputFolder", r.outputFolder, "err", err)
+		log.CtxLogger(ctx).Errorw("Failed to create output folder", "outputFolder", r.outputFolder, "err", err)
 		return subcommands.ExitFailure
 	}
 	defer r.sendStatusToMonitoring(ctx, cloudmonitoring.NewDefaultBackOffIntervals())
 
 	for identifier, query := range r.queries {
 		if query == "" {
-			log.Logger.Infow("Skipping empty query", "identifier", identifier)
+			log.CtxLogger(ctx).Infow("Skipping empty query", "identifier", identifier)
 			continue
 		}
 
 		data, err := r.executeQuery(ctx, identifier, query)
 		if err != nil {
-			log.Logger.Errorw("Failed to execute query", "identifier", identifier, "query", query, "err", err)
+			log.CtxLogger(ctx).Errorw("Failed to execute query", "identifier", identifier, "query", query, "err", err)
 			usagemetrics.Error(usagemetrics.ReadMetricsQueryFailure)
 			return subcommands.ExitFailure
 		}
 
 		fileName, err := r.writeResults(data, identifier)
 		if err != nil {
-			log.Logger.Errorw("Failed to write results", "identifier", identifier, "query", query, "err", err)
+			log.CtxLogger(ctx).Errorw("Failed to write results", "identifier", identifier, "query", query, "err", err)
 			usagemetrics.Error(usagemetrics.ReadMetricsWriteFileFailure)
 			return subcommands.ExitFailure
 		}
 
 		if r.bucket != nil {
 			if err := r.uploadFile(ctx, fileName, copier); err != nil {
-				log.Logger.Errorw("Failed to upload file", "fileName", fileName, "err", err)
+				log.CtxLogger(ctx).Errorw("Failed to upload file", "fileName", fileName, "err", err)
 				usagemetrics.Error(usagemetrics.ReadMetricsBucketUploadFailure)
 				return subcommands.ExitFailure
 			}
 		}
 	}
 
-	log.Logger.Info("ReadMetrics finished")
+	log.CtxLogger(ctx).Info("ReadMetrics finished")
 	r.status = true
 	usagemetrics.Action(usagemetrics.ReadMetricsFinished)
 	return subcommands.ExitSuccess
@@ -237,13 +237,13 @@ func (r *ReadMetrics) executeQuery(ctx context.Context, identifier, query string
 		Name:  fmt.Sprintf("projects/%s", r.projectID),
 		Query: query,
 	}
-	log.Logger.Infow("Executing query", "identifier", identifier, "query", query)
+	log.CtxLogger(ctx).Infow("Executing query", "identifier", identifier, "query", query)
 	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, r.cmr.QueryClient, req, r.cmr.BackOffs)
 	if err != nil {
 		return nil, err
 	}
-	log.Logger.Infow("Query succeeded", "identifier", identifier)
-	log.Logger.Debugw("Query response", "identifier", identifier, "response", data)
+	log.CtxLogger(ctx).Infow("Query succeeded", "identifier", identifier)
+	log.CtxLogger(ctx).Debugw("Query response", "identifier", identifier, "response", data)
 	return data, nil
 }
 
@@ -284,7 +284,7 @@ func (r *ReadMetrics) uploadFile(ctx context.Context, fileName string, copier st
 		return fmt.Errorf("bucket is nil")
 	}
 
-	log.Logger.Infow("Uploading file", "bucket", r.bucketName, "fileName", fileName)
+	log.CtxLogger(ctx).Infow("Uploading file", "bucket", r.bucketName, "fileName", fileName)
 	f, err := os.Open(fileName)
 	if err != nil {
 		return err
@@ -311,7 +311,7 @@ func (r *ReadMetrics) uploadFile(ctx context.Context, fileName string, copier st
 	if err != nil {
 		return err
 	}
-	log.Logger.Infow("File uploaded", "bucket", r.bucketName, "fileName", fileName, "objectName", rw.ObjectName, "bytesWritten", bytesWritten, "fileSize", fileInfo.Size())
+	log.CtxLogger(ctx).Infow("File uploaded", "bucket", r.bucketName, "fileName", fileName, "objectName", rw.ObjectName, "bytesWritten", bytesWritten, "fileSize", fileInfo.Size())
 	return nil
 }
 
@@ -321,7 +321,7 @@ func (r *ReadMetrics) sendStatusToMonitoring(ctx context.Context, bo *cloudmonit
 	if !r.sendToMonitoring {
 		return false
 	}
-	log.Logger.Infow("Sending ReadMetrics status to cloud monitoring", "status", r.status)
+	log.CtxLogger(ctx).Infow("Sending ReadMetrics status to cloud monitoring", "status", r.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
 			CloudProp:  r.cloudProps,
@@ -331,7 +331,7 @@ func (r *ReadMetrics) sendStatusToMonitoring(ctx context.Context, bo *cloudmonit
 		}),
 	}
 	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, r.timeSeriesCreator, bo, r.projectID); err != nil {
-		log.Logger.Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
+		log.CtxLogger(ctx).Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
 		return false
 	}
 	return true

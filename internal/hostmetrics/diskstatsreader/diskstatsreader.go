@@ -77,7 +77,7 @@ func (r *Reader) Read(ctx context.Context, ip *iipb.InstanceProperties) *statspb
 	case "windows":
 		currentDiskStats = r.readDiskStatsForWindows(ctx, ip)
 	default:
-		log.Logger.Errorw("Encountered an unexpected OS value", "value", r.os)
+		log.CtxLogger(ctx).Errorw("Encountered an unexpected OS value", "value", r.os)
 		return nil
 	}
 	r.prevDiskStats = currentDiskStats
@@ -208,7 +208,7 @@ func (r *Reader) readDiskStatsForWindows(ctx context.Context, instanceProps *iip
 	for _, disk := range instanceProps.GetDisks() {
 		diskNumber, ok := parseWindowsDiskNumber(disk.GetMapping())
 		if !ok {
-			log.Logger.Infow("Could not get disk number from device mapping", "mapping", disk.GetMapping())
+			log.CtxLogger(ctx).Infow("Could not get disk number from device mapping", "mapping", disk.GetMapping())
 			continue
 		}
 		// Note: must use separated arguments so the windows go exec does not escape the entire argument list
@@ -233,34 +233,34 @@ func (r *Reader) readDiskStatsForWindows(ctx context.Context, instanceProps *iip
 			Args:       args,
 		})
 		stdOut := strings.Replace(strings.Replace(result.StdOut, "\n", "", -1), "\r", "", -1)
-		log.Logger.Debugw("PowerShell command returned data", "stdout", stdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Debugw("PowerShell command returned data", "stdout", stdOut, "stderr", result.StdErr, "error", result.Error)
 		if result.Error != nil {
-			log.Logger.Warnw("Could not get stats for disk", "devicename", disk.GetDeviceName(), "mapping", disk.GetMapping(), "number", diskNumber)
+			log.CtxLogger(ctx).Warnw("Could not get stats for disk", "devicename", disk.GetDeviceName(), "mapping", disk.GetMapping(), "number", diskNumber)
 			continue
 		}
 		values := strings.Split(stdOut, ";")
 		if len(values) != 3 {
-			log.Logger.Warnw("Unexpected output format when fetching disk stats", "stdout", stdOut, "devicename", disk.GetDeviceName(), "mapping", disk.GetMapping(), "number", diskNumber, "valueslength", len(values))
+			log.CtxLogger(ctx).Warnw("Unexpected output format when fetching disk stats", "stdout", stdOut, "devicename", disk.GetDeviceName(), "mapping", disk.GetMapping(), "number", diskNumber, "valueslength", len(values))
 			continue
 		}
 
 		averageReadResponseTime := int64(metricsformatter.Unavailable)
 		averageRead, err := strconv.ParseFloat(values[0], 64)
 		if err != nil {
-			log.Logger.Warnw("Could not parse average read response time from output", "output", values[0])
+			log.CtxLogger(ctx).Warnw("Could not parse average read response time from output", "output", values[0])
 		} else {
 			averageReadResponseTime = int64(math.Round(averageRead * 1000))
 		}
 		averageWriteResponseTime := int64(metricsformatter.Unavailable)
 		averageWrite, err := strconv.ParseFloat(values[1], 64)
 		if err != nil {
-			log.Logger.Warnw("Could not parse average write response time from output", "output", values[1])
+			log.CtxLogger(ctx).Warnw("Could not parse average write response time from output", "output", values[1])
 		} else {
 			averageWriteResponseTime = int64(math.Round(averageWrite * 1000))
 		}
 		queueLength, err := strconv.ParseInt(values[2], 10, 64)
 		if err != nil {
-			log.Logger.Warnw("Could not parse queue length from output", "output", values[2])
+			log.CtxLogger(ctx).Warnw("Could not parse queue length from output", "output", values[2])
 			queueLength = metricsformatter.Unavailable
 		}
 
@@ -270,7 +270,7 @@ func (r *Reader) readDiskStatsForWindows(ctx context.Context, instanceProps *iip
 			AverageWriteResponseTimeMillis: averageWriteResponseTime,
 			QueueLength:                    queueLength,
 		}
-		log.Logger.Debugw("Disk stats", "diskstats", diskStats[disk.GetMapping()])
+		log.CtxLogger(ctx).Debugw("Disk stats", "diskstats", diskStats[disk.GetMapping()])
 	}
 
 	return diskStats

@@ -57,13 +57,13 @@ type lsblk struct {
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.Logger.Info("Collecting Workload Manager HANA metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager HANA metrics...")
 	l := map[string]string{}
 	hanaVal := 0.0
 
 	globalINILocationVal := globalINIfromSAPsid(params)
 	if globalINILocationVal == "" {
-		log.Logger.Debug("Skipping HANA metrics collection, HANA not active on instance.")
+		log.CtxLogger(ctx).Debug("Skipping HANA metrics collection, HANA not active on instance.")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 	if _, err := params.OSStatReader(globalINILocationVal); err != nil {
@@ -77,7 +77,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		// If the process is not running then the hanaProcessOrGlobalIni will contain the global.ini
 		// location similar to: /usr/sap/HAR/SYS/global/hdb/custom/config/global.ini
 
-		log.Logger.Debugw("Could not find gobal.ini file", "globalinilocation", globalINILocationVal)
+		log.CtxLogger(ctx).Debugw("Could not find gobal.ini file", "globalinilocation", globalINILocationVal)
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 
@@ -139,11 +139,11 @@ func diskInfo(ctx context.Context, basepathVolume string, globalINILocation stri
 	}
 	vList := strings.Fields(result.StdOut)
 	if len(vList) < 3 {
-		log.Logger.Debugw("Could not find basepath volume in global.ini", "basepathvolume", basepathVolume, "globalinilocation", globalINILocation)
+		log.CtxLogger(ctx).Debugw("Could not find basepath volume in global.ini", "basepathvolume", basepathVolume, "globalinilocation", globalINILocation)
 		return diskInfo
 	}
 	basepathVolumePath := vList[2]
-	log.Logger.Debugw("basepathVolumePath from string field", "basepathvolumepath", basepathVolumePath)
+	log.CtxLogger(ctx).Debugw("basepathVolumePath from string field", "basepathvolumepath", basepathVolumePath)
 
 	// Get the exact mount location for the volume basepath
 	// Expected output:
@@ -154,16 +154,16 @@ func diskInfo(ctx context.Context, basepathVolume string, globalINILocation stri
 		ArgsToSplit: fmt.Sprintf("--output=target %s", basepathVolumePath),
 	})
 	if result.Error != nil {
-		log.Logger.Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "error", result.Error)
+		log.CtxLogger(ctx).Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "error", result.Error)
 		return diskInfo
 	}
 	lines := strings.Split(strings.TrimSpace(result.StdOut), "\n")
 	if len(lines) != 2 {
-		log.Logger.Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "output", result.StdOut)
+		log.CtxLogger(ctx).Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "output", result.StdOut)
 		return diskInfo
 	}
 	volumeMountpoint := strings.TrimSpace(lines[1])
-	log.Logger.Debugw("Found volume mountpoint", "mountpoint", volumeMountpoint, "basepathvolumepath", basepathVolumePath)
+	log.CtxLogger(ctx).Debugw("Found volume mountpoint", "mountpoint", volumeMountpoint, "basepathvolumepath", basepathVolumePath)
 
 	// JSON output from lsblk to match the lsblk.proto is produced by the following command:
 	// lsblk -p -J -o name,type,mountpoint
@@ -176,7 +176,7 @@ func diskInfo(ctx context.Context, basepathVolume string, globalINILocation stri
 	err := json.Unmarshal([]byte(lsblkresult.StdOut), &lsblk)
 
 	if err != nil {
-		log.Logger.Debugw("Invalid lsblk json", "error", err)
+		log.CtxLogger(ctx).Debugw("Invalid lsblk json", "error", err)
 		return diskInfo
 	}
 
@@ -208,7 +208,7 @@ BlockDeviceLoop:
 	}
 
 	if len(matchedMountPoint) > 0 {
-		log.Logger.Debugw("Found matched block device", "matchedblockdevice", matchedBlockDevice.Name, "matchedmountpoint", matchedMountPoint, "matchedsize", matchedSize)
+		log.CtxLogger(ctx).Debugw("Found matched block device", "matchedblockdevice", matchedBlockDevice.Name, "matchedmountpoint", matchedMountPoint, "matchedsize", matchedSize)
 		setDiskInfoForDevice(diskInfo, &matchedBlockDevice, matchedMountPoint, matchedSize, iir)
 	}
 

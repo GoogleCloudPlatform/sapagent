@@ -42,7 +42,7 @@ type InterfaceAddrsGetter func() ([]net.Addr, error)
 // WorkloadValidation config and formats the results as a time series to be
 // uploaded to a Collection Storage mechanism.
 func CollectSystemMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.Logger.Info("Collecting Workload Manager System metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager System metrics...")
 	l := make(map[string]string)
 
 	system := params.WorkloadConfig.GetValidationSystem()

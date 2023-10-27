@@ -81,7 +81,7 @@ type CloudMetricReader struct {
 
 // Read reads metrics from the cloud monitoring API and returns a MetricsCollection.
 func (r *CloudMetricReader) Read(ctx context.Context, config *configpb.Configuration, ip *instancepb.InstanceProperties, at agenttime.AgentTime) *metricspb.MetricsCollection {
-	log.Logger.Debug("Getting metrics from cloud monitoring...")
+	log.CtxLogger(ctx).Debug("Getting metrics from cloud monitoring...")
 	return r.readQueryTimeSeries(ctx, config, ip, at)
 }
 
@@ -97,7 +97,7 @@ func (r *CloudMetricReader) readQueryTimeSeries(ctx context.Context, config *con
 		refresh = at.CloudMetricRefresh()
 	)
 
-	log.Logger.Info("Collecting metrics via QueryTimeSeries.")
+	log.CtxLogger(ctx).Info("Collecting metrics via QueryTimeSeries.")
 
 	metrics = append(metrics, r.createPassthroughMetrics(ctx, config, refresh)...)
 	metrics = append(metrics, r.createNetworkMetrics(ctx, ip.GetNetworkAdapters(), config, refresh)...)
@@ -122,7 +122,7 @@ func (r *CloudMetricReader) createPassthroughMetrics(ctx context.Context, config
 		})
 	}
 	metricValues := parseTimeSeriesData(passthroughMetrics, data)
-	log.Logger.Debugw("Metric values", "values", metricValues)
+	log.CtxLogger(ctx).Debugw("Metric values", "values", metricValues)
 
 	var metrics []*metricspb.Metric
 	for k, v := range metricValues {
@@ -152,7 +152,7 @@ func (r *CloudMetricReader) createNetworkMetrics(ctx context.Context, adapters [
 		})
 	}
 	metricValues := parseTimeSeriesData(networkMetrics, data)
-	log.Logger.Debugw("Network metric values", "values", metricValues)
+	log.CtxLogger(ctx).Debugw("Network metric values", "values", metricValues)
 
 	// Since device is shared across adapters, it is expected that the metrics returned will be the same for each.
 	for _, adapter := range adapters {
@@ -215,11 +215,11 @@ func (r *CloudMetricReader) createDiskMetrics(ctx context.Context, disks []*inst
 		})
 	}
 	diskDeltaMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskDeltaMetrics, diskDeltaData)
-	log.Logger.Debugw("Disk delta metric values", "values", diskDeltaMetricValues)
+	log.CtxLogger(ctx).Debugw("Disk delta metric values", "values", diskDeltaMetricValues)
 	diskRateMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskRateMetrics, diskRateData)
-	log.Logger.Debugw("Disk rate metric values", "values", diskRateMetricValues)
+	log.CtxLogger(ctx).Debugw("Disk rate metric values", "values", diskRateMetricValues)
 	diskMaxMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskMaxMetrics, diskMaxData)
-	log.Logger.Debugw("Disk max metric values", "values", diskMaxMetricValues)
+	log.CtxLogger(ctx).Debugw("Disk max metric values", "values", diskMaxMetricValues)
 
 	for _, deviceID := range deviceNames {
 		for _, k := range diskDeltaMetrics {
@@ -270,13 +270,13 @@ func (r *CloudMetricReader) queryTimeSeriesData(ctx context.Context, metrics []s
 		Name:  fmt.Sprintf("projects/%s", projectID),
 		Query: b.String(),
 	}
-	log.Logger.Debugw("QueryTimeSeries request", "request", b.String())
+	log.CtxLogger(ctx).Debugw("QueryTimeSeries request", "request", b.String())
 	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, r.QueryClient, req, r.BackOffs)
-	log.Logger.Debugw("QueryTimeSeries response", "response", data, "error", err)
+	log.CtxLogger(ctx).Debugw("QueryTimeSeries response", "response", data, "error", err)
 
 	// Log any error that is encountered but allow the collection of metrics to proceed with a zero time series.
 	if err != nil {
-		log.Logger.Errorw("The QueryTimeSeries request for metrics has failed", "metrics", metrics, "error", err)
+		log.CtxLogger(ctx).Errorw("The QueryTimeSeries request for metrics has failed", "metrics", metrics, "error", err)
 	}
 	return data
 }

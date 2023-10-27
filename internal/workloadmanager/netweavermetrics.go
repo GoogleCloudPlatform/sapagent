@@ -31,20 +31,20 @@ const sapValidationNetweaver = "workload.googleapis.com/sap/validation/netweaver
 // specified by the WorkloadValidation config and formats the results as a
 // time series to be uploaded to a Collection Storage mechanism.
 func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.Logger.Info("Collecting Workload Manager NetWeaver metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager NetWeaver metrics...")
 	l := make(map[string]string)
 	netweaverVal := 0.0
 
 	for _, instance := range params.sapApplications.Instances {
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
-			log.Logger.Info("Found Netweaver instance.")
+			log.CtxLogger(ctx).Info("Found Netweaver instance.")
 			netweaverVal = 1.0
 			break
 		}
 	}
 
 	if netweaverVal == 0.0 {
-		log.Logger.Debug("Skipping NetWeaver metrics collection, NetWeaver not active on instance.")
+		log.CtxLogger(ctx).Debug("Skipping NetWeaver metrics collection, NetWeaver not active on instance.")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, netweaverVal, params.Config)}
 	}
 

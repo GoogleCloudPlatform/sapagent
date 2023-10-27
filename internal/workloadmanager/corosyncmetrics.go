@@ -29,11 +29,11 @@ const sapValidationCorosync = "workload.googleapis.com/sap/validation/corosync"
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectCorosyncMetricsFromConfig(ctx context.Context, params Parameters, pacemakerVal float64) WorkloadMetrics {
-	log.Logger.Info("Collecting Workload Manager Corosync metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager Corosync metrics...")
 	l := make(map[string]string)
 
 	if pacemakerVal == 0 {
-		log.Logger.Debug("Skipping Corosync metrics collection, Pacemaker not active on instance.")
+		log.CtxLogger(ctx).Debug("Skipping Corosync metrics collection, Pacemaker not active on instance.")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationCorosync, l, 0, params.Config)}
 	}
 

@@ -112,7 +112,7 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	if p.Config.BareMetal {
 		return nil, nil
 	}
-	log.Logger.Info("Collecting infrastructure metrics")
+	log.CtxLogger(ctx).Info("Collecting infrastructure metrics")
 
 	scheduledMigration, err := collectScheduledMigration(p, metadataServerCall)
 	if err != nil {
@@ -141,13 +141,13 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Infow("Retry limit exceeded", "error", err)
+		log.CtxLogger(ctx).Infow("Retry limit exceeded", "error", err)
 	}
 	return res, err
 }

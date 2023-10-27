@@ -86,12 +86,12 @@ func (h *HANAInsights) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for hanainsights.
 func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 2 {
-		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
 	if h.version {
@@ -150,7 +150,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 
 	rules, err := preprocessor.ReadRules(preprocessor.RuleFilenames)
 	if err != nil {
-		log.Logger.Errorw("Failure to read HANA rules", "error", err)
+		log.CtxLogger(ctx).Errorw("Failure to read HANA rules", "error", err)
 		return subcommands.ExitFailure
 	}
 
@@ -159,9 +159,9 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		onetime.LogErrorToFileAndConsole("ERROR: Failure in rule engine", err)
 		return subcommands.ExitFailure
 	}
-	log.Logger.Infow("Generating HANA insights", insights)
+	log.CtxLogger(ctx).Infow("Generating HANA insights", insights)
 	if err = generateLocalHANAInsights(rules, insights, wf, c); err != nil {
-		log.Logger.Errorw("ERROR: Failed to generate local HANA insights", "error", err)
+		log.CtxLogger(ctx).Errorw("ERROR: Failed to generate local HANA insights", "error", err)
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess

@@ -83,17 +83,17 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for restore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 3 {
-		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
 	r.cloudProps, ok = args[2].(*ipb.CloudProperties)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
 	if r.version {
@@ -133,7 +133,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		log.Print(err.Error())
 		return subcommands.ExitFailure
 	}
-	log.Logger.Infow("Starting HANA disk snapshot restore", "sid", r.sid)
+	log.CtxLogger(ctx).Infow("Starting HANA disk snapshot restore", "sid", r.sid)
 	onetime.ConfigureUsageMetricsForOTE(r.cloudProps, "", "")
 	usagemetrics.Action(usagemetrics.HANADiskRestore)
 
@@ -176,7 +176,7 @@ func (r *Restorer) prepare(ctx context.Context) error {
 	if err := r.waitForCompletion(op); err != nil {
 		return fmt.Errorf("detach data disk operation failed: %v", err)
 	}
-	log.Logger.Info("HANA restore prepare succeeded.")
+	log.CtxLogger(ctx).Info("HANA restore prepare succeeded.")
 	return nil
 }
 
@@ -210,7 +210,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	if err := r.rescanVolumeGroups(ctx); err != nil {
 		return fmt.Errorf("failure rescanning volume groups, logical volumes: %v", err)
 	}
-	log.Logger.Info("HANA restore from snapshot succeeded.")
+	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
 	return nil
 }
 
@@ -222,7 +222,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context) error {
 		return err
 	}
 
-	log.Logger.Infow("Checking preconditions", "Data directory", r.baseDataPath, "Data file system",
+	log.CtxLogger(ctx).Infow("Checking preconditions", "Data directory", r.baseDataPath, "Data file system",
 		r.logicalDataPath, "Data physical volume", r.physicalDataPath, "Log directory", r.baseLogPath,
 		"Log file system", r.logicalLogPath, "Log physical volume", r.physicalLogPath)
 
@@ -237,7 +237,7 @@ func (r *Restorer) checkDataDir(ctx context.Context) error {
 	if r.baseDataPath, err = r.parseBasePath(ctx, "basepath_datavolumes", commandlineexecutor.ExecuteCommand); err != nil {
 		return err
 	}
-	log.Logger.Infow("Data volume base path", "path", r.baseDataPath)
+	log.CtxLogger(ctx).Infow("Data volume base path", "path", r.baseDataPath)
 	if r.logicalDataPath, err = r.parseLogicalPath(ctx, r.baseDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return err
 	}
@@ -255,7 +255,7 @@ func (r *Restorer) checkLogDir(ctx context.Context) error {
 	if r.baseLogPath, err = r.parseBasePath(ctx, "basepath_logvolumes", commandlineexecutor.ExecuteCommand); err != nil {
 		return err
 	}
-	log.Logger.Infow("Log volume base path", "path", r.baseDataPath)
+	log.CtxLogger(ctx).Infow("Log volume base path", "path", r.baseDataPath)
 
 	if r.logicalLogPath, err = r.parseLogicalPath(ctx, r.baseLogPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return err
@@ -287,7 +287,7 @@ func (r *Restorer) parseLogicalPath(ctx context.Context, basePath string, exec c
 		return "", fmt.Errorf("failure parsing logical path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	logicalDevice := strings.TrimSuffix(result.StdOut, "\n")
-	log.Logger.Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
+	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
 	return logicalDevice, nil
 }
 
@@ -300,7 +300,7 @@ func (r *Restorer) parsePhysicalPath(ctx context.Context, logicalPath string, ex
 		return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	phyisicalDevice := strings.TrimSuffix(result.StdOut, "\n")
-	log.Logger.Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", phyisicalDevice)
+	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", phyisicalDevice)
 	return phyisicalDevice, nil
 }
 
@@ -324,7 +324,7 @@ func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execut
 	if result.Error != nil {
 		return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
-	log.Logger.Infow("HANA stopped", "sid", r.sid)
+	log.CtxLogger(ctx).Infow("HANA stopped", "sid", r.sid)
 	return nil
 }
 

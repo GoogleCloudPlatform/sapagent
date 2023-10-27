@@ -98,26 +98,26 @@ func SAPApplications(ctx context.Context) *sapb.SAPInstances {
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
-		log.Logger.Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
 	}
 	return instances(ctx, HANAReplicationConfig, listSAPInstances, commandlineexecutor.ExecuteCommand, data)
 }
 
 // instances is a testable version of SAPApplications.
 func instances(ctx context.Context, hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute, crmdata *pacemaker.CRMMon) *sapb.SAPInstances {
-	log.Logger.Info("Discovering SAP Applications.")
+	log.CtxLogger(ctx).Info("Discovering SAP Applications.")
 	var sapInstances []*sapb.SAPInstance
 
 	hana, err := hanaInstances(ctx, hrc, list, exec)
 	if err != nil {
-		log.Logger.Errorw("Unable to discover HANA instances", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Unable to discover HANA instances", log.Error(err))
 	} else {
 		sapInstances = hana
 	}
 
 	netweaver, err := netweaverInstances(ctx, list, exec)
 	if err != nil {
-		log.Logger.Errorw("Unable to discover Netweaver instances", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Unable to discover Netweaver instances", log.Error(err))
 	} else {
 		sapInstances = append(sapInstances, netweaver...)
 	}
@@ -130,7 +130,7 @@ func instances(ctx context.Context, hrc replicationConfig, list listInstances, e
 // hanaInstances returns list of SAP HANA Instances present on the machine.
 // Returns error in case of failures.
 func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
-	log.Logger.Info("Discovering SAP HANA instances.")
+	log.CtxLogger(ctx).Info("Discovering SAP HANA instances.")
 
 	sapServicesEntries, err := list(ctx, exec)
 	if err != nil {
@@ -140,9 +140,9 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 	var instances []*sapb.SAPInstance
 
 	for _, entry := range sapServicesEntries {
-		log.Logger.Infow("Processing SAP Instance", "instance", entry)
+		log.CtxLogger(ctx).Infow("Processing SAP Instance", "instance", entry)
 		if entry.InstanceName != "HDB" {
-			log.Logger.Debugw("Instance is not SAP HANA", "instance", entry)
+			log.CtxLogger(ctx).Debugw("Instance is not SAP HANA", "instance", entry)
 			continue
 		}
 
@@ -150,7 +150,7 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 		user := strings.ToLower(entry.Sid) + "adm"
 		siteID, HAMembers, _, err := hrc(ctx, user, entry.Sid, instanceID)
 		if err != nil {
-			log.Logger.Debugw("Failed to get HANA HA configuration for instance", "instanceid", instanceID, "error", err)
+			log.CtxLogger(ctx).Debugw("Failed to get HANA HA configuration for instance", "instanceid", instanceID, "error", err)
 			siteID = -1 // INSTANCE_SITE_UNDEFINED
 		}
 
@@ -169,7 +169,7 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 
 		instances = append(instances, instance)
 	}
-	log.Logger.Infow("Found SAP HANA instances", "count", len(instances), "instances", instances)
+	log.CtxLogger(ctx).Infow("Found SAP HANA instances", "count", len(instances), "instances", instances)
 	return instances, nil
 }
 
@@ -203,22 +203,22 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	if !ok {
 		return 0, nil, exitStatus, fmt.Errorf("invalid return code: %d from systemReplicationStatus.py", exitStatus)
 	}
-	log.Logger.Debugw("Tool systemReplicationStatus.py returned", "exitstatus", exitStatus, "message", message)
+	log.CtxLogger(ctx).Debugw("Tool systemReplicationStatus.py returned", "exitstatus", exitStatus, "message", message)
 
-	log.Logger.Debugw("SAP HANA Replication Config result", "stdout", result.StdOut)
+	log.CtxLogger(ctx).Debugw("SAP HANA Replication Config result", "stdout", result.StdOut)
 	match := sitePattern.FindStringSubmatch(result.StdOut)
 	if len(match) != 2 {
-		log.Logger.Debugw("Error determining SAP HANA Site for instance", "instanceid", instID)
+		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Site for instance", "instanceid", instID)
 		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Site for instance: %s", instID)
 	}
 	site, err := strconv.Atoi(match[1])
 	if err != nil {
-		log.Logger.Debugw("Failed to get the site info for SAP HANA", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failed to get the site info for SAP HANA", log.Error(err))
 		return 0, nil, 0, err
 	}
 
 	if exitStatus == 10 {
-		log.Logger.Debugw("HANA instance is in standalone mode for instance", "instanceid", instID)
+		log.CtxLogger(ctx).Debugw("HANA instance is in standalone mode for instance", "instanceid", instID)
 		return 0, nil, exitStatus, nil
 	}
 
@@ -306,7 +306,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 		Executable:  "grep",
 		ArgsToSplit: "'pf=' /usr/sap/sapservices",
 	})
-	log.Logger.Debugw("`grep 'pf=' /usr/sap/sapservices` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	log.CtxLogger(ctx).Debugw("`grep 'pf=' /usr/sap/sapservices` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -314,18 +314,18 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 	lines := strings.Split(strings.TrimSuffix(result.StdOut, "\n"), "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "#") {
-			log.Logger.Infow("Not processing the commented entry", "line", line)
+			log.CtxLogger(ctx).Infow("Not processing the commented entry", "line", line)
 			continue
 		}
 		path := sapServicesStartsrvPattern.FindStringSubmatch(line)
 		if len(path) != 5 {
-			log.Logger.Debugw("No SAP instance found", "line", line, "match", path)
+			log.CtxLogger(ctx).Debugw("No SAP instance found", "line", line, "match", path)
 			continue
 		}
 
 		profile := sapServicesProfilePattern.FindStringSubmatch(line)
 		if len(profile) != 2 {
-			log.Logger.Debugw("No SAP instance profile found", "line", line, "match", profile)
+			log.CtxLogger(ctx).Debugw("No SAP instance profile found", "line", line, "match", profile)
 			continue
 		}
 
@@ -339,10 +339,10 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 		entry.LDLibraryPath = fmt.Sprintf("/usr/sap/%s/%s%s/exe", entry.Sid, entry.InstanceName, entry.Snr)
 		libraryPath := libraryPathPattern.FindStringSubmatch(line)
 		if len(libraryPath) == 2 {
-			log.Logger.Debugw("Overriding SAP LD_LIBRARY_PATH with value found", "line", line)
+			log.CtxLogger(ctx).Debugw("Overriding SAP LD_LIBRARY_PATH with value found", "line", line)
 			entry.LDLibraryPath = libraryPath[1]
 		}
-		log.Logger.Infow("Found SAP Instance", "entry", entry)
+		log.CtxLogger(ctx).Infow("Found SAP Instance", "entry", entry)
 		sapServicesEntries = append(sapServicesEntries, entry)
 	}
 	return sapServicesEntries, nil
@@ -351,14 +351,14 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 // netweaverInstances returns list of SAP Netweaver instances present on the machine.
 func netweaverInstances(ctx context.Context, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
 	var instances []*sapb.SAPInstance
-	log.Logger.Info("Discovering SAP NetWeaver instances.")
+	log.CtxLogger(ctx).Info("Discovering SAP NetWeaver instances.")
 
 	sapServicesEntries, err := list(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return nil, err
 	}
 	for _, entry := range sapServicesEntries {
-		log.Logger.Debugw("Processing SAP Instance", "entry", entry)
+		log.CtxLogger(ctx).Debugw("Processing SAP Instance", "entry", entry)
 
 		instanceID := entry.InstanceName + entry.Snr
 		user := strings.ToLower(entry.Sid) + "adm"
@@ -377,12 +377,12 @@ func netweaverInstances(ctx context.Context, list listInstances, exec commandlin
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			instance.NetweaverHealthCheckUrl, instance.ServiceName, err = buildURLAndServiceName(entry.InstanceName, instance.NetweaverHttpPort)
 			if err != nil {
-				log.Logger.Debugw("Could not build Netweaver URL for health check", log.Error(err))
+				log.CtxLogger(ctx).Debugw("Could not build Netweaver URL for health check", log.Error(err))
 			}
 			instances = append(instances, instance)
 		}
 	}
-	log.Logger.Infow("Found SAP NetWeaver instances", "count", len(instances), "instances", instances)
+	log.CtxLogger(ctx).Infow("Found SAP NetWeaver instances", "count", len(instances), "instances", instances)
 	return instances, nil
 }
 
@@ -401,7 +401,7 @@ func findPort(ctx context.Context, instance *sapb.SAPInstance, instanceName stri
 		instanceKind = sapb.InstanceKind_CS
 		httpPort, err = serverPortFromSAPProfile(ctx, instance, "ms", exec)
 		if err != nil {
-			log.Logger.Debugw("The ms HTTP port not found, set to default: '81<snr>.'", "instancename", instanceName)
+			log.CtxLogger(ctx).Debugw("The ms HTTP port not found, set to default: '81<snr>.'", "instancename", instanceName)
 			httpPort = "81" + instance.GetInstanceNumber()
 		}
 	case "J", "JC", "D", "DVEBMGS":
@@ -409,22 +409,22 @@ func findPort(ctx context.Context, instance *sapb.SAPInstance, instanceName stri
 		instanceKind = sapb.InstanceKind_APP
 		httpPort, err = serverPortFromSAPProfile(ctx, instance, "icm", exec)
 		if err != nil {
-			log.Logger.Debugw("The icm HTTP port not found, set to default: '5<snr>00.'", "instancename", instanceName)
+			log.CtxLogger(ctx).Debugw("The icm HTTP port not found, set to default: '5<snr>00.'", "instancename", instanceName)
 			httpPort = "5" + instance.GetInstanceNumber() + "00"
 		}
 	case "ERS":
-		log.Logger.Debugw("This is an Enqueue Replication System.", "instancename", instanceName)
+		log.CtxLogger(ctx).Debugw("This is an Enqueue Replication System.", "instancename", instanceName)
 		instanceType = sapb.InstanceType_NETWEAVER
 		instanceKind = sapb.InstanceKind_ERS
 	case "HDB":
-		log.Logger.Debugw("This is a HANA instance.", "instancename", instanceName)
+		log.CtxLogger(ctx).Debugw("This is a HANA instance.", "instancename", instanceName)
 		instanceType = sapb.InstanceType_HANA
 	default:
 		if strings.HasPrefix(instanceName, "W") {
 			instanceKind = sapb.InstanceKind_APP
 			instanceType = sapb.InstanceType_NETWEAVER
 		} else {
-			log.Logger.Debugw("Unknown instance", "instancename", instanceName)
+			log.CtxLogger(ctx).Debugw("Unknown instance", "instancename", instanceName)
 		}
 	}
 	return httpPort, instanceType, instanceKind
@@ -445,7 +445,7 @@ func serverPortFromSAPProfile(ctx context.Context, instance *sapb.SAPInstance, p
 		}
 		port, err := parseHTTPPort(ctx, params, exec)
 		if err != nil {
-			log.Logger.Debugw("Server port is not configured for HTTP", "port", fmt.Sprintf("%s/server_port_%d", prefix, i), "error", err)
+			log.CtxLogger(ctx).Debugw("Server port is not configured for HTTP", "port", fmt.Sprintf("%s/server_port_%d", prefix, i), "error", err)
 			continue
 		}
 		return port, nil
@@ -457,7 +457,7 @@ func serverPortFromSAPProfile(ctx context.Context, instance *sapb.SAPInstance, p
 // Returns HTTP port on success, error if current parameter is not configured for HTTP.
 func parseHTTPPort(ctx context.Context, params commandlineexecutor.Params, exec commandlineexecutor.Execute) (port string, err error) {
 	result := exec(ctx, params)
-	log.Logger.Debugw("Sapcontrol returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	log.CtxLogger(ctx).Debugw("Sapcontrol returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 	if result.Error != nil {
 		return "", result.Error
 	}
@@ -468,7 +468,7 @@ func parseHTTPPort(ctx context.Context, params commandlineexecutor.Params, exec 
 	}
 
 	protocol, port := match[1], match[2]
-	log.Logger.Debugw("Found protocol on port", "protocol", protocol, "port", port)
+	log.CtxLogger(ctx).Debugw("Found protocol on port", "protocol", protocol, "port", port)
 	if protocol == "HTTP" && port != "0" {
 		return port, nil
 	}
@@ -504,7 +504,7 @@ func sapInitRunning(ctx context.Context, exec commandlineexecutor.Execute) (bool
 		Executable: "/usr/sap/hostctrl/exe/sapinit",
 		Args:       []string{"status"},
 	})
-	log.Logger.Debugw("`/usr/sap/hostctrl/exe/sapinit status` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	log.CtxLogger(ctx).Debugw("`/usr/sap/hostctrl/exe/sapinit status` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 	if result.Error != nil {
 		return false, result.Error
 	}
@@ -521,7 +521,7 @@ func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.
 	// Value hana_db_user must be set to collect HANA DB query metrics.
 	user = hanaConfig.GetHanaDbUser()
 	if user == "" {
-		log.Logger.Info("Using default value for hana_db_user.")
+		log.CtxLogger(ctx).Info("Using default value for hana_db_user.")
 		user = "SYSTEM"
 	}
 

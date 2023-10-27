@@ -137,7 +137,7 @@ func setOSReleaseInfo(configFileReader ConfigFileReader, osReleaseFilePath strin
 // runDiscovery runs the discovery process to find HANA / NetWeaver instances.
 func runDiscovery(ctx context.Context) *sapb.SAPInstances {
 	// TODO: Share SAP System Discovery results across agent.
-	log.Logger.Info("Discovering SAP Applications for Workload Manager Metrics.")
+	log.CtxLogger(ctx).Info("Discovering SAP Applications for Workload Manager Metrics.")
 	return sapdiscovery.SAPApplications(ctx)
 }
 

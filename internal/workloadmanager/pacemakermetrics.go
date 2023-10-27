@@ -99,7 +99,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	l := map[string]string{}
 
 	if params.Config.GetCloudProperties() == nil {
-		log.Logger.Debug("No cloud properties")
+		log.CtxLogger(ctx).Debug("No cloud properties")
 		return 0.0, l
 	}
 	properties := params.Config.GetCloudProperties()
@@ -108,13 +108,13 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	pacemakerXMLString := pacemaker.XMLString(ctx, params.Execute, crmAvailable)
 
 	if pacemakerXMLString == nil {
-		log.Logger.Debug("No pacemaker xml")
+		log.CtxLogger(ctx).Debug("No pacemaker xml")
 		return 0.0, l
 	}
 	pacemakerDocument, err := ParseXML([]byte(*pacemakerXMLString))
 
 	if err != nil {
-		log.Logger.Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
+		log.CtxLogger(ctx).Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
 		return 0.0, l
 	}
 
@@ -134,7 +134,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	bearerToken, err := getBearerToken(ctx, results["serviceAccountJsonFile"], params.ConfigFileReader,
 		params.JSONCredentialsGetter, params.DefaultTokenGetter)
 	if err != nil {
-		log.Logger.Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
+		log.CtxLogger(ctx).Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
 		return 0.0, l
 	}
 	rscLocations := pacemakerDocument.Configuration.Constraints.RSCLocations
@@ -209,7 +209,7 @@ func setPacemakerAPIAccess(ctx context.Context, l map[string]string, projectID s
 		fmt.Sprintf("Authorization: Bearer %s ", bearerToken),
 		fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s?fields=id", projectID))
 	if err != nil {
-		log.Logger.Debugw("Could not obtain fence agent compute API Access", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Could not obtain fence agent compute API Access", log.Error(err))
 	}
 
 	fenceAgentLoggingAPIAccess, err := checkAPIAccess(ctx, exec,
@@ -224,7 +224,7 @@ func setPacemakerAPIAccess(ctx context.Context, l map[string]string, projectID s
 		fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, projectID)+
 			`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"`)
 	if err != nil {
-		log.Logger.Debugw("Could not obtain fence agent logging API Access", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Could not obtain fence agent logging API Access", log.Error(err))
 	}
 	l["fence_agent_compute_api_access"] = strconv.FormatBool(fenceAgentComputeAPIAccess)
 	l["fence_agent_logging_api_access"] = strconv.FormatBool(fenceAgentLoggingAPIAccess)
@@ -283,7 +283,7 @@ func setPacemakerMaintenanceMode(ctx context.Context, l map[string]string, crmAv
 			ArgsToSplit: "-c 'pcs property show | grep maintenance | grep true'",
 		})
 	}
-	log.Logger.Debugw("Pacemaker maintenance mode", "maintenanceMode", result.StdOut, "stderr", result.StdErr, "err", result.Error)
+	log.CtxLogger(ctx).Debugw("Pacemaker maintenance mode", "maintenanceMode", result.StdOut, "stderr", result.StdErr, "err", result.Error)
 	maintenanceModeLabel := "false"
 	if result.Error == nil && result.StdOut != "" {
 		maintenanceModeLabel = "true"

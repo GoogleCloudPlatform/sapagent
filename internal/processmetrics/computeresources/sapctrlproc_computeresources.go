@@ -61,7 +61,7 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb
 	processes := collectControlProcesses(ctx, params)
 	var metricsCollectionError error
 	if len(processes) == 0 {
-		log.Logger.Debug("Cannot collect CPU and memory per process for Netweaver, empty process list.")
+		log.CtxLogger(ctx).Debug("Cannot collect CPU and memory per process for Netweaver, empty process list.")
 		return nil, nil
 	}
 	res := []*mrpb.TimeSeries{}
@@ -96,13 +96,13 @@ func (p *SAPControlProcInstanceProperties) CollectWithRetry(ctx context.Context)
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Debugw("Retry limit exceeded")
+		log.CtxLogger(ctx).Debugw("Retry limit exceeded")
 	}
 	return res, err
 }

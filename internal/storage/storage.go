@@ -151,27 +151,27 @@ func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, 
 	if userAgentSuffix != "" {
 		userAgent = fmt.Sprintf("%s %s)", strings.TrimSuffix(userAgent, ")"), userAgentSuffix)
 	}
-	log.Logger.Infow("Setting User-Agent header", "userAgent", userAgent)
+	log.CtxLogger(ctx).Infow("Setting User-Agent header", "userAgent", userAgent)
 	opts = append(opts, option.WithUserAgent(userAgent))
 	if serviceAccount != "" {
 		opts = append(opts, option.WithCredentialsFile(serviceAccount))
 	}
 	client, err := storageClient(ctx, opts...)
 	if err != nil {
-		log.Logger.Errorw("Failed to create GCS client. Ensure your default credentials or service account file are correct.", "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to create GCS client. Ensure your default credentials or service account file are correct.", "error", err)
 		return nil, false
 	}
 
 	bucket := client.Bucket(bucketName)
 	if !verifyConnection {
-		log.Logger.Infow("Created bucket but did not verify connection. Read/write calls may fail.", "bucket", bucketName)
+		log.CtxLogger(ctx).Infow("Created bucket but did not verify connection. Read/write calls may fail.", "bucket", bucketName)
 		return bucket, true
 	}
 	if _, err := bucket.Objects(ctx, nil).Next(); err != nil && err != iterator.Done {
-		log.Logger.Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", bucketName, "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", bucketName, "error", err)
 		return nil, false
 	}
-	log.Logger.Infow("Connected to bucket", "bucket", bucketName)
+	log.CtxLogger(ctx).Infow("Connected to bucket", "bucket", bucketName)
 	return bucket, true
 }
 
@@ -185,10 +185,10 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	object := rw.BucketHandle.Object(rw.ObjectName).Retryer(rw.retryOptions("Failed to upload data to Google Cloud Storage, retrying.")...)
 	var writer io.WriteCloser
 	if rw.EncryptionKey != "" || rw.KMSKey != "" {
-		log.Logger.Infow("Encryption enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
+		log.CtxLogger(ctx).Infow("Encryption enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 	}
 	if rw.DumpData {
-		log.Logger.Warnw("dump_data set to true, discarding data during upload", "bucket", rw.BucketName, "object", rw.ObjectName)
+		log.CtxLogger(ctx).Warnw("dump_data set to true, discarding data during upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		writer = discardCloser{}
 	} else {
 		if rw.EncryptionKey != "" {
@@ -214,14 +214,14 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 
 	rw = rw.defaultArgs()
 	if rw.ChunkSizeMb == 0 {
-		log.Logger.Warn("ChunkSizeMb set to 0, uploads cannot be retried.")
+		log.CtxLogger(ctx).Warn("ChunkSizeMb set to 0, uploads cannot be retried.")
 	}
 
-	log.Logger.Infow("Upload starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
+	log.CtxLogger(ctx).Infow("Upload starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
 	var err error
 	if rw.Compress {
-		log.Logger.Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
+		log.CtxLogger(ctx).Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		gzipWriter := gzip.NewWriter(rw)
 		if bytesWritten, err = rw.Copier(gzipWriter, rw.Reader); err != nil {
 			return 0, err
@@ -253,7 +253,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		}
 	}
 	avgTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
-	log.Logger.Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "objectSizeInBucket", objectSize, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	log.CtxLogger(ctx).Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "objectSizeInBucket", objectSize, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return bytesWritten, nil
 }
 
@@ -265,7 +265,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	}
 
 	if rw.EncryptionKey != "" || rw.KMSKey != "" {
-		log.Logger.Infow("Decryption enabled for download", "bucket", rw.BucketName, "object", rw.ObjectName)
+		log.CtxLogger(ctx).Infow("Decryption enabled for download", "bucket", rw.BucketName, "object", rw.ObjectName)
 	}
 	object := rw.BucketHandle.Object(rw.ObjectName)
 	if rw.EncryptionKey != "" {
@@ -284,10 +284,10 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	rw.Reader = reader
 
 	rw = rw.defaultArgs()
-	log.Logger.Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
+	log.CtxLogger(ctx).Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
 	if reader.Attrs.ContentType == compressedContentType {
-		log.Logger.Infow("Compressed file detected, decompressing during download", "bucket", rw.BucketName, "object", rw.ObjectName)
+		log.CtxLogger(ctx).Infow("Compressed file detected, decompressing during download", "bucket", rw.BucketName, "object", rw.ObjectName)
 		gzipReader, err := gzip.NewReader(rw)
 		if err != nil {
 			return 0, err
@@ -305,7 +305,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	}
 
 	avgTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
-	log.Logger.Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	log.CtxLogger(ctx).Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	return bytesWritten, nil
 }
 
@@ -330,7 +330,7 @@ func ListObjects(ctx context.Context, bucketHandle *storage.BucketHandle, prefix
 			return nil, fmt.Errorf("error while iterating objects for prefix: %s, err: %v", prefix, err)
 		}
 		if !strings.Contains(attrs.Name, filter) {
-			log.Logger.Debugw("Discarding object due to filter", "fileName", attrs.Name, "filter", filter)
+			log.CtxLogger(ctx).Debugw("Discarding object due to filter", "fileName", attrs.Name, "filter", filter)
 			continue
 		}
 		result = append(result, attrs)
@@ -349,7 +349,7 @@ func DeleteObject(ctx context.Context, bucketHandle *storage.BucketHandle, objec
 	rw := &ReadWriter{MaxRetries: maxRetries, ObjectName: objectName}
 	object := bucketHandle.Object(objectName).Retryer(rw.retryOptions("Failed to delete object, retrying.")...)
 	if err := object.Delete(ctx); err != nil {
-		log.Logger.Errorw("Failed to delete object.", "objectName", objectName, "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to delete object.", "objectName", objectName, "error", err)
 		return err
 	}
 	return nil

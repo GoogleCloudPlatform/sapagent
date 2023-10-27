@@ -129,7 +129,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -153,7 +153,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 }
 
 func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties, e commandlineexecutor.Execute, p commandlineexecutor.Params, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
-	log.Logger.Debugw("Collecting HANA Availability and HA Availability metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
+	log.CtxLogger(ctx).Debugw("Collecting HANA Availability and HA Availability metrics for instance", "instanceid", ip.SAPInstance.GetInstanceId())
 
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{Instance: ip.SAPInstance}
@@ -183,7 +183,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		}
 		_, sapControlResult, err = sapcontrol.ExecProcessList(ctx, e, p)
 		if err != nil {
-			log.Logger.Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
+			log.CtxLogger(ctx).Errorw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
 			return nil, err
 		}
 		haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
@@ -194,7 +194,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))
 	}
 
-	log.Logger.Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
 	return metrics, nil
 }
 
@@ -254,7 +254,7 @@ func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) (int
 
 	// This is not in-band error handling. Metric should be zero in case of failures.
 	if err != nil {
-		log.Logger.Debugw("Failed to refresh HANA HA Replication config for instance", "instanceid", p.SAPInstance.GetInstanceId())
+		log.CtxLogger(ctx).Debugw("Failed to refresh HANA HA Replication config for instance", "instanceid", p.SAPInstance.GetInstanceId())
 		return 0, err
 	}
 
@@ -277,7 +277,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	)
 	procs, err = sc.GetProcessList(scc)
 	if err != nil {
-		log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Error performing GetProcessList web method", log.Error(err))
 		return nil, err
 	}
 

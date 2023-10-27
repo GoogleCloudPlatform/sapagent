@@ -39,14 +39,14 @@ import (
 
 // Execute logs information and performs the requested restore. Returns false on failures.
 func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
-	log.Logger.Infow("RESTORE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("RESTORE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintRestoreStarted)
 	if err := restore(ctx, config, bucketHandle, input, output); err != nil {
-		log.Logger.Errorw("RESTORE failed", "err", err)
+		log.CtxLogger(ctx).Errorw("RESTORE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintRestoreFailure)
 		return false
 	}
-	log.Logger.Infow("RESTORE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
+	log.CtxLogger(ctx).Infow("RESTORE finished", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintRestoreFinished)
 	return true
 }
@@ -59,7 +59,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		log.Logger.Infow("Executing restore input", "line", line)
+		log.CtxLogger(ctx).Infow("Executing restore input", "line", line)
 		if strings.HasPrefix(line, "#SOFTWAREID") {
 			if _, err := parse.WriteSoftwareVersion(line, output); err != nil {
 				return err
@@ -100,7 +100,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 				output.Write(out)
 			})
 		} else {
-			log.Logger.Infow("Unknown prefix encountered, treated as a comment", "line", line)
+			log.CtxLogger(ctx).Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
 	}
 	wp.StopWait()
@@ -121,13 +121,13 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		prefix += fmt.Sprintf("%s.bak", externalBackupID)
 	}
 
-	log.Logger.Infow("Restoring file", "userID", config.GetUserId(), "fileName", fileName, "destName", destName, "prefix", prefix, "externalBackupID", externalBackupID)
+	log.CtxLogger(ctx).Infow("Restoring file", "userID", config.GetUserId(), "fileName", fileName, "destName", destName, "prefix", prefix, "externalBackupID", externalBackupID)
 	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, "", config.GetRetries())
 	if err != nil {
-		log.Logger.Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID)
+		log.CtxLogger(ctx).Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	} else if len(objects) == 0 {
-		log.Logger.Warnw("No objects found", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
+		log.CtxLogger(ctx).Warnw("No objects found", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID)
 		return []byte(fmt.Sprintf("#NOTFOUND %s\n", fileName))
 	}
 	// The objects will be sorted by creation date, latest first.
@@ -135,7 +135,7 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	object := objects[0]
 
 	// From the specification, files are created by Backint and pipes are created by the database.
-	log.Logger.Infow("Restoring object from bucket", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "obj", object.Name, "fileType", object.Metadata["X-Backup-Type"], "destName", destName, "objSize", object.Size)
+	log.CtxLogger(ctx).Infow("Restoring object from bucket", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "obj", object.Name, "fileType", object.Metadata["X-Backup-Type"], "destName", destName, "objSize", object.Size)
 	var destFile *os.File
 	if object.Metadata["X-Backup-Type"] == "FILE" {
 		destFile, err = os.Create(parse.TrimAndClean(destName))
@@ -143,18 +143,18 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		destFile, err = parse.OpenFileWithRetries(parse.TrimAndClean(destName), os.O_RDWR, 0, config.GetFileReadTimeoutMs())
 	}
 	if err != nil {
-		log.Logger.Errorw("Error opening dest file", "destName", destName, "err", err, "fileType", object.Metadata["X-Backup-Type"])
+		log.CtxLogger(ctx).Errorw("Error opening dest file", "destName", destName, "err", err, "fileType", object.Metadata["X-Backup-Type"])
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	}
 	defer func() {
 		if err := destFile.Close(); err != nil {
-			log.Logger.Errorw("Error closing dest file", "destName", destName, "err", err)
+			log.CtxLogger(ctx).Errorw("Error closing dest file", "destName", destName, "err", err)
 			return
 		}
-		log.Logger.Infow("Dest file closed successfully", "destName", destName)
+		log.CtxLogger(ctx).Infow("Dest file closed successfully", "destName", destName)
 	}()
 	if fileInfo, err := destFile.Stat(); err != nil || fileInfo.Mode()&0222 == 0 {
-		log.Logger.Errorw("Dest file does not have writeable permissions", "destName", destName, "err", err)
+		log.CtxLogger(ctx).Errorw("Dest file does not have writeable permissions", "destName", destName, "err", err)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	}
 
@@ -173,10 +173,10 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	}
 	bytesWritten, err := rw.Download(ctx)
 	if err != nil {
-		log.Logger.Errorw("Error downloading file", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "err", err)
+		log.CtxLogger(ctx).Errorw("Error downloading file", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "err", err)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	}
-	log.Logger.Infow("File restored", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "bytesWritten", bytesWritten)
+	log.CtxLogger(ctx).Infow("File restored", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "bytesWritten", bytesWritten)
 	externalBackupID = strings.TrimSuffix(filepath.Base(object.Name), ".bak")
 	return []byte(fmt.Sprintf("#RESTORED %q %s\n", externalBackupID, fileName))
 }

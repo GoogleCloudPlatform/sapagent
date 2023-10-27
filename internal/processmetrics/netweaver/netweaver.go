@@ -179,17 +179,17 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		res     []*mrpb.TimeSeries
 	)
 	err := backoff.Retry(func() error {
-		log.Logger.Infof("Attempting collector retry", "attempt", attempt)
+		log.CtxLogger(ctx).Infof("Attempting collector retry", "attempt", attempt)
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId(), "error", err)
+		log.CtxLogger(ctx).Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId(), "error", err)
 	}
 	return res, err
 }
@@ -207,7 +207,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	)
 	procs, err = sc.GetProcessList(scc)
 	if err != nil {
-		log.Logger.Errorw("Error performing GetProcessList web method", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Error performing GetProcessList web method", log.Error(err))
 		return nil, err
 	}
 	metrics := collectServiceMetrics(p, procs, now)
@@ -366,7 +366,7 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 	)
 	wpDetails, err := sc.ABAPGetWPTable(scc)
 	if err != nil {
-		log.Logger.Debugw("Sapcontrol web method failed", "error", err)
+		log.CtxLogger(ctx).Debugw("Sapcontrol web method failed", "error", err)
 		return nil, err
 	}
 	processCount = wpDetails.Processes
@@ -376,25 +376,25 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 	var metrics []*mrpb.TimeSeries
 	for k, v := range processCount {
 		extraLabels := map[string]string{"abap_process": k}
-		log.Logger.Debugw("Creating metric for abap_process",
+		log.CtxLogger(ctx).Debugw("Creating metric for abap_process",
 			"metric", nwABAPProcCountPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPProcCountPath, extraLabels, now, int64(v)))
 	}
 
 	for k, v := range busyProcessCount {
 		extraLabels := map[string]string{"abap_process": k}
-		log.Logger.Debugw("Creating metric for abap_process",
+		log.CtxLogger(ctx).Debugw("Creating metric for abap_process",
 			"metric", nwABAPProcBusyPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPProcBusyPath, extraLabels, now, int64(v)))
 	}
 
 	for k, v := range busyPercentage {
 		extraLabels := map[string]string{"abap_process": k}
-		log.Logger.Debugw("Creating metric for abap_process",
+		log.CtxLogger(ctx).Debugw("Creating metric for abap_process",
 			"metric", nwABAPProcUtilPath, "abapprocess", k, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPProcUtilPath, extraLabels, now, int64(v)))
 	}
-	log.Logger.Debugw("Time taken to collect metrics in collectABAPProcessStatus()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectABAPProcessStatus()", "time", time.Since(now.AsTime()))
 	return metrics, nil
 }
 
@@ -414,14 +414,14 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 	)
 	currentQueueUsage, peakQueueUsage, err = sc.GetQueueStatistic(scc)
 	if err != nil {
-		log.Logger.Debugw("Sapcontrol web method failed", "error", err)
+		log.CtxLogger(ctx).Debugw("Sapcontrol web method failed", "error", err)
 		return nil, err
 	}
 
 	var metrics []*mrpb.TimeSeries
 	for k, v := range currentQueueUsage {
 		extraLabels := map[string]string{"abap_queue": k}
-		log.Logger.Debugw("Creating metric with labels",
+		log.CtxLogger(ctx).Debugw("Creating metric with labels",
 			"metric", nwABAPProcQueueCurrentPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 
 		metrics = append(metrics, createMetrics(p, nwABAPProcQueueCurrentPath, extraLabels, now, int64(v)))
@@ -429,12 +429,12 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 
 	for k, v := range peakQueueUsage {
 		extraLabels := map[string]string{"abap_queue_peak": k}
-		log.Logger.Debugw("Creating metric with labels",
+		log.CtxLogger(ctx).Debugw("Creating metric with labels",
 			"metric", nwABAPProcQueueCurrentPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 
 		metrics = append(metrics, createMetrics(p, nwABAPProcQueuePeakPath, extraLabels, now, int64(v)))
 	}
-	log.Logger.Debugw("Time taken to collect metrics in collectABAPQueueStats()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectABAPQueueStats()", "time", time.Since(now.AsTime()))
 	return metrics, nil
 }
 
@@ -445,34 +445,34 @@ func collectABAPSessionStats(ctx context.Context, p *InstanceProperties, exec co
 		return nil, nil
 	}
 	results := exec(ctx, params)
-	log.Logger.Debugw("DPMON for sessionStat output", "stdout", results.StdOut, "stderr", results.StdErr, "exitcode", results.ExitCode, "error", results.Error)
+	log.CtxLogger(ctx).Debugw("DPMON for sessionStat output", "stdout", results.StdOut, "stderr", results.StdErr, "exitcode", results.ExitCode, "error", results.Error)
 	if results.Error != nil {
-		log.Logger.Debugw("DPMON failed", log.Error(results.Error))
+		log.CtxLogger(ctx).Debugw("DPMON failed", log.Error(results.Error))
 		return nil, results.Error
 	}
 
 	var metrics []*mrpb.TimeSeries
 	sessionCounts, totalCount, err := parseABAPSessionStats(results.StdOut)
 	if err != nil {
-		log.Logger.Debugw("DPMON ran successfully, but no ABAP session currently active", log.Error(err))
+		log.CtxLogger(ctx).Debugw("DPMON ran successfully, but no ABAP session currently active", log.Error(err))
 		return nil, err
 	}
 
 	for k, v := range sessionCounts {
 		extraLabels := map[string]string{"abap_session_type": k}
-		log.Logger.Debugw("Creating metric with labels",
+		log.CtxLogger(ctx).Debugw("Creating metric with labels",
 			"metric", nwABAPSessionsPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 
 		metrics = append(metrics, createMetrics(p, nwABAPSessionsPath, extraLabels, now, int64(v)))
 	}
 
 	extraLabels := map[string]string{"abap_session_type": "total_count"}
-	log.Logger.Debugw("Creating metric with labels",
+	log.CtxLogger(ctx).Debugw("Creating metric with labels",
 		"metric", nwABAPSessionsPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", totalCount)
 
 	metrics = append(metrics, createMetrics(p, nwABAPSessionsPath, extraLabels, now, int64(totalCount)))
 
-	log.Logger.Debugw("Time taken to collect metrics in collectABAPSessionStats()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectABAPSessionStats()", "time", time.Since(now.AsTime()))
 	return metrics, nil
 }
 
@@ -483,9 +483,9 @@ func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec comm
 		return nil, nil
 	}
 	result := exec(ctx, params)
-	log.Logger.Debugw("DPMON for RFC output", "stdout", result.StdOut, "stderr", result.StdErr, "exitcode", result.ExitCode, "error", result.Error)
+	log.CtxLogger(ctx).Debugw("DPMON for RFC output", "stdout", result.StdOut, "stderr", result.StdErr, "exitcode", result.ExitCode, "error", result.Error)
 	if result.Error != nil {
-		log.Logger.Debugw("DPMON for RFC failed", log.Error(result.Error))
+		log.CtxLogger(ctx).Debugw("DPMON for RFC failed", log.Error(result.Error))
 		return nil, result.Error
 	}
 
@@ -493,11 +493,11 @@ func collectRFCConnections(ctx context.Context, p *InstanceProperties, exec comm
 	rfcStateCount := parseRFCStats(result.StdOut)
 	for k, v := range rfcStateCount {
 		extraLabels := map[string]string{"abap_rfc_conn": k}
-		log.Logger.Debugw("Creating metric with labels",
+		log.CtxLogger(ctx).Debugw("Creating metric with labels",
 			"metric", nwABAPRFCPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", v)
 		metrics = append(metrics, createMetrics(p, nwABAPRFCPath, extraLabels, now, int64(v)))
 	}
-	log.Logger.Debugw("Time taken to collect metrics in collectRFCConnections()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectRFCConnections()", "time", time.Since(now.AsTime()))
 	return metrics, nil
 }
 
@@ -508,7 +508,7 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 	}
 	instance := p.SAPInstance.GetInstanceId()
 	if !strings.HasPrefix(instance, "ASCS") && !strings.HasPrefix(instance, "ERS") {
-		log.Logger.Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)
+		log.CtxLogger(ctx).Debugw("The Enq Lock metric is only applicable for application type: ASCS.", "InstanceID", p.SAPInstance.InstanceId)
 		return nil, nil
 	}
 	now := tspb.Now()
@@ -537,7 +537,7 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 			"object":              lock.Object,
 			"backup":              lock.Backup,
 		}
-		log.Logger.Debugw("Creating metric with labels",
+		log.CtxLogger(ctx).Debugw("Creating metric with labels",
 			"metric", nwEnqLocksPath, "labels", extraLabels, "instancenumber", p.SAPInstance.GetInstanceNumber(), "value", lock.UserCountOwner)
 		metrics = append(metrics, createMetrics(p, nwEnqLocksPath, extraLabels, now, lock.UserCountOwner))
 

@@ -105,7 +105,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
-		log.Logger.Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
 		return metrics, err
 	}
 	// TODO: Test actual timeseries in unit test instead of returning an extra int.
@@ -143,13 +143,13 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.Logger.Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		log.Logger.Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetSapsid())
+		log.CtxLogger(ctx).Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetSapsid())
 	}
 	return res, err
 }

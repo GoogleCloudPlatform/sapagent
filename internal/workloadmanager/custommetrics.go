@@ -29,7 +29,7 @@ const sapValidationCustom = "workload.googleapis.com/sap/validation/custom"
 // the WorkloadValidation config and formats the results as a time series to be
 // uploaded to a Collection Storage mechanism.
 func CollectCustomMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.Logger.Info("Collecting Workload Manager Custom metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager Custom metrics...")
 	l := make(map[string]string)
 
 	custom := params.WorkloadConfig.GetValidationCustom()

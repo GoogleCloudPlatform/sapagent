@@ -115,12 +115,12 @@ func (b *InstallBackint) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for installbackint.
 func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if len(args) < 2 {
-		log.Logger.Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	lp, ok := args[1].(log.Parameters)
 	if !ok {
-		log.Logger.Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
 	}
 	if b.help {
@@ -135,9 +135,9 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 
 	if b.sid == "" {
 		b.sid = os.Getenv("SAPSYSTEMNAME")
-		log.Logger.Warnf("sid defaulted to $SAPSYSTEMNAME: %s", b.sid)
+		log.CtxLogger(ctx).Warnf("sid defaulted to $SAPSYSTEMNAME: %s", b.sid)
 		if b.sid == "" {
-			log.Logger.Errorf("sid is not defined. Set the sid command line argument, or ensure $SAPSYSTEMNAME is set. Usage:" + b.Usage())
+			log.CtxLogger(ctx).Errorf("sid is not defined. Set the sid command line argument, or ensure $SAPSYSTEMNAME is set. Usage:" + b.Usage())
 			return subcommands.ExitUsageError
 		}
 	}
@@ -153,7 +153,7 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	b.chown = os.Chown
 	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.sid)); err != nil {
 		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
-		log.Logger.Errorw("InstallBackint failed", "sid", b.sid, "err", err)
+		log.CtxLogger(ctx).Errorw("InstallBackint failed", "sid", b.sid, "err", err)
 		usagemetrics.Error(usagemetrics.InstallBackintFailure)
 		return subcommands.ExitFailure
 	}
@@ -163,20 +163,20 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 // installBackintHandler creates directories, files, and symlinks
 // in order to execute Backint from SAP HANA for the specified sid.
 func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallDir string) error {
-	log.Logger.Info("InstallBackint starting")
+	log.CtxLogger(ctx).Info("InstallBackint starting")
 	usagemetrics.Action(usagemetrics.InstallBackintStarted)
 	var stat unix.Stat_t
 	if err := b.stat(baseInstallDir, &stat); err != nil {
 		return fmt.Errorf("unable to stat base install directory: %s, ensure the sid is correct. err: %v", baseInstallDir, err)
 	}
-	log.Logger.Infow("Base directory info", "baseInstallDir", baseInstallDir, "uid", stat.Uid, "gid", stat.Gid)
+	log.CtxLogger(ctx).Infow("Base directory info", "baseInstallDir", baseInstallDir, "uid", stat.Uid, "gid", stat.Gid)
 	if err := b.migrateOldAgent(ctx, baseInstallDir, int(stat.Uid), int(stat.Gid)); err != nil {
 		return fmt.Errorf("unable to migrate old agent. err: %v", err)
 	}
 
 	// Ensure we don't trip the Kokoro replace_func by separating the strings.
 	backintInstallDir := baseInstallDir + "/backint" + "/backint-gcs"
-	log.Logger.Infow("Creating Backint directories", "backintInstallDir", backintInstallDir, "hdbconfigDir", baseInstallDir+"/hdbconfig")
+	log.CtxLogger(ctx).Infow("Creating Backint directories", "backintInstallDir", backintInstallDir, "hdbconfigDir", baseInstallDir+"/hdbconfig")
 	// Create /backint first so permissions are set for the /backint-gcs subdir.
 	if err := b.createAndChownDir(ctx, baseInstallDir+"/backint", int(stat.Uid), int(stat.Gid)); err != nil {
 		return err
@@ -190,7 +190,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 
 	backintPath := backintInstallDir + "/backint"
 	parameterPath := backintInstallDir + "/parameters.json"
-	log.Logger.Infow("Creating Backint files", "backintPath", backintPath, "parameterPath", parameterPath)
+	log.CtxLogger(ctx).Infow("Creating Backint files", "backintPath", backintPath, "parameterPath", parameterPath)
 	if err := b.writeFile(backintPath, hdbbackintScript, os.ModePerm); err != nil {
 		return fmt.Errorf("unable to write backint script: %s. err: %v", backintPath, err)
 	}
@@ -210,7 +210,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	parameterSymlink := baseInstallDir + "/hdbconfig/parameters.json"
 	logSymlink := backintInstallDir + "/logs"
 	logPath := "/var/log/google-cloud-sap-agent/"
-	log.Logger.Infow("Creating Backint symlinks", "backintSymlink", backintSymlink, "parameterSymlink", parameterSymlink, "logSymlink", logSymlink)
+	log.CtxLogger(ctx).Infow("Creating Backint symlinks", "backintSymlink", backintSymlink, "parameterSymlink", parameterSymlink, "logSymlink", logSymlink)
 	os.Remove(backintSymlink)
 	os.Remove(parameterSymlink)
 	os.Remove(logSymlink)
@@ -225,7 +225,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	}
 
 	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
-	log.Logger.Info("InstallBackint succeeded")
+	log.CtxLogger(ctx).Info("InstallBackint succeeded")
 	usagemetrics.Action(usagemetrics.InstallBackintFinished)
 	return nil
 }
@@ -240,13 +240,13 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 	jreInstallDir := backintInstallDir + "/jre"
 
 	if err := b.stat(jreInstallDir, &unix.Stat_t{}); os.IsNotExist(err) {
-		log.Logger.Infow("Old Backint agent not found, skipping migration", "jreInstallDir", jreInstallDir)
+		log.CtxLogger(ctx).Infow("Old Backint agent not found, skipping migration", "jreInstallDir", jreInstallDir)
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("unable to stat jre install directory: %s, err: %v", jreInstallDir, err)
 	}
 
-	log.Logger.Infow("Old Backint agent found, migrating files", "oldpath", backintInstallDir, "newpath", backintOldDir)
+	log.CtxLogger(ctx).Infow("Old Backint agent found, migrating files", "oldpath", backintInstallDir, "newpath", backintOldDir)
 	if err := b.rename(backintInstallDir, backintOldDir); err != nil {
 		return fmt.Errorf("unable to move old backint install directory, oldpath: %s newpath: %s, err: %v", backintInstallDir, backintOldDir, err)
 	}
@@ -281,7 +281,7 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 			return fmt.Errorf("unable to chmod parameters file: %s. err: %v", destination, err)
 		}
 	}
-	log.Logger.Infow("Successfully migrated old agent")
+	log.CtxLogger(ctx).Infow("Successfully migrated old agent")
 	return nil
 }
 
