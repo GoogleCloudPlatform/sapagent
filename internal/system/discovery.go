@@ -37,12 +37,12 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -187,17 +187,17 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 
 	for {
 		// Discover instance and immediately adjacent resources (disks, addresses, networks)
-		res, ci, ir := d.discoverInstance(cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
+		res, ci, ir := d.discoverInstance(ctx, cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
 
 		if ci == nil {
 			log.CtxLogger(ctx).Warn("Unable to discover current instance, cannot complete discovery")
 			continue
 		}
 
-		netRes := d.discoverNetworks(cp.GetProjectId(), ci, ir)
+		netRes := d.discoverNetworks(ctx, cp.GetProjectId(), ci, ir)
 		res = append(res, netRes...)
 
-		disks := d.discoverDisks(cp.GetProjectId(), cp.GetZone(), ci, ir)
+		disks := d.discoverDisks(ctx, cp.GetProjectId(), cp.GetZone(), ci, ir)
 		res = append(res, disks...)
 
 		fsRes := d.discoverFilestores(ctx, cp.GetProjectId(), ir)
@@ -207,7 +207,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 		res = append(res, fwrRes...)
 
 		if fwr != nil {
-			lbRes := d.discoverLoadBalancerFromForwardingRule(fwr, fr)
+			lbRes := d.discoverLoadBalancerFromForwardingRule(ctx, fwr, fr)
 			res = append(res, lbRes...)
 
 			// Only add the unique resources, some may be shared, such as network and subnetwork
@@ -336,12 +336,12 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 	}
 }
 
-func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*spb.SapDiscovery_Resource, *compute.Instance, *spb.SapDiscovery_Resource) {
+func (d *Discovery) discoverInstance(ctx context.Context, projectID, zone, instanceName string) ([]*spb.SapDiscovery_Resource, *compute.Instance, *spb.SapDiscovery_Resource) {
 	var res []*spb.SapDiscovery_Resource
-	log.Logger.Debugw("Discovering instance", log.String("instance", instanceName))
+	log.CtxLogger(ctx).Debugw("Discovering instance", log.String("instance", instanceName))
 	ci, err := d.gceService.GetInstance(projectID, zone, instanceName)
 	if err != nil {
-		log.Logger.Errorw("Could not get instance info from compute API",
+		log.CtxLogger(ctx).Errorw("Could not get instance info from compute API",
 			log.String("project", projectID),
 			log.String("zone", zone),
 			log.String("instance", instanceName),
@@ -360,7 +360,7 @@ func (d *Discovery) discoverInstance(projectID, zone, instanceName string) ([]*s
 	return res, ci, ir
 }
 
-func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, ir *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverDisks(ctx context.Context, projectID, zone string, ci *compute.Instance, ir *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	var disks []*spb.SapDiscovery_Resource
 	if ci == nil || ci.Disks == nil || len(ci.Disks) == 0 {
 		return disks
@@ -376,7 +376,7 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, 
 
 		cd, err := d.gceService.GetDisk(projectID, zone, diskName)
 		if err != nil {
-			log.Logger.Warnw("Could not get disk info from compute API",
+			log.CtxLogger(ctx).Warnw("Could not get disk info from compute API",
 				log.String("project", projectID),
 				log.String("zone", zone),
 				log.String("instance", diskName),
@@ -397,7 +397,7 @@ func (d *Discovery) discoverDisks(projectID, zone string, ci *compute.Instance, 
 	return disks
 }
 
-func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverNetworks(ctx context.Context, projectID string, ci *compute.Instance, ir *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	var netRes []*spb.SapDiscovery_Resource
 	if ci == nil || ci.NetworkInterfaces == nil || len(ci.NetworkInterfaces) == 0 {
 		return netRes
@@ -442,7 +442,7 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 
 		netRegion := extractFromURI(net.Subnetwork, "regions")
 		if netRegion == "" {
-			log.Logger.Warnw("Unable to extract region from subnetwork",
+			log.CtxLogger(ctx).Warnw("Unable to extract region from subnetwork",
 				log.String("subnetwork", net.Subnetwork))
 			continue
 		}
@@ -451,7 +451,7 @@ func (d *Discovery) discoverNetworks(projectID string, ci *compute.Instance, ir 
 		ip := net.NetworkIP
 		addr, err := d.gceService.GetAddressByIP(projectID, netRegion, ip)
 		if err != nil {
-			log.Logger.Warnw("Error locating Address by IP",
+			log.CtxLogger(ctx).Warnw("Error locating Address by IP",
 				log.String("project", projectID),
 				log.String("region", netRegion),
 				log.String("ip", ip),
@@ -533,8 +533,8 @@ func (d *Discovery) discoverClusterForwardingRule(ctx context.Context, projectID
 	return res, fwr, fr
 }
 
-func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.ForwardingRule, fr *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
-	log.Logger.Debug("Discovering load balancer")
+func (d *Discovery) discoverLoadBalancerFromForwardingRule(ctx context.Context, fwr *compute.ForwardingRule, fr *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+	log.CtxLogger(ctx).Debug("Discovering load balancer")
 	var res []*spb.SapDiscovery_Resource
 	projectID := extractFromURI(fwr.SelfLink, "projects")
 
@@ -542,20 +542,20 @@ func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.Forwardi
 	b := fwr.BackendService
 	bEName := extractFromURI(b, "backendServices")
 	if bEName == "" {
-		log.Logger.Infow("Forwarding rule does not have a backend service",
+		log.CtxLogger(ctx).Infow("Forwarding rule does not have a backend service",
 			log.String("backendService", b))
 		return res
 	}
 
 	bERegion := extractFromURI(b, "regions")
 	if bERegion == "" {
-		log.Logger.Infow("Unable to extract region from backend service", log.String("backendService", b))
+		log.CtxLogger(ctx).Infow("Unable to extract region from backend service", log.String("backendService", b))
 		return res
 	}
 
 	bs, err := d.gceService.GetRegionalBackendService(projectID, bERegion, bEName)
 	if err != nil {
-		log.Logger.Warnw("Error retrieving backend service", log.Error(err))
+		log.CtxLogger(ctx).Warnw("Error retrieving backend service", log.Error(err))
 		return res
 	}
 
@@ -569,12 +569,12 @@ func (d *Discovery) discoverLoadBalancerFromForwardingRule(fwr *compute.Forwardi
 	fr.RelatedResources = append(fr.RelatedResources, bsr.ResourceUri)
 	res = append(res, bsr)
 
-	igRes := d.discoverInstanceGroups(bs, bsr)
+	igRes := d.discoverInstanceGroups(ctx, bs, bsr)
 	res = append(res, igRes...)
 	return res
 }
 
-func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverInstanceGroups(ctx context.Context, bs *compute.BackendService, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	projectID := extractFromURI(bs.SelfLink, "projects")
 	var res []*spb.SapDiscovery_Resource
 	var groups []string
@@ -587,18 +587,18 @@ func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *s
 	for _, g := range groups {
 		gName := extractFromURI(g, "instanceGroups")
 		if gName == "" {
-			log.Logger.Info("Backend group is not an instance group")
+			log.CtxLogger(ctx).Info("Backend group is not an instance group")
 			continue
 		}
 		gZone := extractFromURI(g, "zones")
 		if gZone == "" {
-			log.Logger.Info("Unable to extract zone from group name")
+			log.CtxLogger(ctx).Info("Unable to extract zone from group name")
 			continue
 		}
 
 		ig, err := d.gceService.GetInstanceGroup(projectID, gZone, gName)
 		if err != nil {
-			log.Logger.Warnw("Error retrieving instance group", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Error retrieving instance group", log.Error(err))
 			continue
 		}
 		igr := &spb.SapDiscovery_Resource{
@@ -611,18 +611,18 @@ func (d *Discovery) discoverInstanceGroups(bs *compute.BackendService, parent *s
 		parent.RelatedResources = append(parent.RelatedResources, igr.ResourceUri)
 		res = append(res, igr)
 
-		iRes := d.discoverInstanceGroupInstances(projectID, gZone, gName, igr)
+		iRes := d.discoverInstanceGroupInstances(ctx, projectID, gZone, gName, igr)
 		res = append(res, iRes...)
 	}
 
 	return res
 }
 
-func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverInstanceGroupInstances(ctx context.Context, projectID, zone, name string, parent *spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	list, err := d.gceService.ListInstanceGroupInstances(projectID, zone, name)
 	if err != nil {
-		log.Logger.Warnw("Error retrieving instance group instances", log.Error(err))
+		log.CtxLogger(ctx).Warnw("Error retrieving instance group instances", log.Error(err))
 		return res
 	}
 
@@ -631,7 +631,7 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 		parent.RelatedResources = append(parent.RelatedResources, i.Instance)
 		iName := extractFromURI(i.Instance, "instances")
 		if iName == "" {
-			log.Logger.Warnw("Unable to extract instance name from instance group items",
+			log.CtxLogger(ctx).Warnw("Unable to extract instance name from instance group items",
 				log.String("item", i.Instance))
 			continue
 		}
@@ -641,26 +641,26 @@ func (d *Discovery) discoverInstanceGroupInstances(projectID, zone, name string,
 	for _, i := range instances {
 		iName := extractFromURI(i, "instances")
 		if iName == "" {
-			log.Logger.Warnw("Unable to extract instance name from instance group items", log.String("item", i))
+			log.CtxLogger(ctx).Warnw("Unable to extract instance name from instance group items", log.String("item", i))
 			continue
 		}
 		iProject := extractFromURI(i, "projects")
 		if iProject == "" {
-			log.Logger.Warnw("Unable to extract project from instance group items", log.String("item", i))
+			log.CtxLogger(ctx).Warnw("Unable to extract project from instance group items", log.String("item", i))
 			continue
 		}
 		iZone := extractFromURI(i, "zones")
 		if iZone == "" {
-			log.Logger.Warnw("Unable to extract zone from instance group items", log.String("item", i))
+			log.CtxLogger(ctx).Warnw("Unable to extract zone from instance group items", log.String("item", i))
 			continue
 		}
-		instanceRes, ci, ir := d.discoverInstance(iProject, iZone, iName)
+		instanceRes, ci, ir := d.discoverInstance(ctx, iProject, iZone, iName)
 		res = append(res, instanceRes...)
 
-		netRes := d.discoverNetworks(iProject, ci, ir)
+		netRes := d.discoverNetworks(ctx, iProject, ci, ir)
 		res = append(res, netRes...)
 
-		disks := d.discoverDisks(iProject, iZone, ci, ir)
+		disks := d.discoverDisks(ctx, iProject, iZone, ci, ir)
 		res = append(res, disks...)
 
 	}
@@ -795,7 +795,7 @@ func (d *Discovery) discoverAppToDBConnection(ctx context.Context, cp *ipb.Cloud
 		return res
 	}
 
-	res = d.extractResourcesFromHosts(cp, sid, dbHosts)
+	res = d.extractResourcesFromHosts(ctx, cp, sid, dbHosts)
 	return res
 }
 
@@ -828,35 +828,35 @@ func parseDBHosts(s string) (dbHosts []string) {
 	return dbHosts
 }
 
-func (d *Discovery) extractResourcesFromHosts(cp *ipb.CloudProperties, sid string, dbHosts []string) []*spb.SapDiscovery_Resource {
+func (d *Discovery) extractResourcesFromHosts(ctx context.Context, cp *ipb.CloudProperties, sid string, dbHosts []string) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	for _, dbHostname := range dbHosts {
-		log.Logger.Infow("Found host", "sid", sid, "hostname", fmt.Sprintf("%q", dbHostname))
+		log.CtxLogger(ctx).Infow("Found host", "sid", sid, "hostname", fmt.Sprintf("%q", dbHostname))
 
 		addrs, err := d.hostResolver(dbHostname)
 		if err != nil {
-			log.Logger.Warn("Error retrieving address, or no address found for host", log.String("sid", sid), log.String("hostname", dbHostname), log.Error(err))
+			log.CtxLogger(ctx).Warn("Error retrieving address, or no address found for host", log.String("sid", sid), log.String("hostname", dbHostname), log.Error(err))
 			return res
 		}
 
 		for _, ip := range addrs {
-			log.Logger.Info("Examining address", log.String("sid", sid), log.String("ip", ip))
+			log.CtxLogger(ctx).Info("Examining address", log.String("sid", sid), log.String("ip", ip))
 			addressURI, err := d.gceService.GetURIForIP(cp.GetProjectId(), ip)
 			if err != nil {
-				log.Logger.Warnw("Error finding URI for IP", "IP", ip, "error", err)
+				log.CtxLogger(ctx).Warnw("Error finding URI for IP", "IP", ip, "error", err)
 				continue
 			}
 
 			switch {
 			case extractFromURI(addressURI, "addresses") != "":
-				aRes := d.discoverAddressFromURI(addressURI)
+				aRes := d.discoverAddressFromURI(ctx, addressURI)
 				res = append(res, aRes...)
 			case extractFromURI(addressURI, "instances") != "":
 				// IP is assigned to an instance
-				iRes := d.discoverInstanceFromURI(addressURI)
+				iRes := d.discoverInstanceFromURI(ctx, addressURI)
 				res = append(res, iRes...)
 			default:
-				log.Logger.Infow("Unrecognized URI type for IP", "IP", ip, "URI", addressURI)
+				log.CtxLogger(ctx).Infow("Unrecognized URI type for IP", "IP", ip, "URI", addressURI)
 				continue
 			}
 		}
@@ -864,31 +864,31 @@ func (d *Discovery) extractResourcesFromHosts(cp *ipb.CloudProperties, sid strin
 	return res
 }
 
-func (d *Discovery) discoverInstanceFromURI(instanceURI string) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverInstanceFromURI(ctx context.Context, instanceURI string) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	iName := extractFromURI(instanceURI, "instances")
 	iZone := extractFromURI(instanceURI, "zones")
 	iProject := extractFromURI(instanceURI, "projects")
 	if iName == "" || iProject == "" || iZone == "" {
-		log.Logger.Warnw("Unable to extract instance information from user URI", "instanceURI", instanceURI)
+		log.CtxLogger(ctx).Warnw("Unable to extract instance information from user URI", "instanceURI", instanceURI)
 		return res
 	}
 
-	iRes, ci, ir := d.discoverInstance(iProject, iZone, iName)
+	iRes, ci, ir := d.discoverInstance(ctx, iProject, iZone, iName)
 	res = append(res, iRes...)
 	if ir == nil {
 		return res
 	}
 
-	netRes := d.discoverNetworks(iProject, ci, ir)
+	netRes := d.discoverNetworks(ctx, iProject, ci, ir)
 	res = append(res, netRes...)
 
-	disks := d.discoverDisks(iProject, iZone, ci, ir)
+	disks := d.discoverDisks(ctx, iProject, iZone, ci, ir)
 	res = append(res, disks...)
 	return res
 }
 
-func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverForwardingRuleFromURI(ctx context.Context, fwrURI string) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	fwrName := extractFromURI(fwrURI, "forwardingRules")
 	fwrProject := extractFromURI(fwrURI, "projects")
@@ -897,13 +897,13 @@ func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.SapDisco
 		fwrLocation = extractFromURI(fwrURI, "regions")
 	}
 	if fwrLocation == "" && !strings.Contains(fwrURI, "/global/") {
-		log.Logger.Warn("Unknown location type for forwarding rule", "fwrURI", fwrURI)
+		log.CtxLogger(ctx).Warn("Unknown location type for forwarding rule", "fwrURI", fwrURI)
 		return res
 	}
 
 	fwr, err := d.gceService.GetForwardingRule(fwrProject, fwrLocation, fwrName)
 	if err != nil {
-		log.Logger.Warn("Error retrieving forwarding rule", log.String("fwrName", fwrName), log.Error(err))
+		log.CtxLogger(ctx).Warn("Error retrieving forwarding rule", log.String("fwrName", fwrName), log.Error(err))
 		return res
 	}
 
@@ -915,13 +915,13 @@ func (d *Discovery) discoverForwardingRuleFromURI(fwrURI string) []*spb.SapDisco
 	}
 	res = append(res, fr)
 
-	lbRes := d.discoverLoadBalancerFromForwardingRule(fwr, fr)
+	lbRes := d.discoverLoadBalancerFromForwardingRule(ctx, fwr, fr)
 	res = append(res, lbRes...)
 
 	return res
 }
 
-func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverAddressFromURI(ctx context.Context, addressURI string) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	addrProject := extractFromURI(addressURI, "projects")
 	addrLocation := extractFromURI(addressURI, "zones")
@@ -930,11 +930,11 @@ func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.SapDiscover
 		addrLocation = extractFromURI(addressURI, "regions")
 	}
 	if addrLocation == "" && !strings.Contains(addressURI, "/global/") {
-		log.Logger.Warnw("Unknown location type for address", "addressURI", addressURI)
+		log.CtxLogger(ctx).Warnw("Unknown location type for address", "addressURI", addressURI)
 		return res
 	}
 	// IP is assigned to an address
-	log.Logger.Info("Address found")
+	log.CtxLogger(ctx).Info("Address found")
 	ar := &spb.SapDiscovery_Resource{
 		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
@@ -946,22 +946,22 @@ func (d *Discovery) discoverAddressFromURI(addressURI string) []*spb.SapDiscover
 
 	addr, err := d.gceService.GetAddress(addrProject, addrLocation, addrName)
 	if err != nil {
-		log.Logger.Warnw("Error retrieving address", "error", err)
+		log.CtxLogger(ctx).Warnw("Error retrieving address", "error", err)
 		return res
 	}
 
-	res = append(res, d.discoverAddressUsers(addr)...)
+	res = append(res, d.discoverAddressUsers(ctx, addr)...)
 
 	return res
 }
 
-func (d *Discovery) discoverAddressUsers(addr *compute.Address) []*spb.SapDiscovery_Resource {
+func (d *Discovery) discoverAddressUsers(ctx context.Context, addr *compute.Address) []*spb.SapDiscovery_Resource {
 	var res []*spb.SapDiscovery_Resource
 	// IP is associated with an address
 	// Is that address assigned to an instance or a load balancer
 	if len(addr.Users) == 0 {
 		// No users
-		log.Logger.Warn("ComputeAddress has no users")
+		log.CtxLogger(ctx).Warn("ComputeAddress has no users")
 		return res
 	}
 
@@ -969,14 +969,14 @@ func (d *Discovery) discoverAddressUsers(addr *compute.Address) []*spb.SapDiscov
 		switch {
 		case extractFromURI(user, "instances") != "":
 			// Address' user is a ComputeInstance
-			iRes := d.discoverInstanceFromURI(user)
+			iRes := d.discoverInstanceFromURI(ctx, user)
 			res = append(res, iRes...)
 		case extractFromURI(user, "forwardingRules") != "":
-			log.Logger.Info("User is forwarding rule")
-			fRes := d.discoverForwardingRuleFromURI(user)
+			log.CtxLogger(ctx).Info("User is forwarding rule")
+			fRes := d.discoverForwardingRuleFromURI(ctx, user)
 			res = append(res, fRes...)
 		default:
-			log.Logger.Warnw("Unknown address user type for address", "addrUser", user)
+			log.CtxLogger(ctx).Warnw("Unknown address user type for address", "addrUser", user)
 		}
 	}
 
@@ -1098,7 +1098,7 @@ func (d *Discovery) discoverDBNodes(ctx context.Context, sid, instanceNumber, pr
 			log.CtxLogger(ctx).Warnw("Error retrieving instance by IP", "IP", hostAddrs[0], "error", err)
 			continue
 		}
-		iRes, _, _ := d.discoverInstance(project, zone, i.Name)
+		iRes, _, _ := d.discoverInstance(ctx, project, zone, i.Name)
 		res = append(res, iRes...)
 	}
 

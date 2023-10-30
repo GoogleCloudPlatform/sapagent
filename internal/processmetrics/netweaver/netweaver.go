@@ -30,10 +30,10 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -93,7 +93,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		metricsCollectionError = err
 	}
 
-	httpMetrics, err := collectHTTPMetrics(p)
+	httpMetrics, err := collectHTTPMetrics(ctx, p)
 	if err != nil {
 		metricsCollectionError = err
 	}
@@ -205,18 +205,18 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 		err   error
 		procs map[int]*sapcontrol.ProcessStatus
 	)
-	procs, err = sc.GetProcessList(scc)
+	procs, err = sc.GetProcessList(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error performing GetProcessList web method", log.Error(err))
 		return nil, err
 	}
-	metrics := collectServiceMetrics(p, procs, now)
+	metrics := collectServiceMetrics(ctx, p, procs, now)
 	return metrics, nil
 }
 
 // collectServiceMetrics collects NetWeaver "service" metrics describing Netweaver service
 // processes as managed by the sapcontrol program.
-func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries) {
+func collectServiceMetrics(ctx context.Context, p *InstanceProperties, procs map[int]*sapcontrol.ProcessStatus, now *tspb.Timestamp) (metrics []*mrpb.TimeSeries) {
 	start := tspb.Now()
 
 	for _, proc := range procs {
@@ -232,31 +232,31 @@ func collectServiceMetrics(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 		}
 		value := boolToInt64(proc.IsGreen)
 
-		log.Logger.Debugw("Creating metrics for process",
+		log.CtxLogger(ctx).Debugw("Creating metrics for process",
 			"metric", nwServicePath, "process", proc.Name, "instanceid", p.SAPInstance.GetInstanceId(), "value", value)
 		metrics = append(metrics, createMetrics(p, nwServicePath, extraLabels, now, value))
 	}
-	log.Logger.Debugw("Time taken to collect metrics in collectServiceMetrics()", "time", time.Since(start.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectServiceMetrics()", "time", time.Since(start.AsTime()))
 	return metrics
 }
 
 // collectHTTPMetrics collects the HTTP health check metrics for different types of
 // Netweaver instances based on their types.
-func collectHTTPMetrics(p *InstanceProperties) ([]*mrpb.TimeSeries, error) {
+func collectHTTPMetrics(ctx context.Context, p *InstanceProperties) ([]*mrpb.TimeSeries, error) {
 	url := p.SAPInstance.GetNetweaverHealthCheckUrl()
 	if url == "" {
-		log.Logger.Debugw("SAP Instance HTTP health check URL is empty", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
+		log.CtxLogger(ctx).Debugw("SAP Instance HTTP health check URL is empty", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
 		return nil, fmt.Errorf("SAP Instance HTTP health check URL is empty %s", p.SAPInstance.GetInstanceId())
 	}
-	log.Logger.Debugw("SAP Instance HTTP health check", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
+	log.CtxLogger(ctx).Debugw("SAP Instance HTTP health check", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
 
 	switch p.SAPInstance.GetServiceName() {
 	case "SAP-ICM-ABAP", "SAP-ICM-JAVA":
-		return collectICMMetrics(p, url)
+		return collectICMMetrics(ctx, p, url)
 	case "SAP-CS":
-		return collectMessageServerMetrics(p, url)
+		return collectMessageServerMetrics(ctx, p, url)
 	default:
-		log.Logger.Debugw("unsupported service name: %s", p.SAPInstance.GetServiceName())
+		log.CtxLogger(ctx).Debugw("unsupported service name: %s", p.SAPInstance.GetServiceName())
 		return nil, fmt.Errorf("unsupported service name: %s", p.SAPInstance.GetServiceName())
 	}
 }
@@ -265,7 +265,7 @@ func collectHTTPMetrics(p *InstanceProperties) ([]*mrpb.TimeSeries, error) {
 // Returns metrics built using:
 //   - HTTP response code.
 //   - Total time taken by the request.
-func collectICMMetrics(p *InstanceProperties, url string) ([]*mrpb.TimeSeries, error) {
+func collectICMMetrics(ctx context.Context, p *InstanceProperties, url string) ([]*mrpb.TimeSeries, error) {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
 	if _, ok := p.SkippedMetrics[nwICMRCodePath]; ok {
 		return nil, nil
@@ -274,14 +274,14 @@ func collectICMMetrics(p *InstanceProperties, url string) ([]*mrpb.TimeSeries, e
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
 	if err != nil {
-		log.Logger.Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
+		log.CtxLogger(ctx).Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
 		return nil, err
 	}
 	defer response.Body.Close()
 
 	extraLabels := map[string]string{"service_name": p.SAPInstance.GetServiceName()}
 
-	log.Logger.Debugw("Time taken to collect metrics in collectICMMetrics", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectICMMetrics", "time", time.Since(now.AsTime()))
 	return []*mrpb.TimeSeries{
 		createMetrics(p, nwICMRCodePath, extraLabels, now, int64(response.StatusCode)),
 		createMetrics(p, nwICMRTimePath, extraLabels, now, timeTaken.Milliseconds()),
@@ -293,7 +293,7 @@ func collectICMMetrics(p *InstanceProperties, url string) ([]*mrpb.TimeSeries, e
 //   - Two metrics - HTTP response code and response time for all HTTP status codes.
 //   - Additional work process count as reported by the message server info page on StatusOK(200).
 //   - A nil in case of errors in HTTP GET request failures.
-func collectMessageServerMetrics(p *InstanceProperties, url string) ([]*mrpb.TimeSeries, error) {
+func collectMessageServerMetrics(ctx context.Context, p *InstanceProperties, url string) ([]*mrpb.TimeSeries, error) {
 	// Since these metrics are derived from the same operation, even if one of the metric is skipped the whole group will be skipped from collection.
 	if _, ok := p.SkippedMetrics[nwMSResponseCodePath]; ok {
 		return nil, nil
@@ -302,7 +302,7 @@ func collectMessageServerMetrics(p *InstanceProperties, url string) ([]*mrpb.Tim
 	response, err := http.Get(url)
 	timeTaken := time.Since(now.AsTime())
 	if err != nil {
-		log.Logger.Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
+		log.CtxLogger(ctx).Debugw("HTTP GET failed", "instanceid", p.SAPInstance.GetInstanceId(), "url", url, "error", err)
 		return nil, err
 	}
 	defer response.Body.Close()
@@ -315,17 +315,17 @@ func collectMessageServerMetrics(p *InstanceProperties, url string) ([]*mrpb.Tim
 	}
 
 	if response.StatusCode != http.StatusOK {
-		log.Logger.Debugw("HTTP GET failed", "statuscode", response.StatusCode, "response", response)
-		log.Logger.Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
+		log.CtxLogger(ctx).Debugw("HTTP GET failed", "statuscode", response.StatusCode, "response", response)
+		log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
 		return nil, fmt.Errorf("HTTP GET failed code: %d", response.StatusCode)
 	}
 
 	workProcessCount, err := parseWorkProcessCount(response.Body)
 	if err != nil {
-		log.Logger.Debugw("Reading work process count from message server info page failed", "error", err)
+		log.CtxLogger(ctx).Debugw("Reading work process count from message server info page failed", "error", err)
 		return nil, err
 	}
-	log.Logger.Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectMessageServerMetrics()", "time", time.Since(now.AsTime()))
 
 	return append(metrics, createMetrics(p, nwMSWorkProcessesPath, extraLabels, now, int64(workProcessCount))), nil
 }
@@ -364,7 +364,7 @@ func collectABAPProcessStatus(ctx context.Context, p *InstanceProperties, scc sa
 		busyProcessCount map[string]int
 		busyPercentage   map[string]int
 	)
-	wpDetails, err := sc.ABAPGetWPTable(scc)
+	wpDetails, err := sc.ABAPGetWPTable(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Sapcontrol web method failed", "error", err)
 		return nil, err
@@ -412,7 +412,7 @@ func collectABAPQueueStats(ctx context.Context, p *InstanceProperties, scc sapco
 		currentQueueUsage map[string]int64
 		peakQueueUsage    map[string]int64
 	)
-	currentQueueUsage, peakQueueUsage, err = sc.GetQueueStatistic(scc)
+	currentQueueUsage, peakQueueUsage, err = sc.GetQueueStatistic(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Sapcontrol web method failed", "error", err)
 		return nil, err
@@ -516,7 +516,7 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 	var enqLocks []*sapcontrol.EnqLock
 	var err error
 
-	enqLocks, err = sc.EnqGetLockTable(scc)
+	enqLocks, err = sc.EnqGetLockTable(ctx, scc)
 	if err != nil {
 		return nil, err
 	}

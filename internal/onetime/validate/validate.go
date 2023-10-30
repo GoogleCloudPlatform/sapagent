@@ -76,20 +76,20 @@ func (v *Validate) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, v.Name(), log.StringLevelToZapcore(v.logLevel))
-	return v.validateHandler()
+	return v.validateHandler(ctx)
 }
 
-func (v *Validate) validateHandler() subcommands.ExitStatus {
+func (v *Validate) validateHandler(ctx context.Context) subcommands.ExitStatus {
 	if v.workloadCollection != "" {
-		return v.validateWorkloadCollectionHandler(os.ReadFile, v.workloadCollection)
+		return v.validateWorkloadCollectionHandler(ctx, os.ReadFile, v.workloadCollection)
 	}
 	return subcommands.ExitSuccess
 }
 
-func (v *Validate) validateWorkloadCollectionHandler(read collectiondefinition.ReadFile, path string) subcommands.ExitStatus {
+func (v *Validate) validateWorkloadCollectionHandler(ctx context.Context, read collectiondefinition.ReadFile, path string) subcommands.ExitStatus {
 	log.Print("Beginning workload collection validation for file: " + path)
 	log.Logger.Infow("Beginning workload collection validation.", "path", path)
-	cd, err := collectiondefinition.FromJSONFile(read, path)
+	cd, err := collectiondefinition.FromJSONFile(ctx, read, path)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("Failed to load workload collection file.", err)
 		return subcommands.ExitFailure

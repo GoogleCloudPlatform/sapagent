@@ -28,9 +28,9 @@ import (
 
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -146,11 +146,11 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 	)
 	sc := &sapcontrol.Properties{Instance: p.sapInstance}
 	scc := p.SAPControlClient
-	processes, err = sc.GetProcessList(scc)
+	processes, err = sc.GetProcessList(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Error("Error performing GetProcessList web method in computeresources", log.Error(err))
 	}
-	wpDetails, err := sc.ABAPGetWPTable(scc)
+	wpDetails, err := sc.ABAPGetWPTable(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Error getting ABAP processes from ABAPGetWPTable web method", log.Error(err))
 	} else {

@@ -123,7 +123,7 @@ func TestValidateWorkloadCollectionHandler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			validate := Validate{}
-			got := validate.validateWorkloadCollectionHandler(test.read, "filepath")
+			got := validate.validateWorkloadCollectionHandler(context.Background(), test.read, "filepath")
 			if got != test.want {
 				t.Errorf("validateWorkloadCollectionHandler() got %v, want %v", got, test.want)
 			}

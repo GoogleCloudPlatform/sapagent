@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -222,12 +222,12 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 		return 0, nil, exitStatus, nil
 	}
 
-	mode, err = readMode(result.StdOut, instID, site)
+	mode, err = readMode(ctx, result.StdOut, instID, site)
 	if err != nil {
 		return 0, nil, 0, err
 	}
 
-	HAMembers, err = readHAMembers(result.StdOut, instID)
+	HAMembers, err = readHAMembers(ctx, result.StdOut, instID)
 	if err != nil {
 		return mode, nil, exitStatus, err
 	}
@@ -235,32 +235,32 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	return mode, HAMembers, exitStatus, nil
 }
 
-func readMode(stdOut, instID string, site int) (mode int, err error) {
+func readMode(ctx context.Context, stdOut, instID string, site int) (mode int, err error) {
 	modePattern, err := regexp.Compile(fmt.Sprintf("site/%d/REPLICATION_MODE=(.*)", site))
 	if err != nil {
-		log.Logger.Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
+		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
 		return 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance")
 	}
 	match := modePattern.FindStringSubmatch(stdOut)
 	if len(match) < 2 {
-		log.Logger.Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
+		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
 		return 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance: %s", instID)
 	}
 	if match[1] == "PRIMARY" {
 		mode = 1
-		log.Logger.Debug("Current SAP HANA node is primary")
+		log.CtxLogger(ctx).Debug("Current SAP HANA node is primary")
 	} else {
 		mode = 2
-		log.Logger.Debug("Current SAP HANA node is secondary")
+		log.CtxLogger(ctx).Debug("Current SAP HANA node is secondary")
 	}
 
 	return mode, nil
 }
 
-func readHAMembers(stdOut, instID string) (HAMembers []string, err error) {
+func readHAMembers(ctx context.Context, stdOut, instID string) (HAMembers []string, err error) {
 	haSites := haPattern.FindAllStringSubmatch(stdOut, -1)
 	if len(haSites) < 1 {
-		log.Logger.Debugw("Error determining SAP HANA HA members for instance", "instanceid", instID)
+		log.CtxLogger(ctx).Debugw("Error determining SAP HANA HA members for instance", "instanceid", instID)
 		return nil, fmt.Errorf("error determining SAP HANA HA members for instance: %s", instID)
 	}
 
@@ -271,15 +271,15 @@ func readHAMembers(stdOut, instID string) (HAMembers []string, err error) {
 		} else {
 			HAMembers = []string{site2, site1}
 		}
-		log.Logger.Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
+		log.CtxLogger(ctx).Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
 	} else {
 		match := primaryMastersPattern.FindStringSubmatch(stdOut)
 		if len(match) < 2 {
-			log.Logger.Debugw("Error determining SAP HANA HA - Primary for instance", "instanceid", instID)
+			log.CtxLogger(ctx).Debugw("Error determining SAP HANA HA - Primary for instance", "instanceid", instID)
 			return nil, fmt.Errorf("error determining SAP HANA HA - Primary for instance: %s", instID)
 		}
 		HAMembers = []string{match[1], haSites[0][2]}
-		log.Logger.Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
+		log.CtxLogger(ctx).Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
 	}
 
 	return HAMembers, nil

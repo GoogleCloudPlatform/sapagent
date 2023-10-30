@@ -510,7 +510,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 			tc.gceService.NodeGroupNodes.Items[0].UpcomingMaintenance = tc.upcomingMaintenance
 		}
 		p := New(&cpb.Configuration{CloudProperties: tc.cloudProperties}, nil, tc.gceService, tc.skipMetrics, nil)
-		m, err := p.collectUpcomingMaintenance()
+		m, err := p.collectUpcomingMaintenance(context.Background())
 		if d := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); d != "" {
 			t.Errorf("collectUpcomingMaintenance(%s) error mismatch (-want, +got):\n%s", tc.name, d)
 		}
@@ -526,7 +526,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 
 func TestCollectUpcomingMaintenanceNotInitialized(t *testing.T) {
 	p := New(&cpb.Configuration{}, nil, &gcebeta.GCEBeta{}, nil, nil)
-	_, err := p.collectUpcomingMaintenance()
+	_, err := p.collectUpcomingMaintenance(context.Background())
 	if err == nil {
 		t.Error("collectUpcomingMaintenance(NotInitialized) got success expected error")
 	}

@@ -254,7 +254,7 @@ func TestCollectMetricsFromFile(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := CollectMetricsFromFile(test.reader, test.path, test.metrics)
+			got := CollectMetricsFromFile(context.Background(), test.reader, test.path, test.metrics)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("CollectMetricsFromFile(%v) mismatch (-want, +got):\n%s", test.metrics, diff)
 			}
@@ -652,7 +652,7 @@ func TestEvaluate(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotValue, gotResult := Evaluate(test.metric, test.output)
+			gotValue, gotResult := Evaluate(context.Background(), test.metric, test.output)
 			if gotValue != test.wantValue {
 				t.Errorf("Evaluate() returned unexpected value got %s want %s", gotValue, test.wantValue)
 			}

@@ -22,9 +22,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
 var (
@@ -147,7 +147,7 @@ func TestGetProcessList(t *testing.T) {
 				respErr = cmpopts.AnyError
 			}
 			fakeSAPClient := sapcontrolclienttest.Fake{Processes: test.respProcesses, ErrGetProcessList: respErr}
-			gotProcStatus, gotErr := p.GetProcessList(fakeSAPClient)
+			gotProcStatus, gotErr := p.GetProcessList(context.Background(), fakeSAPClient)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("GetProcessList(%v), gotErr: %v wantErr: %v.", fakeSAPClient, gotErr, test.wantErr)
 			}
@@ -212,7 +212,7 @@ func TestABAPGetWPTable(t *testing.T) {
 			}
 			wantWPDetails := WorkProcessDetails{test.wantProcesses, test.wantBusyProcesses, test.wantBusyPercentage, test.wantPIDMap}
 			fakeSAPClient := sapcontrolclienttest.Fake{WorkProcesses: test.wp, ErrABAPGetWPTable: respErr}
-			gotWPDetails, err := p.ABAPGetWPTable(fakeSAPClient)
+			gotWPDetails, err := p.ABAPGetWPTable(context.Background(), fakeSAPClient)
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ABAPGetWPTable(%v)=%v, want: %v.", fakeSAPClient, err, test.wantErr)
 			}
@@ -328,7 +328,7 @@ func TestGetQueueStatistic(t *testing.T) {
 				respErr = cmpopts.AnyError
 			}
 			fakeSAPClient := sapcontrolclienttest.Fake{TaskQueues: test.taskQueues, ErrGetQueueStatistic: respErr}
-			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.GetQueueStatistic(fakeSAPClient)
+			gotCurrentQueueUsage, gotPeakQueueUsage, err := p.GetQueueStatistic(context.Background(), fakeSAPClient)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("GetQueueStatistic(%v)=%v, want: %v.", fakeSAPClient, err, test.wantErr)
@@ -390,7 +390,7 @@ func TestEnqGetLockTable(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var p Properties
-			got, err := p.EnqGetLockTable(tc.c)
+			got, err := p.EnqGetLockTable(context.Background(), tc.c)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("EnqGetLockTable(%v)=%v, want %v", tc.c, err, tc.wantErr)
 			}

@@ -112,7 +112,7 @@ func TestCollectNodeState(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues, gotErr := collectNodeState(test.properties, test.fakeNodeState, nil)
+			gotMetrics, gotValues, gotErr := collectNodeState(context.Background(), test.properties, test.fakeNodeState, nil)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
@@ -258,7 +258,7 @@ func TestCollectResourceState(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues, gotErr := collectResourceState(test.properties, test.fakeResourceState, nil)
+			gotMetrics, gotValues, gotErr := collectResourceState(context.Background(), test.properties, test.fakeResourceState, nil)
 
 			if diff := cmp.Diff(test.wantValues, gotValues); diff != "" {
 				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
@@ -443,7 +443,7 @@ func TestCollectFailCount(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues, gotErr := collectFailCount(test.properties, test.fakeReadFailCount, nil)
+			gotMetrics, gotValues, gotErr := collectFailCount(context.Background(), test.properties, test.fakeReadFailCount, nil)
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectFailCount() returned unexpected diff (-want,+got): %s\n", diff)

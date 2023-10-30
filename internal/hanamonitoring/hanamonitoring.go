@@ -206,7 +206,7 @@ func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, param
 		if err := rows.Scan(cols...); err != nil {
 			return 0, 0, err
 		}
-		metrics = append(metrics, createMetricsForRow(db.instance.GetName(), db.instance.GetSid(), query, cols, params, runningSum)...)
+		metrics = append(metrics, createMetricsForRow(ctx, db.instance.GetName(), db.instance.GetSid(), query, cols, params, runningSum)...)
 	}
 	return cloudmonitoring.SendTimeSeries(ctx, metrics, params.TimeSeriesCreator, params.BackOffs, params.Config.GetCloudProperties().GetProjectId())
 }
@@ -283,7 +283,7 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 
 // createMetricsForRow will loop through each column in a query row result twice.
 // First populate the metric labels, then create metrics for GAUGE and CUMULATIVE types.
-func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, params Parameters, runningSum map[timeSeriesKey]prevVal) []*mrpb.TimeSeries {
+func createMetricsForRow(ctx context.Context, dbName, sid string, query *cpb.Query, cols []any, params Parameters, runningSum map[timeSeriesKey]prevVal) []*mrpb.TimeSeries {
 	labels := map[string]string{
 		"instance_name": dbName,
 		"sid":           sid,
@@ -298,7 +298,7 @@ func createMetricsForRow(dbName, sid string, query *cpb.Query, cols []any, param
 				metrics = append(metrics, metric)
 			}
 		} else if c.GetMetricType() == cpb.MetricType_METRIC_CUMULATIVE {
-			if metric, ok := createCumulativeMetric(c, cols[i], labels, query.GetName(), params, tspb.Now(), runningSum); ok {
+			if metric, ok := createCumulativeMetric(ctx, c, cols[i], labels, query.GetName(), params, tspb.Now(), runningSum); ok {
 				metrics = append(metrics, metric)
 			}
 		}
@@ -358,7 +358,7 @@ func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryNa
 
 // createCumulativeMetric builds a cloudmonitoring timeseries with an int or float point value for
 // the specified column. It returns (nil, false) when it is unable to build the timeseries.
-func createCumulativeMetric(c *cpb.Column, val any, labels map[string]string, queryName string, params Parameters, timestamp *tspb.Timestamp, runningSum map[timeSeriesKey]prevVal) (*mrpb.TimeSeries, bool) {
+func createCumulativeMetric(ctx context.Context, c *cpb.Column, val any, labels map[string]string, queryName string, params Parameters, timestamp *tspb.Timestamp, runningSum map[timeSeriesKey]prevVal) (*mrpb.TimeSeries, bool) {
 	metricPath := metricURL + "/" + queryName + "/" + c.GetName()
 	if c.GetNameOverride() != "" {
 		metricPath = metricURL + "/" + c.GetNameOverride()
@@ -383,13 +383,13 @@ func createCumulativeMetric(c *cpb.Column, val any, labels map[string]string, qu
 			ts.Int64Value = *result
 		}
 		if lastVal, ok := runningSum[tsKey]; ok {
-			log.Logger.Debugw("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
+			log.CtxLogger(ctx).Debugw("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
 			ts.Int64Value = ts.Int64Value + lastVal.val.(int64)
 			ts.StartTime = lastVal.startTime
 			runningSum[tsKey] = prevVal{val: ts.Int64Value, startTime: ts.StartTime}
 			return timeseries.BuildInt(ts), true
 		}
-		log.Logger.Debugw("Key does not yet exist, not creating metric.", "Key", tsKey)
+		log.CtxLogger(ctx).Debugw("Key does not yet exist, not creating metric.", "Key", tsKey)
 		runningSum[tsKey] = prevVal{val: ts.Int64Value, startTime: ts.StartTime}
 		return nil, false
 	case cpb.ValueType_VALUE_DOUBLE:
@@ -397,13 +397,13 @@ func createCumulativeMetric(c *cpb.Column, val any, labels map[string]string, qu
 			ts.Float64Value = *result
 		}
 		if lastVal, ok := runningSum[tsKey]; ok {
-			log.Logger.Debugw("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
+			log.CtxLogger(ctx).Debugw("Found already existing key.", "Key", tsKey, "prevVal", lastVal)
 			ts.Float64Value = ts.Float64Value + lastVal.val.(float64)
 			ts.StartTime = lastVal.startTime
 			runningSum[tsKey] = prevVal{val: ts.Float64Value, startTime: ts.StartTime}
 			return timeseries.BuildFloat64(ts), true
 		}
-		log.Logger.Debugw("Key does not yet exist, not creating metric.", "Key", tsKey)
+		log.CtxLogger(ctx).Debugw("Key does not yet exist, not creating metric.", "Key", tsKey)
 		runningSum[tsKey] = prevVal{val: ts.Float64Value, startTime: ts.StartTime}
 		return nil, false
 	default:

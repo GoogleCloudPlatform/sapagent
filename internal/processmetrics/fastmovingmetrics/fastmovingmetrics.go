@@ -165,7 +165,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		availabilityValue int64
 	)
 	if _, ok := ip.SkippedMetrics[availabilityPath]; !ok {
-		processes, err = sc.GetProcessList(scc)
+		processes, err = sc.GetProcessList(ctx, scc)
 		if err != nil {
 			return nil, err
 		}
@@ -275,7 +275,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 		procs   map[int]*sapcontrol.ProcessStatus
 		metrics []*mrpb.TimeSeries
 	)
-	procs, err = sc.GetProcessList(scc)
+	procs, err = sc.GetProcessList(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error performing GetProcessList web method", log.Error(err))
 		return nil, err

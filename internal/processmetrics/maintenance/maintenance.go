@@ -114,7 +114,7 @@ type InstanceProperties struct {
 
 // ReadMaintenanceMode reads the current value for the SIDs under maintenance persisted in
 // maintenance.json file, If the file is empty or it does not exist no sid is considered under
-// maintenace.
+// maintenance.
 // An unsuccessful call will return nil, err
 func ReadMaintenanceMode(fr FileReader) ([]string, error) {
 	content, err := fr.Read(filepath.Join(linuxDirPath, fileName))

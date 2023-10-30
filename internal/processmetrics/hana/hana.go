@@ -172,7 +172,7 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 	)
 
 	if _, ok := ip.SkippedMetrics[servicePath]; !ok {
-		processes, err = sc.GetProcessList(scc)
+		processes, err = sc.GetProcessList(ctx, scc)
 		if err != nil {
 			return nil, err
 		}

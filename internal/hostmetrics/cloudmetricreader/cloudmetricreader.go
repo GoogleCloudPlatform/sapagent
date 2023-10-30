@@ -121,12 +121,12 @@ func (r *CloudMetricReader) createPassthroughMetrics(ctx context.Context, config
 			alignment:       "mean",
 		})
 	}
-	metricValues := parseTimeSeriesData(passthroughMetrics, data)
+	metricValues := parseTimeSeriesData(ctx, passthroughMetrics, data)
 	log.CtxLogger(ctx).Debugw("Metric values", "values", metricValues)
 
 	var metrics []*metricspb.Metric
 	for k, v := range metricValues {
-		metrics = append(metrics, buildMetric(k, v, refresh, ""))
+		metrics = append(metrics, buildMetric(ctx, k, v, refresh, ""))
 	}
 	return metrics
 }
@@ -151,14 +151,14 @@ func (r *CloudMetricReader) createNetworkMetrics(ctx context.Context, adapters [
 			alignment:       "delta",
 		})
 	}
-	metricValues := parseTimeSeriesData(networkMetrics, data)
+	metricValues := parseTimeSeriesData(ctx, networkMetrics, data)
 	log.CtxLogger(ctx).Debugw("Network metric values", "values", metricValues)
 
 	// Since device is shared across adapters, it is expected that the metrics returned will be the same for each.
 	for _, adapter := range adapters {
 		for _, k := range networkMetrics {
 			if v, ok := metricValues[k]; ok {
-				metrics = append(metrics, buildMetric(k, v, refresh, adapter.GetName()))
+				metrics = append(metrics, buildMetric(ctx, k, v, refresh, adapter.GetName()))
 			}
 		}
 	}
@@ -214,17 +214,17 @@ func (r *CloudMetricReader) createDiskMetrics(ctx context.Context, disks []*inst
 			aggregation:     "max",
 		})
 	}
-	diskDeltaMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskDeltaMetrics, diskDeltaData)
+	diskDeltaMetricValues := parseTimeSeriesDataByDisk(ctx, deviceNames, diskDeltaMetrics, diskDeltaData)
 	log.CtxLogger(ctx).Debugw("Disk delta metric values", "values", diskDeltaMetricValues)
-	diskRateMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskRateMetrics, diskRateData)
+	diskRateMetricValues := parseTimeSeriesDataByDisk(ctx, deviceNames, diskRateMetrics, diskRateData)
 	log.CtxLogger(ctx).Debugw("Disk rate metric values", "values", diskRateMetricValues)
-	diskMaxMetricValues := parseTimeSeriesDataByDisk(deviceNames, diskMaxMetrics, diskMaxData)
+	diskMaxMetricValues := parseTimeSeriesDataByDisk(ctx, deviceNames, diskMaxMetrics, diskMaxData)
 	log.CtxLogger(ctx).Debugw("Disk max metric values", "values", diskMaxMetricValues)
 
 	for _, deviceID := range deviceNames {
 		for _, k := range diskDeltaMetrics {
 			if v, ok := diskDeltaMetricValues[deviceID][k]; ok {
-				metrics = append(metrics, buildMetric(k, v, refresh, deviceID))
+				metrics = append(metrics, buildMetric(ctx, k, v, refresh, deviceID))
 			}
 		}
 		readOpsRate := diskRateMetricValues[deviceID][metricDiskReadOpsCountRate]
@@ -282,8 +282,8 @@ func (r *CloudMetricReader) queryTimeSeriesData(ctx context.Context, metrics []s
 }
 
 // buildMetric returns a formatted Metric proto containing the time series data value found for a given metric key and refresh time.
-func buildMetric(key sapMetricKey, value float64, refresh time.Time, deviceID string) *metricspb.Metric {
-	log.Logger.Debugw("Building metric with value", "metric", key, "value", value)
+func buildMetric(ctx context.Context, key sapMetricKey, value float64, refresh time.Time, deviceID string) *metricspb.Metric {
+	log.CtxLogger(ctx).Debugw("Building metric with value", "metric", key, "value", value)
 	sap := sapMetrics[key]
 	metric := &metricspb.Metric{
 		Context:         sap.context,
@@ -359,7 +359,7 @@ func formatTime(t time.Time) string {
 //	  "metricKey2": float64(metricValue2),
 //	  ...
 //	}
-func parseTimeSeriesData(metrics []sapMetricKey, data []*mrpb.TimeSeriesData) map[sapMetricKey]float64 {
+func parseTimeSeriesData(ctx context.Context, metrics []sapMetricKey, data []*mrpb.TimeSeriesData) map[sapMetricKey]float64 {
 	metricValues := make(map[sapMetricKey]float64)
 	// Assign default metric values of unavailable.
 	for _, m := range metrics {
@@ -367,12 +367,12 @@ func parseTimeSeriesData(metrics []sapMetricKey, data []*mrpb.TimeSeriesData) ma
 	}
 
 	if len(data) == 0 {
-		log.Logger.Debugw("There is no time series data for metrics", "metrics", metrics)
+		log.CtxLogger(ctx).Debugw("There is no time series data for metrics", "metrics", metrics)
 		return metricValues
 	}
 	points := data[0].GetPointData()
 	if len(points) == 0 {
-		log.Logger.Debugw("There is no point data in the time series for metrics", "metrics", metrics)
+		log.CtxLogger(ctx).Debugw("There is no point data in the time series for metrics", "metrics", metrics)
 		return metricValues
 	}
 	// In the event of multiple points in the time series, the first entry is the most recent.
@@ -407,7 +407,7 @@ func parseTimeSeriesData(metrics []sapMetricKey, data []*mrpb.TimeSeriesData) ma
 //	  },
 //	  ...
 //	}
-func parseTimeSeriesDataByDisk(deviceNames []string, metrics []sapMetricKey, data []*mrpb.TimeSeriesData) map[string]map[sapMetricKey]float64 {
+func parseTimeSeriesDataByDisk(ctx context.Context, deviceNames []string, metrics []sapMetricKey, data []*mrpb.TimeSeriesData) map[string]map[sapMetricKey]float64 {
 	metricValues := make(map[string]map[sapMetricKey]float64)
 	// Assign default metric values of unavailable.
 	for _, d := range deviceNames {
@@ -418,13 +418,13 @@ func parseTimeSeriesDataByDisk(deviceNames []string, metrics []sapMetricKey, dat
 	}
 
 	if len(data) == 0 {
-		log.Logger.Debugw("There is no time series data for metrics", "metrics", metrics)
+		log.CtxLogger(ctx).Debugw("There is no time series data for metrics", "metrics", metrics)
 		return metricValues
 	}
 	for i, d := range data {
 		// Each entry for time series data should correspond to a device name supplied in the query filter.
 		if i < len(deviceNames) {
-			metricValues[deviceNames[i]] = parseTimeSeriesData(metrics, []*mrpb.TimeSeriesData{d})
+			metricValues[deviceNames[i]] = parseTimeSeriesData(ctx, metrics, []*mrpb.TimeSeriesData{d})
 		}
 	}
 	return metricValues

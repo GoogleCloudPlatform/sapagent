@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -126,18 +126,18 @@ func ExecProcessList(ctx context.Context, exec commandlineexecutor.Execute, para
 //     in the returned process list, and the value is an ProcessStatus struct containing process
 //     status details.
 //   - Error if sapcontrolclient.GetProcessList fails, nil otherwise.
-func (p *Properties) GetProcessList(c ClientInterface) (map[int]*ProcessStatus, error) {
+func (p *Properties) GetProcessList(ctx context.Context, c ClientInterface) (map[int]*ProcessStatus, error) {
 	processes, err := c.GetProcessList()
 	if err != nil {
-		log.Logger.Debugw("Failed to get SAP Process Status via API call", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failed to get SAP Process Status via API call", log.Error(err), "SAPSID:", p.Instance.GetSapsid(), "Instance Number:", p.Instance.GetInstanceNumber())
 		return nil, err
 	}
-	log.Logger.Debugw("Sapcontrol GetProcessList", "API response", processes)
+	log.CtxLogger(ctx).Debugw("Sapcontrol GetProcessList", "API response", processes, "SAPSID:", p.Instance.GetSapsid(), "Instance Number:", p.Instance.GetInstanceNumber())
 
-	return createProcessMapFromAPIResp(processes), nil
+	return createProcessMapFromAPIResp(ctx, processes), nil
 }
 
-func createProcessMapFromAPIResp(resp []sapcontrolclient.OSProcess) map[int]*ProcessStatus {
+func createProcessMapFromAPIResp(ctx context.Context, resp []sapcontrolclient.OSProcess) map[int]*ProcessStatus {
 	processes := make(map[int]*ProcessStatus)
 	for i, p := range resp {
 		if p.Name == "" || p.Dispstatus == "" || p.Pid == 0 {
@@ -156,7 +156,7 @@ func createProcessMapFromAPIResp(resp []sapcontrolclient.OSProcess) map[int]*Pro
 		}
 	}
 
-	log.Logger.Debugw("Process statuses", "statuses", processes)
+	log.CtxLogger(ctx).Debugw("Process statuses", "statuses", processes)
 	return processes
 }
 
@@ -174,19 +174,19 @@ type WorkProcessDetails struct {
 
 // ABAPGetWPTable uses the sapcontrolclient package to run the ABAPGetWPTable SAPControl function.
 // Returns: WorkProcessDetails struct
-func (p *Properties) ABAPGetWPTable(c ClientInterface) (WorkProcessDetails, error) {
+func (p *Properties) ABAPGetWPTable(ctx context.Context, c ClientInterface) (WorkProcessDetails, error) {
 	wp, err := c.ABAPGetWPTable()
 	if err != nil {
-		log.Logger.Debugw("Failed to run ABAPGetWPTable API call", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failed to run ABAPGetWPTable API call", log.Error(err), "SAPSID:", p.Instance.GetSapsid(), "Instance Number:", p.Instance.GetInstanceNumber())
 		return WorkProcessDetails{}, err
 	}
 
-	log.Logger.Debugw("Sapcontrol ABAPGetWPTable", "API Response", wp)
-	return processABAPGetWPTableResponse(wp), nil
+	log.CtxLogger(ctx).Debugw("Sapcontrol ABAPGetWPTable", "API Response", wp, "SAPSID:", p.Instance.GetSapsid(), "Instance Number:", p.Instance.GetInstanceNumber())
+	return processABAPGetWPTableResponse(ctx, wp), nil
 }
 
 // processABAPGetWPTableResponse processes the WorkProcess list returned by the ABAPGetWPTable SAPControl function.
-func processABAPGetWPTableResponse(wp []sapcontrolclient.WorkProcess) (wpDetails WorkProcessDetails) {
+func processABAPGetWPTableResponse(ctx context.Context, wp []sapcontrolclient.WorkProcess) (wpDetails WorkProcessDetails) {
 	wpDetails.Processes = make(map[string]int)
 	wpDetails.BusyProcesses = make(map[string]int)
 	wpDetails.BusyProcessPercentage = make(map[string]int)
@@ -203,14 +203,14 @@ func processABAPGetWPTableResponse(wp []sapcontrolclient.WorkProcess) (wpDetails
 	}
 	for workProcessType, processCount := range wpDetails.Processes {
 		if processCount == 0 {
-			log.Logger.Debugw("Process count zero", "type", workProcessType)
+			log.CtxLogger(ctx).Debugw("Process count zero", "type", workProcessType)
 			continue
 		}
 		busyProcessCount, _ := wpDetails.BusyProcesses[workProcessType]
 		wpDetails.BusyProcessPercentage[workProcessType] = (busyProcessCount * 100) / processCount
 	}
 
-	log.Logger.Debugw("Found ABAP Processes", "count", wpDetails.Processes, "busy", wpDetails.BusyProcesses, "percentage", wpDetails.BusyProcessPercentage, "pidMap", wpDetails.ProcessNameToPID)
+	log.CtxLogger(ctx).Debugw("Found ABAP Processes", "count", wpDetails.Processes, "busy", wpDetails.BusyProcesses, "percentage", wpDetails.BusyProcessPercentage, "pidMap", wpDetails.ProcessNameToPID)
 	return wpDetails
 }
 
@@ -266,18 +266,18 @@ func (p *Properties) ParseQueueStats(ctx context.Context, exec commandlineexecut
 // Returns:
 //   - currentQueueUsage - A map with key->queue_type and value->current_queue_usage.
 //   - peakQueueUsage - A map with key->queue_type and value->peak_queue_usage.
-func (p *Properties) GetQueueStatistic(c ClientInterface) (map[string]int64, map[string]int64, error) {
+func (p *Properties) GetQueueStatistic(ctx context.Context, c ClientInterface) (map[string]int64, map[string]int64, error) {
 	tq, err := c.GetQueueStatistic()
 	if err != nil {
-		log.Logger.Debugw("Failed to run GetQueueStatistic API call", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failed to run GetQueueStatistic API call", log.Error(err))
 		return nil, nil, err
 	}
-	currentQueueUsage, peakQueueUsage := processGetQueueStatisticResponse(tq)
+	currentQueueUsage, peakQueueUsage := processGetQueueStatisticResponse(ctx, tq)
 	return currentQueueUsage, peakQueueUsage, nil
 }
 
 // processGetQueueStatisticResponse processes the TaskHandlerQueue list returned by the GetQueueStatistic SAPControl function.
-func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQueue) (map[string]int64, map[string]int64) {
+func processGetQueueStatisticResponse(ctx context.Context, taskQueues []sapcontrolclient.TaskHandlerQueue) (map[string]int64, map[string]int64) {
 	currentQueueUsage := make(map[string]int64)
 	peakQueueUsage := make(map[string]int64)
 	for _, q := range taskQueues {
@@ -286,7 +286,7 @@ func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQ
 		peakQueueUsage[queue] = peak
 	}
 
-	log.Logger.Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
+	log.CtxLogger(ctx).Debugw("Found Queue stats", "currentqueueusage", currentQueueUsage, "peakqueueusage", peakQueueUsage)
 	return currentQueueUsage, peakQueueUsage
 }
 
@@ -294,11 +294,11 @@ func processGetQueueStatisticResponse(taskQueues []sapcontrolclient.TaskHandlerQ
 // returns
 //   - A slice of EnqLock structs containing lock details
 //   - error if API call fails
-func (p *Properties) EnqGetLockTable(c ClientInterface) ([]*EnqLock, error) {
+func (p *Properties) EnqGetLockTable(ctx context.Context, c ClientInterface) ([]*EnqLock, error) {
 	resp, err := c.GetEnqLockTable()
-	log.Logger.Info("EnqGetLockTable API response", resp, err)
+	log.CtxLogger(ctx).Info("EnqGetLockTable API response", resp, err)
 	if err != nil {
-		log.Logger.Debugw("EnqGetLockTable API call failed", log.Error(err))
+		log.CtxLogger(ctx).Debugw("EnqGetLockTable API call failed", log.Error(err))
 		return nil, err
 	}
 	enqLocks := []*EnqLock{}

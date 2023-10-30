@@ -77,7 +77,7 @@ func CollectOSCommandMetric(ctx context.Context, m *cmpb.OSCommandMetric, exec c
 	})
 
 	label = m.GetMetricInfo().GetLabel()
-	value, _ = Evaluate(m, Output{
+	value, _ = Evaluate(ctx, m, Output{
 		StdOut:   strings.TrimSpace(result.StdOut),
 		StdErr:   strings.TrimSpace(result.StdErr),
 		ExitCode: strconv.Itoa(result.ExitCode),
@@ -87,7 +87,7 @@ func CollectOSCommandMetric(ctx context.Context, m *cmpb.OSCommandMetric, exec c
 
 // CollectMetricsFromFile scans a configuration file and returns a map
 // of collected metric values, keyed by metric label.
-func CollectMetricsFromFile(reader FileReader, path string, metrics []*cmpb.EvalMetric) map[string]string {
+func CollectMetricsFromFile(ctx context.Context, reader FileReader, path string, metrics []*cmpb.EvalMetric) map[string]string {
 	labels := BuildMetricMap(metrics)
 	if len(metrics) == 0 {
 		return labels
@@ -95,7 +95,7 @@ func CollectMetricsFromFile(reader FileReader, path string, metrics []*cmpb.Eval
 
 	file, err := reader(path)
 	if err != nil {
-		log.Logger.Warnw("Could not read the file", log.Error(err))
+		log.CtxLogger(ctx).Warnw("Could not read the file", log.Error(err))
 		return labels
 	}
 	defer file.Close()
@@ -112,7 +112,7 @@ func CollectMetricsFromFile(reader FileReader, path string, metrics []*cmpb.Eval
 		}
 		line := strings.TrimSpace(scanner.Text())
 		for l, m := range metricsByLabel {
-			v, ok := Evaluate(m, Output{StdOut: line})
+			v, ok := Evaluate(ctx, m, Output{StdOut: line})
 			labels[l] = v
 			// For a result that evaluates as true, do not attempt to collect this metric again.
 			// This assumes that at most one metric will be collected per line scanned.
@@ -124,7 +124,7 @@ func CollectMetricsFromFile(reader FileReader, path string, metrics []*cmpb.Eval
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Logger.Warnw("Could not read the file", "path", path, log.Error(err))
+		log.CtxLogger(ctx).Warnw("Could not read the file", "path", path, log.Error(err))
 	}
 
 	return labels
@@ -133,17 +133,17 @@ func CollectMetricsFromFile(reader FileReader, path string, metrics []*cmpb.Eval
 // Evaluate runs a series of evaluation rules against an Output source and
 // returns a derived metric value, as well as a boolean indicating whether
 // the evaluation rules were resolved as true or as false.
-func Evaluate[M proto.Message](metric M, output Output) (string, bool) {
+func Evaluate[M proto.Message](ctx context.Context, metric M, output Output) (string, bool) {
 	andFD := metric.ProtoReflect().Descriptor().Fields().ByName("and_eval_rules")
 	orFD := metric.ProtoReflect().Descriptor().Fields().ByName("or_eval_rules")
 	if metric.ProtoReflect().Has(andFD) {
 		andEval := metric.ProtoReflect().Get(andFD).Message().Interface().(*cmpb.EvalMetricRule)
-		return andEvaluation(andEval, output)
+		return andEvaluation(ctx, andEval, output)
 	} else if metric.ProtoReflect().Has(orFD) {
 		orEvals := metric.ProtoReflect().Get(orFD).Message().Interface().(*cmpb.OrEvalMetricRule)
-		return orEvaluation(orEvals.GetOrEvalRules(), output)
+		return orEvaluation(ctx, orEvals.GetOrEvalRules(), output)
 	} else {
-		log.Logger.Warnw("No evaluation rules found for metric", "metric", metric)
+		log.CtxLogger(ctx).Warnw("No evaluation rules found for metric", "metric", metric)
 		return "", false
 	}
 }
@@ -153,13 +153,13 @@ func Evaluate[M proto.Message](metric M, output Output) (string, bool) {
 // Each of the evaluation rules must resolve to true for the evaluation result
 // to be considered true. Otherwise, the evaluation result will be reported as
 // false.
-func andEvaluation(eval *cmpb.EvalMetricRule, output Output) (string, bool) {
+func andEvaluation(ctx context.Context, eval *cmpb.EvalMetricRule, output Output) (string, bool) {
 	for _, rule := range eval.GetEvalRules() {
-		if result := evaluateRule(rule, output); result == false {
-			return evaluationResult(eval.GetIfFalse(), output), false
+		if result := evaluateRule(ctx, rule, output); result == false {
+			return evaluationResult(ctx, eval.GetIfFalse(), output), false
 		}
 	}
-	return evaluationResult(eval.GetIfTrue(), output), true
+	return evaluationResult(ctx, eval.GetIfTrue(), output), true
 }
 
 // orEvaluation returns the results of a logical OR evaluation for a metric.
@@ -170,10 +170,10 @@ func andEvaluation(eval *cmpb.EvalMetricRule, output Output) (string, bool) {
 // for the evaluation as a whole to be considered true. If none of the
 // evaluations resolve to true, the result from the last evaluation will be
 // used, and the evaluation will be reported as false.
-func orEvaluation(evals []*cmpb.EvalMetricRule, output Output) (string, bool) {
+func orEvaluation(ctx context.Context, evals []*cmpb.EvalMetricRule, output Output) (string, bool) {
 	value := ""
 	for _, eval := range evals {
-		v, ok := andEvaluation(eval, output)
+		v, ok := andEvaluation(ctx, eval, output)
 		if ok {
 			return v, true
 		}
@@ -183,7 +183,7 @@ func orEvaluation(evals []*cmpb.EvalMetricRule, output Output) (string, bool) {
 }
 
 // evaluateRule applies an evaluation rule to a given Output source and returns a boolean result.
-func evaluateRule(rule *cmpb.EvalRule, output Output) bool {
+func evaluateRule(ctx context.Context, rule *cmpb.EvalRule, output Output) bool {
 	source := outputSource(output, rule.GetOutputSource())
 	switch rule.GetEvalRuleTypes().(type) {
 	case *cmpb.EvalRule_OutputEquals:
@@ -193,28 +193,28 @@ func evaluateRule(rule *cmpb.EvalRule, output Output) bool {
 	case *cmpb.EvalRule_OutputLessThan:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.Logger.Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
 			return false
 		}
 		return f < rule.GetOutputLessThan()
 	case *cmpb.EvalRule_OutputLessThanOrEqual:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.Logger.Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
 			return false
 		}
 		return f <= rule.GetOutputLessThanOrEqual()
 	case *cmpb.EvalRule_OutputGreaterThan:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.Logger.Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
 			return false
 		}
 		return f > rule.GetOutputGreaterThan()
 	case *cmpb.EvalRule_OutputGreaterThanOrEqual:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.Logger.Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
 			return false
 		}
 		return f >= rule.GetOutputGreaterThanOrEqual()
@@ -227,13 +227,13 @@ func evaluateRule(rule *cmpb.EvalRule, output Output) bool {
 	case *cmpb.EvalRule_OutputNotContains:
 		return !strings.Contains(source, rule.GetOutputNotContains())
 	default:
-		log.Logger.Debug("No evaluation rule detected, defaulting to false")
+		log.CtxLogger(ctx).Debug("No evaluation rule detected, defaulting to false")
 		return false
 	}
 }
 
 // evaluationResult returns a string result value for a given Output source.
-func evaluationResult(res *cmpb.EvalResult, output Output) string {
+func evaluationResult(ctx context.Context, res *cmpb.EvalResult, output Output) string {
 	source := outputSource(output, res.GetOutputSource())
 
 	switch res.GetEvalResultTypes().(type) {

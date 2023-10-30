@@ -17,6 +17,7 @@ limitations under the License.
 package workloadmanager
 
 import (
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -84,7 +85,7 @@ func TestSetOSReleaseInfo(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotOSVendorID, gotOSVersion := setOSReleaseInfo(test.reader, test.filePath)
+			gotOSVendorID, gotOSVersion := setOSReleaseInfo(context.Background(), test.reader, test.filePath)
 			if gotOSVendorID != test.wantID {
 				t.Errorf("SetOSReleaseInfo() unexpected osVendorID, got %q want %q", gotOSVendorID, test.wantID)
 			}

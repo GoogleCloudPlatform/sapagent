@@ -184,7 +184,7 @@ func TestDiscoverInstance(t *testing.T) {
 			d := Discovery{
 				gceService: test.gceService,
 			}
-			got, _, _ := d.discoverInstance(defaultProjectID, defaultZone, defaultInstanceName)
+			got, _, _ := d.discoverInstance(context.Background(), defaultProjectID, defaultZone, defaultInstanceName)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverInstance() mismatch (-want, +got):\n%s", diff)
 			}
@@ -298,7 +298,7 @@ func TestDiscoverDisks(t *testing.T) {
 			d := Discovery{
 				gceService: test.gceService,
 			}
-			got := d.discoverDisks(defaultProjectID, defaultZone, test.testCI, test.testIR)
+			got := d.discoverDisks(context.Background(), defaultProjectID, defaultZone, test.testCI, test.testIR)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverDisks() mismatch (-want, +got):\n%s", diff)
 			}
@@ -446,7 +446,7 @@ func TestDiscoverNetworks(t *testing.T) {
 			d := Discovery{
 				gceService: test.gceService,
 			}
-			got := d.discoverNetworks(defaultProjectID, test.testCI, test.testIR)
+			got := d.discoverNetworks(context.Background(), defaultProjectID, test.testCI, test.testIR)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverNetworks() mismatch (-want, +got):\n%s", diff)
 			}
@@ -1283,7 +1283,7 @@ func TestDiscoverLoadBalancer(t *testing.T) {
 				execute:    test.exec,
 				exists:     test.exists,
 			}
-			got := d.discoverLoadBalancerFromForwardingRule(test.fwr, test.fr)
+			got := d.discoverLoadBalancerFromForwardingRule(context.Background(), test.fwr, test.fr)
 			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverLoadBalancer() mismatch (-want, +got):\n%s", diff)
 			}

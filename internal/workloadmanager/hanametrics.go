@@ -23,9 +23,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -82,7 +82,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	}
 
 	hana := params.WorkloadConfig.GetValidationHana()
-	for k, v := range configurablemetrics.CollectMetricsFromFile(configurablemetrics.FileReader(params.ConfigFileReader), globalINILocationVal, hana.GetGlobalIniMetrics()) {
+	for k, v := range configurablemetrics.CollectMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), globalINILocationVal, hana.GetGlobalIniMetrics()) {
 		l[k] = v
 	}
 	for _, m := range hana.GetOsCommandMetrics() {
@@ -209,25 +209,26 @@ BlockDeviceLoop:
 
 	if len(matchedMountPoint) > 0 {
 		log.CtxLogger(ctx).Debugw("Found matched block device", "matchedblockdevice", matchedBlockDevice.Name, "matchedmountpoint", matchedMountPoint, "matchedsize", matchedSize)
-		setDiskInfoForDevice(diskInfo, &matchedBlockDevice, matchedMountPoint, matchedSize, iir)
+		setDiskInfoForDevice(ctx, diskInfo, &matchedBlockDevice, matchedMountPoint, matchedSize, iir)
 	}
 
 	return diskInfo
 }
 
 func setDiskInfoForDevice(
+	ctx context.Context,
 	diskInfo map[string]string,
 	matchedBlockDevice *lsblkdevice,
 	matchedMountPoint string,
 	matchedSize string,
 	iir instanceinfo.Reader,
 ) {
-	log.Logger.Debugw("Checking disk mappings against instance disks", "numberofdisks", len(iir.InstanceProperties().GetDisks()))
+	log.CtxLogger(ctx).Debugw("Checking disk mappings against instance disks", "numberofdisks", len(iir.InstanceProperties().GetDisks()))
 	for _, disk := range iir.InstanceProperties().GetDisks() {
-		log.Logger.Debugw("Checking disk mapping", "mapping", disk.GetMapping(), "matchedblockdevice", matchedBlockDevice.Name)
+		log.CtxLogger(ctx).Debugw("Checking disk mapping", "mapping", disk.GetMapping(), "matchedblockdevice", matchedBlockDevice.Name)
 		if strings.HasSuffix(matchedBlockDevice.Name, disk.GetMapping()) {
 			matchedBlockDeviceSize := extractSize(matchedBlockDevice.Size)
-			log.Logger.Debugw("Found matched disk mapping", "mountpoint", matchedMountPoint, "disktype", strings.ToLower(disk.GetDeviceType()))
+			log.CtxLogger(ctx).Debugw("Found matched disk mapping", "mountpoint", matchedMountPoint, "disktype", strings.ToLower(disk.GetDeviceType()))
 			diskInfo["mountpoint"] = matchedMountPoint
 			diskInfo["instancedisktype"] = strings.ToLower(disk.GetDeviceType())
 			diskInfo["size"] = matchedSize

@@ -29,9 +29,9 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
@@ -662,7 +662,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.iir.Read(context.Background(), test.config, test.mapper)
-			setDiskInfoForDevice(test.diskInfo, test.matchedBlockDevice, test.matchedMountPoint, test.matchedSize, *test.iir)
+			setDiskInfoForDevice(context.Background(), test.diskInfo, test.matchedBlockDevice, test.matchedMountPoint, test.matchedSize, *test.iir)
 			got := test.diskInfo
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {

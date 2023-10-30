@@ -109,21 +109,21 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		return metrics, err
 	}
 	// TODO: Test actual timeseries in unit test instead of returning an extra int.
-	nodeMetrics, _, err := collectNodeState(p, pacemaker.NodeState, data)
+	nodeMetrics, _, err := collectNodeState(ctx, p, pacemaker.NodeState, data)
 	if err != nil {
 		metricsCollectionErr = err
 	}
 	if nodeMetrics != nil {
 		metrics = append(metrics, nodeMetrics...)
 	}
-	resourceMetrics, _, err := collectResourceState(p, pacemaker.ResourceState, data)
+	resourceMetrics, _, err := collectResourceState(ctx, p, pacemaker.ResourceState, data)
 	if err != nil {
 		metricsCollectionErr = err
 	}
 	if resourceMetrics != nil {
 		metrics = append(metrics, resourceMetrics...)
 	}
-	failCountMetrics, _, err := collectFailCount(p, pacemaker.FailCount, data)
+	failCountMetrics, _, err := collectFailCount(ctx, p, pacemaker.FailCount, data)
 	if err != nil {
 		metricsCollectionErr = err
 	}
@@ -156,9 +156,9 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 
 // collectNodeState returns the Linux cluster node state metrics as time series.
 // The integer values are returned as an array for testability.
-func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
+func collectNodeState(ctx context.Context, p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if _, ok := p.SkippedMetrics[nodesPath]; ok {
-		log.Logger.Debugw("Skipping collection for", "metric", nodesPath)
+		log.CtxLogger(ctx).Debugw("Skipping collection for", "metric", nodesPath)
 		return nil, nil, nil
 	}
 	var metricValues []int
@@ -167,7 +167,7 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *p
 	now := tspb.Now()
 	nodeState, err := read(crm)
 	if err != nil {
-		log.Logger.Errorw("Failure in reading pacemaker node state", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Failure in reading pacemaker node state", log.Error(err))
 		return nil, nil, err
 	}
 
@@ -180,15 +180,15 @@ func collectNodeState(p *InstanceProperties, read readPacemakerNodeState, crm *p
 		nodeMetric := createMetrics(p, nodesPath, extraLabels, now, int64(nodeValue))
 		metrics = append(metrics, nodeMetric)
 	}
-	log.Logger.Debugw("Time taken to collect metrics in nodeState()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in nodeState()", "time", time.Since(now.AsTime()))
 	return metrics, metricValues, nil
 }
 
 // collectResourceState returns the Linux cluster resource state metrics as time series.
 // The integer values of metric are returned as an array for testability.
-func collectResourceState(p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
+func collectResourceState(ctx context.Context, p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), resourcesPath) {
-		log.Logger.Debugw("Skipping collection for", "metric", resourcesPath)
+		log.CtxLogger(ctx).Debugw("Skipping collection for", "metric", resourcesPath)
 		return nil, nil, nil
 	}
 	var metricValues []int
@@ -197,14 +197,14 @@ func collectResourceState(p *InstanceProperties, read readPacemakerResourceState
 	now := tspb.Now()
 	resourceState, err := read(crm)
 	if err != nil {
-		log.Logger.Errorw("Failure in reading pacemaker resource state", log.Error(err))
+		log.CtxLogger(ctx).Errorw("Failure in reading pacemaker resource state", log.Error(err))
 		return nil, nil, err
 	}
 
 	resourceNames := make(map[string]bool)
 	for _, r := range resourceState {
 		if _, ok := resourceNames[r.Name]; ok {
-			log.Logger.Debugw("Duplicate entry for resource", "name", r.Name)
+			log.CtxLogger(ctx).Debugw("Duplicate entry for resource", "name", r.Name)
 			continue
 		}
 		resourceNames[r.Name] = true
@@ -217,7 +217,7 @@ func collectResourceState(p *InstanceProperties, read readPacemakerResourceState
 		resourceMetric := createMetrics(p, resourcesPath, extraLabels, now, int64(rValue))
 		metrics = append(metrics, resourceMetric)
 	}
-	log.Logger.Debugw("Time taken to collect metrics in resourceState()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in resourceState()", "time", time.Since(now.AsTime()))
 	return metrics, metricValues, nil
 }
 
@@ -233,9 +233,9 @@ func stateFromString(m map[string]int, val string) int {
 // collectFailCount returns the Linux cluster resource failcounts.
 // The metrics are returned only for resources with a failcount entry in
 // crm_mon history.
-func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
+func collectFailCount(ctx context.Context, p *InstanceProperties, read readPacemakerFailCount, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
 	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), failCountsPath) {
-		log.Logger.Debugw("Skipping collection for", "metric", failCountsPath)
+		log.CtxLogger(ctx).Debugw("Skipping collection for", "metric", failCountsPath)
 		return nil, nil, nil
 	}
 	var metricValues []int
@@ -244,7 +244,7 @@ func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *p
 	now := tspb.Now()
 	resourceFailCounts, err := read(crm)
 	if err != nil {
-		log.Logger.Debugw("Failure reading pacemaker resource fail-count", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failure reading pacemaker resource fail-count", log.Error(err))
 		return nil, nil, err
 	}
 
@@ -256,7 +256,7 @@ func collectFailCount(p *InstanceProperties, read readPacemakerFailCount, crm *p
 		metrics = append(metrics, createMetrics(p, failCountsPath, extraLabels, now, int64(r.FailCount)))
 		metricValues = append(metricValues, r.FailCount)
 	}
-	log.Logger.Debugw("Time taken to collect metrics in collectFailCount()", "time", time.Since(now.AsTime()))
+	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectFailCount()", "time", time.Since(now.AsTime()))
 	return metrics, metricValues, nil
 }
 

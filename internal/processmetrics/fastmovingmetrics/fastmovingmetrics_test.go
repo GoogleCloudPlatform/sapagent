@@ -482,7 +482,7 @@ func TestNWAvailabilityValue(t *testing.T) {
 			sc := &sapcontrol.Properties{
 				Instance: defaultSAPInstance,
 			}
-			procs, err := sc.GetProcessList(test.fakeClient)
+			procs, err := sc.GetProcessList(context.Background(), test.fakeClient)
 			if err != nil {
 				t.Errorf("ProcessList() failed with: %v.", err)
 			}

@@ -96,7 +96,7 @@ func New(config *cnfpb.Configuration, client cloudmonitoring.TimeSeriesCreator, 
 	return &Properties{
 		Config:          config,
 		Client:          client,
-		gceBetaService: gceBetaService,
+		gceBetaService:  gceBetaService,
 		skippedMetrics:  sm,
 		PMBackoffPolicy: bo,
 	}
@@ -121,7 +121,7 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	if scheduledMigration != nil {
 		metrics = append(metrics, scheduledMigration...)
 	}
-	upcomingMaintenance, err := p.collectUpcomingMaintenance()
+	upcomingMaintenance, err := p.collectUpcomingMaintenance(ctx)
 	if err != nil {
 		metricsCollectionErr = err
 	}
@@ -167,24 +167,24 @@ func collectScheduledMigration(p *Properties, f func() (string, error)) ([]*mrpb
 	return []*mrpb.TimeSeries{p.createIntMetric(migrationPath, scheduledMigration)}, nil
 }
 
-func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {
+func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	cp := p.Config.CloudProperties
 	project, zone, instName := cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName()
 
 	// TODO : use the regular GCE service once the UpcomingMaintenance API
 	// is available there.
-	if (p.gceBetaService == nil || !p.gceBetaService.Initialized()) {
-		log.Logger.Debug("compute beta API not initialized; skipping maint checks.")
+	if p.gceBetaService == nil || !p.gceBetaService.Initialized() {
+		log.CtxLogger(ctx).Debug("compute beta API not initialized; skipping maint checks.")
 		return []*mrpb.TimeSeries{}, fmt.Errorf("compute beta API not initialized; skipping maint checks")
 	}
 
 	instance, err := p.gceBetaService.GetInstance(project, zone, instName)
 	if err != nil {
-		log.Logger.Errorw("Could not get instance from compute API", "project", project, "zone", zone, "instance", instName, "error", err)
+		log.CtxLogger(ctx).Errorw("Could not get instance from compute API", "project", project, "zone", zone, "instance", instName, "error", err)
 		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not get instance from compute API: %w", err)
 	}
 	if instance.Scheduling == nil || len(instance.Scheduling.NodeAffinities) == 0 {
-		log.Logger.Debug("Not a sole tenant node; skipping maintenance metric collection.")
+		log.CtxLogger(ctx).Debug("Not a sole tenant node; skipping maintenance metric collection.")
 		return []*mrpb.TimeSeries{}, fmt.Errorf("not a sole tenant node; skipping maintenance metric collection")
 	}
 
@@ -192,14 +192,14 @@ func (p *Properties) collectUpcomingMaintenance() ([]*mrpb.TimeSeries, error) {
 	if errors.Is(err, ErrNoStamMatch) {
 		return []*mrpb.TimeSeries{}, err
 	} else if err != nil {
-		log.Logger.Errorw("Could not resolve node", "link", instance.SelfLink, "error", err)
+		log.CtxLogger(ctx).Errorw("Could not resolve node", "link", instance.SelfLink, "error", err)
 		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not resolve node: %w", err)
 	}
 	if n.UpcomingMaintenance == nil {
-		log.Logger.Debugw("No upcoming maintenance", "cp", cp)
+		log.CtxLogger(ctx).Debugw("No upcoming maintenance", "cp", cp)
 		n.UpcomingMaintenance = &compute.UpcomingMaintenance{}
 	} else {
-		log.Logger.Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
+		log.CtxLogger(ctx).Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
 	}
 
 	m := []*mrpb.TimeSeries{}

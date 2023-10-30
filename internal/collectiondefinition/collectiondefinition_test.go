@@ -384,7 +384,7 @@ func TestFromJSONFile(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := FromJSONFile(test.reader, test.path)
+			got, gotErr := FromJSONFile(context.Background(), test.reader, test.path)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("FromJSONFile() mismatch (-want, +got):\n%s", diff)
 			}

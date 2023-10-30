@@ -168,19 +168,19 @@ func loadAndBroadcast(ctx context.Context, chs []chan<- *cdpb.CollectionDefiniti
 
 // FromJSONFile reads a CollectionDefinition JSON configuration file and
 // unmarshals the data into a CollectionDefinition proto.
-func FromJSONFile(read ReadFile, path string) (*cdpb.CollectionDefinition, error) {
+func FromJSONFile(ctx context.Context, read ReadFile, path string) (*cdpb.CollectionDefinition, error) {
 	data, err := read(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		log.Logger.Infow("No collection definition file defined", "path", path)
+		log.CtxLogger(ctx).Infow("No collection definition file defined", "path", path)
 		return nil, nil
 	}
 	if err != nil {
-		log.Logger.Errorw("Failed to read collection definition file", "path", path, "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to read collection definition file", "path", path, "error", err)
 		return nil, err
 	}
 	cd, err := unmarshal(data)
 	if err != nil {
-		log.Logger.Errorw("Failed to unmarshal collection definition data", "path", path, "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to unmarshal collection definition data", "path", path, "error", err)
 		return nil, err
 	}
 	return cd, nil
@@ -213,7 +213,7 @@ func Load(ctx context.Context, opts LoadOptions) (*cdpb.CollectionDefinition, er
 	if opts.OSType == "windows" {
 		path = WindowsConfigPath
 	}
-	localCD, err := FromJSONFile(opts.ReadFile, path)
+	localCD, err := FromJSONFile(ctx, opts.ReadFile, path)
 	if err != nil {
 		return nil, errors.New("Failed to load local collection definition file")
 	}

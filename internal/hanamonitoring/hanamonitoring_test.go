@@ -524,7 +524,7 @@ func TestCreateMetricsForRow(t *testing.T) {
 	runningSum[tsKey] = prevVal{val: float64(123.456), startTime: &tspb.Timestamp{Seconds: 0}}
 
 	wantMetrics := 4
-	got := createMetricsForRow("testName", "testSID", query, cols, defaultParams, runningSum)
+	got := createMetricsForRow(context.Background(), "testName", "testSID", query, cols, defaultParams, runningSum)
 	gotMetrics := len(got)
 	if gotMetrics != wantMetrics {
 		t.Errorf("createMetricsForRow(%#v) = %d, want metrics length: %d", query, gotMetrics, wantMetrics)
@@ -670,7 +670,7 @@ func TestCreateCumulativeMetric(t *testing.T) {
 				test.want.Metric = test.wantMetric
 				test.want.Points[0].Value = test.wantValue
 			}
-			got, _ := createCumulativeMetric(test.column, test.val, map[string]string{"abc": "def"}, "testQuery", defaultParams, defaultTimestamp, test.runningSum)
+			got, _ := createCumulativeMetric(context.Background(), test.column, test.val, map[string]string{"abc": "def"}, "testQuery", defaultParams, defaultTimestamp, test.runningSum)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("createCumulativeMetric(%#v) unexpected diff: (-want +got):\n%s", test.column, diff)
 			}

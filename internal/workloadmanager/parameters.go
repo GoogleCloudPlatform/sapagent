@@ -89,42 +89,42 @@ type Parameters struct {
 
 // Init runs additional setup that is a prerequisite for WLM metric collection.
 func (p *Parameters) Init(ctx context.Context) {
-	p.osVendorID, p.osVersion = setOSReleaseInfo(p.ConfigFileReader, p.OSReleaseFilePath)
+	p.osVendorID, p.osVersion = setOSReleaseInfo(ctx, p.ConfigFileReader, p.OSReleaseFilePath)
 	p.sapApplications = runDiscovery(ctx)
 	p.hanaInsightRules = readHANAInsightsRules()
 }
 
 // setOSReleaseInfo parses the OS release file and retrieves the values for the
 // osVendorID and osVersion.
-func setOSReleaseInfo(configFileReader ConfigFileReader, osReleaseFilePath string) (osVendorID, osVersion string) {
+func setOSReleaseInfo(ctx context.Context, configFileReader ConfigFileReader, osReleaseFilePath string) (osVendorID, osVersion string) {
 	if configFileReader == nil || osReleaseFilePath == "" {
-		log.Logger.Debug("A ConfigFileReader and OSReleaseFilePath must be set.")
+		log.CtxLogger(ctx).Debug("A ConfigFileReader and OSReleaseFilePath must be set.")
 		return
 	}
 
 	file, err := configFileReader(osReleaseFilePath)
 	if err != nil {
-		log.Logger.Warnw(fmt.Sprintf("Could not read from %s", osReleaseFilePath), "error", err)
+		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Could not read from %s", osReleaseFilePath), "error", err)
 		return
 	}
 	defer file.Close()
 
 	ini := goini.New()
 	if err := ini.ParseFrom(file, "\n", "="); err != nil {
-		log.Logger.Warnw(fmt.Sprintf("Failed to parse from %s", osReleaseFilePath), "error", err)
+		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Failed to parse from %s", osReleaseFilePath), "error", err)
 		return
 	}
 
 	id, ok := ini.Get("ID")
 	if !ok {
-		log.Logger.Warn(fmt.Sprintf("Could not read ID from %s", osReleaseFilePath))
+		log.CtxLogger(ctx).Warn(fmt.Sprintf("Could not read ID from %s", osReleaseFilePath))
 		id = ""
 	}
 	osVendorID = strings.ReplaceAll(strings.TrimSpace(id), `"`, "")
 
 	version, ok := ini.Get("VERSION")
 	if !ok {
-		log.Logger.Warn(fmt.Sprintf("Could not read VERSION from %s", osReleaseFilePath))
+		log.CtxLogger(ctx).Warn(fmt.Sprintf("Could not read VERSION from %s", osReleaseFilePath))
 		version = ""
 	}
 	if vf := strings.Fields(version); len(vf) > 0 {

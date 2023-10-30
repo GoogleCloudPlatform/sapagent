@@ -31,10 +31,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -421,11 +421,11 @@ func TestCollectServiceMetrics(t *testing.T) {
 			sc := &sapcontrol.Properties{
 				Instance: defaultSAPInstance,
 			}
-			procs, err := sc.GetProcessList(test.fakeClient)
+			procs, err := sc.GetProcessList(context.Background(), test.fakeClient)
 			if err != nil {
 				t.Errorf("ProcessList() failed with: %v.", err)
 			}
-			got := collectServiceMetrics(defaultInstanceProperties, procs, timestamppb.Now())
+			got := collectServiceMetrics(context.Background(), defaultInstanceProperties, procs, timestamppb.Now())
 			if len(got) != test.wantCount {
 				t.Errorf("Failure in collectNWServiceMetrics(), got: %d want: %d.",
 					len(got), test.wantCount)
@@ -611,7 +611,7 @@ func TestCollectHTTPMetrics(t *testing.T) {
 				SkippedMetrics: test.skippedMetrics,
 			}
 
-			got, gotErr := collectHTTPMetrics(p)
+			got, gotErr := collectHTTPMetrics(context.Background(), p)
 			if len(got) != test.wantCount {
 				t.Errorf("collectHTTPMetrics() metric count mismatch, got: %v want: %v.", len(got), test.wantCount)
 			}
@@ -650,7 +650,7 @@ func TestCollectICMPMetrics(t *testing.T) {
 				url = test.url
 			}
 
-			got, gotErr := collectICMMetrics(defaultInstanceProperties, url)
+			got, gotErr := collectICMMetrics(context.Background(), defaultInstanceProperties, url)
 			if len(got) != test.wantCount {
 				t.Errorf("collectICMMetrics() metric count mismatch, got: %v want: %v.", len(got), test.wantCount)
 			}
@@ -703,7 +703,7 @@ func TestCollectMessageServerMetrics(t *testing.T) {
 				url = test.url
 			}
 
-			got, gotErr := collectMessageServerMetrics(defaultInstanceProperties, url)
+			got, gotErr := collectMessageServerMetrics(context.Background(), defaultInstanceProperties, url)
 			if len(got) != test.wantCount {
 				t.Errorf("collectMessageServerMetrics() metric count mismatch, got: %v want: %v.", len(got), test.wantCount)
 			}
