@@ -182,7 +182,7 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 			continue
 		}
 		labels := map[string]string{
-			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
 		}
 		cpuusage, err := proc.CPUPercentWithContext(ctx)
 		if err != nil {
@@ -221,17 +221,17 @@ func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*Pro
 			continue
 		}
 		vmSizeLables := map[string]string{
-			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSize",
 		}
 		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS)/million, p)
 		rSSLables := map[string]string{
-			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmRSS",
 		}
 		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS)/million, p)
 		swapLables := map[string]string{
-			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSwap",
 		}
 		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap)/million, p)
@@ -270,7 +270,7 @@ func collectIOPSPerProcess(ctx context.Context, p parameters, processes []*Proce
 			continue
 		}
 		labels := map[string]string{
-			"process": formatProcesLabel(processInfo.Name, processInfo.PID),
+			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
 		}
 		deltaReads := float64(currVal.ReadBytes-p.lastValue[key].ReadBytes) / thousand
 		deltaWrites := float64(currVal.WriteBytes-p.lastValue[key].WriteBytes) / thousand
@@ -300,7 +300,7 @@ func createMetrics(mPath string, labels map[string]string, val float64, p parame
 	return timeseries.BuildFloat64(ts)
 }
 
-func formatProcesLabel(pname, pid string) string {
+func formatProcessLabel(pname, pid string) string {
 	result := forwardSlashChar.ReplaceAllString(pname, "_")
 	result = dashChars.ReplaceAllString(result, "_")
 	return result + ":" + pid

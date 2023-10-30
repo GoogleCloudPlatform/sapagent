@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -209,12 +210,25 @@ func splitParams(executable string) []string {
 	// This regex pattern matches substrings without spaces or those with spaces between single quotes
 	pattern := regexp.MustCompile(`[^\s']+|('([^']*)')`)
 	arr := pattern.FindAllString(executable, -1)
+
 	// This for loop removes the single quote characters surrounding the matched substring
 	for i := range arr {
 		// convert "'ls $0 $1'" to "ls $0 $1"
 		if arr[i][0] == '\'' && arr[i][len(arr[i])-1] == '\'' {
 			arr[i] = arr[i][1 : len(arr[i])-1]
 		}
+	}
+
+	// This for loop is to substitute backtick character \` with single quotes \'
+	// Single quotes are used to filter for a specific substring (using grep) matching a given expression.
+	// To prevent malformed matching, it is recommended to write the expression,
+	// normally contained within single quotes, to be contained within back ticks.
+	// For eg: instead of
+	// 		grep -Eo '([0-9]{1,3}\.){1,3}[0-9]{1,3}\:[0-9]{3,5}'
+	// use
+	// 		grep -Eo `([0-9]{1,3}\.){1,3}[0-9]{1,3}\:[0-9]{3,5}``
+	for i := range arr {
+		arr[i] = strings.ReplaceAll(arr[i], "`", "'")
 	}
 	return arr
 }

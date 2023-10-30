@@ -360,3 +360,35 @@ func TestSetupExeForPlatform(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitParams(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    string
+		wantOut []string
+	}{
+		{
+			name:    "echo",
+			args:    "echo hello, world",
+			wantOut: []string{"echo", "hello,", "world"},
+		},
+		{
+			name:    "bashMd5sum",
+			args:    "-c 'echo $0 | md5sum' 'test hashing functions'",
+			wantOut: []string{"-c", "echo $0 | md5sum", "test hashing functions"},
+		},
+		{
+			name:    "tcpFiltering",
+			args:    "-c 'lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`'",
+			wantOut: []string{"-c", "lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo '(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}'"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			splitArgs := splitParams(test.args)
+			if diff := cmp.Diff(test.wantOut, splitArgs); diff != "" {
+				t.Fatalf("splitParams returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
