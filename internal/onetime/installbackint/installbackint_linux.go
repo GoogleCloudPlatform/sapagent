@@ -195,7 +195,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return fmt.Errorf("unable to write backint script: %s. err: %v", backintPath, err)
 	}
 	config := &bpb.BackintConfiguration{Bucket: "<GCS Bucket Name>", LogToCloud: wpb.Bool(true)}
-	configData, err := protojson.MarshalOptions{Indent: "  "}.Marshal(config)
+	configData, err := protojson.MarshalOptions{Indent: "  ", UseProtoNames: true}.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("unable to marshal config, err: %v", err)
 	}
