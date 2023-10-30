@@ -159,6 +159,7 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 // StartSAPSystemDiscovery Initializes the discovery object and starts the discovery subroutine.
 // Returns true if the discovery goroutine is started, and false otherwise.
 func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, gceService gceInterface, wlmService wlmInterface, cloudLogService cloudLogInterface) bool {
+	log.CtxLogger(ctx).Infow("Starting SAP system discovery with configuration.", "config", config)
 	// Start SAP system discovery only if sap_system_discovery is enabled.
 	if !config.GetCollectionConfiguration().GetSapSystemDiscovery().GetValue() {
 		log.CtxLogger(ctx).Info("Not starting SAP system discovery.")
@@ -297,6 +298,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d Discovery) {
 							DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						},
 					},
+					HostProject: config.GetCloudProperties().GetProjectId(),
 				}
 				if err := d.discoverDatabaseNFS(ctx, system.GetDatabaseLayer(), cp); err != nil {
 					log.CtxLogger(ctx).Warnw("Unable to discover database NFS", "error", err)
