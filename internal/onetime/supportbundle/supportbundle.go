@@ -35,10 +35,10 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -197,9 +197,8 @@ func (*SupportBundle) Synopsis() string {
 
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
-	return `supportbundle [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>] [-h] [-v] [-loglevel]=<debug|info|warn|error>
-	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"
-	`
+	return `Usage: supportbundle [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>] [-h] [-v] [-loglevel]=<debug|info|warn|error>
+	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
 
 // SetFlags implements the subcommand interface for support bundle report collection.
@@ -214,7 +213,14 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 }
 
 // Execute implements the subcommand interface for support bundle report collection.
-func (s *SupportBundle) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
+func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if s.help {
+		return onetime.HelpCommand(f)
+	}
+	if s.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 2 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -223,14 +229,6 @@ func (s *SupportBundle) Execute(ctx context.Context, fs *flag.FlagSet, args ...a
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
-	}
-	if s.help {
-		fs.Usage()
-		return subcommands.ExitSuccess
-	}
-	if s.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, s.Name(), log.StringLevelToZapcore(s.logLevel))
 	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})

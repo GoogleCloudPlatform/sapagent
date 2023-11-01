@@ -49,10 +49,9 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 
 // Usage implements the subcommand interface for logusage.
 func (*LogUsage) Usage() string {
-	return `logusage [-name <tool or agent name>] [-av <tool or agent version>]
+	return `Usage: logusage [-name <tool or agent name>] [-av <tool or agent version>]
 	[-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]
-	[-image <image URL of the compute instance>] [-v] [-h] [-loglevel=<debug|info|warn|error>]
-	`
+	[-image <image URL of the compute instance>] [-v] [-h] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for logusage.
@@ -78,6 +77,13 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for logusage.
 func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if l.help {
+		return onetime.HelpCommand(f)
+	}
+	if l.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 3 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -91,14 +97,6 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
-	}
-	if l.help {
-		f.Usage()
-		return subcommands.ExitSuccess
-	}
-	if l.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
 	}
 	// Do not call SetupOnetimeLogging so file logging does not happen for this OTE
 	return l.logUsageHandler(cloudProps)

@@ -37,7 +37,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/agentmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
@@ -50,6 +49,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -102,7 +102,7 @@ func (*Daemon) Synopsis() string { return "start daemon mode of the agent" }
 
 // Usage implements the subcommand interface for startdaemon.
 func (*Daemon) Usage() string {
-	return "startdaemon [-config <path-to-config-file>] \n"
+	return "Usage: startdaemon [-config <path-to-config-file>] \n"
 }
 
 // SetFlags implements the subcommand interface for startdaemon.

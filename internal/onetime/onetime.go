@@ -23,9 +23,11 @@ import (
 	"fmt"
 	"os"
 
+	"flag"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 	"golang.org/x/oauth2/google"
+	"github.com/google/subcommands"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -93,6 +95,13 @@ func NewComputeService(ctx context.Context) (cs *compute.Service, err error) {
 		return nil, fmt.Errorf("failure creating compute service" + err.Error())
 	}
 	return cs, nil
+}
+
+// HelpCommand is used to subcommand requests with help as an arg.
+func HelpCommand(f *flag.FlagSet) subcommands.ExitStatus {
+	PrintAgentVersion()
+	f.Usage()
+	return subcommands.ExitSuccess
 }
 
 // PrintAgentVersion prints the current version of the agent to stdout.

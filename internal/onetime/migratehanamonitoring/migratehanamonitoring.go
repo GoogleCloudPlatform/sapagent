@@ -58,7 +58,7 @@ func (*MigrateHANAMonitoring) Synopsis() string {
 
 // Usage implements the subcommand interface for migrating hana monitoring agent.
 func (*MigrateHANAMonitoring) Usage() string {
-	return "migratehma [-h] [-v] [-loglevel]=<debug|info|warn|error>"
+	return "Usage: migratehma [-h] [-v] [-loglevel]=<debug|info|warn|error>\n"
 }
 
 // SetFlags implements the subcommand interface for migrating hana monitoring agent.
@@ -70,6 +70,13 @@ func (m *MigrateHANAMonitoring) SetFlags(f *flag.FlagSet) {
 
 // Execute implements the subcommand interface for Migrating HANA Monitoring Agent.
 func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if m.help {
+		return onetime.HelpCommand(f)
+	}
+	if m.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 2 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -78,14 +85,6 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
-	}
-	if m.help {
-		f.Usage()
-		return subcommands.ExitSuccess
-	}
-	if m.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, m.Name(), log.StringLevelToZapcore(m.logLevel))
 	return m.migrationHandler(f, os.ReadFile, os.WriteFile)

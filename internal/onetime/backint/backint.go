@@ -57,11 +57,10 @@ func (*Backint) Synopsis() string { return "backup, restore, inquire, or delete 
 
 // Usage implements the subcommand interface for backint.
 func (*Backint) Usage() string {
-	return `backint -function=<backup|restore|inquire|delete|diagnose>
+	return `Usage: backint -function=<backup|restore|inquire|delete|diagnose>
 	-paramfile=<path-to-file> [-v] [-h] -user=<DBNAME@SID> [-input=<path-to-file>]
 	[-output=<path-to-file>] [-backupid=<database-backup-id>] [-count=<number-of-objects>]
-	[-level=<backup-level>] [-loglevel=<debug|info|warn|error>]
-`
+	[-level=<backup-level>] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for backint.
@@ -89,6 +88,13 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for backint.
 func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if b.help {
+		return onetime.HelpCommand(f)
+	}
+	if b.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	// this check will never be hit when executing the command line
 	if len(args) < 2 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
@@ -101,14 +107,6 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		return subcommands.ExitUsageError
 	}
 
-	if b.help {
-		f.Usage()
-		return subcommands.ExitSuccess
-	}
-	if b.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
 	onetime.SetupOneTimeLogging(lp, b.Name(), log.StringLevelToZapcore(b.logLevel))
 
 	return b.backintHandler(ctx, lp, s.NewClient)

@@ -203,13 +203,15 @@ func TestExecuteLogUsage(t *testing.T) {
 		args     []any
 	}{
 		{
-			name: "FailLengthArgs",
-			want: subcommands.ExitUsageError,
-			args: []any{},
+			name:     "FailLengthArgs",
+			logUsage: &LogUsage{},
+			want:     subcommands.ExitUsageError,
+			args:     []any{},
 		},
 		{
-			name: "FailAssertFirstArgs",
-			want: subcommands.ExitUsageError,
+			name:     "FailAssertFirstArgs",
+			logUsage: &LogUsage{},
+			want:     subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				"test2",
@@ -217,8 +219,9 @@ func TestExecuteLogUsage(t *testing.T) {
 			},
 		},
 		{
-			name: "FailAssertSecondArgs",
-			want: subcommands.ExitUsageError,
+			name:     "FailAssertSecondArgs",
+			logUsage: &LogUsage{},
+			want:     subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				log.Parameters{},

@@ -99,9 +99,8 @@ func (*InstallBackint) Synopsis() string {
 
 // Usage implements the subcommand interface for installbackint.
 func (*InstallBackint) Usage() string {
-	return `installbackint [-sid=<sap-system-identification>]
-	[-h] [-v] [loglevel=<debug|info|warn|error>]
-	`
+	return `Usage: installbackint [-sid=<sap-system-identification>]
+	[-h] [-v] [loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for installbackint.
@@ -114,6 +113,13 @@ func (b *InstallBackint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for installbackint.
 func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if b.help {
+		return onetime.HelpCommand(f)
+	}
+	if b.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 2 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -122,14 +128,6 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
-	}
-	if b.help {
-		f.Usage()
-		return subcommands.ExitSuccess
-	}
-	if b.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, b.Name(), log.StringLevelToZapcore(b.logLevel))
 

@@ -88,13 +88,15 @@ func TestExecute(t *testing.T) {
 		args    []any
 	}{
 		{
-			name: "FailLengthArgs",
-			want: subcommands.ExitUsageError,
-			args: []any{},
+			name:    "FailLengthArgs",
+			backint: &Backint{},
+			want:    subcommands.ExitUsageError,
+			args:    []any{},
 		},
 		{
-			name: "FailAssertArgs",
-			want: subcommands.ExitUsageError,
+			name:    "FailAssertArgs",
+			backint: &Backint{},
+			want:    subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				"test2",

@@ -27,10 +27,10 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -61,9 +61,8 @@ func (*Restorer) Synopsis() string { return "invoke HANA restore using persisten
 
 // Usage implements the subcommand interface for restore.
 func (*Restorer) Usage() string {
-	return `restore -project=<project-name> -sid=<HANA-SID> -user=<user-name> -source-snapshot=<snapshot-name>
-	-data-disk-name=<PD-name> -source-disk-zone=<PD-zone> -new-disk-type=<Type of the new PD disk>
-	`
+	return `Usage: restore -project=<project-name> -sid=<HANA-SID> -user=<user-name> -source-snapshot=<snapshot-name>
+	-data-disk-name=<PD-name> -source-disk-zone=<PD-zone> -new-disk-type=<Type of the new PD disk>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for restore.
@@ -82,6 +81,13 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for restore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if r.help {
+		return onetime.HelpCommand(f)
+	}
+	if r.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 3 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -95,14 +101,6 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
-	}
-	if r.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if r.help && f != nil {
-		f.Usage()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, r.Name(), log.StringLevelToZapcore(r.logLevel))
 	return r.restoreHandler(ctx, onetime.NewComputeService)

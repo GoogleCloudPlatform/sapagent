@@ -19,6 +19,8 @@ package onetime
 import (
 	"testing"
 
+	"flag"
+	"github.com/google/subcommands"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -63,5 +65,16 @@ func TestSetupOneTimeLogging(t *testing.T) {
 				t.Errorf("SetupOneTimeLogging(%s,%s)=%s, want: %s", test.os, test.subCommandName, got, test.want)
 			}
 		})
+	}
+}
+
+func TestHelpCommand(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	fs.Usage = func() { log.Print("test usage message") }
+	want := subcommands.ExitSuccess
+	got := HelpCommand(fs)
+
+	if got != want {
+		t.Errorf("HelpCommand()=%v, want: %v", got, want)
 	}
 }

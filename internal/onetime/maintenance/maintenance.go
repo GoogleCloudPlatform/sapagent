@@ -44,7 +44,7 @@ func (*Mode) Synopsis() string { return "configure maintenance mode" }
 
 // Usage implements the subcommand interface for maintenance.
 func (*Mode) Usage() string {
-	return "maintenance [-enable=true|false -sid=<SAP System Identifier>] [show] [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
+	return "Usage: maintenance [-enable=true|false -sid=<SAP System Identifier>] [show] [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
 }
 
 // SetFlags implements the subcommand interface for maintenance.
@@ -59,6 +59,13 @@ func (m *Mode) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for maintenance.
 func (m *Mode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if m.help {
+		return onetime.HelpCommand(f)
+	}
+	if m.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 2 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -67,14 +74,6 @@ func (m *Mode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcom
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
-	}
-	if m.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if m.help {
-		f.Usage()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, m.Name(), log.StringLevelToZapcore(m.logLevel))
 	return m.maintenanceModeHandler(f, maintenance.ModeReader{}, maintenance.ModeWriter{})

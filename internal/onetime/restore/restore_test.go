@@ -22,12 +22,13 @@ import (
 	"os/exec"
 	"testing"
 
+	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -405,11 +406,17 @@ func TestExecute(t *testing.T) {
 			testArgs: []any{"subcommdand_name", log.Parameters{}, &ipb.CloudProperties{}},
 			want:     subcommands.ExitSuccess,
 		},
+		{
+			name:     "Help",
+			r:        Restorer{help: true},
+			testArgs: []any{"subcommdand_name", log.Parameters{}, &ipb.CloudProperties{}},
+			want:     subcommands.ExitSuccess,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.r.Execute(context.Background(), nil, test.testArgs...)
+			got := test.r.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.testArgs...)
 			if got != test.want {
 				t.Errorf("Execute() = %v, want %v", got, test.want)
 			}

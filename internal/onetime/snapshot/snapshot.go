@@ -90,10 +90,9 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snaps
 
 // Usage implements the subcommand interface for snapshot.
 func (*Snapshot) Usage() string {
-	return `snapshot -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
+	return `Usage: snapshot -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
 	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-password=<passwd> | -password-secret=<secret-name>]
-	[-h] [-v] [loglevel]=<debug|info|warn|error>
-	`
+	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for snapshot.
@@ -121,6 +120,13 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for snapshot.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if s.help {
+		return onetime.HelpCommand(f)
+	}
+	if s.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 3 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -134,14 +140,6 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
-	}
-	if s.help {
-		f.Usage()
-		return subcommands.ExitSuccess
-	}
-	if s.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, s.Name(), log.StringLevelToZapcore(s.logLevel))
 

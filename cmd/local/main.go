@@ -19,6 +19,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"time"
@@ -33,19 +35,29 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/readmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/restore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/snapshot"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/version"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+const cn = "google_cloud_sap_agent"
+
+// Registering "help" as a flag makes "-help" and "--help" return help messages.
+var (
+	_ = flag.Bool("h", false, "Should we display a help message")
+	_ = flag.Bool("help", false, "Should we display a help message")
+)
+
 func registerSubCommands() {
-	for _, command := range [...]subcommands.Command{
+	scs := [...]subcommands.Command{
 		&startdaemon.Daemon{},
 		&logusage.LogUsage{},
 		&maintenance.Mode{},
@@ -59,12 +71,23 @@ func registerSubCommands() {
 		&restore.Restorer{},
 		&readmetrics.ReadMetrics{},
 		&installbackint.InstallBackint{},
-		subcommands.HelpCommand(),  // Implement "help"
-		subcommands.FlagsCommand(), // Implement "flags"
-	} {
+		&version.Version{},
+		subcommands.HelpCommand(), // Implement "help"
+	}
+	for _, command := range scs {
 		subcommands.Register(command, "")
 	}
 	flag.Parse()
+	subcommands.DefaultCommander.Explain = func(w io.Writer) {
+		onetime.PrintAgentVersion()
+		fmt.Fprintf(w, "Usage: %s <subcommand> <subcommand args>\n\n", cn)
+		fmt.Fprintf(w, "Subcommands:\n")
+		for _, cmd := range scs {
+			fmt.Fprintf(w, "\t%-15s  %s\n", cmd.Name(), cmd.Synopsis())
+		}
+		fmt.Fprintf(w, "\n")
+		return
+	}
 }
 
 func main() {
@@ -79,7 +102,6 @@ func main() {
 	if cloudProps != nil {
 		lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.GetProjectId())
 	}
-
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
 	if lp.CloudLoggingClient != nil {

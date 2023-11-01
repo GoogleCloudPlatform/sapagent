@@ -31,11 +31,11 @@ import (
 	"golang.org/x/oauth2"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -59,7 +59,7 @@ func (*RemoteValidation) Synopsis() string {
 
 // Usage implements the subcommand interface for remote.
 func (*RemoteValidation) Usage() string {
-	return `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n`
+	return "Usage: remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n"
 }
 
 // SetFlags implements the subcommand interface for remote.
@@ -78,20 +78,19 @@ func (r *RemoteValidation) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for remote.
 func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	gceService, err := gce.NewGCEClient(ctx)
-	if err != nil {
-		log.Print(fmt.Sprintf("ERROR: Failed to create GCE service: %v", err))
-		return subcommands.ExitFailure
-	}
 	if r.help {
-		f.Usage()
-		return subcommands.ExitSuccess
+		return onetime.HelpCommand(f)
 	}
 	if r.version {
 		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
-	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{runtime.GOOS}, gceService)
+	gceService, err := gce.NewGCEClient(ctx)
+	if err != nil {
+		log.Print(fmt.Sprintf("ERROR: Failed to create GCE service: %v", err))
+		return subcommands.ExitFailure
+	}
+	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, gceService)
 	log.SetupLoggingToDiscard()
 
 	loadOptions := collectiondefinition.LoadOptions{

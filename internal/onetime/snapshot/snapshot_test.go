@@ -155,6 +155,18 @@ func TestExecuteSnapshot(t *testing.T) {
 				&ipb.CloudProperties{},
 			},
 		},
+		{
+			name: "SuccessForVersion",
+			snapshot: Snapshot{
+				version: true,
+			},
+			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

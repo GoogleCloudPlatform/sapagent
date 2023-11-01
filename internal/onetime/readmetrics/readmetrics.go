@@ -78,10 +78,9 @@ func (*ReadMetrics) Synopsis() string { return "read metrics from Cloud Monitori
 
 // Usage implements the subcommand interface for readmetrics.
 func (*ReadMetrics) Usage() string {
-	return `readmetrics -project=<project-id> [-i=<input-file>] [-o=output-folder]
+	return `Usage: readmetrics -project=<project-id> [-i=<input-file>] [-o=output-folder]
 	[-bucket=<bucket-name>] [-service-account=<service-account>]
-	[-h] [-v] [loglevel=<debug|info|warn|error>]
-	`
+	[-h] [-v] [loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for readmetrics.
@@ -99,6 +98,13 @@ func (r *ReadMetrics) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for readmetrics.
 func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if r.help {
+		return onetime.HelpCommand(f)
+	}
+	if r.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 3 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -112,14 +118,6 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
-	}
-	if r.help {
-		f.Usage()
-		return subcommands.ExitSuccess
-	}
-	if r.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, r.Name(), log.StringLevelToZapcore(r.logLevel))
 	log.CtxLogger(ctx).Info("ReadMetrics starting")

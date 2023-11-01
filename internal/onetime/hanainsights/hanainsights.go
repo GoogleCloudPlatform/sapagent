@@ -65,8 +65,8 @@ func (*HANAInsights) Synopsis() string { return "invoke HANA local insights work
 
 // Usage implements the subcommand interface for hanainsights.
 func (*HANAInsights) Usage() string {
-	return `hanainsights -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
-	[-password=<passwd> | -password-secret=<secret-name>] [-v] [-h] [-loglevel=<debug|info|warn|error>]`
+	return `Usage: hanainsights -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
+	[-password=<passwd> | -password-secret=<secret-name>] [-v] [-h] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanainsights.
@@ -85,6 +85,13 @@ func (h *HANAInsights) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanainsights.
 func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	if h.help {
+		return onetime.HelpCommand(f)
+	}
+	if h.version {
+		onetime.PrintAgentVersion()
+		return subcommands.ExitSuccess
+	}
 	if len(args) < 2 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
@@ -93,14 +100,6 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 	if !ok {
 		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
 		return subcommands.ExitUsageError
-	}
-	if h.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if h.help {
-		f.Usage()
-		return subcommands.ExitSuccess
 	}
 	onetime.SetupOneTimeLogging(lp, h.Name(), log.StringLevelToZapcore(h.logLevel))
 

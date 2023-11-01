@@ -34,6 +34,52 @@ import (
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
+func TestExecute(t *testing.T) {
+	defaultLoadOptions := collectiondefinition.LoadOptions{
+		CollectionConfig: &cpb.CollectionConfiguration{
+			WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+				DisableFetchLatestConfig: true,
+			},
+		},
+		ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
+		OSType:   "linux",
+		Version:  "1.0",
+	}
+
+	tests := []struct {
+		name        string
+		remote      *RemoteValidation
+		loadOptions collectiondefinition.LoadOptions
+		want        subcommands.ExitStatus
+	}{
+		{
+			name: "SuccessForAgentVersion",
+			remote: &RemoteValidation{
+				version: true,
+			},
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessForHelp",
+			remote: &RemoteValidation{
+				help: true,
+			},
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitSuccess,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.remote.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, instanceinfo.New(nil, nil), test.loadOptions)
+			if got != test.want {
+				t.Errorf("Execute(%v) = %v, want %v", test.remote, got, test.want)
+			}
+		})
+	}
+}
+
 func TestRemoteValidationHandler(t *testing.T) {
 	defaultLoadOptions := collectiondefinition.LoadOptions{
 		CollectionConfig: &cpb.CollectionConfiguration{
@@ -95,28 +141,6 @@ func TestRemoteValidationHandler(t *testing.T) {
 			want: subcommands.ExitFailure,
 		},
 		{
-			name: "SuccessForAgentVersion",
-			remote: &RemoteValidation{
-				project:    "project-1",
-				instanceid: "instance-1",
-				zone:       "zone-1",
-				version:    true,
-			},
-			loadOptions: defaultLoadOptions,
-			want:        subcommands.ExitSuccess,
-		},
-		{
-			name: "SuccessForHelp",
-			remote: &RemoteValidation{
-				project:    "project-1",
-				instanceid: "instance-1",
-				zone:       "zone-1",
-				help:       true,
-			},
-			loadOptions: defaultLoadOptions,
-			want:        subcommands.ExitSuccess,
-		},
-		{
 			name: "Success",
 			remote: &RemoteValidation{
 				project:    "project-1",
@@ -138,7 +162,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 }
 
 func TestUsageForRemoteValidation(t *testing.T) {
-	want := `remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n`
+	want := "Usage: remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n"
 	rv := RemoteValidation{}
 	got := rv.Usage()
 	if got != want {
