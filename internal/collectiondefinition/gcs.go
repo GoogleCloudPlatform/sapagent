@@ -67,7 +67,9 @@ type FetchOptions struct {
 // fetchFromGCS retrieves and authenticates a collection definition from GCS.
 func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefinition {
 	bucketName := bucketEnvMap[opts.Env]
-	bh, ok := storage.ConnectToBucket(ctx, opts.Client, "", bucketName, "", true)
+	// Do not verify the connection to the Cloud Storage bucket.
+	// Public access is enabled for the downloaded files.
+	bh, ok := storage.ConnectToBucket(ctx, opts.Client, "", bucketName, "", false)
 	if !ok {
 		return nil
 	}
