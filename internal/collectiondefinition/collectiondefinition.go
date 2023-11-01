@@ -93,6 +93,13 @@ type validationMetric interface {
 // Services that wish to keep up to date with the latest collection definition
 // should supply a channel that this function will use to broadcast updates.
 func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts StartOptions) *cdpb.CollectionDefinition {
+	// If all agent services which rely on a collection definition are disabled,
+	// then we should short-circuit startup.
+	if !opts.LoadOptions.CollectionConfig.GetCollectWorkloadValidationMetrics() && opts.LoadOptions.CollectionConfig.GetWorkloadValidationRemoteCollection() == nil {
+		log.CtxLogger(ctx).Info("A collection definition is not required for any enabled agent services")
+		return nil
+	}
+
 	log.CtxLogger(ctx).Info("Starting initial load of collection definition")
 	cd, err := Load(ctx, opts.LoadOptions)
 	if err != nil {
@@ -224,6 +231,8 @@ func Load(ctx context.Context, opts LoadOptions) (*cdpb.CollectionDefinition, er
 	if !v.Valid() {
 		return nil, ValidationError{FailureCount: v.FailureCount()}
 	}
+
+	log.CtxLogger(ctx).Debug("Successfully loaded collection definition")
 	return cd, nil
 }
 

@@ -53,11 +53,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 const (
+	collectionDefinitionName   = "collectiondefinition"
 	hostMetricsServiceName     = "hostmetrics"
 	processMetricsServiceName  = "processmetrics"
 	workloadManagerServiceName = "workloadmanager"
@@ -223,6 +225,34 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		}
 	}
 
+	// Create channels to subscribe to collection definition updates.
+	chWLM := make(chan *cdpb.CollectionDefinition)
+	chs := []chan<- *cdpb.CollectionDefinition{chWLM}
+
+	cdCtx := log.SetCtx(ctx, "context", "CollectionDefinition")
+	cdHeartbeatSpec, err := healthMonitor.Register(collectionDefinitionName)
+	if err != nil {
+		log.CtxLogger(cdCtx).Errorw("Failed to register collection definition health monitor", "error", err)
+		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+		return
+	}
+	cd := collectiondefinition.Start(cdCtx, chs, collectiondefinition.StartOptions{
+		HeartbeatSpec: cdHeartbeatSpec,
+		LoadOptions: collectiondefinition.LoadOptions{
+			CollectionConfig: d.config.GetCollectionConfiguration(),
+			ReadFile:         os.ReadFile,
+			OSType:           goos,
+			Version:          configuration.AgentVersion,
+			FetchOptions: collectiondefinition.FetchOptions{
+				OSType:     goos,
+				Env:        d.config.GetCollectionConfiguration().GetWorkloadValidationCollectionDefinition().GetConfigTargetEnvironment(),
+				Client:     storage.NewClient,
+				CreateTemp: os.CreateTemp,
+				Execute:    execute,
+			},
+		},
+	})
+
 	gceService, err := gce.NewGCEClient(ctx)
 	if err != nil {
 		log.Logger.Errorw("Failed to create GCE service", "error", err)
@@ -243,7 +273,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 			gceBetaService.OverrideComputeBasePath(d.config.GetServiceEndpointOverride())
 		}
 	}
-	ppr := &instanceinfo.PhysicalPathReader{goos}
+	ppr := &instanceinfo.PhysicalPathReader{OS: goos}
 	instanceInfoReader := instanceinfo.New(ppr, gceService)
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
@@ -267,6 +297,8 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	}
 	wlmparams := workloadmanager.Parameters{
 		Config:            d.config,
+		WorkloadConfig:    cd.GetWorkloadValidation(),
+		WorkloadConfigCh:  chWLM,
 		Remote:            false,
 		TimeSeriesCreator: mc,
 		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
@@ -439,41 +471,16 @@ type WorkloadManagerParams struct {
 
 // startCollection for WorkLoadManagerParams initiates collection of WorkloadManagerMetrics.
 func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
-	cd, err := collectiondefinition.Load(ctx, collectiondefinition.LoadOptions{
-		CollectionConfig: wmp.wlmparams.Config.GetCollectionConfiguration(),
-		FetchOptions: collectiondefinition.FetchOptions{
-			OSType:     wmp.goos,
-			Env:        wmp.wlmparams.Config.GetCollectionConfiguration().GetWorkloadValidationCollectionDefinition().GetConfigTargetEnvironment(),
-			Client:     storage.NewClient,
-			CreateTemp: os.CreateTemp,
-			Execute:    execute,
-		},
-		ReadFile: os.ReadFile,
-		OSType:   wmp.goos,
-		Version:  configuration.AgentVersion,
-	})
-	if err != nil {
-		// In the event of an error, log the problem that occurred but allow
-		// other agent services to start up.
-		id := usagemetrics.CollectionDefinitionLoadFailure
-		if _, ok := err.(collectiondefinition.ValidationError); ok {
-			id = usagemetrics.CollectionDefinitionValidateFailure
-		}
-		usagemetrics.Error(id)
-		log.CtxLogger(ctx).Error(err)
-	} else {
-		wmp.wlmparams.WorkloadConfig = cd.GetWorkloadValidation()
-		wmp.wlmparams.OSType = wmp.goos
-		wmp.wlmparams.ConfigFileReader = configFileReader
-		wmp.wlmparams.InstanceInfoReader = *wmp.instanceInfoReader
-		wmp.wlmparams.OSStatReader = osStatReader
-		wmp.wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
-		wmp.wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
-		wmp.wlmparams.DefaultTokenGetter = defaultTokenGetter
-		wmp.wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
-		wmp.wlmparams.Init(ctx)
-		workloadmanager.StartMetricsCollection(ctx, wmp.wlmparams)
-	}
+	wmp.wlmparams.OSType = wmp.goos
+	wmp.wlmparams.ConfigFileReader = configFileReader
+	wmp.wlmparams.InstanceInfoReader = *wmp.instanceInfoReader
+	wmp.wlmparams.OSStatReader = osStatReader
+	wmp.wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
+	wmp.wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
+	wmp.wlmparams.DefaultTokenGetter = defaultTokenGetter
+	wmp.wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
+	wmp.wlmparams.Init(ctx)
+	workloadmanager.StartMetricsCollection(ctx, wmp.wlmparams)
 }
 
 // waitForShutdown observes a channel for a shutdown signal, then proceeds to shut down the Agent.

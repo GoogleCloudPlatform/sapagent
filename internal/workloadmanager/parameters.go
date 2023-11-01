@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -62,6 +63,7 @@ type gceInterface interface {
 type Parameters struct {
 	Config                *cpb.Configuration
 	WorkloadConfig        *wlmpb.WorkloadValidation
+	WorkloadConfigCh      <-chan *cdpb.CollectionDefinition
 	Remote                bool
 	ConfigFileReader      ConfigFileReader
 	OSStatReader          OSStatReader

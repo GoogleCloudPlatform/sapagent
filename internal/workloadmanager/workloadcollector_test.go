@@ -41,6 +41,7 @@ import (
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -475,7 +476,9 @@ func TestStartMetricsCollection(t *testing.T) {
 		{
 			name: "succeedsForLocal",
 			params: Parameters{
-				Config: defaultConfiguration,
+				Config:           defaultConfiguration,
+				WorkloadConfig:   &wlmpb.WorkloadValidation{},
+				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
@@ -499,7 +502,9 @@ func TestStartMetricsCollection(t *testing.T) {
 		{
 			name: "succeedsForRemote",
 			params: Parameters{
-				Config: defaultConfiguration,
+				Config:           defaultConfiguration,
+				WorkloadConfig:   &wlmpb.WorkloadValidation{},
+				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
@@ -523,7 +528,9 @@ func TestStartMetricsCollection(t *testing.T) {
 		{
 			name: "succeedsForLocalWithDBMetrics",
 			params: Parameters{
-				Config: defaultConfigurationDBMetrics,
+				Config:           defaultConfigurationDBMetrics,
+				WorkloadConfig:   &wlmpb.WorkloadValidation{},
+				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",
@@ -551,8 +558,10 @@ func TestStartMetricsCollection(t *testing.T) {
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: false,
 					}},
-				OSType:   "linux",
-				BackOffs: defaultBackOffIntervals,
+				WorkloadConfig:   &wlmpb.WorkloadValidation{},
+				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
+				OSType:           "linux",
+				BackOffs:         defaultBackOffIntervals,
 			},
 			wlmInterface: &testWLMInterface{
 				WriteInsightArgs: []WriteInsightArgs{{}},
@@ -563,9 +572,36 @@ func TestStartMetricsCollection(t *testing.T) {
 		{
 			name: "failsDueToOS",
 			params: Parameters{
-				Config:   defaultConfiguration,
-				OSType:   "windows",
-				BackOffs: defaultBackOffIntervals,
+				Config:           defaultConfiguration,
+				WorkloadConfig:   &wlmpb.WorkloadValidation{},
+				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
+				OSType:           "windows",
+				BackOffs:         defaultBackOffIntervals,
+			},
+			wlmInterface: &testWLMInterface{
+				WriteInsightArgs: []WriteInsightArgs{{}},
+				WriteInsightErrs: []error{nil},
+			},
+			want: false,
+		},
+		{
+			name: "failsDueToWorkloadConfig",
+			params: Parameters{
+				Config:           defaultConfiguration,
+				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+					}
+				},
+				Exists:            func(string) bool { return true },
+				ConfigFileReader:  DefaultTestReader,
+				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
+				TimeSeriesCreator: &fake.TimeSeriesCreator{},
+				OSType:            "linux",
+				Remote:            false,
+				BackOffs:          defaultBackOffIntervals,
 			},
 			wlmInterface: &testWLMInterface{
 				WriteInsightArgs: []WriteInsightArgs{{}},
@@ -629,7 +665,9 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 			got := 0
 			lock := sync.Mutex{}
 			params := Parameters{
-				Config: defaultConfiguration,
+				Config:           defaultConfiguration,
+				WorkloadConfig:   &wlmpb.WorkloadValidation{},
+				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "",

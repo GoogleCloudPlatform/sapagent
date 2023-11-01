@@ -124,6 +124,9 @@ func start(ctx context.Context, params Parameters) {
 		case <-ctx.Done():
 			log.CtxLogger(ctx).Debug("Workload metrics cancellation requested")
 			return
+		case cd := <-params.WorkloadConfigCh:
+			log.CtxLogger(ctx).Info("Received updated workload collection configuration")
+			params.WorkloadConfig = cd.GetWorkloadValidation()
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
 		case <-configurableMetricsTicker.C:
@@ -157,13 +160,17 @@ func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 // StartMetricsCollection continuously collects Workload Manager metrics for SAP workloads.
 // Returns true if the collection goroutine is started, and false otherwise.
 func StartMetricsCollection(ctx context.Context, params Parameters) bool {
-	if (params.Config.GetCollectionConfiguration() == nil || params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() == nil) &&
+	if params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() == nil &&
 		!params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics() {
 		log.CtxLogger(ctx).Info("Not collecting Workload Manager metrics")
 		return false
 	}
 	if params.OSType == "windows" {
 		log.CtxLogger(ctx).Info("Workload Manager metrics collection is not supported for windows platform.")
+		return false
+	}
+	if params.WorkloadConfig == nil {
+		log.CtxLogger(ctx).Info("Cannot collect Workload Manager metrics, no collection configuration detected")
 		return false
 	}
 	if params.Remote {

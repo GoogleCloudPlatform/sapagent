@@ -131,10 +131,20 @@ func TestStart(t *testing.T) {
 		want *cdpb.CollectionDefinition
 	}{
 		{
+			name: "NoServicesEnabledReturnsNil",
+			opts: StartOptions{
+				LoadOptions: LoadOptions{
+					CollectionConfig: &cpb.CollectionConfiguration{},
+				},
+			},
+			want: nil,
+		},
+		{
 			name: "InitialLoadReturnsNil",
 			opts: StartOptions{
 				LoadOptions: LoadOptions{
 					CollectionConfig: &cpb.CollectionConfiguration{
+						CollectWorkloadValidationMetrics: true,
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 							DisableFetchLatestConfig: true,
 						},
@@ -151,6 +161,7 @@ func TestStart(t *testing.T) {
 			opts: StartOptions{
 				LoadOptions: LoadOptions{
 					CollectionConfig: &cpb.CollectionConfiguration{
+						CollectWorkloadValidationMetrics: true,
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 							DisableFetchLatestConfig: true,
 						},
@@ -218,6 +229,7 @@ func TestStart_HeartbeatSpec(t *testing.T) {
 				},
 				LoadOptions: LoadOptions{
 					CollectionConfig: &cpb.CollectionConfiguration{
+						CollectWorkloadValidationMetrics: true,
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 							DisableFetchLatestConfig: false,
 							ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
