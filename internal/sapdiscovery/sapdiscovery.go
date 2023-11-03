@@ -189,8 +189,10 @@ func HANAReplicationConfig(ctx context.Context, user, sid, instID string) (site 
 
 // readReplicationConfig is a testable version of HANAReplicationConfig.
 func readReplicationConfig(ctx context.Context, user, sid, instID string, exec commandlineexecutor.Execute) (mode int, HAMembers []string, exitStatus int64, err error) {
-	cmd := fmt.Sprintf("/usr/sap/%s/%s/HDBSettings.sh", sid, instID)
-	args := "systemReplicationStatus.py --sapcontrol=1 >> /tmp/systemReplicationStatus.log 2>&1; cat /tmp/systemReplicationStatus.log"
+	// Keeping the timeout for the execution of the script as 25 seconds, so if the process hangs,
+	// it will be killed and trace files will not be generated.
+	cmd := "timeout"
+	args := fmt.Sprintf("25 /usr/sap/%s/%s/HDBSettings.sh systemReplicationStatus.py --sapcontrol=1 >> /tmp/systemReplicationStatus.log 2>&1;", sid, instID)
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  cmd,
 		ArgsToSplit: args,
