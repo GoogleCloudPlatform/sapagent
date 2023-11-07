@@ -34,6 +34,9 @@ type GetAddressByIPArguments struct{ Project, Region, Address string }
 // GetForwardingRuleArguments is a struct to match arguments passed in to the GetForwardingRule function for validation.
 type GetForwardingRuleArguments struct{ Project, Location, Name string }
 
+// GetURIForIPArguments is a struct to match arguments passed in to the GetURIForIP function.
+type GetURIForIPArguments struct{ Project, IP string }
+
 // TestGCE implements GCE interfaces. A new TestGCE instance should be used per iteration of the test.
 type TestGCE struct {
 	T                    *testing.T
@@ -86,11 +89,20 @@ type TestGCE struct {
 
 	GetURIForIPResp      []string
 	GetURIForIPErr       []error
+	GetURIForIPArgs      []*GetURIForIPArguments
 	GetURIForIPCallCount int
 
 	GetSecretResp      []string
 	GetSecretErr       []error
 	GetSecretCallCount int
+
+	GetFilestoreResp      []*file.Instance
+	GetFilestoreErr       []error
+	GetFilestoreCallCount int
+
+	GetHealthCheckResp      []*compute.HealthCheck
+	GetHealthCheckErr       []error
+	GetHealthCheckCallCount int
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -245,6 +257,12 @@ func (g *TestGCE) GetURIForIP(project, ip string) (string, error) {
 			g.GetURIForIPCallCount = 0
 		}
 	}()
+	if g.GetURIForIPArgs != nil && len(g.GetURIForIPArgs) > g.GetURIForIPCallCount {
+		args := g.GetURIForIPArgs[g.GetURIForIPCallCount]
+		if args != nil && (args.Project != project || args.IP != ip) {
+			g.T.Errorf("Mismatch in expected arguments for GetURIForIP: \ngot: (%s, %s)\nwant:  (%s, %s)", project, ip, args.Project, args.IP)
+		}
+	}
 	return g.GetURIForIPResp[g.GetURIForIPCallCount], g.GetURIForIPErr[g.GetURIForIPCallCount]
 }
 
@@ -257,4 +275,26 @@ func (g *TestGCE) GetSecret(ctx context.Context, projectID, secretName string) (
 		}
 	}()
 	return g.GetSecretResp[g.GetSecretCallCount], g.GetSecretErr[g.GetSecretCallCount]
+}
+
+// GetFilestore fakes calls to the cloud APIs to access a Filestore instance.
+func (g *TestGCE) GetFilestore(projectID, zone, name string) (*file.Instance, error) {
+	defer func() {
+		g.GetFilestoreCallCount++
+		if g.GetFilestoreCallCount >= len(g.GetFilestoreResp) || g.GetFilestoreCallCount >= len(g.GetFilestoreErr) {
+			g.GetFilestoreCallCount = 0
+		}
+	}()
+	return g.GetFilestoreResp[g.GetFilestoreCallCount], g.GetFilestoreErr[g.GetFilestoreCallCount]
+}
+
+// GetHealthCheck fakes calls to hte cloud APIs to access a Health Check
+func (g *TestGCE) GetHealthCheck(projectID, name string) (*compute.HealthCheck, error) {
+	defer func() {
+		g.GetHealthCheckCallCount++
+		if g.GetHealthCheckCallCount >= len(g.GetHealthCheckResp) || g.GetHealthCheckCallCount >= len(g.GetHealthCheckErr) {
+			g.GetHealthCheckCallCount = 0
+		}
+	}()
+	return g.GetHealthCheckResp[g.GetHealthCheckCallCount], g.GetHealthCheckErr[g.GetHealthCheckCallCount]
 }
