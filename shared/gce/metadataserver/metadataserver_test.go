@@ -27,7 +27,7 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )

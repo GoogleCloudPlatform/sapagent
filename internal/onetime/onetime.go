@@ -28,7 +28,7 @@ import (
 	"google.golang.org/api/option"
 	"golang.org/x/oauth2/google"
 	"github.com/google/subcommands"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zapcore/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

@@ -22,9 +22,9 @@ import (
 
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zapcore/zapcore"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 

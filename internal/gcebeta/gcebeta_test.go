@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"github.com/pkg/errors"
 	compute "google.golang.org/api/compute/v0.beta"
 	"google.golang.org/api/googleapi"

@@ -28,7 +28,7 @@ import (
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zapcore/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"

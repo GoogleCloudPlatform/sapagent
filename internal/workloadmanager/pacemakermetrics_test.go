@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"google.golang.org/protobuf/encoding/protojson"

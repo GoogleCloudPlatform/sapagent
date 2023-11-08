@@ -27,7 +27,7 @@ import (
 
 	store "cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"

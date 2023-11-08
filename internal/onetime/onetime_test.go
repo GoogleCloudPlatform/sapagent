@@ -21,7 +21,7 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zapcore/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

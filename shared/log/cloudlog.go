@@ -22,7 +22,7 @@ import (
 	"time"
 
 	logging "cloud.google.com/go/logging"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zapcore/zapcore"
 )
 
 // GoogleCloudLogger interface

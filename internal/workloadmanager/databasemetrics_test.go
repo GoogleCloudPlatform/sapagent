@@ -28,7 +28,7 @@ import (
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"

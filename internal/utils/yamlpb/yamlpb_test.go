@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"google.golang.org/protobuf/proto"
 	test_pb "github.com/GoogleCloudPlatform/sapagent/protos/yamlpbtest"
 )

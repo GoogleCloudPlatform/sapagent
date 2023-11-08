@@ -27,7 +27,7 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"

@@ -24,7 +24,7 @@ import (
 
 	"flag"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"golang.org/x/sys/unix"
 	"github.com/google/subcommands"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"

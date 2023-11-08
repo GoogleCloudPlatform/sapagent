@@ -62,7 +62,7 @@ import (
 	logging "cloud.google.com/go/logging"
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zapcore/zapcore"
 )
 
 var (

@@ -28,7 +28,7 @@ import (
 	"flag"
 
 	"github.com/google/subcommands"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zapcore/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/installbackint"

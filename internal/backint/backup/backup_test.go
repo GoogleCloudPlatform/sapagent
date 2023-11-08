@@ -27,7 +27,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-cmp/cmpopts/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"github.com/gammazero/workerpool"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
