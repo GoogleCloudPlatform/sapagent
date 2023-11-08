@@ -159,17 +159,21 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	}
 
 	rw := storage.ReadWriter{
-		Writer:         destFile,
-		Copier:         copier,
-		BucketHandle:   bucketHandle,
-		BucketName:     config.GetBucket(),
-		ObjectName:     object.Name,
-		TotalBytes:     object.Size,
-		LogDelay:       time.Duration(config.GetLogDelaySec()) * time.Second,
-		RateLimitBytes: config.GetRateLimitMb() * 1024 * 1024,
-		EncryptionKey:  config.GetEncryptionKey(),
-		KMSKey:         config.GetKmsKey(),
-		MaxRetries:     config.GetRetries(),
+		Writer:            destFile,
+		Copier:            copier,
+		BucketHandle:      bucketHandle,
+		BucketName:        config.GetBucket(),
+		ObjectName:        object.Name,
+		TotalBytes:        object.Size,
+		LogDelay:          time.Duration(config.GetLogDelaySec()) * time.Second,
+		RateLimitBytes:    config.GetRateLimitMb() * 1024 * 1024,
+		EncryptionKey:     config.GetEncryptionKey(),
+		KMSKey:            config.GetKmsKey(),
+		MaxRetries:        config.GetRetries(),
+		FileSystemTimeout: 30 * time.Second,
+		FileSystemTimeoutFunc: func() {
+			log.CtxLogger(ctx).Errorw("Timeout while writing to the destination, closing destination to prevent hanging", "destName", destName, "closeErr", destFile.Close())
+		},
 	}
 	bytesWritten, err := rw.Download(ctx)
 	if err != nil {

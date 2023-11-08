@@ -297,7 +297,7 @@ func unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration,
 func marshalLegacyParameters(parameterFile string, config *bpb.BackintConfiguration) {
 	configPath := strings.TrimSuffix(parameterFile, ".txt") + ".json"
 	log.Logger.Infow("Saving legacy parameters as JSON", "configPath", configPath)
-	configData, err := protojson.MarshalOptions{Indent: "  "}.Marshal(config)
+	configData, err := protojson.MarshalOptions{Indent: "  ", UseProtoNames: true}.Marshal(config)
 	if err != nil {
 		log.Logger.Errorw("Unable to marshal config", "err", err)
 	}
