@@ -91,7 +91,7 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snaps
 // Usage implements the subcommand interface for snapshot.
 func (*Snapshot) Usage() string {
 	return `Usage: snapshot -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
-	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-password=<passwd> | -password-secret=<secret-name>]
+	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
 	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
@@ -237,6 +237,7 @@ func runQuery(h *sql.DB, q string) (string, error) {
 }
 
 func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
+	log.CtxLogger(ctx).Info("Start run snapshot workflow")
 	if err = s.abandonPreparedSnapshot(run); err != nil {
 		usagemetrics.Error(usagemetrics.SnapshotDBNotReadyFailure)
 		return err
@@ -251,6 +252,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 		log.CtxLogger(ctx).Errorw("Error creating persistent disk snapshot", "error", err)
 		usagemetrics.Error(usagemetrics.DiskSnapshotCreateFailure)
 		if _, err := run(s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`); err != nil {
+			log.CtxLogger(ctx).Errorw("Error discarding HANA snapshot")
 			usagemetrics.Error(usagemetrics.DiskSnapshotFailedDBNotComplete)
 			return err
 		}
@@ -258,6 +260,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	}
 
 	if _, err = run(s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, s.snapshotName)); err != nil {
+		log.CtxLogger(ctx).Errorw("Error marking HANA snapshot as SUCCESSFUL")
 		usagemetrics.Error(usagemetrics.DiskSnapshotDoneDBNotComplete)
 		return err
 	}

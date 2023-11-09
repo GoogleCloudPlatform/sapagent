@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"flag"
 	backoff "github.com/cenkalti/backoff/v4"
@@ -171,7 +172,7 @@ func (r *Restorer) prepare(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
-	if err := r.waitForCompletion(op); err != nil {
+	if err := r.waitForCompletionWithRetry(ctx, op); err != nil {
 		return fmt.Errorf("detach data disk operation failed: %v", err)
 	}
 	log.CtxLogger(ctx).Info("HANA restore prepare succeeded.")
@@ -190,7 +191,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert new data disk: %v", err)
 	}
-	if err := r.waitForCompletion(op); err != nil {
+	if err := r.waitForCompletionWithRetry(ctx, op); err != nil {
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
@@ -201,7 +202,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
-	if err := r.waitForCompletion(op); err != nil {
+	if err := r.waitForCompletionWithRetry(ctx, op); err != nil {
 		return fmt.Errorf("attach data disk operation failed: %v", err)
 	}
 
@@ -397,4 +398,13 @@ func (r *Restorer) waitForCompletion(op *compute.Operation) error {
 		return fmt.Errorf("Compute operation is not DONE yet")
 	}
 	return nil
+}
+
+// Each waitForCompletion() returns immediately, we sleep for 120s between
+// retries a total 10 times => max_wait_duration = 10*120 = 20 Minutes
+// TODO: change timeout depending on PD limits
+func (r *Restorer) waitForCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
+	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)
+	return backoff.Retry(func() error { return r.waitForCompletion(op) }, bo)
 }
