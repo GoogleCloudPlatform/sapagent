@@ -35,6 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehmadashboards"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/readmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
@@ -72,6 +73,7 @@ func registerSubCommands() {
 		&readmetrics.ReadMetrics{},
 		&installbackint.InstallBackint{},
 		&version.Version{},
+		&migratehmadashboards.MigrateHMADashboards{},
 		subcommands.HelpCommand(), // Implement "help"
 	}
 	for _, command := range scs {

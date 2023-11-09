@@ -1,0 +1,40 @@
+{
+  "displayName": "SAP HANA Performance",
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "height": 5,
+        "widget": {
+          "title": "Instance Memory",
+          "xyChart": {
+            "chartOptions": {
+              "mode": "COLOR"
+            },
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/sap_hana/host/instance_memory/total_peak_used_size\""
+                  },
+                  "unitOverride": "1"
+                }
+              }
+            ],
+            "timeshiftDuration": "0s",
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 6,
+        "yPos": 1
+      }
+    ]
+  }
+}
