@@ -188,9 +188,12 @@ func backupFile(ctx context.Context, p parameters) string {
 		MaxRetries:     p.config.GetRetries(),
 		VerifyUpload:   true,
 		// Match the previous Backint implementation's metadata format.
-		Metadata:              map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
-		FileSystemTimeout:     p.readTimeout,
-		FileSystemTimeoutFunc: p.readTimeoutFunc,
+		Metadata:               map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
+		FileSystemTimeout:      p.readTimeout,
+		FileSystemTimeoutFunc:  p.readTimeoutFunc,
+		RetryBackoffInitial:    time.Duration(p.config.GetRetryBackoffInitial()) * time.Second,
+		RetryBackoffMax:        time.Duration(p.config.GetRetryBackoffMax()) * time.Second,
+		RetryBackoffMultiplier: float64(p.config.GetRetryBackoffMultiplier()),
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {

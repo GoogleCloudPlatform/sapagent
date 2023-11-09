@@ -46,6 +46,9 @@ message BackintConfiguration {
   int64 log_delay_sec = 22;
   google.protobuf.BoolValue log_to_cloud = 23;
   string recovery_bucket = 24;
+  int64 retry_backoff_initial = 25;
+  int64 retry_backoff_max = 26;
+  float retry_backoff_multiplier = 27;
 }
 
 enum LogLevel {

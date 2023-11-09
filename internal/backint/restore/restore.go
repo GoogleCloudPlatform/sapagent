@@ -174,6 +174,9 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		FileSystemTimeoutFunc: func() {
 			log.CtxLogger(ctx).Errorw("Timeout while writing to the destination, closing destination to prevent hanging", "destName", destName, "closeErr", destFile.Close())
 		},
+		RetryBackoffInitial:    time.Duration(config.GetRetryBackoffInitial()) * time.Second,
+		RetryBackoffMax:        time.Duration(config.GetRetryBackoffMax()) * time.Second,
+		RetryBackoffMultiplier: float64(config.GetRetryBackoffMultiplier()),
 	}
 	bytesWritten, err := rw.Download(ctx)
 	if err != nil {

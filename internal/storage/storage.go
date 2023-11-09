@@ -134,6 +134,18 @@ type ReadWriter struct {
 	// read from to prevent an indefinite hang. The default is a no-op.
 	FileSystemTimeoutFunc func()
 
+	// RetryBackoffInitial is an optional parameter to set the initial backoff
+	// interval. The default value is 10 seconds.
+	RetryBackoffInitial time.Duration
+
+	// RetryBackoffMax is an optional parameter to set the maximum backoff
+	// interval. The default value is 300 seconds.
+	RetryBackoffMax time.Duration
+
+	// RetryBackoffMultiplier is an optional parameter to set the multiplier for
+	// the backoff interval. Must be greater than 1 and the default value is 2.
+	RetryBackoffMultiplier float64
+
 	numRetries                int64
 	bytesTransferred          int64
 	lastBytesTransferred      int64
@@ -460,6 +472,22 @@ func (rw *ReadWriter) defaultArgs() *ReadWriter {
 
 // retryOptions uses an exponential backoff to retry all errors except 404.
 func (rw *ReadWriter) retryOptions(failureMessage string) []storage.RetryOption {
+	backoff := gax.Backoff{
+		Initial:    10 * time.Second,
+		Max:        300 * time.Second,
+		Multiplier: 2,
+	}
+	if rw.RetryBackoffInitial > 0 {
+		backoff.Initial = rw.RetryBackoffInitial
+	}
+	if rw.RetryBackoffMax > 0 {
+		backoff.Max = rw.RetryBackoffMax
+	}
+	if rw.RetryBackoffMultiplier > 1 {
+		backoff.Multiplier = rw.RetryBackoffMultiplier
+	}
+	log.Logger.Infow("Using exponential backoff strategy for retries", "objectName", rw.ObjectName, "backoffInitial", backoff.Initial, "backoffMax", backoff.Max, "backoffMultiplier", backoff.Multiplier, "maxRetries", rw.MaxRetries)
+
 	return []storage.RetryOption{storage.WithErrorFunc(func(err error) bool {
 		var e *googleapi.Error
 		if err == nil || errors.As(err, &e) && e.Code == http.StatusNotFound {
@@ -475,11 +503,7 @@ func (rw *ReadWriter) retryOptions(failureMessage string) []storage.RetryOption 
 		log.Logger.Infow(failureMessage, "numRetries", rw.numRetries, "maxRetries", rw.MaxRetries, "objectName", rw.ObjectName, "error", err)
 		return true
 	}),
-		storage.WithBackoff(gax.Backoff{
-			Initial:    10 * time.Second,
-			Max:        120 * time.Second,
-			Multiplier: 2,
-		}),
+		storage.WithBackoff(backoff),
 		storage.WithPolicy(storage.RetryAlways)}
 }
 
