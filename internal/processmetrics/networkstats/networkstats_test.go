@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -86,7 +87,7 @@ func TestCollect(t *testing.T) {
 			wantTS: []*mrpb.TimeSeries{
 				{
 					Metric: &metricpb.Metric{
-						Type: "workload.googleapis.com/sap/networkstats",
+						Type: "workload.googleapis.com/sap/networkstats/rtt",
 						Labels: map[string]string{
 							"name":    "rtt",
 							"process": "hdbnameserver",
@@ -99,6 +100,66 @@ func TestCollect(t *testing.T) {
 							Value: &cpb.TypedValue{
 								Value: &cpb.TypedValue_DoubleValue{
 									DoubleValue: 0.2341,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/networkstats/lastsnd",
+						Labels: map[string]string{
+							"name":    "lastsnd",
+							"process": "hdbnameserver",
+							"pid":     "23456",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 234159,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/networkstats/lastrcv",
+						Labels: map[string]string{
+							"name":    "lastrcv",
+							"process": "hdbnameserver",
+							"pid":     "23456",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 23415,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/networkstats/rto",
+						Labels: map[string]string{
+							"name":    "rto",
+							"process": "hdbnameserver",
+							"pid":     "23456",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 23415,
 								},
 							},
 						},
@@ -127,6 +188,7 @@ func TestCollect(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			metricTS, err := test.p.Collect(context.Background())
 
+			sortProtos := cmpopts.SortSlices(func(m1, m2 *mrpb.TimeSeries) bool { return m1.String() < m2.String() })
 			cmpOpts := []cmp.Option{
 				protocmp.Transform(),
 
@@ -136,6 +198,7 @@ func TestCollect(t *testing.T) {
 				protocmp.IgnoreFields(&mrpb.Point{}, "value"),
 				protocmp.IgnoreFields(&mrpb.TimeSeries{}, "resource"),
 				protocmp.IgnoreFields(&monitoredresourcepb.MonitoredResource{}, "labels", "type"),
+				sortProtos,
 			}
 			if d := cmp.Diff(test.wantTS, metricTS, cmpOpts...); d != "" {
 				t.Errorf("Collect() mismatch in metricTS (-want, +got):\n%s", d)
@@ -207,17 +270,19 @@ func TestCreateTSList(t *testing.T) {
 		name       string
 		p          *Properties
 		pid        string
+		t          string
 		reqMetrics []string
 		ssMap      map[string]string
 		wantTS     []*mrpb.TimeSeries
 		wantErr    error
 	}{
 		{
-			name: "SampleTest",
+			name: "SampleFloatTest",
 			p: &Properties{
 				Config: defaultConfig,
 			},
 			pid:        "20210",
+			t:          "float64",
 			reqMetrics: []string{"rtt"},
 			ssMap: map[string]string{
 				"rtt": "0.027/0.021",
@@ -225,7 +290,7 @@ func TestCreateTSList(t *testing.T) {
 			wantTS: []*mrpb.TimeSeries{
 				{
 					Metric: &metricpb.Metric{
-						Type: "workload.googleapis.com/sap/networkstats",
+						Type: "workload.googleapis.com/sap/networkstats/rtt",
 						Labels: map[string]string{
 							"name":    "rtt",
 							"process": "hdbnameserver",
@@ -246,11 +311,46 @@ func TestCreateTSList(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "SampleIntTest",
+			p: &Properties{
+				Config: defaultConfig,
+			},
+			pid:        "20210",
+			t:          "int64",
+			reqMetrics: []string{"lastsnd"},
+			ssMap: map[string]string{
+				"lastsnd": "234159",
+			},
+			wantTS: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/networkstats/lastsnd",
+						Labels: map[string]string{
+							"name":    "lastsnd",
+							"process": "hdbnameserver",
+							"pid":     "20210",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 234159,
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: nil,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			TSList, err := test.p.createTSList(context.Background(), test.pid, test.reqMetrics, test.ssMap)
+			TSList, err := test.p.createTSList(context.Background(), test.pid, test.reqMetrics, test.ssMap, test.t)
 
 			cmpOpts := []cmp.Option{
 				protocmp.Transform(),
@@ -276,22 +376,25 @@ func TestCollectTCPMetrics(t *testing.T) {
 		name   string
 		metric string
 		pid    string
-		val    float64
+		data   metricVal
 		p      *Properties
 		want   []*mrpb.TimeSeries
 	}{
 		{
-			name:   "SampleTest",
+			name:   "SampleFloat64Test",
 			metric: "rtt",
 			pid:    "20210",
-			val:    0.2341,
+			data: metricVal{
+				val:  0.2341,
+				Type: "float64",
+			},
 			p: &Properties{
 				Config: defaultConfig,
 			},
 			want: []*mrpb.TimeSeries{
 				{
 					Metric: &metricpb.Metric{
-						Type: "workload.googleapis.com/sap/networkstats",
+						Type: "workload.googleapis.com/sap/networkstats/rtt",
 						Labels: map[string]string{
 							"name":    "rtt",
 							"process": "hdbnameserver",
@@ -311,11 +414,45 @@ func TestCollectTCPMetrics(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:   "SampleInt64Test",
+			metric: "lastsnd",
+			pid:    "20210",
+			data: metricVal{
+				val:  int64(23451),
+				Type: "int64",
+			},
+			p: &Properties{
+				Config: defaultConfig,
+			},
+			want: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/networkstats/lastsnd",
+						Labels: map[string]string{
+							"name":    "lastsnd",
+							"process": "hdbnameserver",
+							"pid":     "20210",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 23451,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics := test.p.collectTCPMetrics(context.Background(), test.metric, test.pid, test.val)
+			metrics := test.p.collectTCPMetrics(context.Background(), test.metric, test.pid, test.data)
 
 			cmpOpts := []cmp.Option{
 				protocmp.Transform(),
@@ -337,24 +474,27 @@ func TestCreateMetric(t *testing.T) {
 	tests := []struct {
 		name   string
 		labels map[string]string
-		val    float64
+		data   metricVal
 		p      *Properties
 		want   *mrpb.TimeSeries
 	}{
 		{
-			name: "SampleTest",
+			name: "SampleFloat64Test",
 			labels: map[string]string{
 				"name":    "rtt",
 				"process": "hdbnameserver",
 				"pid":     "20210",
 			},
-			val: 0.2341,
+			data: metricVal{
+				val:  float64(0.2341),
+				Type: "float64",
+			},
 			p: &Properties{
 				Config: defaultConfig,
 			},
 			want: &mrpb.TimeSeries{
 				Metric: &metricpb.Metric{
-					Type: "workload.googleapis.com/sap/networkstats",
+					Type: "workload.googleapis.com/sap/networkstats/rtt",
 					Labels: map[string]string{
 						"name":    "rtt",
 						"process": "hdbnameserver",
@@ -373,11 +513,46 @@ func TestCreateMetric(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "SampleInt64Test",
+			labels: map[string]string{
+				"name":    "lastsnd",
+				"process": "hdbnameserver",
+				"pid":     "20210",
+			},
+			data: metricVal{
+				val:  int64(23451),
+				Type: "int64",
+			},
+			p: &Properties{
+				Config: defaultConfig,
+			},
+			want: &mrpb.TimeSeries{
+				Metric: &metricpb.Metric{
+					Type: "workload.googleapis.com/sap/networkstats/lastsnd",
+					Labels: map[string]string{
+						"name":    "lastsnd",
+						"process": "hdbnameserver",
+						"pid":     "20210",
+					},
+				},
+				MetricKind: metricpb.MetricDescriptor_GAUGE,
+				Points: []*mrpb.Point{
+					{
+						Value: &cpb.TypedValue{
+							Value: &cpb.TypedValue_Int64Value{
+								Int64Value: 23451,
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metric := test.p.createMetric(test.labels, test.val)
+			metric := test.p.createMetric(test.labels, test.data)
 
 			cmpOpts := []cmp.Option{
 				protocmp.Transform(),

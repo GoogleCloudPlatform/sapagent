@@ -21,6 +21,7 @@ package networkstats
 import (
 	"context"
 	"fmt"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -37,18 +38,27 @@ import (
 )
 
 // Properties   struct contains the parameters necessary for networkstats package common methods.
-type Properties struct {
-	Executor        commandlineexecutor.Execute
-	Config          *cnfpb.Configuration
-	Client          cloudmonitoring.TimeSeriesCreator
-	CommandParams   commandlineexecutor.Params
-	PMBackoffPolicy backoff.BackOffContext
-	SkippedMetrics  map[string]bool
-}
+type (
+	Properties struct {
+		Executor        commandlineexecutor.Execute
+		Config          *cnfpb.Configuration
+		Client          cloudmonitoring.TimeSeriesCreator
+		CommandParams   commandlineexecutor.Params
+		PMBackoffPolicy backoff.BackOffContext
+		SkippedMetrics  map[string]bool
+	}
+
+	metricVal struct {
+		val  any
+		Type string
+	}
+)
 
 var (
-	pidRe    = regexp.MustCompile(`\d+`)
-	metricRe = regexp.MustCompile(`(\w*:[a-zA-Z\d,\/.]*)|(\w+\s\d+[a-zA-Z.\d]*)`)
+	pidRe                = regexp.MustCompile(`\d+`)
+	metricRe             = regexp.MustCompile(`(\w*:[a-zA-Z\d,\/.]*)|(\w+\s\d+[a-zA-Z.\d]*)`)
+	requiredFloatMetrics = []string{"rtt", "rcv_rtt"}
+	requiredIntMetrics   = []string{"rto", "bytes_acked", "bytes_received", "lastsnd", "lastrcv"}
 )
 
 const (
@@ -56,15 +66,33 @@ const (
 	nwStatsPath = "/sap/networkstats"
 )
 
-// Collect is an implementation of Collector interface defined in processmetrics.go.
-// Collect method collects network metrics, logs errors if it encounters
-// any and returns the collected metrics with the last error encountered while collecting metrics.
+/*
+Collect is an implementation of Collector interface defined in processmetrics.go.
+Collect method collects network metrics, logs errors if it encounters
+any and returns the collected metrics with the last error encountered while collecting metrics.
+*/
 func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
-	if p.SkippedMetrics[nwStatsPath] {
-		log.CtxLogger(ctx).Infow("Skipped collection of networkstats metrics")
+	var floatMetrics, intMetrics []string
+	for _, metric := range requiredFloatMetrics {
+		if p.SkippedMetrics[path.Join(nwStatsPath, metric)] {
+			log.CtxLogger(ctx).Debug("Skipping collection of networkstats metric:", metric)
+			continue
+		}
+		floatMetrics = append(floatMetrics, metric)
+	}
+	for _, metric := range requiredIntMetrics {
+		if p.SkippedMetrics[path.Join(nwStatsPath, metric)] {
+			log.CtxLogger(ctx).Debug("Skipping collection of networkstats metric:", metric)
+			continue
+		}
+		intMetrics = append(intMetrics, metric)
+	}
+	if len(floatMetrics) == 0 && len(intMetrics) == 0 {
+		log.CtxLogger(ctx).Debug("Skipping collection of all networkstats metrics")
 		return nil, nil
 	}
-	log.CtxLogger(ctx).Info("Collecting networkstats metrics")
+
+	log.CtxLogger(ctx).Debug("Collecting networkstats metrics")
 	cmd := p.CommandParams.Executable
 	argsToSplit := p.CommandParams.ArgsToSplit
 	result := p.Executor(ctx, commandlineexecutor.Params{
@@ -83,8 +111,17 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 
 	ssValues := mapValues(metricList)
 
-	reqMetrics := []string{"rtt"}
-	return p.createTSList(ctx, pid, reqMetrics, ssValues)
+	floats, err := p.createTSList(ctx, pid, floatMetrics, ssValues, "float64")
+	if err != nil {
+		return nil, err
+	}
+
+	ints, err := p.createTSList(ctx, pid, intMetrics, ssValues, "int64")
+	if err != nil {
+		return nil, err
+	}
+
+	return append(floats, ints...), nil
 }
 
 // mapValues creates a map of values from given metric list.
@@ -104,6 +141,10 @@ func mapValues(metrics []string) map[string]string {
 				continue
 			}
 		}
+		if len(v) == 0 {
+			log.Logger.Debugw("Empty value for metric:", metric)
+			continue
+		}
 		ssValues[k] = v
 	}
 	return ssValues
@@ -112,25 +153,38 @@ func mapValues(metrics []string) map[string]string {
 // createTSList creates a slice of timeseries metrics according to the required metric values
 // It returns this slice along with an error which could possibly be non-nil.
 // Some error could occur in collection of one individual metric.
-func (p *Properties) createTSList(ctx context.Context, pid string, reqMetrics []string, ssMap map[string]string) ([]*mrpb.TimeSeries, error) {
+func (p *Properties) createTSList(ctx context.Context, pid string, reqMetrics []string, ssMap map[string]string, t string) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
-	var metricsCollectionErr error
 
 	for _, metric := range reqMetrics {
-		val, err := strconv.ParseFloat(strings.Split(ssMap[metric], "/")[0], 64)
-		if err != nil {
-			metricsCollectionErr = err
-			log.CtxLogger(ctx).Infow("could not convert string to float for metric ", metric, "err: ", err)
+		if _, ok := ssMap[metric]; !ok {
+			log.CtxLogger(ctx).Debug("Metric skipped, could not find metric:", metric)
 			continue
 		}
 
-		ssMetrics := p.collectTCPMetrics(ctx, metric, pid, val)
+		var val any
+		var err error
+		if t == "float64" {
+			if metric == "rtt" {
+				val, err = strconv.ParseFloat(strings.Split(ssMap[metric], "/")[0], 64)
+			} else {
+				val, err = strconv.ParseFloat(ssMap[metric], 64)
+			}
+		} else {
+			val, err = strconv.ParseInt(ssMap[metric], 10, 64)
+		}
+		if err != nil {
+			log.CtxLogger(ctx).Errorw("error in parsing value", "could not convert value to type:", t, "metric:", metric, "Val: ", ssMap[metric], "err: ", err)
+			return nil, err
+		}
+
+		ssMetrics := p.collectTCPMetrics(ctx, metric, pid, metricVal{val, t})
 		if ssMetrics != nil {
 			metrics = append(metrics, ssMetrics...)
 		}
 	}
 
-	return metrics, metricsCollectionErr
+	return metrics, nil
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.
@@ -153,29 +207,37 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 }
 
 // collectTCPMetrics collects TCP connection metrics.
-func (p *Properties) collectTCPMetrics(ctx context.Context, metric, pid string, rtt float64) []*mrpb.TimeSeries {
+func (p *Properties) collectTCPMetrics(ctx context.Context, metric, pid string, data metricVal) []*mrpb.TimeSeries {
 	labels := map[string]string{
 		"name":    metric,
 		"process": "hdbnameserver",
 		"pid":     pid,
 	}
 
-	return []*mrpb.TimeSeries{p.createMetric(labels, rtt)}
+	return []*mrpb.TimeSeries{p.createMetric(labels, data)}
 }
 
 // createMetric creates a TimeSeries metric with given labels and values.
-func (p *Properties) createMetric(labels map[string]string, val float64) *mrpb.TimeSeries {
+func (p *Properties) createMetric(labels map[string]string, data metricVal) *mrpb.TimeSeries {
+	metricPath := path.Join(nwStatsPath, labels["name"])
+	log.Logger.Debug("Creating metric for instance", "metric", metricPath, "value", data.val, "labels", labels)
+
 	ts := timeseries.Params{
 		CloudProp:    p.Config.CloudProperties,
-		MetricType:   metricURL + nwStatsPath,
+		MetricType:   metricURL + metricPath,
 		MetricLabels: labels,
 		Timestamp:    tspb.Now(),
-		Float64Value: val,
 		BareMetal:    p.Config.BareMetal,
 	}
 
-	log.Logger.Debug("Creating metric for instance", "metric", nwStatsPath, "value", val, "labels", labels)
-	return timeseries.BuildFloat64(ts)
+	switch data.Type {
+	case "float64":
+		ts.Float64Value = data.val.(float64)
+		return timeseries.BuildFloat64(ts)
+	default:
+		ts.Int64Value = data.val.(int64)
+		return timeseries.BuildInt(ts)
+	}
 }
 
 // parseSSOutput parses given SSOutput for PID value of concerned processes and a list of TCP connection metrics.
