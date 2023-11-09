@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"flag"
-	"github.com/google/go-cmp/cmpopts/cmpopts"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )

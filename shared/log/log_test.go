@@ -21,7 +21,7 @@ import (
 
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
-	"go.uber.org/zapcore/zapcore"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestSetupLoggingToDiscard(t *testing.T) {

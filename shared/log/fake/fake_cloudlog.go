@@ -22,7 +22,7 @@ import (
 
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmpopts/cmpopts"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 // TestCloudLogging provides fake implementations for the cloud logging interface.

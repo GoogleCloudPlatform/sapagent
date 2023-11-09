@@ -23,7 +23,7 @@ import (
 	"time"
 
 	logging "cloud.google.com/go/logging"
-	"go.uber.org/zapcore/zapcore"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestLogLevels(t *testing.T) {
