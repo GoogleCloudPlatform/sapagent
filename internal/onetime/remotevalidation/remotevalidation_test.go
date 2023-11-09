@@ -122,6 +122,62 @@ func TestRemoteValidationHandler(t *testing.T) {
 			want:        subcommands.ExitUsageError,
 		},
 		{
+			name: "ConfigErrNotExist",
+			remote: &RemoteValidation{
+				project:    "project-1",
+				instanceid: "instance-1",
+				zone:       "zone-1",
+				config:     "/path/does/not/exist",
+			},
+			loadOptions: defaultLoadOptions,
+			want:        subcommands.ExitFailure,
+		},
+		{
+			name: "ConfigReadFileError",
+			remote: &RemoteValidation{
+				project:    "project-1",
+				instanceid: "instance-1",
+				zone:       "zone-1",
+				config:     "/tmp/workload-validation.json",
+			},
+			loadOptions: collectiondefinition.LoadOptions{
+				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
+				OSType:   "linux",
+				Version:  "1.0",
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "ConfigUnmarshalError",
+			remote: &RemoteValidation{
+				project:    "project-1",
+				instanceid: "instance-1",
+				zone:       "zone-1",
+				config:     "/tmp/workload-validation.json",
+			},
+			loadOptions: collectiondefinition.LoadOptions{
+				ReadFile: func(s string) ([]byte, error) { return []byte("invalid json"), nil },
+				OSType:   "linux",
+				Version:  "1.0",
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "ConfigSuccess",
+			remote: &RemoteValidation{
+				project:    "project-1",
+				instanceid: "instance-1",
+				zone:       "zone-1",
+				config:     "/tmp/workload-validation.json",
+			},
+			loadOptions: collectiondefinition.LoadOptions{
+				ReadFile: func(s string) ([]byte, error) { return []byte("{}"), nil },
+				OSType:   "linux",
+				Version:  "1.0",
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
 			name: "CollectionDefinitionLoadError",
 			remote: &RemoteValidation{
 				project:    "project-1",
@@ -141,7 +197,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 			want: subcommands.ExitFailure,
 		},
 		{
-			name: "Success",
+			name: "CollectionDefinitionLoadSuccess",
 			remote: &RemoteValidation{
 				project:    "project-1",
 				instanceid: "instance-1",

@@ -20,8 +20,10 @@ package remotevalidation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"runtime"
@@ -29,6 +31,7 @@ import (
 	"flag"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
+	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -41,12 +44,13 @@ import (
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 // RemoteValidation has args for remote subcommands.
 type RemoteValidation struct {
-	project, instanceid, instancename, zone string
-	help, version                           bool
+	project, instanceid, instancename, zone, config string
+	help, version                                   bool
 }
 
 // Name implements the subcommand interface for remote.
@@ -72,6 +76,8 @@ func (r *RemoteValidation) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.instancename, "name", "", "instance name of this instance")
 	fs.StringVar(&r.zone, "z", "", "zone of this instance")
 	fs.StringVar(&r.zone, "zone", "", "zone of this instance")
+	fs.StringVar(&r.config, "c", "", "workload validation collection config")
+	fs.StringVar(&r.config, "config", "", "workload validation collection config")
 	fs.BoolVar(&r.help, "h", false, "Display help")
 	fs.BoolVar(&r.version, "v", false, "Display the current version of the agent")
 }
@@ -137,7 +143,7 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 		return subcommands.ExitUsageError
 	}
 
-	cd, err := collectiondefinition.Load(ctx, opts)
+	config, err := r.workloadValidationConfig(ctx, opts)
 	if err != nil {
 		log.Print(fmt.Sprintf("ERROR: %v", err))
 		return subcommands.ExitFailure
@@ -145,7 +151,7 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, iir *ins
 
 	wlmparams := workloadmanager.Parameters{
 		Config:                r.createConfiguration(),
-		WorkloadConfig:        cd.GetWorkloadValidation(),
+		WorkloadConfig:        config,
 		Remote:                true,
 		ConfigFileReader:      configFileReader,
 		Execute:               execute,
@@ -176,4 +182,26 @@ func (r *RemoteValidation) createConfiguration() *cpb.Configuration {
 			Version: configuration.AgentVersion,
 		},
 	}
+}
+
+func (r *RemoteValidation) workloadValidationConfig(ctx context.Context, opts collectiondefinition.LoadOptions) (*wpb.WorkloadValidation, error) {
+	if r.config == "" {
+		cd, err := collectiondefinition.Load(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		return cd.GetWorkloadValidation(), nil
+	}
+
+	data, err := opts.ReadFile(r.config)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("workload validation config file does not exist: %s", r.config)
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to read workload validation config file: %v", err)
+	}
+	config := &wpb.WorkloadValidation{}
+	if err := protojson.Unmarshal(data, config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal workload validation config: %v", err)
+	}
+	return config, nil
 }
