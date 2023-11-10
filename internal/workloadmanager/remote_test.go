@@ -24,18 +24,64 @@ import (
 	"strings"
 	"testing"
 
-	mpb "google.golang.org/genproto/googleapis/api/metric"
-	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
-	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+
+	mpb "google.golang.org/genproto/googleapis/api/metric"
+	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+)
+
+var (
+	defaultRemoteCollectionStdout = `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"sapagent","instance_name":"test-instance","os":"sles-15"}},"points":[{"interval":{},"value":{"double_value":1}}],"resource":{"type":"gce_instance","labels":{"instance_id":"instanceId","project_id":"projectId","zone":"some-region-zone"}},"metricKind":"GAUGE"}`
+	defaultRemoteInstance         = &cfgpb.RemoteCollectionInstance{
+		ProjectId:    "projectId",
+		Zone:         "some-region-zone",
+		InstanceId:   "instanceId",
+		InstanceName: "instanceName",
+	}
+	defaultTimeSeries = createTimeSeries("workload.googleapis.com/sap/validation/system", map[string]string{"agent": "sapagent", "instance_name": "test-instance", "os": "sles-15"}, 1, &cfgpb.Configuration{
+		BareMetal: false,
+		CloudProperties: &iipb.CloudProperties{
+			ProjectId:    "projectId",
+			Zone:         "some-region-zone",
+			Region:       "some-region",
+			InstanceId:   "instanceId",
+			InstanceName: "instanceName",
+		},
+	})
+	defaultWLMInterface = func() *testWLMInterface {
+		return &testWLMInterface{
+			WriteInsightArgs: []WriteInsightArgs{{
+				Project:  "projectId",
+				Location: "some-region",
+				Req: &workloadmanager.WriteInsightRequest{
+					Insight: &workloadmanager.Insight{
+						InstanceId: "instanceId",
+						SapValidation: &workloadmanager.SapValidation{
+							ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
+								Details: map[string]string{
+									"agent":         "sapagent",
+									"instance_name": "test-instance",
+									"os":            "sles-15",
+								},
+								SapValidationType: "SYSTEM",
+							}},
+						},
+					},
+				},
+			}},
+			WriteInsightErrs: []error{nil},
+		}
+	}
 )
 
 func TestCollectMetricsToJSON(t *testing.T) {
@@ -199,11 +245,8 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 	tests := []struct {
 		name         string
 		config       *cfgpb.Configuration
-		execOutput   string
 		wlmInterface *testWLMInterface
-		wantCount    int
-		execError    error
-		cmdExists    bool
+		want         int
 	}{
 		{
 			name: "returnsZeroWhenNotConfigured",
@@ -215,262 +258,41 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 					},
 				},
 			},
-			execOutput:   "",
-			wlmInterface: &testWLMInterface{},
-			wantCount:    0,
-			execError:    nil,
-			cmdExists:    true,
+			wlmInterface: defaultWLMInterface(),
+			want:         0,
 		},
 		{
-			name: "returnsSentWhenConfigured",
-			config: &cfgpb.Configuration{
-				CloudProperties: &iipb.CloudProperties{
-					Zone: "some-region-zone",
-				},
-				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
-					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
-						ConcurrentCollections:  1,
-						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
-						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
-							&cfgpb.RemoteCollectionInstance{
-								ProjectId:    "projectId",
-								Zone:         "some-region-zone",
-								InstanceId:   "instanceId",
-								InstanceName: "instanceName",
-							},
-						},
-					},
-				},
-			},
-			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{
-					Project:  "projectId",
-					Location: "some-region",
-					Req: &workloadmanager.WriteInsightRequest{
-						Insight: &workloadmanager.Insight{
-							InstanceId: "instanceId",
-							SapValidation: &workloadmanager.SapValidation{
-								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
-									Details: map[string]string{
-										"agent":         "gcagent",
-										"instance_name": "test-instance",
-										"os":            `"sles"-"15"`,
-									},
-									SapValidationType: "SYSTEM",
-								}},
-							},
-						},
-					},
-				}},
-				WriteInsightErrs: []error{nil},
-			},
-			wantCount: 1,
-			execError: nil,
-			cmdExists: true,
-		},
-		{
-			name: "returnsZeroWithErrorFromRemote",
+			name: "returnsMetricsSentWhenConfiguredGcloud",
 			config: &cfgpb.Configuration{
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
-						ConcurrentCollections:  1,
-						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
-						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
-							&cfgpb.RemoteCollectionInstance{
-								ProjectId:    "projectId",
-								Zone:         "some-region-zone",
-								InstanceId:   "instanceId",
-								InstanceName: "instanceName",
-							},
-						},
+						RemoteCollectionGcloud:    &cfgpb.RemoteCollectionGcloud{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{defaultRemoteInstance},
+						ConcurrentCollections:     1,
 					},
 				},
 			},
-			execOutput:   "ERROR something did not work",
-			wlmInterface: &testWLMInterface{},
-			wantCount:    0,
-			execError:    nil,
-			cmdExists:    true,
+			wlmInterface: defaultWLMInterface(),
+			want:         1,
 		},
 		{
-			name: "returnsZeroWithErrorExec",
+			name: "returnsMetricsSentWhenConfiguredSSH",
 			config: &cfgpb.Configuration{
-				CloudProperties: &iipb.CloudProperties{
-					Zone: "some-region-zone",
-				},
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: false,
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
-						ConcurrentCollections:  1,
-						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
-						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
-							&cfgpb.RemoteCollectionInstance{
-								ProjectId:    "projectId",
-								Zone:         "some-region-zone",
-								InstanceId:   "instanceId",
-								InstanceName: "instanceName",
-							},
-						},
+						RemoteCollectionSsh:       &cfgpb.RemoteCollectionSsh{},
+						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{defaultRemoteInstance},
+						ConcurrentCollections:     1,
 					},
 				},
 			},
-			execOutput:   `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
-			wlmInterface: &testWLMInterface{},
-			wantCount:    0,
-			execError:    errors.New("Error executing"),
-			cmdExists:    true,
-		},
-		{
-			name: "gcloudNotFound",
-			config: &cfgpb.Configuration{
-				CloudProperties: &iipb.CloudProperties{
-					Zone: "some-region-zone",
-				},
-				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
-					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
-						ConcurrentCollections:  1,
-						RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
-						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
-							&cfgpb.RemoteCollectionInstance{
-								ProjectId:    "projectId",
-								Zone:         "some-region-zone",
-								InstanceId:   "instanceId",
-								InstanceName: "instanceName",
-							},
-						},
-					},
-				},
-			},
-			execOutput:   `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
-			wlmInterface: &testWLMInterface{},
-			wantCount:    0,
-			execError:    nil,
-			cmdExists:    false,
-		},
-		{
-			name: "returnsSentWhenConfiguredSSH",
-			config: &cfgpb.Configuration{
-				CloudProperties: &iipb.CloudProperties{
-					Zone: "some-region-zone",
-				},
-				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
-					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
-						ConcurrentCollections: 1,
-						RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
-						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
-							&cfgpb.RemoteCollectionInstance{
-								ProjectId:    "projectId",
-								Zone:         "some-region-zone",
-								InstanceId:   "instanceId",
-								InstanceName: "instanceName",
-							},
-						},
-					},
-				},
-			},
-			execOutput: `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{
-					Project:  "projectId",
-					Location: "some-region",
-					Req: &workloadmanager.WriteInsightRequest{
-						Insight: &workloadmanager.Insight{
-							InstanceId: "instanceId",
-							SapValidation: &workloadmanager.SapValidation{
-								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
-									SapValidationType: "SYSTEM",
-									Details: map[string]string{
-										"agent":         "gcagent",
-										"instance_name": "test-instance",
-										"os":            `"sles"-"15"`,
-									},
-								}},
-							},
-						},
-					},
-				}},
-				WriteInsightErrs: []error{nil},
-			},
-			wantCount: 1,
-			execError: nil,
-		},
-		{
-			name: "returnsZeroWithErrorFromRemote",
-			config: &cfgpb.Configuration{
-				CloudProperties: &iipb.CloudProperties{
-					Zone: "some-region-zone",
-				},
-				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
-					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
-						ConcurrentCollections: 1,
-						RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
-						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
-							&cfgpb.RemoteCollectionInstance{
-								ProjectId:    "projectId",
-								Zone:         "some-region-zone",
-								InstanceId:   "instanceId",
-								InstanceName: "instanceName",
-							},
-						},
-					},
-				},
-			},
-			execOutput: "ERROR something did not work",
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{
-					Project:  "projectId",
-					Location: "some-region",
-					Req: &workloadmanager.WriteInsightRequest{
-						Insight: &workloadmanager.Insight{
-							InstanceId: "instanceId",
-							SapValidation: &workloadmanager.SapValidation{
-								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
-									SapValidationType: "SYSTEM",
-									Details:           map[string]string{},
-								}},
-							},
-						},
-					},
-				}},
-				WriteInsightErrs: []error{nil},
-			},
-			wantCount: 0,
-			execError: nil,
-		},
-		{
-			name: "returnsZeroWithErrorExec",
-			config: &cfgpb.Configuration{
-				CloudProperties: &iipb.CloudProperties{
-					Zone: "some-region-zone",
-				},
-				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
-					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
-						ConcurrentCollections: 1,
-						RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
-						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{
-							&cfgpb.RemoteCollectionInstance{
-								ProjectId:    "projectId",
-								Zone:         "some-region-zone",
-								InstanceId:   "instanceId",
-								InstanceName: "instanceName",
-							},
-						},
-					},
-				},
-			},
-			execOutput:   `{"metric":{"type":"workload.googleapis.com/sap/validation/system","labels":{"agent":"gcagent","instance_name":"test-instance","os":"\"sles\"-\"15\""}},"resource":{"type":"gce_instance","labels":{"instance_id":"5555"}},"metricKind":"GAUGE"}`,
-			wlmInterface: &testWLMInterface{},
-			wantCount:    0,
-			execError:    errors.New("Error executing"),
+			wlmInterface: defaultWLMInterface(),
+			want:         1,
 		},
 	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.wlmInterface.T = t
@@ -478,25 +300,365 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 				Config: test.config,
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
-						StdOut: test.execOutput,
+						StdOut: defaultRemoteCollectionStdout,
 						StdErr: "",
-						Error:  test.execError,
+						Error:  nil,
 					}
 				},
-				Exists:            func(string) bool { return test.cmdExists },
+				Exists:            func(string) bool { return true },
 				ConfigFileReader:  func(data string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(data)), nil },
 				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				BackOffs:          defaultBackOffIntervals,
 				WLMService:        test.wlmInterface,
 			}
-
-			want := test.wantCount
 			got := collectAndSendRemoteMetrics(context.Background(), p)
-			if got != want {
-				t.Errorf("Did not collect and send the expected number of metrics, want: %d, got: %d", want, got)
+			if got != test.want {
+				t.Errorf("collectAndSendRemoteMetrics() unexpected metrics sent, got %d want %d", got, test.want)
 			}
+		})
+	}
+}
 
+func TestRemoteCollectGcloud(t *testing.T) {
+	tests := []struct {
+		name       string
+		cmdExists  func(string) bool
+		cmdExecute func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		config     *cfgpb.WorkloadValidationRemoteCollection
+		instance   *cfgpb.RemoteCollectionInstance
+		want       WorkloadMetrics
+	}{
+		{
+			name:      "gcloudCommandNotExists",
+			cmdExists: func(string) bool { return false },
+			cmdExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections:  1,
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name:      "SCPWorkloadValidationConfigError",
+			cmdExists: func(string) bool { return true },
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "/tmp/workload-validation.json") {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+						Error:  errors.New("SCP error"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections:  1,
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name:      "SCPAgentBinaryError",
+			cmdExists: func(string) bool { return true },
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, agentBinary) {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+						Error:  errors.New("SCP error"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections:  1,
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name:      "RemoteCollectionError",
+			cmdExists: func(string) bool { return true },
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "--command") {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+						Error:  errors.New("sapagent error"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections:  1,
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name:      "RemoteCollectionOutputError",
+			cmdExists: func(string) bool { return true },
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "--command") {
+					return commandlineexecutor.Result{
+						StdOut: "ERROR: remote collection error",
+						StdErr: "",
+						Error:  nil,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections:  1,
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name:      "RemoteCollectionOutputInvalid",
+			cmdExists: func(string) bool { return true },
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "--command") {
+					return commandlineexecutor.Result{
+						StdOut: "Invalid output",
+						StdErr: "",
+						Error:  nil,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections:  1,
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name:      "Success",
+			cmdExists: func(string) bool { return true },
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections: 1,
+				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{
+					SshUsername:      "username",
+					TunnelThroughIap: true,
+					UseInternalIp:    true,
+					GcloudArgs:       "--args",
+				},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{Metrics: defaultTimeSeries},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ch := make(chan WorkloadMetrics)
+			opts := collectOptions{
+				exists:     test.cmdExists,
+				execute:    test.cmdExecute,
+				configPath: "/tmp/workload-validation.json",
+				rc:         test.config,
+				i:          test.instance,
+				wm:         ch,
+			}
+			go collectRemoteGcloud(context.Background(), opts)
+			got := <-ch
+			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
+				t.Errorf("collectRemoteGcloud() unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRemoteCollectSSH(t *testing.T) {
+	tests := []struct {
+		name       string
+		cmdExecute func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		config     *cfgpb.WorkloadValidationRemoteCollection
+		instance   *cfgpb.RemoteCollectionInstance
+		want       WorkloadMetrics
+	}{
+		{
+			name: "SCPWorkloadValidationConfigError",
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "/tmp/workload-validation.json") {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+						Error:  errors.New("SCP error"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections: 1,
+				RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name: "SCPAgentBinaryError",
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, agentBinary) {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+						Error:  errors.New("SCP error"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections: 1,
+				RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name: "RemoteCollectionError",
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "remote") {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "",
+						Error:  errors.New("sapagent error"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections: 1,
+				RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name: "RemoteCollectionOutputError",
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "remote") {
+					return commandlineexecutor.Result{
+						StdOut: "ERROR: remote collection error",
+						StdErr: "",
+						Error:  nil,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections: 1,
+				RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name: "RemoteCollectionOutputInvalid",
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Invalid output",
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections: 1,
+				RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{},
+		},
+		{
+			name: "Success",
+			cmdExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultRemoteCollectionStdout,
+					StdErr: "",
+					Error:  nil,
+				}
+			},
+			config: &cfgpb.WorkloadValidationRemoteCollection{
+				ConcurrentCollections: 1,
+				RemoteCollectionSsh:   &cfgpb.RemoteCollectionSsh{},
+			},
+			instance: defaultRemoteInstance,
+			want:     WorkloadMetrics{Metrics: defaultTimeSeries},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ch := make(chan WorkloadMetrics)
+			opts := collectOptions{
+				execute:    test.cmdExecute,
+				configPath: "/tmp/workload-validation.json",
+				rc:         test.config,
+				i:          test.instance,
+				wm:         ch,
+			}
+			go collectRemoteSSH(context.Background(), opts)
+			got := <-ch
+			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
+				t.Errorf("collectRemoteSSH() unexpected diff (-want +got):\n%s", diff)
+			}
 		})
 	}
 }
