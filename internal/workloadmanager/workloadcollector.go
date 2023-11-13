@@ -89,7 +89,7 @@ func currentTime() int64 {
 }
 
 func start(ctx context.Context, params Parameters) {
-	log.CtxLogger(ctx).Info("Starting collection of Workload Manager metrics")
+	log.CtxLogger(ctx).Info("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
 	cmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 	if cmf <= 0 {
 		// default it to 5 minutes
@@ -125,8 +125,8 @@ func start(ctx context.Context, params Parameters) {
 			log.CtxLogger(ctx).Debug("Workload metrics cancellation requested")
 			return
 		case cd := <-params.WorkloadConfigCh:
-			log.CtxLogger(ctx).Info("Received updated workload collection configuration")
 			params.WorkloadConfig = cd.GetWorkloadValidation()
+			log.CtxLogger(ctx).Info("Received updated workload collection configuration", "version", params.WorkloadConfig.GetVersion())
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
 		case <-configurableMetricsTicker.C:

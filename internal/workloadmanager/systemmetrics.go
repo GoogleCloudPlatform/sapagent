@@ -42,7 +42,7 @@ type InterfaceAddrsGetter func() ([]net.Addr, error)
 // WorkloadValidation config and formats the results as a time series to be
 // uploaded to a Collection Storage mechanism.
 func CollectSystemMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.CtxLogger(ctx).Info("Collecting Workload Manager System metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager System metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
 	l := make(map[string]string)
 
 	system := params.WorkloadConfig.GetValidationSystem()
@@ -74,6 +74,8 @@ func collectSystemVariable(m *wlmpb.SystemMetric, params Parameters) string {
 		return params.Config.GetAgentProperties().GetVersion()
 	case wlmpb.SystemVariable_NETWORK_IPS:
 		return networkIPAddrs(params)
+	case wlmpb.SystemVariable_COLLECTION_CONFIG_VERSION:
+		return fmt.Sprint(params.WorkloadConfig.GetVersion())
 	default:
 		log.Logger.Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
 		return ""

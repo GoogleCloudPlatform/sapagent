@@ -39,6 +39,7 @@ const sapValidationPacemaker = "workload.googleapis.com/sap/validation/pacemaker
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
+	log.CtxLogger(ctx).Info("Collecting Workload Manager Pacemaker metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
 	// Prune the configurable labels depending on what is defined in the workload config.
 	pruneLabels := map[string]bool{
 		"pcmk_delay_base":                  true,

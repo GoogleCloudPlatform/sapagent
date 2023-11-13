@@ -57,7 +57,7 @@ type lsblk struct {
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.CtxLogger(ctx).Info("Collecting Workload Manager HANA metrics...")
+	log.CtxLogger(ctx).Info("Collecting Workload Manager HANA metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
 	l := map[string]string{}
 	hanaVal := 0.0
 

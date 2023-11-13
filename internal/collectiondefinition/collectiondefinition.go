@@ -335,7 +335,9 @@ func isValidVersion(metric validationMetric) bool {
 //
 // Metrics specified in the secondary definition cannot override those in the primary definition.
 func mergeWorkloadValidations(primary, secondary *wlmpb.WorkloadValidation) *wlmpb.WorkloadValidation {
-	merged := &wlmpb.WorkloadValidation{}
+	merged := &wlmpb.WorkloadValidation{
+		Version: primary.GetVersion(),
+	}
 
 	// Construct a map of existing metrics in the primary workload validation definition.
 	existing := mapWorkloadValidationMetrics(primary)

@@ -38,6 +38,7 @@ enum SystemVariable {
   AGENT_NAME = 3;
   AGENT_VERSION = 4;
   NETWORK_IPS = 5;
+  COLLECTION_CONFIG_VERSION = 6;
 }
 
 enum DiskVariable {
@@ -96,6 +97,11 @@ message WorkloadValidation {
   ValidationNetweaver validation_netweaver = 4;
   ValidationPacemaker validation_pacemaker = 5;
   ValidationCustom validation_custom = 6;
+  // Track the version of the workload validation config distributed for the
+  // Agent for SAP by the SAP Core Eng team. This field is intended for logging
+  // and debugging purposes only, and will be ignored if set in a customer
+  // defined collection definition config.
+  int64 version = 7;
 }
 
 message ValidationSystem {
