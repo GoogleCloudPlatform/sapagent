@@ -24,8 +24,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
@@ -40,6 +40,8 @@ var (
 	}
 	//go:embed public.pem
 	pubkey []byte
+	//go:embed public-dev.pem
+	pubkeyDev []byte
 )
 
 // CreateTempFunc is a wrapper around os.CreateTemp.
@@ -126,7 +128,12 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 		log.CtxLogger(ctx).Warnw("Could not create temporary public key file", "error", err)
 		return nil
 	}
-	if _, err = cdPub.Write(pubkey); err != nil {
+
+	pkey := pubkey
+	if opts.Env == cpb.TargetEnvironment_DEVELOPMENT {
+		pkey = pubkeyDev
+	}
+	if _, err = cdPub.Write(pkey); err != nil {
 		log.CtxLogger(ctx).Warnw("Could not write public key to temp file", "error", err)
 		return nil
 	}
@@ -162,7 +169,7 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 		log.CtxLogger(ctx).Warn(err)
 		return nil
 	}
-	
+
 	log.CtxLogger(ctx).Debug("Successfully downloaded and verified collection definition")
 	return cd
 }
