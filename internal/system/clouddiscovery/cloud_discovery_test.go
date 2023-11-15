@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
@@ -83,7 +85,6 @@ func TestDiscoverComputeResources(t *testing.T) {
 		hostList   []string
 		gceService *fake.TestGCE
 		want       []*spb.SapDiscovery_Resource
-		wantErr    error
 	}{{
 		name:     "discoverEmptyList",
 		parent:   "projects/test-project/zones/test-zone/disks/test-disk",
@@ -117,9 +118,10 @@ func TestDiscoverComputeResources(t *testing.T) {
 			ResourceUri:      "test-disk",
 			RelatedResources: []string{"other-disk"},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "other-disk",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:      "other-disk",
+			RelatedResources: []string{"test-disk"},
 		}},
 	}, {
 		name:     "discoverMultipleItems",
@@ -143,13 +145,15 @@ func TestDiscoverComputeResources(t *testing.T) {
 			ResourceUri:      "test-disk",
 			RelatedResources: []string{"other-disk", "test-filestore"},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "other-disk",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:      "other-disk",
+			RelatedResources: []string{"test-disk"},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
-			ResourceUri:  "test-filestore",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+			ResourceUri:      "test-filestore",
+			RelatedResources: []string{"test-disk"},
 		}},
 	}, {
 		name:     "discoverfromParent",
@@ -172,9 +176,10 @@ func TestDiscoverComputeResources(t *testing.T) {
 			ResourceUri:      "test-instance",
 			RelatedResources: []string{"test-disk"},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "test-disk",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:      "test-disk",
+			RelatedResources: []string{"test-instance"},
 		}},
 	}, {
 		name:     "continueAfterError",
@@ -196,24 +201,354 @@ func TestDiscoverComputeResources(t *testing.T) {
 			ResourceUri:      "test-instance",
 			RelatedResources: []string{"test-filestore"},
 		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
-			ResourceUri:  "test-filestore",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+			ResourceUri:      "test-filestore",
+			RelatedResources: []string{"test-instance"},
+		}},
+	}, {
+		name:     "skipEmptyName",
+		parent:   "projects/test-project/zones/test-zone/instances/test-instance",
+		hostList: []string{"", "projects/test-project/regions/test-region/filestores/test-filestore"},
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "test-instance",
+			}},
+			GetInstanceErr:   []error{nil},
+			GetFilestoreResp: []*file.Instance{{Name: "test-filestore"}},
+			GetFilestoreErr:  []error{nil},
+		},
+		want: []*spb.SapDiscovery_Resource{{
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:      "test-instance",
+			RelatedResources: []string{"test-filestore"},
+		}, {
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+			ResourceUri:      "test-filestore",
+			RelatedResources: []string{"test-instance"},
+		}},
+	}, {
+		name:     "parentNameDiffersFromResourceURI",
+		parent:   "projects/test-project/zones/test-zone/instances/some-hostname",
+		hostList: []string{},
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "test-instance",
+			}},
+			GetInstanceErr: []error{nil},
+		},
+		want: []*spb.SapDiscovery_Resource{{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "test-instance",
+		}},
+	}, {
+		name:     "skipsAlreadyDiscoveredResource",
+		parent:   "projects/test-project/zones/test-zone/instances/test-instance",
+		hostList: []string{"projects/test-project/regions/test-region/addresses/test-address", "test-instance"},
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "test-instance",
+			}},
+			GetInstanceErr: []error{nil},
+			GetAddressResp: []*compute.Address{{
+				SelfLink: "test-address",
+				Users:    []string{"test-instance"},
+			}},
+			GetAddressErr: []error{nil},
+		},
+		want: []*spb.SapDiscovery_Resource{{
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:      "test-instance",
+			RelatedResources: []string{"test-address"},
+		}, {
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+			ResourceUri:      "test-address",
+			RelatedResources: []string{"test-instance"},
+		}},
+	}, {
+		name:     "skipsParentWithDifferentURIFromHostname",
+		parent:   "projects/test-project/zones/test-zone/instances/some-hostname",
+		hostList: []string{"projects/test-project/regions/test-region/addresses/test-address"},
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "test-instance",
+			}},
+			GetInstanceErr: []error{nil},
+			GetAddressResp: []*compute.Address{{
+				SelfLink: "test-address",
+				Users:    []string{"projects/test-project/zones/test-zone/instances/some-hostname"},
+			}},
+			GetAddressErr: []error{nil},
+		},
+		want: []*spb.SapDiscovery_Resource{{
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:      "test-instance",
+			RelatedResources: []string{"test-address"},
+		}, {
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+			ResourceUri:      "test-address",
+			RelatedResources: []string{"test-instance"},
 		}},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				hostResolver: func(string) ([]string, error) { return []string{}, nil },
-				gceService:   test.gceService,
+				HostResolver: func(string) ([]string, error) { return []string{}, nil },
+				GceService:   test.gceService,
 			}
-			got, err := c.DiscoverComputeResources(context.Background(), test.parent, test.hostList, defaultCloudProperties)
+			got := c.DiscoverComputeResources(context.Background(), test.parent, test.hostList, defaultCloudProperties)
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverComputeResources() returned unexpected diff (-want +got):\n%s", diff)
 			}
-			if !cmp.Equal(test.wantErr, err, cmpopts.EquateErrors()) {
-				t.Errorf("discoverComputeResources() returned unexpected error: %v", err)
-			}
+		})
+	}
+}
+
+func TestDiscoverResourceCache(t *testing.T) {
+	tests := []struct {
+		name                 string
+		firstHost            toDiscover
+		secondHost           toDiscover
+		gceService           *fake.TestGCE
+		cache                map[string]cacheEntry
+		firstResolver        func(string) ([]string, error)
+		secondResolver       func(string) ([]string, error)
+		firstWant            *spb.SapDiscovery_Resource
+		firstWantToDiscover  []toDiscover
+		firstWantErr         error
+		secondWant           *spb.SapDiscovery_Resource
+		secondWantToDiscover []toDiscover
+		secondWantErr        error
+	}{{
+		name:           "discoverUsesCacheOnSecondCall",
+		firstHost:      toDiscover{name: "projects/test-project/zones/test-zone/instances/test-instance"},
+		secondHost:     toDiscover{name: "projects/test-project/zones/test-zone/instances/test-instance"},
+		firstResolver:  func(string) ([]string, error) { return []string{}, nil },
+		secondResolver: func(string) ([]string, error) { return []string{}, nil },
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "projects/test-project/zones/test-zone/instances/test-instance",
+				Disks: []*compute.AttachedDisk{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
+			}, nil},
+			GetInstanceErr: []error{nil, cmpopts.AnyError},
+		},
+		firstWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		firstWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+		secondWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		secondWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+	}, {
+		name:           "discoverUsesCacheOnSecondCallWithDifferentName",
+		firstHost:      toDiscover{name: "test-instance"},
+		secondHost:     toDiscover{name: "projects/test-project/zones/test-zone/instances/test-instance"},
+		firstResolver:  func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		secondResolver: func(string) ([]string, error) { return []string{}, cmpopts.AnyError },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/instances/test-instance", ""},
+			GetURIForIPErr:  []error{nil, cmpopts.AnyError},
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "projects/test-project/zones/test-zone/instances/test-instance",
+				Disks: []*compute.AttachedDisk{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
+			}, nil},
+			GetInstanceErr: []error{nil, cmpopts.AnyError},
+		},
+		firstWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		firstWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+		secondWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		secondWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+	}, {
+		name:          "discoverUsesCacheOnSecondCallWithDifferentAddress",
+		firstHost:     toDiscover{name: "test-instance"},
+		secondHost:    toDiscover{name: "alternate-hostname"},
+		firstResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		secondResolver: func(string) ([]string, error) {
+			return []string{"5.6.7.8"}, nil
+		},
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/instances/test-instance", "projects/test-project/zones/test-zone/instances/test-instance", ""},
+			GetURIForIPErr:  []error{nil, nil, cmpopts.AnyError},
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "projects/test-project/zones/test-zone/instances/test-instance",
+				Disks: []*compute.AttachedDisk{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
+			}, nil},
+			GetInstanceErr: []error{nil, cmpopts.AnyError},
+		},
+		firstWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		firstWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+		secondWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		secondWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+	}, {
+		name:           "discoverRefreshesOldCache",
+		firstHost:      toDiscover{name: "projects/test-project/zones/test-zone/instances/test-instance"},
+		secondHost:     toDiscover{name: "projects/test-project/zones/test-zone/instances/test-instance"},
+		firstResolver:  func(string) ([]string, error) { return []string{}, nil },
+		secondResolver: func(string) ([]string, error) { return []string{}, nil },
+		gceService: &fake.TestGCE{
+			GetInstanceResp: []*compute.Instance{{
+				SelfLink: "projects/test-project/zones/test-zone/instances/test-instance",
+				Disks: []*compute.AttachedDisk{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk2",
+				}},
+			}},
+			GetInstanceErr: []error{nil},
+		},
+		cache: map[string]cacheEntry{
+			"projects/test-project/zones/test-zone/instances/test-instance": {
+				res: &spb.SapDiscovery_Resource{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+					UpdateTime:   timestamppb.New(time.Unix(0, 0)),
+				},
+				related: []toDiscover{
+					{
+						name: "some-other-resource",
+						parent: &spb.SapDiscovery_Resource{
+							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+						},
+					},
+				},
+			},
+		},
+		firstWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		firstWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk2",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+		secondWant: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+		},
+		secondWantToDiscover: []toDiscover{{
+			name: "projects/test-project/zones/test-zone/disks/test-disk2",
+			parent: &spb.SapDiscovery_Resource{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			},
+		}},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Run(test.name, func(t *testing.T) {
+				c := CloudDiscovery{
+					GceService:    test.gceService,
+					resourceCache: test.cache,
+				}
+
+				c.HostResolver = test.firstResolver
+				got, gotToDiscover, err := c.discoverResource(context.Background(), test.firstHost, defaultProjectID)
+				if diff := cmp.Diff(test.firstWant, got, resourceDiffOpts...); diff != "" {
+					t.Errorf("discoverResource() returned unexpected diff on first call (-want +got):\n%s", diff)
+				}
+				if diff := cmp.Diff(test.firstWantToDiscover, gotToDiscover, toDiscoverListOpts...); diff != "" {
+					t.Errorf("discoverResource() returned unexpected toDiscover diff on first call (-want +got):\n%s", diff)
+				}
+				if !cmp.Equal(test.firstWantErr, err, cmpopts.EquateErrors()) {
+					t.Errorf("discoverResource() returned unexpected error on first call: %v", err)
+				}
+
+				c.HostResolver = test.secondResolver
+				got, gotToDiscover, err = c.discoverResource(context.Background(), test.secondHost, defaultProjectID)
+				if diff := cmp.Diff(test.secondWant, got, resourceDiffOpts...); diff != "" {
+					t.Errorf("discoverResource() returned unexpected diff on second call (-want +got):\n%s", diff)
+				}
+				if diff := cmp.Diff(test.secondWantToDiscover, gotToDiscover, toDiscoverListOpts...); diff != "" {
+					t.Errorf("discoverResource() returned unexpected toDiscover diff on second call (-want +got):\n%s", diff)
+				}
+				if !cmp.Equal(test.secondWantErr, err, cmpopts.EquateErrors()) {
+					t.Errorf("discoverResource() returned unexpected error on second call: %v", err)
+				}
+			})
 		})
 	}
 }
@@ -326,7 +661,7 @@ func TestDiscoverResource(t *testing.T) {
 		host: toDiscover{
 			name: "some-host",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceUri: "projects/parent-project/zones/test-zone/disks/test-disk",
+				ResourceUri: "projects/parent-project/zones/test-zone/instances/test-instance",
 			}},
 		resolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
@@ -340,9 +675,10 @@ func TestDiscoverResource(t *testing.T) {
 			GetDiskErr:  []error{nil},
 		},
 		want: &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "test-disk",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:      "test-disk",
+			RelatedResources: []string{"projects/parent-project/zones/test-zone/instances/test-instance"},
 		},
 	}, {
 		name:     "getURIError",
@@ -380,8 +716,8 @@ func TestDiscoverResource(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService:   test.gceService,
-				hostResolver: test.resolver,
+				GceService:   test.gceService,
+				HostResolver: test.resolver,
 			}
 			got, gotToDiscover, err := c.discoverResource(context.Background(), test.host, test.project)
 			if diff := cmp.Diff(test.want, got, resourceDiffOpts...); diff != "" {
@@ -757,7 +1093,7 @@ func TestDiscoverResourceForURI(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			got, gotToDiscover, err := c.discoverResourceForURI(context.Background(), test.uri)
 			if diff := cmp.Diff(test.wantResource, got, resourceDiffOpts...); diff != "" {
@@ -817,7 +1153,7 @@ func TestDiscoverAddress(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			addressURI := makeRegionalURI(defaultProjectID, defaultRegion, "addresses", "some-address")
@@ -913,7 +1249,7 @@ func TestDiscoverInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			instanceURI := makeZonalURI(defaultProjectID, defaultZone, "instances", "some-instance")
@@ -975,7 +1311,7 @@ func TestDiscoverDisk(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			got, gotToDiscover, err := c.discoverDisk(ctx, test.diskURI)
@@ -1047,7 +1383,7 @@ func TestDiscoverForwardingRule(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			fwrURI := makeRegionalURI(defaultProjectID, defaultRegion, "forwardingRules", "some-forwarding-rule")
@@ -1120,7 +1456,7 @@ func TestDiscoverInstanceGroup(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			groupURI := makeZonalURI(defaultProjectID, defaultZone, "instanceGroups", "some-group-name")
@@ -1168,7 +1504,7 @@ func TestDiscoverInstanceGroupInstances(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			groupURI := makeZonalURI(defaultProjectID, defaultZone, "instanceGroups", "some-group-name")
@@ -1217,7 +1553,7 @@ func TestDiscoverFilestore(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			fsURI := makeZonalURI(defaultProjectID, defaultZone, "fileStores", test.filestoreName)
 			ctx := context.Background()
@@ -1269,7 +1605,7 @@ func TestDiscoverHealthCheck(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			hcURI := makeGlobalURI(defaultProjectID, "healthChecks", test.hcName)
@@ -1319,7 +1655,7 @@ func TestDiscoverBackendService(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
-				gceService: test.gceService,
+				GceService: test.gceService,
 			}
 			ctx := context.Background()
 			beURI := makeRegionalURI(defaultProjectID, defaultRegion, "backendServices", test.beName)
