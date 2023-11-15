@@ -71,10 +71,10 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.project, "project", "", "GCP project. (required)")
 	fs.StringVar(&r.sid, "sid", "", "HANA SID. (required)")
 	fs.StringVar(&r.user, "user", "", "HANA username. (required)")
-	fs.StringVar(&r.dataDiskName, "data-disk-name", "", "PD name. (required)")
-	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "PD zone. (required)")
-	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source snapshot. (required)")
-	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: type of disk passed in data-disk-name.")
+	fs.StringVar(&r.dataDiskName, "data-disk-name", "", "Current PD name. (required)")
+	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "Current PD zone. (required)")
+	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source PD snapshot to restore from. (required)")
+	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
@@ -167,7 +167,9 @@ func (r *Restorer) prepare(ctx context.Context) error {
 	if err := r.unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
+
 	// Detach old HANA data disk
+	log.Logger.Info("Detatching old HANA PD disk", "diskName", r.dataDiskName)
 	op, err := r.computeService.Instances.DetachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), r.dataDiskName).Do()
 	if err != nil {
 		return fmt.Errorf("failed to detach old data disk: %v", err)
@@ -180,13 +182,17 @@ func (r *Restorer) prepare(ctx context.Context) error {
 }
 
 func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
-	newdiskName := fmt.Sprintf("%s-%s", r.cloudProps.GetInstanceName(), r.sourceSnapshot)
+	t := time.Now()
+	newdiskName := fmt.Sprintf("hana-%s-restored-%d%02d%02d-%02d%02d%02d",
+		strings.ToLower(r.sid), t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+
 	disk := &compute.Disk{
 		Name:           newdiskName,
 		Type:           fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.project, r.dataDiskZone, r.newDiskType),
 		Zone:           r.dataDiskZone,
 		SourceSnapshot: fmt.Sprintf("projects/%s/global/snapshots/%s", r.project, r.sourceSnapshot),
 	}
+	log.Logger.Infow("Inserting new HANA PD disk from source snapshot", "diskName", newdiskName, "sourceSnapshot", r.sourceSnapshot)
 	op, err := r.computeService.Disks.Insert(r.project, r.dataDiskZone, disk).Do()
 	if err != nil {
 		return fmt.Errorf("failed to insert new data disk: %v", err)
@@ -195,6 +201,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
+	log.Logger.Info("Attaching new HANA PD disk", "diskName", newdiskName)
 	attachDiskToVM := &compute.AttachedDisk{
 		Source: fmt.Sprintf("projects/%s/zones/%s/disks/%s", r.project, r.dataDiskZone, newdiskName),
 	}
@@ -205,6 +212,8 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	if err := r.waitForCompletionWithRetry(ctx, op); err != nil {
 		return fmt.Errorf("attach data disk operation failed: %v", err)
 	}
+
+	log.Logger.Info("New disk successfully attached")
 
 	if err := r.rescanVolumeGroups(ctx); err != nil {
 		return fmt.Errorf("failure rescanning volume groups, logical volumes: %v", err)
@@ -254,7 +263,7 @@ func (r *Restorer) checkLogDir(ctx context.Context) error {
 	if r.baseLogPath, err = r.parseBasePath(ctx, "basepath_logvolumes", commandlineexecutor.ExecuteCommand); err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Infow("Log volume base path", "path", r.baseDataPath)
+	log.CtxLogger(ctx).Infow("Log volume base path", "path", r.baseLogPath)
 
 	if r.logicalLogPath, err = r.parseLogicalPath(ctx, r.baseLogPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return err
@@ -339,6 +348,7 @@ func (r *Restorer) readDataDirMountPath(ctx context.Context, exec commandlineexe
 }
 
 func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexecutor.Execute) error {
+	log.Logger.Infow("Unmount path", "directory", path)
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "umount",
 		ArgsToSplit: path,

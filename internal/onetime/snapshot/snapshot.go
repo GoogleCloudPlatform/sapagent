@@ -248,7 +248,8 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 		return err
 	}
 
-	if err := s.createPDSnapshot(ctx); err != nil {
+	op, err := s.createPDSnapshot(ctx)
+	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error creating persistent disk snapshot", "error", err)
 		usagemetrics.Error(usagemetrics.DiskSnapshotCreateFailure)
 		if _, err := run(s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`); err != nil {
@@ -259,12 +260,14 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 		return err
 	}
 
+	log.Logger.Info("PD Snapshot created, marking HANA snapshot as successful.")
 	if _, err = run(s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, s.snapshotName)); err != nil {
 		log.CtxLogger(ctx).Errorw("Error marking HANA snapshot as SUCCESSFUL")
 		usagemetrics.Error(usagemetrics.DiskSnapshotDoneDBNotComplete)
 		return err
 	}
-	return nil
+	log.Logger.Info("Waiting for PD snapshot to complete uploading.")
+	return s.waitForUploadCompletionWithRetry(ctx, op)
 }
 
 func (s *Snapshot) abandonPreparedSnapshot(run queryFunc) error {
@@ -308,10 +311,12 @@ func (s *Snapshot) createNewHANASnapshot(run queryFunc) (snapshotID string, err 
 	return snapshotID, nil
 }
 
-func (s *Snapshot) createPDSnapshot(ctx context.Context) (err error) {
+func (s *Snapshot) createPDSnapshot(ctx context.Context) (*compute.Operation, error) {
 	log.CtxLogger(ctx).Infow("Creating persistent disk snapshot", "sourcedisk", s.disk, "sourcediskzone", s.diskZone, "snapshotname", s.snapshotName)
 
 	var op *compute.Operation
+	var err error
+
 	snapshot := &compute.Snapshot{
 		Description:      s.description,
 		Name:             s.snapshotName,
@@ -323,20 +328,23 @@ func (s *Snapshot) createPDSnapshot(ctx context.Context) (err error) {
 		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.project, s.diskZone, s.disk)
 		srcDiskKey, err := readKey(s.diskKeyFile, srcDiskURI, os.ReadFile)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		snapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
 	}
 	if s.computeService == nil {
-		return fmt.Errorf("computeService needed to proceed")
+		return nil, fmt.Errorf("computeService needed to proceed")
 	}
 	if op, err = s.computeService.Disks.CreateSnapshot(s.project, s.diskZone, s.disk, snapshot).Do(); err != nil {
-		return err
+		return nil, err
 	}
-	return s.waitForCompletionWithRetry(ctx, op)
+	if err := s.waitForCreationCompletionWithRetry(ctx, op); err != nil {
+		return nil, err
+	}
+	return op, nil
 }
 
-func (s *Snapshot) waitForCompletion(op *compute.Operation) error {
+func (s *Snapshot) waitForCreationCompletion(op *compute.Operation) error {
 	ss, err := s.computeService.Snapshots.Get(s.project, s.snapshotName).Do()
 	if err != nil {
 		return err
@@ -348,13 +356,34 @@ func (s *Snapshot) waitForCompletion(op *compute.Operation) error {
 	return nil
 }
 
-// Each waitForCompletion() returns immediately, we sleep for 120s between
+// Each waitForCreationCompletion() returns immediately, we sleep for 120s between
 // retries a total 120 times => max_wait_duration = 120*120 = 4 Hours
 // TODO: change timeout depending on PD limits
-func (s *Snapshot) waitForCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
+func (s *Snapshot) waitForCreationCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 120), ctx)
-	return backoff.Retry(func() error { return s.waitForCompletion(op) }, bo)
+	return backoff.Retry(func() error { return s.waitForCreationCompletion(op) }, bo)
+}
+
+func (s *Snapshot) waitForUploadCompletion(op *compute.Operation) error {
+	ss, err := s.computeService.Snapshots.Get(s.project, s.snapshotName).Do()
+	if err != nil {
+		return err
+	}
+	if ss.Status == "UPLOADING" {
+		return fmt.Errorf("snapshot uploading is in progress, snapshot name: %s, status:  UPLOADING", s.snapshotName)
+	}
+	log.Logger.Infow("Snapshot uploading progress", "snapshot", s.snapshotName, "status", ss.Status)
+	return nil
+}
+
+// Each waitForUploadCompletionWithRetry() returns immediately, we sleep for 120s between
+// retries a total 120 times => max_wait_duration = 120*120 = 4 Hours
+// TODO: change timeout depending on PD limits
+func (s *Snapshot) waitForUploadCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
+	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 120), ctx)
+	return backoff.Retry(func() error { return s.waitForUploadCompletion(op) }, bo)
 }
 
 // sendStatusToMonitoring sends the status of one time execution to cloud monitoring as a GAUGE metric.
