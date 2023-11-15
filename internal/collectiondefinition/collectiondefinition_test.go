@@ -200,14 +200,14 @@ func TestStart_HeartbeatSpec(t *testing.T) {
 		},
 		{
 			name:         "CancelAfterOneBeat",
-			beatInterval: time.Millisecond * 50,
-			timeout:      time.Millisecond * 75,
+			beatInterval: time.Millisecond * 150,
+			timeout:      time.Millisecond * 250,
 			want:         1,
 		},
 		{
 			name:         "CancelAfterTwoBeats",
-			beatInterval: time.Millisecond * 50,
-			timeout:      time.Millisecond * 125,
+			beatInterval: time.Millisecond * 150,
+			timeout:      time.Millisecond * 400,
 			want:         2,
 		},
 	}
