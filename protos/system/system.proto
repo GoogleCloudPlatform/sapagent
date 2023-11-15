@@ -39,6 +39,9 @@ message SapDiscovery {
   // Unix timestamp this system has been updated last.
   google.protobuf.Timestamp update_time = 5;
 
+  // The GCP project number that this SapSystem belongs to.
+  string project_number = 6;
+
   // Message describing SAP discovery system metadata
   message Metadata {
     // Customer defined, something like "E-commerce pre prod"
