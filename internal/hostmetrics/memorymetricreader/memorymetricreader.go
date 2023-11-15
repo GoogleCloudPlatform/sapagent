@@ -71,29 +71,33 @@ func (r *Reader) MemoryStats(ctx context.Context) *mstatspb.MemoryStats {
 	return ms
 }
 
-// readMemoryStatsForWindows Reads memory stats for Windows, uses wmic command for the OS values
+// readMemoryStatsForWindows Reads memory stats for Windows.
+// Uses PowerShell command for the OS values.
 func (r *Reader) readMemoryStatsForWindows(ctx context.Context) *mstatspb.MemoryStats {
 	ms := &mstatspb.MemoryStats{}
+
+	// The following commands return size in kb, so divide by 1 kb to get mb.
+	// Specifying -as [Int] will round the floating point value.
 	result := r.execute(ctx, commandlineexecutor.Params{
-		Executable: "wmic",
-		Args:       []string{"computersystem", "get", "TotalPhysicalMemory/Format:List"},
+		Executable: "PowerShell",
+		Args:       []string{"-Command", "(Get-WmiObject", "Win32_OperatingSystem).TotalVisibleMemorySize/1kb", "-as", "[Int]"},
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Errorw("Could not execute wmic get TotalPhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Errorw("Could not execute PowerShell (Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize/1kb -as [Int]", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 		ms.Total = -1
 	} else {
-		// NOMUTANTS--precision is the same when dividend 1024*1024 is mutated to (1024*1024)-1
-		ms.Total = mbValueFromWmicOutput(result.StdOut, "TotalPhysicalMemory", 1024*1024)
+		ms.Total = parseInt(strings.TrimSpace(result.StdOut), "TotalPhysicalMemory")
 	}
+
 	result = r.execute(ctx, commandlineexecutor.Params{
-		Executable: "wmic",
-		Args:       []string{"OS", "get", "FreePhysicalMemory/Format:List"},
+		Executable: "PowerShell",
+		Args:       []string{"-Command", "(Get-WmiObject", "Win32_OperatingSystem).FreePhysicalMemory/1kb", "-as", "[Int]"},
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Errorw("Could not execute wmic get FreePhysicalMemory/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Errorw("Could not execute PowerShell (Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory/1kb -as [Int]", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 		ms.Free = -1
 	} else {
-		ms.Free = mbValueFromWmicOutput(result.StdOut, "FreePhysicalMemory", 1024)
+		ms.Free = parseInt(strings.TrimSpace(result.StdOut), "FreePhysicalMemory")
 	}
 	return ms
 }
@@ -145,21 +149,12 @@ func (r *Reader) readMemoryStatsForLinux() *mstatspb.MemoryStats {
 	return ms
 }
 
-// mbValueFromWmicOutput converts the output from Windows wmic commands values into MB
-func mbValueFromWmicOutput(s string, n string, d int64) int64 {
-	lines := strings.Split(s, "\n")
-	for _, line := range lines {
-		l := strings.Split(line, "=")
-		if len(l) == 2 && l[0] == n {
-			// value will be in bytes so we have to convert to MB
-			s := strings.TrimSpace(l[1])
-			v, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				log.Logger.Errorw("Could not parse wmic output", "output", s, "value", n, "error", err)
-				return -1
-			}
-			return v / d
-		}
+// parseInt parses the string output from Windows PowerShell commands to ints.
+func parseInt(s string, n string) int64 {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		log.Logger.Errorw("Could not parse PowerShell output", "output", s, "value", n, "error", err)
+		return -1
 	}
-	return -1
+	return v
 }

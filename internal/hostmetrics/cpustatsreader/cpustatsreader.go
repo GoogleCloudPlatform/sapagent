@@ -19,12 +19,13 @@ package cpustatsreader
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"strconv"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -71,53 +72,34 @@ func (r *Reader) Read(ctx context.Context) *statspb.CpuStats {
 	return s
 }
 
-// Reads CPU stats for Windows, uses wmic command for the OS values
+// Reads CPU stats for Windows, uses PowerShell command for the OS values.
 func (r *Reader) readCPUStatsForWindows(ctx context.Context) *statspb.CpuStats {
 	s := &statspb.CpuStats{}
-	// Use wmic to get the CPU stats
+
 	// Note: must use separated arguments so the windows go exec does not escape the entire argument list
-	args := []string{"cpu", "get", "Name,", "MaxClockSpeed,", "NumberOfCores,", "NumberOfLogicalProcessors/Format:List"}
+	args := []string{"-NoProfile", "-NonInteractive", "-Command", "Get-WmiObject Win32_Processor | Select-Object -Property Name, MaxClockSpeed, NumberOfCores, NumberOfLogicalProcessors | ConvertTo-Json"}
 	result := r.execute(ctx, commandlineexecutor.Params{
-		Executable: "wmic",
+		Executable: "PowerShell",
 		Args:       args,
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Errorw("Could not execute wmic get NumberOfLogicalProcessors/Format:List", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Errorw("Could not execute PowerShell Get-WmiObject Win32_Processor | select-object Name,MaxClockSpeed,NumberOfCores,NumberOfLogicalProcessors | convertto-json", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 		return s
 	}
-	o := strings.ReplaceAll(result.StdOut, "\r", "")
-	lines := strings.Split(o, "\n")
-	for _, line := range lines {
-		l := strings.Split(line, "=")
-		if len(l) < 2 {
-			continue
-		}
-		switch l[0] {
-		case "Name":
-			s.ProcessorType = l[1]
-		case "MaxClockSpeed":
-			n, err := strconv.ParseFloat(l[1], 64)
-			if err != nil {
-				log.CtxLogger(ctx).Errorw("Could not parse MaxClockSpeed", "value", l[1], "error", err)
-				continue
-			}
-			s.MaxMhz = int64(math.Round(n))
-		case "NumberOfCores":
-			n, err := strconv.ParseInt(l[1], 10, 64)
-			if err != nil {
-				log.CtxLogger(ctx).Errorw("Could not parse NumberOfCores", "value", l[1], "error", err)
-				continue
-			}
-			s.CpuCores = n
-		case "NumberOfLogicalProcessors":
-			n, err := strconv.ParseInt(l[1], 10, 64)
-			if err != nil {
-				log.CtxLogger(ctx).Errorw("Could not parse NumberOfLogicalProcessors", "value", l[1], "error", err)
-				continue
-			}
-			s.CpuCount = n
-		}
+	jsonResult := struct {
+		Name                      string
+		MaxClockSpeed             int64
+		NumberOfCores             int64
+		NumberOfLogicalProcessors int64
+	}{}
+	if err := json.Unmarshal([]byte(result.StdOut), &jsonResult); err != nil {
+		log.CtxLogger(ctx).Errorw("Could not unmarshall PowerShell output", "stdout", result.StdOut, "jsonResult", jsonResult, "error", err)
+		return s
 	}
+	s.ProcessorType = jsonResult.Name
+	s.MaxMhz = jsonResult.MaxClockSpeed
+	s.CpuCores = jsonResult.NumberOfCores
+	s.CpuCount = jsonResult.NumberOfLogicalProcessors
 	return s
 }
 

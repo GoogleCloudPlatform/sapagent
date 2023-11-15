@@ -73,25 +73,25 @@ func TestMemoryStats(t *testing.T) {
 		{
 			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				argStr := strings.Join(params.Args, " ")
-				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
+				if argStr != "-Command (Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize/1kb -as [Int]" && argStr != "-Command (Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory/1kb -as [Int]" {
 					return commandlineexecutor.Result{
 						Error: fmt.Errorf("bad arguments for execute command %q", argStr),
 					}
 				}
-				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
+				if argStr == "-Command (Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize/1kb -as [Int]" {
 					return commandlineexecutor.Result{
-						StdOut: "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n",
+						StdOut: "12345\r\n",
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: "\n\nFreePhysicalMemory=31442364 \n   \n    \n",
+					StdOut: "12340\r\n",
 				}
 			},
 			os: "windows",
 			want: &mstatspb.MemoryStats{
-				Total: 34356005437 / (1024 * 1024),
-				Free:  31442364 / 1024,
-				Used:  (34356005437 / (1024 * 1024)) - (31442364 / 1024),
+				Total: 12345,
+				Free:  12340,
+				Used:  5,
 			},
 		},
 		{
@@ -109,14 +109,14 @@ func TestMemoryStats(t *testing.T) {
 		{
 			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				argStr := strings.Join(params.Args, " ")
-				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
+				if argStr != "-Command (Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize/1kb -as [Int]" && argStr != "-Command (Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory/1kb -as [Int]" {
 					return commandlineexecutor.Result{
 						Error: fmt.Errorf("bad arguments for execute command %q", argStr),
 					}
 				}
-				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
+				if argStr == "-Command (Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize/1kb -as [Int]" {
 					return commandlineexecutor.Result{
-						StdOut: "\n\nTotalPhysicalMemory=34356005437 \n   \n    \n",
+						StdOut: "12345\r\n",
 					}
 				}
 				return commandlineexecutor.Result{
@@ -125,21 +125,21 @@ func TestMemoryStats(t *testing.T) {
 			},
 			os: "windows",
 			want: &mstatspb.MemoryStats{
-				Total: 34356005437 / (1024 * 1024),
+				Total: 12345,
 				Free:  -1,
 			},
 		},
 		{
 			wmicExecute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				argStr := strings.Join(params.Args, " ")
-				if argStr != "computersystem get TotalPhysicalMemory/Format:List" && argStr != "OS get FreePhysicalMemory/Format:List" {
+				if argStr != "-Command (Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize/1kb -as [Int]" && argStr != "-Command (Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory/1kb -as [Int]" {
 					return commandlineexecutor.Result{
 						Error: fmt.Errorf("bad arguments for execute command %q", argStr),
 					}
 				}
-				if argStr == "computersystem get TotalPhysicalMemory/Format:List" {
+				if argStr == "-Command (Get-WmiObject Win32_OperatingSystem).TotalVisibleMemorySize/1kb -as [Int]" {
 					return commandlineexecutor.Result{
-						StdOut: "\n\nTotalPhysicalMemory=34356005437.123 \n   \n    \n",
+						StdOut: "12345.123",
 					}
 				}
 				return commandlineexecutor.Result{}
@@ -171,48 +171,38 @@ func TestMemoryStats(t *testing.T) {
 	}
 }
 
-func TestMBValueFromWmicOutput(t *testing.T) {
+func TestPaseInt(t *testing.T) {
 	tests := []struct {
 		name string
 		s    string
-		n    string
-		d    int64
 		want int64
 	}{
 		{
-			name: "Test 1",
+			name: "Empty",
 			s:    "",
-			n:    "",
-			d:    0,
 			want: -1,
 		},
 		{
-			name: "Test 2",
-			s:    "x = 12\n",
-			n:    "y",
-			d:    1,
+			name: "Int",
+			s:    "12",
+			want: 12,
+		},
+		{
+			name: "Float",
+			s:    "12.123",
 			want: -1,
 		},
 		{
-			name: "Test 3",
-			s:    "x =  12 \n ",
-			n:    "x ",
-			d:    2,
-			want: 6,
-		},
-		{
-			name: "Test 4",
-			s:    "x =  abc \n ",
-			n:    "x ",
-			d:    2,
+			name: "String",
+			s:    "abc",
 			want: -1,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := mbValueFromWmicOutput(test.s, test.n, test.d)
+			got := parseInt(test.s, "")
 			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Errorf("mbValueFromWmicOutput() returned unexpected diff (-want +got):\n%s", diff)
+				t.Errorf("parseInt() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

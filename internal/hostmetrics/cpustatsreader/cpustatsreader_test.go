@@ -24,8 +24,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
 func TestRead(t *testing.T) {
@@ -81,7 +81,12 @@ func TestRead(t *testing.T) {
 			os:   "windows",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut: "\n\r\n\r\nMaxClockSpeed=2200\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4\nNumberOfLogicalProcessors=8\n\r\n\r\n",
+					StdOut: `{
+					"Name":  "Intel(R) Xeon(R) CPU @ 2.20GHz",
+					"MaxClockSpeed":  2200,
+					"NumberOfCores":  4,
+					"NumberOfLogicalProcessors":  8
+					}`,
 					StdErr: "",
 				}
 			},
@@ -117,13 +122,11 @@ func TestRead(t *testing.T) {
 			os:   "windows",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut: "\n\r\n\r\nMaxClockSpeed=not-a-float\nName=Intel(R) Xeon(R) CPU @ 2.20GHz\r\nNumberOfCores=4.5\nNumberOfLogicalProcessors=8.5\n\r\n\r\n",
+					StdOut: `{\n"Name":  "Intel(R) Xeon(R) CPU @ 2.20GHz",\n"MaxClockSpeed":  "not-a-float",\n"NumberOfCores":  4.5,\n"NumberOfLogicalProcessors":  8.5\n}`,
 					StdErr: "",
 				}
 			},
-			want: &statspb.CpuStats{
-				ProcessorType: "Intel(R) Xeon(R) CPU @ 2.20GHz",
-			},
+			want: &statspb.CpuStats{},
 		},
 		{
 			name: "unknownOS",
