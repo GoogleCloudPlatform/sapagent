@@ -80,7 +80,7 @@ func TestCollect(t *testing.T) {
 				Config:   defaultConfig,
 				CommandParams: commandlineexecutor.Params{
 					Executable:  "bash",
-					ArgsToSplit: "-c 'nc -l 5060 & (: echo dummyMessage | nc -w 5 -v localhost 5060 & (echo 23456;ss -tin src *:5060))'",
+					ArgsToSplit: "-c 'nc -l 5060 & (: echo dummyMessage | nc -w 5 -v localhost 5060 & (sleep 1;echo 23456;ss -tin src *:5060) & (sleep 10; pkill nc))'",
 				},
 				Client: &fake.TimeSeriesCreator{},
 			},
