@@ -129,7 +129,11 @@ func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts St
 //
 // The periodic loop is safeguarded by a heartbeat monitor.
 func periodicRefresh(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts StartOptions) {
-	cdFetchTicker := time.NewTicker(24 * time.Hour)
+	interval := 24 * time.Hour
+	if opts.LoadOptions.FetchOptions.Env == cpb.TargetEnvironment_INTEGRATION {
+		interval = 5 * time.Minute
+	}
+	cdFetchTicker := time.NewTicker(interval)
 	defer cdFetchTicker.Stop()
 
 	heartbeatTicker := opts.HeartbeatSpec.CreateTicker()

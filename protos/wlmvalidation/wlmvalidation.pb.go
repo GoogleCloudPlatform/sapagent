@@ -533,7 +533,11 @@ type WorkloadValidation struct {
 	ValidationNetweaver *ValidationNetweaver `protobuf:"bytes,4,opt,name=validation_netweaver,json=validationNetweaver,proto3" json:"validation_netweaver,omitempty"`
 	ValidationPacemaker *ValidationPacemaker `protobuf:"bytes,5,opt,name=validation_pacemaker,json=validationPacemaker,proto3" json:"validation_pacemaker,omitempty"`
 	ValidationCustom    *ValidationCustom    `protobuf:"bytes,6,opt,name=validation_custom,json=validationCustom,proto3" json:"validation_custom,omitempty"`
-	Version             int64                `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
+	// Track the version of the workload validation config distributed for the
+	// Agent for SAP by the SAP Core Eng team. This field is intended for logging
+	// and debugging purposes only, and will be ignored if set in a customer
+	// defined collection definition config.
+	Version int64 `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
 }
 
 func (x *WorkloadValidation) Reset() {

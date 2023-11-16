@@ -176,4 +176,5 @@ enum TargetEnvironment {
   PRODUCTION = 1;
   STAGING = 2;
   DEVELOPMENT = 3;
+  INTEGRATION = 4;
 }

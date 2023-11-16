@@ -37,6 +37,7 @@ var (
 		cpb.TargetEnvironment_PRODUCTION:  "cloudsapdeploy",
 		cpb.TargetEnvironment_STAGING:     "cloudsapdeploytesting",
 		cpb.TargetEnvironment_DEVELOPMENT: "sapagent-collection-definition-dev",
+		cpb.TargetEnvironment_INTEGRATION:  "cloudsapdeployintegration",
 	}
 	//go:embed public.pem
 	pubkey []byte
@@ -130,7 +131,7 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 	}
 
 	pkey := pubkey
-	if opts.Env == cpb.TargetEnvironment_DEVELOPMENT {
+	if opts.Env == cpb.TargetEnvironment_DEVELOPMENT || opts.Env == cpb.TargetEnvironment_INTEGRATION {
 		pkey = pubkeyDev
 	}
 	if _, err = cdPub.Write(pkey); err != nil {
