@@ -120,8 +120,12 @@ func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mappe
 
 	diskNames := []string{}
 	for _, disk := range instance.Disks {
-		s := strings.Split(disk.Source, "/")
-		diskNames = append(diskNames, s[len(s)-1])
+		source, diskName := disk.Source, disk.DeviceName
+		if source != "" {
+			s := strings.Split(source, "/")
+			diskName = s[len(s)-1]
+		}
+		diskNames = append(diskNames, diskName)
 	}
 	f := r.createDiskFilter(diskNames)
 	disks, err := r.gceService.ListDisks(projectID, zone, f)
