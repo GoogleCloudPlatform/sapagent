@@ -180,6 +180,16 @@ func (r *CloudMetricReader) createDiskMetrics(ctx context.Context, disks []*inst
 		}
 		deviceNames = append(deviceNames, name)
 		deviceNamesFilter = append(deviceNamesFilter, fmt.Sprintf("metric.device_name='%s'", name))
+		if disk.GetProvisionedIops() > 0 {
+			log.CtxLogger(ctx).Infow("Adding Guaranteed IOps for disk", "disk", name,
+				"iops", disk.GetProvisionedIops())
+			metrics = append(metrics, buildMetric(ctx, metricDiskGuaranteedIops, float64(disk.GetProvisionedIops()), refresh, name))
+		}
+		if disk.GetProvisionedThroughput() > 0 {
+			log.CtxLogger(ctx).Infow("Adding Guaranteed Throughput for disk", "disk", name,
+				"throughput", disk.GetProvisionedThroughput())
+			metrics = append(metrics, buildMetric(ctx, metricDiskGuaranteedThroughput, float64(disk.GetProvisionedThroughput()), refresh, name))
+		}
 	}
 
 	diskDeltaMetrics := []sapMetricKey{metricDiskReadBytesCount, metricDiskWriteBytesCount, metricDiskReadOpsCount, metricDiskWriteOpsCount}
@@ -443,17 +453,19 @@ type sapMetric struct {
 type sapMetricKey string
 
 const (
-	metricCPUUtilization        sapMetricKey = "CPU_UTILIZATION"
-	metricRXBytesCount          sapMetricKey = "RX_BYTES_COUNT"
-	metricTXBytesCount          sapMetricKey = "TX_BYTES_COUNT"
-	metricDiskReadBytesCount    sapMetricKey = "DISK_READ_BYTES_COUNT"
-	metricDiskWriteBytesCount   sapMetricKey = "DISK_WRITE_BYTES_COUNT"
-	metricDiskReadOpsCount      sapMetricKey = "DISK_READ_OPS_COUNT"
-	metricDiskWriteOpsCount     sapMetricKey = "DISK_WRITE_OPS_COUNT"
-	metricDiskWriteOpsCountRate sapMetricKey = "DISK_WRITE_OPS_COUNT_RATE"
-	metricDiskMaxWriteOpsCount  sapMetricKey = "DISK_MAX_WRITE_OPS_COUNT"
-	metricDiskReadOpsCountRate  sapMetricKey = "DISK_READ_OPS_COUNT_RATE"
-	metricDiskMaxReadOpsCount   sapMetricKey = "DISK_MAX_READ_OPS_COUNT"
+	metricCPUUtilization           sapMetricKey = "CPU_UTILIZATION"
+	metricRXBytesCount             sapMetricKey = "RX_BYTES_COUNT"
+	metricTXBytesCount             sapMetricKey = "TX_BYTES_COUNT"
+	metricDiskReadBytesCount       sapMetricKey = "DISK_READ_BYTES_COUNT"
+	metricDiskWriteBytesCount      sapMetricKey = "DISK_WRITE_BYTES_COUNT"
+	metricDiskReadOpsCount         sapMetricKey = "DISK_READ_OPS_COUNT"
+	metricDiskWriteOpsCount        sapMetricKey = "DISK_WRITE_OPS_COUNT"
+	metricDiskWriteOpsCountRate    sapMetricKey = "DISK_WRITE_OPS_COUNT_RATE"
+	metricDiskMaxWriteOpsCount     sapMetricKey = "DISK_MAX_WRITE_OPS_COUNT"
+	metricDiskReadOpsCountRate     sapMetricKey = "DISK_READ_OPS_COUNT_RATE"
+	metricDiskMaxReadOpsCount      sapMetricKey = "DISK_MAX_READ_OPS_COUNT"
+	metricDiskGuaranteedIops       sapMetricKey = "DISK_GUARANTEED_IOPS"
+	metricDiskGuaranteedThroughput sapMetricKey = "DISK_GUARANTEED_THROUGHPUT"
 )
 
 var sapMetrics = map[sapMetricKey]sapMetric{
@@ -554,6 +566,24 @@ var sapMetrics = map[sapMetricKey]sapMetric{
 		metricspb.Category_CATEGORY_DISK,
 		metricspb.Type_TYPE_DOUBLE,
 		metricspb.Unit_UNIT_OPS_PER_SEC,
+		metricspb.Context_CONTEXT_VM,
+	},
+	metricDiskGuaranteedIops: {
+		"Guaranteed IOps",
+		"",
+		cpb.Aggregation_ALIGN_NONE,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_NONE,
+		metricspb.Context_CONTEXT_VM,
+	},
+	metricDiskGuaranteedThroughput: {
+		"Guaranteed Throughput",
+		"",
+		cpb.Aggregation_ALIGN_NONE,
+		metricspb.Category_CATEGORY_DISK,
+		metricspb.Type_TYPE_INT64,
+		metricspb.Unit_UNIT_NONE,
 		metricspb.Context_CONTEXT_VM,
 	},
 }

@@ -71,6 +71,85 @@ func TestInstanceProperties(t *testing.T) {
 	}
 }
 
+func TestGetDiskData(t *testing.T) {
+	tests := []struct {
+		name     string
+		disks    *compute.DiskList
+		diskName string
+		want     *compute.Disk
+	}{
+		{
+			name:  "nildisks",
+			disks: nil,
+			want:  nil,
+		},
+		{
+			name: "emptyitems",
+			disks: &compute.DiskList{
+				Items: []*compute.Disk{},
+			},
+			want: nil,
+		},
+		{
+			name: "hasdisks",
+			disks: &compute.DiskList{
+				Items: []*compute.Disk{
+					{
+						Name: "test-disk",
+					},
+				},
+			},
+			diskName: "test-disk",
+			want: &compute.Disk{
+				Name: "test-disk",
+			},
+		},
+	}
+	for _, test := range tests {
+		r := New(nil, nil)
+		got := r.getDiskData(test.disks, test.diskName)
+		if d := cmp.Diff(test.want, got); d != "" {
+			t.Errorf("getDiskData() mismatch (-want, +got):\n%s", d)
+		}
+	}
+}
+
+func TestCreateDiskFilter(t *testing.T) {
+	tests := []struct {
+		name  string
+		names []string
+		want  string
+	}{
+		{
+			name:  "nonames",
+			names: []string{},
+			want:  "",
+		},
+		{
+			name:  "namesnil",
+			names: nil,
+			want:  "",
+		},
+		{
+			name:  "onename",
+			names: []string{"test-disk-1"},
+			want:  "(name=test-disk-1)",
+		},
+		{
+			name:  "twonames",
+			names: []string{"test-disk-1", "test-disk-2"},
+			want:  "(name=test-disk-1) OR (name=test-disk-2)",
+		},
+	}
+	for _, test := range tests {
+		r := New(nil, nil)
+		got := r.createDiskFilter(test.names)
+		if d := cmp.Diff(test.want, got); d != "" {
+			t.Errorf("createDiskFilter() mismatch (-want, +got):\n%s", d)
+		}
+	}
+}
+
 func TestRead(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -127,6 +206,23 @@ func TestRead(t *testing.T) {
 					},
 				},
 				ListZoneOperationsErr: []error{nil},
+				ListDisksResp: []*compute.DiskList{
+					{
+						Items: []*compute.Disk{
+							{
+								Name:                  "disk-name",
+								Type:                  "/some/path/device-type",
+								ProvisionedIops:       100,
+								ProvisionedThroughput: 1000,
+							},
+							{
+								Name: "disk-device-name",
+								Type: "/some/path/device-type",
+							},
+						},
+					},
+				},
+				ListDisksErr: []error{nil},
 			},
 			mapper: defaultMapperFunc,
 			want: &instancepb.InstanceProperties{
@@ -135,12 +231,14 @@ func TestRead(t *testing.T) {
 				CreationTimestamp: "test-creation-timestamp",
 				Disks: []*instancepb.Disk{
 					&instancepb.Disk{
-						Type:       "PERSISTENT",
-						DeviceType: "device-type",
-						DeviceName: "disk-device-name",
-						IsLocalSsd: false,
-						DiskName:   "disk-name",
-						Mapping:    "disk-mapping",
+						Type:                  "PERSISTENT",
+						DeviceType:            "device-type",
+						DeviceName:            "disk-device-name",
+						IsLocalSsd:            false,
+						DiskName:              "disk-name",
+						Mapping:               "disk-mapping",
+						ProvisionedIops:       100,
+						ProvisionedThroughput: 1000,
 					},
 					&instancepb.Disk{
 						Type:       "SCRATCH",
@@ -180,6 +278,8 @@ func TestRead(t *testing.T) {
 				GetInstanceErr:         []error{nil},
 				ListZoneOperationsResp: []*compute.OperationList{nil},
 				ListZoneOperationsErr:  []error{nil},
+				ListDisksResp:          []*compute.DiskList{nil},
+				ListDisksErr:           []error{nil},
 			},
 			mapper: defaultMapperFunc,
 			want:   &instancepb.InstanceProperties{},
@@ -194,6 +294,8 @@ func TestRead(t *testing.T) {
 				GetInstanceResp:        []*compute.Instance{nil},
 				GetInstanceErr:         []error{nil},
 				ListZoneOperationsResp: []*compute.OperationList{nil},
+				ListDisksResp:          []*compute.DiskList{nil},
+				ListDisksErr:           []error{nil},
 			},
 			mapper: defaultMapperFunc,
 			want:   &instancepb.InstanceProperties{},
@@ -209,6 +311,8 @@ func TestRead(t *testing.T) {
 				GetInstanceErr:         []error{errors.New("Instances.Get error")},
 				ListZoneOperationsResp: []*compute.OperationList{nil},
 				ListZoneOperationsErr:  []error{nil},
+				ListDisksResp:          []*compute.DiskList{nil},
+				ListDisksErr:           []error{nil},
 			},
 			mapper: defaultMapperFunc,
 			want:   &instancepb.InstanceProperties{},
@@ -238,6 +342,53 @@ func TestRead(t *testing.T) {
 					Items: []*compute.Operation{},
 				}},
 				ListZoneOperationsErr: []error{nil},
+				ListDisksResp:         []*compute.DiskList{nil},
+				ListDisksErr:          []error{nil},
+			},
+			mapper: defaultMapperFunc,
+			want: &instancepb.InstanceProperties{
+				MachineType:       "test-machine-type",
+				CpuPlatform:       "test-cpu-platform",
+				CreationTimestamp: "test-creation-timestamp",
+				Disks: []*instancepb.Disk{
+					&instancepb.Disk{
+						Type:       "PERSISTENT",
+						DeviceType: "unknown",
+						DeviceName: "disk-device-name",
+						IsLocalSsd: false,
+						DiskName:   "disk-name",
+						Mapping:    "unknown",
+					},
+				},
+			},
+		},
+		{
+			name:   "errDisksList",
+			config: defaultConfig,
+			dm:     &fakeDiskMapper{err: errors.New("disk mapping error"), out: ""},
+			gceService: &fake.TestGCE{
+				GetDiskResp: []*compute.Disk{nil},
+				GetDiskErr:  []error{nil},
+				GetInstanceResp: []*compute.Instance{{
+					MachineType:       "test-machine-type",
+					CpuPlatform:       "test-cpu-platform",
+					CreationTimestamp: "test-creation-timestamp",
+					Disks: []*compute.AttachedDisk{
+						{
+							Source:     "/some/path/disk-name",
+							DeviceName: "disk-device-name",
+							Type:       "PERSISTENT",
+						},
+					},
+					NetworkInterfaces: []*compute.NetworkInterface{},
+				}},
+				GetInstanceErr: []error{nil},
+				ListZoneOperationsResp: []*compute.OperationList{{
+					Items: []*compute.Operation{},
+				}},
+				ListZoneOperationsErr: []error{nil},
+				ListDisksResp:         []*compute.DiskList{nil},
+				ListDisksErr:          []error{errors.New("Disks.List error")},
 			},
 			mapper: defaultMapperFunc,
 			want: &instancepb.InstanceProperties{
@@ -280,6 +431,8 @@ func TestRead(t *testing.T) {
 					Items: []*compute.Operation{},
 				}},
 				ListZoneOperationsErr: []error{nil},
+				ListDisksResp:         []*compute.DiskList{nil},
+				ListDisksErr:          []error{nil},
 			},
 			mapper: func() (map[InterfaceName][]NetworkAddress, error) {
 				return nil, errors.New("NetworkMapping error")
@@ -315,6 +468,8 @@ func TestRead(t *testing.T) {
 				GetInstanceErr:         []error{nil},
 				ListZoneOperationsResp: []*compute.OperationList{nil},
 				ListZoneOperationsErr:  []error{errors.New("ZoneOperations.List error")},
+				ListDisksResp:          []*compute.DiskList{nil},
+				ListDisksErr:           []error{nil},
 			},
 			mapper: defaultMapperFunc,
 			want: &instancepb.InstanceProperties{

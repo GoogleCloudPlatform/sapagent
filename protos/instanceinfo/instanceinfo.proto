@@ -44,6 +44,10 @@ message Disk {
   // local disk mapping for device_name
   // found by following the link to  /dev/disk/by-id/google-*
   string mapping = 6;
+  // only applicable to extreme disk types
+  int64 provisioned_iops = 7;
+  // only applicable to extreme disk types
+  int64 provisioned_throughput = 8;
 }
 
 message NetworkAdapter {

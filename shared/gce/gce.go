@@ -88,6 +88,11 @@ func (g *GCE) GetDisk(project, zone, disk string) (*compute.Disk, error) {
 	return g.service.Disks.Get(project, zone, disk).Do()
 }
 
+// ListDisks retrieves GCE Persistent Disks defined by the project, sone, and filter provided.
+func (g *GCE) ListDisks(project, zone, filter string) (*compute.DiskList, error) {
+	return g.service.Disks.List(project, zone).Filter(filter).Do()
+}
+
 // ListZoneOperations retrieves a list of Operations resources defined by the project, and zone provided.
 // Results will be filtered according to the provided filter string, and limit the number jof results to maxResults.
 func (g *GCE) ListZoneOperations(project, zone, filter string, maxResults int64) (*compute.OperationList, error) {

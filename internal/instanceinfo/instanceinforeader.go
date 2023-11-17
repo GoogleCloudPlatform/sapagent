@@ -39,6 +39,7 @@ type gceInterface interface {
 	GetInstance(project, zone, instance string) (*compute.Instance, error)
 	ListZoneOperations(project, zone, filter string, maxResults int64) (*compute.OperationList, error)
 	GetDisk(project, zone, name string) (*compute.Disk, error)
+	ListDisks(project, zone, filter string) (*compute.DiskList, error)
 }
 
 // Reader handles the retrieval of instance properties from a compute client instance.
@@ -60,6 +61,29 @@ func New(dm DiskMapper, gceService gceInterface) *Reader {
 // InstanceProperties returns the currently set instance property information.
 func (r *Reader) InstanceProperties() *instancepb.InstanceProperties {
 	return r.instanceProperties
+}
+
+func (r *Reader) createDiskFilter(names []string) string {
+	var f strings.Builder
+	for c, n := range names {
+		if c > 0 {
+			f.WriteString(" OR ")
+		}
+		f.WriteString(fmt.Sprintf("(name=%s)", n))
+	}
+	return f.String()
+}
+
+func (r *Reader) getDiskData(disks *compute.DiskList, diskName string) *compute.Disk {
+	if disks == nil {
+		return nil
+	}
+	for _, disk := range disks.Items {
+		if disk.Name == diskName {
+			return disk
+		}
+	}
+	return nil
 }
 
 // Read queries instance information using the compute API and stores the result as instanceProperties.
@@ -94,6 +118,17 @@ func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mappe
 		CreationTimestamp: instance.CreationTimestamp,
 	}
 
+	diskNames := []string{}
+	for _, disk := range instance.Disks {
+		s := strings.Split(disk.Source, "/")
+		diskNames = append(diskNames, s[len(s)-1])
+	}
+	f := r.createDiskFilter(diskNames)
+	disks, err := r.gceService.ListDisks(projectID, zone, f)
+	if err != nil {
+		log.Logger.Errorw("Could not get disk info from the Compute API", "project", projectID, "zone", zone, "filter", f, "error", err)
+	}
+
 	for _, disk := range instance.Disks {
 		source, diskName := disk.Source, disk.DeviceName
 		if source != "" {
@@ -107,13 +142,22 @@ func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mappe
 			mapping = "unknown"
 		}
 		log.CtxLogger(ctx).Debugw("Instance disk is mapped to device name", "devicename", disk.DeviceName, "mapping", mapping)
+		diskData := r.getDiskData(disks, diskName)
+		var pIops int64 = 0
+		var pThroughput int64 = 0
+		if diskData != nil {
+			pIops = diskData.ProvisionedIops
+			pThroughput = diskData.ProvisionedThroughput
+		}
 		builder.Disks = append(builder.Disks, &instancepb.Disk{
-			Type:       disk.Type,
-			DeviceType: r.getDeviceType(disk.Type, projectID, zone, diskName),
-			DeviceName: disk.DeviceName,
-			IsLocalSsd: disk.Type == "SCRATCH",
-			DiskName:   diskName,
-			Mapping:    mapping,
+			Type:                  disk.Type,
+			DeviceType:            r.getDeviceType(disk.Type, diskData),
+			DeviceName:            disk.DeviceName,
+			IsLocalSsd:            disk.Type == "SCRATCH",
+			DiskName:              diskName,
+			Mapping:               mapping,
+			ProvisionedIops:       pIops,
+			ProvisionedThroughput: pThroughput,
 		})
 	}
 
@@ -155,18 +199,14 @@ func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mappe
 // https://www.googleapis.com/compute/v1/projects/sap-netweaver/zones/us-central1-a/diskTypes/pd-standard
 //
 // The returned device type will be formatted as: "pd-standard".
-func (r *Reader) getDeviceType(diskType, projectID, zone, name string) string {
+func (r *Reader) getDeviceType(diskType string, diskData *compute.Disk) string {
 	if diskType == "SCRATCH" {
 		return "local-ssd"
 	}
-
-	disk, err := r.gceService.GetDisk(projectID, zone, name)
-	if err != nil {
-		log.Logger.Errorw("Could not get disk info from the Compute API", "project", projectID, "zone", zone, "instancename", name, "error", err)
+	if diskData == nil {
 		return "unknown"
 	}
-
-	s := strings.Split(disk.Type, "/")
+	s := strings.Split(diskData.Type, "/")
 	return s[len(s)-1]
 }
 

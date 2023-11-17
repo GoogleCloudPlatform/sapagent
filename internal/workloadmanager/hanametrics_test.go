@@ -192,6 +192,25 @@ Mounted on
 			Type: "/some/path/default-disk-type",
 		}},
 		GetDiskErr: []error{nil, nil, nil},
+		ListDisksResp: []*compute.DiskList{
+			{
+				Items: []*compute.Disk{
+					{
+						Name: "disk-name",
+						Type: "/some/path/default-disk-type",
+					},
+					{
+						Name: "other-disk-device-name",
+						Type: "/some/path/default-disk-type",
+					},
+					{
+						Name: "hana-disk-name",
+						Type: "/some/path/default-disk-type",
+					},
+				},
+			},
+		},
+		ListDisksErr: []error{nil},
 		GetInstanceResp: []*compute.Instance{{
 			MachineType:       "test-machine-type",
 			CpuPlatform:       "test-cpu-platform",
