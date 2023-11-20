@@ -38,6 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -80,6 +81,7 @@ type Snapshot struct {
 	cloudProps        *ipb.CloudProperties
 	help, version     bool
 	logLevel          string
+	hanaDataPath      string
 }
 
 // Name implements the subcommand interface for snapshot.
@@ -150,6 +152,12 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	}
 	s.timeSeriesCreator = mc
 
+	p, err := s.parseBasePath(ctx, "basepath_datavolumes", commandlineexecutor.ExecuteCommand)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Failed to parse HANA data path", "error", err)
+		return subcommands.ExitFailure
+	}
+	s.hanaDataPath = p
 	return s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService)
 }
 
@@ -249,14 +257,17 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	}
 
 	op, err := s.createPDSnapshot(ctx)
+	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error creating persistent disk snapshot", "error", err)
-		usagemetrics.Error(usagemetrics.DiskSnapshotCreateFailure)
-		if _, err := run(s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`); err != nil {
-			log.CtxLogger(ctx).Errorw("Error discarding HANA snapshot")
-			usagemetrics.Error(usagemetrics.DiskSnapshotFailedDBNotComplete)
-			return err
-		}
+		s.pdSnapshotFailureHandler(ctx, run, snapshotID)
+		return err
+	}
+
+	log.Logger.Info("Waiting for PD snapshot to complete uploading.")
+	if err := s.waitForUploadCompletionWithRetry(ctx, op); err != nil {
+		log.CtxLogger(ctx).Errorw("Error uploading persistent disk snapshot", "error", err)
+		s.pdSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
 
@@ -266,8 +277,15 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 		usagemetrics.Error(usagemetrics.DiskSnapshotDoneDBNotComplete)
 		return err
 	}
-	log.Logger.Info("Waiting for PD snapshot to complete uploading.")
-	return s.waitForUploadCompletionWithRetry(ctx, op)
+	return nil
+}
+
+func (s *Snapshot) pdSnapshotFailureHandler(ctx context.Context, run queryFunc, snapshotID string) {
+	usagemetrics.Error(usagemetrics.DiskSnapshotCreateFailure)
+	if err := s.abandonHANASnapshot(run, snapshotID); err != nil {
+		log.CtxLogger(ctx).Errorw("Error discarding HANA snapshot")
+		usagemetrics.Error(usagemetrics.DiskSnapshotFailedDBNotComplete)
+	}
 }
 
 func (s *Snapshot) abandonPreparedSnapshot(run queryFunc) error {
@@ -286,11 +304,16 @@ func (s *Snapshot) abandonPreparedSnapshot(run queryFunc) error {
 	if !s.abandonPrepared {
 		return fmt.Errorf("a HANA data snapshot is already prepared or is in progress, rerun with <-abandon-prepared=true> to abandon this snapshot")
 	}
-	if _, err = run(s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`); err != nil {
+	if err = s.abandonHANASnapshot(run, snapshotID); err != nil {
 		return err
 	}
 	log.Logger.Info("Snapshot abandoned", "snapshotID", snapshotID)
 	return nil
+}
+
+func (s *Snapshot) abandonHANASnapshot(run queryFunc, snapshotID string) error {
+	_, err := run(s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`)
+	return err
 }
 
 func (s *Snapshot) createNewHANASnapshot(run queryFunc) (snapshotID string, err error) {
@@ -335,6 +358,9 @@ func (s *Snapshot) createPDSnapshot(ctx context.Context) (*compute.Operation, er
 	if s.computeService == nil {
 		return nil, fmt.Errorf("computeService needed to proceed")
 	}
+	if err := s.freezeXFS(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+		return nil, err
+	}
 	if op, err = s.computeService.Disks.CreateSnapshot(s.project, s.diskZone, s.disk, snapshot).Do(); err != nil {
 		return nil, err
 	}
@@ -349,6 +375,7 @@ func (s *Snapshot) waitForCreationCompletion(op *compute.Operation) error {
 	if err != nil {
 		return err
 	}
+	log.Logger.Infow("Snapshot creation status", "snapshot", s.snapshotName, "SnapshotStatus", ss.Status, "OperationStatus", op.Status)
 	if ss.Status == "CREATING" {
 		return fmt.Errorf("snapshot creation is in progress, snapshot name: %s, status:  CREATING", s.snapshotName)
 	}
@@ -357,24 +384,36 @@ func (s *Snapshot) waitForCreationCompletion(op *compute.Operation) error {
 }
 
 // Each waitForCreationCompletion() returns immediately, we sleep for 120s between
-// retries a total 120 times => max_wait_duration = 120*120 = 4 Hours
+// retries a total 10 times => max_wait_duration = 120*10 = 20 minutes
 // TODO: change timeout depending on PD limits
 func (s *Snapshot) waitForCreationCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 120), ctx)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)
 	return backoff.Retry(func() error { return s.waitForCreationCompletion(op) }, bo)
 }
 
 func (s *Snapshot) waitForUploadCompletion(op *compute.Operation) error {
+	zos := compute.NewZoneOperationsService(s.computeService)
+	tracker, err := zos.Wait(s.project, s.diskZone, op.Name).Do()
+	if err != nil {
+		log.Logger.Errorw("Error in operation", "operation", op.Name)
+		return err
+	}
+	log.Logger.Infow("Operation in progress", "Name", op.Name, "percentage", tracker.Progress, "status", tracker.Status)
+	if tracker.Status != "DONE" {
+		return fmt.Errorf("Compute operation is not DONE yet")
+	}
+
 	ss, err := s.computeService.Snapshots.Get(s.project, s.snapshotName).Do()
 	if err != nil {
 		return err
 	}
-	if ss.Status == "UPLOADING" {
-		return fmt.Errorf("snapshot uploading is in progress, snapshot name: %s, status:  UPLOADING", s.snapshotName)
+	log.Logger.Infow("Snapshot upload status", "snapshot", s.snapshotName, "SnapshotStatus", ss.Status, "OperationStatus", op.Status)
+
+	if ss.Status == "READY" {
+		return nil
 	}
-	log.Logger.Infow("Snapshot uploading progress", "snapshot", s.snapshotName, "status", ss.Status)
-	return nil
+	return fmt.Errorf("snapshot %s not READY yet, snapshotStatus: %s, operationStatus: %s", s.snapshotName, ss.Status, op.Status)
 }
 
 // Each waitForUploadCompletionWithRetry() returns immediately, we sleep for 120s between
@@ -410,6 +449,39 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 		return false
 	}
 	return true
+}
+
+func (s *Snapshot) parseBasePath(ctx context.Context, pattern string, exec commandlineexecutor.Execute) (string, error) {
+	args := `-c 'grep ` + pattern + ` /usr/sap/*/SYS/global/hdb/custom/config/global.ini | cut -d= -f 2'`
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/bin/sh",
+		ArgsToSplit: args,
+	})
+	if result.Error != nil {
+		return "", fmt.Errorf("failure parsing base path, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+
+	basePath := strings.TrimSuffix(result.StdOut, "\n")
+	log.CtxLogger(ctx).Infow("Found HANA Base data directory", "hanaDataPath", basePath)
+	return basePath, nil
+}
+
+func (s *Snapshot) freezeXFS(ctx context.Context, exec commandlineexecutor.Execute) error {
+	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-f " + s.hanaDataPath})
+	if result.Error != nil {
+		return fmt.Errorf("failure freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+	log.CtxLogger(ctx).Infow("Filesystem frozen successfully", "hanaDataPath", s.hanaDataPath)
+	return nil
+}
+
+func (s *Snapshot) unFreezeXFS(ctx context.Context, exec commandlineexecutor.Execute) error {
+	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-u " + s.hanaDataPath})
+	if result.Error != nil {
+		return fmt.Errorf("failure un freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+	log.CtxLogger(ctx).Infow("Filesystem unfrozen successfully", "hanaDataPath", s.hanaDataPath)
+	return nil
 }
 
 // Key defines the contents of each entry in the encryption key file.

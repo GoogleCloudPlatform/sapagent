@@ -169,7 +169,7 @@ func (r *Restorer) prepare(ctx context.Context) error {
 	}
 
 	// Detach old HANA data disk
-	log.Logger.Info("Detatching old HANA PD disk", "diskName", r.dataDiskName)
+	log.Logger.Infow("Detatching old HANA PD disk", "diskName", r.dataDiskName)
 	op, err := r.computeService.Instances.DetachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), r.dataDiskName).Do()
 	if err != nil {
 		return fmt.Errorf("failed to detach old data disk: %v", err)
@@ -201,7 +201,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
-	log.Logger.Info("Attaching new HANA PD disk", "diskName", newdiskName)
+	log.Logger.Infow("Attaching new HANA PD disk", "diskName", newdiskName)
 	attachDiskToVM := &compute.AttachedDisk{
 		Source: fmt.Sprintf("projects/%s/zones/%s/disks/%s", r.project, r.dataDiskZone, newdiskName),
 	}
@@ -365,34 +365,34 @@ func (r *Restorer) rescanVolumeGroups(ctx context.Context) error {
 		ArgsToSplit: "remove_all",
 	})
 	if result.Error != nil {
-		return result.Error
+		return fmt.Errorf("failure removing device definitions from the Device Mapper driver, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/vgscan",
 		ArgsToSplit: "-v --mknodes",
 	})
 	if result.Error != nil {
-		return result.Error
+		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/vgchange",
 		ArgsToSplit: "-ay",
 	})
 	if result.Error != nil {
-		return result.Error
+		return fmt.Errorf("failure changing volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable: "/sbin/lvscan",
 	})
 	if result.Error != nil {
-		return result.Error
+		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "mount",
 		ArgsToSplit: "-av",
 	})
 	if result.Error != nil {
-		return result.Error
+		return fmt.Errorf("failure mounting volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	return nil
 }
