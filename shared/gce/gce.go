@@ -20,6 +20,7 @@ package gce
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/pkg/errors"
@@ -166,7 +167,7 @@ func (g *GCE) ListInstanceGroupInstances(project, zone, name string) (*compute.I
 	return g.service.InstanceGroups.ListInstances(project, zone, name, nil).Do()
 }
 
-// GetFilestoreInstance retrieves a GCE Filestore Instance defined by the project, locaiton, and name provided.
+// GetFilestoreInstance retrieves a GCE Filestore Instance defined by the project, location, and name provided.
 func (g *GCE) GetFilestoreInstance(project, location, filestore string) (*file.Instance, error) {
 	name := fmt.Sprintf("projects/%s/locations/%s/instances/%s", project, location, filestore)
 	return g.file.Projects.Locations.Instances.Get(name).Do()
@@ -184,10 +185,14 @@ func (g *GCE) GetURIForIP(project, ip string) (string, error) {
 	if addr != nil {
 		return addr.SelfLink, nil
 	}
-
 	inst, err := g.GetInstanceByIP(project, ip)
 	if inst != nil {
 		return inst.SelfLink, nil
+	}
+	fs, err := g.GetFilestoreByIP(project, "-", ip)
+	if fs != nil && len(fs.Instances) > 0 {
+		fsURI := strings.Replace(fs.Instances[0].Name, "/instances/", "/filestores/", 1)
+		return fsURI, nil
 	}
 	return "", errors.Errorf("error locating object by IP: %v", err)
 }
@@ -200,4 +205,15 @@ func (g *GCE) GetSecret(ctx context.Context, projectID, secretName string) (stri
 		return "", err
 	}
 	return string(result.Payload.Data), nil
+}
+
+// GetFilestore attempts to retrieve the filestore instance addressed by the provided project, location, and name.
+func (g *GCE) GetFilestore(project, zone, name string) (*file.Instance, error) {
+	fsName := fmt.Sprintf("projects/%s/locations/%s/instances/%s", project, zone, name)
+	return g.file.Projects.Locations.Instances.Get(fsName).Do()
+}
+
+// GetHealthCheck attempts to retrieve the compute HealthCheck object addressed by the provided project and name.
+func (g *GCE) GetHealthCheck(project, name string) (*compute.HealthCheck, error) {
+	return g.service.HealthChecks.Get(project, name).Do()
 }

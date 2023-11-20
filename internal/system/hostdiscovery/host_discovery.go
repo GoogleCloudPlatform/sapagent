@@ -23,8 +23,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
@@ -35,8 +33,8 @@ var (
 
 // HostDiscovery is for discovering details that can only be performed on the host running the agent.
 type HostDiscovery struct {
-	exists  commandlineexecutor.Exists
-	execute commandlineexecutor.Execute
+	Exists  commandlineexecutor.Exists
+	Execute commandlineexecutor.Execute
 }
 
 // DiscoverCurrentHost invokes the necessary commands to discover the resources visible only
@@ -46,7 +44,6 @@ func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) []string {
 
 	addr, err := d.discoverClusterAddress(ctx)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error received when discovering cluster address", "error", err)
 		return fs
 	}
 
@@ -54,18 +51,17 @@ func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) []string {
 }
 
 func (d *HostDiscovery) discoverClusterAddress(ctx context.Context) (string, error) {
-	log.CtxLogger(ctx).Info("Discovering cluster")
-	if d.exists("crm") {
+	if d.Exists("crm") {
 		return d.discoverClusterCRM(ctx)
 	}
-	if d.exists("pcs") {
+	if d.Exists("pcs") {
 		return d.discoverClusterPCS(ctx)
 	}
 	return "", errors.New("no cluster command found")
 }
 
 func (d *HostDiscovery) discoverClusterCRM(ctx context.Context) (string, error) {
-	result := d.execute(ctx, commandlineexecutor.Params{
+	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "crm",
 		ArgsToSplit: "config show",
 	})
@@ -90,7 +86,7 @@ func (d *HostDiscovery) discoverClusterCRM(ctx context.Context) (string, error) 
 }
 
 func (d *HostDiscovery) discoverClusterPCS(ctx context.Context) (string, error) {
-	result := d.execute(ctx, commandlineexecutor.Params{
+	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "pcs",
 		ArgsToSplit: "config show",
 	})
@@ -115,31 +111,25 @@ func (d *HostDiscovery) discoverClusterPCS(ctx context.Context) (string, error) 
 }
 
 func (d *HostDiscovery) discoverFilestores(ctx context.Context) []string {
-	log.CtxLogger(ctx).Info("Discovering mounted file stores")
-	if !d.exists("df") {
-		log.CtxLogger(ctx).Warn("Cannot access command df to discover mounted file stores")
+	if !d.Exists("df") {
 		return nil
 	}
 
-	result := d.execute(ctx, commandlineexecutor.Params{
+	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable: "df",
 		Args:       []string{"-h"},
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error retrieving mounts", "error", result.Error)
 		return nil
 	}
 	fs := []string{}
 	for _, l := range strings.Split(result.StdOut, "\n") {
-		log.CtxLogger(ctx).Infof("Processing mount: %s", l)
 		matches := fsMountRegex.FindStringSubmatch(l)
 		if len(matches) < 2 {
-			log.CtxLogger(ctx).Info("Insufficient matches for line")
 			continue
 		}
 		// The first match is the fully matched string, we only need the first submatch, the IP address.
 		address := matches[1]
-		log.CtxLogger(ctx).Infof("Found address: %s", address)
 		fs = append(fs, address)
 	}
 

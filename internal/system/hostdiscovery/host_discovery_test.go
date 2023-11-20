@@ -98,7 +98,7 @@ func TestDiscoverClusterCRM(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := HostDiscovery{
-				execute: test.testExecute,
+				Execute: test.testExecute,
 			}
 			got, err := d.discoverClusterCRM(context.Background())
 			if diff := cmp.Diff(got, test.wantAddr); diff != "" {
@@ -164,7 +164,7 @@ func TestDiscoverClusterPCS(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := HostDiscovery{
-				execute: test.testExecute,
+				Execute: test.testExecute,
 			}
 			got, err := d.discoverClusterPCS(context.Background())
 			if diff := cmp.Diff(got, test.wantAddr); diff != "" {
@@ -273,8 +273,8 @@ func TestDiscoverClusterAddress(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := HostDiscovery{
-				exists:  test.testExists,
-				execute: test.testExecute,
+				Exists:  test.testExists,
+				Execute: test.testExecute,
 			}
 			got, err := d.discoverClusterAddress(context.Background())
 			if diff := cmp.Diff(got, test.wantAddr); diff != "" {
@@ -356,8 +356,8 @@ tmpfs                             9.5G  4.2M  9.5G   1% /run`,
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := HostDiscovery{
-				exists:  test.exists,
-				execute: test.execute,
+				Exists:  test.exists,
+				Execute: test.execute,
 			}
 			got := d.discoverFilestores(context.Background())
 			if diff := cmp.Diff(got, test.want); diff != "" {
@@ -442,8 +442,8 @@ func TestDiscoverCurrentHost(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			d := HostDiscovery{
-				exists:  func(cmd string) bool { return true },
-				execute: tc.execute,
+				Exists:  func(cmd string) bool { return true },
+				Execute: tc.execute,
 			}
 			got := d.DiscoverCurrentHost(ctx)
 			if diff := cmp.Diff(tc.want, got, cmpopts.SortSlices(func(a, b string) bool { return a > b })); diff != "" {

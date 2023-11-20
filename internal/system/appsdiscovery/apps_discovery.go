@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package sapdiscovery contains a set of functionality to discover SAP application details running on the current host, and their related components.
-package sapdiscovery
+// Package appsdiscovery contains a set of functionality to discover SAP application details running on the current host, and their related components.
+package appsdiscovery
 
 import (
 	"context"
@@ -25,10 +25,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -37,17 +37,19 @@ var (
 	headerLineRegex = regexp.MustCompile(`[^-]+`)
 )
 
-type sapDiscovery struct {
-	execute       commandlineexecutor.Execute
-	appsDiscovery func(context.Context) *sappb.SAPInstances
+// SapDiscovery contains variables and methods to discover SAP applications running on the current host.
+type SapDiscovery struct {
+	Execute       commandlineexecutor.Execute
+	AppsDiscovery func(context.Context) *sappb.SAPInstances
 }
 
-type sapSystemDetails struct {
-	appSID, dbSID       string
-	appHosts, dbHosts   []string
-	appOnHost, dbOnHost bool
-	appProperties       *spb.SapDiscovery_Component_ApplicationProperties
-	dbProperties        *spb.SapDiscovery_Component_DatabaseProperties
+// SapSystemDetails contains information about an ASP system running on the current host.
+type SapSystemDetails struct {
+	AppSID, DBSID       string
+	AppHosts, DBHosts   []string
+	AppOnHost, DBOnHost bool
+	AppProperties       *spb.SapDiscovery_Component_ApplicationProperties
+	DBProperties        *spb.SapDiscovery_Component_DatabaseProperties
 }
 
 func removeDuplicates(s []string) []string {
@@ -63,47 +65,48 @@ func removeDuplicates(s []string) []string {
 	return o
 }
 
-func mergeSystemDetails(old sapSystemDetails, new sapSystemDetails) sapSystemDetails {
+func mergeSystemDetails(old SapSystemDetails, new SapSystemDetails) SapSystemDetails {
 	merged := old
-	merged.appOnHost = old.appOnHost || new.appOnHost
-	merged.dbOnHost = old.dbOnHost || new.dbOnHost
-	if old.appSID == "" {
-		merged.appSID = new.appSID
+	merged.AppOnHost = old.AppOnHost || new.AppOnHost
+	merged.DBOnHost = old.DBOnHost || new.DBOnHost
+	if old.AppSID == "" {
+		merged.AppSID = new.AppSID
 	}
-	if old.dbSID == "" {
-		merged.dbSID = new.dbSID
+	if old.DBSID == "" {
+		merged.DBSID = new.DBSID
 	}
-	merged.appHosts = removeDuplicates(append(merged.appHosts, new.appHosts...))
-	merged.dbHosts = removeDuplicates(append(merged.dbHosts, new.dbHosts...))
-	if old.appProperties == nil {
-		merged.appProperties = new.appProperties
-	} else if new.appProperties != nil {
-		if merged.appProperties.ApplicationType == spb.SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED {
-			merged.appProperties.ApplicationType = new.appProperties.ApplicationType
+	merged.AppHosts = removeDuplicates(append(merged.AppHosts, new.AppHosts...))
+	merged.DBHosts = removeDuplicates(append(merged.DBHosts, new.DBHosts...))
+	if old.AppProperties == nil {
+		merged.AppProperties = new.AppProperties
+	} else if new.AppProperties != nil {
+		if merged.AppProperties.ApplicationType == spb.SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED {
+			merged.AppProperties.ApplicationType = new.AppProperties.ApplicationType
 		}
-		if merged.appProperties.AscsUri == "" {
-			merged.appProperties.AscsUri = new.appProperties.AscsUri
+		if merged.AppProperties.AscsUri == "" {
+			merged.AppProperties.AscsUri = new.AppProperties.AscsUri
 		}
-		if merged.appProperties.NfsUri == "" {
-			merged.appProperties.NfsUri = new.appProperties.NfsUri
+		if merged.AppProperties.NfsUri == "" {
+			merged.AppProperties.NfsUri = new.AppProperties.NfsUri
 		}
 	}
-	if old.dbProperties == nil {
-		merged.dbProperties = new.dbProperties
-	} else if new.dbProperties != nil {
-		if merged.dbProperties.DatabaseType == spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED {
-			merged.dbProperties.DatabaseType = new.dbProperties.DatabaseType
+	if old.DBProperties == nil {
+		merged.DBProperties = new.DBProperties
+	} else if new.DBProperties != nil {
+		if merged.DBProperties.DatabaseType == spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED {
+			merged.DBProperties.DatabaseType = new.DBProperties.DatabaseType
 		}
-		if merged.dbProperties.SharedNfsUri == "" {
-			merged.dbProperties.SharedNfsUri = new.dbProperties.SharedNfsUri
+		if merged.DBProperties.SharedNfsUri == "" {
+			merged.DBProperties.SharedNfsUri = new.DBProperties.SharedNfsUri
 		}
 	}
 	return merged
 }
 
-func (d *sapDiscovery) discoverSAPApps(ctx context.Context, cp *ipb.CloudProperties) []sapSystemDetails {
-	sapSystems := []sapSystemDetails{}
-	sapApps := d.appsDiscovery(ctx)
+// DiscoverSAPApps attempts to identify the different SAP Applications running on the current host.
+func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, cp *ipb.CloudProperties) []SapSystemDetails {
+	sapSystems := []SapSystemDetails{}
+	sapApps := d.AppsDiscovery(ctx)
 	if sapApps == nil {
 		return sapSystems
 	}
@@ -116,19 +119,19 @@ func (d *sapDiscovery) discoverSAPApps(ctx context.Context, cp *ipb.CloudPropert
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
-				log.CtxLogger(ctx).Infow("Comparing to system", "dbSID", s.dbSID, "appSID", s.appSID)
-				if (s.appSID == "" || s.appSID == sys.appSID) &&
-					s.dbSID == sys.dbSID {
-					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.appSID)
+				log.CtxLogger(ctx).Infow("Comparing to system", "dbSID", s.DBSID, "appSID", s.AppSID)
+				if (s.AppSID == "" || s.AppSID == sys.AppSID) &&
+					s.DBSID == sys.DBSID {
+					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.AppSID)
 					sapSystems[i] = mergeSystemDetails(s, sys)
-					sapSystems[i].appOnHost = true
+					sapSystems[i].AppOnHost = true
 					found = true
 					break
 				}
 			}
 			if !found {
 				log.CtxLogger(ctx).Infow("No existing system", "sid", app.Sapsid)
-				sys.appOnHost = true
+				sys.AppOnHost = true
 				sapSystems = append(sapSystems, sys)
 			}
 		case sappb.InstanceType_HANA:
@@ -137,82 +140,67 @@ func (d *sapDiscovery) discoverSAPApps(ctx context.Context, cp *ipb.CloudPropert
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
-				if s.dbSID == sys.dbSID {
-					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.dbSID)
+				if s.DBSID == sys.DBSID {
+					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.DBSID)
 					sapSystems[i] = mergeSystemDetails(s, sys)
-					sapSystems[i].dbOnHost = true
+					sapSystems[i].DBOnHost = true
 					found = true
 					break
 				}
 			}
 			if !found {
 				log.CtxLogger(ctx).Infow("No existing system", "sid", app.Sapsid)
-				sys.dbOnHost = true
+				sys.DBOnHost = true
 				sapSystems = append(sapSystems, sys)
 			}
 		}
 	}
+
 	return sapSystems
 }
 
-func (d *sapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInstance) sapSystemDetails {
+func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInstance) SapSystemDetails {
 	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error discovering database SID", "error", err)
-		return sapSystemDetails{}
+		return SapSystemDetails{}
 	}
 	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid)
-	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error discovering app to database connection", "error", err)
-	}
 	ascsHost, err := d.discoverASCS(ctx, app.Sapsid)
-	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error discovering ascs", "error", err)
-	}
 	nfsHost, err := d.discoverAppNFS(ctx, app.Sapsid)
-	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error discovering app NFS", "error", err)
-	}
 	appProps := &spb.SapDiscovery_Component_ApplicationProperties{
 		ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 		AscsUri:         ascsHost,
 		NfsUri:          nfsHost,
 	}
-	log.CtxLogger(ctx).Infof("netweaver dbHosts: %v", dbHosts)
-	return sapSystemDetails{
-		appSID:        app.Sapsid,
-		appProperties: appProps,
-		dbSID:         dbSID,
-		dbHosts:       dbHosts,
+	return SapSystemDetails{
+		AppSID:        app.Sapsid,
+		AppProperties: appProps,
+		DBSID:         dbSID,
+		DBHosts:       dbHosts,
 	}
 }
 
-func (d *sapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance) sapSystemDetails {
+func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance) SapSystemDetails {
 	dbHosts, err := d.discoverDBNodes(ctx, app.Sapsid, app.InstanceNumber)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error discovering DB nodes", "error", err)
-		return sapSystemDetails{}
+		return SapSystemDetails{}
 	}
-	log.CtxLogger(ctx).Infof("hana dbHosts: %v", dbHosts)
 	dbNFS, err := d.discoverDatabaseNFS(ctx)
-	if err != nil {
-		log.CtxLogger(ctx).Warnw("Unable to discover database NFS", "error", err)
-	}
 	dbProps := &spb.SapDiscovery_Component_DatabaseProperties{
 		DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
 		SharedNfsUri: dbNFS,
 	}
-	return sapSystemDetails{
-		dbSID:        app.Sapsid,
-		dbHosts:      dbHosts,
-		dbProperties: dbProps,
+	return SapSystemDetails{
+		DBSID:        app.Sapsid,
+		DBHosts:      dbHosts,
+		DBProperties: dbProps,
 	}
 }
 
-func (d *sapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string) ([]string, error) {
+func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string) ([]string, error) {
 	sidLower := strings.ToLower(sid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	result := d.execute(ctx, commandlineexecutor.Params{
+	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable: "sudo",
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list", "DEFAULT"},
 	})
@@ -232,23 +220,18 @@ func (d *sapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string
 
 func parseDBHosts(s string) (dbHosts []string) {
 	lines := strings.Split(s, "\n")
-	log.Logger.Infof("outLines: %v", lines)
 	for _, l := range lines {
-		log.Logger.Infow("Examining line", "line", l)
 		t := strings.TrimSpace(l)
 		if strings.Index(t, "ENV") < 0 {
-			log.Logger.Info("No ENV")
 			continue
 		}
 
-		log.Logger.Infof("Env line: %s", t)
 		// Trim up to the first colon
 		_, hosts, _ := strings.Cut(t, ":")
 		p := strings.Split(hosts, ";")
 		// Each semicolon part contains the pattern <host>:<port>
 		// The first part will contain "ENV : <host>:port; <host2>:<port2>"
 		for _, h := range p {
-			log.Logger.Infof("Semicolon part: %s", h)
 			c := strings.Split(h, ":")
 			if len(c) < 2 {
 				continue
@@ -259,11 +242,11 @@ func parseDBHosts(s string) (dbHosts []string) {
 	return dbHosts
 }
 
-func (d *sapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (string, error) {
+func (d *SapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (string, error) {
 	sidLower := strings.ToLower(appSID)
 	sidUpper := strings.ToUpper(appSID)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	result := d.execute(ctx, commandlineexecutor.Params{
+	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable: "sudo",
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list"},
 	})
@@ -284,7 +267,7 @@ func (d *sapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 
 	// No DB SID in userstore, check profiles
 	profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/*", sidUpper)
-	result = d.execute(ctx, commandlineexecutor.Params{
+	result = d.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "sh",
 		ArgsToSplit: `-c 'grep "dbid\|dbms/name" ` + profilePath + `'`,
 	})
@@ -308,9 +291,8 @@ func (d *sapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 	return "", errors.New("No database SID found")
 }
 
-func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber string) ([]string, error) {
+func (d *SapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber string) ([]string, error) {
 	if sid == "" || instanceNumber == "" {
-		log.CtxLogger(ctx).Warn("To discover additional HANA nodes SID, and instance number must be provided")
 		return nil, errors.New("To discover additional HANA nodes SID, and instance number must be provided")
 	}
 	sidLower := strings.ToLower(sid)
@@ -318,7 +300,7 @@ func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	scriptPath := fmt.Sprintf("/usr/sap/%s/HDB%s/exe/python_support/landscapeHostConfiguration.py", sidUpper, instanceNumber)
 	command := fmt.Sprintf("-i -u %s python %s", sidAdm, scriptPath)
-	result := d.execute(ctx, commandlineexecutor.Params{
+	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "sudo",
 		ArgsToSplit: command,
 	})
@@ -343,10 +325,8 @@ func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 	lines := strings.Split(result.StdOut, "\n")
 	pastHeaders := false
 	for _, line := range lines {
-		log.CtxLogger(ctx).Info(line)
 		cols := strings.Split(line, "|")
 		if len(cols) < 2 {
-			log.CtxLogger(ctx).Info("Line has too few columns")
 			continue
 		}
 		trimmed := strings.TrimSpace(cols[1])
@@ -360,18 +340,17 @@ func (d *sapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 
 		hosts = append(hosts, trimmed)
 	}
-	log.CtxLogger(ctx).Infow("Discovered other hosts", "sid", sid, "hosts", hosts)
 	return hosts, nil
 }
 
-func (d *sapDiscovery) discoverASCS(ctx context.Context, sid string) (string, error) {
+func (d *SapDiscovery) discoverASCS(ctx context.Context, sid string) (string, error) {
 	// The ASCS of a Netweaver server is identified by the entry "rdisp/mshost" in the DEFAULT.PFL
 	profilePath := fmt.Sprintf("/sapmnt/%s/profile/DEFAULT.PFL", sid)
 	p := commandlineexecutor.Params{
 		Executable: "grep",
 		Args:       []string{"rdisp/mshost", profilePath},
 	}
-	res := d.execute(ctx, p)
+	res := d.Execute(ctx, p)
 	if res.Error != nil {
 		log.CtxLogger(ctx).Warnw("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
@@ -390,13 +369,13 @@ func (d *sapDiscovery) discoverASCS(ctx context.Context, sid string) (string, er
 	return "", errors.New("no ASCS found in default profile")
 }
 
-func (d *sapDiscovery) discoverAppNFS(ctx context.Context, sid string) (string, error) {
+func (d *SapDiscovery) discoverAppNFS(ctx context.Context, sid string) (string, error) {
 	// The primary NFS of a Netweaver server is identified as the one that is mounted to the /sapmnt/<SID> directory.
 	p := commandlineexecutor.Params{
 		Executable: "df",
 		Args:       []string{"-h"},
 	}
-	res := d.execute(ctx, p)
+	res := d.Execute(ctx, p)
 	if res.Error != nil {
 		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
@@ -418,13 +397,13 @@ func (d *sapDiscovery) discoverAppNFS(ctx context.Context, sid string) (string, 
 	return "", errors.New("no NFS found")
 }
 
-func (d *sapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) {
+func (d *SapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) {
 	// The primary NFS of a Netweaver server is identified as the one that is mounted to the /sapmnt/<SID> directory.
 	p := commandlineexecutor.Params{
 		Executable: "df",
 		Args:       []string{"-h"},
 	}
-	res := d.execute(ctx, p)
+	res := d.Execute(ctx, p)
 	if res.Error != nil {
 		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error

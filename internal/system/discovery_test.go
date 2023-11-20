@@ -18,7 +18,6 @@ package system
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -28,16 +27,15 @@ import (
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	compute "google.golang.org/api/compute/v1"
-	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
+	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
+	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
+	hostdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	logfake "github.com/GoogleCloudPlatform/sapagent/shared/log/fake"
 )
@@ -46,6 +44,7 @@ const (
 	defaultInstanceName  = "test-instance-id"
 	defaultProjectID     = "test-project-id"
 	defaultZone          = "test-zone"
+	defaultInstanceURI   = "projects/test-project-id/zones/test-zone/instances/test-instance-id"
 	defaultClusterOutput = `
 	line1
 	line2
@@ -91,14 +90,16 @@ overall host status: info
 
 var (
 	defaultCloudProperties = &instancepb.CloudProperties{
-		InstanceName: defaultInstanceName,
-		ProjectId:    defaultProjectID,
-		Zone:         defaultZone,
+		InstanceName:     defaultInstanceName,
+		ProjectId:        defaultProjectID,
+		Zone:             defaultZone,
+		NumericProjectId: "12345",
 	}
 	resourceListDiffOpts = []cmp.Option{
 		protocmp.Transform(),
 		protocmp.IgnoreFields(&spb.SapDiscovery_Resource{}, "update_time"),
 		protocmp.SortRepeatedFields(&spb.SapDiscovery_Resource{}, "related_resources"),
+		protocmp.SortRepeatedFields(&spb.SapDiscovery_Component{}, "resources"),
 		cmpopts.SortSlices(resourceLess),
 	}
 )
@@ -109,10 +110,13 @@ func resourceLess(a, b *spb.SapDiscovery_Resource) bool {
 
 func TestStartSAPSystemDiscovery(t *testing.T) {
 	tests := []struct {
-		name    string
-		config  *cpb.Configuration
-		testLog *logfake.TestCloudLogging
-		want    bool
+		name               string
+		config             *cpb.Configuration
+		testLog            *logfake.TestCloudLogging
+		testSapDiscovery   *appsdiscoveryfake.SapDiscovery
+		testCloudDiscovery *clouddiscoveryfake.CloudDiscovery
+		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
+		want               bool
 	}{{
 		name: "succeeds",
 		config: &cpb.Configuration{
@@ -123,6 +127,15 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 		},
 		testLog: &logfake.TestCloudLogging{
 			FlushErr: []error{nil},
+		},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
 		},
 		want: true,
 	}, {
@@ -140,12 +153,13 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gceService := &fake.TestGCE{
-				GetInstanceResp: []*compute.Instance{nil},
-				GetInstanceErr:  []error{errors.New("Instance not found")},
+			d := &Discovery{
+				SapDiscoveryInterface:   test.testSapDiscovery,
+				CloudDiscoveryInterface: test.testCloudDiscovery,
+				HostDiscoveryInterface:  test.testHostDiscovery,
 			}
 
-			got := StartSAPSystemDiscovery(context.Background(), test.config, gceService, nil, test.testLog)
+			got := StartSAPSystemDiscovery(context.Background(), test.config, d)
 			if got != test.want {
 				t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", test.config, got, test.want)
 			}
@@ -153,1978 +167,588 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 	}
 }
 
-func TestDiscoverInstance(t *testing.T) {
+func TestDiscoverSAPSystems(t *testing.T) {
 	tests := []struct {
-		name       string
-		gceService *fake.TestGCE
-		want       []*spb.SapDiscovery_Resource
+		name               string
+		config             *cpb.Configuration
+		testSapDiscovery   *appsdiscoveryfake.SapDiscovery
+		testCloudDiscovery *clouddiscoveryfake.CloudDiscovery
+		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
+		want               []*spb.SapDiscovery
 	}{{
-		name: "justInstance",
-		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "some/resource/uri",
-			}},
-			GetInstanceErr: []error{nil},
+		name:   "noDiscovery",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "some/resource/uri",
-		}},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{},
 	}, {
-		name: "noInstanceInfo",
-		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{nil},
-			GetInstanceErr:  []error{errors.New("Instance not found")},
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.gceService.T = t
-			d := Discovery{
-				gceService: test.gceService,
-			}
-			got, _, _ := d.discoverInstance(context.Background(), defaultProjectID, defaultZone, defaultInstanceName)
-			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverInstance() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverDisks(t *testing.T) {
-	tests := []struct {
-		name       string
-		gceService *fake.TestGCE
-		testCI     *compute.Instance
-		testIR     *spb.SapDiscovery_Resource
-		want       []*spb.SapDiscovery_Resource
-	}{{
-		name: "instanceWithDisks",
-		gceService: &fake.TestGCE{
-			GetDiskResp: []*compute.Disk{{
-				SelfLink: "no/source/disk",
-			}, {
-				SelfLink: "no/source/disk2",
-			}},
-			GetDiskErr: []error{nil, nil},
-			GetDiskArgs: []*fake.GetDiskArguments{{
-				Project:  "test-project-id",
-				Zone:     "test-zone",
-				DiskName: "noSourceDisk",
-			}, {
-				Project:  "test-project-id",
-				Zone:     "test-zone",
-				DiskName: "noSourceDisk2",
-			}},
-		},
-		testCI: &compute.Instance{
-			SelfLink: "some/resource/uri",
-			Disks: []*compute.AttachedDisk{{
-				Source:     "",
-				DeviceName: "noSourceDisk",
-			}, {
-				Source:     "",
-				DeviceName: "noSourceDisk2",
-			}},
-		},
-		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.SapDiscovery_Resource{&spb.SapDiscovery_Resource{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			RelatedResources: []string{"some/resource/uri"},
-			ResourceUri:      "no/source/disk",
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			RelatedResources: []string{"some/resource/uri"},
-			ResourceUri:      "no/source/disk2",
-		}},
-	}, {
-		name: "getDiskFromSource",
-		gceService: &fake.TestGCE{
-			GetDiskResp: []*compute.Disk{{SelfLink: "uri/for/disk1"}},
-			GetDiskErr:  []error{nil},
-			GetDiskArgs: []*fake.GetDiskArguments{{
-				Project:  "test-project-id",
-				Zone:     "test-zone",
-				DiskName: "disk1",
-			}},
-		},
-		testCI: &compute.Instance{
-			SelfLink: "some/resource/uri",
-			Disks: []*compute.AttachedDisk{{
-				Source:     "source/for/disk1",
-				DeviceName: "nonSourceName",
-			}},
-		},
-		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			RelatedResources: []string{"some/resource/uri"},
-			ResourceUri:      "uri/for/disk1",
-		}},
-	}, {
-		name: "errGettingDisk",
-		gceService: &fake.TestGCE{
-			GetDiskErr: []error{errors.New("Disk not found"), nil},
-			GetDiskResp: []*compute.Disk{
-				nil,
-				{SelfLink: "uri/for/disk2"},
-			},
-		},
-		testCI: &compute.Instance{
-			SelfLink: "some/resource/uri",
-			Disks: []*compute.AttachedDisk{{
-				Source:     "",
-				DeviceName: "noSourceDisk",
-			}, {
-				Source:     "",
-				DeviceName: "noSourceDisk2",
-			}},
-		},
-		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.SapDiscovery_Resource{&spb.SapDiscovery_Resource{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			RelatedResources: []string{"some/resource/uri"},
-			ResourceUri:      "uri/for/disk2",
-		}},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.gceService.T = t
-			d := Discovery{
-				gceService: test.gceService,
-			}
-			got := d.discoverDisks(context.Background(), defaultProjectID, defaultZone, test.testCI, test.testIR)
-			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverDisks() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverNetworks(t *testing.T) {
-	tests := []struct {
-		name       string
-		gceService *fake.TestGCE
-		testCI     *compute.Instance
-		testIR     *spb.SapDiscovery_Resource
-		want       []*spb.SapDiscovery_Resource
-	}{{
-		name: "instanceWithNetworkInterface",
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{{SelfLink: "some/address/uri"}},
-			GetAddressByIPArgs: []*fake.GetAddressByIPArguments{{
-				Project: "test-project-id",
-				Region:  "test-region",
-				Address: "10.2.3.4",
-			}},
-			GetAddressByIPErr: []error{nil},
-		},
-		testCI: &compute.Instance{
-			SelfLink: "some/resource/uri",
-			NetworkInterfaces: []*compute.NetworkInterface{{
-				Network:       "network",
-				Subnetwork:    "regions/test-region/subnet",
-				AccessConfigs: []*compute.AccessConfig{{NatIP: "1.2.3.4"}},
-				NetworkIP:     "10.2.3.4",
-			}},
-		},
-		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:  "network",
-			RelatedResources: []string{
-				"regions/test-region/subnet",
-				"some/resource/uri",
-				"1.2.3.4",
-				"some/address/uri",
-			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:  "regions/test-region/subnet",
-			RelatedResources: []string{
-				"some/resource/uri",
-				"network",
-				"1.2.3.4",
-				"some/address/uri",
-			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
-			ResourceUri:  "1.2.3.4",
-			RelatedResources: []string{
-				"some/resource/uri",
-				"network",
-				"regions/test-region/subnet",
-			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "some/address/uri",
-			RelatedResources: []string{
-				"some/resource/uri",
-				"network",
-				"regions/test-region/subnet",
-			},
-		}},
-	}, {
-		name:       "noSubnetRegion",
-		gceService: &fake.TestGCE{},
-		testCI: &compute.Instance{
-			SelfLink: "some/resource/uri",
-			NetworkInterfaces: []*compute.NetworkInterface{{
-				Network:    "network",
-				Subnetwork: "noregionsubnet",
-				NetworkIP:  "10.2.3.4",
-			}},
-		},
-		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:  "network",
-			RelatedResources: []string{
-				"noregionsubnet",
-				"some/resource/uri",
-			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:  "noregionsubnet",
-			RelatedResources: []string{
-				"some/resource/uri",
-				"network",
-			},
-		}},
-	}, {
-		name: "errGetAddressByIP",
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{nil},
-			GetAddressByIPArgs: []*fake.GetAddressByIPArguments{{
-				Project: "test-project-id",
-				Region:  "test-region",
-				Address: "10.2.3.4",
-			}},
-			GetAddressByIPErr: []error{errors.New("Error listing addresses")},
-		},
-		testCI: &compute.Instance{
-			SelfLink: "some/resource/uri",
-			NetworkInterfaces: []*compute.NetworkInterface{{
-				Network:    "network",
-				Subnetwork: "regions/test-region/subnet",
-				NetworkIP:  "10.2.3.4",
-			}},
-		},
-		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:  "network",
-			RelatedResources: []string{
-				"regions/test-region/subnet",
-				"some/resource/uri",
-			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:  "regions/test-region/subnet",
-			RelatedResources: []string{
-				"some/resource/uri",
-				"network",
-			},
-		}},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.gceService.T = t
-			d := Discovery{
-				gceService: test.gceService,
-			}
-			got := d.discoverNetworks(context.Background(), defaultProjectID, test.testCI, test.testIR)
-			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverNetworks() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverClusterForwardingRule(t *testing.T) {
-	tests := []struct {
-		name       string
-		gceService *fake.TestGCE
-		exists     commandlineexecutor.Exists
-		exec       commandlineexecutor.Execute
-		want       []*spb.SapDiscovery_Resource
-		wantFWR    *compute.ForwardingRule
-		wantFR     *spb.SapDiscovery_Resource
-	}{{
-		name: "hasForwardingRule",
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{{
-				SelfLink: "some/compute/address",
-				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-			}},
-			GetAddressByIPErr:     []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr"}},
-			GetForwardingRuleErr:  []error{nil},
-		},
-		exists: func(string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
-			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{"some/compute/address"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}},
-		wantFWR: &compute.ForwardingRule{
-			SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		wantFR: &spb.SapDiscovery_Resource{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
-			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{"some/compute/address"},
-		},
-	}, {
-		name:   "hasForwardingRulePcs",
-		exists: func(f string) bool { return f == "pcs" },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{{
-				SelfLink: "some/compute/address",
-				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{
-				SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			}},
-			GetForwardingRuleErr: []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:      "some/compute/address",
-			RelatedResources: []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
-			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{"some/compute/address"},
-		}},
-		wantFWR: &compute.ForwardingRule{
-			SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		wantFR: &spb.SapDiscovery_Resource{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
-			ResourceUri:      "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-			RelatedResources: []string{"some/compute/address"},
-		},
-	}, {
-		name:       "noClusterCommands",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return false },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-	}, {
-		name:       "discoverClusterCommandError",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  errors.New("Some command error"),
-			}
-		},
-	}, {
-		name:       "noVipInClusterConfig",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "line1\nline2",
-				StdErr: "",
-			}
-		},
-	}, {
-		name:       "noAddressInClusterConfig",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "rsc_vip_int-primary IPaddr2\nnot-an-adress",
-				StdErr: "",
-			}
-		},
-	}, {
-		name: "errorListingAddresses",
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{nil},
-			GetAddressByIPErr:  []error{errors.New("Some API error")},
-		},
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-	}, {
-		name:   "addressNotInUse",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{{SelfLink: "some/compute/address"}},
-			GetAddressByIPErr:  []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "some/compute/address",
-		}},
-	}, {
-		name:   "addressUserNotForwardingRule",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{{
-				SelfLink: "some/compute/address",
-				Users:    []string{"projects/test-project/zones/test-zone/notFWR/some-name"},
-			}},
-			GetAddressByIPErr: []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "some/compute/address",
-		}},
-	}, {
-		name:   "errorGettingForwardingRule",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetAddressByIPResp: []*compute.Address{{
-				SelfLink: "some/compute/address",
-				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-			}},
-			GetAddressByIPErr:     []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{nil},
-			GetForwardingRuleErr:  []error{errors.New("Some API error")},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "some/compute/address",
-		}},
-	}}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.gceService.T = t
-			d := Discovery{
-				gceService: test.gceService,
-				exists:     test.exists,
-				execute:    test.exec,
-			}
-			got, fwr, fr := d.discoverClusterForwardingRule(context.Background(), defaultProjectID, defaultZone)
-			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverClusterForwardingRule() mismatch (-want, +got):\n%s", diff)
-			}
-			if diff := cmp.Diff(fwr, test.wantFWR, protocmp.Transform()); diff != "" {
-				t.Errorf("discoverClusterForwardingRule() compute.ForwardingRule mismatch (-want, +got):\n%s", diff)
-			}
-			opts := []cmp.Option{
-				protocmp.Transform(),
-				protocmp.IgnoreFields(&spb.SapDiscovery_Resource{}, "update_time"),
-			}
-			if diff := cmp.Diff(fr, test.wantFR, opts...); diff != "" {
-				t.Errorf("discoverClusterForwardingRule() spb.SapDiscovery_Resource mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverLoadBalancer(t *testing.T) {
-	tests := []struct {
-		name       string
-		gceService *fake.TestGCE
-		fwr        *compute.ForwardingRule
-		fr         *spb.SapDiscovery_Resource
-		exists     commandlineexecutor.Exists
-		exec       commandlineexecutor.Execute
-		want       []*spb.SapDiscovery_Resource
-	}{{
-		name:   "hasLoadBalancer",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			}, {
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil, nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone/instances/test-instance-id",
-				}},
-			}, {
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{nil, nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/instances/test-instance-id",
-				"projects/test-project/regions/test-region/backendServices/test-bes",
-			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-		}},
-	}, {
-		name:   "fwrNoBackendService",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{},
-		fwr: &compute.ForwardingRule{
-			SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		fr: &spb.SapDiscovery_Resource{},
-	}, {
-		name:   "bakendServiceNoRegion",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/zegion/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-	}, {
-		name:   "errorGettingBackendService",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{nil},
-			GetRegionalBackendServiceErr:  []error{errors.New("Some API error")},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-	}, {
-		name:   "backendGroupNotInstanceGroup",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/notIG/instancegroup1",
-				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{nil, nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-		}},
-	}, {
-		name:   "backendGroupNoZone",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/fones/test-zone/instanceGroups/instancegroup1",
-				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{nil, nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-		}},
-	}, {
-		name:   "errorGettingInstanceGroup",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{
-				nil,
-				{SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2"},
-			},
-			GetInstanceGroupErr: []error{errors.New("Some API error"), nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{nil, nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-		}},
-	}, {
-		name:   "listInstanceGroupInstancesError",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			}, {
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil, nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{
-				nil,
-				{
-					Items: []*compute.InstanceWithNamedPorts{{
-						Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-					}},
+		name:   "justHANA",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				DBSID:   "ABC",
+				DBHosts: []string{"some-db-host"},
+				DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					SharedNfsUri: "some-shared-nfs-uri",
 				},
-			},
-			ListInstanceGroupInstancesErr: []error{errors.New("Some API Error"), nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "some-db-host",
+			}}, {{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceUri:  "some-shared-nfs-uri",
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-db-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent: "some-shared-nfs-uri",
+				CP:     defaultCloudProperties,
 			}},
-			GetInstanceErr: []error{nil},
 		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
 		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-		}},
-	}, {
-		name:   "noInstanceNameInInstancesItem",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						SharedNfsUri: "some-shared-nfs-uri",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-db-host",
 				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
 				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			}, {
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil, nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone/unstances/test-instance-id1",
-				}},
-			}, {
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{errors.New("Some API Error"), nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+				HostProject: "12345",
 			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+			ProjectNumber: "12345",
 		}},
 	}, {
-		name:   "noProjectInInstancesItem",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
+		name:   "justApp",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID:   "ABC",
+				AppHosts: []string{"some-app-host"},
+				AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+					NfsUri:  "some-nfs-uri",
+					AscsUri: "some-ascs-uri",
+				},
+			}}},
 		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{},
+				{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-app-host",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-nfs-uri",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-ascs-uri",
+				}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-app-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent: "some-nfs-uri",
+				CP:     defaultCloudProperties,
+			}, {
+				Parent: "some-ascs-uri",
+				CP:     defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						AscsUri: "some-ascs-uri",
+						NfsUri:  "some-nfs-uri",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-app-host",
 				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			}, {
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil, nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "zrojects/test-project/zones/test-zone/instances/test-instance-id1",
-				}},
-			}, {
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{errors.New("Some API Error"), nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-		}},
-	}, {
-		name:   "noZoneInInstancesItem",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultClusterOutput,
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetRegionalBackendServiceResp: []*compute.BackendService{{
-				SelfLink: "projects/test-project/regions/test-region/backendServices/test-bes",
-				Backends: []*compute.Backend{{
-					Group: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-nfs-uri",
 				}, {
-					Group: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-ascs-uri",
 				}},
-			}},
-			GetRegionalBackendServiceErr: []error{nil},
-			GetInstanceGroupResp: []*compute.InstanceGroup{{
-				SelfLink: "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "appAndDB",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID: "ABC",
+				DBSID:  "DEF",
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "ABC",
+				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
+				HostProject: "12345",
+			},
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "appOnHost",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID:    "ABC",
+				AppOnHost: true,
+				AppHosts:  []string{"some-app-resource"},
+			}}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceUri:      defaultInstanceURI,
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{"some-host-resource"},
 			}, {
-				SelfLink: "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			}},
-			GetInstanceGroupErr: []error{nil, nil},
-			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/ones/test-zone/instances/test-instance-id1",
-				}},
+				ResourceUri:      "some-host-resource",
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{defaultInstanceURI},
+			}}, {{
+				ResourceUri:  "some-app-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-host-resource"},
+				CP:       defaultCloudProperties,
 			}, {
-				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-app-resource"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:        "ABC",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      defaultInstanceURI,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"some-host-resource"},
+				}, {
+					ResourceUri:  "some-app-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}, {
+					ResourceUri:      "some-host-resource",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{defaultInstanceURI},
 				}},
-			}},
-			ListInstanceGroupInstancesErr: []error{errors.New("Some API Error"), nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "projects/test-project/zones/test-zone2/instances/test-instance-id2",
-			}},
-			GetInstanceErr: []error{nil},
-		},
-		fwr: &compute.ForwardingRule{
-			BackendService: "projects/test-project/regions/test-region/backendServices/test-bes",
-		},
-		fr: &spb.SapDiscovery_Resource{
-			ResourceUri: "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
-			ResourceUri:  "projects/test-project/regions/test-region/backendServices/test-bes",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-				"projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-				"projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
+				HostProject: "12345",
 			},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone/instanceGroups/instancegroup1",
-			RelatedResources: []string{"projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:      "projects/test-project/zones/test-zone2/instanceGroups/instancegroup2",
-			RelatedResources: []string{"projects/test-project/zones/test-zone2/instances/test-instance-id2", "projects/test-project/regions/test-region/backendServices/test-bes"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "projects/test-project/zones/test-zone2/instances/test-instance-id2",
+			ProjectNumber: "12345",
 		}},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.gceService.T = t
-			d := Discovery{
-				gceService: test.gceService,
-				execute:    test.exec,
-				exists:     test.exists,
-			}
-			got := d.discoverLoadBalancerFromForwardingRule(context.Background(), test.fwr, test.fr)
-			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverLoadBalancer() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverFilestores(t *testing.T) {
-	tests := []struct {
-		name           string
-		gceService     *fake.TestGCE
-		exists         commandlineexecutor.Exists
-		exec           commandlineexecutor.Execute
-		testIR         *spb.SapDiscovery_Resource
-		want           []*spb.SapDiscovery_Resource
-		wantRelatedRes []string
-	}{{
-		name:   "singleFilestore",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "127.0.0.1:/vol",
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{
-				Instances: []*file.Instance{{Name: "some/filestore/uri"}},
-			}},
-			GetFilestoreByIPErr: []error{nil},
-		},
-		testIR: &spb.SapDiscovery_Resource{ResourceUri: "some/resource/uri"},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
-			ResourceUri:      "some/filestore/uri",
-			RelatedResources: []string{"some/resource/uri"},
-		}},
-		wantRelatedRes: []string{"some/filestore/uri"},
 	}, {
-		name:   "multipleFilestore",
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "127.0.0.1:/vol\n127.0.0.2:/vol",
-				StdErr: "",
-			}
+		name:   "DBOnHost",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				DBSID:    "DEF",
+				DBOnHost: true,
+				DBHosts:  []string{"some-db-resource"},
+			}}},
 		},
-		gceService: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{
-				Instances: []*file.Instance{{Name: "some/filestore/uri"}},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceUri:      defaultInstanceURI,
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{"some-host-resource"},
 			}, {
-				Instances: []*file.Instance{{Name: "some/filestore/uri2"}},
+				ResourceUri:      "some-host-resource",
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{defaultInstanceURI},
+			}}, {{
+				ResourceUri:  "some-db-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-host-resource"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-db-resource"},
+				CP:       defaultCloudProperties,
 			}},
-			GetFilestoreByIPErr: []error{nil, nil},
 		},
-		testIR: &spb.SapDiscovery_Resource{
-			ResourceUri:      "some/resource/uri",
-			RelatedResources: []string{},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
-			ResourceUri:      "some/filestore/uri",
-			RelatedResources: []string{"some/resource/uri"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
-			ResourceUri:      "some/filestore/uri2",
-			RelatedResources: []string{"some/resource/uri"},
-		}},
-		wantRelatedRes: []string{"some/filestore/uri", "some/filestore/uri2"},
-	}, {
-		name:       "noDF",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return false },
-	}, {
-		name:       "dfErr",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "Permission denied",
-				Error:  errors.New("Permission denied"),
-			}
-		},
-	}, {
-		name:       "noFilestoreInMounts",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "tmpfs",
-				StdErr: "",
-			}
-		},
-	}, {
-		name:       "justIPInMounts",
-		gceService: &fake.TestGCE{},
-		exists:     func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "127.0.0.1",
-				StdErr: "",
-			}
-		},
-	}, {
-		name: "errGettingFilestore",
-		gceService: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{nil},
-			GetFilestoreByIPErr:  []error{errors.New("some error")},
-		},
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "127.0.0.1:/vol",
-				StdErr: "",
-			}
-		},
-	}, {
-		name: "noFilestoreFound",
-		gceService: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		exists: func(f string) bool { return true },
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "127.0.0.1:/vol",
-				StdErr: "",
-			}
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.gceService.T = t
-			d := Discovery{
-				gceService: test.gceService,
-				execute:    test.exec,
-				exists:     test.exists,
-			}
-			got := d.discoverFilestores(context.Background(), defaultProjectID, test.testIR)
-			if diff := cmp.Diff(got, test.want, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverFilestores() mismatch (-want, +got):\n%s", diff)
-			}
-			if test.wantRelatedRes == nil && test.testIR != nil && len(test.testIR.RelatedResources) != 0 {
-				t.Errorf("discoverFilestores() unexpected change to parent Related Resources: %q", test.testIR.RelatedResources)
-			}
-			if test.wantRelatedRes != nil {
-				if diff := cmp.Diff(test.wantRelatedRes, test.testIR.RelatedResources); diff != "" {
-					t.Errorf("discoverFilestores() mismatch (-want, +got):\n%s", diff)
-				}
-			}
-		})
-	}
-}
-func TestDiscoverAppToDBConnection(t *testing.T) {
-	tests := []struct {
-		name         string
-		exec         func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
-		fakeResolver func(string) ([]string, error)
-		gceService   *fake.TestGCE
-		want         []*spb.SapDiscovery_Resource
-	}{{
-		name: "appToDBWithIPAddrToInstance",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/zones/test-zone/instances/test-instance"},
-				SelfLink: "some/compute/address",
-			}},
-			GetAddressErr: []error{nil},
-			GetAddressByIPResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/zones/test-zone/instances/test-instance"},
-				SelfLink: "some/compute/address2",
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "some/compute/instance",
-				Disks: []*compute.AttachedDisk{{
-					Source:     "",
-					DeviceName: "noSourceDisk",
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:        "DEF",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      defaultInstanceURI,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"some-host-resource"},
+				}, {
+					ResourceUri:  "some-db-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}, {
+					ResourceUri:      "some-host-resource",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{defaultInstanceURI},
 				}},
-				NetworkInterfaces: []*compute.NetworkInterface{{
-					Network:       "network",
-					Subnetwork:    "regions/test-region/subnet",
-					AccessConfigs: []*compute.AccessConfig{{NatIP: "1.2.3.4"}},
-					NetworkIP:     "10.2.3.4",
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "appAndDBOnHost",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID:    "ABC",
+				AppOnHost: true,
+				AppHosts:  []string{"some-app-resource"},
+				DBSID:     "DEF",
+				DBOnHost:  true,
+				DBHosts:   []string{"some-db-resource"},
+			}}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceUri:      defaultInstanceURI,
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{"some-host-resource"},
+			}, {
+				ResourceUri:      "some-host-resource",
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{defaultInstanceURI},
+			}}, {{
+				ResourceUri:  "some-app-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}, {{
+				ResourceUri:  "some-db-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-host-resource"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-app-resource"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-db-resource"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:        "ABC",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      defaultInstanceURI,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"some-host-resource"},
+				}, {
+					ResourceUri:  "some-app-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}, {
+					ResourceUri:      "some-host-resource",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{defaultInstanceURI},
 				}},
-			}},
-			GetInstanceErr:       []error{nil},
-			GetDiskResp:          []*compute.Disk{{SelfLink: "some/compute/disk"}},
-			GetDiskErr:           []error{nil},
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:      "some/compute/disk",
-			RelatedResources: []string{"some/compute/instance"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "some/compute/address2",
-			RelatedResources: []string{
-				"some/compute/instance",
-				"network",
-				"regions/test-region/subnet",
+				HostProject: "12345",
 			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
-			ResourceUri:  "1.2.3.4",
-			RelatedResources: []string{
-				"some/compute/instance",
-				"network",
-				"regions/test-region/subnet",
-			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:  "network",
-			RelatedResources: []string{
-				"regions/test-region/subnet",
-				"some/compute/address2",
-				"some/compute/instance", "1.2.3.4"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:      "regions/test-region/subnet",
-			RelatedResources: []string{"some/compute/address2", "network", "some/compute/instance", "1.2.3.4"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "some/compute/instance",
-			RelatedResources: []string{
-				"regions/test-region/subnet",
-				"network",
-				"1.2.3.4",
-				"some/compute/address2", "some/compute/disk", "regions/test-region/subnet"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
-		}},
-	}, {
-		name: "appToDBWithIPDirectToInstance",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(host string) ([]string, error) {
-			if host == "test-instance" {
-				return []string{"1.2.3.4"}, nil
-			}
-			return nil, errors.New("Unrecognized host")
-		},
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/instances/test-instance"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressByIPResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/zones/test-zone/instances/test-instance"},
-				SelfLink: "projects/test-project/zones/test-zone/addresses/test-address",
-			}},
-			GetAddressByIPErr: []error{nil},
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "some/compute/instance",
-				Disks: []*compute.AttachedDisk{{
-					Source:     "",
-					DeviceName: "noSourceDisk",
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:        "DEF",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      defaultInstanceURI,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"some-host-resource"},
+				}, {
+					ResourceUri:  "some-db-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}, {
+					ResourceUri:      "some-host-resource",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{defaultInstanceURI},
 				}},
-				NetworkInterfaces: []*compute.NetworkInterface{{
-					Network:       "network",
-					Subnetwork:    "regions/test-region/subnet",
-					AccessConfigs: []*compute.AccessConfig{{NatIP: "1.2.3.4"}},
-					NetworkIP:     "10.2.3.4",
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "appOnHostDBOffHost",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID:    "ABC",
+				AppOnHost: true,
+				AppHosts:  []string{"some-app-resource"},
+				DBSID:     "DEF",
+				DBOnHost:  false,
+				DBHosts:   []string{"some-db-resource"},
+			}}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceUri:      defaultInstanceURI,
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{"some-host-resource"},
+			}, {
+				ResourceUri:      "some-host-resource",
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{defaultInstanceURI},
+			}}, {{
+				ResourceUri:  "some-app-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}, {{
+				ResourceUri:  "some-db-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-host-resource"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-app-resource"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-db-resource"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:        "ABC",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      defaultInstanceURI,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"some-host-resource"},
+				}, {
+					ResourceUri:  "some-app-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}, {
+					ResourceUri:      "some-host-resource",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{defaultInstanceURI},
 				}},
-			}},
-			GetInstanceErr:       []error{nil},
-			GetDiskResp:          []*compute.Disk{{SelfLink: "some/compute/disk"}},
-			GetDiskErr:           []error{nil},
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
-			GetFilestoreByIPErr:  []error{nil},
-			GetInstanceByIPResp:  []*compute.Instance{{SelfLink: "projects/test-project/zones/test-zone/instances/test-instance"}},
-			GetInstanceByIPErr:   []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:      "some/compute/disk",
-			RelatedResources: []string{"some/compute/instance"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
-			RelatedResources: []string{
-				"some/compute/instance",
-				"network",
-				"regions/test-region/subnet",
+				HostProject: "12345",
 			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_PUBLIC_ADDRESS,
-			ResourceUri:  "1.2.3.4",
-			RelatedResources: []string{
-				"some/compute/instance",
-				"network",
-				"regions/test-region/subnet",
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:        "DEF",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:  "some-db-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}},
+				HostProject: "12345",
 			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-			ResourceUri:  "network",
-			RelatedResources: []string{
-				"regions/test-region/subnet",
-				"1.2.3.4",
-				"projects/test-project/zones/test-zone/addresses/test-address", "some/compute/instance"},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
-			ResourceUri:  "regions/test-region/subnet",
-			RelatedResources: []string{
-				"projects/test-project/zones/test-zone/addresses/test-address",
-				"network",
-				"1.2.3.4",
-				"some/compute/instance",
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "DBOnHostAppOffHost",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID:    "ABC",
+				AppOnHost: false,
+				AppHosts:  []string{"some-app-resource"},
+				DBSID:     "DEF",
+				DBOnHost:  true,
+				DBHosts:   []string{"some-db-resource"},
+			}}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceUri:      defaultInstanceURI,
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{"some-host-resource"},
+			}, {
+				ResourceUri:      "some-host-resource",
+				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				RelatedResources: []string{defaultInstanceURI},
+			}}, {{
+				ResourceUri:  "some-app-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}, {{
+				ResourceUri:  "some-db-resource",
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-host-resource"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-app-resource"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-db-resource"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:        "ABC",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:  "some-app-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}},
+				HostProject: "12345",
 			},
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "some/compute/instance",
-			RelatedResources: []string{
-				"regions/test-region/subnet",
-				"network",
-				"1.2.3.4",
-				"projects/test-project/zones/test-zone/addresses/test-address", "some/compute/disk", "regions/test-region/subnet"},
-		}},
-	}, {
-		name: "appToDBWithIPToLoadBalancerZonalFwr",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/zones/test-zone/forwardingRules/test-fwr"},
-				SelfLink: "some/compute/address",
-			}},
-			GetAddressErr:         []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/zones/test-zone/forwardingRules/test-fwr"}},
-			GetForwardingRuleErr:  []error{nil},
-			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
-				Project:  "test-project",
-				Location: "test-zone",
-				Name:     "test-fwr",
-			}},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/zones/test-zone/addresses/test-address",
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
-			ResourceUri:  "projects/test-project/zones/test-zone/forwardingRules/test-fwr",
-		}},
-	}, {
-		name: "appToDBWithIPToLoadBalancerRegionalFwr",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/regions/test-region/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/regions/test-region/forwardingRules/test-fwr"},
-				SelfLink: "some/compute/address",
-			}},
-			GetAddressErr:         []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/regions/test-region/forwardingRules/test-fwr"}},
-			GetForwardingRuleErr:  []error{nil},
-			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
-				Project:  "test-project",
-				Location: "test-region",
-				Name:     "test-fwr",
-			}},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/regions/test-region/addresses/test-address",
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
-			ResourceUri:  "projects/test-project/regions/test-region/forwardingRules/test-fwr",
-		}},
-	}, {
-		name: "appToDBWithIPToLoadBalancerGlobalFwr",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/global/forwardingRules/test-fwr"},
-				SelfLink: "some/compute/address",
-			}},
-			GetAddressErr:         []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/global/forwardingRules/test-fwr"}},
-			GetForwardingRuleErr:  []error{nil},
-			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
-				Project:  "test-project",
-				Location: "",
-				Name:     "test-fwr",
-			}},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
-		}, {
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
-			ResourceUri:  "projects/test-project/global/forwardingRules/test-fwr",
-		}},
-	}, {
-		name: "errGettingUserStore",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  errors.New("error"),
-			}
-		},
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "noHostnameInUserstoreOutput",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "errGettingUserStore",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  errors.New("error"),
-			}
-		},
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "noHostnameInUserstoreOutput",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "appToDBWithIPToFwrUnknownLocation",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/unknown-location/forwardingRules/test-fwr"},
-				SelfLink: "some/compute/address",
-			}},
-			GetAddressErr:         []error{nil},
-			GetForwardingRuleResp: []*compute.ForwardingRule{{SelfLink: "projects/test-project/global/forwardingRules/test-fwr"}},
-			GetForwardingRuleErr:  []error{nil},
-			GetForwardingRuleArgs: []*fake.GetForwardingRuleArguments{{
-				Project:  "test-project",
-				Location: "",
-				Name:     "test-fwr",
-			}},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
-		}},
-	}, {
-		name: "errGettingUserStore",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  errors.New("error"),
-			}
-		},
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "noHostnameInUserstoreOutput",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "KEY default\nENV : \n			USER: SAPABAP1\n			DATABASE: DEH\n		Operation succeed.",
-				StdErr: "",
-			}
-		},
-		gceService: &fake.TestGCE{},
-	}, {
-		name: "unableToResolveHost",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return nil, errors.New("error") },
-		gceService:   &fake.TestGCE{},
-	}, {
-		name: "noAddressesForHost",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{}, nil },
-		gceService:   &fake.TestGCE{},
-	}, {
-		name: "hostNotComputeAddressNotInstance",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"nil"},
-			GetURIForIPErr:  []error{errors.New("No resource found")},
-		},
-	}, {
-		name: "hostAddressNoUser",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp:  []*compute.Address{{SelfLink: "some/compute/address"}},
-			GetAddressErr:   []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
-		}},
-	}, {
-		name: "hostAddressUnrecognizedUser",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				SelfLink: "some/compute/address",
-				Users:    []string{"projects/test-project/zones/test-zone/unknownObject/test-object"},
-			}},
-			GetAddressErr: []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
-		}},
-	}, {
-		name: "hostAddressFwrUserUnknownLocation",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				SelfLink: "some/compute/address",
-				Users:    []string{"projects/test-project/unknownLocation/test-zone/instances/test-object"},
-			}},
-			GetAddressErr: []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
-		}},
-	}, {
-		name: "instanceMissingName",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/zones/test-zone/not-inst/no-name"},
-				SelfLink: "some/compute/address2",
-			}},
-			GetAddressErr: []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
-		}},
-	}, {
-		name: "instanceMissingProject",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"not-proj/no-project/zones/test-zone/instances/test-instance"},
-				SelfLink: "some/compute/address2",
-			}},
-			GetAddressErr: []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
-		}},
-	}, {
-		name: "instanceMissingZone",
-		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
-				StdErr: "",
-			}
-		},
-		fakeResolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
-		gceService: &fake.TestGCE{
-			GetURIForIPResp: []string{"projects/test-project/global/addresses/test-address"},
-			GetURIForIPErr:  []error{nil},
-			GetAddressResp: []*compute.Address{{
-				Users:    []string{"projects/test-project/not-zone/no-zone/instances/test-instance"},
-				SelfLink: "some/compute/address2",
-			}},
-			GetAddressErr: []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-			ResourceUri:  "projects/test-project/global/addresses/test-address",
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:        "DEF",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      defaultInstanceURI,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"some-host-resource"},
+				}, {
+					ResourceUri:  "some-db-resource",
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				}, {
+					ResourceUri:      "some-host-resource",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{defaultInstanceURI},
+				}},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
 		}},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.gceService.T = t
-			d := Discovery{
-				gceService:   test.gceService,
-				hostResolver: test.fakeResolver,
-				execute:      test.exec,
+			d := &Discovery{
+				SapDiscoveryInterface:   test.testSapDiscovery,
+				CloudDiscoveryInterface: test.testCloudDiscovery,
+				HostDiscoveryInterface:  test.testHostDiscovery,
 			}
-			parent := &spb.SapDiscovery_Resource{ResourceUri: "test/parent/uri"}
-			got := d.discoverAppToDBConnection(context.Background(), defaultCloudProperties, defaultSID, parent)
-			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverAppToDBConnection() mismatch (-want, +got):\n%s", diff)
+			got := d.discoverSAPSystems(context.Background(), defaultCloudProperties)
+			t.Logf("Got systems: %+v ", got)
+			t.Logf("Want systems: %+v ", test.want)
+			if diff := cmp.Diff(test.want, got, append(resourceListDiffOpts, protocmp.IgnoreFields(&spb.SapDiscovery{}, "update_time"))...); diff != "" {
+				t.Errorf("discoverSAPSystems() mismatch (-want, +got):\n%s", diff)
 			}
-		})
-	}
-}
-
-func TestDiscoverDatabaseSID(t *testing.T) {
-	var execCalls map[string]int
-	tests := []struct {
-		name          string
-		testSID       string
-		exec          commandlineexecutor.Execute
-		want          string
-		wantErr       error
-		wantExecCalls map[string]int
-	}{{
-		name:    "hdbUserStoreErr",
-		testSID: defaultSID,
-		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			execCalls[params.Executable]++
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  errors.New("Some err"),
-			}
-		},
-		wantErr: cmpopts.AnyError,
-
-		wantExecCalls: map[string]int{"sudo": 1},
-	}, {
-		name:    "profileGrepErr",
-		testSID: defaultSID,
-		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			execCalls[params.Executable]++
-			if params.Executable == "sudo" {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
+			if len(test.testCloudDiscovery.DiscoverComputeResourcesArgsDiffs) != 0 {
+				for _, diff := range test.testCloudDiscovery.DiscoverComputeResourcesArgsDiffs {
+					t.Errorf("discoverSAPSystems() discoverCloudResourcesArgs mismatch (-want, +got):\n%s", diff)
 				}
-			}
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  errors.New("Some err"),
-			}
-		},
-		wantErr:       cmpopts.AnyError,
-		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
-	}, {
-		name:    "noSIDInGrep",
-		testSID: defaultSID,
-		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			execCalls[params.Executable]++
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-			}
-		},
-		wantErr:       cmpopts.AnyError,
-		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
-	}, {
-		name:    "sidInUserStore",
-		testSID: defaultSID,
-		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			execCalls[params.Executable]++
-			if params.Executable == "sudo" {
-				return commandlineexecutor.Result{
-					StdOut: `KEY default
-					ENV : dnwh75ldbci:30013
-					USER: SAPABAP1
-					DATABASE: DEH
-				Operation succeed.`,
-					StdErr: "",
-				}
-			}
-			return commandlineexecutor.Result{
-				StdOut: "",
-				StdErr: "",
-				Error:  errors.New("Some err"),
-			}
-		},
-		want:          "DEH",
-		wantErr:       nil,
-		wantExecCalls: map[string]int{"sudo": 1},
-	}, {
-		name:    "sidInProfiles",
-		testSID: defaultSID,
-		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			execCalls[params.Executable]++
-			if params.Executable == "sudo" {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
-				}
-			}
-			return commandlineexecutor.Result{
-				StdOut: `
-				grep: /usr/sap/S15/SYS/profile/DEFAULT.PFL: Permission denied
-				/usr/sap/S15/SYS/profile/s:rsdb/dbid = HN1`,
-				StdErr: "",
-			}
-		},
-		want:          "HN1",
-		wantErr:       nil,
-		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			execCalls = make(map[string]int)
-			d := Discovery{
-				execute: test.exec,
-			}
-			got, gotErr := d.discoverDatabaseSID(context.Background(), test.testSID)
-			if test.want != "" {
-				if got != test.want {
-					t.Errorf("discoverDatabaseSID() = %q, want %q", got, test.want)
-				}
-			}
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("discoverDatabaseSID() gotErr %q, wantErr %q", gotErr, test.wantErr)
-			}
-			if diff := cmp.Diff(test.wantExecCalls, execCalls); diff != "" {
-				t.Errorf("discoverDatabaseSID() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}
@@ -2296,261 +920,6 @@ func TestDiscoverySystemToInsight(t *testing.T) {
 	}
 }
 
-func TestDiscoverDBNodes(t *testing.T) {
-	tests := []struct {
-		name           string
-		sid            string
-		instanceNumber string
-		project        string
-		zone           string
-		execute        commandlineexecutor.Execute
-		gceService     *fake.TestGCE
-		resolver       func(string) ([]string, error)
-		want           []*spb.SapDiscovery_Resource
-	}{{
-		name:           "discoverSingleNode",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "some/compute/instance",
-			}},
-			GetInstanceErr: []error{nil},
-			GetInstanceByIPResp: []*compute.Instance{{
-				Name: "some/compute/instance",
-			}},
-			GetInstanceByIPErr: []error{nil},
-		},
-		resolver: func(string) ([]string, error) {
-			return []string{"1.2.3.4"}, nil
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceUri:  "some/compute/instance",
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-		}},
-	}, {
-		name:           "discoverMultipleNodes",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputMultipleNodes,
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "some/compute/instance",
-			}, {
-				SelfLink: "some/compute/instance2",
-			}, {
-				SelfLink: "some/compute/instance3",
-			}, {
-				SelfLink: "some/compute/instance4",
-			}},
-			GetInstanceErr: []error{nil, nil, nil, nil},
-			GetInstanceByIPResp: []*compute.Instance{{
-				Name: "some/compute/instance",
-			}},
-			GetInstanceByIPErr: []error{nil},
-		},
-		resolver: func(string) ([]string, error) {
-			return []string{"1.2.3.4"}, nil
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceUri:  "some/compute/instance",
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-		}, {
-			ResourceUri:  "some/compute/instance2",
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-		}, {
-			ResourceUri:  "some/compute/instance3",
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-		}, {
-			ResourceUri:  "some/compute/instance4",
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-		}},
-	}, {
-		name:           "pythonScriptReturnsNonfatalCode",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   defaultLandscapeOutputSingleNode,
-				Error:    cmpopts.AnyError,
-				ExitCode: 3,
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "some/compute/instance",
-			}},
-			GetInstanceErr: []error{nil},
-			GetInstanceByIPResp: []*compute.Instance{{
-				Name: "some/compute/instance",
-			}},
-			GetInstanceByIPErr: []error{nil},
-		},
-		resolver: func(string) ([]string, error) {
-			return []string{"1.2.3.4"}, nil
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceUri:  "some/compute/instance",
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-		}},
-	}, {
-		name:           "pythonScriptFails",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   defaultLandscapeOutputSingleNode,
-				Error:    cmpopts.AnyError,
-				ExitCode: 1,
-			}
-		},
-		want: nil,
-	}, {
-		name:           "noHostsInOutput",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{}
-		},
-		gceService: &fake.TestGCE{},
-		want:       nil,
-	}, {
-		name:           "sidNotProvided",
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		want: nil,
-	}, {
-		name:    "instanceNumberNotProvided",
-		sid:     defaultSID,
-		project: defaultProjectID,
-		zone:    defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		want: nil,
-	}, {
-		name:           "projectNotProvided",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		want: nil,
-	}, {
-		name:           "zoneNotProvided",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		want: nil,
-	}, {
-		name:           "hostResolverError",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		gceService: &fake.TestGCE{},
-		resolver: func(string) ([]string, error) {
-			return []string{}, errors.New("Host not found")
-		},
-	}, {
-		name:           "hostResolverReturnsEmpty",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		gceService: &fake.TestGCE{},
-		resolver: func(string) ([]string, error) {
-			return []string{}, nil
-		},
-	}, {
-		name:           "instanceByIPError",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		project:        defaultProjectID,
-		zone:           defaultZone,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: defaultLandscapeOutputSingleNode,
-			}
-		},
-		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "some/compute/instance",
-			}},
-			GetInstanceErr:      []error{nil},
-			GetInstanceByIPResp: []*compute.Instance{nil},
-			GetInstanceByIPErr:  []error{errors.New("No instance found")},
-		},
-		resolver: func(string) ([]string, error) {
-			return []string{"1.2.3.4"}, nil
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			d := Discovery{
-				execute:      test.execute,
-				hostResolver: test.resolver,
-				gceService:   test.gceService,
-			}
-			got := d.discoverDBNodes(context.Background(), test.sid, test.instanceNumber, test.project, test.zone)
-			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
-				t.Errorf("discoverDBNodes() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
 func TestWriteToCloudLogging(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -2592,400 +961,9 @@ func TestWriteToCloudLogging(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.logInterface.T = t
 			d := Discovery{
-				cloudLogInterface: test.logInterface,
+				CloudLogInterface: test.logInterface,
 			}
 			d.writeToCloudLogging(test.system)
-		})
-	}
-}
-
-func TestDiscoverASCS(t *testing.T) {
-	tests := []struct {
-		name         string
-		comp         *spb.SapDiscovery_Component
-		cp           *instancepb.CloudProperties
-		execute      commandlineexecutor.Execute
-		resolver     func(string) ([]string, error)
-		gceInterface *fake.TestGCE
-		wantErr      error
-		wantComp     *spb.SapDiscovery_Component
-	}{{
-		name: "discoverASCS",
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "some extra line\nrdisp/mshost = some-test-ascs ",
-			}
-		},
-		resolver: func(string) ([]string, error) {
-			return []string{"1.2.3.4"}, nil
-		},
-		gceInterface: &fake.TestGCE{
-			GetURIForIPResp: []string{"some/resource/uri"},
-			GetURIForIPErr:  []error{nil},
-		},
-		wantErr: nil,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{
-				AscsUri: "some/resource/uri",
-			}},
-		},
-	}, {
-		name: "errorWhenPassedDatabaseProperties",
-		comp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-	}, {
-		name: "errorExecutingCommand",
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{Error: errors.New("Error running command"), ExitCode: 1}
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
-		},
-	}, {
-		name: "noHostInProfile",
-		comp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "some extra line\nrno host in output",
-			}
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-	}, {
-		name: "emptyHostInProfile",
-		comp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "some extra line\nrdisp/mshost = ",
-			}
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-	}, {
-		name: "hostResolutionError",
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "some extra line\nrdisp/mshost = some-test-ascs ",
-			}
-		},
-		resolver: func(string) ([]string, error) {
-			return nil, errors.New("host resolution error")
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
-		},
-	}, {
-		name: "hostResolutionError",
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: "some extra line\nrdisp/mshost = some-test-ascs ",
-			}
-		},
-		resolver: func(string) ([]string, error) {
-			return nil, errors.New("host resolution error")
-		},
-		gceInterface: &fake.TestGCE{
-			GetURIForIPResp: []string{""},
-			GetURIForIPErr:  []error{errors.New("error finding resource for IP")},
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			d := Discovery{
-				execute:      test.execute,
-				hostResolver: test.resolver,
-				gceService:   test.gceInterface,
-			}
-			gotErr := d.discoverASCS(context.Background(), defaultSID, test.comp, test.cp)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("Unexpected error from discoverASCS (got, want), (%s, %s)", gotErr, test.wantErr)
-			}
-			if diff := cmp.Diff(test.wantComp, test.comp, protocmp.Transform()); diff != "" {
-				t.Errorf("discoverASCS() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverAppNFS(t *testing.T) {
-	tests := []struct {
-		name         string
-		app          *sappb.SAPInstance
-		comp         *spb.SapDiscovery_Component
-		cp           *instancepb.CloudProperties
-		execute      commandlineexecutor.Execute
-		gceInterface *fake.TestGCE
-		wantErr      error
-		wantComp     *spb.SapDiscovery_Component
-	}{{
-		name: "discoverAppNFS",
-		app: &sappb.SAPInstance{
-			Sapsid: defaultSID,
-		},
-		comp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-			}},
-		},
-		cp: defaultCloudProperties,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		gceInterface: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/resource/uri"}}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		wantErr: nil,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-				&spb.SapDiscovery_Component_ApplicationProperties{
-					ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-					NfsUri:          "some/resource/uri",
-				}}},
-	}, {
-		name: "discoverAppNFSWithEmptyProperties",
-		app: &sappb.SAPInstance{
-			Sapsid: defaultSID,
-		},
-		comp: &spb.SapDiscovery_Component{},
-		cp:   defaultCloudProperties,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		gceInterface: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/resource/uri"}}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		wantErr: nil,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-				&spb.SapDiscovery_Component_ApplicationProperties{
-					NfsUri: "some/resource/uri",
-				}}},
-	}, {
-		name: "errorWhenPassedDatabaseProperties",
-		app: &sappb.SAPInstance{
-			Sapsid: defaultSID,
-		},
-		comp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
-		},
-	}, {
-		name: "errorExecutingCommand",
-		app: &sappb.SAPInstance{
-			Sapsid: defaultSID,
-		},
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{Error: errors.New("Error running command"), ExitCode: 1}
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
-		},
-	}, {
-		name: "noNFSInMounts",
-		app: &sappb.SAPInstance{
-			Sapsid: defaultSID,
-		},
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				// StdOut: "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
-				StdOut:   "some extra line\n/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
-		},
-	}, {
-		name: "errorFindingNFSByIP",
-		app: &sappb.SAPInstance{
-			Sapsid: defaultSID,
-		},
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		gceInterface: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{nil},
-			GetFilestoreByIPErr:  []error{errors.New("some error")},
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
-		},
-	}, {
-		name: "noNFSFoundByIP",
-		app: &sappb.SAPInstance{
-			Sapsid: defaultSID,
-		},
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /sapmnt/ABC",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		gceInterface: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		wantErr: cmpopts.AnyError,
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{&spb.SapDiscovery_Component_ApplicationProperties{}},
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-
-			d := Discovery{
-				execute:    test.execute,
-				gceService: test.gceInterface,
-			}
-			gotErr := d.discoverAppNFS(context.Background(), test.app, test.comp, test.cp)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("Unexpected error from discoverAppNFS (got, want), (%s, %s)", gotErr, test.wantErr)
-			}
-			if diff := cmp.Diff(test.wantComp, test.comp, protocmp.Transform()); diff != "" {
-				t.Errorf("discoverAppNFS() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverDatabaseNFS(t *testing.T) {
-	tests := []struct {
-		name         string
-		comp         *spb.SapDiscovery_Component
-		execute      func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
-		gceInterface *fake.TestGCE
-		wantComp     *spb.SapDiscovery_Component
-		wantErr      error
-	}{{
-		name: "discoverDatabaseNFS",
-		comp: &spb.SapDiscovery_Component{Properties: &spb.SapDiscovery_Component_DatabaseProperties_{&spb.SapDiscovery_Component_DatabaseProperties{
-			DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-		}}},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /hana/shared",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		gceInterface: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/nfs/uri"}}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-				&spb.SapDiscovery_Component_DatabaseProperties{
-					DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-					SharedNfsUri: "some/nfs/uri",
-				}},
-		},
-		wantErr: nil,
-	}, {
-		name: "noComponentProperties",
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /hana/shared",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		gceInterface: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/nfs/uri"}}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-				&spb.SapDiscovery_Component_DatabaseProperties{
-					SharedNfsUri: "some/nfs/uri",
-				}},
-		},
-		wantErr: nil,
-	}, {
-		name: "wrongComponentProperties",
-		comp: &spb.SapDiscovery_Component{},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   "some extra line\n1.2.3.4:/some/volume 1007G   42G  914G   5% /hana/shared",
-				StdErr:   "",
-				ExitCode: 0,
-			}
-		},
-		gceInterface: &fake.TestGCE{
-			GetFilestoreByIPResp: []*file.ListInstancesResponse{{Instances: []*file.Instance{{Name: "some/nfs/uri"}}}},
-			GetFilestoreByIPErr:  []error{nil},
-		},
-		wantComp: &spb.SapDiscovery_Component{
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-				&spb.SapDiscovery_Component_DatabaseProperties{
-					SharedNfsUri: "some/nfs/uri",
-				}},
-		},
-		wantErr: nil,
-	}}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			d := Discovery{
-				execute:    test.execute,
-				gceService: test.gceInterface,
-			}
-			gotErr := d.discoverDatabaseNFS(context.Background(), test.comp, defaultCloudProperties)
-			if diff := cmp.Diff(test.wantComp, test.comp, protocmp.Transform()); diff != "" {
-				t.Errorf("discoverDatabaseNFS() mismatch (-want, +got):\n%s", diff)
-			}
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("Unexpected error from discoverDatabaseNFS (got, want), (%s, %s)", gotErr, test.wantErr)
-			}
 		})
 	}
 }

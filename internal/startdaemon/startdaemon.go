@@ -46,6 +46,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
@@ -352,15 +356,28 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	pmp.startCollection(pmCtx)
 
 	// Start SAP System Discovery
-	// TODO: Use the global cloud logging client for sap system.
-	logClient := log.CloudLoggingClient(ctx, d.config.GetCloudProperties().ProjectId)
 	ssdCtx := log.SetCtx(ctx, "context", "SAPSystemDiscovery")
-	if logClient != nil {
-		system.StartSAPSystemDiscovery(ssdCtx, d.config, gceService, wlmService, logClient.Logger("google-cloud-sap-agent"))
+	systemDiscovery := &system.Discovery{
+		WlmService: wlmService,
+		CloudDiscoveryInterface: &clouddiscovery.CloudDiscovery{
+			GceService:   gceService,
+			HostResolver: net.LookupHost,
+		},
+		HostDiscoveryInterface: &hostdiscovery.HostDiscovery{
+			Exists:  commandlineexecutor.CommandExists,
+			Execute: commandlineexecutor.ExecuteCommand,
+		},
+		SapDiscoveryInterface: &appsdiscovery.SapDiscovery{
+			Execute:       commandlineexecutor.ExecuteCommand,
+			AppsDiscovery: sapdiscovery.SAPApplications,
+		},
+	}
+	if d.lp.CloudLoggingClient != nil {
+		systemDiscovery.CloudLogInterface = d.lp.CloudLoggingClient.Logger("google-cloud-sap-agent")
+		system.StartSAPSystemDiscovery(ssdCtx, d.config, systemDiscovery)
 		log.FlushCloudLog()
-		defer logClient.Close()
 	} else {
-		system.StartSAPSystemDiscovery(ssdCtx, d.config, gceService, wlmService, nil)
+		system.StartSAPSystemDiscovery(ssdCtx, d.config, systemDiscovery)
 	}
 
 	// Start HANA Monitoring
