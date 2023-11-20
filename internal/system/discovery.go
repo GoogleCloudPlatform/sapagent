@@ -22,12 +22,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	logging "cloud.google.com/go/logging"
+	"golang.org/x/exp/slices"
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
