@@ -165,7 +165,7 @@ func backupFile(ctx context.Context, p parameters) string {
 			return fmt.Sprintf("#ERROR %s\n", p.fileName)
 		}
 		p.reader = f
-		p.readTimeout = 30 * time.Second
+		p.readTimeout = 180 * time.Second
 		p.readTimeoutFunc = func() {
 			log.CtxLogger(ctx).Errorw("Timeout while reading from the source, closing source to prevent hanging", "fileName", p.fileName, "closeErr", f.Close())
 		}

@@ -170,7 +170,7 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		EncryptionKey:     config.GetEncryptionKey(),
 		KMSKey:            config.GetKmsKey(),
 		MaxRetries:        config.GetRetries(),
-		FileSystemTimeout: 30 * time.Second,
+		FileSystemTimeout: 180 * time.Second,
 		FileSystemTimeoutFunc: func() {
 			log.CtxLogger(ctx).Errorw("Timeout while writing to the destination, closing destination to prevent hanging", "destName", destName, "closeErr", destFile.Close())
 		},
