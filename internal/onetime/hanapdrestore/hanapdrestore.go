@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package restore implements one time execution for HANA Disk based restore.
-package restore
+// Package hanapdrestore implements one time execution for HANA Persistent Disk based restore workflow.
+package hanapdrestore
 
 import (
 	"context"
@@ -41,7 +41,7 @@ type (
 	computeServiceFunc func(context.Context) (*compute.Service, error)
 )
 
-// Restorer has args for restore subcommands
+// Restorer has args for hanapdrestore subcommands
 type Restorer struct {
 	project, sid, user, dataDiskName          string
 	dataDiskZone, sourceSnapshot, newDiskType string
@@ -54,19 +54,21 @@ type Restorer struct {
 	logLevel                                  string
 }
 
-// Name implements the subcommand interface for restore.
-func (*Restorer) Name() string { return "restore" }
+// Name implements the subcommand interface for hanapdrestore.
+func (*Restorer) Name() string { return "hanapdrestore" }
 
-// Synopsis implements the subcommand interface for restore.
-func (*Restorer) Synopsis() string { return "invoke HANA restore using persistent disk snapshot" }
+// Synopsis implements the subcommand interface for hanapdrestore.
+func (*Restorer) Synopsis() string {
+	return "invoke HANA hanapdrestore using worklfow to restore from persistent disk snapshot"
+}
 
-// Usage implements the subcommand interface for restore.
+// Usage implements the subcommand interface for hanapdrestore.
 func (*Restorer) Usage() string {
-	return `Usage: restore -project=<project-name> -sid=<HANA-SID> -user=<user-name> -source-snapshot=<snapshot-name>
+	return `Usage: hanapdrestore -project=<project-name> -sid=<HANA-SID> -user=<user-name> -source-snapshot=<snapshot-name>
 	-data-disk-name=<PD-name> -source-disk-zone=<PD-zone> -new-disk-type=<Type of the new PD disk>` + "\n"
 }
 
-// SetFlags implements the subcommand interface for restore.
+// SetFlags implements the subcommand interface for hanapdrestore.
 func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.project, "project", "", "GCP project. (required)")
 	fs.StringVar(&r.sid, "sid", "", "HANA SID. (required)")
@@ -80,7 +82,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
-// Execute implements the subcommand interface for restore.
+// Execute implements the subcommand interface for hanapdrestore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if r.help {
 		return onetime.HelpCommand(f)

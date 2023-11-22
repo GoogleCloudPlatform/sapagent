@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package snapshot
+package hanapdbackup
 
 import (
 	"context"
@@ -368,7 +368,7 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 }
 
 func TestSynopsisForSnapshot(t *testing.T) {
-	want := "invoke HANA backup using disk snapshots"
+	want := "invoke HANA backup using persistent disk snapshots"
 	snapshot := Snapshot{}
 	got := snapshot.Synopsis()
 	if got != want {

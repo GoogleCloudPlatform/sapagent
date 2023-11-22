@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package snapshot implements one time execution mode for snapshot.
-package snapshot
+// Package hanapdbackup implements one time execution mode for HANA Persistent Disk based backup workflow.
+package hanapdbackup
 
 import (
 	"context"
@@ -84,20 +84,20 @@ type Snapshot struct {
 	hanaDataPath      string
 }
 
-// Name implements the subcommand interface for snapshot.
-func (*Snapshot) Name() string { return "snapshot" }
+// Name implements the subcommand interface for hanapdbackup.
+func (*Snapshot) Name() string { return "hanapdbackup" }
 
-// Synopsis implements the subcommand interface for snapshot.
-func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snapshots" }
+// Synopsis implements the subcommand interface for hanapdbackup.
+func (*Snapshot) Synopsis() string { return "invoke HANA backup using persistent disk snapshots" }
 
-// Usage implements the subcommand interface for snapshot.
+// Usage implements the subcommand interface for hanapdbackup.
 func (*Snapshot) Usage() string {
-	return `Usage: snapshot -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
+	return `Usage: hanapdbackup -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
 	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
 	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
-// SetFlags implements the subcommand interface for snapshot.
+// SetFlags implements the subcommand interface for hanapdbackup.
 func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.project, "project", "", "GCP project. (required)")
 	fs.StringVar(&s.host, "host", "", "HANA host. (required)")
@@ -120,7 +120,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
-// Execute implements the subcommand interface for snapshot.
+// Execute implements the subcommand interface for hanapdbackup.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if s.help {
 		return onetime.HelpCommand(f)
@@ -245,7 +245,7 @@ func runQuery(h *sql.DB, q string) (string, error) {
 }
 
 func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
-	log.CtxLogger(ctx).Info("Start run snapshot workflow")
+	log.CtxLogger(ctx).Info("Start run HANA PD based backup workflow")
 	if err = s.abandonPreparedSnapshot(run); err != nil {
 		usagemetrics.Error(usagemetrics.SnapshotDBNotReadyFailure)
 		return err

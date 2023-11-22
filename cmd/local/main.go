@@ -31,6 +31,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanapdbackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanapdrestore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/installbackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
@@ -39,8 +41,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/readmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/restore"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/snapshot"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/version"
@@ -63,13 +63,13 @@ func registerSubCommands() {
 		&logusage.LogUsage{},
 		&maintenance.Mode{},
 		&remotevalidation.RemoteValidation{},
-		&snapshot.Snapshot{},
+		&hanapdbackup.Snapshot{},
 		&migratehanamonitoring.MigrateHANAMonitoring{},
 		&validate.Validate{},
 		&hanainsights.HANAInsights{},
 		&backint.Backint{},
 		&supportbundle.SupportBundle{},
-		&restore.Restorer{},
+		&hanapdrestore.Restorer{},
 		&readmetrics.ReadMetrics{},
 		&installbackint.InstallBackint{},
 		&version.Version{},
