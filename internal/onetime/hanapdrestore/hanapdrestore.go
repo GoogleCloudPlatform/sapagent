@@ -52,6 +52,7 @@ type Restorer struct {
 	physicalDataPath, physicalLogPath         string
 	help, version                             bool
 	logLevel                                  string
+	forceStopHANA                             bool
 }
 
 // Name implements the subcommand interface for hanapdrestore.
@@ -77,6 +78,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "Current PD zone. (required)")
 	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source PD snapshot to restore from. (required)")
 	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
+	fs.BoolVar(&r.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
@@ -326,10 +328,18 @@ func (r *Restorer) checkDataDeviceForStripes(ctx context.Context, exec commandli
 }
 
 func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execute) error {
+	var cmd string
+	if r.forceStopHANA {
+		log.CtxLogger(ctx).Infow("HANA force stopped", "sid", r.sid)
+		cmd = fmt.Sprintf("-c '/usr/sap/%s/*/HDB kill'", r.sid)
+	} else {
+		log.CtxLogger(ctx).Infow("Stopping HANA", "sid", r.sid)
+		cmd = fmt.Sprintf("-c '/usr/sap/%s/*/HDB stop'", r.sid)
+	}
 	result := exec(ctx, commandlineexecutor.Params{
 		User:        r.user,
 		Executable:  "/bin/sh",
-		ArgsToSplit: fmt.Sprintf("-c '/usr/sap/%s/*/HDB stop'", r.sid),
+		ArgsToSplit: cmd,
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)

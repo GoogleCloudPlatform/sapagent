@@ -283,24 +283,31 @@ func TestCheckDataDeviceForStripes(t *testing.T) {
 func TestStopHANA(t *testing.T) {
 	tests := []struct {
 		name     string
+		r        *Restorer
 		fakeExec commandlineexecutor.Execute
 		want     error
 	}{
 		{
 			name:     "Failure",
+			r:        &Restorer{},
 			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
 			want:     cmpopts.AnyError,
 		},
 		{
-			name:     "Success",
+			name:     "StopSuccess",
+			r:        &Restorer{},
+			fakeExec: testCommandExecute("", "", nil),
+		},
+		{
+			name:     "ForceStopSuccess",
+			r:        &Restorer{forceStopHANA: true},
 			fakeExec: testCommandExecute("", "", nil),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			r := &Restorer{}
-			got := r.stopHANA(context.Background(), test.fakeExec)
+			got := test.r.stopHANA(context.Background(), test.fakeExec)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("stopHANA() = %v, want %v", got, test.want)
 			}
