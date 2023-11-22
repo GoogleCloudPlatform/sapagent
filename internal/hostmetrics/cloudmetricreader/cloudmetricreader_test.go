@@ -46,6 +46,16 @@ var (
 	defaultInstanceProperties = &instancepb.InstanceProperties{
 		Disks: []*instancepb.Disk{
 			&instancepb.Disk{DeviceName: disk1},
+			&instancepb.Disk{DiskName: disk2, ProvisionedIops: 1000, ProvisionedThroughput: 2000},
+		},
+		NetworkAdapters: []*instancepb.NetworkAdapter{
+			&instancepb.NetworkAdapter{Name: adapter1},
+			&instancepb.NetworkAdapter{Name: adapter2},
+		},
+	}
+	instancePropertiesNonHyperDisk = &instancepb.InstanceProperties{
+		Disks: []*instancepb.Disk{
+			&instancepb.Disk{DeviceName: disk1},
 			&instancepb.Disk{DiskName: disk2},
 		},
 		NetworkAdapters: []*instancepb.NetworkAdapter{
@@ -226,6 +236,28 @@ var (
 			DeviceId:        disk2,
 			Value:           "0.0",
 		},
+		"disk2ProvisionedIOps": &mpb.Metric{
+			Context:         sapMetrics[metricDiskGuaranteedIops].context,
+			Category:        sapMetrics[metricDiskGuaranteedIops].category,
+			Type:            sapMetrics[metricDiskGuaranteedIops].metricType,
+			Name:            sapMetrics[metricDiskGuaranteedIops].sapName,
+			LastRefresh:     at.CloudMetricRefresh().Unix(),
+			Unit:            sapMetrics[metricDiskGuaranteedIops].unit,
+			RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
+			DeviceId:        disk2,
+			Value:           wantUnavailable,
+		},
+		"disk2ProvisionedThroughput": &mpb.Metric{
+			Context:         sapMetrics[metricDiskGuaranteedThroughput].context,
+			Category:        sapMetrics[metricDiskGuaranteedThroughput].category,
+			Type:            sapMetrics[metricDiskGuaranteedThroughput].metricType,
+			Name:            sapMetrics[metricDiskGuaranteedThroughput].sapName,
+			LastRefresh:     at.CloudMetricRefresh().Unix(),
+			Unit:            sapMetrics[metricDiskGuaranteedThroughput].unit,
+			RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
+			DeviceId:        disk2,
+			Value:           wantUnavailable,
+		},
 	}
 	// When calling QueryTimeSeries(), the resulting number of time series data entries, or values
 	// in each time series data point, may differ based on the query in a way that is non-trivial
@@ -236,26 +268,26 @@ var (
 			PointData: []*mrpb.TimeSeriesData_PointData{
 				{
 					Values: []*cpb.TypedValue{
-						{Value: &cpb.TypedValue_DoubleValue{0.12345}},
-						{Value: &cpb.TypedValue_DoubleValue{1}},
-						{Value: &cpb.TypedValue_DoubleValue{60}},
-						{Value: &cpb.TypedValue_DoubleValue{90}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 0.12345}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 1}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 60}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 90}},
 					},
 				},
 				{
 					Values: []*cpb.TypedValue{
-						{Value: &cpb.TypedValue_DoubleValue{0.23456}},
-						{Value: &cpb.TypedValue_DoubleValue{2}},
-						{Value: &cpb.TypedValue_DoubleValue{120}},
-						{Value: &cpb.TypedValue_DoubleValue{180}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 0.23456}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 2}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 120}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 180}},
 					},
 				},
 				{
 					Values: []*cpb.TypedValue{
-						{Value: &cpb.TypedValue_DoubleValue{0.34567}},
-						{Value: &cpb.TypedValue_DoubleValue{3}},
-						{Value: &cpb.TypedValue_DoubleValue{180}},
-						{Value: &cpb.TypedValue_DoubleValue{360}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 0.34567}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 3}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 180}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 360}},
 					},
 				},
 			},
@@ -264,26 +296,26 @@ var (
 			PointData: []*mrpb.TimeSeriesData_PointData{
 				{
 					Values: []*cpb.TypedValue{
-						{Value: &cpb.TypedValue_DoubleValue{100}},
-						{Value: &cpb.TypedValue_DoubleValue{200}},
-						{Value: &cpb.TypedValue_DoubleValue{300}},
-						{Value: &cpb.TypedValue_DoubleValue{400}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 100}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 200}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 300}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 400}},
 					},
 				},
 				{
 					Values: []*cpb.TypedValue{
-						{Value: &cpb.TypedValue_DoubleValue{500}},
-						{Value: &cpb.TypedValue_DoubleValue{600}},
-						{Value: &cpb.TypedValue_DoubleValue{700}},
-						{Value: &cpb.TypedValue_DoubleValue{800}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 500}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 600}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 700}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 800}},
 					},
 				},
 				{
 					Values: []*cpb.TypedValue{
-						{Value: &cpb.TypedValue_DoubleValue{900}},
-						{Value: &cpb.TypedValue_DoubleValue{1000}},
-						{Value: &cpb.TypedValue_DoubleValue{1100}},
-						{Value: &cpb.TypedValue_DoubleValue{1200}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 900}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 1000}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 1100}},
+						{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 1200}},
 					},
 				},
 			},
@@ -322,6 +354,8 @@ func TestReadQueryTimeSeries(t *testing.T) {
 					defaultMetrics["network1WriteThroughput"],
 					defaultMetrics["network2ReadThroughput"],
 					defaultMetrics["network2WriteThroughput"],
+					defaultMetrics["disk2ProvisionedIOps"],
+					defaultMetrics["disk2ProvisionedThroughput"],
 					defaultMetrics["disk1VolumeReadThroughput"],
 					defaultMetrics["disk1VolumeWriteThroughput"],
 					defaultMetrics["disk1VolumeReadOps"],
@@ -333,7 +367,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 					defaultMetrics["disk2VolumeWriteOps"],
 					defaultMetrics["disk2VolumeUtilization"],
 				},
-			}, []string{"12.3", "0", "1", "0", "1", "0", "0", "1", "2", "100.0", "2", "3", "5", "7", "100.0"}),
+			}, []string{"12.3", "0", "1", "0", "1", "1000", "2000", "0", "0", "1", "2", "100.0", "2", "3", "5", "7", "100.0"}),
 		},
 		{
 			name:        "bareMetalConfiguration",
@@ -361,7 +395,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 					{
 						PointData: []*mrpb.TimeSeriesData_PointData{
 							{
-								Values: []*cpb.TypedValue{{Value: &cpb.TypedValue_DoubleValue{5}}},
+								Values: []*cpb.TypedValue{{Value: &cpb.TypedValue_DoubleValue{DoubleValue: 5}}},
 							},
 						},
 					},
@@ -377,7 +411,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 			name:               "missingCloudProperties",
 			queryClient:        &fake.TimeSeriesQuerier{TS: defaultTimeSeriesData},
 			config:             &configpb.Configuration{},
-			instanceProperties: defaultInstanceProperties,
+			instanceProperties: instancePropertiesNonHyperDisk,
 			want: &mpb.MetricsCollection{
 				Metrics: []*mpb.Metric{
 					defaultMetrics["cpuUtilization"],
@@ -412,19 +446,21 @@ func TestReadQueryTimeSeries(t *testing.T) {
 			},
 		},
 		{
-			name: "emptyTimeSeries",
+			name: "emptyTimeSeriesWithHyperDisk",
 			queryClient: &fake.TimeSeriesQuerier{
 				TS: []*mrpb.TimeSeriesData{},
 			},
 			config:             defaultConfig,
 			instanceProperties: defaultInstanceProperties,
-			want: &mpb.MetricsCollection{
+			want: metricValues(&mpb.MetricsCollection{
 				Metrics: []*mpb.Metric{
 					defaultMetrics["cpuUtilization"],
 					defaultMetrics["network1ReadThroughput"],
 					defaultMetrics["network1WriteThroughput"],
 					defaultMetrics["network2ReadThroughput"],
 					defaultMetrics["network2WriteThroughput"],
+					defaultMetrics["disk2ProvisionedIOps"],
+					defaultMetrics["disk2ProvisionedThroughput"],
 					defaultMetrics["disk1VolumeReadThroughput"],
 					defaultMetrics["disk1VolumeWriteThroughput"],
 					defaultMetrics["disk1VolumeReadOps"],
@@ -436,7 +472,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 					defaultMetrics["disk2VolumeWriteOps"],
 					defaultMetrics["disk2VolumeUtilization"],
 				},
-			},
+			}, []string{"-1.0", "-1.0", "-1.0", "-1.0", "-1.0", "1000", "2000", "-1.0", "-1.0", "-1.0", "-1.0", "0.0", "-1.0", "-1.0", "-1.0", "-1.0", "0.0"}),
 		},
 		{
 			name: "emptyPointData",
@@ -448,7 +484,7 @@ func TestReadQueryTimeSeries(t *testing.T) {
 				},
 			},
 			config:             defaultConfig,
-			instanceProperties: defaultInstanceProperties,
+			instanceProperties: instancePropertiesNonHyperDisk,
 			want: &mpb.MetricsCollection{
 				Metrics: []*mpb.Metric{
 					defaultMetrics["cpuUtilization"],
