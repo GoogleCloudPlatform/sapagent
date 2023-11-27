@@ -176,9 +176,7 @@ func (discardCloser) Write(p []byte) (int, error) { return len(p), nil }
 // failure (bucket does not exist, invalid credentials, etc.)
 // userAgentSuffix is an optional parameter to set the User-Agent header.
 // verifyConnection requires bucket read access to list the bucket's objects.
-func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName, userAgentSuffix string, verifyConnection bool) (*storage.BucketHandle, bool) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
+func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName, userAgentSuffix string, verifyConnection bool, maxRetries int64) (*storage.BucketHandle, bool) {
 	var opts []option.ClientOption
 	userAgent := fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", configuration.AgentVersion)
 	if userAgentSuffix != "" {
@@ -189,7 +187,7 @@ func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, 
 	if serviceAccount != "" {
 		opts = append(opts, option.WithCredentialsFile(serviceAccount))
 	}
-	client, err := storageClient(ctxTimeout, opts...)
+	client, err := storageClient(ctx, opts...)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create GCS client. Ensure your default credentials or service account file are correct.", "error", err)
 		return nil, false
@@ -201,7 +199,9 @@ func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, 
 		return bucket, true
 	}
 	log.CtxLogger(ctx).Infow("Verifying connection to bucket", "bucket", bucketName)
-	if _, err := bucket.Objects(ctxTimeout, nil).Next(); err != nil && err != iterator.Done {
+	rw := &ReadWriter{MaxRetries: maxRetries}
+	it := bucket.Retryer(rw.retryOptions("Failed to verify bucket connection, retrying.")...).Objects(ctx, nil)
+	if _, err := it.Next(); err != nil && err != iterator.Done {
 		log.CtxLogger(ctx).Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", bucketName, "error", err)
 		return nil, false
 	}

@@ -133,7 +133,7 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	}
 
 	if r.bucketName != "" {
-		if r.bucket, ok = storage.ConnectToBucket(ctx, s.NewClient, r.serviceAccount, r.bucketName, userAgent, false); !ok {
+		if r.bucket, ok = storage.ConnectToBucket(ctx, s.NewClient, r.serviceAccount, r.bucketName, userAgent, false, 0); !ok {
 			log.CtxLogger(ctx).Errorw("Failed to connect to bucket", "bucketName", r.bucketName)
 			return subcommands.ExitFailure
 		}
