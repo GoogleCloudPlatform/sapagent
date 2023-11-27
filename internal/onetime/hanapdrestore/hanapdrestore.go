@@ -65,18 +65,20 @@ func (*Restorer) Synopsis() string {
 
 // Usage implements the subcommand interface for hanapdrestore.
 func (*Restorer) Usage() string {
-	return `Usage: hanapdrestore -project=<project-name> -sid=<HANA-SID> -user=<user-name> -source-snapshot=<snapshot-name>
-	-data-disk-name=<PD-name> -source-disk-zone=<PD-zone> -new-disk-type=<Type of the new PD disk>` + "\n"
+	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
+	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> [-project=<project-name>]
+	[-new-disk-type=<Type of the new PD disk>] [-user=<user-name>]
+	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanapdrestore.
 func (r *Restorer) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&r.project, "project", "", "GCP project. (required)")
-	fs.StringVar(&r.sid, "sid", "", "HANA SID. (required)")
-	fs.StringVar(&r.user, "user", "", "HANA username. (required)")
+	fs.StringVar(&r.sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&r.dataDiskName, "data-disk-name", "", "Current PD name. (required)")
 	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "Current PD zone. (required)")
 	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source PD snapshot to restore from. (required)")
+	fs.StringVar(&r.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
+	fs.StringVar(&r.user, "user", "", "HANA sidadm username. (optional) Default: <sid>adm")
 	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.BoolVar(&r.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
@@ -115,8 +117,11 @@ func (r *Restorer) validateParameters(os string) error {
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot restore is only supported on Linux systems")
-	case r.project == "" || r.sid == "" || r.user == "" || r.dataDiskName == "" || r.dataDiskZone == "" || r.sourceSnapshot == "":
+	case r.sid == "" || r.dataDiskName == "" || r.dataDiskZone == "" || r.sourceSnapshot == "":
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
+	}
+	if r.project == "" {
+		r.project = r.cloudProps.GetProjectId()
 	}
 	if r.newDiskType == "" {
 		exp := backoff.NewExponentialBackOff()
@@ -125,6 +130,9 @@ func (r *Restorer) validateParameters(os string) error {
 	}
 	if r.newDiskType == "" {
 		return fmt.Errorf("could not read disk type, please pass -new-disk-type=<>")
+	}
+	if r.user == "" {
+		r.user = r.sid + "adm"
 	}
 	log.Logger.Debug("Parameter validation successful.")
 	return nil

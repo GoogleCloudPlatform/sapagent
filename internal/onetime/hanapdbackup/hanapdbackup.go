@@ -92,26 +92,27 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using persistent
 
 // Usage implements the subcommand interface for hanapdbackup.
 func (*Snapshot) Usage() string {
-	return `Usage: hanapdbackup -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
-	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
+	return `Usage: hanapdbackup -port=<port-number> -sid=<HANA-sid> -user=<user-name>
+	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-host=<hostname>] [-project=<project-name>]
+	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
 	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanapdbackup.
 func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&s.project, "project", "", "GCP project. (required)")
-	fs.StringVar(&s.host, "host", "", "HANA host. (required)")
 	fs.StringVar(&s.port, "port", "", "HANA port. (required)")
-	fs.StringVar(&s.sid, "sid", "", "HANA SID. (required)")
+	fs.StringVar(&s.sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&s.user, "user", "", "HANA username. (required)")
 	fs.StringVar(&s.password, "password", "", "HANA password. (discouraged - use password-secret instead)")
-	fs.StringVar(&s.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA Password.")
-	fs.BoolVar(&s.abandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional - defaults to false)")
-	fs.StringVar(&s.snapshotName, "snapshot-name", "", "Snapshot name override.(Optional - deafaults to 'hana-sid-snapshot-yyyymmdd-hhmmss')")
+	fs.StringVar(&s.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password.")
 	fs.StringVar(&s.disk, "source-disk", "", "name of the persistent disk from which you want to create a snapshot (required)")
 	fs.StringVar(&s.diskZone, "source-disk-zone", "", "zone of the persistent disk from which you want to create a snapshot. (required)")
+	fs.StringVar(&s.host, "host", "localhost", "HANA host. (optional)")
+	fs.StringVar(&s.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
+	fs.BoolVar(&s.abandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
+	fs.StringVar(&s.snapshotName, "snapshot-name", "", "Snapshot name override.(Optional - deafaults to 'hana-sid-snapshot-yyyymmdd-hhmmss')")
 	fs.StringVar(&s.diskKeyFile, "source-disk-key-file", "", `Path to the customer-supplied encryption key of the source disk. (optional)\n (required if the source disk is protected by a customer-supplied encryption key.)`)
-	fs.StringVar(&s.storageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) (default: nearby regional or multi-regional location automatically chosen.)")
+	fs.StringVar(&s.storageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
 	fs.StringVar(&s.csekKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
 	fs.StringVar(&s.description, "snapshot-description", "", "Description of the new snapshot(optional)")
 	fs.BoolVar(&s.sendToMonitoring, "send-status-to-monitoring", true, "Send the execution status to cloud monitoring as a metric")
@@ -213,10 +214,13 @@ func (s *Snapshot) validateParameters(os string) error {
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
-	case s.host == "" || s.port == "" || s.sid == "" || s.user == "" || s.disk == "" || s.diskZone == "":
+	case s.port == "" || s.sid == "" || s.user == "" || s.disk == "" || s.diskZone == "":
 		return fmt.Errorf("required arguments not passed. Usage:" + s.Usage())
 	case s.password == "" && s.passwordSecret == "":
 		return fmt.Errorf("either -password or -password-secret is required. Usage:" + s.Usage())
+	}
+	if s.project == "" {
+		s.project = s.cloudProps.GetProjectId()
 	}
 	if s.snapshotName == "" {
 		t := time.Now()
@@ -224,7 +228,7 @@ func (s *Snapshot) validateParameters(os string) error {
 			strings.ToLower(s.sid), t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 	}
 	if s.description == "" {
-		s.description = fmt.Sprintf("Snapshot created by Agent for SAP for HANA SID: %q", s.sid)
+		s.description = fmt.Sprintf("Snapshot created by Agent for SAP for HANA sid: %q", s.sid)
 	}
 	log.Logger.Debug("Parameter validation successful.")
 	return nil

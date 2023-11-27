@@ -191,23 +191,18 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name:     "EmptyHost",
-			snapshot: Snapshot{host: ""},
-			want:     cmpopts.AnyError,
-		},
-		{
 			name:     "EmptyPort",
-			snapshot: Snapshot{host: "localhost", port: ""},
+			snapshot: Snapshot{port: ""},
 			want:     cmpopts.AnyError,
 		},
 		{
 			name:     "EmptySID",
-			snapshot: Snapshot{host: "localhost", port: "123", sid: ""},
+			snapshot: Snapshot{port: "123", sid: ""},
 			want:     cmpopts.AnyError,
 		},
 		{
 			name:     "EmptyUser",
-			snapshot: Snapshot{host: "localhost", port: "123", sid: "HDB", user: ""},
+			snapshot: Snapshot{port: "123", sid: "HDB", user: ""},
 			want:     cmpopts.AnyError,
 		},
 		{
@@ -247,6 +242,30 @@ func TestValidateParameters(t *testing.T) {
 			},
 			want: cmpopts.AnyError,
 		},
+		{
+			name: "Emptyhost",
+			snapshot: Snapshot{
+				port:           "123",
+				sid:            "HDB",
+				host:           "",
+				user:           "system",
+				disk:           "pd-1",
+				diskZone:       "us-east1-a",
+				passwordSecret: "secret",
+			},
+		},
+		{
+			name: "Emptyproject",
+			snapshot: Snapshot{
+				port:           "123",
+				sid:            "HDB",
+				project:        "",
+				user:           "system",
+				disk:           "pd-1",
+				diskZone:       "us-east1-a",
+				passwordSecret: "secret",
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -255,6 +274,30 @@ func TestValidateParameters(t *testing.T) {
 				t.Errorf("validateParameters(snapshot=%v, os=%v)=%v, want=%v", test.snapshot, test.os, got, test.want)
 			}
 		})
+	}
+}
+
+var defaultCloudProperties = &ipb.CloudProperties{
+	ProjectId: "default-project",
+}
+
+func TestDefaultProject(t *testing.T) {
+	s := Snapshot{
+		port:           "123",
+		sid:            "HDB",
+		project:        "",
+		user:           "system",
+		disk:           "pd-1",
+		diskZone:       "us-east1-a",
+		passwordSecret: "secret",
+		cloudProps:     defaultCloudProperties,
+	}
+	got := s.validateParameters("linux")
+	if !cmp.Equal(got, nil, cmpopts.EquateErrors()) {
+		t.Errorf("validateParameters(linux=%v)=%v, want=%v", got, got, nil)
+	}
+	if s.project != "default-project" {
+		t.Errorf("project = %v, want = %v", s.project, "default-project")
 	}
 }
 

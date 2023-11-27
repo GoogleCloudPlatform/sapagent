@@ -62,10 +62,11 @@ var (
 
 func TestValidateParameters(t *testing.T) {
 	tests := []struct {
-		name     string
-		restorer Restorer
-		os       string
-		want     error
+		name         string
+		restorer     Restorer
+		os           string
+		want         error
+		wantRestorer *Restorer
 	}{
 		{
 			name: "WindowsUnSupported",
@@ -73,12 +74,12 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name:     "EmptyProject",
+			name:     "Emptyproject",
 			restorer: Restorer{},
 			want:     cmpopts.AnyError,
 		},
 		{
-			name:     "EmptySID",
+			name:     "Emptysid",
 			restorer: Restorer{project: "my-project"},
 			want:     cmpopts.AnyError,
 		},
@@ -95,11 +96,32 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "NewDiskTypeSet",
+			name: "newDiskTypeSet",
 			restorer: Restorer{
 				project:        "my-project",
 				sid:            "my-sid",
 				user:           "my-user",
+				dataDiskName:   "data-disk",
+				dataDiskZone:   "data-zone",
+				sourceSnapshot: "snapshot",
+				newDiskType:    "pd-ssd",
+			},
+		},
+		{
+			name: "Emptyproject",
+			restorer: Restorer{
+				sid:            "tst",
+				dataDiskName:   "data-disk",
+				dataDiskZone:   "data-zone",
+				sourceSnapshot: "snapshot",
+				newDiskType:    "pd-ssd",
+			},
+		},
+		{
+			name: "Emptyuser",
+			restorer: Restorer{
+				project:        "my-project",
+				sid:            "tst",
 				dataDiskName:   "data-disk",
 				dataDiskZone:   "data-zone",
 				sourceSnapshot: "snapshot",
@@ -114,6 +136,32 @@ func TestValidateParameters(t *testing.T) {
 				t.Errorf("validateParameters(%q) = %v, want %v", test.os, got, test.want)
 			}
 		})
+	}
+}
+
+var defaultCloudProperties = &ipb.CloudProperties{
+	ProjectId: "default-project",
+}
+
+func TestDefaultValues(t *testing.T) {
+	r := Restorer{
+		sid:            "hdb",
+		sourceSnapshot: "source-snapshot",
+		dataDiskName:   "data-disk-name",
+		dataDiskZone:   "data-disk-zone",
+		newDiskType:    "new-disk-type",
+		project:        "",
+		cloudProps:     defaultCloudProperties,
+	}
+	got := r.validateParameters("linux")
+	if got != nil {
+		t.Errorf("validateParameters()=%v, want=%v", got, nil)
+	}
+	if r.project != "default-project" {
+		t.Errorf("project = %v, want = %v", r.project, "default-project")
+	}
+	if r.user != "hdbadm" {
+		t.Errorf("user = %v, want = %v", r.user, "hdbadm")
 	}
 }
 
@@ -428,5 +476,27 @@ func TestExecute(t *testing.T) {
 				t.Errorf("Execute() = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestSynopsisForRestorer(t *testing.T) {
+	want := "invoke HANA hanapdrestore using worklfow to restore from persistent disk snapshot"
+	snapshot := Restorer{}
+	got := snapshot.Synopsis()
+	if got != want {
+		t.Errorf("Synopsis()=%v, want=%v", got, want)
+	}
+}
+
+func TestSetFlagsForSnapshot(t *testing.T) {
+	snapshot := Restorer{}
+	fs := flag.NewFlagSet("flags", flag.ExitOnError)
+	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "user"}
+	snapshot.SetFlags(fs)
+	for _, flag := range flags {
+		got := fs.Lookup(flag)
+		if got == nil {
+			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
+		}
 	}
 }
