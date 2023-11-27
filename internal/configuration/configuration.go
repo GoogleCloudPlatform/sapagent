@@ -178,9 +178,15 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	}
 	if cc.GetWorkloadValidationCollectionDefinition() == nil {
 		cc.WorkloadValidationCollectionDefinition = &cpb.WorkloadValidationCollectionDefinition{
-			DisableFetchLatestConfig: true,
-			ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+			FetchLatestConfig:       wpb.Bool(true),
+			ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 		}
+	}
+	if cc.GetWorkloadValidationCollectionDefinition().GetConfigTargetEnvironment() == cpb.TargetEnvironment_TARGET_ENVIRONMENT_UNSPECIFIED {
+		cc.WorkloadValidationCollectionDefinition.ConfigTargetEnvironment = cpb.TargetEnvironment_PRODUCTION
+	}
+	if cc.GetWorkloadValidationCollectionDefinition().GetFetchLatestConfig() == nil {
+		cc.WorkloadValidationCollectionDefinition.FetchLatestConfig = wpb.Bool(true)
 	}
 	return cc
 }

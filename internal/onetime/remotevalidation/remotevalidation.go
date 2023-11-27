@@ -42,9 +42,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 // RemoteValidation has args for remote subcommands.
@@ -103,7 +104,7 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		// TODO: Remote collection should inherit configuration from host instance
 		CollectionConfig: &cpb.CollectionConfiguration{
 			WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-				DisableFetchLatestConfig: true,
+				FetchLatestConfig: wpb.Bool(false),
 			},
 		},
 		ReadFile: os.ReadFile,
@@ -184,7 +185,7 @@ func (r *RemoteValidation) createConfiguration() *cpb.Configuration {
 	}
 }
 
-func (r *RemoteValidation) workloadValidationConfig(ctx context.Context, opts collectiondefinition.LoadOptions) (*wpb.WorkloadValidation, error) {
+func (r *RemoteValidation) workloadValidationConfig(ctx context.Context, opts collectiondefinition.LoadOptions) (*wlmpb.WorkloadValidation, error) {
 	if r.config == "" {
 		cd, err := collectiondefinition.Load(ctx, opts)
 		if err != nil {
@@ -199,7 +200,7 @@ func (r *RemoteValidation) workloadValidationConfig(ctx context.Context, opts co
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to read workload validation config file: %v", err)
 	}
-	config := &wpb.WorkloadValidation{}
+	config := &wlmpb.WorkloadValidation{}
 	if err := protojson.Unmarshal(data, config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal workload validation config: %v", err)
 	}

@@ -114,8 +114,8 @@ func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts St
 		return nil
 	}
 
-	if opts.LoadOptions.CollectionConfig.GetWorkloadValidationCollectionDefinition().GetDisableFetchLatestConfig() {
-		log.CtxLogger(ctx).Debug("Fetch latest config option disabled, will not periodically refresh collection definition")
+	if !opts.LoadOptions.CollectionConfig.GetWorkloadValidationCollectionDefinition().GetFetchLatestConfig().GetValue() {
+		log.CtxLogger(ctx).Info("Fetch latest config option disabled, will not periodically refresh collection definition")
 		return cd
 	}
 
@@ -208,7 +208,7 @@ func Load(ctx context.Context, opts LoadOptions) (*cdpb.CollectionDefinition, er
 	var agentCD *cdpb.CollectionDefinition
 	var err error
 
-	if !opts.CollectionConfig.GetWorkloadValidationCollectionDefinition().GetDisableFetchLatestConfig() {
+	if opts.CollectionConfig.GetWorkloadValidationCollectionDefinition().GetFetchLatestConfig().GetValue() {
 		agentCD = fetchFromGCS(ctx, opts.FetchOptions)
 	}
 
@@ -236,7 +236,7 @@ func Load(ctx context.Context, opts LoadOptions) (*cdpb.CollectionDefinition, er
 		return nil, ValidationError{FailureCount: v.FailureCount()}
 	}
 
-	log.CtxLogger(ctx).Debug("Successfully loaded collection definition")
+	log.CtxLogger(ctx).Info("Successfully loaded collection definition")
 	return cd, nil
 }
 

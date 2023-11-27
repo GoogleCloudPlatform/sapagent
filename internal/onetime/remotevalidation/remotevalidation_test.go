@@ -30,6 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -38,7 +39,7 @@ func TestExecute(t *testing.T) {
 	defaultLoadOptions := collectiondefinition.LoadOptions{
 		CollectionConfig: &cpb.CollectionConfiguration{
 			WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-				DisableFetchLatestConfig: true,
+				FetchLatestConfig: wpb.Bool(false),
 			},
 		},
 		ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
@@ -84,7 +85,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 	defaultLoadOptions := collectiondefinition.LoadOptions{
 		CollectionConfig: &cpb.CollectionConfiguration{
 			WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-				DisableFetchLatestConfig: true,
+				FetchLatestConfig: wpb.Bool(false),
 			},
 		},
 		ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
@@ -187,7 +188,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 			loadOptions: collectiondefinition.LoadOptions{
 				CollectionConfig: &cpb.CollectionConfiguration{
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: true,
+						FetchLatestConfig: wpb.Bool(false),
 					},
 				},
 				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },

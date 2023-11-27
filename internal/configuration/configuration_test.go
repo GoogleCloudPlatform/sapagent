@@ -195,8 +195,8 @@ func TestApplyDefaults(t *testing.T) {
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: true,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
 			},
@@ -206,6 +206,9 @@ func TestApplyDefaults(t *testing.T) {
 			configFromFile: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: wpb.Bool(false),
 				LogToCloud:                 wpb.Bool(false),
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{},
+				},
 			},
 			want: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: wpb.Bool(false),
@@ -216,8 +219,8 @@ func TestApplyDefaults(t *testing.T) {
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: true,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
 			},
@@ -249,8 +252,8 @@ func TestApplyDefaults(t *testing.T) {
 					SapSystemDiscovery:                   wpb.Bool(false),
 					DataWarehouseEndpoint:                "https://other-workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: true,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
 				ProvideSapHostAgentMetrics: wpb.Bool(true),
@@ -283,8 +286,8 @@ func TestApplyDefaults(t *testing.T) {
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: true,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
 			},
@@ -338,8 +341,8 @@ func TestApplyDefaults(t *testing.T) {
 					SapSystemDiscovery:    wpb.Bool(true),
 					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: true,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_PRODUCTION,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
 			},

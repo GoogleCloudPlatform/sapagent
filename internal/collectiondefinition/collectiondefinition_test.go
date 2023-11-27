@@ -35,6 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -115,7 +116,7 @@ var (
 
 	disableFetchConfig = &cpb.CollectionConfiguration{
 		WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-			DisableFetchLatestConfig: true,
+			FetchLatestConfig: wpb.Bool(false),
 		},
 	}
 )
@@ -147,7 +148,7 @@ func TestStart(t *testing.T) {
 					CollectionConfig: &cpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-							DisableFetchLatestConfig: true,
+							FetchLatestConfig: wpb.Bool(false),
 						},
 					},
 					ReadFile: func(s string) ([]byte, error) { return invalidCollectionDefinition, nil },
@@ -164,7 +165,7 @@ func TestStart(t *testing.T) {
 					CollectionConfig: &cpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-							DisableFetchLatestConfig: true,
+							FetchLatestConfig: wpb.Bool(false),
 						},
 					},
 					ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
@@ -232,8 +233,8 @@ func TestStart_HeartbeatSpec(t *testing.T) {
 					CollectionConfig: &cpb.CollectionConfiguration{
 						CollectWorkloadValidationMetrics: true,
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-							DisableFetchLatestConfig: false,
-							ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+							FetchLatestConfig:       wpb.Bool(true),
+							ConfigTargetEnvironment: cpb.TargetEnvironment_DEVELOPMENT,
 						},
 					},
 					FetchOptions: FetchOptions{
@@ -272,8 +273,8 @@ func TestLoadAndBroadcast_Success(t *testing.T) {
 		LoadOptions: LoadOptions{
 			CollectionConfig: &cpb.CollectionConfiguration{
 				WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-					DisableFetchLatestConfig: false,
-					ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+					FetchLatestConfig:       wpb.Bool(true),
+					ConfigTargetEnvironment: cpb.TargetEnvironment_DEVELOPMENT,
 				},
 			},
 			FetchOptions: FetchOptions{
@@ -319,8 +320,8 @@ func TestLoadAndBroadcast_Failure(t *testing.T) {
 		LoadOptions: LoadOptions{
 			CollectionConfig: &cpb.CollectionConfiguration{
 				WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-					DisableFetchLatestConfig: false,
-					ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+					FetchLatestConfig:       wpb.Bool(true),
+					ConfigTargetEnvironment: cpb.TargetEnvironment_DEVELOPMENT,
 				},
 			},
 			FetchOptions: FetchOptions{
@@ -425,8 +426,8 @@ func TestLoad(t *testing.T) {
 			opts: LoadOptions{
 				CollectionConfig: &cpb.CollectionConfiguration{
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: false,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_DEVELOPMENT,
 					},
 				},
 				FetchOptions: FetchOptions{
@@ -483,8 +484,8 @@ func TestLoad(t *testing.T) {
 			opts: LoadOptions{
 				CollectionConfig: &cpb.CollectionConfiguration{
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: false,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_DEVELOPMENT,
 					},
 				},
 				FetchOptions: FetchOptions{
@@ -507,8 +508,8 @@ func TestLoad(t *testing.T) {
 			opts: LoadOptions{
 				CollectionConfig: &cpb.CollectionConfiguration{
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
-						DisableFetchLatestConfig: false,
-						ConfigTargetEnvironment:  cpb.TargetEnvironment_DEVELOPMENT,
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_DEVELOPMENT,
 					},
 				},
 				FetchOptions: FetchOptions{

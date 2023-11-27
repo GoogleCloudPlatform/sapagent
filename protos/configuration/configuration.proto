@@ -107,8 +107,11 @@ message RemoteCollectionSsh {
 }
 
 message WorkloadValidationCollectionDefinition {
+  reserved 2;
+  reserved "disable_fetch_latest_config";
+
   TargetEnvironment config_target_environment = 1;
-  bool disable_fetch_latest_config = 2;
+  google.protobuf.BoolValue fetch_latest_config = 3;
 }
 
 message HANAMetricsConfig {

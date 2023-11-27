@@ -37,7 +37,7 @@ var (
 		cpb.TargetEnvironment_PRODUCTION:  "cloudsapdeploy",
 		cpb.TargetEnvironment_STAGING:     "cloudsapdeploytesting",
 		cpb.TargetEnvironment_DEVELOPMENT: "sapagent-collection-definition-dev",
-		cpb.TargetEnvironment_INTEGRATION:  "cloudsapdeployintegration",
+		cpb.TargetEnvironment_INTEGRATION: "cloudsapdeployintegration",
 	}
 	//go:embed public.pem
 	pubkey []byte
@@ -171,6 +171,6 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 		return nil
 	}
 
-	log.CtxLogger(ctx).Debug("Successfully downloaded and verified collection definition")
+	log.CtxLogger(ctx).Info("Successfully downloaded and verified collection definition")
 	return cd
 }
