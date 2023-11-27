@@ -35,6 +35,11 @@ func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) W
 	l := make(map[string]string)
 	netweaverVal := 0.0
 
+	if params.sapApplications == nil {
+		log.CtxLogger(ctx).Debug("No SAP Instances found")
+		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, netweaverVal, params.Config)}
+	}
+
 	for _, instance := range params.sapApplications.Instances {
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			log.CtxLogger(ctx).Info("Found Netweaver instance.")

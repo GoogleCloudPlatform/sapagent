@@ -26,12 +26,12 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -108,6 +108,19 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 				WorkloadConfig:  &wlmpb.WorkloadValidation{},
 				osVendorID:      "rhel",
 				sapApplications: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{}
+				},
+			},
+			wantValue:  0,
+			wantLabels: map[string]string{},
+		},
+		{
+			name: "TestNOSAPInstances",
+			params: Parameters{
+				Config:         defaultConfiguration,
+				WorkloadConfig: &wlmpb.WorkloadValidation{},
+				osVendorID:     "rhel",
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},

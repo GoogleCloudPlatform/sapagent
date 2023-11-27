@@ -115,6 +115,10 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 // globalINIfromSAPsid returns the path to the global.ini file using the
 // SAP sid from the discovered HANA instance.
 func globalINIfromSAPsid(params Parameters) string {
+	if params.sapApplications == nil {
+		log.Logger.Debug("No SAP Instances found")
+		return ""
+	}
 	for _, instance := range params.sapApplications.Instances {
 		if instance.GetType() == sapb.InstanceType_HANA && instance.GetSapsid() != "" {
 			log.Logger.Infow("Found HANA instance.", "sapsid", instance.GetSapsid())

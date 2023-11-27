@@ -716,6 +716,19 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			wantLabels:       map[string]string{},
 		},
 		{
+			name: "TestNOSAPInstances",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+				}
+			},
+			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
+			configFileReader: defaultFileReader,
+			wantHanaExists:   float64(0.0),
+			wantLabels:       map[string]string{},
+		},
+		{
 			name: "TestHanaNoSAPsid",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
