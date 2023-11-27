@@ -32,13 +32,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
 var (
@@ -148,14 +148,15 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				"instance_name": "test-instance-name",
-				"os":            "debian-11",
-				"agent":         "sapagent",
-				"agent_version": "1.0",
-				"network_ips":   "192.168.0.1,192.168.0.2",
-				"gcloud":        "true",
-				"gsutil":        "true",
-				"agent_state":   "running",
+				"instance_name":             "test-instance-name",
+				"os":                        "debian-11",
+				"agent":                     "sapagent",
+				"agent_version":             "1.0",
+				"network_ips":               "192.168.0.1,192.168.0.2",
+				"gcloud":                    "true",
+				"gsutil":                    "true",
+				"agent_state":               "running",
+				"collection_config_version": "2",
 			},
 		},
 		{

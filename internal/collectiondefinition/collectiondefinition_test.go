@@ -32,6 +32,7 @@ import (
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
@@ -151,7 +152,7 @@ func TestStart(t *testing.T) {
 					},
 					ReadFile: func(s string) ([]byte, error) { return invalidCollectionDefinition, nil },
 					OSType:   "linux",
-					Version:  "1.4",
+					Version:  configuration.AgentVersion,
 				},
 			},
 			want: nil,
@@ -168,7 +169,7 @@ func TestStart(t *testing.T) {
 					},
 					ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
 					OSType:   "linux",
-					Version:  "1.4",
+					Version:  configuration.AgentVersion,
 				},
 			},
 			want: wantCollectionDefinition,
@@ -246,7 +247,7 @@ func TestStart_HeartbeatSpec(t *testing.T) {
 					},
 					ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
 					OSType:   "linux",
-					Version:  "1.4",
+					Version:  configuration.AgentVersion,
 				},
 			}
 
@@ -438,7 +439,7 @@ func TestLoad(t *testing.T) {
 					Execute:    defaultExec,
 				},
 				OSType:          "linux",
-				Version:         "1.4",
+				Version:         configuration.AgentVersion,
 				DisableFallback: true,
 			},
 			want:    nil,
@@ -450,7 +451,7 @@ func TestLoad(t *testing.T) {
 				CollectionConfig: disableFetchConfig,
 				ReadFile:         func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
 				OSType:           "windows",
-				Version:          "1.4",
+				Version:          configuration.AgentVersion,
 			},
 			want:    nil,
 			wantErr: cmpopts.AnyError,
@@ -461,7 +462,7 @@ func TestLoad(t *testing.T) {
 				CollectionConfig: disableFetchConfig,
 				ReadFile:         func(s string) ([]byte, error) { return invalidCollectionDefinition, nil },
 				OSType:           "linux",
-				Version:          "1.4",
+				Version:          configuration.AgentVersion,
 			},
 			want:    nil,
 			wantErr: ValidationError{FailureCount: 1},
@@ -472,7 +473,7 @@ func TestLoad(t *testing.T) {
 				CollectionConfig: disableFetchConfig,
 				ReadFile:         func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
 				OSType:           "linux",
-				Version:          "1.4",
+				Version:          configuration.AgentVersion,
 			},
 			want:    wantCollectionDefinition,
 			wantErr: nil,
@@ -495,7 +496,7 @@ func TestLoad(t *testing.T) {
 				},
 				ReadFile:        func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
 				OSType:          "linux",
-				Version:         "1.4",
+				Version:         configuration.AgentVersion,
 				DisableFallback: true,
 			},
 			want:    &cdpb.CollectionDefinition{WorkloadValidation: &wlmpb.WorkloadValidation{}},
@@ -521,7 +522,7 @@ func TestLoad(t *testing.T) {
 				},
 				ReadFile:        func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
 				OSType:          "linux",
-				Version:         "1.4",
+				Version:         configuration.AgentVersion,
 				DisableFallback: false,
 			},
 			want:    wantCollectionDefinition,

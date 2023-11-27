@@ -89,7 +89,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 		},
 		ReadFile: func(s string) ([]byte, error) { return nil, fs.ErrNotExist },
 		OSType:   "linux",
-		Version:  "1.0",
+		Version:  configuration.AgentVersion,
 	}
 
 	tests := []struct {
@@ -143,7 +143,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 			loadOptions: collectiondefinition.LoadOptions{
 				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
 				OSType:   "linux",
-				Version:  "1.0",
+				Version:  configuration.AgentVersion,
 			},
 			want: subcommands.ExitFailure,
 		},
@@ -158,7 +158,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 			loadOptions: collectiondefinition.LoadOptions{
 				ReadFile: func(s string) ([]byte, error) { return []byte("invalid json"), nil },
 				OSType:   "linux",
-				Version:  "1.0",
+				Version:  configuration.AgentVersion,
 			},
 			want: subcommands.ExitFailure,
 		},
@@ -173,7 +173,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 			loadOptions: collectiondefinition.LoadOptions{
 				ReadFile: func(s string) ([]byte, error) { return []byte("{}"), nil },
 				OSType:   "linux",
-				Version:  "1.0",
+				Version:  configuration.AgentVersion,
 			},
 			want: subcommands.ExitSuccess,
 		},
@@ -192,7 +192,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 				},
 				ReadFile: func(s string) ([]byte, error) { return nil, errors.New("ReadFile Error") },
 				OSType:   "linux",
-				Version:  "1.0",
+				Version:  configuration.AgentVersion,
 			},
 			want: subcommands.ExitFailure,
 		},

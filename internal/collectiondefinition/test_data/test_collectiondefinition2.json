@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 1,
+    "version": 2,
     "validation_system": {
       "system_metrics": [
         {
@@ -37,6 +37,14 @@
             "label": "network_ips"
           },
           "value": "NETWORK_IPS"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "collection_config_version",
+            "min_version": "2.8"
+          },
+          "value": "COLLECTION_CONFIG_VERSION"
         }
       ],
       "os_command_metrics": [
