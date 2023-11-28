@@ -67,18 +67,11 @@ const (
 	WindowsConfigPath = `C:\Program Files\Google\google-cloud-sap-agent\conf\configuration.json`
 )
 
-// ReadFromFile reads configuration from given file into proto.
-func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
-	p := path
-	if len(p) == 0 {
-		p = LinuxConfigPath
-		if ros == "windows" {
-			p = WindowsConfigPath
-		}
-	}
-	content, err := read(p)
+// Read just reads configuration from given file and parses it into config proto.
+func Read(path string, read ReadConfigFile) *cpb.Configuration {
+	content, err := read(path)
 	if err != nil || len(content) == 0 {
-		log.Logger.Errorw("Could not read from configuration file", "file", p, "error", err)
+		log.Logger.Errorw("Could not read from configuration file", "file", path, "error", err)
 		usagemetrics.Error(usagemetrics.ConfigFileReadFailure)
 		return nil
 	}
@@ -87,9 +80,29 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
-		log.Logger.Errorw("Invalid content in the configuration file", "file", p, "content", string(content))
-		log.Logger.Errorf("Configuration JSON at '%s' has error: %v. Only hostmetrics will be started. Please fix the JSON and restart the agent", p, err)
+		log.Logger.Errorw("Invalid content in the configuration file", "file", path, "content", string(content))
+		log.Logger.Errorf("Configuration JSON at '%s' has error: %v. Only hostmetrics will be started. Please fix the JSON and restart the agent", path, err)
 	}
+	return config
+}
+
+// ReadFromFile reads the final configuration from the given file. Besides parsing the file,
+// it consists of the final HANA Monitoring configuration after parsing all the enabled
+// HANA Monitoring queries, by applying overrides wherever necessary, into a proto.
+func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
+	p := path
+	if len(p) == 0 {
+		p = LinuxConfigPath
+		if ros == "windows" {
+			p = WindowsConfigPath
+		}
+	}
+
+	config := Read(p, read)
+	if config == nil {
+		return nil
+	}
+
 	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
 	return config
@@ -205,7 +218,7 @@ func applyDefaultHMConfiguration(configFromFile *cpb.HANAMonitoringConfiguration
 	return hmConfig
 }
 
-// prepareHMConf reads the default HANA Monitoring queries, parses them into a proto,
+// PrepareHMConf reads the default HANA Monitoring queries, parses them into a proto,
 // applies overrides from user configuration and returns final HANA Monitoring Configuration.
 func prepareHMConf(config *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringConfiguration {
 	defaultConfig := &cpb.HANAMonitoringConfiguration{}

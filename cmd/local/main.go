@@ -30,6 +30,7 @@ import (
 	"github.com/google/subcommands"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/features"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanapdbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanapdrestore"
@@ -72,6 +73,7 @@ func registerSubCommands() {
 		&hanapdrestore.Restorer{},
 		&readmetrics.ReadMetrics{},
 		&installbackint.InstallBackint{},
+		&features.Feature{},
 		&version.Version{},
 		&migratehmadashboards.MigrateHMADashboards{},
 		subcommands.HelpCommand(), // Implement "help"
