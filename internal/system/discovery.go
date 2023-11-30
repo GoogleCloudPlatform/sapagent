@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -84,6 +85,16 @@ type Discovery struct {
 	CloudDiscoveryInterface cloudDiscoveryInterface
 	HostDiscoveryInterface  hostDiscoveryInterface
 	SapDiscoveryInterface   sapDiscoveryInterface
+}
+
+// GetSAPSystems returns the current list of SAP Systems discovered on the current host.
+func (d *Discovery) GetSAPSystems() []*spb.SapDiscovery {
+	return nil
+}
+
+// GetSAPInstances returns the current list of SAP Instances discovered on the current host.
+func (d *Discovery) GetSAPInstances() []*sappb.SAPInstance {
+	return nil
 }
 
 func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadmanager.SapDiscoveryResource {
