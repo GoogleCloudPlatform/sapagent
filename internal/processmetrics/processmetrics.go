@@ -223,7 +223,7 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 	log.CtxLogger(ctx).Info("Creating networkstats metrics collector.")
 	// Note: Backticks in grep -Eo `<regularExp>` get replaced by single quotes
 	// as explained in commandlineexecutor.go
-	cmd := "namesrv_sock=$(lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`);echo $(pidof hdbnameserver);echo ss -tin src ${namesrv_sock} | sh"
+	cmd := "namesrv_sock=$(sudo lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`);echo $(pidof hdbnameserver);echo ss -tin src ${namesrv_sock} | sh"
 	networkstatsCollector := &networkstats.Properties{
 		Executor: commandlineexecutor.ExecuteCommand,
 		Config:   p.Config,
