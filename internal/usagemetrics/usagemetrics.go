@@ -93,6 +93,9 @@ const (
 	ReadMetricsWriteFileFailure
 	ReadMetricsBucketUploadFailure
 	InstallBackintFailure
+	ReliabilityQueryFailure
+	ReliabilityWriteFileFailure
+	ReliabilityBucketUploadFailure
 )
 
 // Agent wide action mappings.
@@ -121,6 +124,8 @@ const (
 	InstallBackintStarted
 	InstallBackintFinished
 	RemoteWLMMetricsCollection
+	ReliabilityStarted
+	ReliabilityFinished
 )
 
 var (
