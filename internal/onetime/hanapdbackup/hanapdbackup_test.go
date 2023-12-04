@@ -32,19 +32,30 @@ import (
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 var defaultSnapshot = Snapshot{
-	project:  "my-project",
-	host:     "localhost",
-	port:     "123",
-	sid:      "HDB",
-	user:     "system",
-	disk:     "pd-1",
-	diskZone: "us-east1-a",
-	password: "password",
+	project:    "my-project",
+	host:       "localhost",
+	port:       "123",
+	sid:        "HDB",
+	user:       "system",
+	disk:       "pd-1",
+	diskZone:   "us-east1-a",
+	password:   "password",
+	cloudProps: defaultCloudProperties,
+}
+
+var defaultCloudProperties = &ipb.CloudProperties{
+	ProjectId:    "default-project",
+	InstanceName: "default-instance",
+}
+
+type fakeSnapshot interface {
+	isDiskAttachedToInstance(diskName string) (string, bool, error)
 }
 
 func TestSnapshotHandler(t *testing.T) {
@@ -71,13 +82,6 @@ func TestSnapshotHandler(t *testing.T) {
 			snapshot:           defaultSnapshot,
 			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return nil, cmpopts.AnyError },
-			want:               subcommands.ExitFailure,
-		},
-		{
-			name:               "runWorkflowFailure",
-			snapshot:           defaultSnapshot,
-			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
-			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
 			want:               subcommands.ExitFailure,
 		},
 	}
@@ -277,10 +281,6 @@ func TestValidateParameters(t *testing.T) {
 	}
 }
 
-var defaultCloudProperties = &ipb.CloudProperties{
-	ProjectId: "default-project",
-}
-
 func TestDefaultProject(t *testing.T) {
 	s := Snapshot{
 		port:           "123",
@@ -309,7 +309,25 @@ func TestRunWorkflow(t *testing.T) {
 		want     error
 	}{
 		{
+			name: "CheckValidDiskFailure",
+			snapshot: Snapshot{
+				gceService: &fake.TestGCE{DiskAttachedToInstanceErr: cmpopts.AnyError},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "InvalidDisk",
+			snapshot: Snapshot{
+				gceService: &fake.TestGCE{IsDiskAttached: false},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "AbandonSnapshotFailure",
+			snapshot: Snapshot{
+				abandonPrepared: true,
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+			},
 			run: func(h *sql.DB, q string) (string, error) {
 				return "", cmpopts.AnyError
 			},
@@ -317,6 +335,10 @@ func TestRunWorkflow(t *testing.T) {
 		},
 		{
 			name: "CreateHANASnapshotFailure",
+			snapshot: Snapshot{
+				abandonPrepared: true,
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+			},
 			run: func(h *sql.DB, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
 					return "", cmpopts.AnyError
@@ -326,16 +348,23 @@ func TestRunWorkflow(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name:     "CreatePDSnapshotFailure",
-			snapshot: Snapshot{abandonPrepared: true},
+			name: "CreatePDSnapshotFailure",
+			snapshot: Snapshot{
+				abandonPrepared: true,
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+			},
 			run: func(h *sql.DB, q string) (string, error) {
 				return "1234", nil
 			},
 			want: cmpopts.AnyError,
 		},
 		{
-			name:     "CreateEncryptedPDSnapshotFailure",
-			snapshot: Snapshot{abandonPrepared: true, diskKeyFile: "test.json"},
+			name: "CreateEncryptedPDSnapshotFailure",
+			snapshot: Snapshot{
+				abandonPrepared: true,
+				diskKeyFile:     "test.json",
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+			},
 			run: func(h *sql.DB, q string) (string, error) {
 				return "1234", nil
 			},

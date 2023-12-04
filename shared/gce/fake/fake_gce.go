@@ -106,6 +106,10 @@ type TestGCE struct {
 	GetHealthCheckResp      []*compute.HealthCheck
 	GetHealthCheckErr       []error
 	GetHealthCheckCallCount int
+
+	DiskAttachedToInstanceDeviceName string
+	IsDiskAttached                   bool
+	DiskAttachedToInstanceErr        error
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -302,7 +306,7 @@ func (g *TestGCE) GetFilestore(projectID, zone, name string) (*file.Instance, er
 	return g.GetFilestoreResp[g.GetFilestoreCallCount], g.GetFilestoreErr[g.GetFilestoreCallCount]
 }
 
-// GetHealthCheck fakes calls to hte cloud APIs to access a Health Check
+// GetHealthCheck fakes calls to the cloud APIs to access a Health Check
 func (g *TestGCE) GetHealthCheck(projectID, name string) (*compute.HealthCheck, error) {
 	defer func() {
 		g.GetHealthCheckCallCount++
@@ -311,4 +315,9 @@ func (g *TestGCE) GetHealthCheck(projectID, name string) (*compute.HealthCheck, 
 		}
 	}()
 	return g.GetHealthCheckResp[g.GetHealthCheckCallCount], g.GetHealthCheckErr[g.GetHealthCheckCallCount]
+}
+
+// DiskAttachedToInstance fakes calls to the cloud APIs to access a disk attached to an instance.
+func (g *TestGCE) DiskAttachedToInstance(project, zone, instanceName, diskName string) (string, bool, error) {
+	return g.DiskAttachedToInstanceDeviceName, g.IsDiskAttached, g.DiskAttachedToInstanceErr
 }

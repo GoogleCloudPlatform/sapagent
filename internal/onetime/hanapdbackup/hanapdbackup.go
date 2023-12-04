@@ -60,6 +60,7 @@ type (
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
 		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
+		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 	}
 )
 
@@ -249,6 +250,14 @@ func runQuery(h *sql.DB, q string) (string, error) {
 }
 
 func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
+	_, ok, err := s.gceService.DiskAttachedToInstance(s.project, s.diskZone, s.cloudProps.GetInstanceName(), s.disk)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("ERROR: Failed to check if the source-disk=%v is attached to the instance", s.disk), err)
+		return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", s.disk)
+	}
+	if !ok {
+		return fmt.Errorf("source-disk=%v is not attached to the instance", s.disk)
+	}
 	log.CtxLogger(ctx).Info("Start run HANA PD based backup workflow")
 	if err = s.abandonPreparedSnapshot(run); err != nil {
 		usagemetrics.Error(usagemetrics.SnapshotDBNotReadyFailure)

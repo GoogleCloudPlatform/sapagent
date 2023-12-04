@@ -217,3 +217,17 @@ func (g *GCE) GetFilestore(project, zone, name string) (*file.Instance, error) {
 func (g *GCE) GetHealthCheck(project, name string) (*compute.HealthCheck, error) {
 	return g.service.HealthChecks.Get(project, name).Do()
 }
+
+// DiskAttachedToInstance returns the device name of the disk attached to the instance.
+func (g *GCE) DiskAttachedToInstance(project, zone, instanceName, diskName string) (string, bool, error) {
+	instance, err := g.service.Instances.Get(project, zone, instanceName).Do()
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get instance: %v", err)
+	}
+	for _, disk := range instance.Disks {
+		if strings.Contains(disk.Source, diskName) {
+			return disk.DeviceName, true, nil
+		}
+	}
+	return "", false, nil
+}
