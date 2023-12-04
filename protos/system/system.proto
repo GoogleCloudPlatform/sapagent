@@ -134,6 +134,11 @@ message SapDiscovery {
       // Resource URI of the recognized shared NFS of the application.
       // May be empty if the application server has only a single node.
       string nfs_uri = 3;
+      // Kernel version for Netweaver running in the system.
+      string kernel_version = 4;
+      // Indicates whether this is a Java or ABAP Netweaver instance.
+      // true means it is ABAP, false means it is Java.
+      bool abap = 5;
     }
     // A set of properties describing an SAP Database layer.
     message DatabaseProperties {
@@ -155,6 +160,8 @@ message SapDiscovery {
       // URI of the recognized shared NFS of the database.
       // May be empty if the database has only a single node.
       string shared_nfs_uri = 3;
+      // The version of the database software running in the system.
+      string database_version = 4;
     }
     oneof properties {
       // The component is a SAP application.
