@@ -182,6 +182,59 @@ func (SapDiscovery_Resource_ResourceKind) EnumDescriptor() ([]byte, []int) {
 	return file_system_system_proto_rawDescGZIP(), []int{0, 1, 1}
 }
 
+// Different types of system topology.
+type SapDiscovery_Component_TopologyType int32
+
+const (
+	// Unspecified topology.
+	SapDiscovery_Component_TOPOLOGY_TYPE_UNSPECIFIED SapDiscovery_Component_TopologyType = 0
+	// A scale-up single node system.
+	SapDiscovery_Component_TOPOLOGY_SCALE_UP SapDiscovery_Component_TopologyType = 1
+	// A scale-out multi-node system.
+	SapDiscovery_Component_TOPOLOGY_SCALE_OUT SapDiscovery_Component_TopologyType = 2
+)
+
+// Enum value maps for SapDiscovery_Component_TopologyType.
+var (
+	SapDiscovery_Component_TopologyType_name = map[int32]string{
+		0: "TOPOLOGY_TYPE_UNSPECIFIED",
+		1: "TOPOLOGY_SCALE_UP",
+		2: "TOPOLOGY_SCALE_OUT",
+	}
+	SapDiscovery_Component_TopologyType_value = map[string]int32{
+		"TOPOLOGY_TYPE_UNSPECIFIED": 0,
+		"TOPOLOGY_SCALE_UP":         1,
+		"TOPOLOGY_SCALE_OUT":        2,
+	}
+)
+
+func (x SapDiscovery_Component_TopologyType) Enum() *SapDiscovery_Component_TopologyType {
+	p := new(SapDiscovery_Component_TopologyType)
+	*p = x
+	return p
+}
+
+func (x SapDiscovery_Component_TopologyType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SapDiscovery_Component_TopologyType) Descriptor() protoreflect.EnumDescriptor {
+	return file_system_system_proto_enumTypes[2].Descriptor()
+}
+
+func (SapDiscovery_Component_TopologyType) Type() protoreflect.EnumType {
+	return &file_system_system_proto_enumTypes[2]
+}
+
+func (x SapDiscovery_Component_TopologyType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SapDiscovery_Component_TopologyType.Descriptor instead.
+func (SapDiscovery_Component_TopologyType) EnumDescriptor() ([]byte, []int) {
+	return file_system_system_proto_rawDescGZIP(), []int{0, 2, 0}
+}
+
 // The type of application running in the system.
 type SapDiscovery_Component_ApplicationProperties_ApplicationType int32
 
@@ -215,11 +268,11 @@ func (x SapDiscovery_Component_ApplicationProperties_ApplicationType) String() s
 }
 
 func (SapDiscovery_Component_ApplicationProperties_ApplicationType) Descriptor() protoreflect.EnumDescriptor {
-	return file_system_system_proto_enumTypes[2].Descriptor()
+	return file_system_system_proto_enumTypes[3].Descriptor()
 }
 
 func (SapDiscovery_Component_ApplicationProperties_ApplicationType) Type() protoreflect.EnumType {
-	return &file_system_system_proto_enumTypes[2]
+	return &file_system_system_proto_enumTypes[3]
 }
 
 func (x SapDiscovery_Component_ApplicationProperties_ApplicationType) Number() protoreflect.EnumNumber {
@@ -272,11 +325,11 @@ func (x SapDiscovery_Component_DatabaseProperties_DatabaseType) String() string 
 }
 
 func (SapDiscovery_Component_DatabaseProperties_DatabaseType) Descriptor() protoreflect.EnumDescriptor {
-	return file_system_system_proto_enumTypes[3].Descriptor()
+	return file_system_system_proto_enumTypes[4].Descriptor()
 }
 
 func (SapDiscovery_Component_DatabaseProperties_DatabaseType) Type() protoreflect.EnumType {
-	return &file_system_system_proto_enumTypes[3]
+	return &file_system_system_proto_enumTypes[4]
 }
 
 func (x SapDiscovery_Component_DatabaseProperties_DatabaseType) Number() protoreflect.EnumNumber {
@@ -475,6 +528,9 @@ type SapDiscovery_Resource struct {
 	RelatedResources []string `protobuf:"bytes,4,rep,name=related_resources,json=relatedResources,proto3" json:"related_resources,omitempty"`
 	// Unix timestamp of when this resource last had its discovery data updated.
 	UpdateTime *timestamp.Timestamp `protobuf:"bytes,5,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// A set of properties only applying to instance type resources.
+	InstanceProperties *SapDiscovery_Resource_InstanceProperties `protobuf:"bytes,6,opt,name=instance_properties,json=instanceProperties,proto3" json:"instance_properties,omitempty"`
+	SomeString         string                                    `protobuf:"bytes,7,opt,name=some_string,json=someString,proto3" json:"some_string,omitempty"`
 }
 
 func (x *SapDiscovery_Resource) Reset() {
@@ -544,6 +600,20 @@ func (x *SapDiscovery_Resource) GetUpdateTime() *timestamp.Timestamp {
 	return nil
 }
 
+func (x *SapDiscovery_Resource) GetInstanceProperties() *SapDiscovery_Resource_InstanceProperties {
+	if x != nil {
+		return x.InstanceProperties
+	}
+	return nil
+}
+
+func (x *SapDiscovery_Resource) GetSomeString() string {
+	if x != nil {
+		return x.SomeString
+	}
+	return ""
+}
+
 // Message describing the system component.
 type SapDiscovery_Component struct {
 	state         protoimpl.MessageState
@@ -562,6 +632,11 @@ type SapDiscovery_Component struct {
 	// The sap identifier,
 	// used by the SAP software and helps differentiate systems for customers.
 	Sid string `protobuf:"bytes,5,opt,name=sid,proto3" json:"sid,omitempty"`
+	// The detected topology of the component.
+	TopologyType SapDiscovery_Component_TopologyType `protobuf:"varint,6,opt,name=topology_type,json=topologyType,proto3,enum=cloud.partners.sap.system.SapDiscovery_Component_TopologyType" json:"topology_type,omitempty"`
+	// A list of host URIs that are part of the HA configuration if present.
+	// An empty list indicates the component is not configured for HA.
+	HaHosts []string `protobuf:"bytes,7,rep,name=ha_hosts,json=haHosts,proto3" json:"ha_hosts,omitempty"`
 }
 
 func (x *SapDiscovery_Component) Reset() {
@@ -638,6 +713,20 @@ func (x *SapDiscovery_Component) GetSid() string {
 	return ""
 }
 
+func (x *SapDiscovery_Component) GetTopologyType() SapDiscovery_Component_TopologyType {
+	if x != nil {
+		return x.TopologyType
+	}
+	return SapDiscovery_Component_TOPOLOGY_TYPE_UNSPECIFIED
+}
+
+func (x *SapDiscovery_Component) GetHaHosts() []string {
+	if x != nil {
+		return x.HaHosts
+	}
+	return nil
+}
+
 type isSapDiscovery_Component_Properties interface {
 	isSapDiscovery_Component_Properties()
 }
@@ -655,6 +744,64 @@ type SapDiscovery_Component_DatabaseProperties_ struct {
 func (*SapDiscovery_Component_ApplicationProperties_) isSapDiscovery_Component_Properties() {}
 
 func (*SapDiscovery_Component_DatabaseProperties_) isSapDiscovery_Component_Properties() {}
+
+// A set of properties only present for an instance type resource
+type SapDiscovery_Resource_InstanceProperties struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// A virtual hostname of the instance if it has one.
+	VirtualHostname string `protobuf:"bytes,1,opt,name=virtual_hostname,json=virtualHostname,proto3" json:"virtual_hostname,omitempty"`
+	// A list of instance URIs that are part of a cluster with this one.
+	ClusterInstances []string `protobuf:"bytes,2,rep,name=cluster_instances,json=clusterInstances,proto3" json:"cluster_instances,omitempty"`
+}
+
+func (x *SapDiscovery_Resource_InstanceProperties) Reset() {
+	*x = SapDiscovery_Resource_InstanceProperties{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_system_system_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SapDiscovery_Resource_InstanceProperties) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SapDiscovery_Resource_InstanceProperties) ProtoMessage() {}
+
+func (x *SapDiscovery_Resource_InstanceProperties) ProtoReflect() protoreflect.Message {
+	mi := &file_system_system_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SapDiscovery_Resource_InstanceProperties.ProtoReflect.Descriptor instead.
+func (*SapDiscovery_Resource_InstanceProperties) Descriptor() ([]byte, []int) {
+	return file_system_system_proto_rawDescGZIP(), []int{0, 1, 0}
+}
+
+func (x *SapDiscovery_Resource_InstanceProperties) GetVirtualHostname() string {
+	if x != nil {
+		return x.VirtualHostname
+	}
+	return ""
+}
+
+func (x *SapDiscovery_Resource_InstanceProperties) GetClusterInstances() []string {
+	if x != nil {
+		return x.ClusterInstances
+	}
+	return nil
+}
 
 // A set of properties describing an SAP Application layer.
 type SapDiscovery_Component_ApplicationProperties struct {
@@ -679,7 +826,7 @@ type SapDiscovery_Component_ApplicationProperties struct {
 func (x *SapDiscovery_Component_ApplicationProperties) Reset() {
 	*x = SapDiscovery_Component_ApplicationProperties{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_system_system_proto_msgTypes[4]
+		mi := &file_system_system_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -692,7 +839,7 @@ func (x *SapDiscovery_Component_ApplicationProperties) String() string {
 func (*SapDiscovery_Component_ApplicationProperties) ProtoMessage() {}
 
 func (x *SapDiscovery_Component_ApplicationProperties) ProtoReflect() protoreflect.Message {
-	mi := &file_system_system_proto_msgTypes[4]
+	mi := &file_system_system_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +910,7 @@ type SapDiscovery_Component_DatabaseProperties struct {
 func (x *SapDiscovery_Component_DatabaseProperties) Reset() {
 	*x = SapDiscovery_Component_DatabaseProperties{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_system_system_proto_msgTypes[5]
+		mi := &file_system_system_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -776,7 +923,7 @@ func (x *SapDiscovery_Component_DatabaseProperties) String() string {
 func (*SapDiscovery_Component_DatabaseProperties) ProtoMessage() {}
 
 func (x *SapDiscovery_Component_DatabaseProperties) ProtoReflect() protoreflect.Message {
-	mi := &file_system_system_proto_msgTypes[5]
+	mi := &file_system_system_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -864,7 +1011,7 @@ var file_system_system_proto_rawDesc = []byte{
 	0x72, 0x6f, 0x6e, 0x6d, 0x65, 0x6e, 0x74, 0x54, 0x79, 0x70, 0x65, 0x12, 0x27, 0x0a, 0x0f, 0x63,
 	0x75, 0x73, 0x74, 0x6f, 0x6d, 0x65, 0x72, 0x5f, 0x72, 0x65, 0x67, 0x69, 0x6f, 0x6e, 0x18, 0x04,
 	0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x63, 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x65, 0x72, 0x52, 0x65,
-	0x67, 0x69, 0x6f, 0x6e, 0x1a, 0xde, 0x06, 0x0a, 0x08, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
+	0x67, 0x69, 0x6f, 0x6e, 0x1a, 0xe3, 0x08, 0x0a, 0x08, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
 	0x65, 0x12, 0x62, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x74, 0x79,
 	0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x3d, 0x2e, 0x63, 0x6c, 0x6f, 0x75, 0x64,
 	0x2e, 0x70, 0x61, 0x72, 0x74, 0x6e, 0x65, 0x72, 0x73, 0x2e, 0x73, 0x61, 0x70, 0x2e, 0x73, 0x79,
@@ -1002,39 +1149,43 @@ func file_system_system_proto_rawDescGZIP() []byte {
 	return file_system_system_proto_rawDescData
 }
 
-var file_system_system_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_system_system_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_system_system_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_system_system_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_system_system_proto_goTypes = []interface{}{
 	(SapDiscovery_Resource_ResourceType)(0),                           // 0: cloud.partners.sap.system.SapDiscovery.Resource.ResourceType
 	(SapDiscovery_Resource_ResourceKind)(0),                           // 1: cloud.partners.sap.system.SapDiscovery.Resource.ResourceKind
-	(SapDiscovery_Component_ApplicationProperties_ApplicationType)(0), // 2: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.ApplicationType
-	(SapDiscovery_Component_DatabaseProperties_DatabaseType)(0),       // 3: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.DatabaseType
-	(*SapDiscovery)(nil),                                              // 4: cloud.partners.sap.system.SapDiscovery
-	(*SapDiscovery_Metadata)(nil),                                     // 5: cloud.partners.sap.system.SapDiscovery.Metadata
-	(*SapDiscovery_Resource)(nil),                                     // 6: cloud.partners.sap.system.SapDiscovery.Resource
-	(*SapDiscovery_Component)(nil),                                    // 7: cloud.partners.sap.system.SapDiscovery.Component
-	(*SapDiscovery_Component_ApplicationProperties)(nil),              // 8: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties
-	(*SapDiscovery_Component_DatabaseProperties)(nil),                 // 9: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties
-	(*timestamp.Timestamp)(nil),                                       // 10: google.protobuf.Timestamp
+	(SapDiscovery_Component_TopologyType)(0),                          // 2: cloud.partners.sap.system.SapDiscovery.Component.TopologyType
+	(SapDiscovery_Component_ApplicationProperties_ApplicationType)(0), // 3: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.ApplicationType
+	(SapDiscovery_Component_DatabaseProperties_DatabaseType)(0),       // 4: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.DatabaseType
+	(*SapDiscovery)(nil),                                              // 5: cloud.partners.sap.system.SapDiscovery
+	(*SapDiscovery_Metadata)(nil),                                     // 6: cloud.partners.sap.system.SapDiscovery.Metadata
+	(*SapDiscovery_Resource)(nil),                                     // 7: cloud.partners.sap.system.SapDiscovery.Resource
+	(*SapDiscovery_Component)(nil),                                    // 8: cloud.partners.sap.system.SapDiscovery.Component
+	(*SapDiscovery_Resource_InstanceProperties)(nil),                  // 9: cloud.partners.sap.system.SapDiscovery.Resource.InstanceProperties
+	(*SapDiscovery_Component_ApplicationProperties)(nil),              // 10: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties
+	(*SapDiscovery_Component_DatabaseProperties)(nil),                 // 11: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties
+	(*timestamp.Timestamp)(nil),                                       // 12: google.protobuf.Timestamp
 }
 var file_system_system_proto_depIdxs = []int32{
-	5,  // 0: cloud.partners.sap.system.SapDiscovery.metadata:type_name -> cloud.partners.sap.system.SapDiscovery.Metadata
-	7,  // 1: cloud.partners.sap.system.SapDiscovery.database_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
-	7,  // 2: cloud.partners.sap.system.SapDiscovery.application_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
-	10, // 3: cloud.partners.sap.system.SapDiscovery.update_time:type_name -> google.protobuf.Timestamp
+	6,  // 0: cloud.partners.sap.system.SapDiscovery.metadata:type_name -> cloud.partners.sap.system.SapDiscovery.Metadata
+	8,  // 1: cloud.partners.sap.system.SapDiscovery.database_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
+	8,  // 2: cloud.partners.sap.system.SapDiscovery.application_layer:type_name -> cloud.partners.sap.system.SapDiscovery.Component
+	12, // 3: cloud.partners.sap.system.SapDiscovery.update_time:type_name -> google.protobuf.Timestamp
 	0,  // 4: cloud.partners.sap.system.SapDiscovery.Resource.resource_type:type_name -> cloud.partners.sap.system.SapDiscovery.Resource.ResourceType
 	1,  // 5: cloud.partners.sap.system.SapDiscovery.Resource.resource_kind:type_name -> cloud.partners.sap.system.SapDiscovery.Resource.ResourceKind
-	10, // 6: cloud.partners.sap.system.SapDiscovery.Resource.update_time:type_name -> google.protobuf.Timestamp
-	6,  // 7: cloud.partners.sap.system.SapDiscovery.Component.resources:type_name -> cloud.partners.sap.system.SapDiscovery.Resource
-	8,  // 8: cloud.partners.sap.system.SapDiscovery.Component.application_properties:type_name -> cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties
-	9,  // 9: cloud.partners.sap.system.SapDiscovery.Component.database_properties:type_name -> cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties
-	2,  // 10: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.application_type:type_name -> cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.ApplicationType
-	3,  // 11: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.database_type:type_name -> cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.DatabaseType
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	12, // 6: cloud.partners.sap.system.SapDiscovery.Resource.update_time:type_name -> google.protobuf.Timestamp
+	9,  // 7: cloud.partners.sap.system.SapDiscovery.Resource.instance_properties:type_name -> cloud.partners.sap.system.SapDiscovery.Resource.InstanceProperties
+	7,  // 8: cloud.partners.sap.system.SapDiscovery.Component.resources:type_name -> cloud.partners.sap.system.SapDiscovery.Resource
+	10, // 9: cloud.partners.sap.system.SapDiscovery.Component.application_properties:type_name -> cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties
+	11, // 10: cloud.partners.sap.system.SapDiscovery.Component.database_properties:type_name -> cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties
+	2,  // 11: cloud.partners.sap.system.SapDiscovery.Component.topology_type:type_name -> cloud.partners.sap.system.SapDiscovery.Component.TopologyType
+	3,  // 12: cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.application_type:type_name -> cloud.partners.sap.system.SapDiscovery.Component.ApplicationProperties.ApplicationType
+	4,  // 13: cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.database_type:type_name -> cloud.partners.sap.system.SapDiscovery.Component.DatabaseProperties.DatabaseType
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_system_system_proto_init() }
@@ -1092,7 +1243,7 @@ func file_system_system_proto_init() {
 			}
 		}
 		file_system_system_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SapDiscovery_Component_ApplicationProperties); i {
+			switch v := v.(*SapDiscovery_Resource_InstanceProperties); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1104,6 +1255,18 @@ func file_system_system_proto_init() {
 			}
 		}
 		file_system_system_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SapDiscovery_Component_ApplicationProperties); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_system_system_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SapDiscovery_Component_DatabaseProperties); i {
 			case 0:
 				return &v.state
@@ -1125,8 +1288,8 @@ func file_system_system_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_system_system_proto_rawDesc,
-			NumEnums:      4,
-			NumMessages:   6,
+			NumEnums:      5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

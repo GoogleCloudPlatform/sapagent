@@ -112,6 +112,18 @@ message SapDiscovery {
 
     // Unix timestamp of when this resource last had its discovery data updated.
     google.protobuf.Timestamp update_time = 5;
+
+    // A set of properties only present for an instance type resource
+    message InstanceProperties {
+      // A virtual hostname of the instance if it has one.
+      string virtual_hostname = 1;
+
+      // A list of instance URIs that are part of a cluster with this one.
+      repeated string cluster_instances = 2;
+    }
+
+    // A set of properties only applying to instance type resources.
+    InstanceProperties instance_properties = 6;
   }
   // Message describing the system component.
   message Component {
@@ -174,5 +186,24 @@ message SapDiscovery {
     // The sap identifier,
     // used by the SAP software and helps differentiate systems for customers.
     string sid = 5;
+
+    // Different types of system topology.
+    enum TopologyType {
+      // Unspecified topology.
+      TOPOLOGY_TYPE_UNSPECIFIED = 0;
+
+      // A scale-up single node system.
+      TOPOLOGY_SCALE_UP = 1;
+
+      // A scale-out multi-node system.
+      TOPOLOGY_SCALE_OUT = 2;
+    }
+
+    // The detected topology of the component.
+    TopologyType topology_type = 6;
+
+    // A list of host URIs that are part of the HA configuration if present.
+    // An empty list indicates the component is not configured for HA.
+    repeated string ha_hosts = 7;
   }
 }
