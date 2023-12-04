@@ -53,6 +53,7 @@ type Restorer struct {
 	help, version                             bool
 	logLevel                                  string
 	forceStopHANA                             bool
+	newdiskName                               string
 }
 
 // Name implements the subcommand interface for hanapdrestore.
@@ -113,6 +114,7 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	return r.restoreHandler(ctx, onetime.NewComputeService)
 }
 
+// validateParameters validates the parameters passed to the restore subcommand.
 func (r *Restorer) validateParameters(os string) error {
 	switch {
 	case os == "windows":
@@ -132,12 +134,14 @@ func (r *Restorer) validateParameters(os string) error {
 		return fmt.Errorf("could not read disk type, please pass -new-disk-type=<>")
 	}
 	if r.user == "" {
-		r.user = r.sid + "adm"
+		r.user = strings.ToLower(r.sid) + "adm"
 	}
 	log.Logger.Debug("Parameter validation successful.")
+
 	return nil
 }
 
+// restoreHandler is the main handler for the restore subcommand.
 func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator computeServiceFunc) subcommands.ExitStatus {
 	var err error
 	if err = r.validateParameters(runtime.GOOS); err != nil {
@@ -152,6 +156,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to create compute service,", err)
 		return subcommands.ExitFailure
 	}
+
 	if err := r.checkPreConditions(ctx); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Pre-restore check failed,", err)
 		return subcommands.ExitFailure
@@ -162,12 +167,17 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 	}
 	if err := r.restoreFromSnapshot(ctx); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
+		// If restore fails, attach the old disk, rescan the volumes and delete the new disk.
+		r.attachDisk(ctx, r.dataDiskName)
+		r.rescanVolumeGroups(ctx)
+		r.deleteDisk(ctx, r.newdiskName)
 		return subcommands.ExitFailure
 	}
 	log.Print("SUCCESS: HANA restore from persistent disk snapshot successful.")
 	return subcommands.ExitSuccess
 }
 
+// prepare stops HANA, unmounts data directory and detaches old data disk.
 func (r *Restorer) prepare(ctx context.Context) error {
 	if err := r.stopHANA(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to stop HANA: %v", err)
@@ -180,31 +190,74 @@ func (r *Restorer) prepare(ctx context.Context) error {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
-	// Detach old HANA data disk
-	log.Logger.Infow("Detatching old HANA PD disk", "diskName", r.dataDiskName)
-	op, err := r.computeService.Instances.DetachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), r.dataDiskName).Do()
+	if err := r.detachDisk(ctx); err != nil {
+		// If detach fails, rescan the volume groups to ensure the directories are mounted.
+		r.rescanVolumeGroups(ctx)
+		return fmt.Errorf("failed to detach old data disk: %v", err)
+	}
+
+	log.CtxLogger(ctx).Info("HANA restore prepare succeeded.")
+	return nil
+}
+
+// TODO: Move generic PD related functions from hanapdbackup.go and hanapdrestore.go to gce.go.
+// detachDisk detaches the old HANA data disk from the instance.
+func (r *Restorer) detachDisk(ctx context.Context) error {
+	// Verify the disk is attached to the instance.
+	deviceName, ok, err := r.isDiskAttachedToInstance(r.dataDiskName)
+	if err != nil {
+		return fmt.Errorf("failed to verify if disk %v is attached to the instance", r.dataDiskName)
+	}
+	if !ok {
+		return fmt.Errorf("the disk data-disk-name=%v is not attached to the instance, please pass the current data disk name", r.dataDiskName)
+	}
+
+	// Detach old HANA data disk.
+	log.Logger.Infow("Detatching old HANA PD disk", "diskName", r.dataDiskName, "deviceName", deviceName)
+	op, err := r.computeService.Instances.DetachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), deviceName).Do()
 	if err != nil {
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
 	if err := r.waitForCompletionWithRetry(ctx, op); err != nil {
 		return fmt.Errorf("detach data disk operation failed: %v", err)
 	}
-	log.CtxLogger(ctx).Info("HANA restore prepare succeeded.")
+
+	if _, ok, err = r.isDiskAttachedToInstance(r.dataDiskName); err != nil {
+		return fmt.Errorf("failed to check if disk %v is still attached to the instance", r.dataDiskName)
+	}
+	if ok {
+		return fmt.Errorf("Disk %v is still attached to the instance", r.dataDiskName)
+	}
 	return nil
 }
 
+// isDiskAttachedToInstance checks if the given disk is attached to the instance.
+func (r *Restorer) isDiskAttachedToInstance(diskName string) (string, bool, error) {
+	instance, err := r.computeService.Instances.Get(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName()).Do()
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get instance: %v", err)
+	}
+	for _, disk := range instance.Disks {
+		if strings.Contains(disk.Source, diskName) {
+			return disk.DeviceName, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
 func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	t := time.Now()
-	newdiskName := fmt.Sprintf("hana-%s-restored-%d%02d%02d-%02d%02d%02d",
+	r.newdiskName = fmt.Sprintf("hana-%s-restored-%d%02d%02d-%02d%02d%02d",
 		strings.ToLower(r.sid), t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 
 	disk := &compute.Disk{
-		Name:           newdiskName,
+		Name:           r.newdiskName,
 		Type:           fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.project, r.dataDiskZone, r.newDiskType),
 		Zone:           r.dataDiskZone,
 		SourceSnapshot: fmt.Sprintf("projects/%s/global/snapshots/%s", r.project, r.sourceSnapshot),
 	}
-	log.Logger.Infow("Inserting new HANA PD disk from source snapshot", "diskName", newdiskName, "sourceSnapshot", r.sourceSnapshot)
+	log.Logger.Infow("Inserting new HANA PD disk from source snapshot", "diskName", r.newdiskName, "sourceSnapshot", r.sourceSnapshot)
 	op, err := r.computeService.Disks.Insert(r.project, r.dataDiskZone, disk).Do()
 	if err != nil {
 		return fmt.Errorf("failed to insert new data disk: %v", err)
@@ -213,11 +266,8 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
-	log.Logger.Infow("Attaching new HANA PD disk", "diskName", newdiskName)
-	attachDiskToVM := &compute.AttachedDisk{
-		Source: fmt.Sprintf("projects/%s/zones/%s/disks/%s", r.project, r.dataDiskZone, newdiskName),
-	}
-	op, err = r.computeService.Instances.AttachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), attachDiskToVM).Do()
+	log.Logger.Infow("Attaching new HANA PD disk", "diskName", r.newdiskName)
+	op, err = r.attachDisk(ctx, r.newdiskName)
 	if err != nil {
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
@@ -225,7 +275,15 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 		return fmt.Errorf("attach data disk operation failed: %v", err)
 	}
 
-	log.Logger.Info("New disk successfully attached")
+	_, ok, err := r.isDiskAttachedToInstance(r.newdiskName)
+	if err != nil {
+		return fmt.Errorf("failed to check if new disk %v is attached to the instance", r.newdiskName)
+	}
+	if !ok {
+		return fmt.Errorf("newly created disk %v is not attached to the instance", r.newdiskName)
+	}
+
+	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
 
 	if err := r.rescanVolumeGroups(ctx); err != nil {
 		return fmt.Errorf("failure rescanning volume groups, logical volumes: %v", err)
@@ -234,6 +292,25 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	return nil
 }
 
+// deleteDisk deletes the disk with the given name.
+func (r *Restorer) deleteDisk(ctx context.Context, diskName string) {
+	log.CtxLogger(ctx).Infow("Deleting Persistent disk", "diskName", diskName)
+	if err := r.computeService.Disks.Delete(r.project, r.dataDiskZone, diskName); err != nil {
+		log.CtxLogger(ctx).Errorf("failed to delete Persistent disk: %v", err)
+	}
+}
+
+// attachDisk attaches the disk with the given name to the instance.
+func (r *Restorer) attachDisk(ctx context.Context, diskName string) (*compute.Operation, error) {
+	log.CtxLogger(ctx).Infow("Attaching Persistent disk", "diskName", diskName)
+	attachDiskToVM := &compute.AttachedDisk{
+		DeviceName: r.dataDiskName, // Keep the original device name.
+		Source:     fmt.Sprintf("projects/%s/zones/%s/disks/%s", r.project, r.dataDiskZone, diskName),
+	}
+	return r.computeService.Instances.AttachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), attachDiskToVM).Do()
+}
+
+// checkPreConditions checks if the HANA data and log disks are on the same physical disk.
 func (r *Restorer) checkPreConditions(ctx context.Context) error {
 	if err := r.checkDataDir(ctx); err != nil {
 		return err
@@ -252,6 +329,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context) error {
 	return nil
 }
 
+// checkDataDir checks if the data directory is valid and has a valid physical volume.
 func (r *Restorer) checkDataDir(ctx context.Context) error {
 	var err error
 	if r.baseDataPath, err = r.parseBasePath(ctx, "basepath_datavolumes", commandlineexecutor.ExecuteCommand); err != nil {
@@ -270,6 +348,7 @@ func (r *Restorer) checkDataDir(ctx context.Context) error {
 	return r.checkDataDeviceForStripes(ctx, commandlineexecutor.ExecuteCommand)
 }
 
+// checkLogDir checks if the log directory is valid and has a valid physical volume.
 func (r *Restorer) checkLogDir(ctx context.Context) error {
 	var err error
 	if r.baseLogPath, err = r.parseBasePath(ctx, "basepath_logvolumes", commandlineexecutor.ExecuteCommand); err != nil {
@@ -286,6 +365,7 @@ func (r *Restorer) checkLogDir(ctx context.Context) error {
 	return nil
 }
 
+// parseBasePath parses the base path from the global.ini file.
 func (r *Restorer) parseBasePath(ctx context.Context, pattern string, exec commandlineexecutor.Execute) (string, error) {
 	args := `-c 'grep ` + pattern + ` /usr/sap/*/SYS/global/hdb/custom/config/global.ini | cut -d= -f 2'`
 	result := exec(ctx, commandlineexecutor.Params{
@@ -298,6 +378,7 @@ func (r *Restorer) parseBasePath(ctx context.Context, pattern string, exec comma
 	return strings.TrimSuffix(result.StdOut, "\n"), nil
 }
 
+// parseLogicalPath parses the logical path from the base path.
 func (r *Restorer) parseLogicalPath(ctx context.Context, basePath string, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/bin/sh",
@@ -311,6 +392,7 @@ func (r *Restorer) parseLogicalPath(ctx context.Context, basePath string, exec c
 	return logicalDevice, nil
 }
 
+// parsePhysicalPath parses the physical path from the logical path.
 func (r *Restorer) parsePhysicalPath(ctx context.Context, logicalPath string, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/bin/sh",
@@ -324,6 +406,7 @@ func (r *Restorer) parsePhysicalPath(ctx context.Context, logicalPath string, ex
 	return phyisicalDevice, nil
 }
 
+// checkDataDeviceForStripes checks if the data device is striped.
 func (r *Restorer) checkDataDeviceForStripes(ctx context.Context, exec commandlineexecutor.Execute) error {
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/bin/sh",
@@ -335,6 +418,7 @@ func (r *Restorer) checkDataDeviceForStripes(ctx context.Context, exec commandli
 	return nil
 }
 
+// stopHANA stops the HANA instance.
 func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execute) error {
 	var cmd string
 	if r.forceStopHANA {
@@ -356,6 +440,7 @@ func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execut
 	return nil
 }
 
+// readDataDirMountPath reads the data directory mount path.
 func (r *Restorer) readDataDirMountPath(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/bin/sh",
@@ -367,6 +452,7 @@ func (r *Restorer) readDataDirMountPath(ctx context.Context, exec commandlineexe
 	return strings.TrimSuffix(result.StdOut, "\n"), nil
 }
 
+// unmount unmounts the given directory.
 func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexecutor.Execute) error {
 	log.Logger.Infow("Unmount path", "directory", path)
 	result := exec(ctx, commandlineexecutor.Params{
@@ -379,7 +465,9 @@ func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexe
 	return nil
 }
 
+// rescanVolumeGroups rescans all volume groups and mounts them.
 func (r *Restorer) rescanVolumeGroups(ctx context.Context) error {
+	log.CtxLogger(ctx).Infow("Rescanning volume groups", "sid", r.sid)
 	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/dmsetup",
 		ArgsToSplit: "remove_all",
@@ -417,6 +505,7 @@ func (r *Restorer) rescanVolumeGroups(ctx context.Context) error {
 	return nil
 }
 
+// waitForCompletion waits for the given compute operation to complete.
 func (r *Restorer) waitForCompletion(op *compute.Operation) error {
 	zos := compute.NewZoneOperationsService(r.computeService)
 	tracker, err := zos.Wait(r.project, r.dataDiskZone, op.Name).Do()
