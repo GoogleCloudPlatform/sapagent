@@ -100,8 +100,9 @@ func main() {
 	registerSubCommands()
 	ctx := context.Background()
 	lp := log.Parameters{
-		OSType: runtime.GOOS,
-		Level:  zapcore.InfoLevel,
+		OSType:     runtime.GOOS,
+		Level:      zapcore.InfoLevel,
+		LogToCloud: true,
 	}
 
 	cloudProps := metadataserver.FetchCloudProperties()
