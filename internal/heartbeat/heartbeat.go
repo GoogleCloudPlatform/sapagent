@@ -42,12 +42,24 @@ type registration struct {
 	spec             Spec
 }
 
+// runSpec provides internal-only configuration for the run method. This was added to allow for
+// deterministic control over the run loop execution for testing purposes because after 9 months of
+// relying on timings to test cancellation we had a test failure. We acknowledge this adds code only
+// useful to tests, but now that there is evidence of test failures we must address it in a more
+// controllable fashion and this seems like the least bad solution.
+type runSpec struct {
+	maxTicks int
+	// done will be closed by run to signal to any interested parties that execution is complete.
+	done chan struct{}
+}
+
 // Monitor is the entity which will accept requests to monitor long running services.
 type Monitor struct {
 	registrations    map[string]*registration
 	frequency        time.Duration
 	threshold        int64
 	registrationLock sync.RWMutex
+	runSpec          *runSpec
 }
 
 // Parameters aggregates the data required to create and run a Monitor.
@@ -82,6 +94,7 @@ func NewMonitor(params Parameters) (*Monitor, error) {
 		frequency:        time.Duration(frequencySeconds) * time.Second,
 		registrationLock: sync.RWMutex{},
 		registrations:    map[string]*registration{},
+		runSpec:          nil,
 		threshold:        threshold,
 	}
 	return &monitor, nil
@@ -119,11 +132,29 @@ func (m *Monitor) Run(ctx context.Context) {
 func (m *Monitor) run(ctx context.Context) {
 	ticker := time.NewTicker(m.frequency)
 	defer ticker.Stop()
+	// This is needed so that we can, in effect, set ticker.C = nil.
+	ch := ticker.C
+	hasSpec := m.runSpec != nil
+	numTicks := 0
 	for {
 		select {
 		case <-ctx.Done():
+			if hasSpec && ch != nil {
+				// Cancellation has been initiated before max ticks was reached.
+				close(m.runSpec.done)
+			}
 			return
-		case <-ticker.C:
+		case <-ch:
+			if hasSpec {
+				if numTicks >= m.runSpec.maxTicks {
+					ch = nil
+					close(m.runSpec.done)
+					// We continue instead of return here because we want to allow code coverage to hit the
+					// ctx.Done case.
+					continue
+				}
+				numTicks++
+			}
 			m.incrementAll()
 		}
 	}

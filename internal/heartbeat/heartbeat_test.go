@@ -18,7 +18,6 @@ package heartbeat
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -188,17 +187,12 @@ func TestRegister_shouldNotAllowDuplicateNames(t *testing.T) {
 
 func TestRun_shouldRespectCancellation(t *testing.T) {
 	testData := []struct {
-		name              string
-		numRegistered     int
-		timeout           time.Duration
-		frequencyOverride time.Duration
-		params            Parameters
-		want              int64
+		name   string
+		params Parameters
+		want   int
 	}{
 		{
-			name:          "cancel before any loops",
-			numRegistered: 1,
-			timeout:       time.Millisecond * 10,
+			name: "cancel before any increments",
 			params: Parameters{
 				Config: &cfgpb.Configuration{
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
@@ -206,13 +200,10 @@ func TestRun_shouldRespectCancellation(t *testing.T) {
 						HeartbeatFrequency:       1,
 					}},
 			},
-			frequencyOverride: time.Millisecond * 100,
-			want:              0,
+			want: 0,
 		},
 		{
-			name:          "cancel 10ms after first loop",
-			numRegistered: 1,
-			timeout:       time.Millisecond * 110,
+			name: "cancel after first increment",
 			params: Parameters{
 				Config: &cfgpb.Configuration{
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
@@ -220,30 +211,44 @@ func TestRun_shouldRespectCancellation(t *testing.T) {
 						HeartbeatFrequency:       1,
 					}},
 			},
-			frequencyOverride: time.Millisecond * 100,
-			want:              1,
+			want: 1,
+		},
+		{
+			name: "cancel after tenth increment",
+			params: Parameters{
+				Config: &cfgpb.Configuration{
+					CollectionConfiguration: &cfgpb.CollectionConfiguration{
+						MissedHeartbeatThreshold: 1000,
+						HeartbeatFrequency:       1,
+					}},
+			},
+			want: 10,
 		},
 	}
 
 	for _, d := range testData {
 		t.Run(d.name, func(t *testing.T) {
 			monitor := createMonitor(t, d.params)
-			monitor.frequency = d.frequencyOverride
-			for i := 0; i < d.numRegistered; i++ {
-				name := fmt.Sprintf("%d", i)
-				register(t, monitor, name)
-			}
-			ctx := context.Background()
-			ctx, cancel := context.WithTimeout(ctx, d.timeout)
-			defer cancel()
+			monitor.frequency = time.Millisecond * 20
+			monitor.runSpec = &runSpec{done: make(chan struct{}), maxTicks: d.want}
+			monitor.Register("foo")
+			// 5 seconds is all we care to wait to determine if the test has timed out.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			go func() {
+				<-monitor.runSpec.done
+				cancel()
+			}()
 			monitor.Run(ctx)
 			<-ctx.Done()
-			registrant := monitor.registrations["0"]
+			if context.Cause(ctx) == context.DeadlineExceeded {
+				t.Errorf("context deadline exceeded")
+			}
+			registrant := monitor.registrations["foo"]
 			registrant.lock.Lock()
 			defer registrant.lock.Unlock()
 			got := registrant.missedHeartbeats
-			if got != d.want {
-				t.Errorf("missed heart beats = %v, want %v", got, d.want)
+			if got != int64(d.want) {
+				t.Errorf("number beats = %v, want %v", got, d.want)
 			}
 		})
 	}
