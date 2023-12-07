@@ -21,7 +21,7 @@ import (
 	"context"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 // SapDiscovery provides a fake implementation of the appsdiscovery.SapDiscovery struct.
@@ -31,7 +31,7 @@ type SapDiscovery struct {
 }
 
 // DiscoverSAPApps fakes calls to the appsdiscovery.DiscoverSAPApps method.
-func (f *SapDiscovery) DiscoverSAPApps(ctx context.Context, cp *ipb.CloudProperties) []appsdiscovery.SapSystemDetails {
+func (f *SapDiscovery) DiscoverSAPApps(ctx context.Context, apps *sappb.SAPInstances) []appsdiscovery.SapSystemDetails {
 	defer func() { f.DiscoverSapAppsCallCount++ }()
 	return f.DiscoverSapAppsResp[f.DiscoverSapAppsCallCount]
 }

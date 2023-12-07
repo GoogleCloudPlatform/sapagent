@@ -24,6 +24,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -31,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	dpb "google.golang.org/protobuf/types/known/durationpb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -151,6 +153,7 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 
 	config.CollectionConfiguration = applyDefaultCollectionConfiguration(config.GetCollectionConfiguration())
 	config.HanaMonitoringConfiguration = applyDefaultHMConfiguration(config.GetHanaMonitoringConfiguration())
+	config.DiscoveryConfiguration = applyDefaultDiscoveryConfiguration(config.GetDiscoveryConfiguration())
 	return config
 }
 
@@ -216,6 +219,23 @@ func applyDefaultHMConfiguration(configFromFile *cpb.HANAMonitoringConfiguration
 		hmConfig.ExecutionThreads = 10
 	}
 	return hmConfig
+}
+
+func applyDefaultDiscoveryConfiguration(configFromFile *cpb.DiscoveryConfiguration) *cpb.DiscoveryConfiguration {
+	discoveryConfig := configFromFile
+	if discoveryConfig == nil {
+		discoveryConfig = &cpb.DiscoveryConfiguration{}
+	}
+	if discoveryConfig.GetEnableDiscovery() == nil {
+		discoveryConfig.EnableDiscovery = wpb.Bool(true)
+	}
+	if discoveryConfig.GetSapInstancesUpdateFrequency() == nil {
+		discoveryConfig.SapInstancesUpdateFrequency = dpb.New(time.Duration(1 * time.Minute))
+	}
+	if discoveryConfig.GetSystemDiscoveryUpdateFrequency() == nil {
+		discoveryConfig.SystemDiscoveryUpdateFrequency = dpb.New(time.Duration(4 * time.Hour))
+	}
+	return discoveryConfig
 }
 
 // PrepareHMConf reads the default HANA Monitoring queries, parses them into a proto,

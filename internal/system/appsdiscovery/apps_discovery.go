@@ -25,7 +25,6 @@ import (
 	"regexp"
 	"strings"
 
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -39,8 +38,7 @@ var (
 
 // SapDiscovery contains variables and methods to discover SAP applications running on the current host.
 type SapDiscovery struct {
-	Execute       commandlineexecutor.Execute
-	AppsDiscovery func(context.Context) *sappb.SAPInstances
+	Execute commandlineexecutor.Execute
 }
 
 // SapSystemDetails contains information about an ASP system running on the current host.
@@ -104,9 +102,8 @@ func mergeSystemDetails(old SapSystemDetails, new SapSystemDetails) SapSystemDet
 }
 
 // DiscoverSAPApps attempts to identify the different SAP Applications running on the current host.
-func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, cp *ipb.CloudProperties) []SapSystemDetails {
+func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances) []SapSystemDetails {
 	sapSystems := []SapSystemDetails{}
-	sapApps := d.AppsDiscovery(ctx)
 	if sapApps == nil {
 		return sapSystems
 	}

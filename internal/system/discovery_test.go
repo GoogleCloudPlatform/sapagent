@@ -21,15 +21,17 @@ import (
 	"testing"
 	"time"
 
+	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
+	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
@@ -37,14 +39,16 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 	logfake "github.com/GoogleCloudPlatform/sapagent/shared/log/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 const (
 	defaultInstanceName  = "test-instance-id"
 	defaultProjectID     = "test-project-id"
-	defaultZone          = "test-zone"
-	defaultInstanceURI   = "projects/test-project-id/zones/test-zone/instances/test-instance-id"
+	defaultZone          = "test-zone-a"
+	defaultInstanceURI   = "projects/test-project-id/zones/test-zone-a/instances/test-instance-id"
 	defaultClusterOutput = `
 	line1
 	line2
@@ -120,10 +124,12 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 	}{{
 		name: "succeeds",
 		config: &cpb.Configuration{
-			CollectionConfiguration: &cpb.CollectionConfiguration{
-				SapSystemDiscovery: wpb.Bool(true),
-			},
 			CloudProperties: defaultCloudProperties,
+			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+				EnableDiscovery:                &wpb.BoolValue{Value: true},
+				SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 10},
+				SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 10},
+			},
 		},
 		testLog: &logfake.TestCloudLogging{
 			FlushErr: []error{nil},
@@ -141,8 +147,8 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 	}, {
 		name: "failsDueToConfig",
 		config: &cpb.Configuration{
-			CollectionConfiguration: &cpb.CollectionConfiguration{
-				SapSystemDiscovery: wpb.Bool(false),
+			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+				EnableDiscovery: &wpb.BoolValue{Value: false},
 			},
 		},
 		testLog: &logfake.TestCloudLogging{
@@ -157,12 +163,15 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 				SapDiscoveryInterface:   test.testSapDiscovery,
 				CloudDiscoveryInterface: test.testCloudDiscovery,
 				HostDiscoveryInterface:  test.testHostDiscovery,
+				AppsDiscovery:           func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
 			}
 
-			got := StartSAPSystemDiscovery(context.Background(), test.config, d)
+			ctx, cancel := context.WithCancel(context.Background())
+			got := StartSAPSystemDiscovery(ctx, test.config, d)
 			if got != test.want {
 				t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", test.config, got, test.want)
 			}
+			cancel()
 		})
 	}
 }
@@ -964,6 +973,293 @@ func TestWriteToCloudLogging(t *testing.T) {
 				CloudLogInterface: test.logInterface,
 			}
 			d.writeToCloudLogging(test.system)
+		})
+	}
+}
+
+func TestUpdateSAPInstances(t *testing.T) {
+	tests := []struct {
+		name              string
+		config            *cpb.Configuration
+		discoverResponses []*sappb.SAPInstances
+		wantInstances     []*sappb.SAPInstances // An array to test asynchronous update functionality
+	}{{
+		name: "singleUpdate",
+		config: &cpb.Configuration{DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+			SapInstancesUpdateFrequency: &dpb.Duration{Seconds: 5},
+		}},
+		discoverResponses: []*sappb.SAPInstances{{Instances: []*sappb.SAPInstance{{
+			Sapsid: "abc",
+		}}}},
+		wantInstances: []*sappb.SAPInstances{{Instances: []*sappb.SAPInstance{{
+			Sapsid: "abc",
+		}}}},
+	}, {
+		name: "multipleUpdates",
+		config: &cpb.Configuration{DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+			SapInstancesUpdateFrequency: &dpb.Duration{Seconds: 5},
+		}},
+		discoverResponses: []*sappb.SAPInstances{{Instances: []*sappb.SAPInstance{{
+			Sapsid: "abc",
+		}}}, {Instances: []*sappb.SAPInstance{{
+			Sapsid: "def",
+		}}}},
+		wantInstances: []*sappb.SAPInstances{{Instances: []*sappb.SAPInstance{{
+			Sapsid: "abc",
+		}}}, {Instances: []*sappb.SAPInstance{{
+			Sapsid: "def",
+		}}}},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			discoverCalls := 0
+			d := &Discovery{
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances {
+					defer func() {
+						discoverCalls++
+					}()
+					return test.discoverResponses[discoverCalls]
+				},
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			go updateSAPInstances(ctx, test.config, d)
+			var oldInstances *sappb.SAPInstances
+			for _, want := range test.wantInstances {
+				// Wait the update time
+				log.CtxLogger(ctx).Info("Checking updated instances")
+				var got *sappb.SAPInstances
+				for {
+					got = d.GetSAPInstances()
+					if got != nil && (oldInstances == nil || got != oldInstances) {
+						oldInstances = got
+						break
+					}
+					time.Sleep(test.config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration() / 2)
+				}
+				if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+					t.Errorf("updateSAPInstances() mismatch (-want, +got):\n%s", diff)
+				}
+			}
+			cancel()
+		})
+	}
+}
+
+func TestRunDiscovery(t *testing.T) {
+	tests := []struct {
+		name               string
+		config             *cpb.Configuration
+		testLog            *logfake.TestCloudLogging
+		testSapDiscovery   *appsdiscoveryfake.SapDiscovery
+		testCloudDiscovery *clouddiscoveryfake.CloudDiscovery
+		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
+		testWLM            *wlmfake.TestWLM
+		wantSystems        [][]*spb.SapDiscovery
+	}{{
+		name: "singleUpdate",
+		config: &cpb.Configuration{
+			CloudProperties: defaultCloudProperties,
+			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+				SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 5},
+			},
+		},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID: "ABC",
+				DBSID:  "DEF",
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		testLog: &logfake.TestCloudLogging{
+			ExpectedLogEntries: []logging.Entry{{
+				Severity: logging.Info,
+				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+			}}},
+		testWLM: &wlmfake.TestWLM{
+			WriteInsightArgs: []wlmfake.WriteInsightArgs{{
+				Project:  "test-project-id",
+				Location: "test-zone",
+				Req: &workloadmanager.WriteInsightRequest{
+					Insight: &workloadmanager.Insight{
+						SapDiscovery: &workloadmanager.SapDiscovery{
+							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+								Sid: "ABC",
+								ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
+									ApplicationType: "APPLICATION_TYPE_UNSPECIFIED",
+								},
+								HostProject: "12345",
+							},
+							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+								Sid: "DEF",
+								DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
+									DatabaseType: "DATABASE_TYPE_UNSPECIFIED",
+								},
+								HostProject: "12345",
+							},
+						},
+					},
+				},
+			}},
+			WriteInsightErrs: []error{nil},
+		},
+		wantSystems: [][]*spb.SapDiscovery{{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "ABC",
+				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
+				HostProject: "12345",
+			},
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}}},
+	}, {
+		name: "multipleUpdates",
+		config: &cpb.Configuration{
+			CloudProperties: defaultCloudProperties,
+			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+				SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 5},
+			},
+		},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppSID: "ABC",
+				DBSID:  "DEF",
+			}}, {{
+				AppSID: "GHI",
+				DBSID:  "JKL",
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}, {}, {}, {}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}, {}},
+		},
+		testLog: &logfake.TestCloudLogging{
+			ExpectedLogEntries: []logging.Entry{{
+				Severity: logging.Info,
+				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+			}, {
+				Severity: logging.Info,
+				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+			}}},
+		testWLM: &wlmfake.TestWLM{
+			WriteInsightArgs: []wlmfake.WriteInsightArgs{{
+				Project:  "test-project-id",
+				Location: "test-zone",
+				Req: &workloadmanager.WriteInsightRequest{
+					Insight: &workloadmanager.Insight{
+						SapDiscovery: &workloadmanager.SapDiscovery{
+							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+								Sid: "ABC",
+								ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
+									ApplicationType: "APPLICATION_TYPE_UNSPECIFIED",
+								},
+								HostProject: "12345",
+							},
+							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+								Sid: "DEF",
+								DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
+									DatabaseType: "DATABASE_TYPE_UNSPECIFIED",
+								},
+								HostProject: "12345",
+							},
+						},
+					},
+				},
+			}, {
+				Project:  "test-project-id",
+				Location: "test-zone",
+				Req: &workloadmanager.WriteInsightRequest{
+					Insight: &workloadmanager.Insight{
+						SapDiscovery: &workloadmanager.SapDiscovery{
+							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+								Sid: "GHI",
+								ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
+									ApplicationType: "APPLICATION_TYPE_UNSPECIFIED",
+								},
+								HostProject: "12345",
+							},
+							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+								Sid: "JKL",
+								DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
+									DatabaseType: "DATABASE_TYPE_UNSPECIFIED",
+								},
+								HostProject: "12345",
+							},
+						},
+					},
+				},
+			}},
+			WriteInsightErrs: []error{nil, nil},
+		},
+		wantSystems: [][]*spb.SapDiscovery{{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "ABC",
+				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
+				HostProject: "12345",
+			},
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}}, {{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "GHI",
+				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
+				HostProject: "12345",
+			},
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "JKL",
+				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}}},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.testLog.T = t
+			test.testWLM.T = t
+			d := &Discovery{
+				WlmService:              test.testWLM,
+				CloudLogInterface:       test.testLog,
+				SapDiscoveryInterface:   test.testSapDiscovery,
+				CloudDiscoveryInterface: test.testCloudDiscovery,
+				HostDiscoveryInterface:  test.testHostDiscovery,
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			go runDiscovery(ctx, test.config, d)
+
+			var oldSystems []*spb.SapDiscovery
+			for _, want := range test.wantSystems {
+				log.CtxLogger(ctx).Info("Checking updated instances")
+				var got []*spb.SapDiscovery
+				for {
+					got = d.GetSAPSystems()
+					if got != nil && (oldSystems == nil || got[0].GetUpdateTime() != oldSystems[0].GetUpdateTime()) {
+						// Got something different, compare with wanted
+						oldSystems = got
+						break
+					}
+					// Wait half the refresh interval and check for an update again
+					time.Sleep(test.config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().AsDuration() / 2)
+				}
+				if diff := cmp.Diff(want, got, append(resourceListDiffOpts, protocmp.IgnoreFields(&spb.SapDiscovery{}, "update_time"))...); diff != "" {
+					t.Errorf("runDiscovery() mismatch (-want, +got):\n%s", diff)
+				}
+			}
+			cancel()
 		})
 	}
 }

@@ -46,10 +46,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
@@ -263,6 +263,39 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 		return
 	}
+	
+	wlmService, err := gce.NewWLMClient(ctx, d.config.GetCollectionConfiguration().GetDataWarehouseEndpoint())
+	if err != nil {
+		log.Logger.Errorw("Error creating WLM Client", "error", err)
+		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)
+		return
+	}
+
+	// Start SAP System Discovery
+	ssdCtx := log.SetCtx(ctx, "context", "SAPSystemDiscovery")
+	systemDiscovery := &system.Discovery{
+		WlmService:    wlmService,
+		AppsDiscovery: sapdiscovery.SAPApplications,
+		CloudDiscoveryInterface: &clouddiscovery.CloudDiscovery{
+			GceService:   gceService,
+			HostResolver: net.LookupHost,
+		},
+		HostDiscoveryInterface: &hostdiscovery.HostDiscovery{
+			Exists:  commandlineexecutor.CommandExists,
+			Execute: commandlineexecutor.ExecuteCommand,
+		},
+		SapDiscoveryInterface: &appsdiscovery.SapDiscovery{
+			Execute: commandlineexecutor.ExecuteCommand,
+		},
+	}
+	if d.lp.CloudLoggingClient != nil {
+		systemDiscovery.CloudLogInterface = d.lp.CloudLoggingClient.Logger("google-cloud-sap-agent")
+		system.StartSAPSystemDiscovery(ssdCtx, d.config, systemDiscovery)
+		log.FlushCloudLog()
+	} else {
+		system.StartSAPSystemDiscovery(ssdCtx, d.config, systemDiscovery)
+	}
+	
 	gceBetaService := &gcebeta.GCEBeta{}
 	if strings.Contains(d.config.GetServiceEndpointOverride(), "beta") {
 		gceBetaService, err = gcebeta.NewGCEClient(ctx)
@@ -285,14 +318,6 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return
 	}
-
-	wlmService, err := gce.NewWLMClient(ctx, d.config.GetCollectionConfiguration().GetDataWarehouseEndpoint())
-	if err != nil {
-		log.Logger.Errorw("Error creating WLM Client", "error", err)
-		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)
-		return
-	}
-
 	wlmHeartbeatSpec, err := healthMonitor.Register(workloadManagerServiceName)
 	if err != nil {
 		log.Logger.Error("Failed to register workload manager service", log.Error(err))
@@ -354,31 +379,6 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	pmCtx := log.SetCtx(ctx, "context", "ProcessMetrics")
 	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceBetaService}
 	pmp.startCollection(pmCtx)
-
-	// Start SAP System Discovery
-	ssdCtx := log.SetCtx(ctx, "context", "SAPSystemDiscovery")
-	systemDiscovery := &system.Discovery{
-		WlmService: wlmService,
-		CloudDiscoveryInterface: &clouddiscovery.CloudDiscovery{
-			GceService:   gceService,
-			HostResolver: net.LookupHost,
-		},
-		HostDiscoveryInterface: &hostdiscovery.HostDiscovery{
-			Exists:  commandlineexecutor.CommandExists,
-			Execute: commandlineexecutor.ExecuteCommand,
-		},
-		SapDiscoveryInterface: &appsdiscovery.SapDiscovery{
-			Execute:       commandlineexecutor.ExecuteCommand,
-			AppsDiscovery: sapdiscovery.SAPApplications,
-		},
-	}
-	if d.lp.CloudLoggingClient != nil {
-		systemDiscovery.CloudLogInterface = d.lp.CloudLoggingClient.Logger("google-cloud-sap-agent")
-		system.StartSAPSystemDiscovery(ssdCtx, d.config, systemDiscovery)
-		log.FlushCloudLog()
-	} else {
-		system.StartSAPSystemDiscovery(ssdCtx, d.config, systemDiscovery)
-	}
 
 	// Start HANA Monitoring
 	hanaCtx := log.SetCtx(ctx, "context", "HANAMonitoring")

@@ -51,7 +51,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/networkstats"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapservice"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"

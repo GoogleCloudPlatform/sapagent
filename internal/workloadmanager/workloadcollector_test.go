@@ -47,6 +47,7 @@ import (
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
 var (
@@ -102,31 +103,8 @@ var (
 	})
 )
 
-type WriteInsightArgs struct {
-	Project  string
-	Location string
-	Req      *workloadmanager.WriteInsightRequest
-}
-
-type testWLMInterface struct {
-	T                     *testing.T
-	WriteInsightArgs      []WriteInsightArgs
-	WriteInsightErrs      []error
-	WriteInsightCallCount int
-}
-
 func validationDetailSort(a, b *workloadmanager.SapValidationValidationDetail) bool {
 	return a.SapValidationType < b.SapValidationType
-}
-
-func (t *testWLMInterface) WriteInsight(project string, location string, req *workloadmanager.WriteInsightRequest) error {
-	defer func() { t.WriteInsightCallCount++ }()
-
-	if diff := cmp.Diff(t.WriteInsightArgs[t.WriteInsightCallCount], WriteInsightArgs{project, location, req}, cmpopts.SortSlices(validationDetailSort)); diff != "" {
-		t.T.Errorf("WriteInsight() arguments diff (-want +got):\n%s", diff)
-	}
-
-	return t.WriteInsightErrs[t.WriteInsightCallCount]
 }
 
 func TestCollectMetricsFromConfig(t *testing.T) {
@@ -289,13 +267,13 @@ func TestOverrideMetrics(t *testing.T) {
 func TestSendMetrics(t *testing.T) {
 	tests := []struct {
 		name            string
-		wlmInterface    *testWLMInterface
+		wlmInterface    *wlmfake.TestWLM
 		params          sendMetricsParams
 		wantMetricCount int
 	}{
 		{
 			name:         "succeedsWithZeroMetrics",
-			wlmInterface: &testWLMInterface{},
+			wlmInterface: &wlmfake.TestWLM{},
 			params: sendMetricsParams{
 				wm:                WorkloadMetrics{},
 				cp:                defaultConfiguration.GetCloudProperties(),
@@ -306,8 +284,8 @@ func TestSendMetrics(t *testing.T) {
 		},
 		{
 			name: "succeedsWithMetrics",
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{
 					{
 						Project:  "test-project-id",
 						Location: "test-region",
@@ -338,8 +316,8 @@ func TestSendMetrics(t *testing.T) {
 		},
 		{
 			name: "succeedsBareMetal",
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{
 					{
 						Project:  "bm-project-id",
 						Location: "us-central1",
@@ -372,8 +350,8 @@ func TestSendMetrics(t *testing.T) {
 		},
 		{
 			name: "failsSendToCloudMonitoring",
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{
 					{
 						Project:  "test-project-id",
 						Location: "test-region",
@@ -404,8 +382,8 @@ func TestSendMetrics(t *testing.T) {
 			wantMetricCount: 0,
 		},
 		{
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
 					Location: "test-region",
 					Req: &workloadmanager.WriteInsightRequest{
@@ -470,7 +448,7 @@ func TestStartMetricsCollection(t *testing.T) {
 		name         string
 		params       Parameters
 		os           string
-		wlmInterface *testWLMInterface
+		wlmInterface *wlmfake.TestWLM
 		want         bool
 	}{
 		{
@@ -493,8 +471,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{}},
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: true,
@@ -519,8 +497,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				Remote:            true,
 				BackOffs:          defaultBackOffIntervals,
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{}},
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: true,
@@ -545,8 +523,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{}},
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: true,
@@ -563,8 +541,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:           "linux",
 				BackOffs:         defaultBackOffIntervals,
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{}},
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: false,
@@ -578,8 +556,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:           "windows",
 				BackOffs:         defaultBackOffIntervals,
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{}},
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: false,
@@ -603,8 +581,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{}},
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: false,
@@ -682,10 +660,10 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				OSType:            "linux",
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
-				WLMService: &testWLMInterface{
+				WLMService: &wlmfake.TestWLM{
 					T:                t,
 					WriteInsightErrs: []error{nil},
-					WriteInsightArgs: []WriteInsightArgs{{
+					WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 						Project:  "test-project-id",
 						Location: "test-region",
 						Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{

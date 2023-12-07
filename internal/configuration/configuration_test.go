@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"go.uber.org/zap/zapcore"
 
+	dpb "google.golang.org/protobuf/types/known/durationpb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -46,6 +47,17 @@ var (
 		User:      "SYSTEM",
 		Password:  "PASSWORD#",
 		EnableSsl: false,
+	}
+	testDiscoveryProps = &cpb.DiscoveryConfiguration{
+		EnableDiscovery:                &wpb.BoolValue{Value: false},
+		SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 300},
+		SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 300},
+	}
+
+	defaultDiscoveryProps = &cpb.DiscoveryConfiguration{
+		EnableDiscovery:                &wpb.BoolValue{Value: true},
+		SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+		SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 4 * 60 * 60},
 	}
 
 	//go:embed testdata/defaultHANAMonitoringQueries.json
@@ -199,6 +211,11 @@ func TestApplyDefaults(t *testing.T) {
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: true},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 4 * 60 * 60},
+				},
 			},
 		},
 		{
@@ -208,6 +225,11 @@ func TestApplyDefaults(t *testing.T) {
 				LogToCloud:                 wpb.Bool(false),
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 				},
 			},
 			want: &cpb.Configuration{
@@ -223,6 +245,11 @@ func TestApplyDefaults(t *testing.T) {
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
+				},
 			},
 		},
 		{
@@ -234,6 +261,11 @@ func TestApplyDefaults(t *testing.T) {
 					CollectAgentMetrics:              true,
 					SapSystemDiscovery:               wpb.Bool(false),
 					DataWarehouseEndpoint:            "https://other-workloadmanager-datawarehouse.googleapis.com/",
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 				},
 			},
 			want: &cpb.Configuration{
@@ -260,6 +292,11 @@ func TestApplyDefaults(t *testing.T) {
 				LogToCloud:                 wpb.Bool(true),
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
+				},
 			},
 		},
 		{
@@ -271,6 +308,11 @@ func TestApplyDefaults(t *testing.T) {
 					ProjectId:  "config-project-id",
 					InstanceId: "config-instance-id",
 					Zone:       "config-zone",
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 				},
 			},
 			want: &cpb.Configuration{
@@ -289,6 +331,11 @@ func TestApplyDefaults(t *testing.T) {
 						FetchLatestConfig:       wpb.Bool(true),
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 				},
 			},
 		},
@@ -345,6 +392,7 @@ func TestApplyDefaults(t *testing.T) {
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
 				},
+				DiscoveryConfiguration: defaultDiscoveryProps,
 			},
 		},
 	}

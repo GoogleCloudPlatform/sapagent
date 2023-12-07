@@ -17,6 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.configuration;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/wrappers.proto";
 import "instanceinfo/instanceinfo.proto";
 
@@ -40,6 +41,7 @@ message Configuration {
   AgentProperties agent_properties = 7;
   HANAMonitoringConfiguration hana_monitoring_configuration = 8;
   google.protobuf.BoolValue log_to_cloud = 9;
+  DiscoveryConfiguration discovery_configuration = 10;
 }
 
 message CollectionConfiguration {
@@ -180,4 +182,10 @@ enum TargetEnvironment {
   STAGING = 2;
   DEVELOPMENT = 3;
   INTEGRATION = 4;
+}
+
+message DiscoveryConfiguration {
+  google.protobuf.BoolValue enable_discovery = 1;
+  google.protobuf.Duration system_discovery_update_frequency = 2;
+  google.protobuf.Duration sap_instances_update_frequency = 3;
 }

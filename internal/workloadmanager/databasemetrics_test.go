@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
+	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
 func TestProcessInsights(t *testing.T) {
@@ -40,7 +41,7 @@ func TestProcessInsights(t *testing.T) {
 		Config:            defaultConfigurationDBMetrics,
 		TimeSeriesCreator: &fake.TimeSeriesCreator{},
 		BackOffs:          defaultBackOffIntervals,
-		WLMService:        &testWLMInterface{},
+		WLMService:        &wlmfake.TestWLM{},
 	}
 
 	insights := make(ruleengine.Insights)
@@ -93,19 +94,19 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 	tests := []struct {
 		name         string
 		params       Parameters
-		wlmInterface *testWLMInterface
+		wlmInterface *wlmfake.TestWLM
 		want         error
 	}{
 		{
 			name:         "HANAMetricsConfigNotSet",
 			params:       Parameters{},
-			wlmInterface: &testWLMInterface{},
+			wlmInterface: &wlmfake.TestWLM{},
 			want:         cmpopts.AnyError,
 		},
 		{
 			name:         "NoHANAInsightsRules",
 			params:       Parameters{hanaInsightRules: []*rpb.Rule{}},
-			wlmInterface: &testWLMInterface{},
+			wlmInterface: &wlmfake.TestWLM{},
 			want:         cmpopts.AnyError,
 		},
 		{
@@ -125,8 +126,8 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 					return f.Stat()
 				},
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{}},
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: nil,
@@ -144,8 +145,8 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 					return nil, cmpopts.AnyError
 				},
 			},
-			wlmInterface: &testWLMInterface{
-				WriteInsightArgs: []WriteInsightArgs{{
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
 					Location: "test-region",
 					Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{

@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -56,7 +57,7 @@ type hostDiscoveryInterface interface {
 }
 
 type sapDiscoveryInterface interface {
-	DiscoverSAPApps(ctx context.Context, cp *ipb.CloudProperties) []appsdiscovery.SapSystemDetails
+	DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances) []appsdiscovery.SapSystemDetails
 }
 
 func removeDuplicates(res []*spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
@@ -85,20 +86,28 @@ type Discovery struct {
 	CloudDiscoveryInterface cloudDiscoveryInterface
 	HostDiscoveryInterface  hostDiscoveryInterface
 	SapDiscoveryInterface   sapDiscoveryInterface
+	AppsDiscovery           func(context.Context) *sappb.SAPInstances
+	systems                 []*spb.SapDiscovery
+	systemMu                sync.Mutex
+	sapInstances            *sappb.SAPInstances
+	sapMu                   sync.Mutex
 }
 
 // GetSAPSystems returns the current list of SAP Systems discovered on the current host.
 func (d *Discovery) GetSAPSystems() []*spb.SapDiscovery {
-	return nil
+	d.systemMu.Lock()
+	defer d.systemMu.Unlock()
+	return d.systems
 }
 
 // GetSAPInstances returns the current list of SAP Instances discovered on the current host.
-func (d *Discovery) GetSAPInstances() []*sappb.SAPInstance {
-	return nil
+func (d *Discovery) GetSAPInstances() *sappb.SAPInstances {
+	d.sapMu.Lock()
+	defer d.sapMu.Unlock()
+	return d.sapInstances
 }
 
 func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadmanager.SapDiscoveryResource {
-
 	return &workloadmanager.SapDiscoveryResource{
 		RelatedResources: r.RelatedResources,
 		ResourceKind:     r.ResourceKind.String(),
@@ -156,13 +165,42 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 // Returns true if the discovery goroutine is started, and false otherwise.
 func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) bool {
 	// Start SAP system discovery only if sap_system_discovery is enabled.
-	if !config.GetCollectionConfiguration().GetSapSystemDiscovery().GetValue() {
+	if !config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
 		log.CtxLogger(ctx).Info("Not starting SAP system discovery.")
 		return false
 	}
 
+	go updateSAPInstances(ctx, config, d)
+	// Ensure SAP instances is populated before starting system discovery
+	for d.GetSAPInstances() == nil {
+		time.Sleep(5 * time.Second)
+	}
 	go runDiscovery(ctx, config, d)
+	// Ensure systems are populated before returning
+	for d.GetSAPSystems() == nil {
+		time.Sleep(5 * time.Second)
+	}
 	return true
+}
+
+func updateSAPInstances(ctx context.Context, config *cpb.Configuration, d *Discovery) {
+	log.CtxLogger(ctx).Info("Starting SAP Instances update")
+	updateTicker := time.NewTicker(config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration())
+	for {
+		log.CtxLogger(ctx).Info("Updating SAP Instances")
+		sapInst := d.AppsDiscovery(ctx)
+		d.sapMu.Lock()
+		d.sapInstances = sapInst
+		d.sapMu.Unlock()
+
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("SAP Discovery cancellation requested")
+			return
+		case <-updateTicker.C:
+			continue
+		}
+	}
 }
 
 func runDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) {
@@ -172,6 +210,7 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) 
 		return
 	}
 
+	updateTicker := time.NewTicker(config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().AsDuration())
 	for {
 		sapSystems := d.discoverSAPSystems(ctx, cp)
 
@@ -201,8 +240,18 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) 
 		}
 
 		log.CtxLogger(ctx).Info("Done SAP System Discovery")
-		// Perform discovery at most every 4 hours.
-		time.Sleep(4 * 60 * 60 * time.Second)
+
+		d.systemMu.Lock()
+		d.systems = sapSystems
+		d.systemMu.Unlock()
+
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("SAP Discovery cancellation requested")
+			return
+		case <-updateTicker.C:
+			continue
+		}
 	}
 }
 
@@ -211,7 +260,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 
 	instanceURI := fmt.Sprintf("projects/%s/zones/%s/instances/%s", cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
 	log.CtxLogger(ctx).Info("Starting SAP Discovery")
-	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, cp)
+	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances())
 	log.CtxLogger(ctx).Debugf("SAP Details: %v", sapDetails)
 	log.CtxLogger(ctx).Info("Starting host discovery")
 	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)

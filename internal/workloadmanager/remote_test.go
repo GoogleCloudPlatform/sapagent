@@ -38,6 +38,7 @@ import (
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
 var (
@@ -58,9 +59,9 @@ var (
 			InstanceName: "instanceName",
 		},
 	})
-	defaultWLMInterface = func() *testWLMInterface {
-		return &testWLMInterface{
-			WriteInsightArgs: []WriteInsightArgs{{
+	defaultWLMInterface = func() *wlmfake.TestWLM {
+		return &wlmfake.TestWLM{
+			WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 				Project:  "projectId",
 				Location: "some-region",
 				Req: &workloadmanager.WriteInsightRequest{
@@ -245,7 +246,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 	tests := []struct {
 		name         string
 		config       *cfgpb.Configuration
-		wlmInterface *testWLMInterface
+		wlmInterface *wlmfake.TestWLM
 		want         int
 	}{
 		{

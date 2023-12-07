@@ -1123,12 +1123,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.executor.t = t
 			d := SapDiscovery{
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return tc.sapInstances },
 				Execute: func(c context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
 					return tc.executor.Execute(c, p)
 				},
 			}
-			got := d.DiscoverSAPApps(ctx, tc.cp)
+			got := d.DiscoverSAPApps(ctx, tc.sapInstances)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), cmpopts.SortSlices(sortSapSystemDetails), protocmp.Transform(), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("discoverSAPApps(%v) returned an unexpected diff (-want +got): %v", tc.cp, diff)
 			}
