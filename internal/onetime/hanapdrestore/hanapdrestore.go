@@ -248,8 +248,8 @@ func (r *Restorer) isDiskAttachedToInstance(diskName string) (string, bool, erro
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
 func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	t := time.Now()
-	r.newdiskName = fmt.Sprintf("hana-%s-restored-%d%02d%02d-%02d%02d%02d",
-		strings.ToLower(r.sid), t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+	r.newdiskName = fmt.Sprintf("%s-%d%02d%02d-%02d%02d%02d",
+		r.dataDiskName, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 
 	disk := &compute.Disk{
 		Name:           r.newdiskName,
@@ -285,9 +285,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 
 	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
 
-	if err := r.rescanVolumeGroups(ctx); err != nil {
-		return fmt.Errorf("failure rescanning volume groups, logical volumes: %v", err)
-	}
+	r.rescanVolumeGroups(ctx)
 	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
 	return nil
 }
@@ -457,7 +455,7 @@ func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexe
 	log.Logger.Infow("Unmount path", "directory", path)
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "umount",
-		ArgsToSplit: path,
+		ArgsToSplit: "-f " + path,
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failure unmounting directory: %s, stderr: %s, err: %s", path, result.StdErr, result.Error)
