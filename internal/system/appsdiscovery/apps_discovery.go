@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -36,6 +37,10 @@ var (
 	headerLineRegex = regexp.MustCompile(`[^-]+`)
 )
 
+const (
+	haNodes = "HANodes:"
+)
+
 // SapDiscovery contains variables and methods to discover SAP applications running on the current host.
 type SapDiscovery struct {
 	Execute commandlineexecutor.Execute
@@ -43,11 +48,10 @@ type SapDiscovery struct {
 
 // SapSystemDetails contains information about an ASP system running on the current host.
 type SapSystemDetails struct {
-	AppSID, DBSID       string
+	AppComponent        *spb.SapDiscovery_Component
+	DBComponent         *spb.SapDiscovery_Component
 	AppHosts, DBHosts   []string
 	AppOnHost, DBOnHost bool
-	AppProperties       *spb.SapDiscovery_Component_ApplicationProperties
-	DBProperties        *spb.SapDiscovery_Component_DatabaseProperties
 }
 
 func removeDuplicates(s []string) []string {
@@ -63,41 +67,73 @@ func removeDuplicates(s []string) []string {
 	return o
 }
 
-func mergeSystemDetails(old SapSystemDetails, new SapSystemDetails) SapSystemDetails {
+func mergeAppProperties(old, new *spb.SapDiscovery_Component_ApplicationProperties) *spb.SapDiscovery_Component_ApplicationProperties {
+	if old == nil {
+		return new
+	}
+	merged := proto.Clone(old).(*spb.SapDiscovery_Component_ApplicationProperties)
+	if old.GetApplicationType() == spb.SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED {
+		merged.ApplicationType = new.ApplicationType
+	}
+	if merged.AscsUri == "" {
+		merged.AscsUri = new.AscsUri
+	}
+	if merged.NfsUri == "" {
+		merged.NfsUri = new.NfsUri
+	}
+	return merged
+}
+
+func mergeDBProperties(old, new *spb.SapDiscovery_Component_DatabaseProperties) *spb.SapDiscovery_Component_DatabaseProperties {
+	if old == nil {
+		return new
+	}
+	merged := proto.Clone(old).(*spb.SapDiscovery_Component_DatabaseProperties)
+	if old.GetDatabaseType() == spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED {
+		merged.DatabaseType = new.DatabaseType
+	}
+	if merged.SharedNfsUri == "" {
+		merged.SharedNfsUri = new.SharedNfsUri
+	}
+	return merged
+}
+
+func mergeComponent(old, new *spb.SapDiscovery_Component) *spb.SapDiscovery_Component {
+	if old == nil {
+		return new
+	}
+
+	merged := proto.Clone(old).(*spb.SapDiscovery_Component)
+
+	if old.GetProperties() == nil {
+		merged.Properties = new.Properties
+	} else if new.GetProperties() != nil {
+		switch x := old.Properties.(type) {
+		case *spb.SapDiscovery_Component_ApplicationProperties_:
+			merged.Properties = &spb.SapDiscovery_Component_ApplicationProperties_{
+				ApplicationProperties: mergeAppProperties(x.ApplicationProperties, new.GetApplicationProperties()),
+			}
+		case *spb.SapDiscovery_Component_DatabaseProperties_:
+			merged.Properties = &spb.SapDiscovery_Component_DatabaseProperties_{
+				DatabaseProperties: mergeDBProperties(x.DatabaseProperties, new.GetDatabaseProperties()),
+			}
+		}
+	}
+
+	merged.HaHosts = removeDuplicates(append(merged.GetHaHosts(), new.GetHaHosts()...))
+
+	return merged
+}
+
+func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	merged := old
 	merged.AppOnHost = old.AppOnHost || new.AppOnHost
 	merged.DBOnHost = old.DBOnHost || new.DBOnHost
-	if old.AppSID == "" {
-		merged.AppSID = new.AppSID
-	}
-	if old.DBSID == "" {
-		merged.DBSID = new.DBSID
-	}
+	merged.AppComponent = mergeComponent(old.AppComponent, new.AppComponent)
+	merged.DBComponent = mergeComponent(old.DBComponent, new.DBComponent)
 	merged.AppHosts = removeDuplicates(append(merged.AppHosts, new.AppHosts...))
 	merged.DBHosts = removeDuplicates(append(merged.DBHosts, new.DBHosts...))
-	if old.AppProperties == nil {
-		merged.AppProperties = new.AppProperties
-	} else if new.AppProperties != nil {
-		if merged.AppProperties.ApplicationType == spb.SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED {
-			merged.AppProperties.ApplicationType = new.AppProperties.ApplicationType
-		}
-		if merged.AppProperties.AscsUri == "" {
-			merged.AppProperties.AscsUri = new.AppProperties.AscsUri
-		}
-		if merged.AppProperties.NfsUri == "" {
-			merged.AppProperties.NfsUri = new.AppProperties.NfsUri
-		}
-	}
-	if old.DBProperties == nil {
-		merged.DBProperties = new.DBProperties
-	} else if new.DBProperties != nil {
-		if merged.DBProperties.DatabaseType == spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED {
-			merged.DBProperties.DatabaseType = new.DBProperties.DatabaseType
-		}
-		if merged.DBProperties.SharedNfsUri == "" {
-			merged.DBProperties.SharedNfsUri = new.DBProperties.SharedNfsUri
-		}
-	}
+
 	return merged
 }
 
@@ -116,10 +152,11 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
-				log.CtxLogger(ctx).Infow("Comparing to system", "dbSID", s.DBSID, "appSID", s.AppSID)
-				if (s.AppSID == "" || s.AppSID == sys.AppSID) &&
-					s.DBSID == sys.DBSID {
-					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.AppSID)
+				log.CtxLogger(ctx).Infow("Comparing to system", "dbSid", s.DBComponent.GetSid(), "appSID", s.AppComponent.GetSid())
+				if (s.AppComponent.GetSid() == "" || s.AppComponent.GetSid() == sys.AppComponent.GetSid()) &&
+					(s.DBComponent.GetSid() == "" || s.DBComponent.GetSid() == sys.DBComponent.GetSid()) {
+
+					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.AppComponent.GetSid())
 					sapSystems[i] = mergeSystemDetails(s, sys)
 					sapSystems[i].AppOnHost = true
 					found = true
@@ -137,8 +174,8 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
-				if s.DBSID == sys.DBSID {
-					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.DBSID)
+				if s.DBComponent.GetSid() == sys.DBComponent.GetSid() {
+					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.DBComponent.GetSid())
 					sapSystems[i] = mergeSystemDetails(s, sys)
 					sapSystems[i].DBOnHost = true
 					found = true
@@ -169,11 +206,24 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		AscsUri:         ascsHost,
 		NfsUri:          nfsHost,
 	}
+	ha, nodes := d.discoverNetweaverHA(ctx, app)
+	haNodes := nodes
+	if !ha {
+		haNodes = nil
+	}
 	return SapSystemDetails{
-		AppSID:        app.Sapsid,
-		AppProperties: appProps,
-		DBSID:         dbSID,
-		DBHosts:       dbHosts,
+		AppComponent: &spb.SapDiscovery_Component{
+			Sid: app.Sapsid,
+			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+				ApplicationProperties: appProps,
+			},
+			HaHosts: haNodes,
+		},
+		AppHosts: nodes,
+		DBComponent: &spb.SapDiscovery_Component{
+			Sid: dbSID,
+		},
+		DBHosts: dbHosts,
 	}
 }
 
@@ -188,10 +238,41 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 		SharedNfsUri: dbNFS,
 	}
 	return SapSystemDetails{
-		DBSID:        app.Sapsid,
-		DBHosts:      dbHosts,
-		DBProperties: dbProps,
+		DBComponent: &spb.SapDiscovery_Component{
+			Sid: app.Sapsid,
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+				DatabaseProperties: dbProps,
+			},
+			HaHosts: app.HanaHaMembers,
+		},
+		DBHosts: removeDuplicates(append(dbHosts, app.HanaHaMembers...)),
 	}
+}
+
+func (d *SapDiscovery) discoverNetweaverHA(ctx context.Context, app *sappb.SAPInstance) (bool, []string) {
+	sidLower := strings.ToLower(app.Sapsid)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	params := commandlineexecutor.Params{
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, "sapcontrol", "-nr", app.InstanceNumber, "-function", "HAGetFailoverConfig"},
+	}
+	res := d.Execute(ctx, params)
+	if res.Error != nil {
+		return false, nil
+	}
+
+	ha := strings.Contains(res.StdOut, "HAActive: TRUE")
+
+	i := strings.Index(res.StdOut, haNodes)
+	i += len(haNodes)
+	lines := strings.Split(res.StdOut[i:], "\n")
+	var nodes []string
+	if len(lines) > 0 {
+		for _, n := range strings.Split(lines[0], ",") {
+			nodes = append(nodes, strings.TrimSpace(n))
+		}
+	}
+	return ha, nodes
 }
 
 func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string) ([]string, error) {

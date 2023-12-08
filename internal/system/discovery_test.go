@@ -202,11 +202,15 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBSID:   "ABC",
-				DBHosts: []string{"some-db-host"},
-				DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-					SharedNfsUri: "some-shared-nfs-uri",
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							SharedNfsUri: "some-shared-nfs-uri",
+						},
+					},
 				},
+				DBHosts: []string{"some-db-host"},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -261,12 +265,16 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID:   "ABC",
-				AppHosts: []string{"some-app-host"},
-				AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-					NfsUri:  "some-nfs-uri",
-					AscsUri: "some-ascs-uri",
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+							NfsUri:  "some-nfs-uri",
+							AscsUri: "some-ascs-uri",
+						},
+					},
 				},
+				AppHosts: []string{"some-app-host"},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -334,8 +342,12 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID: "ABC",
-				DBSID:  "DEF",
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+				},
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "DEF",
+				},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -347,12 +359,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		want: []*spb.SapDiscovery{{
 			ApplicationLayer: &spb.SapDiscovery_Component{
 				Sid:         "ABC",
-				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
 				HostProject: "12345",
 			},
 			DatabaseLayer: &spb.SapDiscovery_Component{
 				Sid:         "DEF",
-				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",
@@ -362,7 +372,9 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID:    "ABC",
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+				},
 				AppOnHost: true,
 				AppHosts:  []string{"some-app-resource"},
 			}}},
@@ -398,8 +410,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		},
 		want: []*spb.SapDiscovery{{
 			ApplicationLayer: &spb.SapDiscovery_Component{
-				Sid:        "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Sid: "ABC",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
 					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -424,7 +435,9 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBSID:    "DEF",
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "DEF",
+				},
 				DBOnHost: true,
 				DBHosts:  []string{"some-db-resource"},
 			}}},
@@ -460,8 +473,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		},
 		want: []*spb.SapDiscovery{{
 			DatabaseLayer: &spb.SapDiscovery_Component{
-				Sid:        "DEF",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Sid: "DEF",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
 					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -486,12 +498,16 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID:    "ABC",
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+				},
 				AppOnHost: true,
 				AppHosts:  []string{"some-app-resource"},
-				DBSID:     "DEF",
-				DBOnHost:  true,
-				DBHosts:   []string{"some-db-resource"},
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "DEF",
+				},
+				DBOnHost: true,
+				DBHosts:  []string{"some-db-resource"},
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
@@ -533,8 +549,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		},
 		want: []*spb.SapDiscovery{{
 			ApplicationLayer: &spb.SapDiscovery_Component{
-				Sid:        "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Sid: "ABC",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
 					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -553,8 +568,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				HostProject: "12345",
 			},
 			DatabaseLayer: &spb.SapDiscovery_Component{
-				Sid:        "DEF",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Sid: "DEF",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
 					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -579,12 +593,16 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID:    "ABC",
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+				},
 				AppOnHost: true,
 				AppHosts:  []string{"some-app-resource"},
-				DBSID:     "DEF",
-				DBOnHost:  false,
-				DBHosts:   []string{"some-db-resource"},
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "DEF",
+				},
+				DBOnHost: false,
+				DBHosts:  []string{"some-db-resource"},
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
@@ -626,8 +644,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		},
 		want: []*spb.SapDiscovery{{
 			ApplicationLayer: &spb.SapDiscovery_Component{
-				Sid:        "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Sid: "ABC",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
 					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -646,8 +663,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				HostProject: "12345",
 			},
 			DatabaseLayer: &spb.SapDiscovery_Component{
-				Sid:        "DEF",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Sid: "DEF",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:  "some-db-resource",
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
@@ -662,12 +678,16 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID:    "ABC",
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+				},
 				AppOnHost: false,
 				AppHosts:  []string{"some-app-resource"},
-				DBSID:     "DEF",
-				DBOnHost:  true,
-				DBHosts:   []string{"some-db-resource"},
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "DEF",
+				},
+				DBOnHost: true,
+				DBHosts:  []string{"some-db-resource"},
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
@@ -709,8 +729,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		},
 		want: []*spb.SapDiscovery{{
 			ApplicationLayer: &spb.SapDiscovery_Component{
-				Sid:        "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{},
+				Sid: "ABC",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:  "some-app-resource",
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
@@ -719,8 +738,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				HostProject: "12345",
 			},
 			DatabaseLayer: &spb.SapDiscovery_Component{
-				Sid:        "DEF",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{},
+				Sid: "DEF",
 				Resources: []*spb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
 					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1065,8 +1083,8 @@ func TestRunDiscovery(t *testing.T) {
 		},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID: "ABC",
-				DBSID:  "DEF",
+				AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
+				DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -1088,17 +1106,11 @@ func TestRunDiscovery(t *testing.T) {
 					Insight: &workloadmanager.Insight{
 						SapDiscovery: &workloadmanager.SapDiscovery{
 							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid: "ABC",
-								ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
-									ApplicationType: "APPLICATION_TYPE_UNSPECIFIED",
-								},
+								Sid:         "ABC",
 								HostProject: "12345",
 							},
 							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid: "DEF",
-								DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
-									DatabaseType: "DATABASE_TYPE_UNSPECIFIED",
-								},
+								Sid:         "DEF",
 								HostProject: "12345",
 							},
 						},
@@ -1110,12 +1122,10 @@ func TestRunDiscovery(t *testing.T) {
 		wantSystems: [][]*spb.SapDiscovery{{{
 			ApplicationLayer: &spb.SapDiscovery_Component{
 				Sid:         "ABC",
-				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
 				HostProject: "12345",
 			},
 			DatabaseLayer: &spb.SapDiscovery_Component{
 				Sid:         "DEF",
-				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",
@@ -1130,11 +1140,11 @@ func TestRunDiscovery(t *testing.T) {
 		},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppSID: "ABC",
-				DBSID:  "DEF",
+				AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
+				DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
 			}}, {{
-				AppSID: "GHI",
-				DBSID:  "JKL",
+				AppComponent: &spb.SapDiscovery_Component{Sid: "GHI"},
+				DBComponent:  &spb.SapDiscovery_Component{Sid: "JKL"},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -1159,17 +1169,11 @@ func TestRunDiscovery(t *testing.T) {
 					Insight: &workloadmanager.Insight{
 						SapDiscovery: &workloadmanager.SapDiscovery{
 							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid: "ABC",
-								ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
-									ApplicationType: "APPLICATION_TYPE_UNSPECIFIED",
-								},
+								Sid:         "ABC",
 								HostProject: "12345",
 							},
 							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid: "DEF",
-								DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
-									DatabaseType: "DATABASE_TYPE_UNSPECIFIED",
-								},
+								Sid:         "DEF",
 								HostProject: "12345",
 							},
 						},
@@ -1182,17 +1186,11 @@ func TestRunDiscovery(t *testing.T) {
 					Insight: &workloadmanager.Insight{
 						SapDiscovery: &workloadmanager.SapDiscovery{
 							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid: "GHI",
-								ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
-									ApplicationType: "APPLICATION_TYPE_UNSPECIFIED",
-								},
+								Sid:         "GHI",
 								HostProject: "12345",
 							},
 							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid: "JKL",
-								DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
-									DatabaseType: "DATABASE_TYPE_UNSPECIFIED",
-								},
+								Sid:         "JKL",
 								HostProject: "12345",
 							},
 						},
@@ -1204,24 +1202,20 @@ func TestRunDiscovery(t *testing.T) {
 		wantSystems: [][]*spb.SapDiscovery{{{
 			ApplicationLayer: &spb.SapDiscovery_Component{
 				Sid:         "ABC",
-				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
 				HostProject: "12345",
 			},
 			DatabaseLayer: &spb.SapDiscovery_Component{
 				Sid:         "DEF",
-				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",
 		}}, {{
 			ApplicationLayer: &spb.SapDiscovery_Component{
 				Sid:         "GHI",
-				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{},
 				HostProject: "12345",
 			},
 			DatabaseLayer: &spb.SapDiscovery_Component{
 				Sid:         "JKL",
-				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{},
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",

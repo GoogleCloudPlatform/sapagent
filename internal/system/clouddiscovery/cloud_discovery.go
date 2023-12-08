@@ -216,6 +216,11 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 	}
 
 	res, toAdd, err := d.discoverResourceForURI(ctx, uri)
+	if uri != host.name && res.ResourceKind == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+		res.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{
+			VirtualHostname: host.name,
+		}
+	}
 	if host.parent != nil && err == nil {
 		if !slices.Contains(host.parent.RelatedResources, res.ResourceUri) {
 			host.parent.RelatedResources = append(host.parent.RelatedResources, res.ResourceUri)

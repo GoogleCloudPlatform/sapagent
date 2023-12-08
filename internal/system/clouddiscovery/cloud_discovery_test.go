@@ -388,6 +388,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				VirtualHostname: "test-instance",
+			},
 		},
 		firstWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk",
@@ -395,12 +398,18 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "test-instance",
+				},
 			},
 		}},
 		secondWant: &spb.SapDiscovery_Resource{
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				VirtualHostname: "test-instance",
+			},
 		},
 		secondWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk",
@@ -408,6 +417,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "test-instance",
+				},
 			},
 		}},
 	}, {
@@ -433,6 +445,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				VirtualHostname: "test-instance",
+			},
 		},
 		firstWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk",
@@ -440,12 +455,18 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "test-instance",
+				},
 			},
 		}},
 		secondWant: &spb.SapDiscovery_Resource{
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				VirtualHostname: "test-instance",
+			},
 		},
 		secondWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk",
@@ -453,6 +474,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "test-instance",
+				},
 			},
 		}},
 	}, {
@@ -594,6 +618,9 @@ func TestDiscoverResource(t *testing.T) {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				VirtualHostname: "some-host",
+			},
 		},
 		wantToDiscover: []toDiscover{{
 			name: "test-disk",
@@ -601,6 +628,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}, {
 			name: "test-disk2",
@@ -608,6 +638,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}, {
 			name: "test-network",
@@ -615,6 +648,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}, {
 			name: "test-network2",
@@ -622,6 +658,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}, {
 			name: "test-subnetwork",
@@ -629,6 +668,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}, {
 			name: "test-subnetwork2",
@@ -636,6 +678,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}, {
 			name: "1.2.3.4",
@@ -643,6 +688,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}, {
 			name: "5.6.7.8",
@@ -650,6 +698,9 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					VirtualHostname: "some-host",
+				},
 			},
 		}},
 	}, {

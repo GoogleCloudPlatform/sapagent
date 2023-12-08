@@ -19,6 +19,7 @@ package appsdiscovery
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -104,13 +105,27 @@ var (
 	landscapeMultipleNodesResult = commandlineexecutor.Result{
 		StdOut: landscapeOutputMultipleNodes,
 	}
+	defaultFailoverConfigResult = commandlineexecutor.Result{
+		StdOut: `17.11.2023 01:46:41
+		HAGetFailoverConfig
+		OK
+		HAActive: TRUE
+		HAProductVersion: SUSE Linux Enterprise Server for SAP Applications 15 SP2
+		HASAPInterfaceVersion: SUSE Linux Enterprise Server for SAP Applications 15 SP2 (sap_suse_cluster_connector 3.1.2)
+		HADocumentation: https://www.suse.com/products/sles-for-sap/resource-library/sap-best-practices/
+		HAActiveNode: fs1-nw-node2
+		HANodes: fs1-nw-node2, fs1-nw-node1`,
+		ExitCode: 0,
+		Error:    nil,
+	}
 )
 
 func sortSapSystemDetails(a, b SapSystemDetails) bool {
-	if a.AppSID == b.AppSID {
-		return a.DBSID < b.DBSID
+	if a.AppComponent != nil && b.AppComponent != nil &&
+		a.AppComponent.GetSid() == b.AppComponent.GetSid() {
+		return a.DBComponent.GetSid() < b.DBComponent.GetSid()
 	}
-	return a.AppSID < b.AppSID
+	return a.AppComponent.GetSid() < b.AppComponent.GetSid()
 }
 
 type fakeCommandExecutor struct {
@@ -558,6 +573,78 @@ func TestDiscoverDatabaseNFS(t *testing.T) {
 	}
 }
 
+func TestDiscoverNetweaverHA(t *testing.T) {
+	tests := []struct {
+		name      string
+		app       *sappb.SAPInstance
+		execute   func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		wantHA    bool
+		wantNodes []string
+	}{{
+		name: "isHA",
+		app: &sappb.SAPInstance{
+			InstanceNumber: "00",
+			Sapsid:         "abc",
+		},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return defaultFailoverConfigResult
+		},
+		wantHA:    true,
+		wantNodes: []string{"fs1-nw-node2", "fs1-nw-node1"},
+	}, {
+		name: "noHA",
+		app: &sappb.SAPInstance{
+			InstanceNumber: "00",
+			Sapsid:         "abc",
+		},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `17.11.2023 01:46:41
+				HAGetFailoverConfig
+				OK
+				HAActive: FALSE
+				HAProductVersion: SUSE Linux Enterprise Server for SAP Applications 15 SP2
+				HASAPInterfaceVersion: SUSE Linux Enterprise Server for SAP Applications 15 SP2 (sap_suse_cluster_connector 3.1.2)
+				HADocumentation: https://www.suse.com/products/sles-for-sap/resource-library/sap-best-practices/
+				HAActiveNode: fs1-nw-node2
+				HANodes: fs1-nw-node1`,
+				ExitCode: 0,
+				Error:    nil,
+			}
+		},
+		wantHA:    false,
+		wantNodes: []string{"fs1-nw-node1"},
+	}, {
+		name: "commandError",
+		app: &sappb.SAPInstance{
+			InstanceNumber: "00",
+			Sapsid:         "abc",
+		},
+		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		wantHA: false,
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d := SapDiscovery{
+				Execute: test.execute,
+			}
+			ha, got := d.discoverNetweaverHA(context.Background(), test.app)
+			if ha != test.wantHA {
+				t.Errorf("discoverNetweaverHA() ha bool mismatch. Got: %t, want: %t", ha, test.wantHA)
+			}
+			if diff := cmp.Diff(test.wantNodes, got); diff != "" {
+				t.Errorf("discoverNetweaverHA() mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestDiscoverNetweaver(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -573,7 +660,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			switch params.Executable {
 			case "sudo":
-				return defaultUserStoreResult
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				}
 			case "grep":
 				return defaultProfileResult
 			case "df":
@@ -586,14 +677,19 @@ func TestDiscoverNetweaver(t *testing.T) {
 			}
 		},
 		want: SapSystemDetails{
-			AppSID:  "abc",
-			DBSID:   "DEH",
-			DBHosts: []string{"test-instance"},
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid:     "abc",
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
+			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:     []string{"test-instance"},
 		},
 	}, {
 		name: "noDBSID",
@@ -650,12 +746,15 @@ func TestDiscoverHANA(t *testing.T) {
 			}
 		},
 		want: SapSystemDetails{
-			DBSID:   "abc",
-			DBHosts: []string{"test-instance"},
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
+			DBHosts: []string{"test-instance"},
 		},
 	}, {
 		name: "errGettingNodes",
@@ -729,13 +828,16 @@ func TestDiscoverSAPApps(t *testing.T) {
 		},
 		want: []SapSystemDetails{
 			{
-				DBSID:    "abc",
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "abc",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+							SharedNfsUri: "1.2.3.4",
+						}},
+				},
 				DBOnHost: true,
 				DBHosts:  []string{"test-instance"},
-				DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-					DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-					SharedNfsUri: "1.2.3.4",
-				},
 			},
 		},
 	}, {
@@ -743,19 +845,22 @@ func TestDiscoverSAPApps(t *testing.T) {
 		cp:   defaultCloudProperties,
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
-				Executable: "sudo",
+				Executable: "sudo", // hdbuserstore
 			}, {
-				Executable: "sudo",
+				Executable: "sudo", // hdbuserstore
 			}, {
-				Executable: "grep",
+				Executable: "grep", // Get profile
 			}, {
-				Executable: "df",
+				Executable: "df", // Get NFS
+			}, {
+				Executable: "sudo", // Failover config
 			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultFailoverConfigResult,
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -767,15 +872,20 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 		},
 		want: []SapSystemDetails{{
-			AppSID:    "abc",
-			AppOnHost: true,
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+					}},
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			DBSID:   "DEH",
-			DBHosts: []string{"test-instance"},
+			AppOnHost:   true,
+			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:     []string{"test-instance"},
 		}},
 	}, {
 		name: "twoNetweaver",
@@ -794,19 +904,25 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo",
 			}, {
+				Executable: "sudo",
+			}, {
 				Executable: "grep",
 			}, {
 				Executable: "df",
+			}, {
+				Executable: "sudo",
 			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultFailoverConfigResult,
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultFailoverConfigResult,
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -822,23 +938,35 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 		},
 		want: []SapSystemDetails{{
-			AppSID:    "abc",
-			AppOnHost: true,
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+					}},
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			DBSID:   "DEH",
-			DBHosts: []string{"test-instance"},
+			AppOnHost:   true,
+			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:     []string{"test-instance"},
 		}, {
-			AppSID:    "def",
-			AppOnHost: true,
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				AscsUri:         "some-test-ascs",
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "def",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						AscsUri:         "some-test-ascs",
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+					}},
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			DBSID:   "DEH",
+			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
+			AppOnHost: true,
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+			},
 			DBHosts: []string{"test-instance"},
 		}},
 	}, {
@@ -871,21 +999,27 @@ func TestDiscoverSAPApps(t *testing.T) {
 			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult, landscapeSingleNodeResult, hanaMountResult},
 		},
 		want: []SapSystemDetails{{
-			DBSID:    "abc",
-			DBOnHost: true,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: true,
+			DBHosts:  []string{"test-instance"},
 		}, {
-			DBSID:    "def",
-			DBOnHost: true,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "def",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: true,
+			DBHosts:  []string{"test-instance"},
 		}},
 	}, {
 		name: "netweaverThenHANAConnected",
@@ -915,30 +1049,43 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo",
 			}, {
+				Executable: "sudo",
+			}, {
 				Executable: "df",
 			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
-				netweaverMountResult, landscapeSingleNodeResult, hanaMountResult,
+				netweaverMountResult,
+				defaultFailoverConfigResult,
+				landscapeSingleNodeResult,
+				hanaMountResult,
 			},
 		},
 		want: []SapSystemDetails{{
-			AppSID:    "abc",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
 			AppOnHost: true,
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBSID:    "DEH",
 			DBOnHost: true,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
-			},
-			DBHosts: []string{"test-instance"},
+			DBHosts:  []string{"test-instance"},
 		}},
 	}, {
 		name: "hanaThenNetweaverConnected",
@@ -969,6 +1116,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "grep",
 			}, {
 				Executable: "df",
+			}, {
+				Executable: "sudo",
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult, hanaMountResult,
@@ -976,23 +1125,32 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultFailoverConfigResult,
 			},
 		},
 		want: []SapSystemDetails{{
-			AppSID:    "abc",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
 			AppOnHost: true,
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBSID:    "DEH",
 			DBOnHost: true,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
-			},
-			DBHosts: []string{"test-instance"},
+			DBHosts:  []string{"test-instance"},
 		}},
 	}, {
 		name: "netweaverThenHANANotConnected",
@@ -1022,34 +1180,49 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo",
 			}, {
+				Executable: "sudo",
+			}, {
 				Executable: "df",
 			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
-				netweaverMountResult, landscapeSingleNodeResult, hanaMountResult,
+				netweaverMountResult,
+				defaultFailoverConfigResult,
+				landscapeSingleNodeResult,
+				hanaMountResult,
 			},
 		},
 		want: []SapSystemDetails{{
-			AppSID:    "abc",
-			AppOnHost: true,
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			DBSID:    "DEH",
+			AppOnHost: true,
+			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+			},
 			DBOnHost: false,
 			DBHosts:  []string{"test-instance"},
 		}, {
-			DBSID:    "DB2",
-			DBOnHost: true,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DB2",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: true,
+			DBHosts:  []string{"test-instance"},
 		}},
 	}, {
 		name: "hanaThenNetweaverNotConnected",
@@ -1080,6 +1253,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "grep",
 			}, {
 				Executable: "df",
+			}, {
+				Executable: "sudo",
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult, hanaMountResult,
@@ -1087,27 +1262,38 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultFailoverConfigResult,
 			},
 		},
 		want: []SapSystemDetails{{
-			AppSID:    "abc",
-			AppOnHost: true,
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			DBSID:    "DEH",
+			AppOnHost: true,
+			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+			},
 			DBOnHost: false,
 			DBHosts:  []string{"test-instance"},
 		}, {
-			DBSID:    "DB2",
-			DBOnHost: true,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DB2",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: true,
+			DBHosts:  []string{"test-instance"},
 		}},
 	}, {
 		name:         "",
@@ -1185,117 +1371,159 @@ func TestMergeSystemDetails(t *testing.T) {
 	}, {
 		name: "onlyOld",
 		oldDetails: SapSystemDetails{
-			AppSID: "abc",
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 			AppHosts: []string{"test-instance"},
-			DBSID:    "DEH",
-			DBOnHost: false,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: false,
+			DBHosts:  []string{"test-instance"},
 		},
 		newDetails: SapSystemDetails{},
 		want: SapSystemDetails{
-			AppSID: "abc",
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 			AppHosts: []string{"test-instance"},
-			DBSID:    "DEH",
-			DBOnHost: false,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: false,
+			DBHosts:  []string{"test-instance"},
 		},
 	}, {
 		name:       "onlyNew",
 		oldDetails: SapSystemDetails{},
 		newDetails: SapSystemDetails{
-			AppSID: "abc",
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 			AppHosts: []string{"test-instance"},
-			DBSID:    "DEH",
-			DBOnHost: false,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: false,
+			DBHosts:  []string{"test-instance"},
 		},
 		want: SapSystemDetails{
-			AppSID: "abc",
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 			AppHosts: []string{"test-instance"},
-			DBSID:    "DEH",
-			DBOnHost: false,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: false,
+			DBHosts:  []string{"test-instance"},
 		},
 	}, {
 		name: "identicalOldAndNew",
 		oldDetails: SapSystemDetails{
-			AppSID: "abc",
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 			AppHosts: []string{"test-instance"},
-			DBSID:    "DEH",
-			DBOnHost: false,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
 			},
-
-			DBHosts: []string{"test-instance"},
-		}, newDetails: SapSystemDetails{
-			AppSID: "abc",
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			DBOnHost: false,
+			DBHosts:  []string{"test-instance"},
+		},
+		newDetails: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 			AppHosts: []string{"test-instance"},
-			DBSID:    "DEH",
-			DBOnHost: false,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: false,
+			DBHosts:  []string{"test-instance"},
 		},
 		want: SapSystemDetails{
-			AppSID: "abc",
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 			AppHosts: []string{"test-instance"},
-			DBSID:    "DEH",
-			DBOnHost: false,
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
 			},
-			DBHosts: []string{"test-instance"},
+			DBOnHost: false,
+			DBHosts:  []string{"test-instance"},
 		},
 	}, {
 		name:       "oldAppNotOnHostNewAppOnHost",
@@ -1318,25 +1546,65 @@ func TestMergeSystemDetails(t *testing.T) {
 		newDetails: SapSystemDetails{DBOnHost: false},
 		want:       SapSystemDetails{DBOnHost: true},
 	}, {
-		name:       "dontOverwriteAppSID",
-		oldDetails: SapSystemDetails{AppSID: "abc"},
-		newDetails: SapSystemDetails{AppSID: "def"},
-		want:       SapSystemDetails{AppSID: "abc"},
+		name: "dontOverwriteAppSID",
+		oldDetails: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
+		newDetails: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "def",
+			},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
 	}, {
-		name:       "dontOverwriteDBSID",
-		oldDetails: SapSystemDetails{DBSID: "abc"},
-		newDetails: SapSystemDetails{DBSID: "def"},
-		want:       SapSystemDetails{DBSID: "abc"},
+		name: "dontOverwriteDBSID",
+		oldDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
+		newDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "def",
+			},
+		},
+		want: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
 	}, {
 		name:       "useNewAppSidWithoutOldAppSid",
 		oldDetails: SapSystemDetails{},
-		newDetails: SapSystemDetails{AppSID: "abc"},
-		want:       SapSystemDetails{AppSID: "abc"},
+		newDetails: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
 	}, {
 		name:       "useNewDBSidWithoutOldDBSid",
 		oldDetails: SapSystemDetails{},
-		newDetails: SapSystemDetails{DBSID: "abc"},
-		want:       SapSystemDetails{DBSID: "abc"},
+		newDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
+		want: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+			},
+		},
 	}, {
 		name: "mergeAppHosts",
 		oldDetails: SapSystemDetails{
@@ -1362,41 +1630,59 @@ func TestMergeSystemDetails(t *testing.T) {
 	}, {
 		name: "mergeAppProperties",
 		oldDetails: SapSystemDetails{
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+					}},
 			},
 		},
 		newDetails: SapSystemDetails{
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 		},
 		want: SapSystemDetails{
-			AppProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-				ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-				AscsUri:         "some-test-ascs",
-				NfsUri:          "1.2.3.4",
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
 			},
 		},
 	}, {
 		name: "mergeDBProperties",
 		oldDetails: SapSystemDetails{
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
 			},
 		},
 		newDetails: SapSystemDetails{
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
 		},
 		want: SapSystemDetails{
-			DBProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-				DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-				SharedNfsUri: "1.2.3.4",
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
 			},
 		},
 	}}

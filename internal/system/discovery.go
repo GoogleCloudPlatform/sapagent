@@ -270,7 +270,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 	log.CtxLogger(ctx).Debugf("Host Resources: %v", hostResources)
 	for _, s := range sapDetails {
 		system := &spb.SapDiscovery{}
-		if s.AppSID != "" {
+		if s.AppComponent != nil {
 			log.CtxLogger(ctx).Info("Discovering cloud resources for app")
 			appRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceURI, s.AppHosts, cp)
 			log.CtxLogger(ctx).Debugf("App Resources: %v", appRes)
@@ -278,45 +278,64 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 				appRes = append(appRes, hostResources...)
 				log.CtxLogger(ctx).Debugf("App On Host Resources: %v", appRes)
 			}
-			if s.AppProperties.GetNfsUri() != "" {
+			if s.AppComponent.GetApplicationProperties().GetNfsUri() != "" {
 				log.CtxLogger(ctx).Info("Discovering cloud resources for app NFS")
-				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.AppProperties.GetNfsUri(), nil, cp)
+				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.AppComponent.GetApplicationProperties().GetNfsUri(), nil, cp)
 				appRes = append(appRes, nfsRes...)
-				s.AppProperties.NfsUri = nfsRes[0].GetResourceUri()
+				s.AppComponent.GetApplicationProperties().NfsUri = nfsRes[0].GetResourceUri()
 			}
-			if s.AppProperties.GetAscsUri() != "" {
+			if s.AppComponent.GetApplicationProperties().GetAscsUri() != "" {
 				log.CtxLogger(ctx).Info("Discovering cloud resources for app ASCS")
-				ascsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.AppProperties.GetAscsUri(), nil, cp)
+				ascsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.AppComponent.GetApplicationProperties().GetAscsUri(), nil, cp)
 				appRes = append(appRes, ascsRes...)
-				s.AppProperties.AscsUri = ascsRes[0].GetResourceUri()
+				s.AppComponent.GetApplicationProperties().AscsUri = ascsRes[0].GetResourceUri()
 			}
-			system.ApplicationLayer = &spb.SapDiscovery_Component{
-				Sid:         s.AppSID,
-				Resources:   removeDuplicates(appRes),
-				Properties:  &spb.SapDiscovery_Component_ApplicationProperties_{ApplicationProperties: s.AppProperties},
-				HostProject: cp.GetNumericProjectId(),
+			if len(s.AppComponent.GetHaHosts()) > 0 {
+				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceURI, s.AppComponent.GetHaHosts(), cp)
+				// Find the instances
+				var haURIs []string
+				for _, res := range haRes {
+					if res.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+						haURIs = append(haURIs, res.GetResourceUri())
+					}
+				}
+				appRes = append(appRes, haRes...)
+				s.AppComponent.HaHosts = haURIs
 			}
+			s.AppComponent.HostProject = cp.GetNumericProjectId()
+			s.AppComponent.Resources = removeDuplicates(appRes)
+			system.ApplicationLayer = s.AppComponent
 		}
-		if s.DBSID != "" {
+		if s.DBComponent != nil {
 			log.CtxLogger(ctx).Info("Discovering cloud resources for database")
 			dbRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceURI, s.DBHosts, cp)
 			if s.DBOnHost {
 				dbRes = append(dbRes, hostResources...)
 			}
-			if s.DBProperties.GetSharedNfsUri() != "" {
+			if s.DBComponent.GetDatabaseProperties().GetSharedNfsUri() != "" {
 				log.CtxLogger(ctx).Info("Discovering cloud resources for database NFS")
-				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.DBProperties.GetSharedNfsUri(), nil, cp)
+				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.DBComponent.GetDatabaseProperties().GetSharedNfsUri(), nil, cp)
 				if len(nfsRes) > 0 {
 					dbRes = append(dbRes, nfsRes...)
-					s.DBProperties.SharedNfsUri = nfsRes[0].GetResourceUri()
+					s.DBComponent.GetDatabaseProperties().SharedNfsUri = nfsRes[0].GetResourceUri()
 				}
 			}
-			system.DatabaseLayer = &spb.SapDiscovery_Component{
-				Sid:         s.DBSID,
-				Resources:   removeDuplicates(dbRes),
-				Properties:  &spb.SapDiscovery_Component_DatabaseProperties_{DatabaseProperties: s.DBProperties},
-				HostProject: cp.GetNumericProjectId(),
+			if len(s.DBComponent.GetHaHosts()) > 0 {
+
+				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceURI, s.DBComponent.GetHaHosts(), cp)
+				// Find the instances
+				var haURIs []string
+				for _, res := range haRes {
+					if res.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+						haURIs = append(haURIs, res.GetResourceUri())
+					}
+				}
+				dbRes = append(dbRes, haRes...)
+				s.DBComponent.HaHosts = haURIs
 			}
+			s.DBComponent.HostProject = cp.GetNumericProjectId()
+			s.DBComponent.Resources = removeDuplicates(dbRes)
+			system.DatabaseLayer = s.DBComponent
 		}
 		system.ProjectNumber = cp.GetNumericProjectId()
 		system.UpdateTime = timestamppb.Now()
