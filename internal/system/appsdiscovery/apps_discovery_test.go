@@ -19,11 +19,11 @@ package appsdiscovery
 import (
 	"context"
 	"errors"
-	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/testing/protocmp"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
