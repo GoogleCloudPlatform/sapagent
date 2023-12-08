@@ -302,7 +302,7 @@ func (r *Restorer) deleteDisk(ctx context.Context, diskName string) {
 func (r *Restorer) attachDisk(ctx context.Context, diskName string) (*compute.Operation, error) {
 	log.CtxLogger(ctx).Infow("Attaching Persistent disk", "diskName", diskName)
 	attachDiskToVM := &compute.AttachedDisk{
-		DeviceName: r.dataDiskName, // Keep the original device name.
+		DeviceName: diskName, // Keep the device nam and disk name same.
 		Source:     fmt.Sprintf("projects/%s/zones/%s/disks/%s", r.project, r.dataDiskZone, diskName),
 	}
 	return r.computeService.Instances.AttachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), attachDiskToVM).Do()
