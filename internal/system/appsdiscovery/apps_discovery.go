@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -33,8 +34,9 @@ import (
 )
 
 var (
-	fsMountRegex    = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
-	headerLineRegex = regexp.MustCompile(`[^-]+`)
+	fsMountRegex     = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
+	headerLineRegex  = regexp.MustCompile(`[^-]+`)
+	hanaVersionRegex = regexp.MustCompile(`version:\s+(([0-9]+\.?)+)`)
 )
 
 const (
@@ -232,10 +234,12 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 	if err != nil {
 		return SapSystemDetails{}
 	}
-	dbNFS, err := d.discoverDatabaseNFS(ctx)
+	dbNFS, _ := d.discoverDatabaseNFS(ctx)
+	version, _ := d.discoverHANAVersion(ctx, app.Sapsid)
 	dbProps := &spb.SapDiscovery_Component_DatabaseProperties{
-		DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-		SharedNfsUri: dbNFS,
+		DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+		SharedNfsUri:    dbNFS,
+		DatabaseVersion: version,
 	}
 	return SapSystemDetails{
 		DBComponent: &spb.SapDiscovery_Component{
@@ -500,4 +504,33 @@ func (d *SapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) 
 		}
 	}
 	return "", errors.New("unable to identify main database NFS")
+}
+
+func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, sid string) (string, error) {
+	var version string
+	sidLower := strings.ToLower(sid)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	p := commandlineexecutor.Params{
+		Executable: "HDB",
+		Args:       []string{"version"},
+		User:       sidAdm,
+	}
+	res := d.Execute(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Warnw("Error executing HDB version command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return "", res.Error
+	}
+
+	match := hanaVersionRegex.FindStringSubmatch(res.StdOut)
+	if len(match) < 2 {
+		return "", errors.New("unable to identify HANA version")
+	}
+
+	parts := strings.Split(match[1], ".")
+	// Ignore atoi errors since the regex enforces these parts to be numeric.
+	majorVersion, _ := strconv.Atoi(parts[0])
+	minorVersion, _ := strconv.Atoi(parts[1])
+	revision, _ := strconv.Atoi(parts[2])
+	version = fmt.Sprintf("HANA %d.%d Rev %d", majorVersion, minorVersion, revision)
+	return version, nil
 }

@@ -81,6 +81,17 @@ tmpfs                              48G  2.0M   48G   1% /dev/shm
 	1.2.3.4:/vol                        8G     0    8G   0% /hana/shared
 	tmpfs                              48G  2.0M   48G   1% /dev/shm
 		`
+	defaultHANAVersionOutput = `HDB version info:
+  version:             2.00.056.00.1624618329
+  branch:              fa/hana2sp05
+  machine config:      linuxx86_64
+  git hash:            1862616087c05005d2e3b87b8ca7a8149c3241fb
+  git merge time:      2021-06-25 12:52:09
+  weekstone:           0000.00.0
+  cloud edition:       0000.00.00
+  compile date:        2021-06-25 13:00:46
+  compile host:        ld4554
+  compile type:        rel`
 )
 
 var (
@@ -117,6 +128,9 @@ var (
 		HANodes: fs1-nw-node2, fs1-nw-node1`,
 		ExitCode: 0,
 		Error:    nil,
+	}
+	defaultHANAVersionResult = commandlineexecutor.Result{
+		StdOut: defaultHANAVersionOutput,
 	}
 )
 
@@ -739,6 +753,8 @@ func TestDiscoverHANA(t *testing.T) {
 				return landscapeSingleNodeResult
 			case "df":
 				return hanaMountResult
+			case "HDB":
+				return defaultHANAVersionResult
 			}
 			return commandlineexecutor.Result{
 				Error:    errors.New("Unexpected command"),
@@ -750,8 +766,9 @@ func TestDiscoverHANA(t *testing.T) {
 				Sid: "abc",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
 			DBHosts: []string{"test-instance"},
@@ -823,8 +840,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
-			}},
-			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult},
+			}, {Executable: "HDB", User: "abcadm"}},
+			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
 		},
 		want: []SapSystemDetails{
 			{
@@ -832,8 +849,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Sid: "abc",
 					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-							DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-							SharedNfsUri: "1.2.3.4",
+							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+							SharedNfsUri:    "1.2.3.4",
+							DatabaseVersion: "HANA 2.0 Rev 56",
 						}},
 				},
 				DBOnHost: true,
@@ -992,19 +1010,28 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
+				Executable: "HDB",
+				User:       "abcadm",
+			}, {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
+			}, {
+				Executable: "HDB",
+				User:       "defadm",
 			}},
-			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult, landscapeSingleNodeResult, hanaMountResult},
+			results: []commandlineexecutor.Result{
+				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult,
+				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
 		},
 		want: []SapSystemDetails{{
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "abc",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
 			DBOnHost: true,
@@ -1014,8 +1041,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "def",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
 			DBOnHost: true,
@@ -1052,7 +1080,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
-			}},
+			}, {Executable: "HDB", User: "dehadm"}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -1061,6 +1089,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				landscapeSingleNodeResult,
 				hanaMountResult,
+				defaultHANAVersionResult,
 			},
 		},
 		want: []SapSystemDetails{{
@@ -1080,8 +1109,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "DEH",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
 			DBOnHost: true,
@@ -1109,6 +1139,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
+				Executable: "HDB", User: "dehadm",
+			}, {
 				Executable: "sudo",
 			}, {
 				Executable: "sudo",
@@ -1120,7 +1152,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}},
 			results: []commandlineexecutor.Result{
-				landscapeSingleNodeResult, hanaMountResult,
+				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult,
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
@@ -1145,8 +1177,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "DEH",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
 			DBOnHost: true,
@@ -1183,7 +1216,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
-			}},
+			}, {Executable: "HDB", User: "db2adm"}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -1192,6 +1225,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				landscapeSingleNodeResult,
 				hanaMountResult,
+				defaultHANAVersionResult,
 			},
 		},
 		want: []SapSystemDetails{{
@@ -1217,8 +1251,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "DB2",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
 			DBOnHost: true,
@@ -1246,6 +1281,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
+				Executable: "HDB",
+				User:       "db2adm",
+			}, {
 				Executable: "sudo",
 			}, {
 				Executable: "sudo",
@@ -1257,7 +1295,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}},
 			results: []commandlineexecutor.Result{
-				landscapeSingleNodeResult, hanaMountResult,
+				landscapeSingleNodeResult,
+				hanaMountResult,
+				defaultHANAVersionResult,
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
@@ -1288,19 +1328,14 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "DB2",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
 		}},
-	}, {
-		name:         "",
-		cp:           defaultCloudProperties,
-		sapInstances: &sappb.SAPInstances{},
-		executor:     &fakeCommandExecutor{},
-		want:         []SapSystemDetails{},
 	}}
 
 	ctx := context.Background()
@@ -1691,6 +1726,52 @@ func TestMergeSystemDetails(t *testing.T) {
 			got := mergeSystemDetails(test.oldDetails, test.newDetails)
 			if diff := cmp.Diff(test.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("mergeSystemDetails() mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDiscoverHANAVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		want    string
+		wantErr error
+	}{{
+		name: "success",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return defaultHANAVersionResult
+		},
+		want: "HANA 2.0 Rev 56",
+	}, {
+		name: "commandError",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				Error: errors.New("test error"),
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "unexpectedOutput",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some output",
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &SapDiscovery{
+				Execute: tc.exec,
+			}
+			got, err := d.discoverHANAVersion(context.Background(), defaultSID)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("discoverHANAVersion() error: got %v, want %v", err, tc.wantErr)
+			}
+
+			if got != tc.want {
+				t.Errorf("discoverHANAVersion() = %v, want: %v", got, tc.want)
 			}
 		})
 	}
