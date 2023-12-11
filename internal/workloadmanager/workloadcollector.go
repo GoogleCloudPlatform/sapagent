@@ -378,7 +378,7 @@ func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	}
 	locationParts := strings.Split(location, "-")
 	location = strings.Join([]string{locationParts[0], locationParts[1]}, "-")
-	req := createWriteInsightRequest(params.wm, params.cp.GetInstanceId())
+	req := createWriteInsightRequest(params.wm, params.cp)
 	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
 		log.CtxLogger(ctx).Debugw("Failed to send metrics to Data Warehouse", "error", err)
 		// Do not log a usagemetrics error until this is the primary data pipeline.
@@ -406,7 +406,7 @@ func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configu
 }
 
 // createWriteInsightRequest converts a WorkloadMetrics time series into a WriteInsightRequest.
-func createWriteInsightRequest(wm WorkloadMetrics, instanceID string) *workloadmanager.WriteInsightRequest {
+func createWriteInsightRequest(wm WorkloadMetrics, cp *ipb.CloudProperties) *workloadmanager.WriteInsightRequest {
 	validations := []*workloadmanager.SapValidationValidationDetail{}
 	for _, m := range wm.Metrics {
 		t := "SAP_VALIDATION_TYPE_UNSPECIFIED"
@@ -426,16 +426,23 @@ func createWriteInsightRequest(wm WorkloadMetrics, instanceID string) *workloadm
 		case sapValidationCustom:
 			t = "CUSTOM"
 		}
+		v := false
+		if len(m.GetPoints()) > 0 {
+			v = m.GetPoints()[0].GetValue().GetDoubleValue() > 0
+		}
 		validations = append(validations, &workloadmanager.SapValidationValidationDetail{
 			SapValidationType: t,
+			IsPresent:         v,
 			Details:           m.GetMetric().GetLabels(),
 		})
 	}
 
 	return &workloadmanager.WriteInsightRequest{
 		Insight: &workloadmanager.Insight{
-			InstanceId: instanceID,
+			InstanceId: cp.GetInstanceId(),
 			SapValidation: &workloadmanager.SapValidation{
+				ProjectId:         cp.GetProjectId(),
+				Zone:              cp.GetZone(),
 				ValidationDetails: validations,
 			},
 		},

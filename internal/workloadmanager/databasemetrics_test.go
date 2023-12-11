@@ -152,9 +152,12 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 					Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{
 						InstanceId: "test-instance-id",
 						SapValidation: &workloadmanager.SapValidation{
+							ProjectId: "test-project-id",
+							Zone:      "test-region-zone",
 							ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
 								Details:           map[string]string{},
 								SapValidationType: "HANA_SECURITY",
+								IsPresent:         true,
 							}}},
 					}},
 				}},

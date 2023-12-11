@@ -293,6 +293,8 @@ func TestSendMetrics(t *testing.T) {
 							Insight: &workloadmanager.Insight{
 								InstanceId: "test-instance-id",
 								SapValidation: &workloadmanager.SapValidation{
+									ProjectId: "test-project-id",
+									Zone:      "test-region-zone",
 									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
 										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
 									},
@@ -325,6 +327,7 @@ func TestSendMetrics(t *testing.T) {
 							Insight: &workloadmanager.Insight{
 								InstanceId: "bm-instance-id",
 								SapValidation: &workloadmanager.SapValidation{
+									ProjectId: "bm-project-id",
 									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
 										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
 									},
@@ -390,6 +393,8 @@ func TestSendMetrics(t *testing.T) {
 						Insight: &workloadmanager.Insight{
 							InstanceId: "test-instance-id",
 							SapValidation: &workloadmanager.SapValidation{
+								ProjectId: "test-project-id",
+								Zone:      "test-region-zone",
 								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
 									&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
 								},
@@ -669,29 +674,37 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 						Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{
 							InstanceId: "test-instance-id",
 							SapValidation: &workloadmanager.SapValidation{
+								ProjectId: "test-project-id",
+								Zone:      "test-region-zone",
 								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
 									{
 										SapValidationType: "SYSTEM",
+										IsPresent:         true,
 										Details:           map[string]string{},
 									},
 									{
 										SapValidationType: "NETWEAVER",
+										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
 										SapValidationType: "HANA",
+										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
 										SapValidationType: "PACEMAKER",
+										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
 										SapValidationType: "COROSYNC",
+										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
 										SapValidationType: "CUSTOM",
+										IsPresent:         true,
 										Details:           map[string]string{},
 									},
 								},

@@ -68,6 +68,8 @@ var (
 					Insight: &workloadmanager.Insight{
 						InstanceId: "instanceId",
 						SapValidation: &workloadmanager.SapValidation{
+							ProjectId: "projectId",
+							Zone: "some-region-zone",
 							ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
 								Details: map[string]string{
 									"agent":         "sapagent",
@@ -75,6 +77,7 @@ var (
 									"os":            "sles-15",
 								},
 								SapValidationType: "SYSTEM",
+								IsPresent: true,
 							}},
 						},
 					},
