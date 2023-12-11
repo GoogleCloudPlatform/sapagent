@@ -43,7 +43,7 @@ type (
 
 // Restorer has args for hanapdrestore subcommands
 type Restorer struct {
-	project, sid, user, dataDiskName          string
+	project, sid, hanaSidAdm, dataDiskName    string
 	dataDiskZone, sourceSnapshot, newDiskType string
 	cloudProps                                *ipb.CloudProperties
 	computeService                            *compute.Service
@@ -68,7 +68,7 @@ func (*Restorer) Synopsis() string {
 func (*Restorer) Usage() string {
 	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
 	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> [-project=<project-name>]
-	[-new-disk-type=<Type of the new PD disk>] [-user=<user-name>]
+	[-new-disk-type=<Type of the new PD disk>]
 	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
@@ -79,7 +79,6 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "Current PD zone. (required)")
 	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source PD snapshot to restore from. (required)")
 	fs.StringVar(&r.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
-	fs.StringVar(&r.user, "user", "", "HANA sidadm username. (optional) Default: <sid>adm")
 	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.BoolVar(&r.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
@@ -133,9 +132,8 @@ func (r *Restorer) validateParameters(os string) error {
 	if r.newDiskType == "" {
 		return fmt.Errorf("could not read disk type, please pass -new-disk-type=<>")
 	}
-	if r.user == "" {
-		r.user = strings.ToLower(r.sid) + "adm"
-	}
+	// setting HANA sidadm value from the sid flag.
+	r.hanaSidAdm = strings.ToLower(r.sid) + "adm"
 	log.Logger.Debug("Parameter validation successful.")
 
 	return nil
@@ -427,7 +425,7 @@ func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execut
 		cmd = fmt.Sprintf("-c '/usr/sap/%s/*/HDB stop'", r.sid)
 	}
 	result := exec(ctx, commandlineexecutor.Params{
-		User:        r.user,
+		User:        r.hanaSidAdm,
 		Executable:  "/bin/sh",
 		ArgsToSplit: cmd,
 	})

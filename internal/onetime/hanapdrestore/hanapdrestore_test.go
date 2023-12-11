@@ -36,7 +36,7 @@ var (
 	defaultRestorer = Restorer{
 		project:        "my-project",
 		sid:            "my-sid",
-		user:           "my-user",
+		hanaSidAdm:     "my-user",
 		dataDiskName:   "data-disk",
 		dataDiskZone:   "data-zone",
 		newDiskType:    "pd-ssd",
@@ -88,7 +88,7 @@ func TestValidateParameters(t *testing.T) {
 			restorer: Restorer{
 				project:        "my-project",
 				sid:            "my-sid",
-				user:           "my-user",
+				hanaSidAdm:     "my-user",
 				dataDiskName:   "data-disk",
 				dataDiskZone:   "data-zone",
 				sourceSnapshot: "snapshot",
@@ -100,7 +100,7 @@ func TestValidateParameters(t *testing.T) {
 			restorer: Restorer{
 				project:        "my-project",
 				sid:            "my-sid",
-				user:           "my-user",
+				hanaSidAdm:     "my-user",
 				dataDiskName:   "data-disk",
 				dataDiskZone:   "data-zone",
 				sourceSnapshot: "snapshot",
@@ -160,8 +160,8 @@ func TestDefaultValues(t *testing.T) {
 	if r.project != "default-project" {
 		t.Errorf("project = %v, want = %v", r.project, "default-project")
 	}
-	if r.user != "hdbadm" {
-		t.Errorf("user = %v, want = %v", r.user, "hdbadm")
+	if r.hanaSidAdm != "hdbadm" {
+		t.Errorf("user = %v, want = %v", r.hanaSidAdm, "hdbadm")
 	}
 }
 
@@ -491,7 +491,7 @@ func TestSynopsisForRestorer(t *testing.T) {
 func TestSetFlagsForSnapshot(t *testing.T) {
 	snapshot := Restorer{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "user"}
+	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

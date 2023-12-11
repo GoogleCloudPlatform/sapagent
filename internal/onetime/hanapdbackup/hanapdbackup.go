@@ -66,9 +66,9 @@ type (
 
 // Snapshot has args for snapshot subcommands.
 type Snapshot struct {
-	project, host, port, sid       string
-	user, password, passwordSecret string
-	disk, diskZone                 string
+	project, host, port, sid             string
+	hanaDBUser, password, passwordSecret string
+	disk, diskZone                       string
 
 	diskKeyFile, storageLocation, csekKeyFile string
 	snapshotName, description                 string
@@ -93,7 +93,7 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using persistent
 
 // Usage implements the subcommand interface for hanapdbackup.
 func (*Snapshot) Usage() string {
-	return `Usage: hanapdbackup -port=<port-number> -sid=<HANA-sid> -user=<user-name>
+	return `Usage: hanapdbackup -port=<port-number> -sid=<HANA-sid> -hana_db_user=<HANA DB User>
 	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-host=<hostname>] [-project=<project-name>]
 	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
 	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
@@ -103,7 +103,7 @@ func (*Snapshot) Usage() string {
 func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.port, "port", "", "HANA port. (required)")
 	fs.StringVar(&s.sid, "sid", "", "HANA sid. (required)")
-	fs.StringVar(&s.user, "user", "", "HANA username. (required)")
+	fs.StringVar(&s.hanaDBUser, "hana-db-user", "", "HANA DB Username. (required)")
 	fs.StringVar(&s.password, "password", "", "HANA password. (discouraged - use password-secret instead)")
 	fs.StringVar(&s.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password.")
 	fs.StringVar(&s.disk, "source-disk", "", "name of the persistent disk from which you want to create a snapshot (required)")
@@ -183,7 +183,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	onetime.ConfigureUsageMetricsForOTE(s.cloudProps, "", "")
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
 	dbp := databaseconnector.Params{
-		Username:       s.user,
+		Username:       s.hanaDBUser,
 		Password:       s.password,
 		PasswordSecret: s.passwordSecret,
 		Host:           s.host,
@@ -215,7 +215,7 @@ func (s *Snapshot) validateParameters(os string) error {
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
-	case s.port == "" || s.sid == "" || s.user == "" || s.disk == "" || s.diskZone == "":
+	case s.port == "" || s.sid == "" || s.hanaDBUser == "" || s.disk == "" || s.diskZone == "":
 		return fmt.Errorf("required arguments not passed. Usage:" + s.Usage())
 	case s.password == "" && s.passwordSecret == "":
 		return fmt.Errorf("either -password or -password-secret is required. Usage:" + s.Usage())
