@@ -19,6 +19,7 @@ package appsdiscovery
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -43,9 +44,12 @@ const (
 	haNodes = "HANodes:"
 )
 
+type fileReader func(filename string) ([]byte, error)
+
 // SapDiscovery contains variables and methods to discover SAP applications running on the current host.
 type SapDiscovery struct {
-	Execute commandlineexecutor.Execute
+	Execute    commandlineexecutor.Execute
+	FileReader fileReader
 }
 
 // SapSystemDetails contains information about an ASP system running on the current host.
@@ -143,9 +147,10 @@ func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances) []SapSystemDetails {
 	sapSystems := []SapSystemDetails{}
 	if sapApps == nil {
+		log.CtxLogger(ctx).Debugw("No SAP applications found")
 		return sapSystems
 	}
-
+	log.CtxLogger(ctx).Debugw("SAP Apps found", "apps", sapApps)
 	for _, app := range sapApps.Instances {
 		switch app.Type {
 		case sappb.InstanceType_NETWEAVER:
@@ -184,6 +189,7 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 					break
 				}
 			}
+
 			if !found {
 				log.CtxLogger(ctx).Infow("No existing system", "sid", app.Sapsid)
 				sys.DBOnHost = true
@@ -191,7 +197,6 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 			}
 		}
 	}
-
 	return sapSystems
 }
 
@@ -375,7 +380,7 @@ func (d *SapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 
 func (d *SapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber string) ([]string, error) {
 	if sid == "" || instanceNumber == "" {
-		return nil, errors.New("To discover additional HANA nodes SID, and instance number must be provided")
+		return nil, errors.New("To discover additional HANA nodes, SID and instance number must be provided")
 	}
 	sidLower := strings.ToLower(sid)
 	sidUpper := strings.ToUpper(sid)
@@ -533,4 +538,65 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, sid string) (str
 	revision, _ := strconv.Atoi(parts[2])
 	version = fmt.Sprintf("HANA %d.%d Rev %d", majorVersion, minorVersion, revision)
 	return version, nil
+}
+
+func (d *SapDiscovery) readAndUnmarshalJson(ctx context.Context, filepath string) (map[string]any, error) {
+	file, err := d.FileReader(filepath)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Error reading file", "filepath", filepath, "error", err)
+		return nil, err
+	}
+
+	data := map[string]any{}
+	err = json.Unmarshal(file, &data)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Error unmarshalling file", "filepath", filepath, "error", err, "contents", string(file))
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (d *SapDiscovery) discoverHANATenantDBs(ctx context.Context, app *sappb.SAPInstance, dbHost string, runid string) ([]string, error) {
+	// The hdb topology containing sid info is contained in the nameserver_topology_HDBHostname.json
+	// Abstract path: /hana/shared/SID/HDBXX/HDBHostname/trace/nameserver_topology_HDBHostname.json
+	// Concrete example: /hana/shared/DEH/HDB00/dnwh75rdbci/trace/nameserver_topology_dnwh75rdbci.json
+	log.CtxLogger(ctx).Infow("Entered discoverHANATenantDBs", "runid", runid)
+	instanceID := app.GetInstanceId()
+	sidUpper := strings.ToUpper(app.Sapsid)
+	topologyPath := fmt.Sprintf("/hana/shared/%s/%s/%s/trace", sidUpper, instanceID, dbHost, dbHost)
+	log.CtxLogger(ctx).Debugw("hdb topology file", "filepath", topologyPath)
+	data, err := d.readAndUnmarshalJson(ctx, topologyPath)
+	if err != nil {
+		return nil, err
+	}
+	databasesData := map[string]any{}
+	if topology, ok := data["topology"]; ok {
+		if topologyMap, ok := topology.(map[string]any); ok {
+			if databases, ok := topologyMap["databases"]; ok {
+				if databasesMap, ok := databases.(map[string]any); ok {
+					databasesData = databasesMap
+				}
+			}
+		}
+	}
+	log.CtxLogger(ctx).Infow("databasesData", "databasesData", databasesData)
+	var dbSids []string
+	for _, db := range databasesData {
+		if dbMap, ok := db.(map[string]any); ok {
+			if dbSid, ok := dbMap["name"]; ok {
+				dbSidString, ok := dbSid.(string)
+				if ok {
+					// Ignore the SYSTEMDB
+					if len(dbSidString) == 3 {
+						dbSids = append(dbSids, dbSidString)
+					}
+				}
+
+			}
+		}
+	}
+
+	log.CtxLogger(ctx).Infow("End of discoverHANATenantDBs", "dbSids", dbSids, "runid", runid)
+	return dbSids, nil
 }

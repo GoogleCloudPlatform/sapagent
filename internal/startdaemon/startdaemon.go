@@ -263,7 +263,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		usagemetrics.Error(usagemetrics.GCEServiceCreateFailure)
 		return
 	}
-	
+
 	wlmService, err := gce.NewWLMClient(ctx, d.config.GetCollectionConfiguration().GetDataWarehouseEndpoint())
 	if err != nil {
 		log.Logger.Errorw("Error creating WLM Client", "error", err)
@@ -285,7 +285,8 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 			Execute: commandlineexecutor.ExecuteCommand,
 		},
 		SapDiscoveryInterface: &appsdiscovery.SapDiscovery{
-			Execute: commandlineexecutor.ExecuteCommand,
+			Execute:    commandlineexecutor.ExecuteCommand,
+			FileReader: os.ReadFile,
 		},
 	}
 	if d.lp.CloudLoggingClient != nil {
@@ -295,7 +296,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	} else {
 		system.StartSAPSystemDiscovery(ssdCtx, d.config, systemDiscovery)
 	}
-	
+
 	gceBetaService := &gcebeta.GCEBeta{}
 	if strings.Contains(d.config.GetServiceEndpointOverride(), "beta") {
 		gceBetaService, err = gcebeta.NewGCEClient(ctx)

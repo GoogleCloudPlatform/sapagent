@@ -113,6 +113,7 @@ var (
 		StdOut: defaultDBMountOutput,
 	}
 	landscapeSingleNodeResult    = commandlineexecutor.Result{StdOut: landscapeOutputSingleNode}
+	landscapeZeroNodeResult      = commandlineexecutor.Result{StdOut: ""}
 	landscapeMultipleNodesResult = commandlineexecutor.Result{
 		StdOut: landscapeOutputMultipleNodes,
 	}
@@ -789,7 +790,7 @@ func TestDiscoverHANA(t *testing.T) {
 		},
 		want: SapSystemDetails{},
 	}, {
-		name: "",
+		name: "EmptyInstance",
 		app:  &sappb.SAPInstance{},
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
@@ -807,6 +808,127 @@ func TestDiscoverHANA(t *testing.T) {
 			got := d.discoverHANA(ctx, tc.app)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform()); diff != "" {
 				t.Errorf("discoverHANA(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
+			}
+		})
+	}
+}
+
+func TestDiscoverHANATenantDBs(t *testing.T) {
+	tests := []struct {
+		name     string
+		app      *sappb.SAPInstance
+		execute  commandlineexecutor.Execute
+		topology string
+		want     []string
+	}{{
+		name: "singleTenant",
+		app: &sappb.SAPInstance{
+			Sapsid:         "abc",
+			Type:           sappb.InstanceType_HANA,
+			InstanceNumber: "00",
+		},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "ABC"
+					}
+				}
+			}
+		}`,
+		want: []string{"ABC"},
+	}, {
+		name: "IgnoreSYSTEMDB",
+		app:  &sappb.SAPInstance{},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "SYSTEMDB"
+					},
+					"2": {
+						"name": "ABC"
+					}
+				}
+			}
+		}`,
+		want: []string{"ABC"},
+	}, {
+		name: "MultipleTenants",
+		app:  &sappb.SAPInstance{},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "SYSTEMDB"
+					},
+					"2": {
+						"name": "ABC"
+					},
+					"3": {
+						"name": "DEF"
+					}
+				}
+			}
+		}`,
+		want: []string{"ABC", "DEF"},
+	}, {
+		name: "ZeroTenants",
+		app:  &sappb.SAPInstance{},
+		topology: `{
+			"topology": {
+				"databases": {}
+			}
+		}`,
+		want: nil,
+	}, {
+		name:     "InvalidJson",
+		app:      &sappb.SAPInstance{},
+		topology: `{{not valid json}`,
+		want:     nil,
+	}, {
+		name:     "ValidJsonMissingExpectedFields",
+		app:      &sappb.SAPInstance{},
+		topology: `{"unexpected": "content"}`,
+		want:     nil,
+	}, {
+		name:     "ValidJsonMissingUnexpectedTopologyTypes",
+		app:      &sappb.SAPInstance{},
+		topology: `{"topology": 123}`,
+		want:     nil,
+	}, {
+		name: "ValidJsonMissingUnexpectedDatabaseTypes",
+		app:  &sappb.SAPInstance{},
+		topology: `{
+			"topology": {
+				"databases": true
+				}
+			}
+		}`,
+		want: nil,
+	}, {
+		name: "ValidJsonMissingUnexpectedNameTypes",
+		app:  &sappb.SAPInstance{},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": 123
+				}
+			}
+		}`,
+		want: nil,
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fr := func(filename string) ([]byte, error) { return []byte(tc.topology), nil }
+			d := SapDiscovery{Execute: tc.execute, FileReader: fr}
+			got, _ := d.discoverHANATenantDBs(ctx, tc.app, "", tc.name)
+			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+				t.Errorf("discoverHANATenantDBs(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
 			}
 		})
 	}
