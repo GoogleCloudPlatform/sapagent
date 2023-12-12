@@ -42,6 +42,7 @@ import (
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
 // fakeDiskMapper provides a testable fake implementation of the DiskMapper interface
@@ -686,6 +687,96 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, setDiskInfoForDevice returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
+			}
+		})
+	}
+}
+
+func TestCheckHAZones(t *testing.T) {
+	tests := []struct {
+		name   string
+		params Parameters
+		want   bool
+	}{
+		{
+			name: "NoHAHosts",
+			params: Parameters{
+				Config: defaultConfiguration,
+				sapSystems: []*spb.SapDiscovery{
+					{
+						DatabaseLayer: &spb.SapDiscovery_Component{},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "NoHostInstance",
+			params: Parameters{
+				Config: defaultConfiguration,
+				sapSystems: []*spb.SapDiscovery{
+					{
+						DatabaseLayer: &spb.SapDiscovery_Component{
+							HaHosts: []string{
+								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
+							},
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "NoOverlappingZones",
+			params: Parameters{
+				Config: defaultConfiguration,
+				sapSystems: []*spb.SapDiscovery{
+					{
+						DatabaseLayer: &spb.SapDiscovery_Component{
+							HaHosts: []string{
+								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
+							},
+						},
+					},
+					{
+						DatabaseLayer: &spb.SapDiscovery_Component{
+							HaHosts: []string{
+								"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
+								"/projects/test-project-id/zones/test-other-zone/instances/other-instance-3",
+							},
+						},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "HasHAInSameZone",
+			params: Parameters{
+				Config: defaultConfiguration,
+				sapSystems: []*spb.SapDiscovery{
+					{
+						DatabaseLayer: &spb.SapDiscovery_Component{
+							HaHosts: []string{
+								"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
+								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+								"resourceURI/does/not/match/regexp",
+							},
+						},
+					},
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := checkHAZones(test.params)
+			if got != test.want {
+				t.Errorf("checkHAZones() got %t, want %t", got, test.want)
 			}
 		})
 	}

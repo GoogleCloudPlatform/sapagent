@@ -37,6 +37,7 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
@@ -85,6 +86,7 @@ type Parameters struct {
 	osVersion  string
 	// fields derived from running discovery on the SAP system
 	sapApplications *sapb.SAPInstances
+	sapSystems      []*spb.SapDiscovery
 	// fields derived from reading HANA Insights rules
 	hanaInsightRules []*rpb.Rule
 }

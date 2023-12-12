@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,8 @@ import (
 )
 
 const sapValidationHANA = "workload.googleapis.com/sap/validation/hana"
+
+var instanceURIRegex = regexp.MustCompile("/projects/(.+)/zones/(.+)/instances/(.+)")
 
 type lsblkdevicechild struct {
 	Name       string
@@ -258,4 +261,29 @@ func extractSize(msg []byte) int64 {
 	}
 
 	return size
+}
+
+// checkHAZones determines if the host instance is part of a HA setup which
+// shares the same zone as another instance in the same HA grouping.
+func checkHAZones(params Parameters) bool {
+	isHASameZone := false
+	for _, system := range params.sapSystems {
+		haInstanceZones := map[string]int{}
+		hasHostInstance := false
+		for _, hostURI := range system.GetDatabaseLayer().GetHaHosts() {
+			uriMatch := instanceURIRegex.FindStringSubmatch(hostURI)
+			if len(uriMatch) == 0 {
+				continue
+			}
+			haInstanceZones[uriMatch[2]]++
+			if uriMatch[3] == params.Config.GetCloudProperties().GetInstanceName() {
+				hasHostInstance = true
+			}
+		}
+		if hasHostInstance && haInstanceZones[params.Config.GetCloudProperties().GetZone()] > 1 {
+			isHASameZone = true
+			break
+		}
+	}
+	return isHASameZone
 }
