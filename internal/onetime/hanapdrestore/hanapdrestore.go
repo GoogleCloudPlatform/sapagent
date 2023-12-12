@@ -168,7 +168,6 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		// If restore fails, attach the old disk, rescan the volumes and delete the new disk.
 		r.attachDisk(ctx, r.dataDiskName)
 		r.rescanVolumeGroups(ctx)
-		r.deleteDisk(ctx, r.newdiskName)
 		return subcommands.ExitFailure
 	}
 	log.Print("SUCCESS: HANA restore from persistent disk snapshot successful.")
@@ -286,14 +285,6 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	r.rescanVolumeGroups(ctx)
 	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
 	return nil
-}
-
-// deleteDisk deletes the disk with the given name.
-func (r *Restorer) deleteDisk(ctx context.Context, diskName string) {
-	log.CtxLogger(ctx).Infow("Deleting Persistent disk", "diskName", diskName)
-	if err := r.computeService.Disks.Delete(r.project, r.dataDiskZone, diskName); err != nil {
-		log.CtxLogger(ctx).Errorf("failed to delete Persistent disk: %v", err)
-	}
 }
 
 // attachDisk attaches the disk with the given name to the instance.
