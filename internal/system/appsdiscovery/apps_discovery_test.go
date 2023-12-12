@@ -92,6 +92,52 @@ tmpfs                              48G  2.0M   48G   1% /dev/shm
   compile date:        2021-06-25 13:00:46
   compile host:        ld4554
   compile type:        rel`
+	defaultNetweaverKernelOutput = `
+	--------------------
+	disp+work information
+	--------------------
+	
+	kernel release                785
+	
+	kernel make variant           785_REL
+	
+	compiled on                   Linux GNU SLES-12 x86_64 cc8.2.1 use-pr220209 for linuxx86_64
+	
+	compiled for                  64 BIT
+	
+	compilation mode              UNICODE
+	
+	compile time                  Feb  9 2022 21:13:56
+	
+	Wed Oct 25 14:07:38 2023
+	Loading DB library '/usr/sap/DEV/SYS/exe/run/dbhdbslib.so' ...
+	Library '/usr/sap/DEV/SYS/exe/run/dbhdbslib.so' loaded
+	Version of '/usr/sap/DEV/SYS/exe/run/dbhdbslib.so' is "785.03", patchlevel (0.100)
+	
+	update level                  0
+	
+	patch number                  100
+	
+	kernel patch level            100
+	
+	source id                     0.100
+	
+	RKS compatibility level       0
+	
+	DW_GUI compatibility level    100
+	
+	
+	---------------------
+	supported environment
+	---------------------
+	
+	database (SAP, table SVERS)   755
+																756
+																785
+	
+	operating system
+	Linux
+	`
 )
 
 var (
@@ -132,6 +178,9 @@ var (
 	}
 	defaultHANAVersionResult = commandlineexecutor.Result{
 		StdOut: defaultHANAVersionOutput,
+	}
+	defaultNetweaverKernelResult = commandlineexecutor.Result{
+		StdOut: defaultNetweaverKernelOutput,
 	}
 )
 
@@ -1894,6 +1943,64 @@ func TestDiscoverHANAVersion(t *testing.T) {
 
 			if got != tc.want {
 				t.Errorf("discoverHANAVersion() = %v, want: %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDiscoverNetweaverKernelVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		want    string
+		wantErr error
+	}{{
+		name: "success",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return defaultNetweaverKernelResult
+		},
+		want:    "SAP Kernel 785 Patch 100",
+		wantErr: nil,
+	}, {
+		name: "commandError",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				Error: errors.New("test error"),
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "noKernel",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some output",
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "noPatch",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "some output",
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &SapDiscovery{
+				Execute: tc.exec,
+			}
+			got, err := d.discoverNetweaverKernelVersion(ctx, defaultSID)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("discoverNetweaverKernelVersion() returned an unexpected error: %v", err)
+			}
+
+			if got != tc.want {
+				t.Errorf("discoverNetweaverKernelVersion() = %v, want: %v", got, tc.want)
 			}
 		})
 	}

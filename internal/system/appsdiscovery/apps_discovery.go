@@ -35,9 +35,11 @@ import (
 )
 
 var (
-	fsMountRegex     = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
-	headerLineRegex  = regexp.MustCompile(`[^-]+`)
-	hanaVersionRegex = regexp.MustCompile(`version:\s+(([0-9]+\.?)+)`)
+	fsMountRegex              = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
+	headerLineRegex           = regexp.MustCompile(`[^-]+`)
+	hanaVersionRegex          = regexp.MustCompile(`version:\s+(([0-9]+\.?)+)`)
+	netweaverKernelRegex      = regexp.MustCompile(`kernel release\s+([0-9]+)`)
+	netweaverPatchNumberRegex = regexp.MustCompile(`patch number\s+([0-9]+)`)
 )
 
 const (
@@ -482,6 +484,38 @@ func (d *SapDiscovery) discoverAppNFS(ctx context.Context, sid string) (string, 
 	}
 
 	return "", errors.New("no NFS found")
+}
+
+func (d *SapDiscovery) discoverNetweaverKernelVersion(ctx context.Context, sid string) (string, error) {
+	sidLower := strings.ToLower(sid)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	p := commandlineexecutor.Params{
+		Executable: "disp+work",
+		Args:       []string{},
+		User:       sidAdm,
+	}
+	res := d.Execute(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Warnw("Error executing disp+work command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return "", res.Error
+	}
+
+	kernelMatches := netweaverKernelRegex.FindStringSubmatch(res.StdOut)
+	if len(kernelMatches) < 2 {
+		return "", errors.New("unable to identify Netweaver kernel version")
+	}
+
+	kernelNumber, _ := strconv.Atoi(kernelMatches[1])
+
+	patchMatches := netweaverPatchNumberRegex.FindStringSubmatch(res.StdOut)
+
+	if len(patchMatches) < 2 {
+		return "", errors.New("unable to identify Netweaver kernel version")
+	}
+	patchNumber, _ := strconv.Atoi(patchMatches[1])
+
+	version := fmt.Sprintf("SAP Kernel %d Patch %d", kernelNumber, patchNumber)
+	return version, nil
 }
 
 func (d *SapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) {
