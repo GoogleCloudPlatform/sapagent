@@ -564,7 +564,7 @@ func (d *SapDiscovery) discoverHANATenantDBs(ctx context.Context, app *sappb.SAP
 	log.CtxLogger(ctx).Infow("Entered discoverHANATenantDBs", "runid", runid)
 	instanceID := app.GetInstanceId()
 	sidUpper := strings.ToUpper(app.Sapsid)
-	topologyPath := fmt.Sprintf("/hana/shared/%s/%s/%s/trace", sidUpper, instanceID, dbHost, dbHost)
+	topologyPath := fmt.Sprintf("/hana/shared/%s/%s/%s/trace/nameserver_topology_%s.json", sidUpper, instanceID, dbHost, dbHost)
 	log.CtxLogger(ctx).Debugw("hdb topology file", "filepath", topologyPath)
 	data, err := d.readAndUnmarshalJson(ctx, topologyPath)
 	if err != nil {
