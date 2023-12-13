@@ -44,8 +44,9 @@ var (
 		fileName:     "/object.txt",
 		fileType:     "#FILE",
 		config: &bpb.BackintConfiguration{
-			UserId:          "test@TST",
-			ParallelStreams: 2,
+			UserId:            "test@TST",
+			ParallelStreams:   2,
+			FileReadTimeoutMs: 100,
 		},
 		extension:        ".bak",
 		externalBackupID: "12345",
@@ -161,7 +162,7 @@ func TestBackup(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := backup(context.Background(), nil, defaultBucketHandle, test.input, bytes.NewBufferString(""))
+			got := backup(context.Background(), defaultParameters.config, defaultBucketHandle, test.input, bytes.NewBufferString(""))
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("backup() = %v, want %v", got, test.want)
 			}
@@ -171,7 +172,7 @@ func TestBackup(t *testing.T) {
 
 func TestBackupParallelSuccess(t *testing.T) {
 	input := bytes.NewBufferString("#FILE /object.txt 12345")
-	config := &bpb.BackintConfiguration{ParallelStreams: 2}
+	config := &bpb.BackintConfiguration{ParallelStreams: 2, FileReadTimeoutMs: 100}
 	got := backup(context.Background(), config, defaultBucketHandle, input, bytes.NewBufferString(""))
 	if got != nil {
 		t.Errorf("backup() = %v, want <nil>", got)
@@ -187,6 +188,7 @@ func TestBackupFile(t *testing.T) {
 		{
 			name: "ErrorOpeningFile",
 			want: "#ERROR",
+			p:    defaultParameters,
 		},
 		{
 			name: "UploadError",
@@ -195,6 +197,7 @@ func TestBackupFile(t *testing.T) {
 				copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
 					return 0, errors.New("copy error")
 				},
+				config: defaultParameters.config,
 			},
 			want: "#ERROR",
 		},
@@ -208,6 +211,7 @@ func TestBackupFile(t *testing.T) {
 					dst.Write(defaultContent)
 					return 0, nil
 				},
+				config: defaultParameters.config,
 			},
 			want: "#ERROR",
 		},
@@ -221,6 +225,7 @@ func TestBackupFile(t *testing.T) {
 					dst.Write(defaultContent)
 					return int64(len(defaultContent)), nil
 				},
+				config: defaultParameters.config,
 			},
 			want: "#SAVED",
 		},
@@ -244,8 +249,11 @@ func TestBackupFileParallel(t *testing.T) {
 		wantError error
 	}{
 		{
-			name:      "ErrorOpeningFile",
-			p:         parameters{wp: workerpool.New(1)},
+			name: "ErrorOpeningFile",
+			p: parameters{
+				wp:     workerpool.New(1),
+				config: &bpb.BackintConfiguration{FileReadTimeoutMs: 100},
+			},
 			want:      "#ERROR",
 			wantError: cmpopts.AnyError,
 		},
@@ -256,6 +264,7 @@ func TestBackupFileParallel(t *testing.T) {
 				fileName: t.TempDir() + "/object.txt",
 				stat:     func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist },
 				wp:       workerpool.New(1),
+				config:   &bpb.BackintConfiguration{FileReadTimeoutMs: 100},
 			},
 			want:      "#ERROR",
 			wantError: cmpopts.AnyError,
@@ -265,7 +274,7 @@ func TestBackupFileParallel(t *testing.T) {
 			p: parameters{
 				bucketHandle: fakeServer("parallel-failed").Client().Bucket("parallel-failed"),
 				fileName:     t.TempDir() + "/object.txt",
-				config:       &bpb.BackintConfiguration{ParallelStreams: 2},
+				config:       &bpb.BackintConfiguration{ParallelStreams: 2, FileReadTimeoutMs: 100},
 				wp:           workerpool.New(2),
 				mu:           &sync.Mutex{},
 				output:       bytes.NewBufferString(""),
@@ -278,7 +287,7 @@ func TestBackupFileParallel(t *testing.T) {
 			p: parameters{
 				bucketHandle: fakeServer("parallel-not-in-bucket").Client().Bucket("parallel-not-in-bucket"),
 				fileName:     t.TempDir() + "/object.txt",
-				config:       &bpb.BackintConfiguration{ParallelStreams: 2},
+				config:       &bpb.BackintConfiguration{ParallelStreams: 2, FileReadTimeoutMs: 100},
 				wp:           workerpool.New(2),
 				mu:           &sync.Mutex{},
 				output:       bytes.NewBufferString(""),
@@ -292,7 +301,7 @@ func TestBackupFileParallel(t *testing.T) {
 				// Dump data due to limitation with uploading chunks to the fake bucket in this test.
 				bucketHandle: fakeServer("parallel-success").Client().Bucket("parallel-success"),
 				fileName:     t.TempDir() + "/object.txt",
-				config:       &bpb.BackintConfiguration{ParallelStreams: 2, DumpData: true},
+				config:       &bpb.BackintConfiguration{ParallelStreams: 2, DumpData: true, FileReadTimeoutMs: 100},
 				wp:           workerpool.New(2),
 				mu:           &sync.Mutex{},
 				output:       bytes.NewBufferString(""),
@@ -340,7 +349,7 @@ func TestComposeChunks(t *testing.T) {
 			name: "FailComposingAndDeleting",
 			p: parameters{
 				bucketHandle: defaultBucketHandle,
-				config:       &bpb.BackintConfiguration{ParallelStreams: 2},
+				config:       &bpb.BackintConfiguration{ParallelStreams: 2, FileReadTimeoutMs: 100},
 			},
 			want: "#ERROR",
 		},
@@ -359,13 +368,13 @@ func TestComposeChunks(t *testing.T) {
 		},
 		{
 			name:       "DumpDataPreviousError",
-			p:          parameters{config: &bpb.BackintConfiguration{DumpData: true}},
+			p:          parameters{config: &bpb.BackintConfiguration{DumpData: true, FileReadTimeoutMs: 100}},
 			chunkError: true,
 			want:       "#ERROR",
 		},
 		{
 			name: "DumpDataNoError",
-			p:    parameters{config: &bpb.BackintConfiguration{DumpData: true}},
+			p:    parameters{config: &bpb.BackintConfiguration{DumpData: true, FileReadTimeoutMs: 100}},
 			want: "#SAVED",
 		},
 	}

@@ -60,7 +60,7 @@ var (
 		},
 	})
 	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
-	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST"}
+	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100}
 	defaultOptions      = diagnoseOptions{
 		execute: func(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
 			return false

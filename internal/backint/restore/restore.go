@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	store "cloud.google.com/go/storage"
@@ -140,7 +141,7 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	if object.Metadata["X-Backup-Type"] == "FILE" {
 		destFile, err = os.Create(parse.TrimAndClean(destName))
 	} else {
-		destFile, err = parse.OpenFileWithRetries(parse.TrimAndClean(destName), os.O_RDWR, 0, config.GetFileReadTimeoutMs())
+		destFile, err = parse.OpenFileWithRetries(parse.TrimAndClean(destName), os.O_WRONLY|syscall.O_NONBLOCK, 0, config.GetFileReadTimeoutMs())
 	}
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error opening dest file", "destName", destName, "err", err, "fileType", object.Metadata["X-Backup-Type"])
@@ -154,26 +155,22 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		log.CtxLogger(ctx).Infow("Dest file closed successfully", "destName", destName)
 	}()
 	if fileInfo, err := destFile.Stat(); err != nil || fileInfo.Mode()&0222 == 0 {
-		log.CtxLogger(ctx).Errorw("Dest file does not have writeable permissions", "destName", destName, "err", err)
+		log.CtxLogger(ctx).Errorw("Dest file does not have writeable permissions", "destName", destName, "fileInfo", fileInfo.Mode(), "err", err)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	}
 
 	rw := storage.ReadWriter{
-		Writer:            destFile,
-		Copier:            copier,
-		BucketHandle:      bucketHandle,
-		BucketName:        config.GetBucket(),
-		ObjectName:        object.Name,
-		TotalBytes:        object.Size,
-		LogDelay:          time.Duration(config.GetLogDelaySec()) * time.Second,
-		RateLimitBytes:    config.GetRateLimitMb() * 1024 * 1024,
-		EncryptionKey:     config.GetEncryptionKey(),
-		KMSKey:            config.GetKmsKey(),
-		MaxRetries:        config.GetRetries(),
-		FileSystemTimeout: 180 * time.Second,
-		FileSystemTimeoutFunc: func() {
-			log.CtxLogger(ctx).Errorw("Timeout while writing to the destination, closing destination to prevent hanging", "destName", destName, "closeErr", destFile.Close())
-		},
+		Writer:                 destFile,
+		Copier:                 copier,
+		BucketHandle:           bucketHandle,
+		BucketName:             config.GetBucket(),
+		ObjectName:             object.Name,
+		TotalBytes:             object.Size,
+		LogDelay:               time.Duration(config.GetLogDelaySec()) * time.Second,
+		RateLimitBytes:         config.GetRateLimitMb() * 1024 * 1024,
+		EncryptionKey:          config.GetEncryptionKey(),
+		KMSKey:                 config.GetKmsKey(),
+		MaxRetries:             config.GetRetries(),
 		RetryBackoffInitial:    time.Duration(config.GetRetryBackoffInitial()) * time.Second,
 		RetryBackoffMax:        time.Duration(config.GetRetryBackoffMax()) * time.Second,
 		RetryBackoffMultiplier: float64(config.GetRetryBackoffMultiplier()),

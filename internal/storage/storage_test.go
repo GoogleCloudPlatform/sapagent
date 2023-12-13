@@ -285,20 +285,6 @@ func TestUpload(t *testing.T) {
 			wantError: nil,
 		},
 		{
-			name: "UploadSuccessWithFileSystemTimeout",
-			rw: &ReadWriter{
-				BucketHandle:      defaultBucketHandle,
-				ChunkSizeMb:       1,
-				Copier:            io.Copy,
-				Reader:            defaultBuffer(),
-				LogDelay:          time.Nanosecond,
-				ObjectName:        "object.txt",
-				FileSystemTimeout: time.Second,
-			},
-			want:      int64(defaultBuffer().Len()),
-			wantError: nil,
-		},
-		{
 			name: "UploadSuccessWithRateLimit",
 			rw: &ReadWriter{
 				BucketHandle:   defaultBucketHandle,
@@ -446,19 +432,6 @@ func TestDownload(t *testing.T) {
 				Writer:       defaultBuffer(),
 				Copier:       io.Copy,
 				LogDelay:     time.Nanosecond,
-			},
-			want:      int64(len(defaultContent)),
-			wantError: nil,
-		},
-		{
-			name: "DownloadSuccessWithFileSystemTimeout",
-			rw: &ReadWriter{
-				BucketHandle:      defaultBucketHandle,
-				ObjectName:        "object.txt",
-				Writer:            defaultBuffer(),
-				Copier:            io.Copy,
-				LogDelay:          time.Nanosecond,
-				FileSystemTimeout: time.Second,
 			},
 			want:      int64(len(defaultContent)),
 			wantError: nil,

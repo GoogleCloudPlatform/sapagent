@@ -203,8 +203,8 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		p.Config.RateLimitMb = 0
 	}
 	if p.Config.FileReadTimeoutMs <= 0 {
-		log.Logger.Warn("file_read_timeout_ms defaulted to 1000")
-		p.Config.FileReadTimeoutMs = 1000
+		log.Logger.Warn("file_read_timeout_ms defaulted to 60000")
+		p.Config.FileReadTimeoutMs = 60000
 	}
 	if p.Config.GetInputFile() == "" {
 		log.Logger.Warn("input_file defaulted to /dev/stdin")

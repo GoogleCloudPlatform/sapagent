@@ -124,16 +124,6 @@ type ReadWriter struct {
 	// An exponential backoff delays each subsequent retry.
 	MaxRetries int64
 
-	// FileSystemTimeout sets a timeout for the read and write calls to the
-	// file system reader/writer. After the timeout, FileSystemTimeoutFunc gets
-	// called. The default value is 0 seconds, which will never timeout.
-	FileSystemTimeout time.Duration
-
-	// FileSystemTimeoutFunc is called once FileSystemTimeout elapses.
-	// The main use case would be to close the local pipe being written to or
-	// read from to prevent an indefinite hang. The default is a no-op.
-	FileSystemTimeoutFunc func()
-
 	// RetryBackoffInitial is an optional parameter to set the initial backoff
 	// interval. The default value is 10 seconds.
 	RetryBackoffInitial time.Duration
@@ -154,15 +144,6 @@ type ReadWriter struct {
 	lastLog                   time.Time
 	lastTransferTime          time.Duration
 	totalTransferTime         time.Duration
-}
-
-// FileSystemReadWriter wraps the local io.Reader and io.Writer
-// to provide timeouts for potential hanging operations.
-type FileSystemReadWriter struct {
-	reader      io.Reader
-	writer      io.Writer
-	timeout     time.Duration
-	timeoutFunc func()
 }
 
 // discardCloser provides no-ops for a io.WriteCloser interface.
@@ -254,11 +235,10 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 	log.CtxLogger(ctx).Infow("Upload starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
 	var err error
-	fsReader := FileSystemReadWriter{reader: rw.Reader, timeout: rw.FileSystemTimeout, timeoutFunc: rw.FileSystemTimeoutFunc}
 	if rw.Compress {
 		log.CtxLogger(ctx).Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		gzipWriter := gzip.NewWriter(rw)
-		if bytesWritten, err = rw.Copier(gzipWriter, &fsReader); err != nil {
+		if bytesWritten, err = rw.Copier(gzipWriter, rw.Reader); err != nil {
 			return 0, err
 		}
 		// Closing the gzip writer flushes data to the underlying writer and writes the gzip footer.
@@ -267,7 +247,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 			return 0, err
 		}
 	} else {
-		if bytesWritten, err = rw.Copier(rw, &fsReader); err != nil {
+		if bytesWritten, err = rw.Copier(rw, rw.Reader); err != nil {
 			return 0, err
 		}
 	}
@@ -321,21 +301,20 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	rw = rw.defaultArgs()
 	log.CtxLogger(ctx).Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
-	fsWriter := FileSystemReadWriter{writer: rw.Writer, timeout: rw.FileSystemTimeout, timeoutFunc: rw.FileSystemTimeoutFunc}
 	if reader.Attrs.ContentType == compressedContentType {
 		log.CtxLogger(ctx).Infow("Compressed file detected, decompressing during download", "bucket", rw.BucketName, "object", rw.ObjectName)
 		gzipReader, err := gzip.NewReader(rw)
 		if err != nil {
 			return 0, err
 		}
-		if bytesWritten, err = rw.Copier(&fsWriter, gzipReader); err != nil {
+		if bytesWritten, err = rw.Copier(rw.Writer, gzipReader); err != nil {
 			return 0, err
 		}
 		if err := gzipReader.Close(); err != nil {
 			return 0, err
 		}
 	} else {
-		if bytesWritten, err = rw.Copier(&fsWriter, rw); err != nil {
+		if bytesWritten, err = rw.Copier(rw.Writer, rw); err != nil {
 			return 0, err
 		}
 	}
@@ -508,22 +487,4 @@ func (rw *ReadWriter) retryOptions(failureMessage string) []storage.RetryOption 
 	}),
 		storage.WithBackoff(backoff),
 		storage.WithPolicy(storage.RetryAlways)}
-}
-
-// Read wraps io.Reader to provide a timeout for file system reads.
-func (fs *FileSystemReadWriter) Read(p []byte) (n int, err error) {
-	if fs.timeout > 0 {
-		timer := time.AfterFunc(fs.timeout, fs.timeoutFunc)
-		defer timer.Stop()
-	}
-	return fs.reader.Read(p)
-}
-
-// Write wraps io.Writer to provide a timeout for file system writes.
-func (fs *FileSystemReadWriter) Write(p []byte) (n int, err error) {
-	if fs.timeout > 0 {
-		timer := time.AfterFunc(fs.timeout, fs.timeoutFunc)
-		defer timer.Stop()
-	}
-	return fs.writer.Write(p)
 }

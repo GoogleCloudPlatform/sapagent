@@ -80,7 +80,7 @@ var (
 		},
 	})
 	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
-	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST"}
+	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100}
 	fakeFile            = func() *os.File {
 		f, _ := os.Open("fake-file.txt")
 		return f

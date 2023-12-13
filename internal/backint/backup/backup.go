@@ -53,18 +53,16 @@ type parameters struct {
 	// The externalBackupID will be the number of milliseconds elapsed since January 1, 1970 UTC.
 	externalBackupID string
 
-	config          *bpb.BackintConfiguration
-	bucketHandle    *store.BucketHandle
-	fileType        string
-	fileName        string
-	fileSize        int64
-	output          io.Writer
-	copier          storage.IOFileCopier
-	wp              *workerpool.WorkerPool
-	mu              *sync.Mutex
-	stat            statFunc
-	readTimeout     time.Duration
-	readTimeoutFunc func()
+	config       *bpb.BackintConfiguration
+	bucketHandle *store.BucketHandle
+	fileType     string
+	fileName     string
+	fileSize     int64
+	output       io.Writer
+	copier       storage.IOFileCopier
+	wp           *workerpool.WorkerPool
+	mu           *sync.Mutex
+	stat         statFunc
 }
 
 // Execute logs information and performs the requested backup. Returns false on failures.
@@ -165,10 +163,6 @@ func backupFile(ctx context.Context, p parameters) string {
 			return fmt.Sprintf("#ERROR %s\n", p.fileName)
 		}
 		p.reader = f
-		p.readTimeout = 180 * time.Second
-		p.readTimeoutFunc = func() {
-			log.CtxLogger(ctx).Errorw("Timeout while reading from the source, closing source to prevent hanging", "fileName", p.fileName, "closeErr", f.Close())
-		}
 	}
 
 	rw := storage.ReadWriter{
@@ -189,8 +183,6 @@ func backupFile(ctx context.Context, p parameters) string {
 		VerifyUpload:   true,
 		// Match the previous Backint implementation's metadata format.
 		Metadata:               map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
-		FileSystemTimeout:      p.readTimeout,
-		FileSystemTimeoutFunc:  p.readTimeoutFunc,
 		RetryBackoffInitial:    time.Duration(p.config.GetRetryBackoffInitial()) * time.Second,
 		RetryBackoffMax:        time.Duration(p.config.GetRetryBackoffMax()) * time.Second,
 		RetryBackoffMultiplier: float64(p.config.GetRetryBackoffMultiplier()),

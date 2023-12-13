@@ -95,11 +95,12 @@ func RestoreFilename(str string) string {
 // exponential backoff until the timeout.
 func OpenFileWithRetries(name string, flag int, perm os.FileMode, timeoutMs int64) (*os.File, error) {
 	if timeoutMs <= 0 {
-		log.Logger.Warn("timeoutMs defaulted to 1000")
-		timeoutMs = 1000
+		log.Logger.Warn("timeoutMs defaulted to 60000")
+		timeoutMs = 60000
 	}
 	bo := backoff.NewExponentialBackOff()
-	bo.MaxInterval = 10 * time.Second
+	bo.InitialInterval = 500 * time.Millisecond
+	bo.MaxInterval = 3 * time.Second
 	bo.MaxElapsedTime = time.Duration(timeoutMs) * time.Millisecond
 
 	var file *os.File

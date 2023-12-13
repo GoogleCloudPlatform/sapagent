@@ -186,7 +186,7 @@ func TestOpenFileWithRetries(t *testing.T) {
 			defer f.Close()
 		}
 
-		_, err := OpenFileWithRetries(tc.fileName, os.O_RDONLY, 0, 0)
+		_, err := OpenFileWithRetries(tc.fileName, os.O_RDONLY, 0, 100)
 		if cmp.Diff(err, tc.wantError, cmpopts.EquateErrors()) != "" {
 			t.Errorf("OpenFileWithRetries(%v) = %v, wantError: %v", tc.fileName, err, tc.wantError)
 		}
