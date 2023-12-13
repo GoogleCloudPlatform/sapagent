@@ -182,17 +182,16 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 		featureStatus[agentMetrics] = false
 		featureStatus[workloadValidation] = false
 		featureStatus[processMetrics] = false
-		featureStatus[sapDiscovery] = false
 	} else {
 		featureStatus[agentMetrics] = cc.GetCollectAgentMetrics()
 		featureStatus[workloadValidation] = cc.GetCollectWorkloadValidationMetrics()
 		featureStatus[processMetrics] = cc.GetCollectProcessMetrics()
+	}
 
-		if ssd := cc.GetSapSystemDiscovery(); ssd != nil {
-			featureStatus[sapDiscovery] = ssd.GetValue()
-		} else {
-			featureStatus[sapDiscovery] = false
-		}
+	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
+		featureStatus[sapDiscovery] = true
+	} else {
+		featureStatus[sapDiscovery] = false
 	}
 
 	log.CtxLogger(ctx).Debug("Feature status: ", featureStatus)
@@ -385,7 +384,7 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 	case "sap_discovery":
 		if isEnabled != nil {
 			isCmdValid = true
-			checkCollectionConfig(config).SapSystemDiscovery = &wpb.BoolValue{Value: *isEnabled}
+			checkDiscoveryConfig(config).EnableDiscovery = &wpb.BoolValue{Value: *isEnabled}
 		}
 	case "agent_metrics":
 		if isEnabled != nil {
@@ -542,6 +541,13 @@ func checkCollectionConfig(config *cpb.Configuration) *cpb.CollectionConfigurati
 		return cc
 	}
 	return &cpb.CollectionConfiguration{}
+}
+
+func checkDiscoveryConfig(config *cpb.Configuration) *cpb.DiscoveryConfiguration {
+	if dc := config.GetDiscoveryConfiguration(); dc != nil {
+		return dc
+	}
+	return &cpb.DiscoveryConfiguration{}
 }
 
 // TODO: Extend this function for Windows systems.

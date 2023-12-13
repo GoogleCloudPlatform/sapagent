@@ -54,7 +54,7 @@ message CollectionConfiguration {
   bool collect_experimental_metrics = 7;
   HANAMetricsConfig hana_metrics_config =
       8;  // HANA DB user credentials for process metrics
-  google.protobuf.BoolValue sap_system_discovery = 9;
+  google.protobuf.BoolValue sap_system_discovery = 9 [deprecated = true];
   bool collect_agent_metrics = 10;
   int64 agent_metrics_frequency = 11;
   int64 heartbeat_frequency = 12;

@@ -186,9 +186,6 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc.GetCollectAgentMetrics() && cc.GetMissedHeartbeatThreshold() <= 0 {
 		cc.MissedHeartbeatThreshold = 10
 	}
-	if cc.GetSapSystemDiscovery() == nil {
-		cc.SapSystemDiscovery = wpb.Bool(true)
-	}
 	if cc.GetDataWarehouseEndpoint() == "" {
 		cc.DataWarehouseEndpoint = "https://workloadmanager-datawarehouse.googleapis.com/"
 	}

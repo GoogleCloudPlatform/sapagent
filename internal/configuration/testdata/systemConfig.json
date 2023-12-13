@@ -5,7 +5,7 @@
     "instance_id": "config-instance-id",
     "zone": "config-zone"
   },
-  "collection_configuration": {
-    "sap_system_discovery": false
+  "discovery_configuration": {
+    "enable_discovery": true
   }
 }
