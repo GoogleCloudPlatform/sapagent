@@ -242,7 +242,7 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 		return SapSystemDetails{}
 	}
 	dbNFS, _ := d.discoverDatabaseNFS(ctx)
-	version, _ := d.discoverHANAVersion(ctx, app.Sapsid)
+	version, _ := d.discoverHANAVersion(ctx, app)
 	dbProps := &spb.SapDiscovery_Component_DatabaseProperties{
 		DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 		SharedNfsUri:    dbNFS,
@@ -545,12 +545,14 @@ func (d *SapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) 
 	return "", errors.New("unable to identify main database NFS")
 }
 
-func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, sid string) (string, error) {
-	var version string
-	sidLower := strings.ToLower(sid)
+func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPInstance) (string, error) {
+	log.CtxLogger(ctx).Debug("Entered discoverHANAVersion")
+	sidLower := strings.ToLower(app.Sapsid)
+	sidUpper := strings.ToUpper(app.Sapsid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	path := fmt.Sprintf("/usr/sap/%s/HDB%s/HDB", sidUpper, app.GetInstanceNumber())
 	p := commandlineexecutor.Params{
-		Executable: "HDB",
+		Executable: path,
 		Args:       []string{"version"},
 		User:       sidAdm,
 	}
@@ -570,7 +572,8 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, sid string) (str
 	majorVersion, _ := strconv.Atoi(parts[0])
 	minorVersion, _ := strconv.Atoi(parts[1])
 	revision, _ := strconv.Atoi(parts[2])
-	version = fmt.Sprintf("HANA %d.%d Rev %d", majorVersion, minorVersion, revision)
+
+	version := fmt.Sprintf("HANA %d.%d Rev %d", majorVersion, minorVersion, revision)
 	return version, nil
 }
 

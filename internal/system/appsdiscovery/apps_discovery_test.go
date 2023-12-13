@@ -19,6 +19,7 @@ package appsdiscovery
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -803,8 +804,10 @@ func TestDiscoverHANA(t *testing.T) {
 				return landscapeSingleNodeResult
 			case "df":
 				return hanaMountResult
-			case "HDB":
-				return defaultHANAVersionResult
+			default:
+				if strings.Contains(params.Executable, "HDB") {
+					return defaultHANAVersionResult
+				}
 			}
 			return commandlineexecutor.Result{
 				Error:    errors.New("Unexpected command"),
@@ -1011,7 +1014,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
-			}, {Executable: "HDB", User: "abcadm"}},
+			}, {
+				Executable: "/usr/sap/ABC/HDB00/HDB",
+				User:       "abcadm",
+			}},
 			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
 		},
 		want: []SapSystemDetails{
@@ -1181,14 +1187,14 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
-				Executable: "HDB",
+				Executable: "/usr/sap/ABC/HDB00/HDB",
 				User:       "abcadm",
 			}, {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
 			}, {
-				Executable: "HDB",
+				Executable: "/usr/sap/DEF/HDB00/HDB",
 				User:       "defadm",
 			}},
 			results: []commandlineexecutor.Result{
@@ -1251,7 +1257,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
-			}, {Executable: "HDB", User: "dehadm"}},
+			}, {
+				Executable: "/usr/sap/DEH/HDB00/HDB",
+				User:       "dehadm",
+			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -1310,7 +1319,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
-				Executable: "HDB", User: "dehadm",
+				Executable: "/usr/sap/DEH/HDB00/HDB",
+				User:       "dehadm",
 			}, {
 				Executable: "sudo",
 			}, {
@@ -1387,7 +1397,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
-			}, {Executable: "HDB", User: "db2adm"}},
+			}, {
+				Executable: "/usr/sap/DB2/HDB00/HDB",
+				User:       "db2adm",
+			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -1452,7 +1465,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
-				Executable: "HDB",
+				Executable: "/usr/sap/DB2/HDB00/HDB",
 				User:       "db2adm",
 			}, {
 				Executable: "sudo",
@@ -1936,7 +1949,11 @@ func TestDiscoverHANAVersion(t *testing.T) {
 			d := &SapDiscovery{
 				Execute: tc.exec,
 			}
-			got, err := d.discoverHANAVersion(context.Background(), defaultSID)
+			app := &sappb.SAPInstance{
+				Sapsid:         defaultSID,
+				InstanceNumber: defaultInstanceNumber,
+			}
+			got, err := d.discoverHANAVersion(context.Background(), app)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("discoverHANAVersion() error: got %v, want %v", err, tc.wantErr)
 			}
