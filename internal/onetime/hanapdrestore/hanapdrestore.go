@@ -187,7 +187,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		r.rescanVolumeGroups(ctx)
 		return subcommands.ExitFailure
 	}
-	log.Print("SUCCESS: HANA restore from persistent disk snapshot successful.")
+	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from persistent disk snapshot successful. Please refer <link-to-public-doc> for next steps.")
 	return subcommands.ExitSuccess
 }
 
