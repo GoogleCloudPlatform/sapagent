@@ -179,23 +179,24 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 			}
 		case sappb.InstanceType_HANA:
 			log.CtxLogger(ctx).Infow("discovering hana", "sid", app.Sapsid)
-			sys := d.discoverHANA(ctx, app)
-			// See if a system with the same SID already exists
-			found := false
-			for i, s := range sapSystems {
-				if s.DBComponent.GetSid() == sys.DBComponent.GetSid() {
-					log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.DBComponent.GetSid())
-					sapSystems[i] = mergeSystemDetails(s, sys)
-					sapSystems[i].DBOnHost = true
-					found = true
-					break
+			for _, sys := range d.discoverHANA(ctx, app) {
+				// See if a system with the same SID already exists
+				found := false
+				for i, s := range sapSystems {
+					if s.DBComponent.GetSid() == sys.DBComponent.GetSid() {
+						log.CtxLogger(ctx).Infow("Found existing system", "sid", sys.DBComponent.GetSid())
+						sapSystems[i] = mergeSystemDetails(s, sys)
+						sapSystems[i].DBOnHost = true
+						found = true
+						break
+					}
 				}
-			}
 
-			if !found {
-				log.CtxLogger(ctx).Infow("No existing system", "sid", app.Sapsid)
-				sys.DBOnHost = true
-				sapSystems = append(sapSystems, sys)
+				if !found {
+					log.CtxLogger(ctx).Infow("No existing system", "sid", sys.DBComponent.GetSid())
+					sys.DBOnHost = true
+					sapSystems = append(sapSystems, sys)
+				}
 			}
 		}
 	}
@@ -236,10 +237,23 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	}
 }
 
-func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance) SapSystemDetails {
+func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid string) SapSystemDetails {
+	return SapSystemDetails{
+		DBComponent: &spb.SapDiscovery_Component{
+			Sid: sid,
+			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+				DatabaseProperties: dbProps,
+			},
+			HaHosts: app.HanaHaMembers,
+		},
+		DBHosts: removeDuplicates(append(dbHosts, app.HanaHaMembers...)),
+	}
+}
+
+func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance) []SapSystemDetails {
 	dbHosts, err := d.discoverDBNodes(ctx, app.Sapsid, app.InstanceNumber)
-	if err != nil {
-		return SapSystemDetails{}
+	if err != nil || len(dbHosts) == 0 {
+		return nil
 	}
 	dbNFS, _ := d.discoverDatabaseNFS(ctx)
 	version, _ := d.discoverHANAVersion(ctx, app)
@@ -248,16 +262,18 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 		SharedNfsUri:    dbNFS,
 		DatabaseVersion: version,
 	}
-	return SapSystemDetails{
-		DBComponent: &spb.SapDiscovery_Component{
-			Sid: app.Sapsid,
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-				DatabaseProperties: dbProps,
-			},
-			HaHosts: app.HanaHaMembers,
-		},
-		DBHosts: removeDuplicates(append(dbHosts, app.HanaHaMembers...)),
+
+	dbSIDs, err := d.discoverHANATenantDBs(ctx, app, dbHosts[0])
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverHANATenantDBs. Only discovering primary HANA system.", "error", err)
+		return []SapSystemDetails{hanaSystemDetails(app, dbProps, dbHosts, app.Sapsid)}
 	}
+
+	systems := []SapSystemDetails{}
+	for _, s := range dbSIDs {
+		systems = append(systems, hanaSystemDetails(app, dbProps, dbHosts, s))
+	}
+	return systems
 }
 
 func (d *SapDiscovery) discoverNetweaverHA(ctx context.Context, app *sappb.SAPInstance) (bool, []string) {
@@ -594,11 +610,11 @@ func (d *SapDiscovery) readAndUnmarshalJson(ctx context.Context, filepath string
 	return data, nil
 }
 
-func (d *SapDiscovery) discoverHANATenantDBs(ctx context.Context, app *sappb.SAPInstance, dbHost string, runid string) ([]string, error) {
+func (d *SapDiscovery) discoverHANATenantDBs(ctx context.Context, app *sappb.SAPInstance, dbHost string) ([]string, error) {
 	// The hdb topology containing sid info is contained in the nameserver_topology_HDBHostname.json
 	// Abstract path: /hana/shared/SID/HDBXX/HDBHostname/trace/nameserver_topology_HDBHostname.json
 	// Concrete example: /hana/shared/DEH/HDB00/dnwh75rdbci/trace/nameserver_topology_dnwh75rdbci.json
-	log.CtxLogger(ctx).Infow("Entered discoverHANATenantDBs", "runid", runid)
+	log.CtxLogger(ctx).Debugw("Entered discoverHANATenantDBs")
 	instanceID := app.GetInstanceId()
 	sidUpper := strings.ToUpper(app.Sapsid)
 	topologyPath := fmt.Sprintf("/hana/shared/%s/%s/%s/trace/nameserver_topology_%s.json", sidUpper, instanceID, dbHost, dbHost)
@@ -617,7 +633,7 @@ func (d *SapDiscovery) discoverHANATenantDBs(ctx context.Context, app *sappb.SAP
 			}
 		}
 	}
-	log.CtxLogger(ctx).Infow("databasesData", "databasesData", databasesData)
+	log.CtxLogger(ctx).Debugw("databasesData", "databasesData", databasesData)
 	var dbSids []string
 	for _, db := range databasesData {
 		if dbMap, ok := db.(map[string]any); ok {
@@ -634,6 +650,6 @@ func (d *SapDiscovery) discoverHANATenantDBs(ctx context.Context, app *sappb.SAP
 		}
 	}
 
-	log.CtxLogger(ctx).Infow("End of discoverHANATenantDBs", "dbSids", dbSids, "runid", runid)
+	log.CtxLogger(ctx).Debugw("End of discoverHANATenantDBs", "dbSids", dbSids)
 	return dbSids, nil
 }

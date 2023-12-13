@@ -787,10 +787,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 
 func TestDiscoverHANA(t *testing.T) {
 	tests := []struct {
-		name    string
-		app     *sappb.SAPInstance
-		execute commandlineexecutor.Execute
-		want    SapSystemDetails
+		name     string
+		app      *sappb.SAPInstance
+		execute  commandlineexecutor.Execute
+		topology string
+		want     []SapSystemDetails
 	}{{
 		name: "singleNode",
 		app: &sappb.SAPInstance{
@@ -814,9 +815,18 @@ func TestDiscoverHANA(t *testing.T) {
 				ExitCode: 1,
 			}
 		},
-		want: SapSystemDetails{
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "ABC"
+					}
+				}
+			}
+		}`,
+		want: []SapSystemDetails{{
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "abc",
+				Sid: "ABC",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
@@ -825,6 +835,70 @@ func TestDiscoverHANA(t *testing.T) {
 					}},
 			},
 			DBHosts: []string{"test-instance"},
+		}},
+	}, {
+		name: "multiTenant",
+		app: &sappb.SAPInstance{
+			Sapsid:         "abc",
+			Type:           sappb.InstanceType_HANA,
+			InstanceNumber: "00",
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				return landscapeSingleNodeResult
+			case "df":
+				return hanaMountResult
+			default:
+				if strings.Contains(params.Executable, "HDB") {
+					return defaultHANAVersionResult
+				}
+			}
+			return commandlineexecutor.Result{
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "SYSTEMDB"
+					},
+					"3": {
+						"name": "ABC"
+					},
+					"4": {
+						"name": "DEF"
+					}
+				}
+			}
+		}`,
+		want: []SapSystemDetails{
+			SapSystemDetails{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+							SharedNfsUri:    "1.2.3.4",
+							DatabaseVersion: "HANA 2.0 Rev 56",
+						}},
+				},
+				DBHosts: []string{"test-instance"},
+			},
+			SapSystemDetails{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "DEF",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+							SharedNfsUri:    "1.2.3.4",
+							DatabaseVersion: "HANA 2.0 Rev 56",
+						}},
+				},
+				DBHosts: []string{"test-instance"},
+			},
 		},
 	}, {
 		name: "errGettingNodes",
@@ -840,7 +914,7 @@ func TestDiscoverHANA(t *testing.T) {
 				ExitCode: 1,
 			}
 		},
-		want: SapSystemDetails{},
+		want: nil,
 	}, {
 		name: "EmptyInstance",
 		app:  &sappb.SAPInstance{},
@@ -849,14 +923,79 @@ func TestDiscoverHANA(t *testing.T) {
 				StdOut: landscapeOutputSingleNode,
 			}
 		},
-		want: SapSystemDetails{},
+		want: nil,
+	}, {
+		name: "missingDBNodes",
+		app: &sappb.SAPInstance{
+			Sapsid:         "abc",
+			Type:           sappb.InstanceType_HANA,
+			InstanceNumber: "00",
+		},
+		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				return landscapeZeroNodeResult
+			case "df":
+				return hanaMountResult
+			case "HDB":
+				return defaultHANAVersionResult
+			}
+			return commandlineexecutor.Result{
+				Error:    errors.New("unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "ABC"
+					}
+				}
+			}
+		}`,
+		want: nil,
+	}, {
+		name: "errorFromDBNodes",
+		app: &sappb.SAPInstance{
+			Sapsid:         "abc",
+			Type:           sappb.InstanceType_HANA,
+			InstanceNumber: "00",
+		},
+		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				return commandlineexecutor.Result{
+					Error:    errors.New("expected error for test"),
+					ExitCode: 1,
+				}
+			case "df":
+				return hanaMountResult
+			case "HDB":
+				return defaultHANAVersionResult
+			}
+			return commandlineexecutor.Result{
+				Error:    errors.New("unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "ABC"
+					}
+				}
+			}
+		}`,
+		want: nil,
 	}}
 
 	ctx := context.Background()
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			d := SapDiscovery{Execute: tc.execute}
+			d := SapDiscovery{Execute: tc.execute, FileReader: func(string) ([]byte, error) { return []byte(tc.topology), nil }}
 			got := d.discoverHANA(ctx, tc.app)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform()); diff != "" {
 				t.Errorf("discoverHANA(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
@@ -976,9 +1115,8 @@ func TestDiscoverHANATenantDBs(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			fr := func(filename string) ([]byte, error) { return []byte(tc.topology), nil }
-			d := SapDiscovery{Execute: tc.execute, FileReader: fr}
-			got, _ := d.discoverHANATenantDBs(ctx, tc.app, "", tc.name)
+			d := SapDiscovery{Execute: tc.execute, FileReader: func(string) ([]byte, error) { return []byte(tc.topology), nil }}
+			got, _ := d.discoverHANATenantDBs(ctx, tc.app, "")
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 				t.Errorf("discoverHANATenantDBs(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
 			}
@@ -992,6 +1130,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 		cp           *instancepb.CloudProperties
 		executor     *fakeCommandExecutor
 		sapInstances *sappb.SAPInstances
+		topology     string
 		want         []SapSystemDetails
 	}{{
 		name:         "noSAPApps",
@@ -1526,11 +1665,13 @@ func TestDiscoverSAPApps(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			fr := func(filename string) ([]byte, error) { return []byte(tc.topology), nil }
 			tc.executor.t = t
 			d := SapDiscovery{
 				Execute: func(c context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
 					return tc.executor.Execute(c, p)
 				},
+				FileReader: fr,
 			}
 			got := d.DiscoverSAPApps(ctx, tc.sapInstances)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), cmpopts.SortSlices(sortSapSystemDetails), protocmp.Transform(), cmpopts.EquateEmpty()); diff != "" {
