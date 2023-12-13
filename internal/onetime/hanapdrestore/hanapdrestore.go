@@ -43,17 +43,17 @@ type (
 
 // Restorer has args for hanapdrestore subcommands
 type Restorer struct {
-	project, sid, hanaSidAdm, dataDiskName    string
-	dataDiskZone, sourceSnapshot, newDiskType string
-	cloudProps                                *ipb.CloudProperties
-	computeService                            *compute.Service
-	baseDataPath, baseLogPath                 string
-	logicalDataPath, logicalLogPath           string
-	physicalDataPath, physicalLogPath         string
-	help, version                             bool
-	logLevel                                  string
-	forceStopHANA                             bool
-	newdiskName                               string
+	project, sid, hanaSidAdm, dataDiskName, dataDiskDeviceName string
+	dataDiskZone, sourceSnapshot, newDiskType                  string
+	cloudProps                                                 *ipb.CloudProperties
+	computeService                                             *compute.Service
+	baseDataPath, baseLogPath                                  string
+	logicalDataPath, logicalLogPath                            string
+	physicalDataPath, physicalLogPath                          string
+	help, version                                              bool
+	logLevel                                                   string
+	forceStopHANA                                              bool
+	newdiskName                                                string
 }
 
 // Name implements the subcommand interface for hanapdrestore.
@@ -217,18 +217,9 @@ func (r *Restorer) prepare(ctx context.Context) error {
 // TODO: Move generic PD related functions from hanapdbackup.go and hanapdrestore.go to gce.go.
 // detachDisk detaches the old HANA data disk from the instance.
 func (r *Restorer) detachDisk(ctx context.Context) error {
-	// Verify the disk is attached to the instance.
-	deviceName, ok, err := r.isDiskAttachedToInstance(r.dataDiskName)
-	if err != nil {
-		return fmt.Errorf("failed to verify if disk %v is attached to the instance", r.dataDiskName)
-	}
-	if !ok {
-		return fmt.Errorf("the disk data-disk-name=%v is not attached to the instance, please pass the current data disk name", r.dataDiskName)
-	}
-
 	// Detach old HANA data disk.
-	log.Logger.Infow("Detatching old HANA PD disk", "diskName", r.dataDiskName, "deviceName", deviceName)
-	op, err := r.computeService.Instances.DetachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), deviceName).Do()
+	log.Logger.Infow("Detatching old HANA PD disk", "diskName", r.dataDiskName, "deviceName", r.dataDiskDeviceName)
+	op, err := r.computeService.Instances.DetachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), r.dataDiskDeviceName).Do()
 	if err != nil {
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
@@ -236,7 +227,8 @@ func (r *Restorer) detachDisk(ctx context.Context) error {
 		return fmt.Errorf("detach data disk operation failed: %v", err)
 	}
 
-	if _, ok, err = r.isDiskAttachedToInstance(r.dataDiskName); err != nil {
+	_, ok, err := r.isDiskAttachedToInstance(r.dataDiskName)
+	if err != nil {
 		return fmt.Errorf("failed to check if disk %v is still attached to the instance", r.dataDiskName)
 	}
 	if ok {
@@ -311,6 +303,7 @@ func (r *Restorer) attachDisk(ctx context.Context, diskName string) (*compute.Op
 }
 
 // checkPreConditions checks if the HANA data and log disks are on the same physical disk.
+// Also verifies that the data disk is attached to the instance.
 func (r *Restorer) checkPreConditions(ctx context.Context) error {
 	if err := r.checkDataDir(ctx); err != nil {
 		return err
@@ -326,6 +319,16 @@ func (r *Restorer) checkPreConditions(ctx context.Context) error {
 	if r.physicalDataPath == r.physicalLogPath {
 		return fmt.Errorf("unsupported: HANA data and HANA log are on the same physical disk - %s", r.physicalDataPath)
 	}
+
+	// Verify the disk is attached to the instance.
+	dev, ok, err := r.isDiskAttachedToInstance(r.dataDiskName)
+	if err != nil {
+		return fmt.Errorf("failed to verify if disk %v is attached to the instance", r.dataDiskName)
+	}
+	if !ok {
+		return fmt.Errorf("the disk data-disk-name=%v is not attached to the instance, please pass the current data disk name", r.dataDiskName)
+	}
+	r.dataDiskDeviceName = dev
 	return nil
 }
 
