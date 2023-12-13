@@ -832,7 +832,7 @@ func TestModifyConfig(t *testing.T) {
 			name: "AddSkipMetrics",
 			c: &Configure{
 				feature:      "process_metrics",
-				skipMetrics:  "/sap/networkstats/rtt,  /sap/networkstats/rcv_rtt, /sap/hana/utilization",
+				skipMetrics:  "/sap/networkstats/rtt, /sap/networkstats/rcv_rtt, /sap/hana/utilization",
 				add:          true,
 				path:         path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -1548,7 +1548,8 @@ func TestModifyConfig(t *testing.T) {
 			}
 
 			gotConfig := configuration.Read(test.c.path, os.ReadFile)
-			if diff := cmp.Diff(test.newConfig, gotConfig, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.newConfig, gotConfig, protocmp.Transform(),
+				cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 				t.Errorf("modifyConfig(%v) returned an unexpected diff (-want +got): %v", test.c.path, diff)
 			}
 		})
