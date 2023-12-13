@@ -68,8 +68,8 @@ func (*Restorer) Synopsis() string {
 func (*Restorer) Usage() string {
 	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
 	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> [-project=<project-name>]
-	[-new-disk-type=<Type of the new PD disk>]
-	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
+	[-new-disk-name=<name-less-than-63-chars>] [-new-disk-type=<Type of the new PD disk>]
+	[-hana-sidadm=<hana-sid-user-name>] [-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanapdrestore.
@@ -80,6 +80,8 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source PD snapshot to restore from. (required)")
 	fs.StringVar(&r.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
+	fs.StringVar(&r.hanaSidAdm, "hana-sidadm", "", "HANA sidadm username. (optional) Default: <sid>adm")
+	fs.StringVar(&r.newdiskName, "new-disk-name", "", "New PD name. (optional) Default: same name as disk passed in data-disk-name with current timestamp as a suffix.")
 	fs.BoolVar(&r.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
@@ -132,8 +134,23 @@ func (r *Restorer) validateParameters(os string) error {
 	if r.newDiskType == "" {
 		return fmt.Errorf("could not read disk type, please pass -new-disk-type=<>")
 	}
-	// setting HANA sidadm value from the sid flag.
-	r.hanaSidAdm = strings.ToLower(r.sid) + "adm"
+	if r.hanaSidAdm == "" {
+		r.hanaSidAdm = strings.ToLower(r.sid) + "adm"
+	}
+
+	if len(r.newdiskName) > 63 {
+		return fmt.Errorf("the new-disk-name is longer than 63 chars which is not supported, please provide a shorter name")
+	}
+
+	if r.newdiskName == "" {
+		t := time.Now()
+		r.newdiskName = fmt.Sprintf("%s-%d%02d%02d-%02d%02d%02d",
+			r.dataDiskName, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+		if len(r.newdiskName) > 63 {
+			return fmt.Errorf("the new disk name we tried to generate is longer than 63 chars, please provide a shorter name using -new-disk-name param")
+		}
+	}
+
 	log.Logger.Debug("Parameter validation successful.")
 
 	return nil
@@ -244,10 +261,6 @@ func (r *Restorer) isDiskAttachedToInstance(diskName string) (string, bool, erro
 
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
 func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
-	t := time.Now()
-	r.newdiskName = fmt.Sprintf("%s-%d%02d%02d-%02d%02d%02d",
-		r.dataDiskName, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
-
 	disk := &compute.Disk{
 		Name:           r.newdiskName,
 		Type:           fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.project, r.dataDiskZone, r.newDiskType),
