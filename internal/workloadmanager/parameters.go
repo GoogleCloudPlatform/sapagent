@@ -29,14 +29,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
-	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
@@ -55,6 +54,11 @@ type DefaultTokenGetter func(context.Context, ...string) (oauth2.TokenSource, er
 
 // JSONCredentialsGetter obtains a JSON oauth2 google credentials within the getJSONBearerToken function.
 type JSONCredentialsGetter func(context.Context, []byte, ...string) (*google.Credentials, error)
+
+type discoveryInterface interface {
+	GetSAPSystems() []*spb.SapDiscovery
+	GetSAPInstances() *sappb.SAPInstances
+}
 
 type gceInterface interface {
 	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
@@ -81,12 +85,10 @@ type Parameters struct {
 	OSReleaseFilePath     string
 	GCEService            gceInterface
 	WLMService            wlmInterface
+	Discovery             discoveryInterface
 	// fields derived from parsing the file specified by OSReleaseFilePath
 	osVendorID string
 	osVersion  string
-	// fields derived from running discovery on the SAP system
-	sapApplications *sapb.SAPInstances
-	sapSystems      []*spb.SapDiscovery
 	// fields derived from reading HANA Insights rules
 	hanaInsightRules []*rpb.Rule
 }
@@ -94,7 +96,6 @@ type Parameters struct {
 // Init runs additional setup that is a prerequisite for WLM metric collection.
 func (p *Parameters) Init(ctx context.Context) {
 	p.osVendorID, p.osVersion = setOSReleaseInfo(ctx, p.ConfigFileReader, p.OSReleaseFilePath)
-	p.sapApplications = runDiscovery(ctx)
 	p.hanaInsightRules = readHANAInsightsRules()
 }
 
@@ -136,13 +137,6 @@ func setOSReleaseInfo(ctx context.Context, configFileReader ConfigFileReader, os
 	}
 
 	return osVendorID, osVersion
-}
-
-// runDiscovery runs the discovery process to find HANA / NetWeaver instances.
-func runDiscovery(ctx context.Context) *sapb.SAPInstances {
-	// TODO: Share SAP System Discovery results across agent.
-	log.CtxLogger(ctx).Info("Discovering SAP Applications for Workload Manager Metrics.")
-	return sapdiscovery.SAPApplications(ctx)
 }
 
 // readHANAInsightsRules reads the HANA Insights rules.

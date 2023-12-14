@@ -122,7 +122,7 @@ var (
 )
 
 func TestStart(t *testing.T) {
-	wantCollectionDefinition, err := unmarshal(testCollectionDefinition2)
+	wantCollectionDefinition, err := unmarshal(configuration.DefaultCollectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}

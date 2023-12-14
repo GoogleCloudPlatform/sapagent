@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io/fs"
 	"testing"
+	"time"
 
 	"flag"
 	"github.com/google/go-cmp/cmp"
@@ -30,10 +31,21 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 
+	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
+
+type fakeDiscoveryInterface struct {
+	systems   []*spb.SapDiscovery
+	instances *sapb.SAPInstances
+}
+
+func (d *fakeDiscoveryInterface) GetSAPSystems() []*spb.SapDiscovery  { return d.systems }
+func (d *fakeDiscoveryInterface) GetSAPInstances() *sapb.SAPInstances { return d.instances }
 
 func TestExecute(t *testing.T) {
 	defaultLoadOptions := collectiondefinition.LoadOptions{
@@ -97,6 +109,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 		name        string
 		remote      *RemoteValidation
 		loadOptions collectiondefinition.LoadOptions
+		discovery   *fakeDiscoveryInterface
 		want        subcommands.ExitStatus
 	}{
 		{
@@ -106,12 +119,14 @@ func TestRemoteValidationHandler(t *testing.T) {
 				zone:       "zone-1",
 			},
 			loadOptions: defaultLoadOptions,
+			discovery:   &fakeDiscoveryInterface{},
 			want:        subcommands.ExitUsageError,
 		},
 		{
 			name:        "EmptyInstanceID",
 			remote:      &RemoteValidation{},
 			loadOptions: defaultLoadOptions,
+			discovery:   &fakeDiscoveryInterface{},
 			want:        subcommands.ExitUsageError,
 		},
 		{
@@ -120,6 +135,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 				project: "project-1",
 			},
 			loadOptions: defaultLoadOptions,
+			discovery:   &fakeDiscoveryInterface{},
 			want:        subcommands.ExitUsageError,
 		},
 		{
@@ -131,6 +147,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 				config:     "/path/does/not/exist",
 			},
 			loadOptions: defaultLoadOptions,
+			discovery:   &fakeDiscoveryInterface{},
 			want:        subcommands.ExitFailure,
 		},
 		{
@@ -146,7 +163,8 @@ func TestRemoteValidationHandler(t *testing.T) {
 				OSType:   "linux",
 				Version:  configuration.AgentVersion,
 			},
-			want: subcommands.ExitFailure,
+			discovery: &fakeDiscoveryInterface{},
+			want:      subcommands.ExitFailure,
 		},
 		{
 			name: "ConfigUnmarshalError",
@@ -161,7 +179,8 @@ func TestRemoteValidationHandler(t *testing.T) {
 				OSType:   "linux",
 				Version:  configuration.AgentVersion,
 			},
-			want: subcommands.ExitFailure,
+			discovery: &fakeDiscoveryInterface{},
+			want:      subcommands.ExitFailure,
 		},
 		{
 			name: "ConfigSuccess",
@@ -176,7 +195,8 @@ func TestRemoteValidationHandler(t *testing.T) {
 				OSType:   "linux",
 				Version:  configuration.AgentVersion,
 			},
-			want: subcommands.ExitSuccess,
+			discovery: &fakeDiscoveryInterface{},
+			want:      subcommands.ExitSuccess,
 		},
 		{
 			name: "CollectionDefinitionLoadError",
@@ -195,7 +215,8 @@ func TestRemoteValidationHandler(t *testing.T) {
 				OSType:   "linux",
 				Version:  configuration.AgentVersion,
 			},
-			want: subcommands.ExitFailure,
+			discovery: &fakeDiscoveryInterface{},
+			want:      subcommands.ExitFailure,
 		},
 		{
 			name: "CollectionDefinitionLoadSuccess",
@@ -205,12 +226,18 @@ func TestRemoteValidationHandler(t *testing.T) {
 				zone:       "zone-1",
 			},
 			loadOptions: defaultLoadOptions,
+			discovery:   &fakeDiscoveryInterface{},
 			want:        subcommands.ExitSuccess,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.remote.remoteValidationHandler(context.Background(), instanceinfo.New(nil, nil), test.loadOptions)
+			got := test.remote.remoteValidationHandler(context.Background(), handlerOptions{
+				config:    test.remote.createConfiguration(),
+				iir:       instanceinfo.New(nil, nil),
+				loadOpts:  test.loadOptions,
+				discovery: test.discovery,
+			})
 			if got != test.want {
 				t.Errorf("remoteValidationHandler(%v) = %v, want %v", test.remote, got, test.want)
 			}
@@ -256,6 +283,11 @@ func TestCreateConfiguration(t *testing.T) {
 		AgentProperties: &cpb.AgentProperties{
 			Name:    configuration.AgentName,
 			Version: configuration.AgentVersion,
+		},
+		DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+			EnableDiscovery:                wpb.Bool(true),
+			SapInstancesUpdateFrequency:    dpb.New(time.Duration(1 * time.Hour)),
+			SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(1 * time.Hour)),
 		},
 	}
 

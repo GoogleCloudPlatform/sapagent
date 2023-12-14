@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 2,
+    "version": 3,
     "validation_system": {
       "system_metrics": [
         {
@@ -584,6 +584,16 @@
               "value": "PD_SIZE"
             }
           ]
+        }
+      ],
+      "ha_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "ha_in_same_zone",
+            "min_version": "3.0"
+          },
+          "value": "HA_IN_SAME_ZONE"
         }
       ],
       "os_command_metrics": [

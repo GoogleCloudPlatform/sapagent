@@ -88,9 +88,11 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 			params: Parameters{
 				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
-				sapApplications: &sapb.SAPInstances{
-					Instances: []*sapb.SAPInstance{
-						&sapb.SAPInstance{Type: sapb.InstanceType_NETWEAVER},
+				Discovery: &fakeDiscoveryInterface{
+					instances: &sapb.SAPInstances{
+						Instances: []*sapb.SAPInstance{
+							&sapb.SAPInstance{Type: sapb.InstanceType_NETWEAVER},
+						},
 					},
 				},
 				osVendorID: "rhel",
@@ -104,10 +106,12 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 		{
 			name: "NetWeaverMetricsEmpty",
 			params: Parameters{
-				Config:          defaultConfiguration,
-				WorkloadConfig:  &wlmpb.WorkloadValidation{},
-				osVendorID:      "rhel",
-				sapApplications: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+				Config:         defaultConfiguration,
+				WorkloadConfig: &wlmpb.WorkloadValidation{},
+				osVendorID:     "rhel",
+				Discovery: &fakeDiscoveryInterface{
+					instances: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+				},
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
@@ -121,6 +125,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{},
 				osVendorID:     "rhel",
+				Discovery: &fakeDiscoveryInterface{},
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
@@ -162,9 +167,11 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 					},
 				},
 				osVendorID: "rhel",
-				sapApplications: &sapb.SAPInstances{
-					Instances: []*sapb.SAPInstance{
-						&sapb.SAPInstance{Type: sapb.InstanceType_NETWEAVER},
+				Discovery: &fakeDiscoveryInterface{
+					instances: &sapb.SAPInstances{
+						Instances: []*sapb.SAPInstance{
+							&sapb.SAPInstance{Type: sapb.InstanceType_NETWEAVER},
+						},
 					},
 				},
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {

@@ -31,16 +31,21 @@ const sapValidationNetweaver = "workload.googleapis.com/sap/validation/netweaver
 // specified by the WorkloadValidation config and formats the results as a
 // time series to be uploaded to a Collection Storage mechanism.
 func CollectNetWeaverMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.CtxLogger(ctx).Info("Collecting Workload Manager NetWeaver metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
+	log.CtxLogger(ctx).Infow("Collecting Workload Manager NetWeaver metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
 	l := make(map[string]string)
 	netweaverVal := 0.0
 
-	if params.sapApplications == nil {
+	if params.Discovery == nil {
+		log.CtxLogger(ctx).Debug("Discovery has not been initialized, cannot check SAP instances")
+		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, netweaverVal, params.Config)}
+	}
+	sapInstances := params.Discovery.GetSAPInstances().GetInstances()
+	if len(sapInstances) == 0 {
 		log.CtxLogger(ctx).Debug("No SAP Instances found")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationNetweaver, l, netweaverVal, params.Config)}
 	}
 
-	for _, instance := range params.sapApplications.Instances {
+	for _, instance := range sapInstances {
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			log.CtxLogger(ctx).Info("Found Netweaver instance.")
 			netweaverVal = 1.0

@@ -167,7 +167,9 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 				},
 				OSStatReader:       func(data string) (os.FileInfo, error) { return nil, nil },
 				InstanceInfoReader: *instanceinfo.New(&fakeDiskMapper{}, defaultGCEService),
-				sapApplications:    &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+				Discovery: &fakeDiscoveryInterface{
+					instances: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+				},
 			},
 			want: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{
 				createTimeSeries(
@@ -657,10 +659,12 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 						StdErr: "",
 					}
 				},
-				Exists:            func(string) bool { return true },
-				ConfigFileReader:  DefaultTestReader,
-				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
-				sapApplications:   &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+				Exists:           func(string) bool { return true },
+				ConfigFileReader: DefaultTestReader,
+				OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
+				Discovery: &fakeDiscoveryInterface{
+					instances: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+				},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				OSType:            "linux",
 				Remote:            false,

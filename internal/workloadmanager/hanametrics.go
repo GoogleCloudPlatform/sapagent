@@ -60,11 +60,11 @@ type lsblk struct {
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.CtxLogger(ctx).Info("Collecting Workload Manager HANA metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
+	log.CtxLogger(ctx).Infow("Collecting Workload Manager HANA metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
 	l := map[string]string{}
 	hanaVal := 0.0
 
-	globalINILocationVal := globalINIfromSAPsid(params)
+	globalINILocationVal := globalINIfromSAPsid(ctx, params)
 	if globalINILocationVal == "" {
 		log.CtxLogger(ctx).Debug("Skipping HANA metrics collection, HANA not active on instance.")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
@@ -110,6 +110,13 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 			}
 		}
 	}
+	for _, m := range hana.GetHaMetrics() {
+		k := m.GetMetricInfo().GetLabel()
+		switch m.GetValue() {
+		case wpb.HANAHighAvailabilityVariable_HA_IN_SAME_ZONE:
+			l[k] = fmt.Sprint(checkHAZones(ctx, params))
+		}
+	}
 
 	hanaVal = 1.0
 	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
@@ -117,14 +124,19 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 
 // globalINIfromSAPsid returns the path to the global.ini file using the
 // SAP sid from the discovered HANA instance.
-func globalINIfromSAPsid(params Parameters) string {
-	if params.sapApplications == nil {
-		log.Logger.Debug("No SAP Instances found")
+func globalINIfromSAPsid(ctx context.Context, params Parameters) string {
+	if params.Discovery == nil {
+		log.CtxLogger(ctx).Debug("Discovery has not been initialized, cannot check SAP instances")
 		return ""
 	}
-	for _, instance := range params.sapApplications.Instances {
+	sapInstances := params.Discovery.GetSAPInstances().GetInstances()
+	if len(sapInstances) == 0 {
+		log.CtxLogger(ctx).Debug("No SAP instances found")
+		return ""
+	}
+	for _, instance := range sapInstances {
 		if instance.GetType() == sapb.InstanceType_HANA && instance.GetSapsid() != "" {
-			log.Logger.Infow("Found HANA instance.", "sapsid", instance.GetSapsid())
+			log.CtxLogger(ctx).Infow("Found HANA instance", "sapsid", instance.GetSapsid())
 			return fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config/global.ini", instance.GetSapsid())
 		}
 	}
@@ -265,11 +277,12 @@ func extractSize(msg []byte) int64 {
 
 // checkHAZones determines if the host instance is part of a HA setup which
 // shares the same zone as another instance in the same HA grouping.
-func checkHAZones(params Parameters) bool {
+func checkHAZones(ctx context.Context, params Parameters) bool {
 	isHASameZone := false
-	for _, system := range params.sapSystems {
+	for _, system := range params.Discovery.GetSAPSystems() {
 		haInstanceZones := map[string]int{}
 		hasHostInstance := false
+		log.CtxLogger(ctx).Debugw("SAP System has the following HA hosts", "haHosts", system.GetDatabaseLayer().GetHaHosts())
 		for _, hostURI := range system.GetDatabaseLayer().GetHaHosts() {
 			uriMatch := instanceURIRegex.FindStringSubmatch(hostURI)
 			if len(uriMatch) == 0 {

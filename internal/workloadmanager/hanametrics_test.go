@@ -51,6 +51,14 @@ type fakeDiskMapper struct {
 	out string
 }
 
+type fakeDiscoveryInterface struct {
+	systems   []*spb.SapDiscovery
+	instances *sapb.SAPInstances
+}
+
+func (d *fakeDiscoveryInterface) GetSAPSystems() []*spb.SapDiscovery  { return d.systems }
+func (d *fakeDiscoveryInterface) GetSAPInstances() *sapb.SAPInstances { return d.instances }
+
 func createHANAWorkloadMetrics(labels map[string]string, value float64) WorkloadMetrics {
 	return WorkloadMetrics{
 		Metrics: []*mrpb.TimeSeries{{
@@ -702,9 +710,11 @@ func TestCheckHAZones(t *testing.T) {
 			name: "NoHAHosts",
 			params: Parameters{
 				Config: defaultConfiguration,
-				sapSystems: []*spb.SapDiscovery{
-					{
-						DatabaseLayer: &spb.SapDiscovery_Component{},
+				Discovery: &fakeDiscoveryInterface{
+					systems: []*spb.SapDiscovery{
+						{
+							DatabaseLayer: &spb.SapDiscovery_Component{},
+						},
 					},
 				},
 			},
@@ -714,12 +724,14 @@ func TestCheckHAZones(t *testing.T) {
 			name: "NoHostInstance",
 			params: Parameters{
 				Config: defaultConfiguration,
-				sapSystems: []*spb.SapDiscovery{
-					{
-						DatabaseLayer: &spb.SapDiscovery_Component{
-							HaHosts: []string{
-								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
-								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
+				Discovery: &fakeDiscoveryInterface{
+					systems: []*spb.SapDiscovery{
+						{
+							DatabaseLayer: &spb.SapDiscovery_Component{
+								HaHosts: []string{
+									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
+								},
 							},
 						},
 					},
@@ -731,20 +743,22 @@ func TestCheckHAZones(t *testing.T) {
 			name: "NoOverlappingZones",
 			params: Parameters{
 				Config: defaultConfiguration,
-				sapSystems: []*spb.SapDiscovery{
-					{
-						DatabaseLayer: &spb.SapDiscovery_Component{
-							HaHosts: []string{
-								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
-								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
+				Discovery: &fakeDiscoveryInterface{
+					systems: []*spb.SapDiscovery{
+						{
+							DatabaseLayer: &spb.SapDiscovery_Component{
+								HaHosts: []string{
+									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
+								},
 							},
 						},
-					},
-					{
-						DatabaseLayer: &spb.SapDiscovery_Component{
-							HaHosts: []string{
-								"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
-								"/projects/test-project-id/zones/test-other-zone/instances/other-instance-3",
+						{
+							DatabaseLayer: &spb.SapDiscovery_Component{
+								HaHosts: []string{
+									"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
+									"/projects/test-project-id/zones/test-other-zone/instances/other-instance-3",
+								},
 							},
 						},
 					},
@@ -756,13 +770,15 @@ func TestCheckHAZones(t *testing.T) {
 			name: "HasHAInSameZone",
 			params: Parameters{
 				Config: defaultConfiguration,
-				sapSystems: []*spb.SapDiscovery{
-					{
-						DatabaseLayer: &spb.SapDiscovery_Component{
-							HaHosts: []string{
-								"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
-								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
-								"resourceURI/does/not/match/regexp",
+				Discovery: &fakeDiscoveryInterface{
+					systems: []*spb.SapDiscovery{
+						{
+							DatabaseLayer: &spb.SapDiscovery_Component{
+								HaHosts: []string{
+									"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
+									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+									"resourceURI/does/not/match/regexp",
+								},
 							},
 						},
 					},
@@ -774,7 +790,7 @@ func TestCheckHAZones(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := checkHAZones(test.params)
+			got := checkHAZones(context.Background(), test.params)
 			if got != test.want {
 				t.Errorf("checkHAZones() got %t, want %t", got, test.want)
 			}
@@ -788,7 +804,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		exec             commandlineexecutor.Execute
 		osStatReader     OSStatReader
 		configFileReader ConfigFileReader
-		sapApplications  *sapb.SAPInstances
+		discovery        *fakeDiscoveryInterface
 		wantHanaExists   float64
 		wantLabels       map[string]string
 	}{
@@ -802,9 +818,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
-			sapApplications:  &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
-			wantHanaExists:   float64(0.0),
-			wantLabels:       map[string]string{},
+			discovery: &fakeDiscoveryInterface{
+				instances: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+			},
+			wantHanaExists: float64(0.0),
+			wantLabels:     map[string]string{},
 		},
 		{
 			name: "TestNOSAPInstances",
@@ -816,6 +834,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
+			discovery:        &fakeDiscoveryInterface{},
 			wantHanaExists:   float64(0.0),
 			wantLabels:       map[string]string{},
 		},
@@ -829,9 +848,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     os.Stat,
 			configFileReader: defaultFileReader,
-			sapApplications: &sapb.SAPInstances{
-				Instances: []*sapb.SAPInstance{
-					&sapb.SAPInstance{Type: sapb.InstanceType_HANA},
+			discovery: &fakeDiscoveryInterface{
+				instances: &sapb.SAPInstances{
+					Instances: []*sapb.SAPInstance{
+						&sapb.SAPInstance{Type: sapb.InstanceType_HANA},
+					},
 				},
 			},
 			wantHanaExists: float64(0.0),
@@ -853,9 +874,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, errors.New("error") },
 			configFileReader: defaultFileReader,
-			sapApplications: &sapb.SAPInstances{
-				Instances: []*sapb.SAPInstance{
-					&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+			discovery: &fakeDiscoveryInterface{
+				instances: &sapb.SAPInstances{
+					Instances: []*sapb.SAPInstance{
+						&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+					},
 				},
 			},
 			wantHanaExists: float64(0.0),
@@ -871,9 +894,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
-			sapApplications: &sapb.SAPInstances{
-				Instances: []*sapb.SAPInstance{
-					&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+			discovery: &fakeDiscoveryInterface{
+				instances: &sapb.SAPInstances{
+					Instances: []*sapb.SAPInstance{
+						&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+					},
 				},
 			},
 			wantHanaExists: float64(1.0),
@@ -890,6 +915,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"ha_sr_hook_configured": "no",
 				"numa_balancing":        "disabled",
 				"transparent_hugepages": "disabled",
+				"ha_in_same_zone":       "false",
 			},
 		},
 		{
@@ -940,9 +966,22 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			configFileReader: ConfigFileReader(func(data string) (io.ReadCloser, error) {
 				return io.NopCloser(strings.NewReader(defaultHanaINI)), nil
 			}),
-			sapApplications: &sapb.SAPInstances{
-				Instances: []*sapb.SAPInstance{
-					&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+			discovery: &fakeDiscoveryInterface{
+				instances: &sapb.SAPInstances{
+					Instances: []*sapb.SAPInstance{
+						&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+					},
+				},
+				systems: []*spb.SapDiscovery{
+					{
+						DatabaseLayer: &spb.SapDiscovery_Component{
+							HaHosts: []string{
+								"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
+								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+								"resourceURI/does/not/match/regexp",
+							},
+						},
+					},
 				},
 			},
 			wantHanaExists: float64(1.0),
@@ -959,6 +998,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"ha_sr_hook_configured": "yes",
 				"numa_balancing":        "enabled",
 				"transparent_hugepages": "enabled",
+				"ha_in_same_zone":       "true",
 			},
 		},
 	}
@@ -980,7 +1020,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				Execute:            test.exec,
 				OSType:             "linux",
 				osVendorID:         "rhel",
-				sapApplications:    test.sapApplications,
+				Discovery:          test.discovery,
 				WorkloadConfig:     collectionDefinition.GetWorkloadValidation(),
 				ConfigFileReader:   test.configFileReader,
 			}

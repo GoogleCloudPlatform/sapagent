@@ -337,6 +337,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		HeartbeatSpec:     wlmHeartbeatSpec,
 		GCEService:        gceService,
 		WLMService:        wlmService,
+		Discovery:         systemDiscovery,
 	}
 	if d.config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
 		// When set to collect workload manager metrics remotely then that is all this runtime will do.

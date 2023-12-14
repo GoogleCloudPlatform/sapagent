@@ -49,6 +49,11 @@ enum DiskVariable {
   PD_SIZE = 4;
 }
 
+enum HANAHighAvailabilityVariable {
+  HA_VARIABLE_UNSPECIFIED = 0;
+  HA_IN_SAME_ZONE = 1;
+}
+
 enum PrimitiveVariable {
   PRIMITIVE_VARIABLE_UNSPECIFIED = 0;
   PCMK_DELAY_BASE = 1;
@@ -124,6 +129,7 @@ message ValidationHANA {
   repeated configurablemetrics.EvalMetric global_ini_metrics = 1;
   repeated HANADiskVolumeMetric hana_disk_volume_metrics = 2;
   repeated configurablemetrics.OSCommandMetric os_command_metrics = 3;
+  repeated HANAHighAvailabilityMetric ha_metrics = 4;
 }
 
 message HANADiskVolumeMetric {
@@ -134,6 +140,11 @@ message HANADiskVolumeMetric {
 message HANADiskMetric {
   configurablemetrics.MetricInfo metric_info = 1;
   DiskVariable value = 2;
+}
+
+message HANAHighAvailabilityMetric {
+  configurablemetrics.MetricInfo metric_info = 1;
+  HANAHighAvailabilityVariable value = 2;
 }
 
 message ValidationNetweaver {

@@ -107,7 +107,9 @@ func TestCollectMetricsToJSON(t *testing.T) {
 		BackOffs:         defaultBackOffIntervals,
 		osVendorID:       "test-os",
 		osVersion:        "version",
-		sapApplications:  &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+		Discovery: &fakeDiscoveryInterface{
+			instances:  &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+		},
 	}
 	got := strings.TrimSpace(CollectMetricsToJSON(context.Background(), p))
 	if !strings.HasPrefix(got, "{") || !strings.HasSuffix(got, "}") {
