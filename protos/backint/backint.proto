@@ -30,7 +30,7 @@ message BackintConfiguration {
   string encryption_key = 6;
   bool compress = 7;
   string kms_key = 8;
-  string service_account = 9;
+  string service_account_key = 9;
   int64 rate_limit_mb = 10;
   int64 file_read_timeout_ms = 11;
   bool dump_data = 12;

@@ -31,7 +31,6 @@ import (
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
-	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
 func fakeServer(bucketName string) *fakestorage.Server {
@@ -109,16 +108,16 @@ func emptyServer(bucketName string) *fakestorage.Server {
 
 func TestConnectToBucket(t *testing.T) {
 	tests := []struct {
-		name   string
-		config *bpb.BackintConfiguration
-		client Client
-		verify bool
-		want   *storage.BucketHandle
-		wantOk bool
+		name              string
+		serviceAccountKey string
+		bucket            string
+		client            Client
+		verify            bool
+		want              *storage.BucketHandle
+		wantOk            bool
 	}{
 		{
-			name:   "ClientCreateFail",
-			config: &bpb.BackintConfiguration{},
+			name: "ClientCreateFail",
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return nil, errors.New("client create error")
 			},
@@ -127,10 +126,8 @@ func TestConnectToBucket(t *testing.T) {
 			wantOk: false,
 		},
 		{
-			name: "ClientCreateFailServiceAccount",
-			config: &bpb.BackintConfiguration{
-				ServiceAccount: "test-account",
-			},
+			name:              "ClientCreateFailServiceAccount",
+			serviceAccountKey: "test-account",
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return nil, errors.New("client create error")
 			},
@@ -139,41 +136,33 @@ func TestConnectToBucket(t *testing.T) {
 			wantOk: false,
 		},
 		{
-			name: "ConnectFail",
-			config: &bpb.BackintConfiguration{
-				Bucket: "fake-bucket",
-			},
+			name:   "ConnectFail",
+			bucket: "fake-bucket",
 			client: defaultStorageClient,
 			verify: true,
 			want:   nil,
 			wantOk: false,
 		},
 		{
-			name: "ConnectFailNoVerify",
-			config: &bpb.BackintConfiguration{
-				Bucket: "fake-bucket",
-			},
+			name:   "ConnectFailNoVerify",
+			bucket: "fake-bucket",
 			client: defaultStorageClient,
 			verify: false,
 			want:   emptyServer("fake-bucket").Client().Bucket("fake-bucket"),
 			wantOk: true,
 		},
 		{
-			name: "ConnectSuccess",
-			config: &bpb.BackintConfiguration{
-				Bucket: "test-bucket",
-			},
+			name:   "ConnectSuccess",
+			bucket: "test-bucket",
 			client: defaultStorageClient,
 			verify: true,
 			want:   defaultFakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
 		{
-			name: "ConnectSuccessServiceAccount",
-			config: &bpb.BackintConfiguration{
-				Bucket:         "test-bucket",
-				ServiceAccount: "test-account",
-			},
+			name:              "ConnectSuccessServiceAccount",
+			bucket:            "test-bucket",
+			serviceAccountKey: "test-account",
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				if opts == nil {
 					return nil, errors.New("client create error")
@@ -185,10 +174,8 @@ func TestConnectToBucket(t *testing.T) {
 			wantOk: true,
 		},
 		{
-			name: "ConnectSuccessEmptyBucket",
-			config: &bpb.BackintConfiguration{
-				Bucket: "empty-bucket",
-			},
+			name:   "ConnectSuccessEmptyBucket",
+			bucket: "empty-bucket",
 			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 				return emptyServer("empty-bucket").Client(), nil
 			},
@@ -199,12 +186,12 @@ func TestConnectToBucket(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := ConnectToBucket(context.Background(), test.client, test.config.GetServiceAccount(), test.config.GetBucket(), "test-user-agent", test.verify, 5)
+			got, gotOk := ConnectToBucket(context.Background(), test.client, test.serviceAccountKey, test.bucket, "test-user-agent", test.verify, 5)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.IgnoreUnexported(storage.BucketHandle{})); diff != "" {
-				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.config.GetServiceAccount(), test.config.GetBucket(), diff)
+				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.serviceAccountKey, test.bucket, diff)
 			}
 			if gotOk != test.wantOk {
-				t.Errorf("ConnectToBucket(%v, %v) = %v, want %v", test.config.GetServiceAccount(), test.config.GetBucket(), gotOk, test.wantOk)
+				t.Errorf("ConnectToBucket(%v, %v) = %v, want %v", test.serviceAccountKey, test.bucket, gotOk, test.wantOk)
 			}
 		})
 	}

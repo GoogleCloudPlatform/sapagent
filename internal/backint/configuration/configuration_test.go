@@ -386,7 +386,7 @@ func TestLegacyParameters(t *testing.T) {
 				InputFile:         "/input.txt",
 				OutputFile:        "/output.txt",
 				LogToCloud:        wpb.Bool(false),
-				ServiceAccount:    "testAccount",
+				ServiceAccountKey: "testAccount",
 				LogLevel:          bpb.LogLevel_DEBUG,
 			},
 			read: func(p string) ([]byte, error) {

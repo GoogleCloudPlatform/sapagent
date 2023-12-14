@@ -70,7 +70,7 @@ func defaultParametersFile(t *testing.T) *os.File {
 		"encryption_key": "",
 		"compress": false,
 		"kms_key": "",
-		"service_account": "",
+		"service_account_key": "",
 		"rate_limit_mb": 0,
 		"file_read_timeout_ms": 1000,
 		"dump_data": false,

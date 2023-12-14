@@ -252,7 +252,7 @@ func unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration,
 		case "#BUCKET":
 			config.Bucket = split[1]
 		case "#SERVICE_ACCOUNT":
-			config.ServiceAccount = split[1]
+			config.ServiceAccountKey = split[1]
 		case "#ENCRYPTION_KEY":
 			config.EncryptionKey = split[1]
 		case "#KMS_KEY_NAME":
