@@ -997,7 +997,7 @@ func TestDiscoverHANA(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := SapDiscovery{Execute: tc.execute, FileReader: func(string) ([]byte, error) { return []byte(tc.topology), nil }}
 			got := d.discoverHANA(ctx, tc.app)
-			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.SortSlices(func(a, b SapSystemDetails) bool { return a.DBComponent.Sid < b.DBComponent.Sid })); diff != "" {
 				t.Errorf("discoverHANA(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
 			}
 		})
