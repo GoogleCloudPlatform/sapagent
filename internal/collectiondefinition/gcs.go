@@ -72,7 +72,7 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 	bucketName := bucketEnvMap[opts.Env]
 	// Do not verify the connection to the Cloud Storage bucket.
 	// Public access is enabled for the downloaded files.
-	bh, ok := storage.ConnectToBucket(ctx, opts.Client, "", bucketName, "", false, 0)
+	bh, ok := storage.ConnectToBucket(ctx, storage.ConnectParameters{StorageClient: opts.Client, BucketName: bucketName})
 	if !ok {
 		return nil
 	}

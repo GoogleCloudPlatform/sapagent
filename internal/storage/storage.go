@@ -152,41 +152,55 @@ type discardCloser struct{}
 func (discardCloser) Close() error                { return nil }
 func (discardCloser) Write(p []byte) (int, error) { return len(p), nil }
 
+// ConnectParameters provides parameters for bucket connection.
+type ConnectParameters struct {
+	StorageClient    Client
+	ServiceAccount   string
+	BucketName       string
+	UserAgentSuffix  string
+	Endpoint         string
+	VerifyConnection bool
+	MaxRetries       int64
+}
+
 // ConnectToBucket creates the storage client with custom retry logic and
 // attempts to connect to the GCS bucket. Returns false if there is a connection
 // failure (bucket does not exist, invalid credentials, etc.)
 // userAgentSuffix is an optional parameter to set the User-Agent header.
 // verifyConnection requires bucket read access to list the bucket's objects.
-func ConnectToBucket(ctx context.Context, storageClient Client, serviceAccount, bucketName, userAgentSuffix string, verifyConnection bool, maxRetries int64) (*storage.BucketHandle, bool) {
+func ConnectToBucket(ctx context.Context, p ConnectParameters) (*storage.BucketHandle, bool) {
 	var opts []option.ClientOption
 	userAgent := fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", configuration.AgentVersion)
-	if userAgentSuffix != "" {
-		userAgent = fmt.Sprintf("%s %s)", strings.TrimSuffix(userAgent, ")"), userAgentSuffix)
+	if p.UserAgentSuffix != "" {
+		userAgent = fmt.Sprintf("%s %s)", strings.TrimSuffix(userAgent, ")"), p.UserAgentSuffix)
 	}
 	log.CtxLogger(ctx).Infow("Setting User-Agent header", "userAgent", userAgent)
 	opts = append(opts, option.WithUserAgent(userAgent))
-	if serviceAccount != "" {
-		opts = append(opts, option.WithCredentialsFile(serviceAccount))
+	if p.ServiceAccount != "" {
+		opts = append(opts, option.WithCredentialsFile(p.ServiceAccount))
 	}
-	client, err := storageClient(ctx, opts...)
+	if p.Endpoint != "" {
+		opts = append(opts, option.WithEndpoint(p.Endpoint))
+	}
+	client, err := p.StorageClient(ctx, opts...)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create GCS client. Ensure your default credentials or service account file are correct.", "error", err)
 		return nil, false
 	}
 
-	bucket := client.Bucket(bucketName)
-	if !verifyConnection {
-		log.CtxLogger(ctx).Infow("Created bucket but did not verify connection. Read/write calls may fail.", "bucket", bucketName)
+	bucket := client.Bucket(p.BucketName)
+	if !p.VerifyConnection {
+		log.CtxLogger(ctx).Infow("Created bucket but did not verify connection. Read/write calls may fail.", "bucket", p.BucketName)
 		return bucket, true
 	}
-	log.CtxLogger(ctx).Infow("Verifying connection to bucket", "bucket", bucketName)
-	rw := &ReadWriter{MaxRetries: maxRetries}
+	log.CtxLogger(ctx).Infow("Verifying connection to bucket", "bucket", p.BucketName)
+	rw := &ReadWriter{MaxRetries: p.MaxRetries}
 	it := bucket.Retryer(rw.retryOptions("Failed to verify bucket connection, retrying.")...).Objects(ctx, nil)
 	if _, err := it.Next(); err != nil && err != iterator.Done {
-		log.CtxLogger(ctx).Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", bucketName, "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to connect to bucket. Ensure the bucket exists and you have permission to access it.", "bucket", p.BucketName, "error", err)
 		return nil, false
 	}
-	log.CtxLogger(ctx).Infow("Connected to bucket", "bucket", bucketName)
+	log.CtxLogger(ctx).Infow("Connected to bucket", "bucket", p.BucketName)
 	return bucket, true
 }
 

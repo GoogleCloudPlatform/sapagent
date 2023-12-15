@@ -49,6 +49,7 @@ message BackintConfiguration {
   int64 retry_backoff_initial = 25;
   int64 retry_backoff_max = 26;
   float retry_backoff_multiplier = 27;
+  string client_endpoint = 28;
 }
 
 enum LogLevel {

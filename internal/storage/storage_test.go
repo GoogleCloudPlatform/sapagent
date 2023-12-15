@@ -108,90 +108,102 @@ func emptyServer(bucketName string) *fakestorage.Server {
 
 func TestConnectToBucket(t *testing.T) {
 	tests := []struct {
-		name              string
-		serviceAccountKey string
-		bucket            string
-		client            Client
-		verify            bool
-		want              *storage.BucketHandle
-		wantOk            bool
+		name   string
+		p      ConnectParameters
+		want   *storage.BucketHandle
+		wantOk bool
 	}{
 		{
 			name: "ClientCreateFail",
-			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
-				return nil, errors.New("client create error")
+			p: ConnectParameters{
+				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+					return nil, errors.New("client create error")
+				},
+				VerifyConnection: true,
 			},
-			verify: true,
 			want:   nil,
 			wantOk: false,
 		},
 		{
-			name:              "ClientCreateFailServiceAccount",
-			serviceAccountKey: "test-account",
-			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
-				return nil, errors.New("client create error")
+			name: "ClientCreateFailServiceAccount",
+			p: ConnectParameters{
+				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+					return nil, errors.New("client create error")
+				},
+				VerifyConnection: true,
+				ServiceAccount:   "test-account",
 			},
-			verify: true,
 			want:   nil,
 			wantOk: false,
 		},
 		{
-			name:   "ConnectFail",
-			bucket: "fake-bucket",
-			client: defaultStorageClient,
-			verify: true,
+			name: "ConnectFail",
+			p: ConnectParameters{
+				StorageClient:    defaultStorageClient,
+				VerifyConnection: true,
+				BucketName:       "fake-bucket",
+			},
 			want:   nil,
 			wantOk: false,
 		},
 		{
-			name:   "ConnectFailNoVerify",
-			bucket: "fake-bucket",
-			client: defaultStorageClient,
-			verify: false,
+			name: "ConnectFailNoVerify",
+			p: ConnectParameters{
+				StorageClient: defaultStorageClient,
+				BucketName:    "fake-bucket",
+			},
 			want:   emptyServer("fake-bucket").Client().Bucket("fake-bucket"),
 			wantOk: true,
 		},
 		{
-			name:   "ConnectSuccess",
-			bucket: "test-bucket",
-			client: defaultStorageClient,
-			verify: true,
+			name: "ConnectSuccess",
+			p: ConnectParameters{
+				StorageClient:    defaultStorageClient,
+				BucketName:       "test-bucket",
+				VerifyConnection: true,
+			},
 			want:   defaultFakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
 		{
-			name:              "ConnectSuccessServiceAccount",
-			bucket:            "test-bucket",
-			serviceAccountKey: "test-account",
-			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
-				if opts == nil {
-					return nil, errors.New("client create error")
-				}
-				return defaultFakeServer.Client(), nil
+			name: "ConnectSuccessServiceAccount",
+			p: ConnectParameters{
+				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+					if opts == nil {
+						return nil, errors.New("client create error")
+					}
+					return defaultFakeServer.Client(), nil
+				},
+				BucketName:       "test-bucket",
+				VerifyConnection: true,
+				ServiceAccount:   "test-account",
+				UserAgentSuffix:  "test-user-agent",
+				Endpoint:         "test-endpoint",
 			},
-			verify: true,
 			want:   defaultFakeServer.Client().Bucket("test-bucket"),
 			wantOk: true,
 		},
 		{
-			name:   "ConnectSuccessEmptyBucket",
-			bucket: "empty-bucket",
-			client: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
-				return emptyServer("empty-bucket").Client(), nil
+			name: "ConnectSuccessEmptyBucket",
+			p: ConnectParameters{
+				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
+					return emptyServer("empty-bucket").Client(), nil
+				},
+				BucketName:       "empty-bucket",
+				VerifyConnection: true,
 			},
-			verify: true,
 			want:   emptyServer("empty-bucket").Client().Bucket("empty-bucket"),
 			wantOk: true,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := ConnectToBucket(context.Background(), test.client, test.serviceAccountKey, test.bucket, "test-user-agent", test.verify, 5)
+			got, gotOk := ConnectToBucket(context.Background(), test.p)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), cmpopts.IgnoreUnexported(storage.BucketHandle{})); diff != "" {
-				t.Errorf("ConnectToBucket(%v, %v) had unexpected diff (-want +got):\n%s", test.serviceAccountKey, test.bucket, diff)
+				t.Errorf("ConnectToBucket(%v) had unexpected diff (-want +got):\n%s", test.p, diff)
 			}
 			if gotOk != test.wantOk {
-				t.Errorf("ConnectToBucket(%v, %v) = %v, want %v", test.serviceAccountKey, test.bucket, gotOk, test.wantOk)
+				t.Errorf("ConnectToBucket(%v) = %v, want %v", test.p, gotOk, test.wantOk)
 			}
 		})
 	}

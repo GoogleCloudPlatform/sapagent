@@ -143,7 +143,13 @@ func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	}
 
 	if r.bucketName != "" {
-		if r.bucket, ok = storage.ConnectToBucket(ctx, s.NewClient, r.serviceAccount, r.bucketName, userAgent, false, 0); !ok {
+		connectParams := storage.ConnectParameters{
+			StorageClient:   s.NewClient,
+			ServiceAccount:  r.serviceAccount,
+			BucketName:      r.bucketName,
+			UserAgentSuffix: userAgent,
+		}
+		if r.bucket, ok = storage.ConnectToBucket(ctx, connectParams); !ok {
 			log.CtxLogger(ctx).Errorw("Failed to connect to bucket", "bucketName", r.bucketName)
 			return subcommands.ExitFailure
 		}

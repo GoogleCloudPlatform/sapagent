@@ -132,7 +132,16 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
 	log.CtxLogger(ctx).Infow("Args parsed and config validated", "config", config)
 
-	bucketHandle, ok := storage.ConnectToBucket(ctx, client, config.GetServiceAccountKey(), config.GetBucket(), userAgent, true, config.GetRetries())
+	connectParams := storage.ConnectParameters{
+		StorageClient:    client,
+		ServiceAccount:   config.GetServiceAccountKey(),
+		BucketName:       config.GetBucket(),
+		UserAgentSuffix:  userAgent,
+		VerifyConnection: true,
+		MaxRetries:       config.GetRetries(),
+		Endpoint:         config.GetClientEndpoint(),
+	}
+	bucketHandle, ok := storage.ConnectToBucket(ctx, connectParams)
 	if !ok {
 		return subcommands.ExitUsageError
 	}
