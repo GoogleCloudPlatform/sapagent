@@ -53,6 +53,10 @@ var defaultHMQueriesContent []byte
 //go:embed defaultconfigs/collectiondefinition/collection_definition.json
 var DefaultCollectionDefinition []byte
 
+// AgentBuildChange is the change number that the agent was built at
+// this will be replaced using "-X github.com/GoogleCloudPlatform/sapagent/internal/configuration.AgentBuildChange=$CLNUMBER" by the build process
+var AgentBuildChange = `0`
+
 const (
 	// AgentName is a short-hand name of the agent.
 	AgentName = `sapagent`
