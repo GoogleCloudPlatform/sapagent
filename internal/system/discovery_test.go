@@ -113,67 +113,35 @@ func resourceLess(a, b *spb.SapDiscovery_Resource) bool {
 }
 
 func TestStartSAPSystemDiscovery(t *testing.T) {
-	tests := []struct {
-		name               string
-		config             *cpb.Configuration
-		testLog            *logfake.TestCloudLogging
-		testSapDiscovery   *appsdiscoveryfake.SapDiscovery
-		testCloudDiscovery *clouddiscoveryfake.CloudDiscovery
-		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
-		want               bool
-	}{{
-		name: "succeeds",
-		config: &cpb.Configuration{
-			CloudProperties: defaultCloudProperties,
-			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-				EnableDiscovery:                &wpb.BoolValue{Value: true},
-				SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 10},
-				SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 10},
-			},
+	config := &cpb.Configuration{
+		CloudProperties: defaultCloudProperties,
+		DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+			EnableDiscovery:                &wpb.BoolValue{Value: true},
+			SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 10},
+			SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 10},
 		},
-		testLog: &logfake.TestCloudLogging{
-			FlushErr: []error{nil},
-		},
-		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+	}
+
+	d := &Discovery{
+		SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 		},
-		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 		},
-		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+		HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 			DiscoverCurrentHostResp: [][]string{{}},
 		},
-		want: true,
-	}, {
-		name: "failsDueToConfig",
-		config: &cpb.Configuration{
-			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-				EnableDiscovery: &wpb.BoolValue{Value: false},
-			},
-		},
-		testLog: &logfake.TestCloudLogging{
-			FlushErr: []error{nil},
-		},
-		want: false,
-	}}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			d := &Discovery{
-				SapDiscoveryInterface:   test.testSapDiscovery,
-				CloudDiscoveryInterface: test.testCloudDiscovery,
-				HostDiscoveryInterface:  test.testHostDiscovery,
-				AppsDiscovery:           func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-			}
-
-			ctx, cancel := context.WithCancel(context.Background())
-			got := StartSAPSystemDiscovery(ctx, test.config, d)
-			if got != test.want {
-				t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", test.config, got, test.want)
-			}
-			cancel()
-		})
+		AppsDiscovery:     func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	got := StartSAPSystemDiscovery(ctx, config, d)
+	if got != true {
+		t.Errorf("StartSAPSystemDiscovery(%#v) = %t, want: %t", config, got, true)
+	}
+	cancel()
 }
 
 func TestDiscoverSAPSystems(t *testing.T) {
@@ -1073,154 +1041,201 @@ func TestRunDiscovery(t *testing.T) {
 		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
 		testWLM            *wlmfake.TestWLM
 		wantSystems        [][]*spb.SapDiscovery
-	}{{
-		name: "singleUpdate",
-		config: &cpb.Configuration{
-			CloudProperties: defaultCloudProperties,
-			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-				SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 5},
+	}{
+		{
+			name: "disableWrite",
+			config: &cpb.Configuration{
+				CloudProperties: defaultCloudProperties,
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 5},
+				},
 			},
-		},
-		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
-			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
-				DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+			testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+				DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+					AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
+					DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+				}}},
+			},
+			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}},
+			},
+			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+				DiscoverCurrentHostResp: [][]string{{}},
+			},
+			testLog: &logfake.TestCloudLogging{
+				ExpectedLogEntries: []logging.Entry{},
+			},
+			testWLM: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{},
+				WriteInsightErrs: []error{nil},
+			},
+			wantSystems: [][]*spb.SapDiscovery{{{
+				ApplicationLayer: &spb.SapDiscovery_Component{
+					Sid:         "ABC",
+					HostProject: "12345",
+				},
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid:         "DEF",
+					HostProject: "12345",
+				},
+				ProjectNumber: "12345",
 			}}},
 		},
-		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}},
-		},
-		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
-		},
-		testLog: &logfake.TestCloudLogging{
-			ExpectedLogEntries: []logging.Entry{{
-				Severity: logging.Info,
-				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
-			}}},
-		testWLM: &wlmfake.TestWLM{
-			WriteInsightArgs: []wlmfake.WriteInsightArgs{{
-				Project:  "test-project-id",
-				Location: "test-zone",
-				Req: &workloadmanager.WriteInsightRequest{
-					Insight: &workloadmanager.Insight{
-						SapDiscovery: &workloadmanager.SapDiscovery{
-							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid:         "ABC",
-								HostProject: "12345",
-							},
-							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid:         "DEF",
-								HostProject: "12345",
+		{
+			name: "singleUpdate",
+			config: &cpb.Configuration{
+				CloudProperties: defaultCloudProperties,
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: true},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 5},
+				},
+			},
+			testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+				DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+					AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
+					DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+				}}},
+			},
+			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}},
+			},
+			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+				DiscoverCurrentHostResp: [][]string{{}},
+			},
+			testLog: &logfake.TestCloudLogging{
+				ExpectedLogEntries: []logging.Entry{{
+					Severity: logging.Info,
+					Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+				}},
+			},
+			testWLM: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
+					Project:  "test-project-id",
+					Location: "test-zone",
+					Req: &workloadmanager.WriteInsightRequest{
+						Insight: &workloadmanager.Insight{
+							SapDiscovery: &workloadmanager.SapDiscovery{
+								ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+									Sid:         "ABC",
+									HostProject: "12345",
+								},
+								DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+									Sid:         "DEF",
+									HostProject: "12345",
+								},
 							},
 						},
 					},
+				}},
+				WriteInsightErrs: []error{nil},
+			},
+			wantSystems: [][]*spb.SapDiscovery{{{
+				ApplicationLayer: &spb.SapDiscovery_Component{
+					Sid:         "ABC",
+					HostProject: "12345",
 				},
-			}},
-			WriteInsightErrs: []error{nil},
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid:         "DEF",
+					HostProject: "12345",
+				},
+				ProjectNumber: "12345",
+			}}},
 		},
-		wantSystems: [][]*spb.SapDiscovery{{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
-				Sid:         "ABC",
-				HostProject: "12345",
+		{
+			name: "multipleUpdates",
+			config: &cpb.Configuration{
+				CloudProperties: defaultCloudProperties,
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: true},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 5},
+				},
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
-				Sid:         "DEF",
-				HostProject: "12345",
+			testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+				DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+					AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
+					DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+				}}, {{
+					AppComponent: &spb.SapDiscovery_Component{Sid: "GHI"},
+					DBComponent:  &spb.SapDiscovery_Component{Sid: "JKL"},
+				}}},
 			},
-			ProjectNumber: "12345",
-		}}},
-	}, {
-		name: "multipleUpdates",
-		config: &cpb.Configuration{
-			CloudProperties: defaultCloudProperties,
-			DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-				SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 5},
+			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}, {}, {}, {}},
 			},
-		},
-		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
-			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
-				DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+				DiscoverCurrentHostResp: [][]string{{}, {}},
+			},
+			testLog: &logfake.TestCloudLogging{
+				ExpectedLogEntries: []logging.Entry{{
+					Severity: logging.Info,
+					Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+				}, {
+					Severity: logging.Info,
+					Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
+				}},
+			},
+			testWLM: &wlmfake.TestWLM{
+				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
+					Project:  "test-project-id",
+					Location: "test-zone",
+					Req: &workloadmanager.WriteInsightRequest{
+						Insight: &workloadmanager.Insight{
+							SapDiscovery: &workloadmanager.SapDiscovery{
+								ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+									Sid:         "ABC",
+									HostProject: "12345",
+								},
+								DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+									Sid:         "DEF",
+									HostProject: "12345",
+								},
+							},
+						},
+					},
+				}, {
+					Project:  "test-project-id",
+					Location: "test-zone",
+					Req: &workloadmanager.WriteInsightRequest{
+						Insight: &workloadmanager.Insight{
+							SapDiscovery: &workloadmanager.SapDiscovery{
+								ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+									Sid:         "GHI",
+									HostProject: "12345",
+								},
+								DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+									Sid:         "JKL",
+									HostProject: "12345",
+								},
+							},
+						},
+					},
+				}},
+				WriteInsightErrs: []error{nil, nil},
+			},
+			wantSystems: [][]*spb.SapDiscovery{{{
+				ApplicationLayer: &spb.SapDiscovery_Component{
+					Sid:         "ABC",
+					HostProject: "12345",
+				},
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid:         "DEF",
+					HostProject: "12345",
+				},
+				ProjectNumber: "12345",
 			}}, {{
-				AppComponent: &spb.SapDiscovery_Component{Sid: "GHI"},
-				DBComponent:  &spb.SapDiscovery_Component{Sid: "JKL"},
+				ApplicationLayer: &spb.SapDiscovery_Component{
+					Sid:         "GHI",
+					HostProject: "12345",
+				},
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid:         "JKL",
+					HostProject: "12345",
+				},
+				ProjectNumber: "12345",
 			}}},
 		},
-		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}, {}, {}, {}},
-		},
-		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}, {}},
-		},
-		testLog: &logfake.TestCloudLogging{
-			ExpectedLogEntries: []logging.Entry{{
-				Severity: logging.Info,
-				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
-			}, {
-				Severity: logging.Info,
-				Payload:  map[string]string{"type": "SapDiscovery", "discovery": ""},
-			}}},
-		testWLM: &wlmfake.TestWLM{
-			WriteInsightArgs: []wlmfake.WriteInsightArgs{{
-				Project:  "test-project-id",
-				Location: "test-zone",
-				Req: &workloadmanager.WriteInsightRequest{
-					Insight: &workloadmanager.Insight{
-						SapDiscovery: &workloadmanager.SapDiscovery{
-							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid:         "ABC",
-								HostProject: "12345",
-							},
-							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid:         "DEF",
-								HostProject: "12345",
-							},
-						},
-					},
-				},
-			}, {
-				Project:  "test-project-id",
-				Location: "test-zone",
-				Req: &workloadmanager.WriteInsightRequest{
-					Insight: &workloadmanager.Insight{
-						SapDiscovery: &workloadmanager.SapDiscovery{
-							ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid:         "GHI",
-								HostProject: "12345",
-							},
-							DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
-								Sid:         "JKL",
-								HostProject: "12345",
-							},
-						},
-					},
-				},
-			}},
-			WriteInsightErrs: []error{nil, nil},
-		},
-		wantSystems: [][]*spb.SapDiscovery{{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
-				Sid:         "ABC",
-				HostProject: "12345",
-			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
-				Sid:         "DEF",
-				HostProject: "12345",
-			},
-			ProjectNumber: "12345",
-		}}, {{
-			ApplicationLayer: &spb.SapDiscovery_Component{
-				Sid:         "GHI",
-				HostProject: "12345",
-			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
-				Sid:         "JKL",
-				HostProject: "12345",
-			},
-			ProjectNumber: "12345",
-		}}},
-	}}
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.testLog.T = t

@@ -164,12 +164,6 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 // StartSAPSystemDiscovery Initializes the discovery object and starts the discovery subroutine.
 // Returns true if the discovery goroutine is started, and false otherwise.
 func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) bool {
-	// Start SAP system discovery only if sap_system_discovery is enabled.
-	if !config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
-		log.CtxLogger(ctx).Info("Not starting SAP system discovery.")
-		return false
-	}
-
 	go updateSAPInstances(ctx, config, d)
 	// Ensure SAP instances is populated before starting system discovery
 	for d.GetSAPInstances() == nil {
@@ -217,25 +211,28 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) 
 		locationParts := strings.Split(cp.GetZone(), "-")
 		region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 
-		log.CtxLogger(ctx).Info("Sending systems to WLM API")
-		for _, sys := range sapSystems {
-			// Send System to DW API
-			req := &workloadmanager.WriteInsightRequest{
-				Insight: insightFromSAPSystem(sys),
-			}
-			req.Insight.InstanceId = cp.GetInstanceId()
+		// Write SAP system discovery data only if sap_system_discovery is enabled.
+		if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
+			log.CtxLogger(ctx).Info("Sending systems to WLM API")
+			for _, sys := range sapSystems {
+				// Send System to DW API
+				req := &workloadmanager.WriteInsightRequest{
+					Insight: insightFromSAPSystem(sys),
+				}
+				req.Insight.InstanceId = cp.GetInstanceId()
 
-			err := d.WlmService.WriteInsight(cp.ProjectId, region, req)
-			if err != nil {
-				log.CtxLogger(ctx).Warnw("Encountered error writing to WLM", "error", err)
-			}
+				err := d.WlmService.WriteInsight(cp.ProjectId, region, req)
+				if err != nil {
+					log.CtxLogger(ctx).Warnw("Encountered error writing to WLM", "error", err)
+				}
 
-			if d.CloudLogInterface == nil {
-				continue
-			}
-			err = d.writeToCloudLogging(sys)
-			if err != nil {
-				log.CtxLogger(ctx).Warnw("Encountered error writing to cloud logging", "error", err)
+				if d.CloudLogInterface == nil {
+					continue
+				}
+				err = d.writeToCloudLogging(sys)
+				if err != nil {
+					log.CtxLogger(ctx).Warnw("Encountered error writing to cloud logging", "error", err)
+				}
 			}
 		}
 
