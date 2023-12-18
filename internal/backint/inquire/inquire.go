@@ -36,10 +36,10 @@ import (
 )
 
 // Execute logs information and performs the requested inquiry. Returns false on failures.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
 	log.CtxLogger(ctx).Infow("INQUIRE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintInquireStarted)
-	if err := inquire(ctx, config, bucketHandle, input, output); err != nil {
+	if err := inquire(ctx, config, connectParams, input, output); err != nil {
 		log.CtxLogger(ctx).Errorw("INQUIRE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintInquireFailure)
 		return false
@@ -51,7 +51,7 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // inquire queries the bucket for objects based on each line of the input. Results for each
 // inquiry are written to the output. Issues with file operations will return errors.
-func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+func inquire(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) error {
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	backintVersion := ""
@@ -73,6 +73,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 			}
 			prefix := config.GetUserId() + parse.TrimAndClean(fileName)
 			wp.Submit(func() {
+				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion, "", config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()
@@ -95,6 +96,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 				filter = externalBackupID + ".bak"
 			}
 			wp.Submit(func() {
+				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion, filter, config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()

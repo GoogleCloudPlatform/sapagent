@@ -50,7 +50,12 @@ var (
 			Content: []byte("test content"),
 		},
 	})
-	defaultBucketHandle  = fakeServer.Client().Bucket("test-bucket")
+	defaultConnectParameters = &storage.ConnectParameters{
+		StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+			return fakeServer.Client(), nil
+		},
+		BucketName: "test-bucket",
+	}
 	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
 		return fakeServer.Client(), nil
 	}
@@ -218,7 +223,7 @@ func TestRun(t *testing.T) {
 	tests := []struct {
 		name   string
 		config *bpb.BackintConfiguration
-		bucket *s.BucketHandle
+		params *storage.ConnectParameters
 		input  string
 		want   bool
 	}{
@@ -299,7 +304,7 @@ func TestRun(t *testing.T) {
 				OutputFile: t.TempDir() + "/output.txt",
 				Function:   bpb.Function_DELETE,
 			},
-			bucket: defaultBucketHandle,
+			params: defaultConnectParameters,
 			input:  `#SOFTWAREID "backint 1.50"`,
 			want:   true,
 		},
@@ -320,7 +325,7 @@ func TestRun(t *testing.T) {
 				OutputFile: t.TempDir() + "/output.txt",
 				Function:   bpb.Function_RESTORE,
 			},
-			bucket: defaultBucketHandle,
+			params: defaultConnectParameters,
 			input:  `#SOFTWAREID "backint 1.50"`,
 			want:   true,
 		},
@@ -331,8 +336,12 @@ func TestRun(t *testing.T) {
 				OutputFile: t.TempDir() + "/output.txt",
 				Function:   bpb.Function_DIAGNOSE,
 			},
-			bucket: nil,
-			want:   false,
+			params: &storage.ConnectParameters{
+				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+					return fakestorage.NewServer([]fakestorage.Object{}).Client(), nil
+				},
+			},
+			want: false,
 		},
 	}
 	for _, test := range tests {
@@ -346,7 +355,7 @@ func TestRun(t *testing.T) {
 				defer f.Close()
 			}
 
-			got := run(context.Background(), test.config, test.bucket)
+			got := run(context.Background(), test.config, test.params)
 			if got != test.want {
 				t.Errorf("run(%#v) = %v, want %v", test.config, got, test.want)
 			}

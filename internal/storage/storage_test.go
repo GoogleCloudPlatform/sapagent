@@ -109,13 +109,13 @@ func emptyServer(bucketName string) *fakestorage.Server {
 func TestConnectToBucket(t *testing.T) {
 	tests := []struct {
 		name   string
-		p      ConnectParameters
+		p      *ConnectParameters
 		want   *storage.BucketHandle
 		wantOk bool
 	}{
 		{
 			name: "ClientCreateFail",
-			p: ConnectParameters{
+			p: &ConnectParameters{
 				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 					return nil, errors.New("client create error")
 				},
@@ -126,7 +126,7 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ClientCreateFailServiceAccount",
-			p: ConnectParameters{
+			p: &ConnectParameters{
 				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 					return nil, errors.New("client create error")
 				},
@@ -138,7 +138,7 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectFail",
-			p: ConnectParameters{
+			p: &ConnectParameters{
 				StorageClient:    defaultStorageClient,
 				VerifyConnection: true,
 				BucketName:       "fake-bucket",
@@ -148,7 +148,7 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectFailNoVerify",
-			p: ConnectParameters{
+			p: &ConnectParameters{
 				StorageClient: defaultStorageClient,
 				BucketName:    "fake-bucket",
 			},
@@ -157,7 +157,7 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectSuccess",
-			p: ConnectParameters{
+			p: &ConnectParameters{
 				StorageClient:    defaultStorageClient,
 				BucketName:       "test-bucket",
 				VerifyConnection: true,
@@ -167,7 +167,7 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectSuccessServiceAccount",
-			p: ConnectParameters{
+			p: &ConnectParameters{
 				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 					if opts == nil {
 						return nil, errors.New("client create error")
@@ -185,7 +185,7 @@ func TestConnectToBucket(t *testing.T) {
 		},
 		{
 			name: "ConnectSuccessEmptyBucket",
-			p: ConnectParameters{
+			p: &ConnectParameters{
 				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error) {
 					return emptyServer("empty-bucket").Client(), nil
 				},

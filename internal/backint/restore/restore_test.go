@@ -31,6 +31,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"google.golang.org/api/option"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
@@ -79,9 +80,15 @@ var (
 			Content: []byte("test content 3"),
 		},
 	})
-	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
-	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100}
-	fakeFile            = func() *os.File {
+	defaultBucketHandle      = fakeServer.Client().Bucket("test-bucket")
+	defaultConnectParameters = &storage.ConnectParameters{
+		StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+			return fakeServer.Client(), nil
+		},
+		BucketName: "test-bucket",
+	}
+	defaultConfig = &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100}
+	fakeFile      = func() *os.File {
 		f, _ := os.Open("fake-file.txt")
 		return f
 	}
@@ -166,7 +173,7 @@ func TestRestore(t *testing.T) {
 
 			input := bytes.NewBufferString(test.input)
 			output := bytes.NewBufferString("")
-			got := restore(context.Background(), defaultConfig, defaultBucketHandle, input, output)
+			got := restore(context.Background(), defaultConfig, defaultConnectParameters, input, output)
 			if output.String() != test.want {
 				t.Errorf("restore() = %s, want: %s", output.String(), test.want)
 			}
@@ -179,7 +186,7 @@ func TestRestore(t *testing.T) {
 
 func TestRestoreScannerError(t *testing.T) {
 	want := cmpopts.AnyError
-	got := restore(context.Background(), defaultConfig, defaultBucketHandle, fakeFile(), bytes.NewBufferString(""))
+	got := restore(context.Background(), defaultConfig, defaultConnectParameters, fakeFile(), bytes.NewBufferString(""))
 	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
 		t.Errorf("restore() = %v, want: %v", got, want)
 	}

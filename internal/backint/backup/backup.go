@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -53,6 +54,10 @@ type parameters struct {
 	// The externalBackupID will be the number of milliseconds elapsed since January 1, 1970 UTC.
 	externalBackupID string
 
+	// connectParams holds the bucket connection parameters. Bucket connection
+	// was already verified so connection via a new client should always succeed.
+	connectParams *storage.ConnectParameters
+
 	config       *bpb.BackintConfiguration
 	bucketHandle *store.BucketHandle
 	fileType     string
@@ -66,10 +71,10 @@ type parameters struct {
 }
 
 // Execute logs information and performs the requested backup. Returns false on failures.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
 	log.CtxLogger(ctx).Infow("BACKUP starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintBackupStarted)
-	if err := backup(ctx, config, bucketHandle, input, output); err != nil {
+	if err := backup(ctx, config, connectParams, input, output); err != nil {
 		log.CtxLogger(ctx).Errorw("BACKUP failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintBackupFailure)
 		return false
@@ -81,7 +86,7 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // backup uploads pipes and files based on each line of the input. Results for each upload are
 // written to the output. Issues with file operations will return errors.
-func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) error {
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
@@ -99,7 +104,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 			}
 			p := parameters{
 				config:           config,
-				bucketHandle:     bucketHandle,
+				connectParams:    connectParams,
 				fileType:         s[0],
 				fileName:         s[1],
 				wp:               wp,
@@ -129,6 +134,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 				continue
 			}
 			wp.Submit(func() {
+				p.bucketHandle, _ = storage.ConnectToBucket(ctx, p.connectParams)
 				out := backupFile(ctx, p)
 				mu.Lock()
 				output.Write([]byte(out))
@@ -220,6 +226,7 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 		return fmt.Sprintf("#ERROR %s\n", p.fileName), fmt.Errorf("backup file does not have readable permissions")
 	}
 
+	startTime := time.Now()
 	sectionLength := p.fileSize / p.config.GetParallelStreams()
 	chunksCompleted := int64(0)
 	chunkError := false
@@ -231,6 +238,7 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 		// Reference: https://go.dev/doc/faq#closures_and_goroutines
 		i := i
 		p.wp.Submit(func() {
+			p.bucketHandle, _ = storage.ConnectToBucket(ctx, p.connectParams)
 			offset := sectionLength * i
 			length := sectionLength
 			// If this is the last chunk, ensure it uploads the remainder of the file
@@ -254,7 +262,7 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 			}
 			chunksCompleted++
 			if chunksCompleted == p.config.GetParallelStreams() {
-				p.output.Write([]byte(composeChunks(ctx, p, chunkError)))
+				p.output.Write([]byte(composeChunks(ctx, p, chunkError, startTime)))
 				f.Close()
 			}
 		})
@@ -264,7 +272,7 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 
 // composeChunks composes all chunks into 1 object in the bucket and deletes
 // the temporary chunks. Any chunk error will result in a failure.
-func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
+func composeChunks(ctx context.Context, p parameters, chunkError bool, startTime time.Time) string {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
 	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + ".bak"
 
@@ -279,7 +287,8 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool) string {
 		return ret()
 	}
 
-	log.CtxLogger(ctx).Infow("All chunks uploaded, composing into 1 object", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
+	avgTransferSpeedMBps := float64(p.fileSize) / time.Since(startTime).Seconds() / 1024 / 1024
+	log.CtxLogger(ctx).Infow("All chunks uploaded, composing into 1 object", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
 	var srcs []*store.ObjectHandle
 	// The composer can take between 1 to 32 objects to compose into 1 object
 	// parallel_streams are limited to 32 in the configuration so only 1 compose call is needed.

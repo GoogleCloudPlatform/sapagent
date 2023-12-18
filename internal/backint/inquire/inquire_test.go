@@ -26,12 +26,14 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/storage"
+	s "cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"google.golang.org/api/option"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
@@ -61,9 +63,15 @@ var (
 			Content: []byte("test content"),
 		},
 	})
-	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
-	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST"}
-	fakeFile            = func() *os.File {
+	defaultBucketHandle      = fakeServer.Client().Bucket("test-bucket")
+	defaultConnectParameters = &storage.ConnectParameters{
+		StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+			return fakeServer.Client(), nil
+		},
+		BucketName: "test-bucket",
+	}
+	defaultConfig = &bpb.BackintConfiguration{UserId: "test@TST"}
+	fakeFile      = func() *os.File {
 		f, _ := os.Open("fake-file.txt")
 		return f
 	}
@@ -137,7 +145,7 @@ func TestInquire(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			output := bytes.NewBufferString("")
-			got := inquire(context.Background(), defaultConfig, defaultBucketHandle, test.input, output)
+			got := inquire(context.Background(), defaultConfig, defaultConnectParameters, test.input, output)
 			if output.String() != test.want {
 				t.Errorf("inquire() = %s, want: %s", output.String(), test.want)
 			}
@@ -151,7 +159,7 @@ func TestInquire(t *testing.T) {
 func TestInquireFiles(t *testing.T) {
 	tests := []struct {
 		name             string
-		bucket           *storage.BucketHandle
+		bucket           *s.BucketHandle
 		prefix           string
 		fileName         string
 		externalBackupID string

@@ -168,7 +168,7 @@ type ConnectParameters struct {
 // failure (bucket does not exist, invalid credentials, etc.)
 // userAgentSuffix is an optional parameter to set the User-Agent header.
 // verifyConnection requires bucket read access to list the bucket's objects.
-func ConnectToBucket(ctx context.Context, p ConnectParameters) (*storage.BucketHandle, bool) {
+func ConnectToBucket(ctx context.Context, p *ConnectParameters) (*storage.BucketHandle, bool) {
 	var opts []option.ClientOption
 	userAgent := fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", configuration.AgentVersion)
 	if p.UserAgentSuffix != "" {

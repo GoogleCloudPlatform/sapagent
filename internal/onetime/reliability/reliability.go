@@ -143,7 +143,7 @@ func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	}
 
 	if r.bucketName != "" {
-		connectParams := storage.ConnectParameters{
+		connectParams := &storage.ConnectParameters{
 			StorageClient:   s.NewClient,
 			ServiceAccount:  r.serviceAccount,
 			BucketName:      r.bucketName,

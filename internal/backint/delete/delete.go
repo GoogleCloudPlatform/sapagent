@@ -36,10 +36,10 @@ import (
 )
 
 // Execute logs information and performs the requested deletion. Returns false on failures.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
 	log.CtxLogger(ctx).Infow("DELETE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintDeleteStarted)
-	if err := delete(ctx, config, bucketHandle, input, output); err != nil {
+	if err := delete(ctx, config, connectParams, input, output); err != nil {
 		log.CtxLogger(ctx).Errorw("DELETE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintDeleteFailure)
 		return false
@@ -51,7 +51,7 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // delete deletes objects in the bucket based on each line of the input. Results for each
 // deletion are written to the output. Issues with file operations will return errors.
-func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+func delete(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) error {
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
@@ -72,6 +72,7 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle 
 			object := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
 			wp.Submit(func() {
 				log.CtxLogger(ctx).Infow("Deleting object", "object", object)
+				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				err := storage.DeleteObject(ctx, bucketHandle, object, config.GetRetries())
 				mu.Lock()
 				defer mu.Unlock()

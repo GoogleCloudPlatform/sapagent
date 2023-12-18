@@ -39,10 +39,10 @@ import (
 )
 
 // Execute logs information and performs the requested restore. Returns false on failures.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
 	log.CtxLogger(ctx).Infow("RESTORE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintRestoreStarted)
-	if err := restore(ctx, config, bucketHandle, input, output); err != nil {
+	if err := restore(ctx, config, connectParams, input, output); err != nil {
 		log.CtxLogger(ctx).Errorw("RESTORE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintRestoreFailure)
 		return false
@@ -54,7 +54,7 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 
 // restore downloads files from the bucket based on each line of the input. Results for each
 // restore are written to the output. Issues with file operations will return errors.
-func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) error {
+func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) error {
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
@@ -77,6 +77,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 				destName = s[2]
 			}
 			wp.Submit(func() {
+				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, "")
 				mu.Lock()
 				defer mu.Unlock()
@@ -95,6 +96,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle
 				destName = s[3]
 			}
 			wp.Submit(func() {
+				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, externalBackupID)
 				mu.Lock()
 				defer mu.Unlock()

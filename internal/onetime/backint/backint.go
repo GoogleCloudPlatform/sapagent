@@ -132,7 +132,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
 	log.CtxLogger(ctx).Infow("Args parsed and config validated", "config", config)
 
-	connectParams := storage.ConnectParameters{
+	connectParams := &storage.ConnectParameters{
 		StorageClient:    client,
 		ServiceAccount:   config.GetServiceAccountKey(),
 		BucketName:       config.GetBucket(),
@@ -141,13 +141,12 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 		MaxRetries:       config.GetRetries(),
 		Endpoint:         config.GetClientEndpoint(),
 	}
-	bucketHandle, ok := storage.ConnectToBucket(ctx, connectParams)
-	if !ok {
+	if _, ok := storage.ConnectToBucket(ctx, connectParams); !ok {
 		return subcommands.ExitUsageError
 	}
 
 	usagemetrics.Action(usagemetrics.BackintRunning)
-	if ok := run(ctx, config, bucketHandle); !ok {
+	if ok := run(ctx, config, connectParams); !ok {
 		return subcommands.ExitUsageError
 	}
 
@@ -157,7 +156,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 
 // run opens the input file and creates the output file then selects which Backint function
 // to execute based on the configuration. Issues with file operations or config will return false.
-func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.BucketHandle) bool {
+func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters) bool {
 	usagemetrics.Action(usagemetrics.BackintRunning)
 	log.CtxLogger(ctx).Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	inFile, err := os.Open(config.GetInputFile())
@@ -183,15 +182,15 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *s.
 
 	switch config.GetFunction() {
 	case bpb.Function_BACKUP:
-		return backup.Execute(ctx, config, bucketHandle, inFile, outFile)
+		return backup.Execute(ctx, config, connectParams, inFile, outFile)
 	case bpb.Function_INQUIRE:
-		return inquire.Execute(ctx, config, bucketHandle, inFile, outFile)
+		return inquire.Execute(ctx, config, connectParams, inFile, outFile)
 	case bpb.Function_DELETE:
-		return delete.Execute(ctx, config, bucketHandle, inFile, outFile)
+		return delete.Execute(ctx, config, connectParams, inFile, outFile)
 	case bpb.Function_RESTORE:
-		return restore.Execute(ctx, config, bucketHandle, inFile, outFile)
+		return restore.Execute(ctx, config, connectParams, inFile, outFile)
 	case bpb.Function_DIAGNOSE:
-		return diagnose.Execute(ctx, config, bucketHandle, outFile)
+		return diagnose.Execute(ctx, config, connectParams, outFile)
 	default:
 		log.CtxLogger(ctx).Errorw("Unsupported Backint function", "function", config.GetFunction().String())
 		return false

@@ -24,10 +24,12 @@ import (
 	"strings"
 	"testing"
 
-	"cloud.google.com/go/storage"
+	s "cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"google.golang.org/api/option"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
@@ -49,9 +51,14 @@ var (
 			Content: []byte("test content"),
 		},
 	})
-	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
-	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST"}
-	fakeFile            = func() *os.File {
+	defaultConnectParameters = &storage.ConnectParameters{
+		StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+			return fakeServer.Client(), nil
+		},
+		BucketName: "test-bucket",
+	}
+	defaultConfig = &bpb.BackintConfiguration{UserId: "test@TST"}
+	fakeFile      = func() *os.File {
 		f, _ := os.Open("fake-file.txt")
 		return f
 	}
@@ -61,73 +68,77 @@ func TestDelete(t *testing.T) {
 	tests := []struct {
 		name       string
 		input      io.Reader
-		bucket     *storage.BucketHandle
+		params     *storage.ConnectParameters
 		want       error
 		wantPrefix string
 	}{
 		{
-			name:       "NoBucket",
-			input:      bytes.NewBufferString("#EBID 12345 /object.txt"),
-			bucket:     nil,
+			name:  "NoBucket",
+			input: bytes.NewBufferString("#EBID 12345 /object.txt"),
+			params: &storage.ConnectParameters{
+				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+					return fakestorage.NewServer([]fakestorage.Object{}).Client(), nil
+				},
+			},
 			wantPrefix: "#ERROR",
 			want:       nil,
 		},
 		{
 			name:   "ScannerError",
-			bucket: defaultBucketHandle,
+			params: defaultConnectParameters,
 			input:  fakeFile(),
 			want:   cmpopts.AnyError,
 		},
 		{
 			name:   "MalformedSoftwareID",
 			input:  bytes.NewBufferString("#SOFTWAREID"),
-			bucket: defaultBucketHandle,
+			params: defaultConnectParameters,
 			want:   cmpopts.AnyError,
 		},
 		{
 			name:       "FormattedSoftwareID",
 			input:      bytes.NewBufferString(`#SOFTWAREID "backint 1.50"`),
-			bucket:     defaultBucketHandle,
+			params:     defaultConnectParameters,
 			wantPrefix: "#SOFTWAREID",
 			want:       nil,
 		},
 		{
 			name:   "MalformedExternalBackupID",
 			input:  bytes.NewBufferString("#EBID"),
-			bucket: defaultBucketHandle,
+			params: defaultConnectParameters,
 			want:   cmpopts.AnyError,
 		},
 		{
 			name:       "ObjectNotFound",
 			input:      bytes.NewBufferString("#EBID 12345 /fake-object.txt"),
-			bucket:     defaultBucketHandle,
+			params:     defaultConnectParameters,
 			wantPrefix: "#NOTFOUND",
 			want:       nil,
 		},
 		{
 			name:       "ObjectDeleted",
 			input:      bytes.NewBufferString("#EBID 12345 /object.txt"),
-			bucket:     defaultBucketHandle,
+			params:     defaultConnectParameters,
 			wantPrefix: "#DELETED",
 			want:       nil,
 		},
 		{
 			name:   "EmptyInput",
 			input:  bytes.NewBufferString(""),
-			bucket: defaultBucketHandle,
+			params: defaultConnectParameters,
 			want:   nil,
 		},
 		{
 			name:   "NoSpecifiedPrefix",
 			input:  bytes.NewBufferString("#TEST"),
-			bucket: defaultBucketHandle,
+			params: defaultConnectParameters,
 			want:   nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			output := bytes.NewBufferString("")
-			got := delete(context.Background(), defaultConfig, test.bucket, test.input, output)
+			got := delete(context.Background(), defaultConfig, test.params, test.input, output)
 			if !strings.HasPrefix(output.String(), test.wantPrefix) {
 				t.Errorf("delete() = %s, wantPrefix: %s", output.String(), test.wantPrefix)
 			}

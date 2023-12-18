@@ -25,11 +25,13 @@ import (
 	"testing"
 	"time"
 
-	store "cloud.google.com/go/storage"
+	s "cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"google.golang.org/api/option"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
@@ -59,15 +61,20 @@ var (
 			Content: []byte("test content"),
 		},
 	})
-	defaultBucketHandle = fakeServer.Client().Bucket("test-bucket")
-	defaultConfig       = &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100}
-	defaultOptions      = diagnoseOptions{
-		execute: func(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
+	defaultConnectParameters = &storage.ConnectParameters{
+		StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+			return fakeServer.Client(), nil
+		},
+		BucketName: "test-bucket",
+	}
+	defaultConfig  = &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100}
+	defaultOptions = diagnoseOptions{
+		execute: func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
 			return false
 		},
-		config:       defaultConfig,
-		bucketHandle: defaultBucketHandle,
-		output:       bytes.NewBufferString(""),
+		config:        defaultConfig,
+		connectParams: defaultConnectParameters,
+		output:        bytes.NewBufferString(""),
 		files: []*diagnoseFile{
 			{
 				fileSize:         12345,
@@ -81,8 +88,8 @@ var (
 
 // defaultExecute utilizes a closure to write the input line by line
 // to the output. execute() can then be called multiple times per test case.
-func defaultExecute(lines []string) func(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
-	return func(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, input io.Reader, output io.Writer) bool {
+func defaultExecute(lines []string) func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
+	return func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
 		if len(lines) == 0 {
 			return false
 		}
@@ -94,19 +101,23 @@ func defaultExecute(lines []string) func(ctx context.Context, config *bpb.Backin
 
 func TestExecute(t *testing.T) {
 	tests := []struct {
-		name         string
-		bucketHandle *store.BucketHandle
-		want         bool
+		name   string
+		params *storage.ConnectParameters
+		want   bool
 	}{
 		{
-			name:         "FailNoBucket",
-			bucketHandle: nil,
-			want:         false,
+			name: "FailNoBucket",
+			params: &storage.ConnectParameters{
+				StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+					return fakestorage.NewServer([]fakestorage.Object{}).Client(), nil
+				},
+			},
+			want: false,
 		},
 		{
-			name:         "Success",
-			bucketHandle: defaultBucketHandle,
-			want:         true,
+			name:   "Success",
+			params: defaultConnectParameters,
+			want:   true,
 		},
 	}
 	for _, test := range tests {
@@ -119,7 +130,7 @@ func TestExecute(t *testing.T) {
 			oneGB /= 8
 			sixteenGB = oneGB
 
-			got := Execute(context.Background(), defaultConfig, test.bucketHandle, bytes.NewBufferString(""))
+			got := Execute(context.Background(), defaultConfig, test.params, bytes.NewBufferString(""))
 			if got != test.want {
 				t.Errorf("Execute() = %v, want: %v", got, test.want)
 			}
@@ -225,7 +236,11 @@ func TestRemoveFiles(t *testing.T) {
 				files: []*diagnoseFile{
 					{fileName: "/tmp/object.txt"},
 				},
-				bucketHandle: &store.BucketHandle{},
+				connectParams: &storage.ConnectParameters{
+					StorageClient: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+						return fakestorage.NewServer([]fakestorage.Object{}).Client(), nil
+					},
+				},
 			},
 			remove: defaultRemoveFunc,
 			want:   false,
@@ -233,7 +248,7 @@ func TestRemoveFiles(t *testing.T) {
 		{
 			name: "Success",
 			opts: diagnoseOptions{
-				bucketHandle: defaultBucketHandle,
+				connectParams: defaultConnectParameters,
 				files: []*diagnoseFile{
 					{fileName: "/tmp/object.txt"},
 				},
