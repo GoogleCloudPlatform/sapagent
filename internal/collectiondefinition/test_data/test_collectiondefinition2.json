@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 3,
+    "version": 4,
     "validation_system": {
       "system_metrics": [
         {
@@ -459,12 +459,12 @@
           },
           "os_vendor": "ALL",
           "command": "corosync-cmapctl",
-          "args": ["-g", "totem.two_node"],
+          "args": ["-g", "quorum.two_node"],
           "and_eval_rules": {
             "eval_rules": [
               {
                 "output_source": "STDOUT",
-                "output_contains": "totem.two_node"
+                "output_contains": "quorum.two_node"
               }
             ],
             "if_true": {
