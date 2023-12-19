@@ -225,8 +225,8 @@ func (s *Snapshot) validateParameters(os string) error {
 	}
 	if s.snapshotName == "" {
 		t := time.Now()
-		s.snapshotName = fmt.Sprintf("hana-%s-snapshot-%d%02d%02d-%02d%02d%02d",
-			strings.ToLower(s.sid), t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+		s.snapshotName = fmt.Sprintf("snapshot-%s-%d%02d%02d-%02d%02d%02d",
+			s.disk, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 	}
 	if s.description == "" {
 		s.description = fmt.Sprintf("Snapshot created by Agent for SAP for HANA sid: %q", s.sid)
