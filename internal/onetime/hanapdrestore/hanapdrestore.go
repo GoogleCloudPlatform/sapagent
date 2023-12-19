@@ -78,10 +78,10 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.dataDiskName, "data-disk-name", "", "Current PD name. (required)")
 	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "Current PD zone. (required)")
 	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source PD snapshot to restore from. (required)")
+	fs.StringVar(&r.newdiskName, "new-disk-name", "", "New PD name. (required) must be less than 63 characters long")
 	fs.StringVar(&r.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.StringVar(&r.hanaSidAdm, "hana-sidadm", "", "HANA sidadm username. (optional) Default: <sid>adm")
-	fs.StringVar(&r.newdiskName, "new-disk-name", "", "New PD name. (optional) Default: same name as disk passed in data-disk-name with current timestamp as a suffix.")
 	fs.BoolVar(&r.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
@@ -120,9 +120,13 @@ func (r *Restorer) validateParameters(os string) error {
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot restore is only supported on Linux systems")
-	case r.sid == "" || r.dataDiskName == "" || r.dataDiskZone == "" || r.sourceSnapshot == "":
+	case r.sid == "" || r.dataDiskName == "" || r.dataDiskZone == "" || r.sourceSnapshot == "" || r.newdiskName == "":
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
+	if len(r.newdiskName) > 63 {
+		return fmt.Errorf("the new-disk-name is longer than 63 chars which is not supported, please provide a shorter name")
+	}
+
 	if r.project == "" {
 		r.project = r.cloudProps.GetProjectId()
 	}
@@ -136,19 +140,6 @@ func (r *Restorer) validateParameters(os string) error {
 	}
 	if r.hanaSidAdm == "" {
 		r.hanaSidAdm = strings.ToLower(r.sid) + "adm"
-	}
-
-	if len(r.newdiskName) > 63 {
-		return fmt.Errorf("the new-disk-name is longer than 63 chars which is not supported, please provide a shorter name")
-	}
-
-	if r.newdiskName == "" {
-		t := time.Now()
-		r.newdiskName = fmt.Sprintf("%s-%d%02d%02d-%02d%02d%02d",
-			r.dataDiskName, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
-		if len(r.newdiskName) > 63 {
-			return fmt.Errorf("the new disk name we tried to generate is longer than 63 chars, please provide a shorter name using -new-disk-name param")
-		}
 	}
 
 	log.Logger.Debug("Parameter validation successful.")
