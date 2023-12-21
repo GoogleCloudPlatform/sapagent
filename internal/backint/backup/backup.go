@@ -238,7 +238,6 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 		// Reference: https://go.dev/doc/faq#closures_and_goroutines
 		i := i
 		p.wp.Submit(func() {
-			p.bucketHandle, _ = storage.ConnectToBucket(ctx, p.connectParams)
 			offset := sectionLength * i
 			length := sectionLength
 			// If this is the last chunk, ensure it uploads the remainder of the file
@@ -247,6 +246,7 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 			}
 
 			chunkParameters := p
+			chunkParameters.bucketHandle, _ = storage.ConnectToBucket(ctx, p.connectParams)
 			chunkParameters.extension += strconv.FormatInt(i, 10)
 			chunkParameters.reader = io.NewSectionReader(f, offset, length)
 			chunkParameters.fileSize = length
