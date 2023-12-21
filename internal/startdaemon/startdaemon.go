@@ -52,6 +52,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
@@ -286,7 +287,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		},
 		SapDiscoveryInterface: &appsdiscovery.SapDiscovery{
 			Execute:    commandlineexecutor.ExecuteCommand,
-			FileReader: os.ReadFile,
+			FileSystem: filesystem.Helper{},
 		},
 	}
 	if d.lp.CloudLoggingClient != nil {

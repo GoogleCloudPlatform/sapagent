@@ -25,10 +25,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -53,106 +51,8 @@ type (
 		help, version          bool
 		logLevel               string
 	}
-
-	fileSystemHelper struct{}
-
 	zipperHelper struct{}
 )
-
-// MkdirAll provides testable implementation of os.MkdirAll method
-func (h fileSystemHelper) MkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm)
-}
-
-// ReadFile provides testable implementation of os.ReadFile method.
-func (h fileSystemHelper) ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
-}
-
-// ReadDir provides testable implementation of os.ReadDir method.
-func (h fileSystemHelper) ReadDir(path string) ([]fs.FileInfo, error) {
-	return ioutil.ReadDir(path)
-}
-
-// Open provides testable implementation of os.Open method.
-func (h fileSystemHelper) Open(path string) (*os.File, error) {
-	return os.Open(path)
-}
-
-// OpenFile provides testable implementation of os.OpenFile method.
-func (h fileSystemHelper) OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
-	return os.OpenFile(path, flag, perm)
-}
-
-// RemoveAll provides testable implementation of os.RemoveAll method.
-func (h fileSystemHelper) RemoveAll(path string) error {
-	return os.RemoveAll(path)
-}
-
-// Create provides testable implementation of os.Create method.
-func (h fileSystemHelper) Create(path string) (*os.File, error) {
-	return os.Create(path)
-}
-
-// WriteStringToFile provides testable implementation of os.WriteStringToFile method.
-func (h fileSystemHelper) WriteStringToFile(file *os.File, content string) (int, error) {
-	return file.WriteString(content)
-}
-
-// Copy provides testable implementation of io.Copy method.
-func (h fileSystemHelper) Copy(w io.Writer, r io.Reader) (int64, error) {
-	return io.Copy(w, r)
-}
-
-// Chmod provides testable implementation of os.Chmod method.
-func (h fileSystemHelper) Chmod(path string, perm os.FileMode) error {
-	return os.Chmod(path, perm)
-}
-
-// Stat provides testable implementation of os.Stat method.
-func (h fileSystemHelper) Stat(path string) (os.FileInfo, error) {
-	return os.Stat(path)
-}
-
-// WalkAndZip provides testable implementation of filepath.Walk which zips the content of the directory.
-func (h fileSystemHelper) WalkAndZip(source string, z zipper.Zipper, w *zip.Writer) error {
-	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		header, err := z.FileInfoHeader(info)
-		if err != nil {
-			return err
-		}
-		header.Method = zip.Deflate
-
-		header.Name, err = filepath.Rel(filepath.Dir(source), path)
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			header.Name += "/"
-		}
-
-		headerWriter, err := z.CreateHeader(w, header)
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		f, err := h.Open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		_, err = h.Copy(headerWriter, f)
-		return err
-	})
-}
 
 // NewWriter is testable version of zip.NewWriter method.
 func (h zipperHelper) NewWriter(w io.Writer) *zip.Writer {
@@ -231,7 +131,7 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 		return subcommands.ExitUsageError
 	}
 	onetime.SetupOneTimeLogging(lp, s.Name(), log.StringLevelToZapcore(s.logLevel))
-	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, fileSystemHelper{}, zipperHelper{})
+	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
 }
 
 func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {

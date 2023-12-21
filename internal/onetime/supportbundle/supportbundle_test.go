@@ -190,7 +190,7 @@ func (mfu mockedfilesystem) WalkAndZip(path string, z zipper.Zipper, w *zip.Writ
 		return cmpopts.AnyError
 	}
 	if strings.Contains(path, "test") {
-		fsh := fileSystemHelper{}
+		fsh := filesystem.Helper{}
 		return fsh.WalkAndZip(path, z, w)
 	}
 	return nil

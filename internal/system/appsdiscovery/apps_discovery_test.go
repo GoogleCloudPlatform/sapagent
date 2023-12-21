@@ -19,6 +19,7 @@ package appsdiscovery
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/testing/protocmp"
+	fakefs "github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
@@ -139,6 +141,10 @@ tmpfs                              48G  2.0M   48G   1% /dev/shm
 	operating system
 	Linux
 	`
+	defaultR3transOutput = `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+unicode enabled version
+R3trans finished (0000).
+	`
 )
 
 var (
@@ -183,6 +189,9 @@ var (
 	defaultNetweaverKernelResult = commandlineexecutor.Result{
 		StdOut: defaultNetweaverKernelOutput,
 	}
+	defaultR3transResult = commandlineexecutor.Result{
+		StdOut: defaultR3transOutput,
+	}
 )
 
 func sortSapSystemDetails(a, b SapSystemDetails) bool {
@@ -202,7 +211,14 @@ type fakeCommandExecutor struct {
 
 func (f *fakeCommandExecutor) Execute(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 	defer func() { f.executeCallCount++ }()
-	if diff := cmp.Diff(f.params[f.executeCallCount], params, cmpopts.IgnoreFields(commandlineexecutor.Params{}, "Args", "ArgsToSplit")); diff != "" {
+	opts := []cmp.Option{}
+	if f.params[f.executeCallCount].Args == nil {
+		opts = append(opts, cmpopts.IgnoreFields(commandlineexecutor.Params{}, "Args"))
+	}
+	if f.params[f.executeCallCount].ArgsToSplit == "" {
+		opts = append(opts, cmpopts.IgnoreFields(commandlineexecutor.Params{}, "ArgsToSplit"))
+	}
+	if diff := cmp.Diff(f.params[f.executeCallCount], params, opts...); diff != "" {
 		f.t.Errorf("Execute params mismatch (-want, +got):\n%s", diff)
 	}
 	return f.results[f.executeCallCount]
@@ -712,10 +728,11 @@ func TestDiscoverNetweaverHA(t *testing.T) {
 
 func TestDiscoverNetweaver(t *testing.T) {
 	tests := []struct {
-		name    string
-		app     *sappb.SAPInstance
-		execute commandlineexecutor.Execute
-		want    SapSystemDetails
+		name       string
+		app        *sappb.SAPInstance
+		execute    commandlineexecutor.Execute
+		fileSystem *fakefs.FileSystem
+		want       SapSystemDetails
 	}{{
 		name: "justNetweaverConnectedToDB",
 		app: &sappb.SAPInstance{
@@ -729,6 +746,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 					return defaultUserStoreResult
 				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
 					return defaultFailoverConfigResult
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
 				}
 			case "grep":
 				return defaultProfileResult
@@ -741,6 +760,15 @@ func TestDiscoverNetweaver(t *testing.T) {
 				ExitCode: 1,
 			}
 		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
 		want: SapSystemDetails{
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
@@ -748,6 +776,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
+						Abap:            true,
 					}},
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
@@ -776,7 +805,10 @@ func TestDiscoverNetweaver(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			d := SapDiscovery{Execute: tc.execute}
+			d := SapDiscovery{
+				Execute:    tc.execute,
+				FileSystem: tc.fileSystem,
+			}
 			got := d.discoverNetweaver(ctx, tc.app)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform()); diff != "" {
 				t.Errorf("discoverNetweaver(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
@@ -995,7 +1027,13 @@ func TestDiscoverHANA(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			d := SapDiscovery{Execute: tc.execute, FileReader: func(string) ([]byte, error) { return []byte(tc.topology), nil }}
+			d := SapDiscovery{
+				Execute: tc.execute,
+				FileSystem: &fakefs.FileSystem{
+					ReadFileResp: [][]byte{[]byte(tc.topology)},
+					ReadFileErr:  []error{nil},
+				},
+			}
 			got := d.discoverHANA(ctx, tc.app)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.SortSlices(func(a, b SapSystemDetails) bool { return a.DBComponent.Sid < b.DBComponent.Sid })); diff != "" {
 				t.Errorf("discoverHANA(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
@@ -1115,7 +1153,13 @@ func TestDiscoverHANATenantDBs(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			d := SapDiscovery{Execute: tc.execute, FileReader: func(string) ([]byte, error) { return []byte(tc.topology), nil }}
+			d := SapDiscovery{
+				Execute: tc.execute,
+				FileSystem: &fakefs.FileSystem{
+					ReadFileResp: [][]byte{[]byte(tc.topology)},
+					ReadFileErr:  []error{nil},
+				},
+			}
 			got, _ := d.discoverHANATenantDBs(ctx, tc.app, "")
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 				t.Errorf("discoverHANATenantDBs(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
@@ -1130,7 +1174,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 		cp           *instancepb.CloudProperties
 		executor     *fakeCommandExecutor
 		sapInstances *sappb.SAPInstances
-		topology     string
+		fileSystem   *fakefs.FileSystem
 		want         []SapSystemDetails
 	}{{
 		name:         "noSAPApps",
@@ -1158,6 +1202,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 				User:       "abcadm",
 			}},
 			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
+		},
+		fileSystem: &fakefs.FileSystem{
+			ReadFileResp: [][]byte{[]byte("")},
+			ReadFileErr:  []error{nil},
 		},
 		want: []SapSystemDetails{
 			{
@@ -1188,6 +1236,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df", // Get NFS
 			}, {
 				Executable: "sudo", // Failover config
+			}, {
+				Executable: "sudo", // ABAP
 			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
@@ -1195,6 +1245,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
+				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -1204,6 +1255,15 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Type:   sappb.InstanceType_NETWEAVER,
 				},
 			},
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			ReadFileResp:          [][]byte{[]byte("")},
+			ReadFileErr:           []error{nil},
+			RemoveAllErr:          []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -1226,25 +1286,29 @@ func TestDiscoverSAPApps(t *testing.T) {
 		cp:   defaultCloudProperties,
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
-				Executable: "sudo",
+				Executable: "sudo", // hdbuserstore
 			}, {
-				Executable: "sudo",
+				Executable: "sudo", // hdbuserstore
 			}, {
-				Executable: "grep",
+				Executable: "grep", // Get profile
 			}, {
-				Executable: "df",
+				Executable: "df", // Get NFS
 			}, {
-				Executable: "sudo",
+				Executable: "sudo", // Failover config
 			}, {
-				Executable: "sudo",
+				Executable: "sudo", // ABAP
 			}, {
-				Executable: "sudo",
+				Executable: "sudo", // hdbuserstore
 			}, {
-				Executable: "grep",
+				Executable: "sudo", // hdbuserstore
 			}, {
-				Executable: "df",
+				Executable: "grep", // Get profile
 			}, {
-				Executable: "sudo",
+				Executable: "df", // Get NFS
+			}, {
+				Executable: "sudo", // Failover config
+			}, {
+				Executable: "sudo", // ABAP
 			}},
 			results: []commandlineexecutor.Result{
 				defaultUserStoreResult,
@@ -1252,11 +1316,13 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
+				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
+				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -1270,6 +1336,13 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Type:   sappb.InstanceType_NETWEAVER,
 				},
 			},
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil, nil},
+			ChmodErr:              []error{nil, nil},
+			WriteStringToFileResp: []int{0, 0},
+			WriteStringToFileErr:  []error{nil, nil},
+			RemoveAllErr:          []error{nil, nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -1340,6 +1413,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult,
 				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
 		},
+		fileSystem: &fakefs.FileSystem{
+			ReadFileResp: [][]byte{[]byte{}, []byte{}},
+			ReadFileErr:  []error{nil, nil},
+		},
 		want: []SapSystemDetails{{
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "abc",
@@ -1371,8 +1448,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 		sapInstances: &sappb.SAPInstances{
 			Instances: []*sappb.SAPInstance{
 				&sappb.SAPInstance{
-					Sapsid: "abc",
-					Type:   sappb.InstanceType_NETWEAVER,
+					Sapsid:         "abc",
+					Type:           sappb.InstanceType_NETWEAVER,
+					InstanceNumber: "11",
 				},
 				&sappb.SAPInstance{
 					Sapsid:         "DEH",
@@ -1384,20 +1462,31 @@ func TestDiscoverSAPApps(t *testing.T) {
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
 			}, {
 				Executable: "grep",
+				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "dehadm", "python", "/usr/sap/DEH/HDB00/exe/python_support/landscapeHostConfiguration.py"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "/usr/sap/DEH/HDB00/HDB",
+				Args:       []string{"version"},
 				User:       "dehadm",
 			}},
 			results: []commandlineexecutor.Result{
@@ -1406,10 +1495,20 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
+				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
 			},
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
+			RemoveAllErr:          []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -1447,29 +1546,41 @@ func TestDiscoverSAPApps(t *testing.T) {
 					InstanceNumber: "00",
 				},
 				&sappb.SAPInstance{
-					Sapsid: "abc",
-					Type:   sappb.InstanceType_NETWEAVER,
+					Sapsid:         "abc",
+					Type:           sappb.InstanceType_NETWEAVER,
+					InstanceNumber: "11",
 				},
 			},
 		},
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "dehadm", "python", "/usr/sap/DEH/HDB00/exe/python_support/landscapeHostConfiguration.py"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "/usr/sap/DEH/HDB00/HDB",
+				Args:       []string{"version"},
 				User:       "dehadm",
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
 			}, {
 				Executable: "grep",
+				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult,
@@ -1478,7 +1589,15 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
+				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 			},
+		},
+		fileSystem: &fakefs.FileSystem{
+			ReadFileResp: [][]byte{[]byte{}},
+			ReadFileErr:  []error{nil},
+			MkDirErr:     []error{nil},
+			ChmodErr:     []error{nil},
+			RemoveAllErr: []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -1511,8 +1630,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 		sapInstances: &sappb.SAPInstances{
 			Instances: []*sappb.SAPInstance{
 				&sappb.SAPInstance{
-					Sapsid: "abc",
-					Type:   sappb.InstanceType_NETWEAVER,
+					Sapsid:         "abc",
+					Type:           sappb.InstanceType_NETWEAVER,
+					InstanceNumber: "11",
 				},
 				&sappb.SAPInstance{
 					Sapsid:         "DB2",
@@ -1524,20 +1644,31 @@ func TestDiscoverSAPApps(t *testing.T) {
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
 			}, {
 				Executable: "grep",
+				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "db2adm", "python", "/usr/sap/DB2/HDB00/exe/python_support/landscapeHostConfiguration.py"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "/usr/sap/DB2/HDB00/HDB",
+				Args:       []string{"version"},
 				User:       "db2adm",
 			}},
 			results: []commandlineexecutor.Result{
@@ -1546,10 +1677,18 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
+				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
 			},
+		},
+		fileSystem: &fakefs.FileSystem{
+			ReadFileResp: [][]byte{[]byte{}},
+			ReadFileErr:  []error{nil},
+			MkDirErr:     []error{nil},
+			ChmodErr:     []error{nil},
+			RemoveAllErr: []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -1593,29 +1732,41 @@ func TestDiscoverSAPApps(t *testing.T) {
 					InstanceNumber: "00",
 				},
 				&sappb.SAPInstance{
-					Sapsid: "abc",
-					Type:   sappb.InstanceType_NETWEAVER,
+					Sapsid:         "abc",
+					Type:           sappb.InstanceType_NETWEAVER,
+					InstanceNumber: "11",
 				},
 			},
 		},
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "db2adm", "python", "/usr/sap/DB2/HDB00/exe/python_support/landscapeHostConfiguration.py"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "/usr/sap/DB2/HDB00/HDB",
+				Args:       []string{"version"},
 				User:       "db2adm",
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
 			}, {
 				Executable: "grep",
+				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
 				Executable: "df",
+				Args:       []string{"-h"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult,
@@ -1626,7 +1777,15 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
+				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 			},
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:     []error{nil},
+			ChmodErr:     []error{nil},
+			ReadFileResp: [][]byte{[]byte{}},
+			ReadFileErr:  []error{nil},
+			RemoveAllErr: []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -1665,13 +1824,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			fr := func(filename string) ([]byte, error) { return []byte(tc.topology), nil }
 			tc.executor.t = t
 			d := SapDiscovery{
 				Execute: func(c context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
 					return tc.executor.Execute(c, p)
 				},
-				FileReader: fr,
+				FileSystem: tc.fileSystem,
 			}
 			got := d.DiscoverSAPApps(ctx, tc.sapInstances)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), cmpopts.SortSlices(sortSapSystemDetails), protocmp.Transform(), cmpopts.EquateEmpty()); diff != "" {
@@ -2159,6 +2317,269 @@ func TestDiscoverNetweaverKernelVersion(t *testing.T) {
 
 			if got != tc.want {
 				t.Errorf("discoverNetweaverKernelVersion() = %v, want: %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDiscoverNetweaverABAP(t *testing.T) {
+	tests := []struct {
+		name           string
+		app            *sappb.SAPInstance
+		executor       fakeCommandExecutor
+		testFilesystem *fakefs.FileSystem
+		want           bool
+		wantErr        error
+	}{{
+		name: "success",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		executor: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-w", "/tmp/r3trans/output.txt", "/tmp/r3trans/export_products.ctl"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-w", "/tmp/r3trans/output.txt", "-v", "-l", "/tmp/r3trans/export_products.dat"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}, {
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}, {
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}},
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		want: true,
+	}, {
+		name: "mkDirErr",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr: []error{errors.New("test error")},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "chmodErr",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:     []error{nil},
+			ChmodErr:     []error{errors.New("test error")},
+			RemoveAllErr: []error{nil},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "firstR3transErr",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:     []error{nil},
+			ChmodErr:     []error{nil},
+			RemoveAllErr: []error{nil},
+		},
+		executor: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}},
+			results: []commandlineexecutor.Result{{
+				Error: errors.New("test error"),
+			}},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "firstR3transFailResponse",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		executor: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans failed (9999).`,
+			}},
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:     []error{nil},
+			ChmodErr:     []error{nil},
+			RemoveAllErr: []error{nil},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "createFileErr",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		executor: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}},
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:     []error{nil},
+			ChmodErr:     []error{nil},
+			CreateResp:   []*os.File{nil},
+			CreateErr:    []error{errors.New("test error")},
+			RemoveAllErr: []error{nil},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "writeStringToFileErr",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		executor: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}},
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{errors.New("test error")},
+			RemoveAllErr:          []error{nil},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "secondR3transError",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		executor: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-w", "/tmp/r3trans/output.txt", "/tmp/r3trans/export_products.ctl"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}, {
+				Error: errors.New("test error"),
+			}},
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "thirdR3transError",
+		app: &sappb.SAPInstance{
+			Sapsid:         defaultSID,
+			InstanceNumber: defaultInstanceNumber,
+		},
+		executor: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-w", "/tmp/r3trans/output.txt", "/tmp/r3trans/export_products.ctl"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-w", "/tmp/r3trans/output.txt", "-v", "-l", "/tmp/r3trans/export_products.dat"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}, {
+				StdOut: `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+				unicode enabled version
+				R3trans finished (0000).`,
+			}, {
+				Error: errors.New("test error"),
+			}},
+		},
+		testFilesystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		wantErr: cmpopts.AnyError,
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.executor.t = t
+			d := &SapDiscovery{
+				Execute: func(c context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+					return tc.executor.Execute(c, p)
+				},
+				FileSystem: tc.testFilesystem,
+			}
+			got, err := d.discoverNetweaverABAP(ctx, tc.app)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Fatalf("discoverNetweaverABAP(%v) returned an unexpected error: %v", tc.app, err)
+			}
+
+			if got != tc.want {
+				t.Errorf("discoverNetweaverABAP(%v) = %v, want: %v", tc.app, got, tc.want)
 			}
 		})
 	}

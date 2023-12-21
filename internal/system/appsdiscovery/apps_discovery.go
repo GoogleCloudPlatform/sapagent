@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/proto"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -43,7 +44,11 @@ var (
 )
 
 const (
-	haNodes = "HANodes:"
+	haNodes              = "HANodes:"
+	r3transSuccessResult = "R3trans finished (0000)"
+	r3transTmpFolder     = "/tmp/r3trans/"
+	tmpControlFilePath   = r3transTmpFolder + "export_products.ctl"
+	r3transOutputPath    = r3transTmpFolder + "output.txt"
 )
 
 type fileReader func(filename string) ([]byte, error)
@@ -51,7 +56,7 @@ type fileReader func(filename string) ([]byte, error)
 // SapDiscovery contains variables and methods to discover SAP applications running on the current host.
 type SapDiscovery struct {
 	Execute    commandlineexecutor.Execute
-	FileReader fileReader
+	FileSystem filesystem.FileSystem
 }
 
 // SapSystemDetails contains information about an ASP system running on the current host.
@@ -221,6 +226,11 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	if !ha {
 		haNodes = nil
 	}
+	isABAP, err := d.discoverNetweaverABAP(ctx, app)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
+	}
+	appProps.Abap = isABAP
 	return SapSystemDetails{
 		AppComponent: &spb.SapDiscovery_Component{
 			Sid: app.Sapsid,
@@ -323,6 +333,71 @@ func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string
 	return dbHosts, nil
 }
 
+func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAPInstance) (bool, error) {
+	if err := d.FileSystem.MkdirAll(r3transTmpFolder, 0777); err != nil {
+		return false, fmt.Errorf("error creating r3trans tmp folder: %v", err)
+	}
+	defer d.FileSystem.RemoveAll(r3transTmpFolder)
+	if err := d.FileSystem.Chmod(r3transTmpFolder, 0777); err != nil {
+		return false, fmt.Errorf("error changing r3trans tmp folder permissions: %v", err)
+	}
+	sidLower := strings.ToLower(app.Sapsid)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+
+	// First check if the db is responding
+	params := commandlineexecutor.Params{
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, "R3trans", "-d", "-w", r3transTmpFolder + "tmp.log"},
+	}
+	result := d.Execute(ctx, params)
+	log.CtxLogger(ctx).Debugw("R3trans result", "result", result)
+	if result.Error != nil {
+		return false, result.Error
+	}
+
+	if !strings.Contains(result.StdOut, r3transSuccessResult) {
+		return false, fmt.Errorf("R3trans returned unexpected result, database may not be connected and working:\n%s", result.StdOut)
+	}
+
+	log.CtxLogger(ctx).Debugw("DB appears good", "stdOut", result.StdOut)
+
+	// Now create the control file in /tmp
+	contents := `EXPORT
+	file='/tmp/export_products.dat'
+	CLIENT=all
+	SELECT * FROM PRDVERS`
+	file, err := d.FileSystem.Create(tmpControlFilePath)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Error creating control file", "error", err)
+		return false, err
+	}
+	defer file.Close()
+	if _, err = d.FileSystem.WriteStringToFile(file, contents); err != nil {
+		log.CtxLogger(ctx).Warnw("Error writing control file", "error", err)
+		return false, err
+	}
+
+	log.CtxLogger(ctx).Debugw("Control file created")
+
+	// Run R3trans with the control file
+	params.Args = []string{"-i", "-u", sidAdm, "R3trans", "-w", r3transOutputPath, tmpControlFilePath}
+	if result = d.Execute(ctx, params); result.Error != nil {
+		log.CtxLogger(ctx).Warnw("Error running R3trans with control file", "error", result.Error)
+		return false, result.Error
+	}
+
+	// Export the data
+	params.Args = []string{"-i", "-u", sidAdm, "R3trans", "-w", r3transOutputPath, "-v", "-l", r3transTmpFolder + "export_products.dat"}
+	if result = d.Execute(ctx, params); result.Error != nil {
+		log.CtxLogger(ctx).Warnw("Error exporting data", "error", result.Error)
+		return false, result.Error
+	}
+
+	// Command success indicates system is ABAP. Additional details may be pulled out of this data in
+	// the future.
+	return true, nil
+}
+
 func parseDBHosts(s string) (dbHosts []string) {
 	lines := strings.Split(s, "\n")
 	for _, l := range lines {
@@ -404,10 +479,9 @@ func (d *SapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 	sidUpper := strings.ToUpper(sid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	scriptPath := fmt.Sprintf("/usr/sap/%s/HDB%s/exe/python_support/landscapeHostConfiguration.py", sidUpper, instanceNumber)
-	command := fmt.Sprintf("-i -u %s python %s", sidAdm, scriptPath)
 	result := d.Execute(ctx, commandlineexecutor.Params{
-		Executable:  "sudo",
-		ArgsToSplit: command,
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, "python", scriptPath},
 	})
 	// The commandlineexecutor interface returns an error any time the command
 	// has an exit status != 0. However, only 0 and 1 are considered true
@@ -594,7 +668,7 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 }
 
 func (d *SapDiscovery) readAndUnmarshalJson(ctx context.Context, filepath string) (map[string]any, error) {
-	file, err := d.FileReader(filepath)
+	file, err := d.FileSystem.ReadFile(filepath)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Error reading file", "filepath", filepath, "error", err)
 		return nil, err
