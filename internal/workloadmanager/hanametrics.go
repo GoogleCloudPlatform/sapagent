@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -276,27 +277,32 @@ func extractSize(msg []byte) int64 {
 }
 
 // checkHAZones determines if the host instance is part of a HA setup which
-// shares the same zone as another instance in the same HA grouping.
-func checkHAZones(ctx context.Context, params Parameters) bool {
-	isHASameZone := false
+// shares the same zone as other instance(s) in the same HA grouping.
+func checkHAZones(ctx context.Context, params Parameters) string {
+	haNodesSameZone := ""
 	for _, system := range params.Discovery.GetSAPSystems() {
-		haInstanceZones := map[string]int{}
+		var instancesInSameZone []string
 		hasHostInstance := false
 		log.CtxLogger(ctx).Debugw("SAP System has the following HA hosts", "haHosts", system.GetDatabaseLayer().GetHaHosts())
 		for _, hostURI := range system.GetDatabaseLayer().GetHaHosts() {
 			uriMatch := instanceURIRegex.FindStringSubmatch(hostURI)
-			if len(uriMatch) == 0 {
+			if len(uriMatch) < 4 {
 				continue
 			}
-			haInstanceZones[uriMatch[2]]++
 			if uriMatch[3] == params.Config.GetCloudProperties().GetInstanceName() {
 				hasHostInstance = true
+				continue
+			}
+			if uriMatch[2] == params.Config.GetCloudProperties().GetZone() {
+				if !slices.Contains(instancesInSameZone, uriMatch[3]) {
+					instancesInSameZone = append(instancesInSameZone, uriMatch[3])
+				}
 			}
 		}
-		if hasHostInstance && haInstanceZones[params.Config.GetCloudProperties().GetZone()] > 1 {
-			isHASameZone = true
+		if hasHostInstance && len(instancesInSameZone) > 0 {
+			haNodesSameZone = strings.Join(instancesInSameZone, ",")
 			break
 		}
 	}
-	return isHASameZone
+	return haNodesSameZone
 }

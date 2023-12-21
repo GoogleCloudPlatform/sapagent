@@ -704,7 +704,7 @@ func TestCheckHAZones(t *testing.T) {
 	tests := []struct {
 		name   string
 		params Parameters
-		want   bool
+		want   string
 	}{
 		{
 			name: "NoHAHosts",
@@ -718,7 +718,7 @@ func TestCheckHAZones(t *testing.T) {
 					},
 				},
 			},
-			want: false,
+			want: "",
 		},
 		{
 			name: "NoHostInstance",
@@ -737,7 +737,7 @@ func TestCheckHAZones(t *testing.T) {
 					},
 				},
 			},
-			want: false,
+			want: "",
 		},
 		{
 			name: "NoOverlappingZones",
@@ -764,7 +764,7 @@ func TestCheckHAZones(t *testing.T) {
 					},
 				},
 			},
-			want: false,
+			want: "",
 		},
 		{
 			name: "HasHAInSameZone",
@@ -777,6 +777,8 @@ func TestCheckHAZones(t *testing.T) {
 								HaHosts: []string{
 									"/projects/test-project-id/zones/test-region-zone/instances/test-instance-name",
 									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
+									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
+									"/projects/test-project-id/zones/test-region-zone/instances/other-instance-2",
 									"resourceURI/does/not/match/regexp",
 								},
 							},
@@ -784,7 +786,7 @@ func TestCheckHAZones(t *testing.T) {
 					},
 				},
 			},
-			want: true,
+			want: "other-instance-1,other-instance-2",
 		},
 	}
 
@@ -792,7 +794,7 @@ func TestCheckHAZones(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := checkHAZones(context.Background(), test.params)
 			if got != test.want {
-				t.Errorf("checkHAZones() got %t, want %t", got, test.want)
+				t.Errorf("checkHAZones() got %s, want %s", got, test.want)
 			}
 		})
 	}
@@ -915,7 +917,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"ha_sr_hook_configured": "no",
 				"numa_balancing":        "disabled",
 				"transparent_hugepages": "disabled",
-				"ha_in_same_zone":       "false",
+				"ha_in_same_zone":       "",
 			},
 		},
 		{
@@ -998,7 +1000,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"ha_sr_hook_configured": "yes",
 				"numa_balancing":        "enabled",
 				"transparent_hugepages": "enabled",
-				"ha_in_same_zone":       "true",
+				"ha_in_same_zone":       "other-instance-1",
 			},
 		},
 	}
