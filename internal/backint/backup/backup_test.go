@@ -360,6 +360,11 @@ func TestComposeChunks(t *testing.T) {
 		want       string
 	}{
 		{
+			name: "FailNoBucketHandle",
+			p:    parameters{},
+			want: "#ERROR",
+		},
+		{
 			name: "FailNoChunks",
 			p:    parameters{bucketHandle: defaultBucketHandle, connectParams: defaultConnectParameters},
 			want: "#ERROR",

@@ -262,6 +262,7 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 			}
 			chunksCompleted++
 			if chunksCompleted == p.config.GetParallelStreams() {
+				p.bucketHandle = chunkParameters.bucketHandle
 				p.output.Write([]byte(composeChunks(ctx, p, chunkError, startTime)))
 				f.Close()
 			}
@@ -284,6 +285,11 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool, startTime
 	}
 	if p.config.GetDumpData() {
 		log.CtxLogger(ctx).Warnw("dump_data set to true, not composing objects.", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object)
+		return ret()
+	}
+	if p.bucketHandle == nil {
+		log.CtxLogger(ctx).Error("No bucket handle defined, cannot compose objects")
+		chunkError = true
 		return ret()
 	}
 
