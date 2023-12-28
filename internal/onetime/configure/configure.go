@@ -586,7 +586,19 @@ func restartAgent(ctx context.Context) subcommands.ExitStatus {
 		return subcommands.ExitFailure
 	}
 
-	// TODO: Add a check for agent status
-	log.CtxLogger(ctx).Debug("Restarted the agent")
-	return subcommands.ExitSuccess
+	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+		Executable:  "bash",
+		ArgsToSplit: "-c 'sudo systemctl status google-cloud-sap-agent'",
+	})
+	if result.ExitCode != 0 {
+		log.CtxLogger(ctx).Errorw("failed checking the status of sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
+		return subcommands.ExitFailure
+	}
+
+	if strings.Contains(result.StdOut, "running") {
+		log.CtxLogger(ctx).Debug("Restarted the agent")
+		return subcommands.ExitSuccess
+	}
+	log.CtxLogger(ctx).Error("Agent is not running")
+	return subcommands.ExitFailure
 }
