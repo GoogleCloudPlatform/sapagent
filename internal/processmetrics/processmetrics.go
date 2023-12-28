@@ -479,7 +479,7 @@ func collectAndSendSlowMovingMetrics(ctx context.Context, p *Properties, c Colle
 
 func collectAndSendSlowMovingMetricsOnce(ctx context.Context, p *Properties, c Collector, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
 	metrics, err := c.CollectWithRetry(ctx)
-	if err != nil {
+	if err != nil && len(metrics) == 0 {
 		return 0, 0, err
 	}
 	return cloudmonitoring.SendTimeSeries(ctx, metrics, p.Client, bo, p.Config.GetCloudProperties().GetProjectId())

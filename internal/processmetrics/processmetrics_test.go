@@ -88,6 +88,10 @@ type (
 
 	fakeCollectorError struct {
 	}
+
+	fakeCollectorErrorWithTimeSeries struct {
+		timeSeriesCount int
+	}
 )
 
 func (f *fakeCollector) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
@@ -112,6 +116,22 @@ func (f *fakeCollectorError) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 
 func (f *fakeCollectorError) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	return nil, cmpopts.AnyError
+}
+
+func (f *fakeCollectorErrorWithTimeSeries) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	m := make([]*mrpb.TimeSeries, f.timeSeriesCount)
+	for i := 0; i < f.timeSeriesCount; i++ {
+		m[i] = &mrpb.TimeSeries{}
+	}
+	return m, cmpopts.AnyError
+}
+
+func (f *fakeCollectorErrorWithTimeSeries) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	m := make([]*mrpb.TimeSeries, f.timeSeriesCount)
+	for i := 0; i < f.timeSeriesCount; i++ {
+		m[i] = &mrpb.TimeSeries{}
+	}
+	return m, cmpopts.AnyError
 }
 
 func fakeCollectors(count, timeSerisCountPerCollector int) []Collector {
@@ -421,6 +441,20 @@ func TestCollectAndSendSlowMovingMetricsOnce(t *testing.T) {
 			collector:      &fakeCollectorError{},
 			wantErr:        cmpopts.AnyError,
 			wantBatchCount: 0,
+		},
+		{
+			name: "CollectorFailureWithSomeTimeSeriesData",
+			properties: &Properties{
+				Client:     &fake.TimeSeriesCreatorThreadSafe{},
+				Collectors: fakeCollectors(10, 1),
+				Config:     quickTestConfig,
+			},
+			collector: &fakeCollectorErrorWithTimeSeries{
+				timeSeriesCount: 10,
+			},
+			wantErr:        nil,
+			wantSent:       10,
+			wantBatchCount: 1,
 		},
 		{
 			name: "SendFailure",
