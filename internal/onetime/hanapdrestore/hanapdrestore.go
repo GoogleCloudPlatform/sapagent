@@ -69,7 +69,7 @@ func (*Restorer) Usage() string {
 	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
 	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> -new-disk-name=<name-less-than-63-chars>
 	[-project=<project-name>] [-new-disk-type=<Type of the new PD disk>]
-	[-hana-sidadm=<hana-sid-user-name>] [-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
+	[-hana-sidadm=<hana-sid-user-name>] [-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanapdrestore.
@@ -320,6 +320,11 @@ func (r *Restorer) checkPreConditions(ctx context.Context) error {
 		return fmt.Errorf("the disk data-disk-name=%v is not attached to the instance, please pass the current data disk name", r.dataDiskName)
 	}
 	r.dataDiskDeviceName = dev
+
+	// Verify the snapshot is present.
+	if _, err = r.computeService.Snapshots.Get(r.project, r.sourceSnapshot).Do(); err != nil {
+		return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.sourceSnapshot, err)
+	}
 	return nil
 }
 

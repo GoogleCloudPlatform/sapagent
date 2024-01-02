@@ -96,7 +96,7 @@ func (*Snapshot) Usage() string {
 	return `Usage: hanapdbackup -port=<port-number> -sid=<HANA-sid> -hana_db_user=<HANA DB User>
 	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-host=<hostname>] [-project=<project-name>]
 	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
-	[-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
+	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanapdbackup.

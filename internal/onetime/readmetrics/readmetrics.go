@@ -80,7 +80,7 @@ func (*ReadMetrics) Synopsis() string { return "read metrics from Cloud Monitori
 func (*ReadMetrics) Usage() string {
 	return `Usage: readmetrics -project=<project-id> [-i=<input-file>] [-o=output-folder]
 	[-bucket=<bucket-name>] [-service-account=<service-account>]
-	[-h] [-v] [loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for readmetrics.

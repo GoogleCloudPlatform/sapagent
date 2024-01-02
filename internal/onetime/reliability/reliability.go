@@ -97,7 +97,7 @@ func (*Reliability) Synopsis() string { return "read reliability data from Cloud
 func (*Reliability) Usage() string {
 	return `Usage: reliability [-project=<project-id>] [-bucket=<bucket-name>]
 	[-o=output-folder] [-service-account=<service-account>]
-	[-h] [-v] [loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for reliability.

@@ -100,7 +100,7 @@ func (*InstallBackint) Synopsis() string {
 // Usage implements the subcommand interface for installbackint.
 func (*InstallBackint) Usage() string {
 	return `Usage: installbackint [-sid=<sap-system-identification>]
-	[-h] [-v] [loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for installbackint.
