@@ -19,6 +19,8 @@ package hanapdbackup
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +34,7 @@ import (
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -48,6 +51,24 @@ var defaultSnapshot = Snapshot{
 	password:   "password",
 	cloudProps: defaultCloudProperties,
 }
+
+var (
+	testCommandExecute = func(stdout, stderr string, err error) commandlineexecutor.Execute {
+		return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			exitCode := 0
+			var exitErr *exec.ExitError
+			if err != nil && errors.As(err, &exitErr) {
+				exitCode = exitErr.ExitCode()
+			}
+			return commandlineexecutor.Result{
+				StdOut:   stdout,
+				StdErr:   stderr,
+				Error:    err,
+				ExitCode: exitCode,
+			}
+		}
+	}
+)
 
 var defaultCloudProperties = &ipb.CloudProperties{
 	ProjectId:    "default-project",
@@ -619,6 +640,133 @@ func TestReadKey(t *testing.T) {
 			}
 			if got != test.wantKey {
 				t.Errorf("readKey()=%v, want=%v", got, test.wantKey)
+			}
+		})
+	}
+}
+
+func TestCheckDataDeviceForStripes(t *testing.T) {
+	tests := []struct {
+		name     string
+		fakeExec commandlineexecutor.Execute
+		want     error
+	}{
+		{
+			name:     "SpripesPresent",
+			fakeExec: testCommandExecute("", "", nil),
+			want:     cmpopts.AnyError,
+		},
+		{
+			name:     "StripesNotPresent",
+			fakeExec: testCommandExecute("", "exit code:1", &exec.ExitError{}),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := &Snapshot{}
+			got := r.checkDataDeviceForStripes(context.Background(), test.fakeExec)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("checkDataDeviceForStripes() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestParseBasePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		fakeExec commandlineexecutor.Execute
+		want     string
+		wantErr  error
+	}{
+		{
+			name:     "Failure",
+			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "Success",
+			fakeExec: testCommandExecute("/hana/data/ABC", "", nil),
+			want:     "/hana/data/ABC",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := &Snapshot{}
+			got, gotErr := r.parseBasePath(context.Background(), "", test.fakeExec)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("parseBasePath() = %v, want %v", gotErr, test.wantErr)
+			}
+			if got != test.want {
+				t.Errorf("parseBasePath() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestParsePhysicalPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		fakeExec commandlineexecutor.Execute
+		want     string
+		wantErr  error
+	}{
+		{
+			name:     "Failure",
+			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "Success",
+			fakeExec: testCommandExecute("/dev/sdb", "", nil),
+			want:     "/dev/sdb",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := &Snapshot{}
+			got, gotErr := r.parsePhysicalPath(context.Background(), "", test.fakeExec)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("parsePhysicalPath() = %v, want %v", gotErr, test.wantErr)
+			}
+			if got != test.want {
+				t.Errorf("parsePhysicalPath() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestParseLogicalPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		fakeExec commandlineexecutor.Execute
+		want     string
+		wantErr  error
+	}{
+		{
+			name:     "Failure",
+			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "Success",
+			fakeExec: testCommandExecute("/dev/mapper/vg-volume-1", "", nil),
+			want:     "/dev/mapper/vg-volume-1",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := &Snapshot{}
+			got, gotErr := r.parseLogicalPath(context.Background(), "", test.fakeExec)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("parseLogicalPath() = %v, want %v", gotErr, test.wantErr)
+			}
+			if got != test.want {
+				t.Errorf("parseLogicalPath() = %v, want %v", got, test.want)
 			}
 		})
 	}

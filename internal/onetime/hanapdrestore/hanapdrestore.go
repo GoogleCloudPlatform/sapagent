@@ -42,6 +42,7 @@ type (
 )
 
 // Restorer has args for hanapdrestore subcommands
+// TODO: Improve PD Backup and Restore code coverage and reduce redundancy.
 type Restorer struct {
 	project, sid, hanaSidAdm, dataDiskName, dataDiskDeviceName string
 	dataDiskZone, sourceSnapshot, newDiskType                  string

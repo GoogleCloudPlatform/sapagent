@@ -65,6 +65,7 @@ type (
 )
 
 // Snapshot has args for snapshot subcommands.
+// TODO: Improve PD Backup and Restore code coverage and reduce redundancy.
 type Snapshot struct {
 	project, host, port, sid             string
 	hanaDBUser, password, passwordSecret string
@@ -74,15 +75,16 @@ type Snapshot struct {
 	snapshotName, description                 string
 	abandonPrepared, sendToMonitoring         bool
 
-	db                *sql.DB
-	gceService        gceInterface
-	computeService    *compute.Service
-	status            bool
-	timeSeriesCreator cloudmonitoring.TimeSeriesCreator
-	cloudProps        *ipb.CloudProperties
-	help, version     bool
-	logLevel          string
-	hanaDataPath      string
+	db                                *sql.DB
+	gceService                        gceInterface
+	computeService                    *compute.Service
+	status                            bool
+	timeSeriesCreator                 cloudmonitoring.TimeSeriesCreator
+	cloudProps                        *ipb.CloudProperties
+	help, version                     bool
+	logLevel                          string
+	hanaDataPath                      string
+	logicalDataPath, physicalDataPath string
 }
 
 // Name implements the subcommand interface for hanapdbackup.
@@ -176,6 +178,10 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	s.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to create GCE service", err)
+		return subcommands.ExitFailure
+	}
+
+	if err := s.checkPreConditions(ctx); err != nil {
 		return subcommands.ExitFailure
 	}
 
@@ -494,6 +500,66 @@ func (s *Snapshot) unFreezeXFS(ctx context.Context, exec commandlineexecutor.Exe
 		return fmt.Errorf("failure un freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Infow("Filesystem unfrozen successfully", "hanaDataPath", s.hanaDataPath)
+	return nil
+}
+
+func (s *Snapshot) checkPreConditions(ctx context.Context) error {
+	return s.checkDataDir(ctx)
+}
+
+// parseLogicalPath parses the logical path from the base path.
+func (s *Snapshot) parseLogicalPath(ctx context.Context, basePath string, exec commandlineexecutor.Execute) (string, error) {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/bin/sh",
+		ArgsToSplit: fmt.Sprintf("-c 'df --output=source %s | tail -n 1'", basePath),
+	})
+	if result.Error != nil {
+		return "", fmt.Errorf("failure parsing logical path, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+	logicalDevice := strings.TrimSuffix(result.StdOut, "\n")
+	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
+	return logicalDevice, nil
+}
+
+// parsePhysicalPath parses the physical path from the logical path.
+func (s *Snapshot) parsePhysicalPath(ctx context.Context, logicalPath string, exec commandlineexecutor.Execute) (string, error) {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/bin/sh",
+		ArgsToSplit: fmt.Sprintf("-c '/sbin/lvdisplay -m %s | grep \"Physical volume\" | awk \"{print \\$3}\"'", logicalPath),
+	})
+	if result.Error != nil {
+		return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+	phyisicalDevice := strings.TrimSuffix(result.StdOut, "\n")
+	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", phyisicalDevice)
+	return phyisicalDevice, nil
+}
+
+// checkDataDir checks if the data directory is valid and has a valid physical volume.
+func (s *Snapshot) checkDataDir(ctx context.Context) error {
+	var err error
+	log.CtxLogger(ctx).Infow("Data volume base path", "path", s.hanaDataPath)
+	if s.logicalDataPath, err = s.parseLogicalPath(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(s.logicalDataPath, "/dev/mapper") {
+		return fmt.Errorf("only data disks using LVM are supported, exiting")
+	}
+	if s.physicalDataPath, err = s.parsePhysicalPath(ctx, s.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+		return err
+	}
+	return s.checkDataDeviceForStripes(ctx, commandlineexecutor.ExecuteCommand)
+}
+
+// checkDataDeviceForStripes checks if the data device is striped.
+func (s *Snapshot) checkDataDeviceForStripes(ctx context.Context, exec commandlineexecutor.Execute) error {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/bin/sh",
+		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", s.logicalDataPath),
+	})
+	if result.ExitCode == 0 {
+		return fmt.Errorf("backup of striped HANA data disks are not currently supported, exiting")
+	}
 	return nil
 }
 
