@@ -67,8 +67,8 @@ func (*Restorer) Synopsis() string {
 // Usage implements the subcommand interface for hanapdrestore.
 func (*Restorer) Usage() string {
 	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
-	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> [-project=<project-name>]
-	[-new-disk-name=<name-less-than-63-chars>] [-new-disk-type=<Type of the new PD disk>]
+	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> -new-disk-name=<name-less-than-63-chars>
+	[-project=<project-name>] [-new-disk-type=<Type of the new PD disk>]
 	[-hana-sidadm=<hana-sid-user-name>] [-h] [-v] [loglevel]=<debug|info|warn|error>` + "\n"
 }
 
