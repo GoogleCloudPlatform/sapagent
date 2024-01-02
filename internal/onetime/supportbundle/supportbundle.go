@@ -137,7 +137,7 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
-		onetime.LogErrorToFileAndConsole("Invalid params for collecting support bundle Report for Agent for SAP"+errMessage, errors.New(errMessage))
+		onetime.LogErrorToFileAndConsole("Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
 		return subcommands.ExitUsageError
 	}
 	destFilesPath := fmt.Sprintf("%ssupportbundle-%s-%s", destFilePathPrefix, s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
@@ -315,10 +315,10 @@ func matchNameServerTraceAndBackup(name string) bool {
 	nameserverTopologyJSON := regexp.MustCompile(`nameserver.*topology.*json`)
 	indexServer := regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
 	backuplog := regexp.MustCompile(`backup.log`)
-	backinitlog := regexp.MustCompile(`backinit.log`)
+	backintlog := regexp.MustCompile(`backint.log`)
 
 	if nameserverTrace.MatchString(name) || indexServer.MatchString(name) ||
-		backuplog.MatchString(name) || backinitlog.MatchString(name) ||
+		backuplog.MatchString(name) || backintlog.MatchString(name) ||
 		nameserverTopologyJSON.MatchString(name) {
 		return true
 	}
