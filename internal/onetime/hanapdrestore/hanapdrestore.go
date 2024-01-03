@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package hanapdrestore implements one time execution for HANA Persistent Disk based restore workflow.
+// Package hanapdrestore implements one time execution for HANA Disk based restore workflow.
 package hanapdrestore
 
 import (
@@ -55,6 +55,7 @@ type Restorer struct {
 	logLevel                                                   string
 	forceStopHANA                                              bool
 	newdiskName                                                string
+	provisionedIops, provisionedThroughput, diskSizeGb         int64
 }
 
 // Name implements the subcommand interface for hanapdrestore.
@@ -62,7 +63,7 @@ func (*Restorer) Name() string { return "hanapdrestore" }
 
 // Synopsis implements the subcommand interface for hanapdrestore.
 func (*Restorer) Synopsis() string {
-	return "invoke HANA hanapdrestore using worklfow to restore from persistent disk snapshot"
+	return "invoke HANA hanapdrestore using worklfow to restore from disk snapshot"
 }
 
 // Usage implements the subcommand interface for hanapdrestore.
@@ -70,7 +71,9 @@ func (*Restorer) Usage() string {
 	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
 	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> -new-disk-name=<name-less-than-63-chars>
 	[-project=<project-name>] [-new-disk-type=<Type of the new PD disk>]
-	[-hana-sidadm=<hana-sid-user-name>] [-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
+	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
+	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
+	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanapdrestore.
@@ -84,6 +87,9 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.StringVar(&r.hanaSidAdm, "hana-sidadm", "", "HANA sidadm username. (optional) Default: <sid>adm")
 	fs.BoolVar(&r.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
+	fs.Int64Var(&r.diskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
+	fs.Int64Var(&r.provisionedIops, "provisioned-iops", 0, "Number of I/O operations per second that the disk can handle. (optional)")
+	fs.Int64Var(&r.provisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
@@ -179,7 +185,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		r.rescanVolumeGroups(ctx)
 		return subcommands.ExitFailure
 	}
-	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from persistent disk snapshot successful. Please refer <link-to-public-doc> for next steps.")
+	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from disk snapshot successful. Please refer <link-to-public-doc> for next steps.")
 	return subcommands.ExitSuccess
 }
 
@@ -251,6 +257,15 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 		Zone:           r.dataDiskZone,
 		SourceSnapshot: fmt.Sprintf("projects/%s/global/snapshots/%s", r.project, r.sourceSnapshot),
 	}
+	if r.diskSizeGb > 0 {
+		disk.SizeGb = r.diskSizeGb
+	}
+	if r.provisionedIops > 0 {
+		disk.ProvisionedIops = r.provisionedIops
+	}
+	if r.provisionedThroughput > 0 {
+		disk.ProvisionedThroughput = r.provisionedThroughput
+	}
 	log.Logger.Infow("Inserting new HANA PD disk from source snapshot", "diskName", r.newdiskName, "sourceSnapshot", r.sourceSnapshot)
 	op, err := r.computeService.Disks.Insert(r.project, r.dataDiskZone, disk).Do()
 	if err != nil {
@@ -286,7 +301,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 
 // attachDisk attaches the disk with the given name to the instance.
 func (r *Restorer) attachDisk(ctx context.Context, diskName string) (*compute.Operation, error) {
-	log.CtxLogger(ctx).Infow("Attaching Persistent disk", "diskName", diskName)
+	log.CtxLogger(ctx).Infow("Attaching disk", "diskName", diskName)
 	attachDiskToVM := &compute.AttachedDisk{
 		DeviceName: diskName, // Keep the device nam and disk name same.
 		Source:     fmt.Sprintf("projects/%s/zones/%s/disks/%s", r.project, r.dataDiskZone, diskName),
@@ -495,6 +510,7 @@ func (r *Restorer) rescanVolumeGroups(ctx context.Context) error {
 	if result.Error != nil {
 		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	time.Sleep(5 * time.Second)
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "mount",
 		ArgsToSplit: "-av",

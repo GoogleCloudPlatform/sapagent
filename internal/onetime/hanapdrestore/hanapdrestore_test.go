@@ -532,7 +532,7 @@ func TestExecute(t *testing.T) {
 }
 
 func TestSynopsisForRestorer(t *testing.T) {
-	want := "invoke HANA hanapdrestore using worklfow to restore from persistent disk snapshot"
+	want := "invoke HANA hanapdrestore using worklfow to restore from disk snapshot"
 	snapshot := Restorer{}
 	got := snapshot.Synopsis()
 	if got != want {
