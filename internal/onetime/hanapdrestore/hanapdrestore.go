@@ -70,7 +70,7 @@ func (*Restorer) Synopsis() string {
 func (*Restorer) Usage() string {
 	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
 	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> -new-disk-name=<name-less-than-63-chars>
-	[-project=<project-name>] [-new-disk-type=<Type of the new PD disk>]
+	[-project=<project-name>] [-new-disk-type=<Type of the new PD disk>] [-force-stop-hana=<true|false>]
 	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
@@ -447,6 +447,7 @@ func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execut
 		User:        r.hanaSidAdm,
 		Executable:  "/bin/sh",
 		ArgsToSplit: cmd,
+		Timeout:     300,
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
