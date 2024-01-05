@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 var (
@@ -44,6 +45,7 @@ func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) []string {
 
 	addr, err := d.discoverClusterAddress(ctx)
 	if err != nil {
+		log.CtxLogger(ctx).Warnw("Error discovering cluster", "error", err)
 		return fs
 	}
 
@@ -99,7 +101,7 @@ func (d *HostDiscovery) discoverClusterPCS(ctx context.Context) (string, error) 
 		if addrPrimitiveFound && strings.Contains(l, "ip") {
 			address := ipRegex.FindString(l)
 			if address == "" {
-				return "", errors.New("unable to locate IP address in pcs output: " + result.StdOut)
+				continue
 			}
 			return address, nil
 		}
