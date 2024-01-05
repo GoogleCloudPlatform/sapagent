@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package hanapdrestore implements one time execution for HANA Disk based restore workflow.
-package hanapdrestore
+// Package hanadiskrestore implements one time execution for HANA Disk based restore workflow.
+package hanadiskrestore
 
 import (
 	"context"
@@ -32,7 +32,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -41,8 +40,8 @@ type (
 	computeServiceFunc func(context.Context) (*compute.Service, error)
 )
 
-// Restorer has args for hanapdrestore subcommands
-// TODO: Improve PD Backup and Restore code coverage and reduce redundancy.
+// Restorer has args for hanadiskrestore subcommands
+// TODO: Improve Disk Backup and Restore code coverage and reduce redundancy.
 type Restorer struct {
 	project, sid, hanaSidAdm, dataDiskName, dataDiskDeviceName string
 	dataDiskZone, sourceSnapshot, newDiskType                  string
@@ -58,33 +57,33 @@ type Restorer struct {
 	provisionedIops, provisionedThroughput, diskSizeGb         int64
 }
 
-// Name implements the subcommand interface for hanapdrestore.
-func (*Restorer) Name() string { return "hanapdrestore" }
+// Name implements the subcommand interface for hanadiskrestore.
+func (*Restorer) Name() string { return "hanadiskrestore" }
 
-// Synopsis implements the subcommand interface for hanapdrestore.
+// Synopsis implements the subcommand interface for hanadiskrestore.
 func (*Restorer) Synopsis() string {
-	return "invoke HANA hanapdrestore using worklfow to restore from disk snapshot"
+	return "invoke HANA hanadiskrestore using workflow to restore from disk snapshot"
 }
 
-// Usage implements the subcommand interface for hanapdrestore.
+// Usage implements the subcommand interface for hanadiskrestore.
 func (*Restorer) Usage() string {
-	return `Usage: hanapdrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
-	-data-disk-name=<PD-name> -data-disk-zone=<PD-zone> -new-disk-name=<name-less-than-63-chars>
-	[-project=<project-name>] [-new-disk-type=<Type of the new PD disk>] [-force-stop-hana=<true|false>]
+	return `Usage: hanadiskrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
+	-data-disk-name=<disk-name> -data-disk-zone=<disk-zone> -new-disk-name=<name-less-than-63-chars>
+	[-project=<project-name>] [-new-disk-type=<Type of the new disk>] [-force-stop-hana=<true|false>]
 	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
-// SetFlags implements the subcommand interface for hanapdrestore.
+// SetFlags implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.sid, "sid", "", "HANA sid. (required)")
-	fs.StringVar(&r.dataDiskName, "data-disk-name", "", "Current PD name. (required)")
-	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "Current PD zone. (required)")
-	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source PD snapshot to restore from. (required)")
-	fs.StringVar(&r.newdiskName, "new-disk-name", "", "New PD name. (required) must be less than 63 characters long")
+	fs.StringVar(&r.dataDiskName, "data-disk-name", "", "Current disk name. (required)")
+	fs.StringVar(&r.dataDiskZone, "data-disk-zone", "", "Current disk zone. (required)")
+	fs.StringVar(&r.sourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (required)")
+	fs.StringVar(&r.newdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
 	fs.StringVar(&r.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
-	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new PD disk. (optional) Default: same type as disk passed in data-disk-name.")
+	fs.StringVar(&r.newDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.StringVar(&r.hanaSidAdm, "hana-sidadm", "", "HANA sidadm username. (optional) Default: <sid>adm")
 	fs.BoolVar(&r.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
 	fs.Int64Var(&r.diskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
@@ -95,7 +94,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
-// Execute implements the subcommand interface for hanapdrestore.
+// Execute implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if r.help {
 		return onetime.HelpCommand(f)
@@ -137,14 +136,7 @@ func (r *Restorer) validateParameters(os string) error {
 	if r.project == "" {
 		r.project = r.cloudProps.GetProjectId()
 	}
-	if r.newDiskType == "" {
-		exp := backoff.NewExponentialBackOff()
-		bo := backoff.WithMaxRetries(exp, 1)
-		r.newDiskType = metadataserver.DiskTypeWithRetry(bo, r.dataDiskName)
-	}
-	if r.newDiskType == "" {
-		return fmt.Errorf("could not read disk type, please pass -new-disk-type=<>")
-	}
+
 	if r.hanaSidAdm == "" {
 		r.hanaSidAdm = strings.ToLower(r.sid) + "adm"
 	}
@@ -212,11 +204,11 @@ func (r *Restorer) prepare(ctx context.Context) error {
 	return nil
 }
 
-// TODO: Move generic PD related functions from hanapdbackup.go and hanapdrestore.go to gce.go.
+// TODO: Move generic disk related functions from hanadiskbackup.go and hanadiskrestore.go to gce.go.
 // detachDisk detaches the old HANA data disk from the instance.
 func (r *Restorer) detachDisk(ctx context.Context) error {
 	// Detach old HANA data disk.
-	log.Logger.Infow("Detatching old HANA PD disk", "diskName", r.dataDiskName, "deviceName", r.dataDiskDeviceName)
+	log.Logger.Infow("Detatching old HANA disk", "diskName", r.dataDiskName, "deviceName", r.dataDiskDeviceName)
 	op, err := r.computeService.Instances.DetachDisk(r.project, r.dataDiskZone, r.cloudProps.GetInstanceName(), r.dataDiskDeviceName).Do()
 	if err != nil {
 		return fmt.Errorf("failed to detach old data disk: %v", err)
@@ -266,7 +258,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	if r.provisionedThroughput > 0 {
 		disk.ProvisionedThroughput = r.provisionedThroughput
 	}
-	log.Logger.Infow("Inserting new HANA PD disk from source snapshot", "diskName", r.newdiskName, "sourceSnapshot", r.sourceSnapshot)
+	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", r.newdiskName, "sourceSnapshot", r.sourceSnapshot)
 	op, err := r.computeService.Disks.Insert(r.project, r.dataDiskZone, disk).Do()
 	if err != nil {
 		return fmt.Errorf("failed to insert new data disk: %v", err)
@@ -275,7 +267,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
-	log.Logger.Infow("Attaching new HANA PD disk", "diskName", r.newdiskName)
+	log.Logger.Infow("Attaching new HANA disk", "diskName", r.newdiskName)
 	op, err = r.attachDisk(ctx, r.newdiskName)
 	if err != nil {
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
@@ -340,6 +332,14 @@ func (r *Restorer) checkPreConditions(ctx context.Context) error {
 	// Verify the snapshot is present.
 	if _, err = r.computeService.Snapshots.Get(r.project, r.sourceSnapshot).Do(); err != nil {
 		return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.sourceSnapshot, err)
+	}
+
+	if r.newDiskType == "" {
+		d, err := r.computeService.Disks.Get(r.project, r.dataDiskZone, r.dataDiskName).Do()
+		if err != nil {
+			return fmt.Errorf("failed to read data disk type: %v", err)
+		}
+		r.newDiskType = d.Type
 	}
 	return nil
 }
@@ -538,7 +538,7 @@ func (r *Restorer) waitForCompletion(op *compute.Operation) error {
 
 // Each waitForCompletion() returns immediately, we sleep for 120s between
 // retries a total 10 times => max_wait_duration = 10*120 = 20 Minutes
-// TODO: change timeout depending on PD limits
+// TODO: change timeout depending on disk snapshot limits
 func (r *Restorer) waitForCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)

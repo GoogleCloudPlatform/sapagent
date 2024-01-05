@@ -31,8 +31,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanapdbackup"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanapdrestore"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/installbackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
@@ -64,13 +64,13 @@ func registerSubCommands() {
 		&logusage.LogUsage{},
 		&maintenance.Mode{},
 		&remotevalidation.RemoteValidation{},
-		&hanapdbackup.Snapshot{},
+		&hanadiskbackup.Snapshot{},
 		&migratehanamonitoring.MigrateHANAMonitoring{},
 		&validate.Validate{},
 		&hanainsights.HANAInsights{},
 		&backint.Backint{},
 		&supportbundle.SupportBundle{},
-		&hanapdrestore.Restorer{},
+		&hanadiskrestore.Restorer{},
 		&readmetrics.ReadMetrics{},
 		&installbackint.InstallBackint{},
 		&configure.Configure{},

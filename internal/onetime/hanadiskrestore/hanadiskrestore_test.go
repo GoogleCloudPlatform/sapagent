@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package hanapdrestore
+package hanadiskrestore
 
 import (
 	"context"
@@ -532,7 +532,7 @@ func TestExecute(t *testing.T) {
 }
 
 func TestSynopsisForRestorer(t *testing.T) {
-	want := "invoke HANA hanapdrestore using worklfow to restore from disk snapshot"
+	want := "invoke HANA hanadiskrestore using workflow to restore from disk snapshot"
 	snapshot := Restorer{}
 	got := snapshot.Synopsis()
 	if got != want {

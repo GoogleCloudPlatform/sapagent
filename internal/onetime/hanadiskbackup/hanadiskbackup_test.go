@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package hanapdbackup
+package hanadiskbackup
 
 import (
 	"context"
@@ -369,7 +369,7 @@ func TestRunWorkflow(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "CreatePDSnapshotFailure",
+			name: "CreateDiskSnapshotFailure",
 			snapshot: Snapshot{
 				abandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
@@ -380,7 +380,7 @@ func TestRunWorkflow(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "CreateEncryptedPDSnapshotFailure",
+			name: "CreateEncryptedDiskSnapshotFailure",
 			snapshot: Snapshot{
 				abandonPrepared: true,
 				diskKeyFile:     "test.json",
@@ -461,7 +461,7 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 }
 
 func TestSynopsisForSnapshot(t *testing.T) {
-	want := "invoke HANA backup using persistent disk snapshots"
+	want := "invoke HANA backup using disk snapshots"
 	snapshot := Snapshot{}
 	got := snapshot.Synopsis()
 	if got != want {

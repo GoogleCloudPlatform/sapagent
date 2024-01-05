@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package hanapdbackup implements one time execution mode for HANA Persistent Disk based backup workflow.
-package hanapdbackup
+// Package hanadiskbackup implements one time execution mode for HANA Disk based backup workflow.
+package hanadiskbackup
 
 import (
 	"context"
@@ -65,7 +65,7 @@ type (
 )
 
 // Snapshot has args for snapshot subcommands.
-// TODO: Improve PD Backup and Restore code coverage and reduce redundancy.
+// TODO: Improve Disk Backup and Restore code coverage and reduce redundancy.
 type Snapshot struct {
 	project, host, port, sid             string
 	hanaDBUser, password, passwordSecret string
@@ -87,29 +87,29 @@ type Snapshot struct {
 	logicalDataPath, physicalDataPath string
 }
 
-// Name implements the subcommand interface for hanapdbackup.
-func (*Snapshot) Name() string { return "hanapdbackup" }
+// Name implements the subcommand interface for hanadiskbackup.
+func (*Snapshot) Name() string { return "hanadiskbackup" }
 
-// Synopsis implements the subcommand interface for hanapdbackup.
-func (*Snapshot) Synopsis() string { return "invoke HANA backup using persistent disk snapshots" }
+// Synopsis implements the subcommand interface for hanadiskbackup.
+func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snapshots" }
 
-// Usage implements the subcommand interface for hanapdbackup.
+// Usage implements the subcommand interface for hanadiskbackup.
 func (*Snapshot) Usage() string {
-	return `Usage: hanapdbackup -port=<port-number> -sid=<HANA-sid> -hana_db_user=<HANA DB User>
-	-source-disk=<PD-name> -source-disk-zone=<PD-zone> [-host=<hostname>] [-project=<project-name>]
+	return `Usage: hanadiskbackup -port=<port-number> -sid=<HANA-sid> -hana_db_user=<HANA DB User>
+	-source-disk=<disk-name> -source-disk-zone=<disk-zone> [-host=<hostname>] [-project=<project-name>]
 	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
-// SetFlags implements the subcommand interface for hanapdbackup.
+// SetFlags implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.port, "port", "", "HANA port. (required)")
 	fs.StringVar(&s.sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&s.hanaDBUser, "hana-db-user", "", "HANA DB Username. (required)")
 	fs.StringVar(&s.password, "password", "", "HANA password. (discouraged - use password-secret instead)")
 	fs.StringVar(&s.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password.")
-	fs.StringVar(&s.disk, "source-disk", "", "name of the persistent disk from which you want to create a snapshot (required)")
-	fs.StringVar(&s.diskZone, "source-disk-zone", "", "zone of the persistent disk from which you want to create a snapshot. (required)")
+	fs.StringVar(&s.disk, "source-disk", "", "name of the disk from which you want to create a snapshot (required)")
+	fs.StringVar(&s.diskZone, "source-disk-zone", "", "zone of the disk from which you want to create a snapshot. (required)")
 	fs.StringVar(&s.host, "host", "localhost", "HANA host. (optional)")
 	fs.StringVar(&s.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.BoolVar(&s.abandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
@@ -124,7 +124,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
-// Execute implements the subcommand interface for hanapdbackup.
+// Execute implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if s.help {
 		return onetime.HelpCommand(f)
@@ -212,7 +212,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		onetime.LogErrorToFileAndConsole("Error: Failed to run HANA disk snapshot workflow", err)
 		return subcommands.ExitFailure
 	}
-	log.Print("SUCCESS: HANA backup and persistent disk snapshot creation successful.")
+	log.Print("SUCCESS: HANA backup and disk snapshot creation successful.")
 	s.status = true
 	return subcommands.ExitSuccess
 }
@@ -264,7 +264,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	if !ok {
 		return fmt.Errorf("source-disk=%v is not attached to the instance", s.disk)
 	}
-	log.CtxLogger(ctx).Info("Start run HANA PD based backup workflow")
+	log.CtxLogger(ctx).Info("Start run HANA Disk based backup workflow")
 	if err = s.abandonPreparedSnapshot(run); err != nil {
 		usagemetrics.Error(usagemetrics.SnapshotDBNotReadyFailure)
 		return err
@@ -275,22 +275,22 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 		return err
 	}
 
-	op, err := s.createPDSnapshot(ctx)
+	op, err := s.createDiskSnapshot(ctx)
 	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error creating persistent disk snapshot", "error", err)
-		s.pdSnapshotFailureHandler(ctx, run, snapshotID)
+		log.CtxLogger(ctx).Errorw("Error creating disk snapshot", "error", err)
+		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
 
-	log.Logger.Info("Waiting for PD snapshot to complete uploading.")
+	log.Logger.Info("Waiting for disk snapshot to complete uploading.")
 	if err := s.waitForUploadCompletionWithRetry(ctx, op); err != nil {
-		log.CtxLogger(ctx).Errorw("Error uploading persistent disk snapshot", "error", err)
-		s.pdSnapshotFailureHandler(ctx, run, snapshotID)
+		log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
+		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
 
-	log.Logger.Info("PD Snapshot created, marking HANA snapshot as successful.")
+	log.Logger.Info("Disk snapshot created, marking HANA snapshot as successful.")
 	if _, err = run(s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, s.snapshotName)); err != nil {
 		log.CtxLogger(ctx).Errorw("Error marking HANA snapshot as SUCCESSFUL")
 		usagemetrics.Error(usagemetrics.DiskSnapshotDoneDBNotComplete)
@@ -299,7 +299,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	return nil
 }
 
-func (s *Snapshot) pdSnapshotFailureHandler(ctx context.Context, run queryFunc, snapshotID string) {
+func (s *Snapshot) diskSnapshotFailureHandler(ctx context.Context, run queryFunc, snapshotID string) {
 	usagemetrics.Error(usagemetrics.DiskSnapshotCreateFailure)
 	if err := s.abandonHANASnapshot(run, snapshotID); err != nil {
 		log.CtxLogger(ctx).Errorw("Error discarding HANA snapshot")
@@ -353,8 +353,8 @@ func (s *Snapshot) createNewHANASnapshot(run queryFunc) (snapshotID string, err 
 	return snapshotID, nil
 }
 
-func (s *Snapshot) createPDSnapshot(ctx context.Context) (*compute.Operation, error) {
-	log.CtxLogger(ctx).Infow("Creating persistent disk snapshot", "sourcedisk", s.disk, "sourcediskzone", s.diskZone, "snapshotname", s.snapshotName)
+func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, error) {
+	log.CtxLogger(ctx).Infow("Creating disk snapshot", "sourcedisk", s.disk, "sourcediskzone", s.diskZone, "snapshotname", s.snapshotName)
 
 	var op *compute.Operation
 	var err error
@@ -404,7 +404,7 @@ func (s *Snapshot) waitForCreationCompletion(op *compute.Operation) error {
 
 // Each waitForCreationCompletion() returns immediately, we sleep for 120s between
 // retries a total 10 times => max_wait_duration = 120*10 = 20 minutes
-// TODO: change timeout depending on PD limits
+// TODO: change timeout depending on disk snapshot limits
 func (s *Snapshot) waitForCreationCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)
@@ -437,7 +437,7 @@ func (s *Snapshot) waitForUploadCompletion(op *compute.Operation) error {
 
 // Each waitForUploadCompletionWithRetry() returns immediately, we sleep for 120s between
 // retries a total 120 times => max_wait_duration = 120*120 = 4 Hours
-// TODO: change timeout depending on PD limits
+// TODO: change timeout depending on disk snapshot limits
 func (s *Snapshot) waitForUploadCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 120), ctx)
