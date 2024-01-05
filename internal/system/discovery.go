@@ -108,19 +108,27 @@ func (d *Discovery) GetSAPInstances() *sappb.SAPInstances {
 }
 
 func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadmanager.SapDiscoveryResource {
-	return &workloadmanager.SapDiscoveryResource{
+	o := &workloadmanager.SapDiscoveryResource{
 		RelatedResources: r.RelatedResources,
 		ResourceKind:     r.ResourceKind.String(),
 		ResourceType:     r.ResourceType.String(),
 		ResourceUri:      r.ResourceUri,
 		UpdateTime:       r.UpdateTime.AsTime().Format(time.RFC3339),
 	}
+	if r.GetInstanceProperties() != nil {
+		o.InstanceProperties = &workloadmanager.SapDiscoveryResourceInstanceProperties{
+			VirtualHostname:  r.InstanceProperties.GetVirtualHostname(),
+			ClusterInstances: r.InstanceProperties.GetClusterInstances(),
+		}
+	}
+	return o
 }
 
 func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *workloadmanager.SapDiscoveryComponent {
 	iComp := &workloadmanager.SapDiscoveryComponent{
 		HostProject: comp.HostProject,
 		Sid:         comp.Sid,
+		HaHosts:     comp.HaHosts,
 	}
 
 	for _, r := range comp.Resources {
@@ -133,12 +141,15 @@ func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *work
 			ApplicationType: x.ApplicationProperties.GetApplicationType().String(),
 			AscsUri:         x.ApplicationProperties.GetAscsUri(),
 			NfsUri:          x.ApplicationProperties.GetNfsUri(),
+			Abap:            x.ApplicationProperties.GetAbap(),
+			KernelVersion:   x.ApplicationProperties.GetKernelVersion(),
 		}
 	case *spb.SapDiscovery_Component_DatabaseProperties_:
 		iComp.DatabaseProperties = &workloadmanager.SapDiscoveryComponentDatabaseProperties{
 			DatabaseType:       x.DatabaseProperties.GetDatabaseType().String(),
 			PrimaryInstanceUri: x.DatabaseProperties.GetPrimaryInstanceUri(),
 			SharedNfsUri:       x.DatabaseProperties.GetSharedNfsUri(),
+			DatabaseVersion:    x.DatabaseProperties.GetDatabaseVersion(),
 		}
 	}
 
@@ -147,8 +158,9 @@ func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *work
 
 func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 	iDiscovery := &workloadmanager.SapDiscovery{
-		SystemId:   sys.SystemId,
-		UpdateTime: sys.UpdateTime.AsTime().Format(time.RFC3339),
+		SystemId:      sys.SystemId,
+		ProjectNumber: sys.ProjectNumber,
+		UpdateTime:    sys.UpdateTime.AsTime().Format(time.RFC3339),
 	}
 	if sys.ApplicationLayer != nil {
 		iDiscovery.ApplicationLayer = insightComponentFromSystemComponent(sys.ApplicationLayer)

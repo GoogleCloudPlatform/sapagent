@@ -762,6 +762,10 @@ func TestResourceToInsight(t *testing.T) {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			RelatedResources: []string{"other/resource"},
 			UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				VirtualHostname:  "virtual-hostname",
+				ClusterInstances: []string{"cluster-host1", "cluster-host2", "cluster-host3"},
+			},
 		},
 		want: &workloadmanager.SapDiscoveryResource{
 			ResourceUri:      "test/uri",
@@ -769,6 +773,10 @@ func TestResourceToInsight(t *testing.T) {
 			ResourceType:     "RESOURCE_TYPE_COMPUTE",
 			RelatedResources: []string{"other/resource"},
 			UpdateTime:       "2023-05-01T15:45:11Z",
+			InstanceProperties: &workloadmanager.SapDiscoveryResourceInstanceProperties{
+				VirtualHostname:  "virtual-hostname",
+				ClusterInstances: []string{"cluster-host1", "cluster-host2", "cluster-host3"},
+			},
 		},
 	}}
 	for _, test := range tests {
@@ -796,6 +804,8 @@ func TestComponentToInsight(t *testing.T) {
 					ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 					AscsUri:         "ascs/uri",
 					NfsUri:          "nfs/uri",
+					Abap:            true,
+					KernelVersion:   "kernel-version",
 				},
 			},
 			Resources: []*spb.SapDiscovery_Resource{{
@@ -805,6 +815,7 @@ func TestComponentToInsight(t *testing.T) {
 				RelatedResources: []string{"other/resource"},
 				UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
 			}},
+			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
 		},
 		want: &workloadmanager.SapDiscoveryComponent{
 			HostProject: "test/project",
@@ -813,6 +824,8 @@ func TestComponentToInsight(t *testing.T) {
 				ApplicationType: "NETWEAVER",
 				AscsUri:         "ascs/uri",
 				NfsUri:          "nfs/uri",
+				Abap:            true,
+				KernelVersion:   "kernel-version",
 			},
 			Resources: []*workloadmanager.SapDiscoveryResource{{
 				ResourceUri:      "test/uri",
@@ -820,7 +833,9 @@ func TestComponentToInsight(t *testing.T) {
 				ResourceType:     "RESOURCE_TYPE_COMPUTE",
 				RelatedResources: []string{"other/resource"},
 				UpdateTime:       "2023-05-01T15:45:11Z",
-			}}},
+			}},
+			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
+		},
 	}, {
 		name: "discoveryDatabaseComponentToInsightComponent",
 		comp: &spb.SapDiscovery_Component{
@@ -831,6 +846,7 @@ func TestComponentToInsight(t *testing.T) {
 					DatabaseType:       spb.SapDiscovery_Component_DatabaseProperties_HANA,
 					PrimaryInstanceUri: "primary/uri",
 					SharedNfsUri:       "shared/uri",
+					DatabaseVersion:    "database-version",
 				},
 			},
 			Resources: []*spb.SapDiscovery_Resource{{
@@ -840,6 +856,7 @@ func TestComponentToInsight(t *testing.T) {
 				RelatedResources: []string{"other/resource"},
 				UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
 			}},
+			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
 		},
 		want: &workloadmanager.SapDiscoveryComponent{
 			HostProject: "test/project",
@@ -848,6 +865,7 @@ func TestComponentToInsight(t *testing.T) {
 				DatabaseType:       "HANA",
 				PrimaryInstanceUri: "primary/uri",
 				SharedNfsUri:       "shared/uri",
+				DatabaseVersion:    "database-version",
 			},
 			Resources: []*workloadmanager.SapDiscoveryResource{{
 				ResourceUri:      "test/uri",
@@ -855,7 +873,9 @@ func TestComponentToInsight(t *testing.T) {
 				ResourceType:     "RESOURCE_TYPE_COMPUTE",
 				RelatedResources: []string{"other/resource"},
 				UpdateTime:       "2023-05-01T15:45:11Z",
-			}}},
+			}},
+			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
+		},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1124,6 +1144,7 @@ func TestRunDiscovery(t *testing.T) {
 									Sid:         "DEF",
 									HostProject: "12345",
 								},
+								ProjectNumber: "12345",
 							},
 						},
 					},
@@ -1190,6 +1211,7 @@ func TestRunDiscovery(t *testing.T) {
 									Sid:         "DEF",
 									HostProject: "12345",
 								},
+								ProjectNumber: "12345",
 							},
 						},
 					},
@@ -1207,6 +1229,7 @@ func TestRunDiscovery(t *testing.T) {
 									Sid:         "JKL",
 									HostProject: "12345",
 								},
+								ProjectNumber: "12345",
 							},
 						},
 					},
