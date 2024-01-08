@@ -304,11 +304,15 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool, startTime
 
 	// Default to octet-stream, but set to the first chunk's content type if available.
 	contentType := "application/octet-stream"
+	// Default to the fileType, but set to the first chunk's metadata if available.
+	metadata := map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")}
 	if attrs, err := p.bucketHandle.Object(object + "0").Attrs(ctx); err == nil {
 		contentType = attrs.ContentType
+		metadata = attrs.Metadata
 	}
 	composer := p.bucketHandle.Object(object).ComposerFrom(srcs...)
 	composer.ObjectAttrs.ContentType = contentType
+	composer.ObjectAttrs.Metadata = metadata
 	if _, err := composer.Run(ctx); err != nil {
 		log.CtxLogger(ctx).Errorw("Error composing object", "object", object, "chunks", p.config.GetParallelStreams(), "err", err)
 		chunkError = true
