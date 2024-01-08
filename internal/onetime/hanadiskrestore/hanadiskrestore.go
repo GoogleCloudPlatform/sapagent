@@ -245,7 +245,7 @@ func (r *Restorer) isDiskAttachedToInstance(diskName string) (string, bool, erro
 func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
 	disk := &compute.Disk{
 		Name:           r.newdiskName,
-		Type:           fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.project, r.dataDiskZone, r.newDiskType),
+		Type:           r.newDiskType,
 		Zone:           r.dataDiskZone,
 		SourceSnapshot: fmt.Sprintf("projects/%s/global/snapshots/%s", r.project, r.sourceSnapshot),
 	}
@@ -340,6 +340,9 @@ func (r *Restorer) checkPreConditions(ctx context.Context) error {
 			return fmt.Errorf("failed to read data disk type: %v", err)
 		}
 		r.newDiskType = d.Type
+		log.CtxLogger(ctx).Infow("New disk type will be same as the data-disk-name", "diskType", r.newDiskType)
+	} else {
+		r.newDiskType = fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.project, r.dataDiskZone, r.newDiskType)
 	}
 	return nil
 }
