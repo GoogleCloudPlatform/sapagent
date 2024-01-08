@@ -173,6 +173,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 	// Check cache for this hostname
 	if c, ok := d.resourceCache[host.name]; ok {
 		if now.Sub(c.res.UpdateTime.AsTime()) < (10 * time.Minute) {
+			log.CtxLogger(ctx).Debugw("discoverResource cache hit", "name", host.name, "now", now, "res", c.res, "related", c.related)
 			return c.res, c.related, nil
 		}
 	}
@@ -189,6 +190,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 			// Cache did not hit for the hostname, add it
 			d.resourceCache[host.name] = c
 			if now.Sub(c.res.UpdateTime.AsTime()) < (10 * time.Minute) {
+				log.CtxLogger(ctx).Debugw("discoverResource cache hit", "name", host.name, "now", now, "res", c.res, "related", c.related)
 				return c.res, c.related, nil
 			}
 		}
@@ -200,6 +202,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 		var err error
 		uri, err = d.GceService.GetURIForIP(project, addr)
 		if err != nil {
+			log.CtxLogger(ctx).Warnw("discoverResource URI error", "err", err, "addr", addr, "host", host.name)
 			return nil, nil, err
 		}
 		log.CtxLogger(ctx).Debugw("discoverResource uri for ip", "uri", uri)
@@ -210,6 +213,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 			d.resourceCache[host.name] = c
 			d.resourceCache[addr] = c
 			if now.Sub(c.res.UpdateTime.AsTime()) < (10 * time.Minute) {
+				log.CtxLogger(ctx).Debugw("discoverResource cache hit", "name", host.name, "now", now, "res", c.res, "related", c.related)
 				return c.res, c.related, nil
 			}
 		}
@@ -237,6 +241,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 	if addr != "" && addr != host.name {
 		d.resourceCache[addr] = c
 	}
+	log.CtxLogger(ctx).Debugw("discoverResource result", "res", res, "toAdd", toAdd, "err", err)
 	return res, toAdd, err
 }
 

@@ -209,20 +209,20 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 }
 
 func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInstance) SapSystemDetails {
-	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)
-	if err != nil {
-		return SapSystemDetails{}
-	}
-	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid)
 	ascsHost, err := d.discoverASCS(ctx, app.Sapsid)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverASCS.", "error", err)
+	}
 	nfsHost, err := d.discoverAppNFS(ctx, app.Sapsid)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverAppNFS.", "error", err)
+	}
 	appProps := &spb.SapDiscovery_Component_ApplicationProperties{
 		ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 		AscsUri:         ascsHost,
 		NfsUri:          nfsHost,
 	}
-	ha, nodes := d.discoverNetweaverHA(ctx, app)
-	haNodes := nodes
+	ha, haNodes := d.discoverNetweaverHA(ctx, app)
 	if !ha {
 		haNodes = nil
 	}
@@ -231,7 +231,8 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
 	}
 	appProps.Abap = isABAP
-	return SapSystemDetails{
+
+	details := SapSystemDetails{
 		AppComponent: &spb.SapDiscovery_Component{
 			Sid: app.Sapsid,
 			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
@@ -239,12 +240,23 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 			},
 			HaHosts: haNodes,
 		},
-		AppHosts: nodes,
-		DBComponent: &spb.SapDiscovery_Component{
-			Sid: dbSID,
-		},
-		DBHosts: dbHosts,
+		AppHosts: haNodes,
 	}
+
+	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)
+	if err != nil {
+		return details
+	}
+	details.DBComponent = &spb.SapDiscovery_Component{
+		Sid: dbSID,
+	}
+	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid)
+	if err != nil {
+		return details
+	}
+
+	details.DBHosts = dbHosts
+	return details
 }
 
 func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid string) SapSystemDetails {

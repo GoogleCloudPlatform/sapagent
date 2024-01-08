@@ -786,19 +786,257 @@ func TestDiscoverNetweaver(t *testing.T) {
 			DBHosts:     []string{"test-instance"},
 		},
 	}, {
-		name: "noDBSID",
+		name: "notHA",
 		app: &sappb.SAPInstance{
 			Sapsid: "abc",
 			Type:   sappb.InstanceType_NETWEAVER,
 		},
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return defaultProfileResult
+			case "df":
+				return netweaverMountResult
+			}
 			return commandlineexecutor.Result{
 				StdErr:   "Unexpected command",
 				Error:    errors.New("Unexpected command"),
 				ExitCode: 1,
 			}
 		},
-		want: SapSystemDetails{},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+						Abap:            true,
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:     []string{"test-instance"},
+		},
+	}, {
+		name: "ascsErr",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return commandlineexecutor.Result{Error: errors.New("some error")}
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						NfsUri:          "1.2.3.4",
+						Abap:            true,
+					}},
+				Sid:     "abc",
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
+			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+		},
+	}, {
+		name: "nfsErr",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return defaultProfileResult
+			case "df":
+				return commandlineexecutor.Result{Error: errors.New("some error")}
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						Abap:            true,
+					}},
+				Sid:     "abc",
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
+			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+		},
+	}, {
+		name: "noDBSID",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return defaultProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+						Abap:            true,
+					}},
+				Sid:     "abc",
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
+			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+		},
+	}, {
+		name: "noDBHosts",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					if slices.Contains(params.Args, "DEFAULT") {
+						return commandlineexecutor.Result{Error: errors.New("some error")}
+					}
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return defaultProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+						Abap:            true,
+					}},
+				Sid:     "abc",
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
+			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
+		},
 	}}
 
 	ctx := context.Background()
@@ -1227,25 +1465,25 @@ func TestDiscoverSAPApps(t *testing.T) {
 		cp:   defaultCloudProperties,
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
-				Executable: "sudo", // hdbuserstore
-			}, {
-				Executable: "sudo", // hdbuserstore
-			}, {
 				Executable: "grep", // Get profile
 			}, {
 				Executable: "df", // Get NFS
 			}, {
 				Executable: "sudo", // Failover config
 			}, {
+				Executable: "sudo", // hdbuserstore
+			}, {
+				Executable: "sudo", // hdbuserstore
+			}, {
 				Executable: "sudo", // ABAP
 			}},
 			results: []commandlineexecutor.Result{
-				defaultUserStoreResult,
-				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
+				defaultUserStoreResult,
+				defaultUserStoreResult,
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -1286,10 +1524,6 @@ func TestDiscoverSAPApps(t *testing.T) {
 		cp:   defaultCloudProperties,
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
-				Executable: "sudo", // hdbuserstore
-			}, {
-				Executable: "sudo", // hdbuserstore
-			}, {
 				Executable: "grep", // Get profile
 			}, {
 				Executable: "df", // Get NFS
@@ -1309,10 +1543,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo", // Failover config
 			}, {
 				Executable: "sudo", // ABAP
+			}, {
+				Executable: "sudo", // hdbuserstore
+			}, {
+				Executable: "sudo", // hdbuserstore
 			}},
 			results: []commandlineexecutor.Result{
-				defaultUserStoreResult,
-				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
@@ -1323,6 +1559,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				netweaverMountResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
+				defaultUserStoreResult,
+				defaultUserStoreResult,
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -1461,12 +1699,6 @@ func TestDiscoverSAPApps(t *testing.T) {
 		},
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
-			}, {
 				Executable: "grep",
 				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
@@ -1480,6 +1712,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "dehadm", "python", "/usr/sap/DEH/HDB00/exe/python_support/landscapeHostConfiguration.py"},
 			}, {
 				Executable: "df",
@@ -1490,12 +1728,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				User:       "dehadm",
 			}},
 			results: []commandlineexecutor.Result{
-				defaultUserStoreResult,
-				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
+				defaultUserStoreResult,
+				defaultUserStoreResult,
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
@@ -1564,12 +1802,6 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"version"},
 				User:       "dehadm",
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
-			}, {
 				Executable: "grep",
 				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
@@ -1581,15 +1813,23 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
 			}},
 			results: []commandlineexecutor.Result{
-				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult,
-				defaultUserStoreResult,
-				defaultUserStoreResult,
+				landscapeSingleNodeResult,
+				hanaMountResult,
+				defaultHANAVersionResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
+				defaultUserStoreResult,
+				defaultUserStoreResult,
 			},
 		},
 		fileSystem: &fakefs.FileSystem{
@@ -1643,12 +1883,6 @@ func TestDiscoverSAPApps(t *testing.T) {
 		},
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
-			}, {
 				Executable: "grep",
 				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
@@ -1662,6 +1896,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "db2adm", "python", "/usr/sap/DB2/HDB00/exe/python_support/landscapeHostConfiguration.py"},
 			}, {
 				Executable: "df",
@@ -1672,12 +1912,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				User:       "db2adm",
 			}},
 			results: []commandlineexecutor.Result{
-				defaultUserStoreResult,
-				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
+				defaultUserStoreResult,
+				defaultUserStoreResult,
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
@@ -1750,12 +1990,6 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"version"},
 				User:       "db2adm",
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
-			}, {
 				Executable: "grep",
 				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
@@ -1767,17 +2001,23 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
-				defaultUserStoreResult,
-				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
+				defaultUserStoreResult,
+				defaultUserStoreResult,
 			},
 		},
 		fileSystem: &fakefs.FileSystem{

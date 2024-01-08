@@ -290,14 +290,19 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			if s.AppComponent.GetApplicationProperties().GetNfsUri() != "" {
 				log.CtxLogger(ctx).Info("Discovering cloud resources for app NFS")
 				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.AppComponent.GetApplicationProperties().GetNfsUri(), nil, cp)
-				appRes = append(appRes, nfsRes...)
-				s.AppComponent.GetApplicationProperties().NfsUri = nfsRes[0].GetResourceUri()
+				if len(nfsRes) > 0 {
+					appRes = append(appRes, nfsRes...)
+					s.AppComponent.GetApplicationProperties().NfsUri = nfsRes[0].GetResourceUri()
+				}
 			}
 			if s.AppComponent.GetApplicationProperties().GetAscsUri() != "" {
 				log.CtxLogger(ctx).Info("Discovering cloud resources for app ASCS")
 				ascsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, s.AppComponent.GetApplicationProperties().GetAscsUri(), nil, cp)
-				appRes = append(appRes, ascsRes...)
-				s.AppComponent.GetApplicationProperties().AscsUri = ascsRes[0].GetResourceUri()
+				if len(ascsRes) > 0 {
+					log.CtxLogger(ctx).Debugw("ASCS Resources", "res", ascsRes)
+					appRes = append(appRes, ascsRes...)
+					s.AppComponent.GetApplicationProperties().AscsUri = ascsRes[0].GetResourceUri()
+				}
 			}
 			if len(s.AppComponent.GetHaHosts()) > 0 {
 				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceURI, s.AppComponent.GetHaHosts(), cp)

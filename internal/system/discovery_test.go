@@ -237,8 +237,8 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					Sid: "ABC",
 					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-							NfsUri:  "some-nfs-uri",
-							AscsUri: "some-ascs-uri",
+							NfsUri:  "some-nfs-host",
+							AscsUri: "some-ascs-host",
 						},
 					},
 				},
@@ -260,6 +260,79 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-ascs-uri",
 				}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-app-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent: "some-nfs-host",
+				CP:     defaultCloudProperties,
+			}, {
+				Parent: "some-ascs-host",
+				CP:     defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						AscsUri: "some-ascs-uri",
+						NfsUri:  "some-nfs-uri",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-app-host",
+				}, {
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-nfs-uri",
+				}, {
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-ascs-uri",
+				}},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "noASCSResource",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+							NfsUri:  "some-nfs-uri",
+							AscsUri: "some-ascs-uri",
+						},
+					},
+				},
+				AppHosts: []string{"some-app-host"},
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{},
+				{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-app-host",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-nfs-uri",
+				}}, {}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   defaultInstanceURI,
 				HostList: []string{},
@@ -296,6 +369,73 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-nfs-uri",
+				}},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "noNFSResource",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				AppComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+							NfsUri:  "some-nfs-uri",
+							AscsUri: "some-ascs-uri",
+						},
+					},
+				},
+				AppHosts: []string{"some-app-host"},
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{},
+				{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-app-host",
+				}},
+				{},
+				{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-ascs-uri",
+				}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   defaultInstanceURI,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceURI,
+				HostList: []string{"some-app-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent: "some-nfs-uri",
+				CP:     defaultCloudProperties,
+			}, {
+				Parent: "some-ascs-uri",
+				CP:     defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						AscsUri: "some-ascs-uri",
+						NfsUri:  "some-nfs-uri",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-app-host",
 				}, {
 					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
