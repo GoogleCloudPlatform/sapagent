@@ -367,9 +367,17 @@ func TestInstallBackintHandler(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "FailedToStatOldAgent",
+			name: "FailedToStatInstallationFolder",
 			b: InstallBackint{
 				stat: defaultStat(1),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToStatOldAgent",
+			b: InstallBackint{
+				stat:   defaultStat(2),
+				rename: defaultRename(1),
 			},
 			want: cmpopts.AnyError,
 		},
@@ -384,7 +392,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailedToMkdir",
 			b: InstallBackint{
-				stat:   defaultStat(2),
+				stat:   defaultStat(3),
 				rename: defaultRename(1),
 				mkdir:  defaultMkdir(0),
 			},
@@ -393,7 +401,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailedToChownNewDir",
 			b: InstallBackint{
-				stat:   defaultStat(2),
+				stat:   defaultStat(3),
 				rename: defaultRename(1),
 				mkdir:  defaultMkdir(2),
 				chown:  defaultChown(1),
@@ -403,7 +411,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailedToChownOldDir",
 			b: InstallBackint{
-				stat:   defaultStat(2),
+				stat:   defaultStat(3),
 				rename: defaultRename(1),
 				mkdir:  defaultMkdir(3),
 				chown:  defaultChown(2),
@@ -413,7 +421,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailedToGlob",
 			b: InstallBackint{
-				stat:   defaultStat(2),
+				stat:   defaultStat(3),
 				rename: defaultRename(1),
 				mkdir:  defaultMkdir(3),
 				chown:  defaultChown(3),
@@ -424,7 +432,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailedToReadFile",
 			b: InstallBackint{
-				stat:     defaultStat(2),
+				stat:     defaultStat(3),
 				rename:   defaultRename(1),
 				mkdir:    defaultMkdir(3),
 				chown:    defaultChown(3),
@@ -436,7 +444,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailedToWriteFile",
 			b: InstallBackint{
-				stat:      defaultStat(2),
+				stat:      defaultStat(3),
 				rename:    defaultRename(1),
 				mkdir:     defaultMkdir(3),
 				chown:     defaultChown(3),
@@ -449,7 +457,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "FailedToChmodFile",
 			b: InstallBackint{
-				stat:      defaultStat(2),
+				stat:      defaultStat(3),
 				rename:    defaultRename(1),
 				mkdir:     defaultMkdir(3),
 				chown:     defaultChown(3),
@@ -463,7 +471,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "SuccessWithMigration",
 			b: InstallBackint{
-				stat:      defaultStat(2),
+				stat:      defaultStat(3),
 				rename:    defaultRename(1),
 				mkdir:     defaultMkdir(6),
 				chown:     defaultChown(6),

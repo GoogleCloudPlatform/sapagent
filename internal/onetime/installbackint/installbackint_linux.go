@@ -136,6 +136,7 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 		log.CtxLogger(ctx).Warnf("sid defaulted to $SAPSYSTEMNAME: %s", b.sid)
 		if b.sid == "" {
 			log.CtxLogger(ctx).Errorf("sid is not defined. Set the sid command line argument, or ensure $SAPSYSTEMNAME is set. Usage:" + b.Usage())
+			fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
 			return subcommands.ExitUsageError
 		}
 	}
@@ -235,7 +236,19 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 	// Ensure we don't trip the Kokoro replace_func by separating the strings.
 	backintInstallDir := baseInstallDir + "/backint" + "/backint-gcs"
 	backintOldDir := baseInstallDir + "/backint" + "/backint-gcs-old-" + time.Now().Format(DateTimeMinutes)
-	jreInstallDir := backintInstallDir + "/jre"
+	jreInstallDir := backintOldDir + "/jre"
+
+	if err := b.stat(backintInstallDir, &unix.Stat_t{}); os.IsNotExist(err) {
+		log.CtxLogger(ctx).Infow("Backint installation files not found, skipping backup", "backintInstallDir", backintInstallDir)
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("unable to stat backint install directory: %s, err: %v", backintInstallDir, err)
+	}
+
+	log.CtxLogger(ctx).Infow("Creating backup folder for Backint installation files", "oldpath", backintInstallDir, "newpath", backintOldDir)
+	if err := b.rename(backintInstallDir, backintOldDir); err != nil {
+		return fmt.Errorf("unable to move old backint install directory, oldpath: %s newpath: %s, err: %v", backintInstallDir, backintOldDir, err)
+	}
 
 	if err := b.stat(jreInstallDir, &unix.Stat_t{}); os.IsNotExist(err) {
 		log.CtxLogger(ctx).Infow("Old Backint agent not found, skipping migration", "jreInstallDir", jreInstallDir)
@@ -245,9 +258,6 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 	}
 
 	log.CtxLogger(ctx).Infow("Old Backint agent found, migrating files", "oldpath", backintInstallDir, "newpath", backintOldDir)
-	if err := b.rename(backintInstallDir, backintOldDir); err != nil {
-		return fmt.Errorf("unable to move old backint install directory, oldpath: %s newpath: %s, err: %v", backintInstallDir, backintOldDir, err)
-	}
 	// Create /backint first so permissions are set for the /backint-gcs subdir.
 	if err := b.createAndChownDir(ctx, baseInstallDir+"/backint", uid, gid); err != nil {
 		return err
