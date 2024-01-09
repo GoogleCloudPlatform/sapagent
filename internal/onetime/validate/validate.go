@@ -19,6 +19,7 @@ package validate
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"flag"
@@ -86,7 +87,7 @@ func (v *Validate) validateHandler(ctx context.Context) subcommands.ExitStatus {
 }
 
 func (v *Validate) validateWorkloadCollectionHandler(ctx context.Context, read collectiondefinition.ReadFile, path string) subcommands.ExitStatus {
-	log.Print("Beginning workload collection validation for file: " + path)
+	fmt.Println("Beginning workload collection validation for file: " + path)
 	log.Logger.Infow("Beginning workload collection validation.", "path", path)
 	cd, err := collectiondefinition.FromJSONFile(ctx, read, path)
 	if err != nil {
@@ -100,7 +101,7 @@ func (v *Validate) validateWorkloadCollectionHandler(ctx context.Context, read c
 		err := collectiondefinition.ValidationError{FailureCount: validator.FailureCount()}
 		onetime.LogErrorToFileAndConsole("Validation Result: FAILURE", err)
 	} else {
-		log.Print("Validation Result: SUCCESS")
+		fmt.Println("Validation Result: SUCCESS")
 		log.Logger.Info("Validation Result: SUCCESS")
 	}
 	return subcommands.ExitSuccess

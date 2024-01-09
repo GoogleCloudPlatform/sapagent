@@ -231,7 +231,7 @@ func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
 		}
 		output += out
 	}
-	log.Print(output)
+	fmt.Println(output)
 	return subcommands.ExitSuccess
 }
 

@@ -87,12 +87,12 @@ func (m *Mode) maintenanceModeHandler(fs *flag.FlagSet, fr maintenance.FileReade
 			return subcommands.ExitFailure
 		}
 		if len(res) == 0 {
-			log.Print("No SID is under maintenance.")
+			fmt.Println("No SID is under maintenance.")
 			return subcommands.ExitSuccess
 		}
 		log.Print("Maintenance mode flag for process metrics is set to true for the following SIDs:\n")
 		for _, v := range res {
-			log.Print(v + "\n")
+			fmt.Println(v + "\n")
 		}
 		return subcommands.ExitSuccess
 	}
@@ -107,6 +107,6 @@ func (m *Mode) maintenanceModeHandler(fs *flag.FlagSet, fr maintenance.FileReade
 		log.Print(fmt.Sprintf("Error updating the maintenance mode: %v.", err))
 		return subcommands.ExitFailure
 	}
-	log.Print(fmt.Sprintf("Updated maintenance mode for the SID: %s", m.sid))
+	fmt.Println(fmt.Sprintf("Updated maintenance mode for the SID: %s", m.sid))
 	return subcommands.ExitSuccess
 }

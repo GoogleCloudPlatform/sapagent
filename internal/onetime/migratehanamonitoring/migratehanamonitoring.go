@@ -109,7 +109,7 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 	hmConfig := prepareConfig(hmMigrationConf, sslEnabled)
 	config.HanaMonitoringConfiguration = hmConfig
 	if !configuration.ValidateQueries(config.GetHanaMonitoringConfiguration().GetQueries()) {
-		logMessageToFileAndConsole("Queries formed using Old HANA Monitoring Agent Config are not valid. File" + oldConfigPath)
+		onetime.LogMessageToFileAndConsole("Queries formed using Old HANA Monitoring Agent Config are not valid. File" + oldConfigPath)
 		return subcommands.ExitUsageError
 	}
 	content, err := protojson.MarshalOptions{Multiline: true}.Marshal(config)
@@ -130,10 +130,10 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 		the config file ` + configuration.LinuxConfigPath + `and restart the agent
 		to start HANA monitoring functionality in the Agent for SAP.
 		`
-		logMessageToFileAndConsole(msg)
+		onetime.LogMessageToFileAndConsole(msg)
 		return subcommands.ExitUsageError
 	}
-	logMessageToFileAndConsole("Migrated HANA Monitoring Agent Config successfully")
+	onetime.LogMessageToFileAndConsole("Migrated HANA Monitoring Agent Config successfully")
 	return subcommands.ExitSuccess
 }
 
@@ -266,7 +266,3 @@ func format(s string) string {
 	return res
 }
 
-func logMessageToFileAndConsole(msg string) {
-	log.Print(msg)
-	log.Logger.Info(msg)
-}

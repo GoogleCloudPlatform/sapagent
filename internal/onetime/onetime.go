@@ -66,7 +66,7 @@ func LogErrorToFileAndConsole(msg string, err error) {
 
 // LogMessageToFileAndConsole prints out the console message and also to the log file.
 func LogMessageToFileAndConsole(msg string) {
-	log.Print(msg)
+	fmt.Println(msg)
 	log.Logger.Info(msg)
 }
 
@@ -106,5 +106,5 @@ func HelpCommand(f *flag.FlagSet) subcommands.ExitStatus {
 
 // PrintAgentVersion prints the current version of the agent to stdout.
 func PrintAgentVersion() {
-	log.Print(fmt.Sprintf("Google Cloud Agent for SAP version %s.%s", configuration.AgentVersion, configuration.AgentBuildChange))
+	fmt.Printf("Google Cloud Agent for SAP version %s.%s", configuration.AgentVersion, configuration.AgentBuildChange)
 }
