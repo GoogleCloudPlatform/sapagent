@@ -387,7 +387,7 @@ func (r *Restorer) checkLogDir(ctx context.Context) error {
 func (r *Restorer) parseBasePath(ctx context.Context, pattern string, exec commandlineexecutor.Execute) (string, error) {
 	args := `-c 'grep ` + pattern + ` /usr/sap/*/SYS/global/hdb/custom/config/global.ini | cut -d= -f 2'`
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
+		Executable:  "bash",
 		ArgsToSplit: args,
 	})
 	if result.Error != nil {
@@ -399,7 +399,7 @@ func (r *Restorer) parseBasePath(ctx context.Context, pattern string, exec comma
 // parseLogicalPath parses the logical path from the base path.
 func (r *Restorer) parseLogicalPath(ctx context.Context, basePath string, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
+		Executable:  "bash",
 		ArgsToSplit: fmt.Sprintf("-c 'df --output=source %s | tail -n 1'", basePath),
 	})
 	if result.Error != nil {
@@ -413,7 +413,7 @@ func (r *Restorer) parseLogicalPath(ctx context.Context, basePath string, exec c
 // parsePhysicalPath parses the physical path from the logical path.
 func (r *Restorer) parsePhysicalPath(ctx context.Context, logicalPath string, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
+		Executable:  "bash",
 		ArgsToSplit: fmt.Sprintf("-c '/sbin/lvdisplay -m %s | grep \"Physical volume\" | awk \"{print \\$3}\"'", logicalPath),
 	})
 	if result.Error != nil {
@@ -427,7 +427,7 @@ func (r *Restorer) parsePhysicalPath(ctx context.Context, logicalPath string, ex
 // checkDataDeviceForStripes checks if the data device is striped.
 func (r *Restorer) checkDataDeviceForStripes(ctx context.Context, exec commandlineexecutor.Execute) error {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
+		Executable:  "bash",
 		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", r.logicalDataPath),
 	})
 	if result.ExitCode == 0 {
@@ -448,7 +448,7 @@ func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execut
 	}
 	result := exec(ctx, commandlineexecutor.Params{
 		User:        r.hanaSidAdm,
-		Executable:  "/bin/sh",
+		Executable:  "bash",
 		ArgsToSplit: cmd,
 		Timeout:     300,
 	})
@@ -462,7 +462,7 @@ func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execut
 // readDataDirMountPath reads the data directory mount path.
 func (r *Restorer) readDataDirMountPath(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
+		Executable:  "bash",
 		ArgsToSplit: fmt.Sprintf(" -c 'df --output=target %s| tail -n 1'", r.baseDataPath),
 	})
 	if result.Error != nil {
