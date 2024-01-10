@@ -32,8 +32,18 @@ const (
 	line2
 	rsc_vip_int-primary IPaddr2
 	anotherline
-	params ip 127.0.0.1 other text
+	params ip=127.0.0.1 other text
 	line3
+	line4
+	`
+	defaultMultiClusterOutput = `
+	line1
+	line2
+	rsc_vip_int-primary IPaddr2
+	anotherline
+	params ip=127.0.0.1 other text
+	line3
+	params ip=127.0.0.2 other text
 	line4
 	`
 	defaultFilestoreOutput = `
@@ -45,144 +55,152 @@ tmpfs                              48G  2.0M   48G   1% /dev/shm
 	`
 )
 
-func TestDiscoverClusterCRM(t *testing.T) {
+func TestDiscoverClustersCRM(t *testing.T) {
 	tests := []struct {
 		name        string
 		testExecute commandlineexecutor.Execute
-		wantAddr    string
+		wantAddrs   []string
 		wantErr     error
-	}{
-		{
-			name: "CRM Success",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultClusterOutput,
-					StdErr: "",
-				}
-			},
-			wantAddr: "127.0.0.1",
-			wantErr:  nil,
-		}, {
-			name: "CRM execute error",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "error",
-					Error:  errors.New("exit status 1"),
-				}
-			},
-			wantAddr: "",
-			wantErr:  cmpopts.AnyError,
-		}, {
-			name: "CRM no params ip",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "rsc_cip_int-primary IPAddr2",
-					StdErr: "",
-				}
-			},
-			wantAddr: "",
-			wantErr:  cmpopts.AnyError,
-		}, {
-			name: "CRM no output",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "line1\nline2\n",
-					StdErr: "",
-				}
-			},
-			wantAddr: "",
-			wantErr:  cmpopts.AnyError,
+	}{{
+		name: "CRM Success",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
 		},
+		wantAddrs: []string{"127.0.0.1"},
+		wantErr:   nil,
+	}, {
+		name: "CRM Success MultipleAddresses",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultMultiClusterOutput,
+				StdErr: "",
+			}
+		},
+		wantAddrs: []string{"127.0.0.1", "127.0.0.2"},
+		wantErr:   nil,
+	}, {
+		name: "CRM execute error",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "error",
+				Error:  errors.New("exit status 1"),
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "CRM no params ip",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "rsc_cip_int-primary IPAddr2",
+				StdErr: "",
+			}
+		},
+	}, {
+		name: "CRM no output",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+			}
+		},
+	},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := HostDiscovery{
 				Execute: test.testExecute,
 			}
-			got, err := d.discoverClusterCRM(context.Background())
-			if diff := cmp.Diff(got, test.wantAddr); diff != "" {
-				t.Errorf("discoverClusterCRM mismatch (-want, +got):\n%s", diff)
+			got, err := d.discoverClustersCRM(context.Background())
+			if diff := cmp.Diff(got, test.wantAddrs); diff != "" {
+				t.Errorf("discoverClustersCRM mismatch (-want, +got):\n%s", diff)
 			}
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
-				t.Error("discoverClusterCRM error mismatch")
+				t.Error("discoverClustersCRM error mismatch")
 			}
 		})
 	}
 }
 
-func TestDiscoverClusterPCS(t *testing.T) {
+func TestDiscoverClustersPCS(t *testing.T) {
 	tests := []struct {
 		name        string
 		testExecute commandlineexecutor.Execute
-		wantAddr    string
+		wantAddrs   []string
 		wantErr     error
-	}{
-		{
-			name: "PCS Success",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultClusterOutput,
-					StdErr: "",
-				}
-			},
-			wantAddr: "127.0.0.1",
-			wantErr:  nil,
-		}, {
-			name: "PCS execute error",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "error",
-					Error:  errors.New("exit status 1"),
-				}
-			},
-			wantAddr: "",
-			wantErr:  cmpopts.AnyError,
-		}, {
-			name: "PCS no params ip",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "rsc_cip_int-primary IPAddr2",
-					StdErr: "",
-				}
-			},
-			wantAddr: "",
-			wantErr:  cmpopts.AnyError,
-		}, {
-			name: "PCS no output",
-			testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "line1\nline2\n",
-					StdErr: "",
-				}
-			},
-			wantAddr: "",
-			wantErr:  cmpopts.AnyError,
+	}{{
+		name: "PCS Success",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultClusterOutput,
+				StdErr: "",
+			}
 		},
+		wantAddrs: []string{"127.0.0.1"},
+		wantErr:   nil,
+	}, {
+		name: "PCS Multi Cluster Success",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: defaultMultiClusterOutput,
+				StdErr: "",
+			}
+		},
+		wantAddrs: []string{"127.0.0.1", "127.0.0.2"},
+		wantErr:   nil,
+	}, {
+		name: "PCS execute error",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "error",
+				Error:  errors.New("exit status 1"),
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "PCS no params ip",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "rsc_cip_int-primary IPAddr2",
+				StdErr: "",
+			}
+		},
+	}, {
+		name: "PCS no output",
+		testExecute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+			}
+		},
+	},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := HostDiscovery{
 				Execute: test.testExecute,
 			}
-			got, err := d.discoverClusterPCS(context.Background())
-			if diff := cmp.Diff(got, test.wantAddr); diff != "" {
-				t.Errorf("discoverClusterPCS mismatch (-want, +got):\n%s", diff)
+			got, err := d.discoverClustersPCS(context.Background())
+			if diff := cmp.Diff(got, test.wantAddrs); diff != "" {
+				t.Errorf("discoverClustersPCS mismatch (-want, +got):\n%s", diff)
 			}
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
-				t.Error("discoverClusterPCS error mismatch")
+				t.Error("discoverClustersPCS error mismatch")
 			}
 		})
 	}
 }
 
-func TestDiscoverClusterAddress(t *testing.T) {
+func TestDiscoverClusterAddresses(t *testing.T) {
 	tests := []struct {
 		name        string
 		testExists  commandlineexecutor.Exists
 		testExecute commandlineexecutor.Execute
-		wantAddr    string
+		wantAddrs   []string
 		wantErr     error
 	}{{
 		name:       "Address from CRM",
@@ -200,8 +218,8 @@ func TestDiscoverClusterAddress(t *testing.T) {
 				StdErr: "",
 			}
 		},
-		wantAddr: "127.0.0.1",
-		wantErr:  nil,
+		wantAddrs: []string{"127.0.0.1"},
+		wantErr:   nil,
 	}, {
 		name:       "Address from PCS",
 		testExists: func(cmd string) bool { return cmd == "pcs" },
@@ -218,8 +236,8 @@ func TestDiscoverClusterAddress(t *testing.T) {
 				StdErr: "",
 			}
 		},
-		wantAddr: "127.0.0.1",
-		wantErr:  nil,
+		wantAddrs: []string{"127.0.0.1"},
+		wantErr:   nil,
 	}, {
 		name:       "No valid commands",
 		testExists: func(string) bool { return false },
@@ -230,8 +248,7 @@ func TestDiscoverClusterAddress(t *testing.T) {
 				Error:  errors.New("Unexpected command"),
 			}
 		},
-		wantAddr: "",
-		wantErr:  cmpopts.AnyError,
+		wantErr: cmpopts.AnyError,
 	}, {
 		name:       "CRM Error",
 		testExists: func(cmd string) bool { return cmd == "crm" },
@@ -249,8 +266,7 @@ func TestDiscoverClusterAddress(t *testing.T) {
 				Error:  errors.New("CRM Error"),
 			}
 		},
-		wantAddr: "",
-		wantErr:  cmpopts.AnyError,
+		wantErr: cmpopts.AnyError,
 	}, {
 		name:       "PCS Error",
 		testExists: func(cmd string) bool { return cmd == "pcs" },
@@ -267,8 +283,7 @@ func TestDiscoverClusterAddress(t *testing.T) {
 				StdErr: "PCS Error", Error: errors.New("PCS Error"),
 			}
 		},
-		wantAddr: "",
-		wantErr:  cmpopts.AnyError,
+		wantErr: cmpopts.AnyError,
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -276,12 +291,12 @@ func TestDiscoverClusterAddress(t *testing.T) {
 				Exists:  test.testExists,
 				Execute: test.testExecute,
 			}
-			got, err := d.discoverClusterAddress(context.Background())
-			if diff := cmp.Diff(got, test.wantAddr); diff != "" {
-				t.Errorf("discoverClusterAddress mismatch (-want, +got):\n%s", diff)
+			got, err := d.discoverClusterAddresses(context.Background())
+			if diff := cmp.Diff(got, test.wantAddrs); diff != "" {
+				t.Errorf("discoverClusterAddresses mismatch (-want, +got):\n%s", diff)
 			}
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
-				t.Error("discoverClusterAddress error mismatch")
+				t.Error("discoverClusterAddresses error mismatch")
 			}
 		})
 	}

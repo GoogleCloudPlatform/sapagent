@@ -157,6 +157,24 @@ func (g *GCE) GetForwardingRule(project, location, name string) (*compute.Forwar
 	return g.service.ForwardingRules.Get(project, location, name).Do()
 }
 
+// GetForwardingRuleByIP retrieves a GCE Forwarding rule defined by the project, and IP address provided.
+func (g *GCE) GetForwardingRuleByIP(project, ip string) (*compute.ForwardingRule, error) {
+	filter := fmt.Sprintf("(IPAddress eq %s)", ip)
+	list, err := g.service.ForwardingRules.AggregatedList(project).Filter(filter).Do()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving aggregated forwarding rules list: %s", err)
+	}
+
+	for _, l := range list.Items {
+		for _, fwr := range l.ForwardingRules {
+			if fwr.IPAddress == ip {
+				return fwr, nil
+			}
+		}
+	}
+	return nil, errors.Errorf("no forwarding rule with IP %s found", ip)
+}
+
 // GetInstanceGroup retrieves a GCE Instance Group rule defined by the project, zone, and name provided.
 func (g *GCE) GetInstanceGroup(project, zone, name string) (*compute.InstanceGroup, error) {
 	return g.service.InstanceGroups.Get(project, zone, name).Do()
@@ -185,10 +203,16 @@ func (g *GCE) GetURIForIP(project, ip string) (string, error) {
 	if addr != nil {
 		return addr.SelfLink, nil
 	}
-	inst, err := g.GetInstanceByIP(project, ip)
+	inst, _ := g.GetInstanceByIP(project, ip)
 	if inst != nil {
 		return inst.SelfLink, nil
 	}
+
+	fwr, _ := g.GetForwardingRuleByIP(project, ip)
+	if fwr != nil {
+		return fwr.SelfLink, nil
+	}
+
 	fs, err := g.GetFilestoreByIP(project, "-", ip)
 	if fs != nil && len(fs.Instances) > 0 {
 		fsURI := strings.Replace(fs.Instances[0].Name, "/instances/", "/filestores/", 1)

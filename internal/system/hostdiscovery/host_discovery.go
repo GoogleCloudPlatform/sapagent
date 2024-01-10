@@ -29,7 +29,8 @@ import (
 
 var (
 	fsMountRegex = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(/[a-zA-Z0-9]+)`)
-	ipRegex      = regexp.MustCompile(`[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+`)
+	crmIPRegex   = regexp.MustCompile(`params ip=([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)`)
+	pcsIPRegex   = regexp.MustCompile(`ip=([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)`)
 )
 
 // HostDiscovery is for discovering details that can only be performed on the host running the agent.
@@ -43,73 +44,64 @@ type HostDiscovery struct {
 func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) []string {
 	fs := d.discoverFilestores(ctx)
 
-	addr, err := d.discoverClusterAddress(ctx)
+	addrs, err := d.discoverClusterAddresses(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Error discovering cluster", "error", err)
 		return fs
 	}
 
-	return append(fs, addr)
+	return append(fs, addrs...)
 }
 
-func (d *HostDiscovery) discoverClusterAddress(ctx context.Context) (string, error) {
+func (d *HostDiscovery) discoverClusterAddresses(ctx context.Context) ([]string, error) {
 	if d.Exists("crm") {
-		return d.discoverClusterCRM(ctx)
+		return d.discoverClustersCRM(ctx)
 	}
 	if d.Exists("pcs") {
-		return d.discoverClusterPCS(ctx)
+		return d.discoverClustersPCS(ctx)
 	}
-	return "", errors.New("no cluster command found")
+	return nil, errors.New("no cluster command found")
 }
 
-func (d *HostDiscovery) discoverClusterCRM(ctx context.Context) (string, error) {
+func (d *HostDiscovery) discoverClustersCRM(ctx context.Context) ([]string, error) {
 	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "crm",
 		ArgsToSplit: "config show",
 	})
 	if result.Error != nil {
-		return "", result.Error
+		log.CtxLogger(ctx).Warnw("running crm", "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		return nil, result.Error
 	}
 
-	var addrPrimitiveFound bool
-	for _, l := range strings.Split(result.StdOut, "\n") {
-		if strings.Contains(l, "rsc_vip_int-primary IPaddr2") {
-			addrPrimitiveFound = true
+	var addrs []string
+	matches := crmIPRegex.FindAllStringSubmatch(result.StdOut, -1)
+	for _, match := range matches {
+		if match == nil {
+			continue
 		}
-		if addrPrimitiveFound && strings.Contains(l, "params ip") {
-			address := ipRegex.FindString(l)
-			if address == "" {
-				return "", errors.New("unable to locate IP address in crm output: " + result.StdOut)
-			}
-			return address, nil
-		}
+		addrs = append(addrs, match[1])
 	}
-	return "", errors.New("no address found in crm cluster config output")
+	return addrs, nil
 }
 
-func (d *HostDiscovery) discoverClusterPCS(ctx context.Context) (string, error) {
+func (d *HostDiscovery) discoverClustersPCS(ctx context.Context) ([]string, error) {
 	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "pcs",
 		ArgsToSplit: "config show",
 	})
 	if result.Error != nil {
-		return "", result.Error
+		return nil, result.Error
 	}
 
-	var addrPrimitiveFound bool
-	for _, l := range strings.Split(result.StdOut, "\n") {
-		if addrPrimitiveFound && strings.Contains(l, "ip") {
-			address := ipRegex.FindString(l)
-			if address == "" {
-				continue
-			}
-			return address, nil
+	var addrs []string
+	matches := pcsIPRegex.FindAllStringSubmatch(result.StdOut, -1)
+	for _, match := range matches {
+		if match == nil {
+			continue
 		}
-		if strings.Contains(l, "rsc_vip_") {
-			addrPrimitiveFound = true
-		}
+		addrs = append(addrs, match[1])
 	}
-	return "", errors.New("no address found in pcs cluster config output")
+	return addrs, nil
 }
 
 func (d *HostDiscovery) discoverFilestores(ctx context.Context) []string {
