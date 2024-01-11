@@ -113,7 +113,7 @@ func data(ctx context.Context, runner commandlineexecutor.Execute) (*CRMMon, err
 		Args:       []string{"--as-xml"},
 	})
 	if result.Error != nil && result.ExecutableFound {
-		log.CtxLogger(ctx).Errorw("Command 'crm_mon --as-xml' failed", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		log.CtxLogger(ctx).Debugw("Command 'crm_mon --as-xml' failed", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 		return nil, result.Error
 	}
 	return parseCRMMon([]byte(result.StdOut))
