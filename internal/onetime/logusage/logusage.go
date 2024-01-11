@@ -58,7 +58,7 @@ func (*LogUsage) Usage() string {
 func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&l.name, "name", configuration.AgentName, "Agent or Tool  name")
 	fs.StringVar(&l.name, "n", configuration.AgentName, "Agent or Tool  name")
-	fs.StringVar(&l.agentVersion, "agentVersion", configuration.AgentVersion, "Agent or Tool version")
+	fs.StringVar(&l.agentVersion, "agent-version", configuration.AgentVersion, "Agent or Tool version")
 	fs.StringVar(&l.agentVersion, "av", configuration.AgentVersion, "Agent or Tool version")
 	fs.StringVar(&l.agentPriorVersion, "prior-version", "", "prior installed version")
 	fs.StringVar(&l.agentPriorVersion, "pv", "", "prior installed version")
@@ -107,8 +107,8 @@ func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands
 	case l.status == "":
 		log.Print("A usage status value is required.")
 		return subcommands.ExitUsageError
-	case l.status == string(usagemetrics.StatusUpdated) && l.agentPriorVersion == "":
-		log.Print("Prior agent version is required.")
+	case l.status == string(usagemetrics.StatusUpdated) && l.agentVersion == "":
+		log.Print("For status UPDATED, either PriorVersion or Agent Version is requried.")
 		return subcommands.ExitUsageError
 	case l.status == string(usagemetrics.StatusError) && l.usageError <= 0:
 		log.Print("For status ERROR, an error code is required.")
@@ -126,7 +126,13 @@ func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands
 
 // logUsageStatus makes a call to the appropriate usage metrics API.
 func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
-	configureUsageMetricsForOTE(cloudProps, l.name, l.agentPriorVersion, l.image)
+	version := l.agentPriorVersion
+	if version == "" {
+		// If prior-version is not passed, we use the value of agent-version.
+		// This is an optional parameters with default value of configuration.AgentVersion
+		version = l.agentVersion
+	}
+	configureUsageMetricsForOTE(cloudProps, l.name, version, l.image)
 	switch usagemetrics.Status(l.status) {
 	case usagemetrics.StatusRunning:
 		usagemetrics.Running()

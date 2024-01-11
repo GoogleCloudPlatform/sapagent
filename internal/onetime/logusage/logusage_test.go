@@ -56,14 +56,6 @@ func TestLogUsageHandler(t *testing.T) {
 			want: subcommands.ExitSuccess,
 		},
 		{
-			name: "AgentUpdatedWithEmptyPriorVersion",
-			logUsage: &LogUsage{
-				status:            "UPDATED",
-				agentPriorVersion: "",
-			},
-			want: subcommands.ExitUsageError,
-		},
-		{
 			name: "ErrorWithInvalidErrorCode",
 			logUsage: &LogUsage{
 				status:     "ERROR",
@@ -86,6 +78,30 @@ func TestLogUsageHandler(t *testing.T) {
 				action: 0,
 			},
 			want: subcommands.ExitUsageError,
+		},
+		{
+			name: "AgentUpdatedWithAgentVersion",
+			logUsage: &LogUsage{
+				status:       "UPDATED",
+				agentVersion: "1.2.3",
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "AgentUpdatedWithoutPriorVersionAndAgentVersion",
+			logUsage: &LogUsage{
+				status:            "UPDATED",
+			},
+			want: subcommands.ExitUsageError,
+		},
+		{
+			name: "AgentUpdatedWithDifferentPriorVersionAndAgentVersion",
+			logUsage: &LogUsage{
+				status:            "UPDATED",
+				agentVersion:      "1.2.3",
+				agentPriorVersion: "1.2.",
+			},
+			want: subcommands.ExitSuccess,
 		},
 		{
 			name: "Success",
@@ -115,11 +131,13 @@ func TestLogUsageStatus(t *testing.T) {
 	})
 
 	tests := []struct {
-		name     string
-		status   string
-		actionID int
-		errorID  int
-		want     error
+		name              string
+		status            string
+		agentVersion      string
+		agentPriorVersion string
+		actionID          int
+		errorID           int
+		want              error
 	}{
 		{
 			name:   "Running",
@@ -158,9 +176,23 @@ func TestLogUsageStatus(t *testing.T) {
 			want:   nil,
 		},
 		{
-			name:   "Updated",
-			status: "UPDATED",
-			want:   nil,
+			name:         "UpdatedWithAgentVersion",
+			status:       "UPDATED",
+			agentVersion: "1.2.3",
+			want:         nil,
+		},
+		{
+			name:              "UpdatedWithDifferentPriorVersionAndAgentVersion",
+			status:            "UPDATED",
+			agentPriorVersion: "1.2.3",
+			agentVersion:      "1.2.4",
+			want:              nil,
+		},
+		{
+			name:              "UpdatedWithPriorVersion",
+			status:            "UPDATED",
+			agentPriorVersion: "1.2.3",
+			want:              nil,
 		},
 		{
 			name:   "Uninstalled",
@@ -183,9 +215,11 @@ func TestLogUsageStatus(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			l := &LogUsage{
-				status:     test.status,
-				action:     test.actionID,
-				usageError: test.errorID,
+				status:            test.status,
+				action:            test.actionID,
+				usageError:        test.errorID,
+				agentVersion:      test.agentVersion,
+				agentPriorVersion: test.agentPriorVersion,
 			}
 			got := l.logUsageStatus(&ipb.CloudProperties{})
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
@@ -285,7 +319,7 @@ func TestSetFlagsLogUsage(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	l.SetFlags(fs)
 
-	flags := []string{"name", "n", "agentVersion", "av", "prior-version", "pv", "status", "s", "action", "a", "error", "e", "v", "h", "loglevel"}
+	flags := []string{"name", "n", "agent-version", "av", "prior-version", "pv", "status", "s", "action", "a", "error", "e", "v", "h", "loglevel"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {
