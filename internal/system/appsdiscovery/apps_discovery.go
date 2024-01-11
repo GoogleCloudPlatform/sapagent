@@ -375,7 +375,7 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 
 	// Now create the control file in /tmp
 	contents := `EXPORT
-	file='/tmp/export_products.dat'
+	file='/tmp/r3trans/export_products.dat'
 	CLIENT=all
 	SELECT * FROM PRDVERS`
 	file, err := d.FileSystem.Create(tmpControlFilePath)
