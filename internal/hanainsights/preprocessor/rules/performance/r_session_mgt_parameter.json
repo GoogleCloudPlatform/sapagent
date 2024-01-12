@@ -1,0 +1,32 @@
+{
+  "id": "r_session_mgt_parameter",
+  "description": "The parameter itab_initial_buffer_size controls the session packet buffer size. Per default the packet buffer per session is 102400 byte, i.e. 100 KB. When a larger result set is sent, the buffer is increased and subsequently reduced to the original size of 100 KB. Thus, sending larger portions of data can result in frequent allocations and deallocations, increasing the memory management load and the memory allocation share.",
+  "labels": [
+    "performance"
+  ],
+  "queries": [
+    {
+      "name": "q_session_mgt_parameter",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'indexserver.ini' AND SECTION= 'session' AND KEY = 'itab_initial_buffer_size'",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "lhs": "q_session_mgt_parameter:VALUE",
+        "operation": "NE",
+        "rhs": "1126400"
+      },
+      "actions": [
+        {
+          "description": "The parameter itab_initial_buffer_size value 1126400 is typically a good compromise between efforts and results. It is a large enough value to improve performance for in-memory table operations that involve large amounts of data and It is a small enough value to not significantly increase memory usage. However, it is important to review the memory utilization and adjust the parameter accordingly."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,1999997 - FAQ: SAP HANA Memory,https://me.sap.com/notes/1999997"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "id": "r_os_kernel_check",
+  "description": "Check to see that all hosts in a scale-out environment have a consistent OS version and Kernel version.",
+  "labels": [
+    "scaleout"
+  ],
+  "queries": [
+    {
+      "name": "q_oskernel_check",
+      "sql": "SELECT DISTINCT(VALUE) as value FROM M_HOST_INFORMATION WHERE KEY='os_kernel_version'",
+      "columns": ["value"]
+    },
+    {
+      "name": "q_osversion_check",
+      "sql": "SELECT DISTINCT(VALUE) AS value FROM M_HOST_INFORMATION WHERE KEY='os_cpe_name'",
+      "columns": ["value"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger":{
+          "operation": "OR",
+          "child_evals": [
+            {
+              "lhs": "size(q_oskernel_check)",
+              "operation": "GT",
+              "rhs": "1"
+            },
+            {
+              "lhs": "size(q_osversion_check)",
+              "operation": "GT",
+              "rhs": "1"
+            }
+        ]
+      },
+      "actions": [
+        {
+          "description": "Operating System version or Linux kernel versions are not consistent across all nodes in the SAP HANA scale-out landscape. Address the version mismatches to ensure optimal performance, stability and supportability."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,2235581 - SAP HANA: Supported Operating Systems,https://me.sap.com/notes/2235581"
+      ]
+    }
+  ]
+}
