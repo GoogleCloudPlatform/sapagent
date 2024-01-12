@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	//go:embed rules/*.json testrules/*.json rules/security/*.json
+	//go:embed rules/*.json testrules/*.json rules/ha_dr/*.json rules/maintenance/*.json rules/performance/*.json rules/scaleout/*.json rules/security/*.json
 	rulesDir embed.FS
 
 	// RuleFilenames has list of filenames containing rule definitions.
