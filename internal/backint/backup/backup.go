@@ -155,7 +155,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 // String results are returned on success or failure.
 func backupFile(ctx context.Context, p parameters) string {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
-	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + p.extension
+	object := p.config.GetFolderPrefix() + p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + p.extension
 	log.CtxLogger(ctx).Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType)
 	if p.reader == nil {
 		f, err := parse.OpenFileWithRetries(fileNameTrim, os.O_RDONLY, 0, p.config.GetFileReadTimeoutMs())
@@ -275,7 +275,7 @@ func backupFileParallel(ctx context.Context, p parameters) (string, error) {
 // the temporary chunks. Any chunk error will result in a failure.
 func composeChunks(ctx context.Context, p parameters, chunkError bool, startTime time.Time) string {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
-	object := p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + ".bak"
+	object := p.config.GetFolderPrefix() + p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + ".bak"
 
 	ret := func() string {
 		if chunkError {

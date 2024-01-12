@@ -357,7 +357,8 @@ func TestInstallBackintHandler(t *testing.T) {
 		{
 			name: "SuccessNoMigration",
 			b: InstallBackint{
-				stat:      defaultStatNotExist(1),
+				stat:      defaultStatNotExist(2),
+				rename:    defaultRename(1),
 				mkdir:     defaultMkdir(3),
 				chown:     defaultChown(3),
 				writeFile: defaultWriteFile(2),

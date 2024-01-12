@@ -69,7 +69,7 @@ func delete(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 			}
 			externalBackupID := strings.Trim(s[1], `"`)
 			fileName := s[2]
-			object := config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
+			object := config.GetFolderPrefix() + config.GetUserId() + parse.TrimAndClean(fileName) + "/" + externalBackupID + ".bak"
 			wp.Submit(func() {
 				log.CtxLogger(ctx).Infow("Deleting object", "object", object)
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)

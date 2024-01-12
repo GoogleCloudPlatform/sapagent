@@ -103,6 +103,7 @@ func TestExecute(t *testing.T) {
 	tests := []struct {
 		name   string
 		params *storage.ConnectParameters
+		config *bpb.BackintConfiguration
 		want   bool
 	}{
 		{
@@ -112,11 +113,19 @@ func TestExecute(t *testing.T) {
 					return fakestorage.NewServer([]fakestorage.Object{}).Client(), nil
 				},
 			},
-			want: false,
+			config: defaultConfig,
+			want:   false,
 		},
 		{
 			name:   "Success",
 			params: defaultConnectParameters,
+			config: defaultConfig,
+			want:   true,
+		},
+		{
+			name:   "SuccessWithFolderPrefix",
+			params: defaultConnectParameters,
+			config: &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100, FolderPrefix: "test-prefix"},
 			want:   true,
 		},
 	}
@@ -130,7 +139,7 @@ func TestExecute(t *testing.T) {
 			oneGB /= 8
 			sixteenGB = oneGB
 
-			got := Execute(context.Background(), defaultConfig, test.params, bytes.NewBufferString(""))
+			got := Execute(context.Background(), test.config, test.params, bytes.NewBufferString(""))
 			if got != test.want {
 				t.Errorf("Execute() = %v, want: %v", got, test.want)
 			}

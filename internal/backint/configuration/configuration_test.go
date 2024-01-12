@@ -138,6 +138,64 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantOk: false,
 		},
 		{
+			name:   "BucketWithForwardSlash",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:    "testUser",
+				Function:  bpb.Function_BACKUP,
+				ParamFile: "testParamsFile.json",
+				Bucket:    "//test-bucket",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "//test-bucket"}`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "BucketWithGsPrefix",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:    "testUser",
+				Function:  bpb.Function_BACKUP,
+				ParamFile: "testParamsFile.json",
+				Bucket:    "gs:test-bucket",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "gs:test-bucket"}`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "RecoveryBucketWithForwardSlash",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:         "testUser",
+				Function:       bpb.Function_BACKUP,
+				ParamFile:      "testParamsFile.json",
+				Bucket:         "test-bucket",
+				RecoveryBucket: "//test-bucket",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "test-bucket", "recovery_bucket": "//test-bucket"}`), nil
+			},
+			wantOk: false,
+		},
+		{
+			name:   "RecoveryBucketWithGsPrefix",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:         "testUser",
+				Function:       bpb.Function_BACKUP,
+				ParamFile:      "testParamsFile.json",
+				Bucket:         "test-bucket",
+				RecoveryBucket: "gs:test-bucket",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "test-bucket", "recovery_bucket": "gs:test-bucket"}`), nil
+			},
+			wantOk: false,
+		},
+		{
 			name:   "EncyptionKeyAndKmsKeyDefined",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
@@ -209,6 +267,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				Function:          bpb.Function_BACKUP,
 				ParamFile:         "testParamsFile.json",
 				Bucket:            "testBucket",
+				RecoveryBucket:    "recoveryBucket",
 				ParallelStreams:   1,
 				BufferSizeMb:      100,
 				FileReadTimeoutMs: 60000,
@@ -218,9 +277,10 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				InputFile:         "/dev/stdin",
 				OutputFile:        "/dev/stdout",
 				LogToCloud:        wpb.Bool(true),
+				FolderPrefix:      "test/1/2/3/",
 			},
 			read: func(p string) ([]byte, error) {
-				return []byte(`{"bucket": "testBucket", "rate_limit_mb": -1}`), nil
+				return []byte(`{"bucket": "testBucket", "recovery_bucket": "recoveryBucket", "rate_limit_mb": -1, "folder_prefix": "test/1/2/3"}`), nil
 			},
 			wantOk: true,
 		},
@@ -237,7 +297,8 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				UserId:            "testUser",
 				Function:          bpb.Function_RESTORE,
 				ParamFile:         "testParamsFile.json",
-				Bucket:            "testBucket",
+				Bucket:            "recoveryBucket",
+				RecoveryBucket:    "recoveryBucket",
 				ParallelStreams:   32,
 				BufferSizeMb:      250,
 				FileReadTimeoutMs: 2000,
@@ -249,9 +310,10 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				InputFile:         "/input.txt",
 				OutputFile:        "/output.txt",
 				LogToCloud:        wpb.Bool(true),
+				FolderPrefix:      "test/1/2/3/",
 			},
 			read: func(p string) ([]byte, error) {
-				return []byte(`{"bucket": "testBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 200, "rate_limit_mb": 200}`), nil
+				return []byte(`{"bucket": "testBucket", "recovery_bucket": "recoveryBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 200, "rate_limit_mb": 200, "folder_prefix": "test/1/2/3/"}`), nil
 			},
 			wantOk: true,
 		},

@@ -71,7 +71,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			if len(s) > 1 {
 				fileName = s[1]
 			}
-			prefix := config.GetUserId() + parse.TrimAndClean(fileName)
+			prefix := config.GetFolderPrefix() + config.GetUserId() + parse.TrimAndClean(fileName)
 			wp.Submit(func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion, "", config.GetRetries())
@@ -87,7 +87,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			externalBackupID := parse.TrimAndClean(s[1])
 			// fileName is an optional parameter not present in Backint 1.00
 			fileName := ""
-			prefix := config.GetUserId()
+			prefix := config.GetFolderPrefix() + config.GetUserId()
 			filter := ""
 			if len(s) > 2 {
 				fileName = s[2]

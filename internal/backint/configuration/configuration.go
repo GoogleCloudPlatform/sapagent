@@ -146,6 +146,12 @@ func (p *Parameters) validateParameters() error {
 	if p.Config.GetBucket() == "" {
 		return errors.New("bucket must be provided")
 	}
+	if strings.Contains(p.Config.GetBucket(), "/") || strings.HasPrefix(p.Config.GetBucket(), "gs:") {
+		return fmt.Errorf("bucket (%s) must not contain any '/' or be prefixed with 'gs:', only include the name of the bucket in the parameter", p.Config.GetBucket())
+	}
+	if p.Config.GetRecoveryBucket() != "" && (strings.Contains(p.Config.GetRecoveryBucket(), "/") || strings.HasPrefix(p.Config.GetRecoveryBucket(), "gs:")) {
+		return fmt.Errorf("recovery_bucket (%s) must not contain any '/' or be prefixed with 'gs:', only include the name of the bucket in the parameter", p.Config.GetRecoveryBucket())
+	}
 	if p.Config.GetEncryptionKey() != "" && p.Config.GetKmsKey() != "" {
 		return errors.New("only one of encryption_key or kms_key can be provided")
 	}
@@ -213,6 +219,12 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 	if p.Config.GetOutputFile() == "" {
 		log.Logger.Warn("output_file defaulted to /dev/stdout")
 		p.Config.OutputFile = "/dev/stdout"
+	}
+	if p.Config.GetFolderPrefix() != "" {
+		if !strings.HasSuffix(p.Config.GetFolderPrefix(), "/") {
+			p.Config.FolderPrefix += "/"
+		}
+		log.Logger.Warnf("folder_prefix is set. All objects in the GCS bucket will be prefixed with '%s'", p.Config.GetFolderPrefix())
 	}
 }
 

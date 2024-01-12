@@ -119,7 +119,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, copier storage.IOFileCopier, fileName, destName, externalBackupID string) []byte {
 	// A trailing slash ensures a complete match for the file name, otherwise
 	// "file-name" and "file-name1" could both be returned.
-	prefix := config.GetUserId() + parse.TrimAndClean(fileName) + "/"
+	prefix := config.GetFolderPrefix() + config.GetUserId() + parse.TrimAndClean(fileName) + "/"
 	if externalBackupID != "" {
 		prefix += fmt.Sprintf("%s.bak", externalBackupID)
 	}
