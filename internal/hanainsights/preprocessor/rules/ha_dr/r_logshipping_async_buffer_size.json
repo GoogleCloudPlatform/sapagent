@@ -1,0 +1,47 @@
+{
+  "id": "r_logshipping_async_buffer_size",
+  "description": "The parameter logshipping_async_buffer_size controls logshipping buffer size.",
+  "labels": [
+    "ha_dr"
+  ],
+  "queries": [
+    {
+      "name": "q_async_replication_mode",
+      "sql": "SELECT COUNT(*) AS VALUE FROM M_SYSTEM_REPLICATION WHERE REPLICATION_MODE = 'ASYNC'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_logshipping_async_buffer_size",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'system_replication' AND KEY = 'logshipping_async_buffer_size'",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "operation": "AND",
+        "child_evals": [
+          {
+            "lhs": "q_async_replication_mode:VALUE",
+            "operation": "GT",
+            "rhs": "0"
+          },
+          {
+            "lhs": "q_logshipping_async_buffer_size",
+            "operation": "LT",
+            "rhs": "1073741824"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "description": "During a full data shipment and if system replication is disconnected, it has to start from scratch. In order to reduce the risk of buffer full situations, parameter logshipping_async_buffer_size can be adjusted to 1GB on the primary site."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,1999880 - FAQ: SAP HANA System Replication, https://me.sap.com/notes/1999880"
+      ]
+    }
+  ]
+}
