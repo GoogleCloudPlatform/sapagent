@@ -127,9 +127,16 @@ func (p *Parameters) readParametersFile(read ReadConfigFile) (int, error) {
 	}
 	proto.Merge(p.Config, config)
 
-	if p.Config.GetFunction() == bpb.Function_RESTORE && p.Config.GetRecoveryBucket() != "" {
-		p.Config.Bucket = p.Config.GetRecoveryBucket()
-		log.Logger.Warnw("bucket overridden by recovery_bucket for RESTORE operation", "bucket", p.Config.GetBucket())
+	// For RESTORE operations, several parameters can be overridden.
+	if p.Config.GetFunction() == bpb.Function_RESTORE {
+		if p.Config.GetRecoveryBucket() != "" {
+			p.Config.Bucket = p.Config.GetRecoveryBucket()
+			p.Config.FolderPrefix = p.Config.GetRecoveryFolderPrefix()
+			log.Logger.Warnw("bucket and folder_prefix overridden by recovery_bucket and recovery_folder_prefix for RESTORE operation", "bucket", p.Config.GetBucket(), "folder_prefix", p.Config.GetFolderPrefix())
+		} else if p.Config.GetRecoveryFolderPrefix() != "" {
+			p.Config.FolderPrefix = p.Config.GetRecoveryFolderPrefix()
+			log.Logger.Warnw("folder_prefix overridden by recovery_folder_prefix for RESTORE operation", "folder_prefix", p.Config.GetFolderPrefix())
+		}
 	}
 	if err := p.validateParameters(); err != nil {
 		return usagemetrics.BackintMalformedConfigFile, err

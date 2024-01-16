@@ -51,6 +51,7 @@ message BackintConfiguration {
   float retry_backoff_multiplier = 27;
   string client_endpoint = 28;
   string folder_prefix = 29;
+  string recovery_folder_prefix = 30;
 }
 
 enum LogLevel {
