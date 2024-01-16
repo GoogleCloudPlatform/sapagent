@@ -49,7 +49,7 @@ message CollectionConfiguration {
   int64 workload_validation_metrics_frequency = 2;
   bool collect_process_metrics = 3;
   int64 process_metrics_frequency = 4;
-  int64 process_metrics_send_frequency = 5;
+  int64 process_metrics_send_frequency = 5 [deprecated = true];
   WorkloadValidationRemoteCollection workload_validation_remote_collection = 6;
   bool collect_experimental_metrics = 7;
   HANAMetricsConfig hana_metrics_config =

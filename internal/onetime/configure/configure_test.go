@@ -612,7 +612,6 @@ func TestModifyConfig(t *testing.T) {
 			c: &Configure{
 				feature:              "process_metrics",
 				frequency:            "30",
-				sendFrequency:        "10",
 				slowMetricsFrequency: "50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -629,7 +628,6 @@ func TestModifyConfig(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectProcessMetrics:       true,
 					ProcessMetricsFrequency:     30,
-					ProcessMetricsSendFrequency: 10,
 					SlowProcessMetricsFrequency: 50,
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
@@ -642,7 +640,6 @@ func TestModifyConfig(t *testing.T) {
 			c: &Configure{
 				feature:              "process_metrics",
 				frequency:            "-30",
-				sendFrequency:        "10",
 				slowMetricsFrequency: "50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -660,35 +657,6 @@ func TestModifyConfig(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectProcessMetrics:   true,
 					ProcessMetricsFrequency: 30,
-				},
-				LogToCloud: &wpb.BoolValue{Value: true},
-			},
-			readFunc: os.ReadFile,
-			want:     subcommands.ExitUsageError,
-		},
-		{
-			name: "InvalidSetFreqProcessMetrics2",
-			c: &Configure{
-				feature:              "process_metrics",
-				frequency:            "30",
-				sendFrequency:        "-10",
-				slowMetricsFrequency: "50",
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
-			},
-			oldConfig: &cpb.Configuration{
-				LogLevel: 2,
-				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectProcessMetrics:       true,
-					ProcessMetricsSendFrequency: 10,
-				},
-				LogToCloud: &wpb.BoolValue{Value: true},
-			},
-			newConfig: &cpb.Configuration{
-				LogLevel: 2,
-				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectProcessMetrics:       true,
-					ProcessMetricsSendFrequency: 10,
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
 			},
@@ -700,7 +668,6 @@ func TestModifyConfig(t *testing.T) {
 			c: &Configure{
 				feature:              "process_metrics",
 				frequency:            "30",
-				sendFrequency:        "10",
 				slowMetricsFrequency: "-50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -729,7 +696,6 @@ func TestModifyConfig(t *testing.T) {
 			c: &Configure{
 				feature:              "process_metrics",
 				frequency:            "30.5",
-				sendFrequency:        "10",
 				slowMetricsFrequency: "50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -1428,7 +1394,7 @@ func TestSetFlags(t *testing.T) {
 		"feature", "f", "version", "v", "help", "h", "loglevel", "logconfig", "setting", "path",
 		"enable", "disable", "showall", "add", "remove", "frequency", "db-frequency",
 		"sample-interval-sec", "query-timeout-sec", "process-metrics-to-skip", "slow-metrics-frequency",
-		"heartbeat-frequency", "agent-health-frequency", "send-frequency",
+		"heartbeat-frequency", "agent-health-frequency",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

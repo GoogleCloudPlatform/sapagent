@@ -54,9 +54,8 @@ var (
 
 	defaultConfig = &cpb.Configuration{
 		CollectionConfiguration: &cpb.CollectionConfiguration{
-			CollectProcessMetrics:       false,
-			ProcessMetricsFrequency:     5,
-			ProcessMetricsSendFrequency: 60,
+			CollectProcessMetrics:   false,
+			ProcessMetricsFrequency: 5,
 		},
 		CloudProperties: &iipb.CloudProperties{
 			ProjectId:        "test-project",
@@ -477,11 +476,11 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		{
 			name: "SuccessWebmethod",
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
-				{"hdbdaemon", "SAPControl-GREEN", 9609},
-				{"hdbcompileserver", "SAPControl-GREEN", 9972},
-				{"hdbindexserver", "SAPControl-GREEN", 10013},
-				{"hdbnameserver", "SAPControl-GREEN", 9642},
-				{"hdbpreprocessor", "SAPControl-GREEN", 9975},
+				{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 9609},
+				{Name: "hdbcompileserver", Dispstatus: "SAPControl-GREEN", Pid: 9972},
+				{Name: "hdbindexserver", Dispstatus: "SAPControl-GREEN", Pid: 10013},
+				{Name: "hdbnameserver", Dispstatus: "SAPControl-GREEN", Pid: 9642},
+				{Name: "hdbpreprocessor", Dispstatus: "SAPControl-GREEN", Pid: 9975},
 			},
 			},
 			wantMetricCount:    5,
@@ -776,8 +775,8 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		{
 			name: "SuccessWebmethod",
 			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
-				{0, "DIA", 7488, "Run", "4", ""},
-				{1, "BTC", 7489, "Wait", "", ""},
+				{No: 0, Type: "DIA", Pid: 7488, Status: "Run", Time: "4", User: ""},
+				{No: 1, Type: "BTC", Pid: 7489, Status: "Wait", Time: "", User: ""},
 			}},
 			wantMetricCount:    8,
 			instanceProperties: defaultAPIInstanceProperties,
@@ -785,8 +784,8 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		{
 			name: "SkipNwABAPProcCount",
 			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
-				{0, "DIA", 7488, "Run", "4", ""},
-				{1, "BTC", 7489, "Wait", "", ""},
+				{No: 0, Type: "DIA", Pid: 7488, Status: "Run", Time: "4", User: ""},
+				{No: 1, Type: "BTC", Pid: 7489, Status: "Wait", Time: "", User: ""},
 			}},
 			wantMetricCount: 0,
 			instanceProperties: &InstanceProperties{
@@ -802,8 +801,8 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		{
 			name: "SkipNwABAPProcBusy",
 			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
-				{0, "DIA", 7488, "Run", "4", ""},
-				{1, "BTC", 7489, "Wait", "", ""},
+				{No: 0, Type: "DIA", Pid: 7488, Status: "Run", Time: "4", User: ""},
+				{No: 1, Type: "BTC", Pid: 7489, Status: "Wait", Time: "", User: ""},
 			}},
 			wantMetricCount: 0,
 			instanceProperties: &InstanceProperties{
@@ -819,8 +818,8 @@ func TestCollectABAPProcessStatus(t *testing.T) {
 		{
 			name: "SkipNwABAPProcUtil",
 			fakeClient: sapcontrolclienttest.Fake{WorkProcesses: []sapcontrolclient.WorkProcess{
-				{0, "DIA", 7488, "Run", "4", ""},
-				{1, "BTC", 7489, "Wait", "", ""},
+				{No: 0, Type: "DIA", Pid: 7488, Status: "Run", Time: "4", User: ""},
+				{No: 1, Type: "BTC", Pid: 7489, Status: "Wait", Time: "", User: ""},
 			}},
 			wantMetricCount: 0,
 			instanceProperties: &InstanceProperties{
@@ -865,8 +864,15 @@ func TestCollectABAPQueueStats(t *testing.T) {
 			instanceProperties: defaultAPIInstanceProperties,
 		},
 		{
-			name:               "DPMonFailsWithTasksWebmethod",
-			fakeClient:         sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{{"ICM/Intern", 0, 7}}, ErrGetQueueStatistic: cmpopts.AnyError},
+			name: "DPMonFailsWithTasksWebmethod",
+			fakeClient: sapcontrolclienttest.Fake{
+				TaskQueues: []sapcontrolclient.TaskHandlerQueue{
+					{
+						Type: "ICM/Intern",
+						Now:  0,
+						High: 7,
+					},
+				}, ErrGetQueueStatistic: cmpopts.AnyError},
 			wantMetricCount:    0,
 			wantErr:            cmpopts.AnyError,
 			instanceProperties: defaultAPIInstanceProperties,
@@ -880,7 +886,9 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		{
 			name: "DPMONSuccessWebmethod",
 			fakeClient: sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{
-				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
+				{Type: "ABAP/NOWP", Now: 0, High: 8},
+				{Type: "ABAP/DIA", Now: 0, High: 10},
+				{Type: "ICM/Intern", Now: 0, High: 7},
 			}},
 			wantMetricCount:    6,
 			instanceProperties: defaultAPIInstanceProperties,
@@ -888,8 +896,9 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		{
 			name: "SkipNwABAPProcQueueCurrentPath",
 			fakeClient: sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{
-				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
-			}},
+				{Type: "ABAP/NOWP", Now: 0, High: 8},
+				{Type: "ABAP/DIA", Now: 0, High: 10},
+				{Type: "ICM/Intern", Now: 0, High: 7}}},
 			wantMetricCount: 0,
 			instanceProperties: &InstanceProperties{
 				SAPInstance: defaultAPIInstanceProperties.SAPInstance,
@@ -904,7 +913,9 @@ func TestCollectABAPQueueStats(t *testing.T) {
 		{
 			name: "SkipNwABAPProcQueuePeakPath",
 			fakeClient: sapcontrolclienttest.Fake{TaskQueues: []sapcontrolclient.TaskHandlerQueue{
-				{"ABAP/NOWP", 0, 8}, {"ABAP/DIA", 0, 10}, {"ICM/Intern", 0, 7},
+				{Type: "ABAP/NOWP", Now: 0, High: 8},
+				{Type: "ABAP/DIA", Now: 0, High: 10},
+				{Type: "ICM/Intern", Now: 0, High: 7},
 			}},
 			wantMetricCount: 0,
 			instanceProperties: &InstanceProperties{

@@ -73,9 +73,8 @@ func (mfw mockedFileWriter) MakeDirs(path string, perm os.FileMode) error {
 var (
 	defaultConfig = &cpb.Configuration{
 		CollectionConfiguration: &cpb.CollectionConfiguration{
-			CollectProcessMetrics:       false,
-			ProcessMetricsFrequency:     5,
-			ProcessMetricsSendFrequency: 60,
+			CollectProcessMetrics:   false,
+			ProcessMetricsFrequency: 5,
 		},
 		CloudProperties: &iipb.CloudProperties{
 			ProjectId:        "test-project",

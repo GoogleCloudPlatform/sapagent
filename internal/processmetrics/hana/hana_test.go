@@ -23,9 +23,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -47,9 +47,8 @@ var (
 
 	defaultConfig = &cpb.Configuration{
 		CollectionConfiguration: &cpb.CollectionConfiguration{
-			CollectProcessMetrics:       false,
-			ProcessMetricsFrequency:     5,
-			ProcessMetricsSendFrequency: 60,
+			CollectProcessMetrics:   false,
+			ProcessMetricsFrequency: 5,
 		},
 		CloudProperties: &iipb.CloudProperties{
 			ProjectId:        "test-project",
@@ -117,13 +116,13 @@ func TestCollectHANAServiceMetrics(t *testing.T) {
 			name: "SuccessWebmethod",
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"hdbdaemon", "SAPControl-GREEN", 9609},
-					{"hdbcompileserver", "SAPControl-GREEN", 9972},
-					{"hdbindexserver", "SAPControl-GREEN", 10013},
-					{"hdbnameserver", "SAPControl-GREEN", 9642},
-					{"hdbpreprocessor", "SAPControl-GREEN", 9975},
-					{"hdbwebdispatcher", "SAPControl-GREEN", 666},
-					{"hdbxsengine", "SAPControl-GREEN", 777},
+					{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 9609},
+					{Name: "hdbcompileserver", Dispstatus: "SAPControl-GREEN", Pid: 9972},
+					{Name: "hdbindexserver", Dispstatus: "SAPControl-GREEN", Pid: 10013},
+					{Name: "hdbnameserver", Dispstatus: "SAPControl-GREEN", Pid: 9642},
+					{Name: "hdbpreprocessor", Dispstatus: "SAPControl-GREEN", Pid: 9975},
+					{Name: "hdbwebdispatcher", Dispstatus: "SAPControl-GREEN", Pid: 666},
+					{Name: "hdbxsengine", Dispstatus: "SAPControl-GREEN", Pid: 777},
 				},
 			},
 			wantMetricCount:    7,
@@ -148,12 +147,12 @@ func TestCollectHANAServiceMetrics(t *testing.T) {
 			name: "MetricsSkipped",
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"hdbdaemon", "SAPControl-GREEN", 9609},
-					{"hdbcompileserver", "SAPControl-GREEN", 9972},
-					{"hdbindexserver", "SAPControl-GREEN", 10013},
-					{"hdbnameserver", "SAPControl-GREEN", 9642},
-					{"hdbpreprocessor", "SAPControl-GREEN", 9975},
-					{"hdbwebdispatcher", "SAPControl-GREEN", 666},
+					{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 9609},
+					{Name: "hdbcompileserver", Dispstatus: "SAPControl-GREEN", Pid: 9972},
+					{Name: "hdbindexserver", Dispstatus: "SAPControl-GREEN", Pid: 10013},
+					{Name: "hdbnameserver", Dispstatus: "SAPControl-GREEN", Pid: 9642},
+					{Name: "hdbpreprocessor", Dispstatus: "SAPControl-GREEN", Pid: 9975},
+					{Name: "hdbwebdispatcher", Dispstatus: "SAPControl-GREEN", Pid: 666},
 				},
 			},
 			instanceProperties: &InstanceProperties{

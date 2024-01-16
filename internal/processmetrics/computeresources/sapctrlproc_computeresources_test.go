@@ -23,8 +23,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
 func TestCollectForSAPControlProcesses(t *testing.T) {
@@ -106,10 +106,9 @@ func TestCollectForSAPControlProcesses(t *testing.T) {
 			},
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectProcessMetrics:       false,
-					ProcessMetricsFrequency:     5,
-					ProcessMetricsSendFrequency: 60,
-					ProcessMetricsToSkip:        []string{sapCTRLCPUPath, sapCtrlMemoryPath},
+					CollectProcessMetrics:   false,
+					ProcessMetricsFrequency: 5,
+					ProcessMetricsToSkip:    []string{sapCTRLCPUPath, sapCtrlMemoryPath},
 				},
 			},
 			skippedMetrics: map[string]bool{

@@ -25,10 +25,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -49,9 +49,8 @@ var (
 
 	defaultConfig = &cpb.Configuration{
 		CollectionConfiguration: &cpb.CollectionConfiguration{
-			CollectProcessMetrics:       false,
-			ProcessMetricsFrequency:     5,
-			ProcessMetricsSendFrequency: 60,
+			CollectProcessMetrics:   false,
+			ProcessMetricsFrequency: 5,
 		},
 		CloudProperties: &iipb.CloudProperties{
 			ProjectId:        "test-project",

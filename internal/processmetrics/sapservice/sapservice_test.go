@@ -36,7 +36,6 @@ var (
 		CollectionConfiguration: &cpb.CollectionConfiguration{
 			CollectProcessMetrics:       false,
 			ProcessMetricsFrequency:     5,
-			ProcessMetricsSendFrequency: 60,
 		},
 		CloudProperties: &iipb.CloudProperties{
 			ProjectId:        "test-project",

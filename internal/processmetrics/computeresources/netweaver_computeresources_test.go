@@ -24,11 +24,11 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
 var (
@@ -68,7 +68,7 @@ func TestCollectForNetweaver(t *testing.T) {
 			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"hdbcompileserver", "SAPControl-GREEN", 222},
+					{Name: "hdbcompileserver", Dispstatus: "SAPControl-GREEN", Pid: 222},
 				},
 			},
 			skippedMetrics: map[string]bool{
@@ -84,7 +84,7 @@ func TestCollectForNetweaver(t *testing.T) {
 			config: defaultConfig,
 			fakeClient: sapcontrolclienttest.Fake{
 				Processes: []sapcontrolclient.OSProcess{
-					{"enserver", "SAPControl-GREEN", 333},
+					{Name: "enserver", Dispstatus: "SAPControl-GREEN", Pid: 333},
 				},
 			},
 			skippedMetrics: map[string]bool{
@@ -99,10 +99,9 @@ func TestCollectForNetweaver(t *testing.T) {
 			name: "MetricsSkipped",
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectProcessMetrics:       false,
-					ProcessMetricsFrequency:     5,
-					ProcessMetricsSendFrequency: 60,
-					ProcessMetricsToSkip:        []string{nwCPUPath, nwMemoryPath, nwIOPSReadsPath, nwIOPSWritePath},
+					CollectProcessMetrics:   false,
+					ProcessMetricsFrequency: 5,
+					ProcessMetricsToSkip:    []string{nwCPUPath, nwMemoryPath, nwIOPSReadsPath, nwIOPSWritePath},
 				},
 			},
 			skippedMetrics: map[string]bool{
@@ -160,7 +159,7 @@ func TestCollectWithRetryNW(t *testing.T) {
 		SAPInstance:   defaultSAPInstanceNetWeaver,
 		SAPControlClient: sapcontrolclienttest.Fake{
 			Processes: []sapcontrolclient.OSProcess{
-				{"msg_server", "SAPControl-GREEN", 111},
+				{Name: "msg_server", Dispstatus: "SAPControl-GREEN", Pid: 111},
 			},
 		},
 		PMBackoffPolicy: defaultBOPolicy(c),

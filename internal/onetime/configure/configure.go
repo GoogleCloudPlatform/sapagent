@@ -46,7 +46,7 @@ type Configure struct {
 	setting, path                            string
 	skipMetrics                              string
 	frequency, dbFrequency                   string
-	sendFrequency, slowMetricsFrequency      string
+	slowMetricsFrequency                     string
 	agentHealthFrequency, heartbeatFrequency string
 	sampleIntervalSec, queryTimeoutSec       string
 	help, version                            bool
@@ -106,7 +106,6 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
 	fs.StringVar(&c.frequency, "frequency", "", "Sets the frequency of metric collection")
 	fs.StringVar(&c.dbFrequency, "db-frequency", "", "Sets the database frequency of workload validation metrics collection")
-	fs.StringVar(&c.sendFrequency, "send-frequency", "", "Sets the send frequency of process metric collection")
 	fs.StringVar(&c.slowMetricsFrequency, "slow-metrics-frequency", "", "Sets the slow metrics frequency of process metric collection")
 	fs.StringVar(&c.agentHealthFrequency, "agent-health-frequency", "", "Sets the agent health frequency")
 	fs.StringVar(&c.heartbeatFrequency, "heartbeat-frequency", "", "Sets the heartbeat frequency")
@@ -320,16 +319,6 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 			}
 			isCmdValid = true
 			checkCollectionConfig(config).ProcessMetricsFrequency = i
-		}
-
-		if c.sendFrequency != "" {
-			i, err := c.updateField(c.sendFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
-			}
-			isCmdValid = true
-			checkCollectionConfig(config).ProcessMetricsSendFrequency = i
 		}
 
 		if c.slowMetricsFrequency != "" {
