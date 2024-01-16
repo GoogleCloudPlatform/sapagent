@@ -72,7 +72,7 @@ type Snapshot struct {
 	disk, diskZone                       string
 
 	diskKeyFile, storageLocation, csekKeyFile string
-	snapshotName, description                 string
+	snapshotName, snapshotType, description   string
 	abandonPrepared, sendToMonitoring         bool
 
 	db                                *sql.DB
@@ -114,6 +114,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.BoolVar(&s.abandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
 	fs.StringVar(&s.snapshotName, "snapshot-name", "", "Snapshot name override.(Optional - deafaults to 'hana-sid-snapshot-yyyymmdd-hhmmss')")
+	fs.StringVar(&s.snapshotType, "snapshot-type", "STANDARD", "Snapshot type override.(Optional - deafaults to 'STANDARD', use 'ARCHIVE' for archive snapshots.)")
 	fs.StringVar(&s.diskKeyFile, "source-disk-key-file", "", `Path to the customer-supplied encryption key of the source disk. (optional)\n (required if the source disk is protected by a customer-supplied encryption key.)`)
 	fs.StringVar(&s.storageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
 	fs.StringVar(&s.csekKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
@@ -362,7 +363,7 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 	snapshot := &compute.Snapshot{
 		Description:      s.description,
 		Name:             s.snapshotName,
-		SnapshotType:     "STANDARD",
+		SnapshotType:     s.snapshotType,
 		StorageLocations: []string{s.storageLocation},
 	}
 
