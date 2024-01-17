@@ -98,7 +98,7 @@ func TestSetOSReleaseInfo(t *testing.T) {
 
 func TestReadHANAInsightsRules(t *testing.T) {
 	gotRules := readHANAInsightsRules()
-	if len(gotRules) != 20 {
-		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(gotRules), 20)
+	if len(gotRules) != 21 {
+		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(gotRules), 21)
 	}
 }

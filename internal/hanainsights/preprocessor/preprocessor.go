@@ -36,6 +36,7 @@ var (
 	// RuleFilenames has list of filenames containing rule definitions.
 	RuleFilenames = []string{
 		"rules/knowledgebase.json",
+		"rules/ha_dr/r_logshipping_async_buffer_size.json",
 		"rules/security/r_sap_hana_internal_support_role.json",
 		"rules/security/r_dev_privs_in_prod.json",
 		"rules/security/r_system_replication_allowed_sender.json",

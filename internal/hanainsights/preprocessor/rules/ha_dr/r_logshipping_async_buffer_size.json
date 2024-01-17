@@ -12,7 +12,7 @@
     },
     {
       "name": "q_logshipping_async_buffer_size",
-      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'system_replication' AND KEY = 'logshipping_async_buffer_size'",
+      "sql": "SELECT COUNT(*) AS VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'indexserver.ini'  AND SECTION = 'system_replication' AND KEY = 'logshipping_async_buffer_size' AND CAST(VALUE AS INTEGER) >= 1073741824",
       "columns": ["VALUE"]
     }
   ],
@@ -28,15 +28,15 @@
             "rhs": "0"
           },
           {
-            "lhs": "q_logshipping_async_buffer_size",
-            "operation": "LT",
-            "rhs": "1073741824"
+            "lhs": "q_logshipping_async_buffer_size:VALUE",
+            "operation": "EQ",
+            "rhs": "0"
           }
         ]
       },
       "actions": [
         {
-          "description": "During a full data shipment and if system replication is disconnected, it has to start from scratch. In order to reduce the risk of buffer full situations, parameter logshipping_async_buffer_size can be adjusted to 1GB on the primary site."
+          "description": "During a full data shipment and if system replication is disconnected, replication has to start from scratch. In order to reduce the risk of buffer full situations, parameter logshipping_async_buffer_size can be adjusted to 1GB on the primary site.However, please note that you can adjust this value to a higher or lower based on the specific needs and workload of your environment."
         }
       ],
       "references": [
