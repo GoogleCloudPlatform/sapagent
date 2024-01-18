@@ -21,9 +21,11 @@ import (
 	"errors"
 	"io"
 	"testing"
+
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 )
 
-func TestSetOSReleaseInfo(t *testing.T) {
+func TestInit(t *testing.T) {
 	defaultFileReader := ConfigFileReader(func(path string) (io.ReadCloser, error) {
 		file, err := testFS.Open(path)
 		var f io.ReadCloser = file
@@ -85,20 +87,20 @@ func TestSetOSReleaseInfo(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotOSVendorID, gotOSVersion := setOSReleaseInfo(context.Background(), test.reader, test.filePath)
-			if gotOSVendorID != test.wantID {
-				t.Errorf("SetOSReleaseInfo() unexpected osVendorID, got %q want %q", gotOSVendorID, test.wantID)
+			p := Parameters{
+				ConfigFileReader:  test.reader,
+				OSReleaseFilePath: test.filePath,
 			}
-			if gotOSVersion != test.wantVersion {
-				t.Errorf("SetOSReleaseInfo() unexpected osVersion, got %q want %q", gotOSVersion, test.wantVersion)
+			p.Init(context.Background())
+			if p.osVendorID != test.wantID {
+				t.Errorf("Init() unexpected osVendorID, got %q want %q", p.osVendorID, test.wantID)
+			}
+			if p.osVersion != test.wantVersion {
+				t.Errorf("Init() unexpected osVersion, got %q want %q", p.osVersion, test.wantVersion)
+			}
+			if p.hanaInsightRules == nil {
+				t.Errorf("Init() unexpected hanaInsightRules, got nil want %T", []*rpb.Rule{})
 			}
 		})
-	}
-}
-
-func TestReadHANAInsightsRules(t *testing.T) {
-	gotRules := readHANAInsightsRules()
-	if len(gotRules) != 21 {
-		t.Errorf("ReadHANAInsightsRules() got: %d rules, want: %d.", len(gotRules), 21)
 	}
 }
