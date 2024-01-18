@@ -181,6 +181,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 	uri := host.name
 	var addr string
 	addrs, _ := d.HostResolver(host.name)
+	log.CtxLogger(ctx).Debugw("discoverResource addresses", "addrs", addrs)
 	// An error may just mean that
 	if len(addrs) > 0 {
 		addr = addrs[0]
@@ -218,8 +219,11 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 			}
 		}
 	}
-
+	log.CtxLogger(ctx).Debugw("discoverResource host did not resolve", "uri", uri)
 	res, toAdd, err := d.discoverResourceForURI(ctx, uri)
+	if res == nil || err != nil {
+		return nil, nil, err
+	}
 	if uri != host.name && res.ResourceKind == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
 		res.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{
 			VirtualHostname: host.name,
@@ -458,6 +462,7 @@ func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string)
 		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_NETWORK,
 		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
 		ResourceUri:  networkURI,
+		UpdateTime:   timestamppb.Now(),
 	}, nil, nil
 }
 
@@ -466,5 +471,6 @@ func (d *CloudDiscovery) discoverSubnetwork(ctx context.Context, subnetworkURI s
 		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_NETWORK,
 		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,
 		ResourceUri:  subnetworkURI,
+		UpdateTime:   timestamppb.Now(),
 	}, nil, nil
 }
