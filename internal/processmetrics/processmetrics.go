@@ -45,6 +45,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/fastmovingmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/hana"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/hanavolume"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/infra"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/netweaver"
@@ -236,7 +237,26 @@ func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeS
 		SkippedMetrics:  skippedMetrics,
 	}
 
-	p.Collectors = append(p.Collectors, sapServiceCollector, sapStartCollector, migrationCollector, networkstatsCollector)
+	log.CtxLogger(ctx).Info("Creating volume availability metrics collector.")
+	volumeDetailsCollector := &hanavolume.Properties{
+		Executor: commandlineexecutor.ExecuteCommand,
+		Config:   p.Config,
+		Client:   p.Client,
+		CommandParams: commandlineexecutor.Params{
+			Executable:  "df",
+			ArgsToSplit: "-h",
+		},
+		PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
+	}
+
+	p.Collectors = append(
+		p.Collectors,
+		sapServiceCollector,
+		sapStartCollector,
+		migrationCollector,
+		networkstatsCollector,
+		volumeDetailsCollector,
+	)
 
 	sids := make(map[string]bool)
 	clusterCollectorCreated := false

@@ -37,7 +37,7 @@ import (
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
-// Properties   struct contains the parameters necessary for networkstats package common methods.
+// Properties struct contains the parameters necessary for networkstats package common methods.
 type (
 	Properties struct {
 		Executor        commandlineexecutor.Execute
