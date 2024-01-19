@@ -149,7 +149,9 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	b.glob = filepath.Glob
 	b.readFile = os.ReadFile
 	b.chmod = os.Chmod
-	b.chown = os.Chown
+	// Lchown works similar to chown except it can change
+	// the uid and gid of symbolic links as well.
+	b.chown = os.Lchown
 	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.sid)); err != nil {
 		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
 		log.CtxLogger(ctx).Errorw("InstallBackint failed", "sid", b.sid, "err", err)
@@ -190,19 +192,16 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	backintPath := backintInstallDir + "/backint"
 	parameterPath := backintInstallDir + "/parameters.json"
 	log.CtxLogger(ctx).Infow("Creating Backint files", "backintPath", backintPath, "parameterPath", parameterPath)
-	if err := b.writeFile(backintPath, hdbbackintScript, os.ModePerm); err != nil {
-		return fmt.Errorf("unable to write backint script: %s. err: %v", backintPath, err)
+	if err := b.createAndChownFile(ctx, backintPath, hdbbackintScript, 0750, int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
 	}
 	config := &bpb.BackintConfiguration{Bucket: "<GCS Bucket Name>", LogToCloud: wpb.Bool(true)}
 	configData, err := protojson.MarshalOptions{Indent: "  ", UseProtoNames: true}.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("unable to marshal config, err: %v", err)
 	}
-	if err := b.writeFile(parameterPath, configData, 0666); err != nil {
-		return fmt.Errorf("unable to write parameters.json file: %s. err: %v", parameterPath, err)
-	}
-	if err := b.chmod(parameterPath, 0666); err != nil {
-		return fmt.Errorf("unable to chmod parameters.json file: %s. err: %v", parameterPath, err)
+	if err := b.createAndChownFile(ctx, parameterPath, configData, 0640, int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
 	}
 
 	backintSymlink := baseInstallDir + "/hdbbackint"
@@ -213,14 +212,14 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 	os.Remove(backintSymlink)
 	os.Remove(parameterSymlink)
 	os.Remove(logSymlink)
-	if err := b.symlink(backintPath, backintSymlink); err != nil {
-		return fmt.Errorf("unable to create hdbbackint symlink: %s for: %s. err: %v", backintSymlink, backintPath, err)
+	if err := b.createAndChownSymlink(ctx, backintPath, backintSymlink, int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
 	}
-	if err := b.symlink(parameterPath, parameterSymlink); err != nil {
-		return fmt.Errorf("unable to create parameters.json symlink: %s for %s. err: %v", parameterSymlink, parameterPath, err)
+	if err := b.createAndChownSymlink(ctx, parameterPath, parameterSymlink, int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
 	}
-	if err := b.symlink(logPath, logSymlink); err != nil {
-		return fmt.Errorf("unable to create log symlink: %s for %s. err: %v", logSymlink, logPath, err)
+	if err := b.createAndChownSymlink(ctx, logPath, logSymlink, int(stat.Uid), int(stat.Gid)); err != nil {
+		return err
 	}
 
 	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
@@ -282,11 +281,8 @@ func (b *InstallBackint) migrateOldAgent(ctx context.Context, baseInstallDir str
 			return fmt.Errorf("unable to read parameter file: %s, err: %v", fileName, err)
 		}
 		destination := backintInstallDir + "/" + filepath.Base(fileName)
-		if err := b.writeFile(destination, data, 0666); err != nil {
-			return fmt.Errorf("unable to write parameter file: %s, err: %v", destination, err)
-		}
-		if err := b.chmod(destination, 0666); err != nil {
-			return fmt.Errorf("unable to chmod parameters file: %s. err: %v", destination, err)
+		if err := b.createAndChownFile(ctx, destination, data, 0640, uid, gid); err != nil {
+			return err
 		}
 	}
 	log.CtxLogger(ctx).Infow("Successfully migrated old agent")
@@ -301,6 +297,33 @@ func (b *InstallBackint) createAndChownDir(ctx context.Context, dir string, uid,
 	}
 	if err := b.chown(dir, uid, gid); err != nil {
 		return fmt.Errorf("unable to chown directory: %s, uid: %d, gid: %d, err: %v", dir, uid, gid, err)
+	}
+	return nil
+}
+
+// createAndChownFile creates the file if it does not exist,
+// updates permissions, and chowns to the user and group.
+func (b *InstallBackint) createAndChownFile(ctx context.Context, file string, data []byte, permissions os.FileMode, uid, gid int) error {
+	if err := b.writeFile(file, data, permissions); err != nil {
+		return fmt.Errorf("unable to write file: %s, err: %v", file, err)
+	}
+	if err := b.chmod(file, permissions); err != nil {
+		return fmt.Errorf("unable to chmod file: %s. err: %v", file, err)
+	}
+	if err := b.chown(file, uid, gid); err != nil {
+		return fmt.Errorf("unable to chown file: %s, uid: %d, gid: %d, err: %v", file, uid, gid, err)
+	}
+	return nil
+}
+
+// createAndChownSymlink creates the symlink if it does not exist
+// and chowns to the user and group.
+func (b *InstallBackint) createAndChownSymlink(ctx context.Context, oldname, newname string, uid, gid int) error {
+	if err := b.symlink(oldname, newname); err != nil {
+		return fmt.Errorf("unable to create symlink: %s for: %s. err: %v", newname, oldname, err)
+	}
+	if err := b.chown(newname, uid, gid); err != nil {
+		return fmt.Errorf("unable to chown symlink: %s, uid: %d, gid: %d, err: %v", newname, uid, gid, err)
 	}
 	return nil
 }
