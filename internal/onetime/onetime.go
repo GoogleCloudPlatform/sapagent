@@ -106,5 +106,5 @@ func HelpCommand(f *flag.FlagSet) subcommands.ExitStatus {
 
 // PrintAgentVersion prints the current version of the agent to stdout.
 func PrintAgentVersion() {
-	fmt.Printf("Google Cloud Agent for SAP version %s.%s", configuration.AgentVersion, configuration.AgentBuildChange)
+	fmt.Printf("Google Cloud Agent for SAP version %s.%s\n", configuration.AgentVersion, configuration.AgentBuildChange)
 }
