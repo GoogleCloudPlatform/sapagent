@@ -31,7 +31,7 @@ import (
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
-var (
+const (
 	sapInitRunningOutput = `
 	saphostexec running (pid = 3640)
 	sapstartsrv running (pid = 3958)
@@ -42,6 +42,98 @@ var (
 	sapInitStoppedOutput = `
 	saphostexec stopped
 	No process running.`
+
+	hanaSingleNodeOutput = `System Replication State
+	~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	online: true
+	
+	mode: none
+	done.`
+	hanaHAPrimaryOutput = `System Replication State
+	~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	online: true
+	
+	mode: primary
+	operation mode: primary
+	site id: 1
+	site name: HO2_21
+	
+	is source system: true
+	is secondary/consumer system: false
+	has secondaries/consumers attached: true
+	is a takeover active: false
+	is primary suspended: false
+	
+	Host Mappings:
+	~~~~~~~~~~~~~~
+	
+	gce-1 -> [HO2_22] gce-2
+	gce-1 -> [HO2_21] gce-1
+	
+	
+	Site Mappings:
+	~~~~~~~~~~~~~~
+	HO2_21 (primary/primary)
+			|---HO2_22 (syncmem/logreplay_readaccess)
+	
+	Tier of HO2_21: 1
+	Tier of HO2_22: 2
+	
+	Replication mode of HO2_21: primary
+	Replication mode of HO2_22: syncmem
+	
+	Operation mode of HO2_21: primary
+	Operation mode of HO2_22: logreplay_readaccess
+	
+	Mapping: HO2_21 -> HO2_22
+	done.
+	`
+	hanaHASecondaryOutput = `System Replication State
+	~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	online: true
+	
+	mode: syncmem
+	operation mode: logreplay_readaccess
+	site id: 2
+	site name: gce-2
+	
+	is source system: false
+	is secondary/consumer system: true
+	has secondaries/consumers attached: false
+	is a takeover active: false
+	is primary suspended: false
+	is timetravel enabled: false
+	replay mode: auto
+	active primary site: 1
+	
+	primary masters: gce-1
+	
+	Host Mappings:
+	~~~~~~~~~~~~~~
+	
+	gce-2 -> [HO2_22] gce-2
+	gce-2 -> [HO2_21] gce-1
+	
+	
+	Site Mappings:
+	~~~~~~~~~~~~~~
+	HO2_21 (primary/primary)
+			|---HO2_22 (syncmem/logreplay_readaccess)
+	
+	Tier of HO2_21: 1
+	Tier of HO2_22: 2
+	
+	Replication mode of HO2_21: primary
+	Replication mode of HO2_22: syncmem
+	
+	Operation mode of HO2_21: primary
+	Operation mode of HO2_22: logreplay_readaccess
+	
+	Mapping: HO2_21 -> HO2_22
+	done.`
 )
 
 func TestInstances(t *testing.T) {
@@ -305,8 +397,7 @@ func TestReadReplicationConfig(t *testing.T) {
 			instanceID: "00",
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut:   "site/1/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n",
-					ExitCode: 15,
+					StdOut: hanaHAPrimaryOutput,
 				}
 			},
 			wantMode:     1,
@@ -320,9 +411,7 @@ func TestReadReplicationConfig(t *testing.T) {
 			instanceID: "00",
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut:   "site/1/REPLICATION_MODE=SYNCMEM\nlocal_site_id=1\nsite/1/SITE_NAME=gce-1\nsite/1/PRIMARY_MASTERS=gce-2\n",
-					StdErr:   "",
-					ExitCode: 15,
+					StdOut: hanaHASecondaryOutput,
 				}
 			},
 			wantMode:     2,
@@ -336,8 +425,7 @@ func TestReadReplicationConfig(t *testing.T) {
 			instanceID: "00",
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut:   "local_site_id=0\n",
-					ExitCode: 10,
+					StdOut: hanaSingleNodeOutput,
 				}
 			},
 			wantMode:     0,
@@ -351,84 +439,89 @@ func TestReadReplicationConfig(t *testing.T) {
 			instanceID: "00",
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut:   "site/1/REPLICATION_MODE=PRIMARY\nsite/2/SITE_NAME=gce-2\nsite/1/SITE_NAME=gce-1\nlocal_site_id=1\n",
-					ExitCode: 15,
+					StdOut: `System Replication State
+					~~~~~~~~~~~~~~~~~~~~~~~~
+					
+					online: true
+					
+					mode: syncmem
+					operation mode: logreplay_readaccess
+					site id: 2
+					site name: gce-2
+					
+					is source system: false
+					is secondary/consumer system: true
+					has secondaries/consumers attached: false
+					is a takeover active: false
+					is primary suspended: false
+					is timetravel enabled: false
+					replay mode: auto
+					active primary site: 1
+					
+					primary masters: gce-2
+					
+					Host Mappings:
+					~~~~~~~~~~~~~~
+					
+					gce-2 -> [HO2_22] gce-2
+					gce-2 -> [HO2_21] gce-1
+					
+					
+					Site Mappings:
+					~~~~~~~~~~~~~~
+					HO2_22 (primary/primary)
+							|---HO2_21 (syncmem/logreplay_readaccess)
+					
+					Tier of HO2_22: 1
+					Tier of HO2_21: 2
+					
+					Replication mode of HO2_21: syncmem
+					Replication mode of HO2_22: primary
+					
+					Operation mode of HO2_21: logreplay_readaccess
+					Operation mode of HO2_22: primary
+					
+					Mapping: HO2_22 -> HO2_21
+					done.`,
 				}
 			},
 			wantMode:     1,
 			wantHAMebers: []string{"gce-1", "gce-2"},
 			wantErr:      nil,
-		},
-		{
-			name: "EmptySiteID",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "local_site_id=\n",
-					ExitCode: 15,
-				}
-			},
-			wantMode:     0,
-			wantHAMebers: nil,
-			wantErr:      cmpopts.AnyError,
-		},
-		{
-			name: "EmptyReplicationMode",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut:   "site/2/REPLICATION_MODE=PRIMARY\nsite/1/SITE_NAME=gce-1\nsite/2/SITE_NAME=gce-2\nlocal_site_id=1\n",
-					ExitCode: 15,
-				}
-			},
-			wantMode:     0,
-			wantHAMebers: nil,
-			wantErr:      cmpopts.AnyError,
-		},
-		{
+		}, {
 			name: "EmptySiteName",
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut:   "local_site_id=2\nsite/2/SITE_NAME=",
-					ExitCode: 15,
+					StdOut: "site name:",
 				}
 			},
 			wantMode:     0,
 			wantHAMebers: nil,
 			wantErr:      cmpopts.AnyError,
-		},
-		{
-			name: "SiteNamePatternError",
+		}, {
+			name: "NoHostMap",
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut:   "site/2/REPLICATION_MODE=SYNCMEM\nlocal_site_id=2\nsite/2/SITE",
-					ExitCode: 15,
+					StdOut: "site name: gce-1",
 				}
 			},
-			wantMode:     2,
+			wantMode:     0,
 			wantHAMebers: nil,
 			wantErr:      cmpopts.AnyError,
-		},
-		{
-			name: "CmdFailure",
+		}, {
+			name: "NoReplicationMode",
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut:   "abc",
-					StdErr:   "123",
-					ExitCode: 0,
-					Error:    cmpopts.AnyError,
+					StdOut: `site name: gce-1
+					gce-2 -> [HO2_22] gce-2
+					gce-2 -> [HO2_21] gce-1
+					`,
 				}
 			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name: "InvalidStatusCode",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: 99,
-				}
-			},
-			wantErr: cmpopts.AnyError,
-		},
-	}
+			wantMode:     0,
+			wantHAMebers: nil,
+			wantErr:      cmpopts.AnyError,
+		}}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -440,7 +533,7 @@ func TestReadReplicationConfig(t *testing.T) {
 			if test.wantMode != gotMode {
 				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect mode, got: %d want: %d.", test.user, test.sid, test.instanceID, gotMode, test.wantMode)
 			}
-			if cmp.Diff(test.wantHAMebers, gotHAMembers) != "" {
+			if cmp.Diff(test.wantHAMebers, gotHAMembers, cmpopts.SortSlices(func(a, b string) bool { return a < b })) != "" {
 				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect haMembers, got: %s want: %s.", test.user, test.sid, test.instanceID, gotHAMembers, test.wantHAMebers)
 			}
 		})

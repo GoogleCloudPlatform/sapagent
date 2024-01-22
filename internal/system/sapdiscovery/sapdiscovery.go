@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
@@ -33,13 +32,13 @@ import (
 )
 
 var (
-	// haPattern captures the site and site name e.g.
-	// site/1/SITE_NAME=gce-1\nlocal_site_id=1\n -> site/1/SITE_NAME=gce-1
-	haPattern = regexp.MustCompile(`site/([0-9])/SITE_NAME=(.*)`)
+	// hostMapPattern captures the site name and host name e.g.
+	// sapodb22 -> [HO2_22] sapodb22 -> Site: HO2_22 Host name: sapodb22
+	hostMapPattern = regexp.MustCompile(`\S*\s->\s\[([^]]+)\]\s(.*)`)
 
-	// sitePattern captures local_site_id e.g.
-	// site/1/SITE_NAME=gce-1\nlocal_site_id=1\n -> local_site_id=1
-	sitePattern = regexp.MustCompile(`local_site_id=([0-9])`)
+	// sitePattern captures site name e.g.
+	// site name: HO2_22 -> site_name=HO2_22
+	sitePattern = regexp.MustCompile(`site name: (.*)`)
 
 	primaryMastersPattern = regexp.MustCompile(`PRIMARY_MASTERS=(.*)`)
 	sapInitRunningPattern = regexp.MustCompile(`running$`)
@@ -192,63 +191,60 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	// Keeping the timeout for the execution of the script as 25 seconds, so if the process hangs,
 	// it will be killed and trace files will not be generated.
 	cmd := "timeout"
-	args := fmt.Sprintf("25 /usr/sap/%s/%s/HDBSettings.sh systemReplicationStatus.py --sapcontrol=1 >> /tmp/systemReplicationStatus.log 2>&1;", sid, instID)
+	args := fmt.Sprintf("25 /usr/sap/%s/HDB%s/exe/hdbnsutil -sr_state >> /tmp/systemReplicationStatus.log 2>&1;", strings.ToUpper(sid), instID)
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  cmd,
 		ArgsToSplit: args,
 		User:        user,
 	})
-	// We do not want to check the result Error, error can exist even when the exec was successful.
-
-	exitStatus = int64(result.ExitCode)
-	message, ok := systemReplicationStatus[exitStatus]
-	if !ok {
-		return 0, nil, exitStatus, fmt.Errorf("invalid return code: %d from systemReplicationStatus.py", exitStatus)
-	}
-	log.CtxLogger(ctx).Debugw("Tool systemReplicationStatus.py returned", "exitstatus", exitStatus, "message", message)
+	log.CtxLogger(ctx).Debugw("Tool hdbnsutil returned", "exitstatus", exitStatus)
 
 	log.CtxLogger(ctx).Debugw("SAP HANA Replication Config result", "stdout", result.StdOut)
+	if strings.Contains(result.StdOut, "mode: none") {
+		log.CtxLogger(ctx).Debugw("HANA instance is in standalone mode for instance", "instanceid", instID)
+		return 0, nil, exitStatus, nil
+	}
+
 	match := sitePattern.FindStringSubmatch(result.StdOut)
 	if len(match) != 2 {
 		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Site for instance", "instanceid", instID)
 		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Site for instance: %s", instID)
 	}
-	site, err := strconv.Atoi(match[1])
-	if err != nil {
-		log.CtxLogger(ctx).Debugw("Failed to get the site info for SAP HANA", log.Error(err))
-		return 0, nil, 0, err
-	}
+	site := match[1]
 
-	if exitStatus == 10 {
-		log.CtxLogger(ctx).Debugw("HANA instance is in standalone mode for instance", "instanceid", instID)
-		return 0, nil, exitStatus, nil
-	}
-
-	mode, err = readMode(ctx, result.StdOut, instID, site)
-	if err != nil {
-		return 0, nil, 0, err
-	}
-
-	HAMembers, err = readHAMembers(ctx, result.StdOut, instID)
+	haHostMap, err := readHAMembers(ctx, result.StdOut, instID)
 	if err != nil {
 		return mode, nil, exitStatus, err
+	}
+
+	// site may be either the host name or the site name. Utilize the haHostMap to get a site name.
+	if s, ok := haHostMap[site]; ok {
+		site = s
+	}
+	mode, err = readMode(ctx, result.StdOut, site)
+	if err != nil {
+		return 0, nil, 0, err
+	}
+
+	for k := range haHostMap {
+		HAMembers = append(HAMembers, k)
 	}
 
 	return mode, HAMembers, exitStatus, nil
 }
 
-func readMode(ctx context.Context, stdOut, instID string, site int) (mode int, err error) {
-	modePattern, err := regexp.Compile(fmt.Sprintf("site/%d/REPLICATION_MODE=(.*)", site))
+func readMode(ctx context.Context, stdOut, site string) (mode int, err error) {
+	modePattern, err := regexp.Compile(fmt.Sprintf("Replication mode of %s: (.*)\n", site))
 	if err != nil {
-		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
+		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "siteID", site)
 		return 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance")
 	}
 	match := modePattern.FindStringSubmatch(stdOut)
 	if len(match) < 2 {
-		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "instanceid", instID)
-		return 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance: %s", instID)
+		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "siteID", site)
+		return 0, fmt.Errorf("error determining SAP HANA Replication Mode for site: %s", site)
 	}
-	if match[1] == "PRIMARY" {
+	if match[1] == "primary" {
 		mode = 1
 		log.CtxLogger(ctx).Debug("Current SAP HANA node is primary")
 	} else {
@@ -259,32 +255,24 @@ func readMode(ctx context.Context, stdOut, instID string, site int) (mode int, e
 	return mode, nil
 }
 
-func readHAMembers(ctx context.Context, stdOut, instID string) (HAMembers []string, err error) {
-	haSites := haPattern.FindAllStringSubmatch(stdOut, -1)
+func readHAMembers(ctx context.Context, stdOut, instID string) (HAHostMap map[string]string, err error) {
+	HAHostMap = make(map[string]string)
+	haSites := hostMapPattern.FindAllStringSubmatch(stdOut, -1)
 	if len(haSites) < 1 {
 		log.CtxLogger(ctx).Debugw("Error determining SAP HANA HA members for instance", "instanceid", instID)
 		return nil, fmt.Errorf("error determining SAP HANA HA members for instance: %s", instID)
 	}
-
-	if len(haSites) > 1 {
-		site1, site2 := haSites[0][2], haSites[1][2]
-		if haSites[0][1] == "1" {
-			HAMembers = []string{site1, site2}
-		} else {
-			HAMembers = []string{site2, site1}
+	// Submatch should be a number of lines matching the pattern.
+	// The 0 element is the whole match, and the subsequent elements are the matches for the capture groups.
+	for _, match := range haSites {
+		if len(match) > 2 {
+			site := match[1]
+			host := match[2]
+			HAHostMap[host] = site
 		}
-		log.CtxLogger(ctx).Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
-	} else {
-		match := primaryMastersPattern.FindStringSubmatch(stdOut)
-		if len(match) < 2 {
-			log.CtxLogger(ctx).Debugw("Error determining SAP HANA HA - Primary for instance", "instanceid", instID)
-			return nil, fmt.Errorf("error determining SAP HANA HA - Primary for instance: %s", instID)
-		}
-		HAMembers = []string{match[1], haSites[0][2]}
-		log.CtxLogger(ctx).Debugw("SAP HANA HA Members are", "hamembers", HAMembers)
 	}
 
-	return HAMembers, nil
+	return HAHostMap, nil
 }
 
 // HANASite maps an integer to SAP Instance Site Type.
