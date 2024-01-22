@@ -1,0 +1,77 @@
+{
+  "id": "r_logshipping_max_retention_size",
+  "description": "The SAP HANA parameter logshipping_max_retention_size defines the maximum amount of redo logs that are kept on primary site for synchronization with the secondary site.",
+  "labels": [
+    "ha_dr"
+  ],
+  "queries": [
+    {
+      "name": "q_replication_status",
+      "sql": "SELECT COUNT(*) AS VALUE FROM M_SYSTEM_REPLICATION WHERE REPLICATION_STATUS = 'ACTIVE'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_enable_log_retention",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'system_replication' AND KEY = 'enable_log_retention'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_logshipping_max_retention_size",
+      "sql": "select (VALUE * 1024) AS VALUE  from M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_replication' AND KEY = 'logshipping_max_retention_size' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_70p_log_vol_size",
+      "sql": "SELECT CAST((TOTAL_SIZE * 0.7)/1024 AS INTEGER) AS LOG_VOL_SIZE from M_DISKS WHERE USAGE_TYPE = 'LOG'",
+      "columns": ["LOG_VOL_SIZE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "operation": "AND",
+        "child_evals": [
+          {
+            "lhs": "q_replication_status:VALUE",
+            "operation": "GT",
+            "rhs": "0"
+          },
+           {
+             "operation" : "AND",
+             "child_evals": [
+              {
+                "lhs": "q_logshipping_max_retention_size:VALUE",
+                "operation": "GTE",
+                "rhs": "q_70p_log_vol_size:LOG_VOL_SIZE"
+              },
+              {
+             "operation" : "OR",
+             "child_evals": [
+              {
+                "lhs": "q_enable_log_retention:VALUE",
+                "operation": "EQ",
+                "rhs": "on"
+              },
+              {
+                "lhs": "q_enable_log_retention:VALUE",
+                "operation": "EQ",
+                "rhs": "auto"
+              }
+            ]
+          }
+            ]
+          }
+            ]
+        },
+      "actions": [
+        {
+          "description": "In context of logreplay operations modes the logshipping_max_retention_size SAP HANA parameter defines the maximum amount of redo logs that are kept on primary site for synchronization with the secondary site (default: 1 TB). If the underlying file system isn't large enough to hold the complete configured retention size, it can happen in the worst case that the file system runs full and the primary site comes to a standstill. Therefore SAP recommends to configure this parameter with not more than 70% of the log volume size."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,1999880 - FAQ: SAP HANA System Replication, https://me.sap.com/notes/1999880"
+      ]
+    }
+  ]
+}
