@@ -30,9 +30,10 @@ import (
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/installbackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
@@ -46,6 +47,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/version"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -77,6 +79,7 @@ func registerSubCommands() {
 		&version.Version{},
 		&migratehmadashboards.MigrateHMADashboards{},
 		&reliability.Reliability{},
+		&gcbdr.Discovery{FSH: filesystem.Helper{}},
 		subcommands.HelpCommand(), // Implement "help"
 	}
 	for _, command := range scs {

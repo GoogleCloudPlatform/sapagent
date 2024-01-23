@@ -1,0 +1,64 @@
+/*
+Copyright 2024 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+syntax = "proto3";
+
+package sapagent.protos.gcbdrhanadiscovery;
+
+message Application {
+  string name = 1;
+  string dbsid = 2;
+  string type = 3;
+  string hana_version = 4;
+  string config_type = 5;
+  string hardware_key = 6;
+  string port = 7;
+  string hana_nodes = 8;
+  string master_node = 9;
+  string replication_nodes = 10;
+  string instance = 11;
+  string catalog_backup_path = 12;
+  string global_init_path = 13;
+  string manifest_file_location = 14;
+  string data_volume_owner = 15;
+  int64 size = 16;
+  string db_names = 17;
+  string data_volume = 18;
+  string log_volume = 19;
+  string log_backup_volume = 20;
+  string data_vol_mount_point = 21;
+  string log_vol_mount_point = 22;
+  string log_backup_vol_mount_point = 23;
+  string data_vol_vgname = 24;
+  string data_vol_lvname = 25;
+  string data_vol_pd_name = 26;
+  string log_vol_vgname = 27;
+  string log_vol_lvname = 28;
+  string log_vol_pdname = 29;
+  string log_backup_vol_vgname = 30;
+  string log_backup_lvname = 31;
+  string log_backup_pd_name = 32;
+  repeated VolumePD volume_details = 33;
+}
+
+message VolumePD {
+  string volume_name = 1;
+  string mount_point = 2;
+  string volume_type = 3;
+  string volume_group = 4;
+  string logical_name = 5;
+  string pd_host_devicename = 6;
+  string disk_interface = 7;
+}
