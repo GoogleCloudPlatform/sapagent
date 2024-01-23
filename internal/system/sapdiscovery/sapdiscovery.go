@@ -97,7 +97,7 @@ func SAPApplications(ctx context.Context) *sapb.SAPInstances {
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
-		log.CtxLogger(ctx).Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failure in reading crm_mon data from pacemaker", log.Error(err))
 	}
 	return instances(ctx, HANAReplicationConfig, listSAPInstances, commandlineexecutor.ExecuteCommand, data)
 }
