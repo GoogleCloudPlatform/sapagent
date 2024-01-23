@@ -1,0 +1,47 @@
+{
+  "id": "r_datashipping_parallel_channels",
+  "description": "The SAP HANA parameter datashipping_parallel_channels defines the number of network channels used by full or delta datashipping.",
+  "labels": [
+    "ha_dr"
+  ],
+  "queries": [
+    {
+      "name": "q_replication_status",
+      "sql": "SELECT COUNT(*) AS VALUE FROM M_SYSTEM_REPLICATION WHERE REPLICATION_STATUS = 'ACTIVE'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_datashipping_parallel_channels",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'system_replication' AND KEY = 'datashipping_parallel_channels' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger":{
+          "operation": "AND",
+          "child_evals": [
+            {
+              "lhs": "q_replication_status:VALUE",
+              "operation": "GT",
+              "rhs": "0"
+            },
+            {
+              "lhs": "q_datashipping_parallel_channels:VALUE",
+        "operation": "LT",
+        "rhs": "8"
+            }
+        ]
+      },
+      "actions": [
+        {
+          "description": "The SAP HANA parameter datashipping_parallel_channels defines the number of network channels used by full or delta datashipping. The default value is 4, which means that four network channels are used to ship data. To better utilise Google cloud network performance, the parameter can be adjusted to 8."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/742945a940f240f4a2a0e39f93d3e2d4/904911eb0fe54124b10dfaeadb5337ce.html#data-and-log-volume-encryption, https://help.sap.com/docs/SAP_HANA_ONE/102d9916bf77407ea3942fef93a47da8/dc01f36fbb5710148b668201a6e95cf2.html,https://help.sap.com/docs/SAP_HANA_PLATFORM/b3ee5778bc2e4a089d3299b82ec762a7/dc01f36fbb5710148b668201a6e95cf2.html"
+      ]
+    }
+  ]
+}

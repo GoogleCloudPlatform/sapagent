@@ -36,7 +36,7 @@
       },
       "actions": [
         {
-          "description": "Operating System version or Linux kernel versions are not consistent across all nodes in the SAP HANA scale-out landscape. Address the version mismatches to ensure optimal performance, stability and supportability."
+          "description": "Operating System version or Linux kernel version are not consistent across all nodes in the SAP HANA scale-out landscape. Address the version mismatches to ensure optimal performance, stability and supportability."
         }
       ],
       "references": [

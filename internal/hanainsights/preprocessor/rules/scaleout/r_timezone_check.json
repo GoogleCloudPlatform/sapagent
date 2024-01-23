@@ -1,0 +1,33 @@
+{
+  "id": "r_timezone_check",
+  "description": "HANA scaleout system timezone check.",
+  "labels": [
+    "scaleout"
+  ],
+  "queries": [
+    {
+      "name": "q_timezone_check",
+      "sql": "SELECT DISTINCT(VALUE) AS TIMEZONE_NAME FROM M_HOST_INFORMATION WHERE KEY='timezone_name'",
+      "columns": ["TIMEZONE_NAME"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "lhs": "size(q_timezone_check)",
+        "operation": "GT",
+        "rhs": "1"
+      },
+      "actions": [
+        {
+          "description": "The timezone does not match on all hosts in the SAP scale-out environment. For stability and supportability reasons, adjust the timezones so they match."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,2080216 - Check HANA DB for DST switch,https://me.sap.com/notes/2080216",
+        "SAP HANA Database Checklists and Recommendations,3357289 - Error 'Time zone xxxxxx does not exist' for data replication due to country time zone inconsistencies,https://me.sap.com/notes/0003357289"
+      ]
+    }
+  ]
+}

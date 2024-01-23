@@ -1,0 +1,52 @@
+{
+  "id": "r_automatic_log_reclaim",
+  "description": "If the log partition file system disk usage ('usedDiskSpace' in percent of 'totalDiskSpace') is above the specified threshold, the logger will automatically trigger an internal 'log release' (0 = disabled). As default, the logger will keep all free log segments cached for reuse, segments will only be removed if a reclaim is triggered explicitly via 'ALTER SYSTEM RECLAIM LOG' or if a 'DiskFull'/'LogFull' event is hit on logger level. This threshold parameter can be used to trigger the reclaim internally before a 'DiskFull'/'LogFull' situation occurs.",
+  "labels": [
+    "maintenance"
+  ],
+  "queries": [
+    {
+      "name": "q_automatic_log_reclaim",
+      "sql": "SELECT VALUE from M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' and section= 'persistence' and key = 'log_disk_usage_reclaim_threshold' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '-1' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "operation" : "AND",
+        "child_evals" : [
+          {
+            "operation" : "AND",
+            "child_evals": [
+              {
+                "operation" : "EQ",
+                "lhs" : "q_hana_version:major",
+                "rhs" : "2"
+              },
+              {
+                "operation" : "GTE",
+                "lhs" : "q_hana_version:sps",
+                "rhs" : "6"
+              }
+            ]
+          },
+          {
+            "lhs": "q_automatic_log_reclaim:VALUE",
+            "operation": "EQ",
+            "rhs": "0"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "description": "The log_disk_usage_reclaim_threshold parameter is 0, which means that the logger will not automatically reclaim log segments. To ensure that SAP HANA reclaims log segments after reaching a certain percentage of disk usage, you should set this parameter to a non-zero value."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/009e68bc5f3c440cb31823a3ec4bb95b/f1b759affa5f444992736273afb7d9fe.html#loiof1b759affa5f444992736273afb7d9fe__configSPS07_id_392"
+      ]
+    }
+  ]
+}

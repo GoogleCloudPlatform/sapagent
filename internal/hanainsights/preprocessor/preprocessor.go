@@ -37,6 +37,8 @@ var (
 	RuleFilenames = []string{
 		"rules/knowledgebase.json",
 		"rules/ha_dr/r_logshipping_async_buffer_size.json",
+		"rules/ha_dr/r_datashipping_parallel_channels.json",
+		"rules/ha_dr/r_compressed_log_shipping.json",
 		"rules/security/r_sap_hana_internal_support_role.json",
 		"rules/security/r_dev_privs_in_prod.json",
 		"rules/security/r_system_replication_allowed_sender.json",
@@ -56,6 +58,13 @@ var (
 		"rules/security/r_password_policy_maximum_unused_initial_password_lifetime.json",
 		"rules/security/r_password_policy_maximum_unused_productive_password_lifetime.json",
 		"rules/security/r_password_policy_minimum_password_lifetime.json",
+		"rules/maintenance/r_rowstore_fragmentation.json",
+		"rules/maintenance/r_automatic_log_reclaim.json",
+		"rules/maintenance/r_backup_catalog_housekeeping.json",
+		"rules/maintenance/r_table_consistency_check.json",
+		"rules/scaleout/r_timezone_check.json",
+		"rules/scaleout/r_os_kernel_check.json",
+		"rules/performance/r_stacksize_parameter.json",
 		"rules/ha_dr/r_logshipping_max_retention_size.json",
 	}
 
@@ -172,7 +181,7 @@ func validateTriggerCondition(node *rpb.EvalNode, queryNameToCols map[string]boo
 		return nil
 	}
 	if len(node.GetChildEvals()) == 0 {
-		// a leaf node should have a trigger condition evaluated i.e lhs, rhs and operation.
+		// a leaf node should have a trigger condition evaluated i.e. lhs, rhs and operation.
 		if node.GetLhs() == "" || node.GetRhs() == "" || node.GetOperation() == rpb.EvalNode_UNDEFINED {
 			return fmt.Errorf("invalid eval node with lhs: %s, rhs: %s, operation: %s", node.GetLhs(), node.GetRhs(), node.GetOperation().String())
 		}
@@ -257,7 +266,7 @@ func QueryExecutionOrder(queries []*rpb.Query) ([]*rpb.Query, error) {
 
 // prepareGraph is function which returns a data structure created to represent the rule
 // queries in a form of nodes in a graph, each edge (u, v) in graph represents query v depends on
-// query u i.e u should be executed before v.
+// query u i.e. u should be executed before v.
 func prepareGraph(queries []*rpb.Query) map[string][]string {
 	queryGraph := make(map[string][]string)
 	for _, q := range queries {

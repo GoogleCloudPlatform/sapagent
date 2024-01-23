@@ -1,0 +1,65 @@
+{
+  "id": "r_stacksize_parameter",
+  "description": "The thread stack parameter default_stack_size_kb and worker_stack_size_kb determines the amount a data a newly created thread can access.",
+  "labels": [
+    "performance"
+  ],
+  "queries": [
+    {
+      "name": "q_allocation_limit",
+      "sql": "select count(*) AS VALUE from M_SERVICE_MEMORY where ALLOCATION_LIMIT > '252329328640' and SERVICE_NAME='indexserver'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_default_stack_size_kb",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'threads' AND KEY = 'default_stack_size_kb' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_worker_stack_size_kb",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'threads' AND KEY = 'worker_stack_size_kb' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "operation" : "AND",
+         "child_evals" : [
+           {
+             "lhs": "q_allocation_limit:VALUE",
+             "operation": "GT",
+             "rhs": "0"
+           },
+           {
+            "operation" : "OR",
+            "child_evals": [
+              {
+                "operation" : "LT",
+                "lhs" : "q_default_stack_size_kb:VALUE",
+                "rhs" : "2048"
+              },
+              {
+                "operation" : "LT",
+                "lhs" : "q_worker_stack_size_kb:VALUE",
+                "rhs" : "2048"
+              }
+            ]
+          }
+            ]
+      },
+      "actions": [
+        {
+          "description": "At least one of the stack size parameters is less than 2048 KB. To address the crash and termination of Indexserver caused by stack overflow, It is recommended to increase the size of the stack size parameters default_stack_size_kb and worker_stack_size_kb to 2048 in systems with more than 235 GB allocation limit."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,3002993 - Indexserver Crash Due to STACK OVERFLOW in Evaluator::ExpressionParser,https://me.sap.com/notes/3002993",
+        "SAP HANA Database Checklists and Recommendations,3024498 - Indexserver Crash Due to STACK OVERFLOW at JoinEvaluator::PlanCreator::doEstimation,https://me.sap.com/notes/3024498",
+        "SAP HANA Database Checklists and Recommendations,3048909 - Indexserver Crash Due to STACK OVERFLOW as a Consequence of Recursive Hierarchy Function Calls,https://me.sap.com/notes/3048909",
+        "SAP HANA Database Checklists and Recommendations,3265972 - Indexserver Crash due to STACK OVERFLOW at ResourceManager::ResourceHeader::addReferenceIfManaged,https://me.sap.com/notes/3265972"
+      ]
+    }
+  ]
+}

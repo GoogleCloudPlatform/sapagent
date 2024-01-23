@@ -1,0 +1,32 @@
+{
+  "id": "r_table_consistency_check",
+  "description": "Validates the information about the time of the last table consistency check and falg those with age 30 or above",
+  "labels": [
+    "security"
+  ],
+  "queries": [
+    {
+      "name": "q_table_consistency_check",
+      "sql": "SELECT COUNT(*) as NUM_TABLES FROM M_CS_TABLES WHERE last_consistency_check_time < ADD_DAYS(CURRENT_TIMESTAMP, -30)",
+      "columns": ["NUM_TABLES"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "lhs": "q_table_consistency_check:NUM_TABLES",
+        "operation": "GT",
+        "rhs": "0"
+      },
+      "actions": [
+        {
+          "description": "It has been over 30 days since several tables have been checked for consistency. To reduce the risk of data corruption, it is important to run consistency checks regularly during off-peak hours."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,2116157 - FAQ: SAP HANA Consistency Checks and Corruptions,https://me.sap.com/notes/2116157"
+      ]
+    }
+  ]
+}

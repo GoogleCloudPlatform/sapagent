@@ -1,0 +1,62 @@
+{
+  "id": "r_compressed_log_shipping",
+  "description": "Data and log compression can be configured to reduce the amount of traffic between systems, especially over long distances (for example, when using the ASYNC replication mode).",
+  "labels": [
+    "ha_dr"
+  ],
+  "queries": [
+    {
+      "name": "q_async_replication_mode",
+      "sql": "SELECT COUNT(*) AS VALUE FROM M_SYSTEM_REPLICATION WHERE REPLICATION_MODE = 'ASYNC'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_log_compression",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'system_replication' AND KEY = 'enable_log_compression' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_data_compression",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'system_replication' AND KEY = 'enable_data_compression' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "operation" : "AND",
+         "child_evals" : [
+          {
+            "lhs": "q_async_replication_mode:VALUE",
+            "operation": "GT",
+            "rhs": "0"
+          },
+           {
+            "operation" : "OR",
+            "child_evals": [
+              {
+                "operation" : "EQ",
+                "lhs" : "q_log_compression:VALUE",
+                "rhs" : "false"
+              },
+              {
+                "operation" : "EQ",
+                "lhs" : "q_data_compression:VALUE",
+                "rhs" : "false"
+              }
+            ]
+          }
+            ]
+      },
+      "actions": [
+        {
+          "description": "It has been identified that either data or log or both have compression set to false (disabled). Data and log compression can be used for the initial full data shipping, the sub sequential delta data shipping, as well as for the continuous log shipping. Data and log compression can be configured to reduce the amount of traffic between systems, especially over long distances (for example, when using the ASYNC replication mode)"
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,https://help.sap.com/docs/SAP_HANA_PLATFORM/4e9b18c116aa42fc84c7dbfd02111aba/92447e0a105c4facad3553b28aaec318.html"
+      ]
+    }
+  ]
+}

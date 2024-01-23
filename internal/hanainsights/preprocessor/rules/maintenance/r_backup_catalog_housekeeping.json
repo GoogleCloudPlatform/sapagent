@@ -1,0 +1,34 @@
+{
+  "id": "r_backup_catalog_housekeeping",
+  "description": "The backup catalog can grow quite large over time, especially if it is not regularly cleaned up. This can lead to performance problems and can make it difficult to find the backups that are needed.",
+  "labels": [
+    "maintenance"
+  ],
+  "queries": [
+    {
+      "name": "q_backup_catalog_housekeeping",
+      "sql": "SELECT COUNT(*) AS VALUE FROM M_BACKUP_CATALOG WHERE DAYS_BETWEEN(SYS_START_TIME, CURRENT_TIMESTAMP) >=42",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "lhs": "q_backup_catalog_housekeeping:VALUE",
+        "operation": "GT",
+        "rhs": "0"
+      },
+      "actions": [
+        {
+          "description": "There is at least one backup that is older than 42 days in the backup catalog. Please check the references section, analyze the backup catalog results and cleanup the backup catalog to save disk space and improve performance."
+        }
+      ],
+      "references": [
+        "SAP HANA Database Checklists and Recommendations,3339034 - SAP HANA multiple issue (Alert ID: 2, 36, 65) caused by large Log Backups due to large Backup Catalog size,https://me.sap.com/notes/3339034",
+        "SAP HANA Database Checklists and Recommendations,1969700 - SQL Statement Collection for SAP HANA,https://me.sap.com/notes/1969700",
+        "SAP HANA Database Checklists and Recommendations,Cleanup of backup Catalog using retention policy in HANA DB 2.0 using HANA Cockpit,https://blogs.sap.com/2020/07/31/cleanup-of-backup-catalog-using-retention-policy-in-hana-db-2.0-using-hana-cockpit/"
+      ]
+    }
+  ]
+}

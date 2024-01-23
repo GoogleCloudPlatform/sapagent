@@ -7,7 +7,7 @@
   "queries": [
     {
       "name": "q_rowstore_fragmentation",
-      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'indexserver.ini' AND SECTION= 'row_engine' AND KEY = 'automatic_reorg_threshold'",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'indexserver.ini' AND SECTION= 'row_engine' AND KEY = 'automatic_reorg_threshold' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
       "columns": ["VALUE"]
     }
   ],
@@ -23,7 +23,7 @@
               {
                 "operation" : "EQ",
                 "lhs" : "q_hana_version:major",
-                "rhs" : "2.0"
+                "rhs" : "2"
               },
               {
                 "operation" : "GTE",
