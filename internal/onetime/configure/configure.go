@@ -74,7 +74,9 @@ var (
 		"warn":  cpb.Configuration_WARNING,
 		"error": cpb.Configuration_ERROR,
 	}
-	spaces = regexp.MustCompile(`\s+`)
+	spaces           = regexp.MustCompile(`\s+`)
+	keyMatchRegex    = regexp.MustCompile(`"(\w+)":`)
+	wordBarrierRegex = regexp.MustCompile(`(\w)([A-Z])`)
 )
 
 // Name implements the subcommand interface for features.
@@ -160,6 +162,11 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 
 	if c.restartAgent == nil {
 		c.restartAgent = restartAgent
+	}
+
+	res := c.modifyConfig(ctx, os.ReadFile)
+	if res == subcommands.ExitSuccess {
+		fmt.Println("Successfully modified configuration.json and restarted the agent.")
 	}
 	return c.modifyConfig(ctx, os.ReadFile)
 }
@@ -283,6 +290,7 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 	}
 
 	if err := writeFile(ctx, config, c.path); err != nil {
+		log.Print("Unable to write configuration.json")
 		log.CtxLogger(ctx).Errorw("Unable to write configuration.json", "error:", err)
 		return subcommands.ExitUsageError
 	}
@@ -505,16 +513,34 @@ func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcom
 	return subcommands.ExitSuccess
 }
 
+func snakeMarshal(config *cpb.Configuration) ([]byte, error) {
+	camelCaseFile, err := protojson.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	snakeCaseFile := keyMatchRegex.ReplaceAllFunc(
+		camelCaseFile,
+		func(match []byte) []byte {
+			return bytes.ToLower(wordBarrierRegex.ReplaceAll(
+				match,
+				[]byte(`${1}_${2}`),
+			))
+		},
+	)
+
+	return snakeCaseFile, nil
+}
+
 func writeFile(ctx context.Context, config *cpb.Configuration, path string) error {
-	file, err := protojson.Marshal(config)
+	file, err := snakeMarshal(config)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Unable to marshal configuration.json")
 		return err
 	}
 
 	var fileBuf bytes.Buffer
-	json.Indent(&fileBuf, file, "", " ")
-	// log.CtxLogger(ctx).Debug("File: ", string(fileBuf.Bytes()))
+	json.Indent(&fileBuf, file, "", "  ")
+	log.CtxLogger(ctx).Debug("Config file before writing: ", fileBuf.String())
 
 	err = os.WriteFile(path, fileBuf.Bytes(), 0644)
 	if err != nil {
@@ -571,6 +597,7 @@ func restartAgent(ctx context.Context) subcommands.ExitStatus {
 		ArgsToSplit: "-c 'sudo systemctl restart google-cloud-sap-agent'",
 	})
 	if result.ExitCode != 0 {
+		log.Print("Could not restart the agent")
 		log.CtxLogger(ctx).Errorw("failed restarting sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
 		return subcommands.ExitFailure
 	}
@@ -580,6 +607,7 @@ func restartAgent(ctx context.Context) subcommands.ExitStatus {
 		ArgsToSplit: "-c 'sudo systemctl status google-cloud-sap-agent'",
 	})
 	if result.ExitCode != 0 {
+		log.Print("Could not restart the agent")
 		log.CtxLogger(ctx).Errorw("failed checking the status of sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
 		return subcommands.ExitFailure
 	}
@@ -588,6 +616,7 @@ func restartAgent(ctx context.Context) subcommands.ExitStatus {
 		log.CtxLogger(ctx).Debug("Restarted the agent")
 		return subcommands.ExitSuccess
 	}
+	log.Print("Could not restart the agent")
 	log.CtxLogger(ctx).Error("Agent is not running")
 	return subcommands.ExitFailure
 }

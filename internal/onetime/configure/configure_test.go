@@ -17,9 +17,7 @@ limitations under the License.
 package configure
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"path"
 	"strings"
@@ -28,7 +26,6 @@ import (
 	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -1294,9 +1291,8 @@ func TestWriteFile(t *testing.T) {
 		wantErr  error
 	}{
 		{
-			name:     "ErrorWritingOutput",
-			wantErr:  cmpopts.AnyError,
-			wantFile: "{}",
+			name:    "ErrorWritingOutput",
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "validFile",
@@ -1314,16 +1310,16 @@ func TestWriteFile(t *testing.T) {
 				LogToCloud: &wpb.BoolValue{Value: true},
 			},
 			wantFile: `{
- "provideSapHostAgentMetrics": true,
- "logLevel": "INFO",
- "collectionConfiguration": {
-  "collectWorkloadValidationMetrics": true,
-  "collectAgentMetrics": true
- },
- "logToCloud": true,
- "discoveryConfiguration": {
-  "enableDiscovery": true
- }
+  "provide_sap_host_agent_metrics": true,
+  "log_level": "INFO",
+  "collection_configuration": {
+    "collect_workload_validation_metrics": true,
+    "collect_agent_metrics": true
+  },
+  "log_to_cloud": true,
+  "discovery_configuration": {
+    "enable_discovery": true
+  }
 }`,
 			wantErr: nil,
 		},
@@ -1335,16 +1331,16 @@ func TestWriteFile(t *testing.T) {
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("writeFile(%v, %v) returned an unexpected diff (-want +got): %v", tc.config, tc.path, diff)
 			}
-
-			file, err := protojson.Marshal(configuration.Read(tc.path, os.ReadFile))
-			if err != nil {
-				t.Errorf("protojson.Marhsal in writeFile(%v, %v) returned unexpected error: %v", tc.config, tc.path, err)
+			if gotErr != nil {
 				return
 			}
 
-			var gotFile bytes.Buffer
-			json.Indent(&gotFile, file, "", " ")
-			if diff := cmp.Diff(tc.wantFile, gotFile.String()); diff != "" {
+			file, err := os.ReadFile(tc.path)
+			if err != nil {
+				t.Fatalf("os.ReadFile(%v) returned unexpected error: %v", tc.path, err)
+			}
+
+			if diff := cmp.Diff(tc.wantFile, string(file)); diff != "" {
 				t.Errorf("writeFile(%v, %v) returned an unexpected diff (-want +got): %v", tc.config, tc.path, diff)
 			}
 		})
@@ -1401,6 +1397,44 @@ func TestSetFlags(t *testing.T) {
 		if got == nil {
 			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
 		}
+	}
+}
+
+func TestSnakeMarshal(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *cpb.Configuration
+		want   []byte
+	}{
+		{
+			name: "SampleConfig1",
+			config: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+			},
+			want: []byte(`{"provide_sap_host_agent_metrics":true}`),
+		},
+		{
+			name: "SampleConfig2",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					AgentMetricsFrequency: 23,
+				},
+			},
+			want: []byte(`{"collection_configuration":{"agent_metrics_frequency":"23"}}`),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := snakeMarshal(tc.config)
+			if err != nil {
+				t.Fatalf("snakeMarshal(%v) returned an unexpected error: %v", tc.config, err)
+			}
+
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("snakeMarshal(%v) returned an unexpected diff (-want +got):\n%v", tc.config, diff)
+			}
+		})
 	}
 }
 
