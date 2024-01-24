@@ -608,7 +608,7 @@ func TestModifyConfig(t *testing.T) {
 			name: "ValidSetFreqProcessMetrics",
 			c: &Configure{
 				feature:              "process_metrics",
-				frequency:            "30",
+				fastMetricsFrequency: "30",
 				slowMetricsFrequency: "50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -636,7 +636,7 @@ func TestModifyConfig(t *testing.T) {
 			name: "InvalidSetFreqProcessMetrics1",
 			c: &Configure{
 				feature:              "process_metrics",
-				frequency:            "-30",
+				fastMetricsFrequency: "-30",
 				slowMetricsFrequency: "50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -664,7 +664,7 @@ func TestModifyConfig(t *testing.T) {
 			name: "InvalidSetFreqProcessMetrics3",
 			c: &Configure{
 				feature:              "process_metrics",
-				frequency:            "30",
+				fastMetricsFrequency: "30",
 				slowMetricsFrequency: "-50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -692,7 +692,7 @@ func TestModifyConfig(t *testing.T) {
 			name: "InvalidSetFreqProcessMetrics4",
 			c: &Configure{
 				feature:              "process_metrics",
-				frequency:            "30.5",
+				fastMetricsFrequency: "30.5",
 				slowMetricsFrequency: "50",
 				path:                 path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
@@ -836,11 +836,11 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetFreqWorkloadValidation",
 			c: &Configure{
-				feature:      "workload_validation",
-				frequency:    "30",
-				dbFrequency:  "50",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				feature:                    "workload_validation",
+				validationMetricsFrequency: "30",
+				dbFrequency:                "50",
+				path:                       path.Join(t.TempDir(), "/configuration.json"),
+				restartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -866,11 +866,11 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqWorkloadValidation1",
 			c: &Configure{
-				feature:      "workload_validation",
-				frequency:    "-30",
-				dbFrequency:  "50",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				feature:                    "workload_validation",
+				validationMetricsFrequency: "-30",
+				dbFrequency:                "50",
+				path:                       path.Join(t.TempDir(), "/configuration.json"),
+				restartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -894,11 +894,11 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqWorkloadValidation2",
 			c: &Configure{
-				feature:      "workload_validation",
-				frequency:    "30",
-				dbFrequency:  "-50",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				feature:                    "workload_validation",
+				validationMetricsFrequency: "30",
+				dbFrequency:                "-50",
+				path:                       path.Join(t.TempDir(), "/configuration.json"),
+				restartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1022,12 +1022,12 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetFreqAgentMetrics",
 			c: &Configure{
-				feature:              "agent_metrics",
-				frequency:            "25",
-				agentHealthFrequency: "20",
-				heartbeatFrequency:   "10",
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				feature:               "agent_metrics",
+				agentMetricsFrequency: "25",
+				agentHealthFrequency:  "20",
+				heartbeatFrequency:    "10",
+				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				restartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1055,12 +1055,12 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqAgentMetrics1",
 			c: &Configure{
-				feature:              "agent_metrics",
-				frequency:            "-25",
-				agentHealthFrequency: "20",
-				heartbeatFrequency:   "10",
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				feature:               "agent_metrics",
+				agentMetricsFrequency: "-25",
+				agentHealthFrequency:  "20",
+				heartbeatFrequency:    "10",
+				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				restartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1084,12 +1084,12 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqAgentMetrics2",
 			c: &Configure{
-				feature:              "agent_metrics",
-				frequency:            "25",
-				agentHealthFrequency: "-20",
-				heartbeatFrequency:   "10",
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				feature:               "agent_metrics",
+				agentMetricsFrequency: "25",
+				agentHealthFrequency:  "-20",
+				heartbeatFrequency:    "10",
+				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				restartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1113,12 +1113,12 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqAgentMetrics3",
 			c: &Configure{
-				feature:              "agent_metrics",
-				frequency:            "25",
-				agentHealthFrequency: "20",
-				heartbeatFrequency:   "-10",
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
-				restartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				feature:               "agent_metrics",
+				agentMetricsFrequency: "25",
+				agentHealthFrequency:  "20",
+				heartbeatFrequency:    "-10",
+				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				restartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1388,9 +1388,9 @@ func TestSetFlags(t *testing.T) {
 
 	flags := []string{
 		"feature", "f", "version", "v", "help", "h", "loglevel", "logconfig", "setting", "path",
-		"enable", "disable", "showall", "add", "remove", "frequency", "db-frequency",
-		"sample-interval-sec", "query-timeout-sec", "process-metrics-to-skip", "slow-metrics-frequency",
-		"heartbeat-frequency", "agent-health-frequency",
+		"enable", "disable", "showall", "add", "remove", "process-metrics-frequency", "db-frequency",
+		"sample-interval-sec", "query-timeout-sec", "process-metrics-to-skip", "slow-process-metrics-frequency",
+		"heartbeat-frequency", "agent-health-frequency", "agent-metrics-frequency", "workload-validation-metrics-frequency",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

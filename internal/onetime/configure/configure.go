@@ -42,17 +42,17 @@ import (
 
 // Configure has args for backint subcommands.
 type Configure struct {
-	feature, logLevel, logConfig             string
-	setting, path                            string
-	skipMetrics                              string
-	frequency, dbFrequency                   string
-	slowMetricsFrequency                     string
-	agentHealthFrequency, heartbeatFrequency string
-	sampleIntervalSec, queryTimeoutSec       string
-	help, version                            bool
-	enable, disable, showall                 bool
-	add, remove                              bool
-	restartAgent                             RestartAgent
+	feature, logLevel, logConfig                                    string
+	setting, path                                                   string
+	skipMetrics                                                     string
+	validationMetricsFrequency, dbFrequency                         string
+	fastMetricsFrequency, slowMetricsFrequency                      string
+	agentMetricsFrequency, agentHealthFrequency, heartbeatFrequency string
+	sampleIntervalSec, queryTimeoutSec                              string
+	help, version                                                   bool
+	enable, disable, showall                                        bool
+	add, remove                                                     bool
+	restartAgent                                                    RestartAgent
 }
 
 // RestartAgent abstracts restart functions(windows & linux) for testability.
@@ -106,9 +106,11 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.logConfig, "logconfig", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.setting, "setting", "", "The requested setting")
 	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
-	fs.StringVar(&c.frequency, "frequency", "", "Sets the frequency of metric collection")
+	fs.StringVar(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", "", "Sets the frequency of workload validation metrics collection")
 	fs.StringVar(&c.dbFrequency, "db-frequency", "", "Sets the database frequency of workload validation metrics collection")
-	fs.StringVar(&c.slowMetricsFrequency, "slow-metrics-frequency", "", "Sets the slow metrics frequency of process metric collection")
+	fs.StringVar(&c.fastMetricsFrequency, "process-metrics-frequency", "", "Sets the frequency of fast moving process metrics collection")
+	fs.StringVar(&c.slowMetricsFrequency, "slow-process-metrics-frequency", "", "Sets the frequency of slow moving process metrics collection")
+	fs.StringVar(&c.agentMetricsFrequency, "agent-metrics-frequency", "", "Sets the agent metrics frequency")
 	fs.StringVar(&c.agentHealthFrequency, "agent-health-frequency", "", "Sets the agent health frequency")
 	fs.StringVar(&c.heartbeatFrequency, "heartbeat-frequency", "", "Sets the heartbeat frequency")
 	fs.StringVar(&c.sampleIntervalSec, "sample-interval-sec", "", "Sets the sample interval sec for HANA Monitoring")
@@ -319,8 +321,8 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 			checkCollectionConfig(config).CollectProcessMetrics = *isEnabled
 		}
 
-		if c.frequency != "" {
-			i, err := c.updateField(c.frequency)
+		if c.fastMetricsFrequency != "" {
+			i, err := c.updateField(c.fastMetricsFrequency)
 			if err != nil {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
 				return c.returnError(err)
@@ -388,8 +390,8 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 			isCmdValid = true
 			checkCollectionConfig(config).CollectAgentMetrics = *isEnabled
 		}
-		if c.frequency != "" {
-			i, err := c.updateField(c.frequency)
+		if c.agentMetricsFrequency != "" {
+			i, err := c.updateField(c.agentMetricsFrequency)
 			if err != nil {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
 				return c.returnError(err)
@@ -420,8 +422,8 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 			isCmdValid = true
 			checkCollectionConfig(config).CollectWorkloadValidationMetrics = *isEnabled
 		}
-		if c.frequency != "" {
-			i, err := c.updateField(c.frequency)
+		if c.validationMetricsFrequency != "" {
+			i, err := c.updateField(c.validationMetricsFrequency)
 			if err != nil {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
 				return c.returnError(err)
