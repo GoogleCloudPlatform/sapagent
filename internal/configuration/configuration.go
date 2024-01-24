@@ -166,6 +166,7 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc == nil {
 		cc = &cpb.CollectionConfiguration{}
 	}
+	
 	if cc.GetCollectWorkloadValidationMetrics() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
 		cc.WorkloadValidationMetricsFrequency = 300
 	}
@@ -187,6 +188,7 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc.GetCollectAgentMetrics() && cc.GetHeartbeatFrequency() <= 0 {
 		cc.HeartbeatFrequency = 60
 	}
+	
 	if cc.GetCollectAgentMetrics() && cc.GetMissedHeartbeatThreshold() <= 0 {
 		cc.MissedHeartbeatThreshold = 10
 	}
@@ -210,12 +212,14 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 
 func applyDefaultHMConfiguration(configFromFile *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringConfiguration {
 	hmConfig := configFromFile
+	
 	if hmConfig != nil && hmConfig.GetQueryTimeoutSec() <= 0 {
 		hmConfig.QueryTimeoutSec = 300
 	}
 	if hmConfig != nil && hmConfig.GetSampleIntervalSec() < 5 {
 		hmConfig.SampleIntervalSec = 300
 	}
+	
 	if hmConfig != nil && hmConfig.GetExecutionThreads() <= 0 {
 		hmConfig.ExecutionThreads = 10
 	}

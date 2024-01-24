@@ -25,7 +25,6 @@ import (
 	"os"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"flag"
@@ -45,10 +44,10 @@ type Configure struct {
 	feature, logLevel, logConfig                                    string
 	setting, path                                                   string
 	skipMetrics                                                     string
-	validationMetricsFrequency, dbFrequency                         string
-	fastMetricsFrequency, slowMetricsFrequency                      string
-	agentMetricsFrequency, agentHealthFrequency, heartbeatFrequency string
-	sampleIntervalSec, queryTimeoutSec                              string
+	validationMetricsFrequency, dbFrequency                         int64
+	fastMetricsFrequency, slowMetricsFrequency                      int64
+	agentMetricsFrequency, agentHealthFrequency, heartbeatFrequency int64
+	sampleIntervalSec, queryTimeoutSec                              int64
 	help, version                                                   bool
 	enable, disable, showall                                        bool
 	add, remove                                                     bool
@@ -106,15 +105,21 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.logConfig, "logconfig", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.setting, "setting", "", "The requested setting")
 	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
-	fs.StringVar(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", "", "Sets the frequency of workload validation metrics collection")
-	fs.StringVar(&c.dbFrequency, "db-frequency", "", "Sets the database frequency of workload validation metrics collection")
-	fs.StringVar(&c.fastMetricsFrequency, "process-metrics-frequency", "", "Sets the frequency of fast moving process metrics collection")
-	fs.StringVar(&c.slowMetricsFrequency, "slow-process-metrics-frequency", "", "Sets the frequency of slow moving process metrics collection")
-	fs.StringVar(&c.agentMetricsFrequency, "agent-metrics-frequency", "", "Sets the agent metrics frequency")
-	fs.StringVar(&c.agentHealthFrequency, "agent-health-frequency", "", "Sets the agent health frequency")
-	fs.StringVar(&c.heartbeatFrequency, "heartbeat-frequency", "", "Sets the heartbeat frequency")
-	fs.StringVar(&c.sampleIntervalSec, "sample-interval-sec", "", "Sets the sample interval sec for HANA Monitoring")
-	fs.StringVar(&c.queryTimeoutSec, "query-timeout-sec", "", "Sets the query timeout for HANA Monitoring")
+	fs.Int64Var(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", 0, "Sets the frequency of workload validation metrics collection")
+	fs.Int64Var(&c.dbFrequency, "db-frequency", 0,
+		"Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
+	fs.Int64Var(&c.fastMetricsFrequency, "process-metrics-frequency", 0,
+		"Sets the frequency of fast moving process metrics collection")
+	fs.Int64Var(&c.slowMetricsFrequency, "slow-process-metrics-frequency", 0, "Sets the frequency of slow moving process metrics collection. Default value is 30(s)")
+	fs.Int64Var(&c.agentMetricsFrequency, "agent-metrics-frequency", 0, "Sets the agent metrics frequency")
+	fs.Int64Var(&c.agentHealthFrequency, "agent-health-frequency", 0,
+		"Sets the agent health frequency. Default value is 60(s)")
+	fs.Int64Var(&c.heartbeatFrequency, "heartbeat-frequency", 0,
+		"Sets the heartbeat frequency. Default value is 60(s)")
+	fs.Int64Var(&c.sampleIntervalSec, "sample-interval-sec", 0,
+		"Sets the sample interval sec for HANA Monitoring. Default value is 300(s)")
+	fs.Int64Var(&c.queryTimeoutSec, "query-timeout-sec", 0,
+		"Sets the query timeout for HANA Monitoring. Default value is 300(s)")
 	fs.StringVar(&c.path, "path", "", "Sets the path for configuration.json")
 	fs.BoolVar(&c.help, "help", false, "Display help")
 	fs.BoolVar(&c.help, "h", false, "Display help")
@@ -321,24 +326,22 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 			checkCollectionConfig(config).CollectProcessMetrics = *isEnabled
 		}
 
-		if c.fastMetricsFrequency != "" {
-			i, err := c.updateField(c.fastMetricsFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.fastMetricsFrequency != 0 {
+			if c.fastMetricsFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).ProcessMetricsFrequency = i
+			checkCollectionConfig(config).ProcessMetricsFrequency = c.fastMetricsFrequency
 		}
 
-		if c.slowMetricsFrequency != "" {
-			i, err := c.updateField(c.slowMetricsFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.slowMetricsFrequency != 0 {
+			if c.slowMetricsFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("slow-metrics-frequency must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).SlowProcessMetricsFrequency = i
+			checkCollectionConfig(config).SlowProcessMetricsFrequency = c.slowMetricsFrequency
 		}
 
 		if len(c.skipMetrics) > 0 {
@@ -362,23 +365,21 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 				config.HanaMonitoringConfiguration = &cpb.HANAMonitoringConfiguration{Enabled: *isEnabled}
 			}
 		}
-		if c.sampleIntervalSec != "" {
-			i, err := c.updateField(c.sampleIntervalSec)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.sampleIntervalSec != 0 {
+			if c.sampleIntervalSec < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("sample-interval-sec must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			config.HanaMonitoringConfiguration.SampleIntervalSec = i
+			config.HanaMonitoringConfiguration.SampleIntervalSec = c.sampleIntervalSec
 		}
-		if c.queryTimeoutSec != "" {
-			i, err := c.updateField(c.queryTimeoutSec)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.queryTimeoutSec != 0 {
+			if c.queryTimeoutSec < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("query-timeout-sec must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			config.HanaMonitoringConfiguration.QueryTimeoutSec = i
+			config.HanaMonitoringConfiguration.QueryTimeoutSec = c.queryTimeoutSec
 		}
 	case "sap_discovery":
 		if isEnabled != nil {
@@ -390,55 +391,50 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 			isCmdValid = true
 			checkCollectionConfig(config).CollectAgentMetrics = *isEnabled
 		}
-		if c.agentMetricsFrequency != "" {
-			i, err := c.updateField(c.agentMetricsFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.agentMetricsFrequency != 0 {
+			if c.agentMetricsFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).AgentMetricsFrequency = i
+			checkCollectionConfig(config).AgentMetricsFrequency = c.agentMetricsFrequency
 		}
-		if c.agentHealthFrequency != "" {
-			i, err := c.updateField(c.agentHealthFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.agentHealthFrequency != 0 {
+			if c.agentHealthFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("agent-health-frequency must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).AgentHealthFrequency = i
+			checkCollectionConfig(config).AgentHealthFrequency = c.agentHealthFrequency
 		}
-		if c.heartbeatFrequency != "" {
-			i, err := c.updateField(c.heartbeatFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.heartbeatFrequency != 0 {
+			if c.heartbeatFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("heartbeat-frequency must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).HeartbeatFrequency = i
+			checkCollectionConfig(config).HeartbeatFrequency = c.heartbeatFrequency
 		}
 	case "workload_validation":
 		if isEnabled != nil {
 			isCmdValid = true
 			checkCollectionConfig(config).CollectWorkloadValidationMetrics = *isEnabled
 		}
-		if c.validationMetricsFrequency != "" {
-			i, err := c.updateField(c.validationMetricsFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.validationMetricsFrequency != 0 {
+			if c.validationMetricsFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).WorkloadValidationMetricsFrequency = i
+			checkCollectionConfig(config).WorkloadValidationMetricsFrequency = c.validationMetricsFrequency
 		}
-		if c.dbFrequency != "" {
-			i, err := c.updateField(c.dbFrequency)
-			if err != nil {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-				return c.returnError(err)
+		if c.dbFrequency != 0 {
+			if c.dbFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("db-frequency must be non-negative"))
+				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).WorkloadValidationDbMetricsFrequency = i
+			checkCollectionConfig(config).WorkloadValidationDbMetricsFrequency = c.dbFrequency
 		}
 	default:
 		onetime.LogMessageToFileAndConsole("Unsupported Metric")
@@ -458,18 +454,6 @@ func (c *Configure) returnError(err error) subcommands.ExitStatus {
 	log.Print("Please check usage:\n")
 	log.Print(c.Usage())
 	return subcommands.ExitUsageError
-}
-
-func (c *Configure) updateField(val string) (int64, error) {
-	i, err := strconv.ParseInt(val, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	if i < 0 {
-		return 0, fmt.Errorf("inappropriate value. flag value cannot be negative or floating")
-	}
-
-	return i, nil
 }
 
 // modifyProcessMetricsToSkip modifies 'process_metrics_to_skip' field of the configuration file.
