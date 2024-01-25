@@ -441,10 +441,10 @@ func (r *Restorer) stopHANA(ctx context.Context, exec commandlineexecutor.Execut
 	var cmd string
 	if r.forceStopHANA {
 		log.CtxLogger(ctx).Infow("HANA force stopped", "sid", r.sid)
-		cmd = fmt.Sprintf("-c '/usr/sap/%s/*/HDB kill'", r.sid)
+		cmd = fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && /usr/sap/%s/*/HDB stop'", r.sid, r.sid) // NOLINT
 	} else {
 		log.CtxLogger(ctx).Infow("Stopping HANA", "sid", r.sid)
-		cmd = fmt.Sprintf("-c '/usr/sap/%s/*/HDB stop'", r.sid)
+		cmd = fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && /usr/sap/%s/*/HDB kill'", r.sid, r.sid) // NOLINT
 	}
 	result := exec(ctx, commandlineexecutor.Params{
 		User:        r.hanaSidAdm,
