@@ -102,7 +102,6 @@ func (EvalNode_EvalType) EnumDescriptor() ([]byte, []int) {
 	return file_hanainsights_rule_rule_proto_rawDescGZIP(), []int{3, 0}
 }
 
-
 type Rule struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

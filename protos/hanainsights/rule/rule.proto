@@ -19,7 +19,6 @@ package sapagent.protos.hanainsights.rule;
 
 option java_multiple_files = true;
 
-
 message Rule {
   string name = 1;  // Optional
   string id =

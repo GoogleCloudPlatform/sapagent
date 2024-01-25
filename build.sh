@@ -13,6 +13,7 @@ echo "**************  Getting go 1.21"
 wget -q https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
 mkdir -p /tmp/sapagent
 tar -C /tmp/sapagent -xzf go1.21.0.linux-amd64.tar.gz
+
 export GOROOT=/tmp/sapagent/go
 mkdir -p $GOROOT/.cache
 mkdir -p $GOROOT/pkg/mod
