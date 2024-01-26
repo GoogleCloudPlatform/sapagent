@@ -54,6 +54,8 @@ type Discovery struct {
 	systemMu                sync.Mutex
 	sapInstances            *sappb.SAPInstances
 	sapMu                   sync.Mutex
+	sapInstancesRoutine     *recovery.RecoverableRoutine
+	systemDiscoveryRoutine  *recovery.RecoverableRoutine
 }
 
 // GetSAPSystems returns the current list of SAP Systems discovered on the current host.
@@ -74,13 +76,13 @@ func (d *Discovery) GetSAPInstances() *sappb.SAPInstances {
 // Returns true if the discovery goroutine is started, and false otherwise.
 func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) bool {
 
-	sapInstancesRoutine := &recovery.RecoverableRoutine{
+	d.sapInstancesRoutine = &recovery.RecoverableRoutine{
 		Routine:             updateSAPInstances,
 		RoutineArg:          updateSapInstancesArgs{config, d},
 		ErrorCode:           usagemetrics.DiscoverSapInstanceFailure,
 		ExpectedMinDuration: 5 * time.Second,
 	}
-	sapInstancesRoutine.StartRoutine(ctx)
+	d.sapInstancesRoutine.StartRoutine(ctx)
 
 	// Ensure SAP instances is populated before starting system discovery
 	backoff.Retry(func() error {
@@ -90,14 +92,14 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *
 		return fmt.Errorf("SAP Instances not ready yet")
 	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second), 120))
 
-	systemDiscoveryRoutine := &recovery.RecoverableRoutine{
+	d.systemDiscoveryRoutine = &recovery.RecoverableRoutine{
 		Routine:             runDiscovery,
 		RoutineArg:          runDiscoveryArgs{config, d},
 		ErrorCode:           usagemetrics.DiscoverSapSystemFailure,
 		ExpectedMinDuration: 10 * time.Second,
 	}
 
-	systemDiscoveryRoutine.StartRoutine(ctx)
+	d.systemDiscoveryRoutine.StartRoutine(ctx)
 
 	// Ensure systems are populated before returning
 	backoff.Retry(func() error {
