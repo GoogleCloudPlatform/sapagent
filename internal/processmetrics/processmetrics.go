@@ -64,7 +64,8 @@ import (
 )
 
 var (
-	dailyMetricsRoutine *recovery.RecoverableRoutine
+	dailyMetricsRoutine   *recovery.RecoverableRoutine
+	collectAndSendRoutine *recovery.RecoverableRoutine
 )
 
 type (
@@ -166,8 +167,19 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	dailyMetricsRoutine.StartRoutine(ctx)
 
 	p := create(ctx, parameters, mc, sapInstances)
+	collectAndSendRoutine = &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			if parameters, ok := a.(*Parameters); ok {
+				p.collectAndSend(ctx, parameters.BackOffs)
+			}
+		},
+		RoutineArg:          parameters,
+		ErrorCode:           usagemetrics.CollectMetricsRoutineFailure,
+		ExpectedMinDuration: time.Minute,
+	}
 	// NOMUTANTS--will be covered by integration testing
-	go p.collectAndSend(ctx, parameters.BackOffs)
+	collectAndSendRoutine.StartRoutine(ctx)
+
 	// createWorkerPool creates a pool of workers to start collecting slow moving metrics in parallel
 	// each collector has its own job of collecting and then sending the metrics to cloudmonitoring.
 	// So after an error is encountered during metrics collection within a collector, while it retried

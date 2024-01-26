@@ -99,6 +99,7 @@ const (
 	DiscoverSapInstanceFailure
 	DiscoverSapSystemFailure
 	UsageMetricsDailyLogError
+	CollectMetricsRoutineFailure
 )
 
 // Agent wide action mappings.
