@@ -51,6 +51,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/netweaver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/networkstats"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapservice"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -60,6 +61,10 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+)
+
+var (
+	dailyMetricsRoutine *recovery.RecoverableRoutine
 )
 
 type (
@@ -151,7 +156,15 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	}
 
 	log.CtxLogger(ctx).Info("Starting process metrics collection in background.")
-	go usagemetrics.LogActionDaily(usagemetrics.CollectProcessMetrics)
+
+	dailyMetricsRoutine = &recovery.RecoverableRoutine{
+		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectProcessMetrics) },
+		RoutineArg:          nil,
+		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		ExpectedMinDuration: 24 * time.Hour,
+	}
+	dailyMetricsRoutine.StartRoutine(ctx)
+
 	p := create(ctx, parameters, mc, sapInstances)
 	// NOMUTANTS--will be covered by integration testing
 	go p.collectAndSend(ctx, parameters.BackOffs)

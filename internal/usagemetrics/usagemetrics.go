@@ -98,6 +98,7 @@ const (
 	ReliabilityBucketUploadFailure
 	DiscoverSapInstanceFailure
 	DiscoverSapSystemFailure
+	UsageMetricsDailyLogError
 )
 
 // Agent wide action mappings.
