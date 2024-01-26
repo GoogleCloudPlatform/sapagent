@@ -184,7 +184,18 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	// each collector has its own job of collecting and then sending the metrics to cloudmonitoring.
 	// So after an error is encountered during metrics collection within a collector, while it retried
 	// as per the retry policy, other collectors remain unaffected.
-	go createWorkerPoolForSlowMetrics(ctx, p, parameters.BackOffs)
+	slowMetricsRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			if parameters, ok := a.(*Parameters); ok {
+				createWorkerPoolForSlowMetrics(ctx, p, parameters.BackOffs)
+			}
+		},
+		RoutineArg:          parameters,
+		ErrorCode:           usagemetrics.SlowMetricsCollectionFailure,
+		ExpectedMinDuration: time.Minute,
+	}
+	slowMetricsRoutine.StartRoutine(ctx)
+
 	return true
 }
 

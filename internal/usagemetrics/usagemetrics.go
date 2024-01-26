@@ -100,6 +100,7 @@ const (
 	DiscoverSapSystemFailure
 	UsageMetricsDailyLogError
 	CollectMetricsRoutineFailure
+	SlowMetricsCollectionFailure
 )
 
 // Agent wide action mappings.
