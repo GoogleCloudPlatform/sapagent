@@ -1,0 +1,63 @@
+{
+
+  "id": "r_parallel_merge_threads_check",
+  "description": "Checks for appropriate configuration of the parallel_merge_threads parameter in SAP HANA environments.",
+  "labels":
+  [
+    "performance"
+  ],
+  "queries":
+  [
+    {
+      "name": "q_threads_check",
+      "sql": "SELECT VALUE  FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND KEY='parallel_merge_threads' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_resource_wait_check",
+      "sql": "select count(*) AS VALUE FROM M_DELTA_MERGE_STATISTICS where RESOURCE_WAIT_TIME > 0",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_cpu_threads_check",
+      "sql": "select VALUE from M_HOST_INFORMATION where KEY = 'cpu_threads'",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations":
+  [
+    {
+      "id": "rec_1",
+      "trigger":{
+          "operation": "AND",
+          "child_evals": [
+            {
+              "lhs": "q_threads_check:VALUE",
+              "operation": "LT",
+              "rhs": "5"
+            },
+            {
+              "lhs": "q_resource_wait_check:VALUE",
+              "operation": "GT",
+              "rhs": "0"
+            },
+            {
+              "lhs": "q_cpu_threads_check:VALUE",
+              "operation": "GT",
+              "rhs": "49"
+            }
+        ]
+      },
+      "actions":
+      [
+        {
+          "description": "The parallel_merge_threads parameter is set to a value lower than the recommended (5). Monitor CPU usage closely to ensure it's not causing contention or impacting other workloads. Adjust the value as needed to find the optimal balance for your system."
+        }
+      ],
+      "references":
+      [
+        "https://me.sap.com/notes/2057046 - FAQ: SAP HANA Delta Merges"
+      ]
+    }
+  ]
+}

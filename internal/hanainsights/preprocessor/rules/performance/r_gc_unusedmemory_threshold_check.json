@@ -1,0 +1,63 @@
+{
+  "id": "r_gc_unusedmemory_threshold_check",
+  "description": "Checks in databases with more than 235 GB allocation limit  if gc_unused_memory_threshold_rel/gc_unused_memory_threshold_abs was set to SAP recommended value .This parameter helps to reduce the risk of hiccups (e.g. due to MemoryReclaim waits) when garbage collection happens reactively",
+  "labels":
+  [
+    "performance"
+  ],
+  "queries": [
+    {
+      "name": "q_allocation_limit",
+      "sql": "select count(*) AS VALUE from M_SERVICE_MEMORY where ALLOCATION_LIMIT > '252329328640' and SERVICE_NAME='indexserver'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_mem_threshold_rel",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'memorymanager' AND KEY = 'gc_unused_memory_threshold_rel' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_mem_threshold_abs",
+      "sql": "SELECT count(*) as VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'memorymanager' AND KEY = 'gc_unused_memory_threshold_abs' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0'",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "operation" : "AND",
+         "child_evals" : [
+           {
+             "lhs": "q_allocation_limit:VALUE",
+             "operation": "GT",
+             "rhs": "0"
+           },
+           {
+            "operation" : "AND",
+            "child_evals": [
+              {
+                "operation" : "EQ",
+                "lhs" : "q_mem_threshold_rel:VALUE",
+                "rhs" : "0"
+              },
+              {
+                "operation" : "EQ",
+                "lhs" : "q_mem_threshold_abs:VALUE",
+                "rhs" : "0"
+              }
+            ]
+          }
+            ]
+      },
+      "actions": [
+        {
+          "description": "Both garbage collection parameters is set to a default value . To address the risk of hiccups (e.g. due to MemoryReclaim waits), gc_unused_memory_threshold_rel needs to be set to value of 25% or gc_unused_memory_threshold_abs to a value 25% of allocation_limit."
+        }
+      ],
+      "references": [
+        "https://me.sap.com/notes/2169283"
+      ]
+    }
+  ]
+}

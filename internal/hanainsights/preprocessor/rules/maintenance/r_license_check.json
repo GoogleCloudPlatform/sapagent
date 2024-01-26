@@ -1,0 +1,32 @@
+{
+  "id": "r_license_check",
+  "description": "Provides information about the current SAP HANA license status.",
+  "labels": [
+    "scaleout"
+  ],
+  "queries": [
+    {
+      "name": "q_license_check",
+      "sql": "select PERMANENT AS VALUE from M_LICENSE",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "lhs": "q_license_check:VALUE",
+        "operation": "EQ",
+        "rhs": "FALSE"
+      },
+      "actions": [
+        {
+          "description": "Request and apply a new permanent license key."
+        }
+      ],
+      "references": [
+        "https://me.sap.com/notes/1644792"
+      ]
+    }
+  ]
+}

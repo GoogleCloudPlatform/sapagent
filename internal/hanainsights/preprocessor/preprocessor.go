@@ -66,6 +66,11 @@ var (
 		"rules/scaleout/r_os_kernel_check.json",
 		"rules/performance/r_stacksize_parameter.json",
 		"rules/ha_dr/r_logshipping_max_retention_size.json",
+		"rules/performance/r_parallel_merge_threads_check.json",
+		"rules/performance/r_gc_unusedmemory_threshold_check.json",
+		"rules/performance/r_max_cpuload_for_parallel_merge_check.json",
+		"rules/maintenance/r_license_check.json",
+		"rules/maintenance/r_logmode_check.json",
 	}
 
 	// CountPattern regex is used to identify possible matches in the trigger condition using count()

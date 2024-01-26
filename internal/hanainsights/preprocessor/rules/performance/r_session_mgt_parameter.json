@@ -6,6 +6,11 @@
   ],
   "queries": [
     {
+      "name": "q_session_mgt_count",
+      "sql": "SELECT count(*) as VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'indexserver.ini' AND SECTION= 'session' AND KEY = 'itab_initial_buffer_size'",
+      "columns": ["VALUE"]
+    },
+    {
       "name": "q_session_mgt_parameter",
       "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'indexserver.ini' AND SECTION= 'session' AND KEY = 'itab_initial_buffer_size'",
       "columns": ["VALUE"]
@@ -15,9 +20,19 @@
     {
       "id": "rec_1",
       "trigger": {
-        "lhs": "q_session_mgt_parameter:VALUE",
-        "operation": "NE",
-        "rhs": "1126400"
+        "operation" : "OR",
+            "child_evals": [
+              {
+                "lhs": "q_session_mgt_parameter:VALUE",
+                "operation": "NEQ",
+                "rhs": "1126400"
+              },
+              {
+                "operation" : "GT",
+                "lhs" : "q_session_mgt_count:VALUE",
+                "rhs" : "0"
+              }
+            ]
       },
       "actions": [
         {

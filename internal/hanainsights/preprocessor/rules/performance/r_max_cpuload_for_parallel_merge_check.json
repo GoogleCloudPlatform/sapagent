@@ -1,0 +1,67 @@
+{
+  "id": "r_max_cpuload_for_parallel_merge_check",
+  "description": "Checks for appropriate configuration of the max_cpuload_for_parallel_merge parameter in SAP HANA environments.",
+  "labels":
+  [
+    "performance"
+  ],
+  "queries":
+  [
+    {
+      "name": "q_param_count_check",
+      "sql": "SELECT count(*) as VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND SECTION='mergedog' AND KEY='max_cpuload_for_parallel_merge'",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_max_cpuload_check",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND SECTION='mergedog' AND KEY='max_cpuload_for_parallel_merge' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "columns": ["VALUE"]
+    },
+    {
+      "name": "q_resource_wait_check",
+      "sql": "select count(*) AS VALUE FROM M_DELTA_MERGE_STATISTICS where RESOURCE_WAIT_TIME > 0",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations":
+  [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "operation" : "AND",
+         "child_evals" : [
+           {
+             "lhs": "q_resource_wait_check:VALUE",
+             "operation": "GT",
+             "rhs": "0"
+           },
+           {
+            "operation" : "OR",
+            "child_evals": [
+              {
+                "operation" : "EQ",
+                "lhs" : "q_param_count_check:VALUE",
+                "rhs" : "0"
+              },
+              {
+                "operation" : "LT",
+                "lhs" : "q_max_cpuload_check:VALUE",
+                "rhs" : "80"
+              }
+            ]
+          }
+            ]
+      },
+      "actions":
+      [
+        {
+          "description": "The max_cpuload_for_parallel_merge parameter is set to a value lower than the recommended (80). Monitor CPU usage closely to ensure it's not causing contention or impacting other workloads. Adjust the value as needed to find the optimal balance for your system."
+        }
+      ],
+      "references":
+      [
+        "https://me.sap.com/notes/2057046 - FAQ: SAP HANA Delta Merges"
+      ]
+    }
+  ]
+}
