@@ -39,6 +39,9 @@ type RecoverableRoutine struct {
 
 // StartRoutine starts a routine and retries if it panics, following the assigned backoff policy.
 func (r *RecoverableRoutine) StartRoutine(ctx context.Context) {
+	if r.Backoff == nil {
+		r.Backoff = backoff.NewExponentialBackOff()
+	}
 	go backoff.Retry(func() (err error) {
 		defer func() {
 			if p := recover(); p != nil {

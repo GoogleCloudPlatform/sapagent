@@ -96,6 +96,8 @@ const (
 	ReliabilityQueryFailure
 	ReliabilityWriteFileFailure
 	ReliabilityBucketUploadFailure
+	DiscoverSapInstanceFailure
+	DiscoverSapSystemFailure
 )
 
 // Agent wide action mappings.

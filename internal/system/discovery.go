@@ -27,17 +27,87 @@ import (
 	"time"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	backoff "github.com/cenkalti/backoff/v4"
 	logging "cloud.google.com/go/logging"
 	"golang.org/x/exp/slices"
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/encoding/protojson"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+// Discovery is a type used to perform SAP System discovery operations.
+type Discovery struct {
+	WlmService              wlmInterface
+	CloudLogInterface       cloudLogInterface
+	CloudDiscoveryInterface cloudDiscoveryInterface
+	HostDiscoveryInterface  hostDiscoveryInterface
+	SapDiscoveryInterface   sapDiscoveryInterface
+	AppsDiscovery           func(context.Context) *sappb.SAPInstances
+	systems                 []*spb.SapDiscovery
+	systemMu                sync.Mutex
+	sapInstances            *sappb.SAPInstances
+	sapMu                   sync.Mutex
+}
+
+// GetSAPSystems returns the current list of SAP Systems discovered on the current host.
+func (d *Discovery) GetSAPSystems() []*spb.SapDiscovery {
+	d.systemMu.Lock()
+	defer d.systemMu.Unlock()
+	return d.systems
+}
+
+// GetSAPInstances returns the current list of SAP Instances discovered on the current host.
+func (d *Discovery) GetSAPInstances() *sappb.SAPInstances {
+	d.sapMu.Lock()
+	defer d.sapMu.Unlock()
+	return d.sapInstances
+}
+
+// StartSAPSystemDiscovery Initializes the discovery object and starts the discovery subroutine.
+// Returns true if the discovery goroutine is started, and false otherwise.
+func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) bool {
+
+	sapInstancesRoutine := &recovery.RecoverableRoutine{
+		Routine:             updateSAPInstances,
+		RoutineArg:          updateSapInstancesArgs{config, d},
+		ErrorCode:           usagemetrics.DiscoverSapInstanceFailure,
+		ExpectedMinDuration: 5 * time.Second,
+	}
+	sapInstancesRoutine.StartRoutine(ctx)
+
+	// Ensure SAP instances is populated before starting system discovery
+	backoff.Retry(func() error {
+		if d.GetSAPInstances() != nil {
+			return nil
+		}
+		return fmt.Errorf("SAP Instances not ready yet")
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second), 120))
+
+	systemDiscoveryRoutine := &recovery.RecoverableRoutine{
+		Routine:             runDiscovery,
+		RoutineArg:          runDiscoveryArgs{config, d},
+		ErrorCode:           usagemetrics.DiscoverSapSystemFailure,
+		ExpectedMinDuration: 10 * time.Second,
+	}
+
+	systemDiscoveryRoutine.StartRoutine(ctx)
+
+	// Ensure systems are populated before returning
+	backoff.Retry(func() error {
+		if d.GetSAPSystems() != nil {
+			return nil
+		}
+		return fmt.Errorf("SAP Systems not ready yet")
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second), 120))
+	return true
+}
 
 type cloudLogInterface interface {
 	Log(e logging.Entry)
@@ -77,34 +147,6 @@ func removeDuplicates(res []*spb.SapDiscovery_Resource) []*spb.SapDiscovery_Reso
 		}
 	}
 	return out
-}
-
-// Discovery is a type used to perform SAP System discovery operations.
-type Discovery struct {
-	WlmService              wlmInterface
-	CloudLogInterface       cloudLogInterface
-	CloudDiscoveryInterface cloudDiscoveryInterface
-	HostDiscoveryInterface  hostDiscoveryInterface
-	SapDiscoveryInterface   sapDiscoveryInterface
-	AppsDiscovery           func(context.Context) *sappb.SAPInstances
-	systems                 []*spb.SapDiscovery
-	systemMu                sync.Mutex
-	sapInstances            *sappb.SAPInstances
-	sapMu                   sync.Mutex
-}
-
-// GetSAPSystems returns the current list of SAP Systems discovered on the current host.
-func (d *Discovery) GetSAPSystems() []*spb.SapDiscovery {
-	d.systemMu.Lock()
-	defer d.systemMu.Unlock()
-	return d.systems
-}
-
-// GetSAPInstances returns the current list of SAP Instances discovered on the current host.
-func (d *Discovery) GetSAPInstances() *sappb.SAPInstances {
-	d.sapMu.Lock()
-	defer d.sapMu.Unlock()
-	return d.sapInstances
 }
 
 func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadmanager.SapDiscoveryResource {
@@ -173,31 +215,32 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 	return &workloadmanager.Insight{SapDiscovery: iDiscovery}
 }
 
-// StartSAPSystemDiscovery Initializes the discovery object and starts the discovery subroutine.
-// Returns true if the discovery goroutine is started, and false otherwise.
-func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) bool {
-	go updateSAPInstances(ctx, config, d)
-	// Ensure SAP instances is populated before starting system discovery
-	for d.GetSAPInstances() == nil {
-		time.Sleep(5 * time.Second)
-	}
-	go runDiscovery(ctx, config, d)
-	// Ensure systems are populated before returning
-	for d.GetSAPSystems() == nil {
-		time.Sleep(5 * time.Second)
-	}
-	return true
+type updateSapInstancesArgs struct {
+	config *cpb.Configuration
+	d      *Discovery
 }
 
-func updateSAPInstances(ctx context.Context, config *cpb.Configuration, d *Discovery) {
+type runDiscoveryArgs struct {
+	config *cpb.Configuration
+	d      *Discovery
+}
+
+func updateSAPInstances(ctx context.Context, a any) {
+	var args updateSapInstancesArgs
+	var ok bool
+	if args, ok = a.(updateSapInstancesArgs); !ok {
+		log.CtxLogger(ctx).Warn("args is not of type updateSapInstancesArgs")
+		return
+	}
+
 	log.CtxLogger(ctx).Info("Starting SAP Instances update")
-	updateTicker := time.NewTicker(config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration())
+	updateTicker := time.NewTicker(args.config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration())
 	for {
 		log.CtxLogger(ctx).Info("Updating SAP Instances")
-		sapInst := d.AppsDiscovery(ctx)
-		d.sapMu.Lock()
-		d.sapInstances = sapInst
-		d.sapMu.Unlock()
+		sapInst := args.d.AppsDiscovery(ctx)
+		args.d.sapMu.Lock()
+		args.d.sapInstances = sapInst
+		args.d.sapMu.Unlock()
 
 		select {
 		case <-ctx.Done():
@@ -209,22 +252,28 @@ func updateSAPInstances(ctx context.Context, config *cpb.Configuration, d *Disco
 	}
 }
 
-func runDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) {
-	cp := config.GetCloudProperties()
+func runDiscovery(ctx context.Context, a any) {
+	var args runDiscoveryArgs
+	var ok bool
+	if args, ok = a.(runDiscoveryArgs); !ok {
+		log.CtxLogger(ctx).Warn("args is not of type runDiscoveryArgs")
+		return
+	}
+	cp := args.config.GetCloudProperties()
 	if cp == nil {
 		log.CtxLogger(ctx).Warn("No Metadata Cloud Properties found, cannot collect resource information from the Compute API")
 		return
 	}
 
-	updateTicker := time.NewTicker(config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().AsDuration())
+	updateTicker := time.NewTicker(args.config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().AsDuration())
 	for {
-		sapSystems := d.discoverSAPSystems(ctx, cp)
+		sapSystems := args.d.discoverSAPSystems(ctx, cp)
 
 		locationParts := strings.Split(cp.GetZone(), "-")
 		region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 
 		// Write SAP system discovery data only if sap_system_discovery is enabled.
-		if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
+		if args.config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
 			log.CtxLogger(ctx).Info("Sending systems to WLM API")
 			for _, sys := range sapSystems {
 				// Send System to DW API
@@ -233,15 +282,15 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) 
 				}
 				req.Insight.InstanceId = cp.GetInstanceId()
 
-				err := d.WlmService.WriteInsight(cp.ProjectId, region, req)
+				err := args.d.WlmService.WriteInsight(cp.ProjectId, region, req)
 				if err != nil {
 					log.CtxLogger(ctx).Warnw("Encountered error writing to WLM", "error", err)
 				}
 
-				if d.CloudLogInterface == nil {
+				if args.d.CloudLogInterface == nil {
 					continue
 				}
-				err = d.writeToCloudLogging(sys)
+				err = args.d.writeToCloudLogging(sys)
 				if err != nil {
 					log.CtxLogger(ctx).Warnw("Encountered error writing to cloud logging", "error", err)
 				}
@@ -250,9 +299,9 @@ func runDiscovery(ctx context.Context, config *cpb.Configuration, d *Discovery) 
 
 		log.CtxLogger(ctx).Info("Done SAP System Discovery")
 
-		d.systemMu.Lock()
-		d.systems = sapSystems
-		d.systemMu.Unlock()
+		args.d.systemMu.Lock()
+		args.d.systems = sapSystems
+		args.d.systemMu.Unlock()
 
 		select {
 		case <-ctx.Done():

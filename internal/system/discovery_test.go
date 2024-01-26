@@ -1168,7 +1168,7 @@ func TestUpdateSAPInstances(t *testing.T) {
 				},
 			}
 			ctx, cancel := context.WithCancel(context.Background())
-			go updateSAPInstances(ctx, test.config, d)
+			go updateSAPInstances(ctx, updateSapInstancesArgs{d: d, config: test.config})
 			var oldInstances *sappb.SAPInstances
 			for _, want := range test.wantInstances {
 				// Wait the update time
@@ -1411,7 +1411,7 @@ func TestRunDiscovery(t *testing.T) {
 				HostDiscoveryInterface:  test.testHostDiscovery,
 			}
 			ctx, cancel := context.WithCancel(context.Background())
-			go runDiscovery(ctx, test.config, d)
+			go runDiscovery(ctx, runDiscoveryArgs{config: test.config, d: d})
 
 			var oldSystems []*spb.SapDiscovery
 			for _, want := range test.wantSystems {
