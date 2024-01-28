@@ -423,7 +423,7 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidLogConfig",
 			c: &Configure{
-				logConfig:    "warning",
+				logLevel:     "warning",
 				path:         t.TempDir() + "/configuration.json",
 				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
@@ -441,7 +441,7 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidLogConfig",
 			c: &Configure{
-				logConfig:    "warn",
+				logLevel:     "warn",
 				path:         t.TempDir() + "/configuration.json",
 				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
@@ -1359,7 +1359,7 @@ func TestSetFlags(t *testing.T) {
 	c.SetFlags(fs)
 
 	flags := []string{
-		"feature", "f", "version", "v", "help", "h", "loglevel", "logconfig", "setting", "path",
+		"feature", "f", "version", "v", "help", "h", "loglevel", "setting", "path",
 		"enable", "disable", "showall", "add", "remove", "process-metrics-frequency", "db-frequency",
 		"sample-interval-sec", "query-timeout-sec", "process-metrics-to-skip", "slow-process-metrics-frequency",
 		"heartbeat-frequency", "agent-health-frequency", "agent-metrics-frequency", "workload-validation-metrics-frequency",

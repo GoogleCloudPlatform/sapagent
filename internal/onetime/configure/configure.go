@@ -41,7 +41,7 @@ import (
 
 // Configure has args for backint subcommands.
 type Configure struct {
-	feature, logLevel, logConfig                                    string
+	feature, logLevel                                               string
 	setting, path                                                   string
 	skipMetrics                                                     string
 	validationMetricsFrequency, dbFrequency                         int64
@@ -101,8 +101,7 @@ func (*Configure) Usage() string {
 func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.feature, "feature", "", "The requested feature")
 	fs.StringVar(&c.feature, "f", "", "The requested feature")
-	fs.StringVar(&c.logLevel, "loglevel", "info", "Sets the logging level for a log file")
-	fs.StringVar(&c.logConfig, "logconfig", "", "Sets the logging level for the agent configuration file")
+	fs.StringVar(&c.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.setting, "setting", "", "The requested setting")
 	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
 	fs.Int64Var(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", 0, "Sets the frequency of workload validation metrics collection")
@@ -154,7 +153,7 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
-	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore(c.logLevel))
+	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore("info"))
 
 	if c.path == "" {
 		c.path = configuration.LinuxConfigPath
@@ -207,7 +206,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 		featureStatus[sapDiscovery] = false
 	}
 
-	log.CtxLogger(ctx).Debug("Feature status: ", featureStatus)
+	log.CtxLogger(ctx).Info("Feature status: ", featureStatus)
 	return featureStatus
 }
 
@@ -250,7 +249,7 @@ func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
 
 // modifyConfig takes user input and enables/disables features in configuration.json and restarts the agent.
 func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadConfigFile) subcommands.ExitStatus {
-	log.Logger.Debugw("Beginning execution of features command")
+	log.Logger.Infow("Beginning execution of features command")
 	config := configuration.Read(c.path, read)
 	if config == nil {
 		log.CtxLogger(ctx).Error("Unable to read configuration.json")
@@ -258,13 +257,13 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 	}
 
 	isCmdValid := false
-	if len(c.logConfig) > 0 {
-		if _, ok := loglevels[c.logConfig]; !ok {
+	if len(c.logLevel) > 0 {
+		if _, ok := loglevels[c.logLevel]; !ok {
 			onetime.LogMessageToFileAndConsole("Invalid log level. Please use [debug, info, warn, error]")
 			return subcommands.ExitUsageError
 		}
 		isCmdValid = true
-		config.LogLevel = loglevels[c.logConfig]
+		config.LogLevel = loglevels[c.logLevel]
 	}
 
 	if len(c.feature) > 0 {
@@ -345,7 +344,7 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 		}
 
 		if len(c.skipMetrics) > 0 {
-			log.CtxLogger(ctx).Debug("Skip Metrics: ", c.skipMetrics)
+			log.CtxLogger(ctx).Info("Skip Metrics: ", c.skipMetrics)
 			if !c.add && !c.remove {
 				onetime.LogMessageToFileAndConsole("Please choose to add or remove given list of process metrics.")
 				return subcommands.ExitUsageError
@@ -526,7 +525,7 @@ func writeFile(ctx context.Context, config *cpb.Configuration, path string) erro
 
 	var fileBuf bytes.Buffer
 	json.Indent(&fileBuf, file, "", "  ")
-	log.CtxLogger(ctx).Debug("Config file before writing: ", fileBuf.String())
+	log.CtxLogger(ctx).Info("Config file before writing: ", fileBuf.String())
 
 	err = os.WriteFile(path, fileBuf.Bytes(), 0644)
 	if err != nil {
@@ -599,7 +598,7 @@ func restartAgent(ctx context.Context) subcommands.ExitStatus {
 	}
 
 	if strings.Contains(result.StdOut, "running") {
-		log.CtxLogger(ctx).Debug("Restarted the agent")
+		log.CtxLogger(ctx).Info("Restarted the agent")
 		return subcommands.ExitSuccess
 	}
 	log.Print("Could not restart the agent")
