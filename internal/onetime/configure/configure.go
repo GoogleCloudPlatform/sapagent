@@ -90,19 +90,17 @@ func (*Configure) Synopsis() string {
 
 // Usage implements the subcommand interface for features.
 func (*Configure) Usage() string {
-	return `configure --feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_validation>
-	--enable | --disable
-	[--loglevel=<debug|info|warn|error>]
-	[--showall]
-	`
+	return `Usage:
+configure [-feature|-setting] [-options]
+`
 }
 
 // SetFlags implements the subcommand interface for features.
 func (c *Configure) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&c.feature, "feature", "", "The requested feature")
-	fs.StringVar(&c.feature, "f", "", "The requested feature")
+	fs.StringVar(&c.feature, "feature", "", "The requested feature. Values: <host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_validation>")
+	fs.StringVar(&c.feature, "f", "", "The requested feature. Values: <host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_validation>")
 	fs.StringVar(&c.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
-	fs.StringVar(&c.setting, "setting", "", "The requested setting")
+	fs.StringVar(&c.setting, "setting", "", "The requested setting. Values: <bare_metal|log_to_cloud>")
 	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
 	fs.Int64Var(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", 0, "Sets the frequency of workload validation metrics collection")
 	fs.Int64Var(&c.dbFrequency, "db-frequency", 0,
@@ -170,11 +168,11 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 		c.restartAgent = restartAgent
 	}
 
-	res := c.modifyConfig(ctx, os.ReadFile)
+	res := c.modifyConfig(ctx, fs, os.ReadFile)
 	if res == subcommands.ExitSuccess {
 		fmt.Println("Successfully modified configuration.json and restarted the agent.")
 	}
-	return c.modifyConfig(ctx, os.ReadFile)
+	return res
 }
 
 func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
@@ -213,7 +211,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
 	config := configuration.Read(c.path, os.ReadFile)
 	if config == nil {
-		log.CtxLogger(ctx).Error("Unable to read configuration.json")
+		onetime.LogMessageToFileAndConsole("Unable to read configuration.json")
 		return subcommands.ExitFailure
 	}
 
@@ -248,11 +246,11 @@ func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
 }
 
 // modifyConfig takes user input and enables/disables features in configuration.json and restarts the agent.
-func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadConfigFile) subcommands.ExitStatus {
+func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read configuration.ReadConfigFile) subcommands.ExitStatus {
 	log.Logger.Infow("Beginning execution of features command")
 	config := configuration.Read(c.path, read)
 	if config == nil {
-		log.CtxLogger(ctx).Error("Unable to read configuration.json")
+		onetime.LogMessageToFileAndConsole("Unable to read configuration.json")
 		return subcommands.ExitFailure
 	}
 
@@ -267,7 +265,7 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 	}
 
 	if len(c.feature) > 0 {
-		if res := c.modifyFeature(ctx, config); res != subcommands.ExitSuccess {
+		if res := c.modifyFeature(ctx, fs, config); res != subcommands.ExitSuccess {
 			return res
 		}
 		isCmdValid = true
@@ -292,6 +290,10 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 
 	if !isCmdValid {
 		onetime.LogMessageToFileAndConsole("Insufficient flags. Please check usage:\n")
+		// Checking for nil for testing purposes
+		if fs != nil {
+			fs.Usage()
+		}
 		return subcommands.ExitUsageError
 	}
 
@@ -305,7 +307,7 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 
 // modifyFeature takes user input and modifies fields related to a particular feature, which could simply
 // be enabling or disabling the feature or updating frequency values, for instance, of the feature.
-func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration) subcommands.ExitStatus {
+func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config *cpb.Configuration) subcommands.ExitStatus {
 	// var isEnabled any
 	var isEnabled *bool
 	if c.enable || c.disable {
@@ -442,17 +444,13 @@ func (c *Configure) modifyFeature(ctx context.Context, config *cpb.Configuration
 
 	if !isCmdValid {
 		onetime.LogMessageToFileAndConsole("Insufficient flags. Please check usage:\n")
-		log.Print(c.Usage())
+		// Checking for nil for testing purposes
+		if fs != nil {
+			fs.Usage()
+		}
 		return subcommands.ExitUsageError
 	}
 	return subcommands.ExitSuccess
-}
-
-func (c *Configure) returnError(err error) subcommands.ExitStatus {
-	onetime.LogErrorToFileAndConsole("Inappropriate flag values: ", err)
-	log.Print("Please check usage:\n")
-	log.Print(c.Usage())
-	return subcommands.ExitUsageError
 }
 
 // modifyProcessMetricsToSkip modifies 'process_metrics_to_skip' field of the configuration file.

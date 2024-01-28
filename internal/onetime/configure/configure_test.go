@@ -1239,7 +1239,7 @@ func TestModifyConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			writeFile(ctx, test.oldConfig, test.c.path)
-			got := test.c.modifyConfig(ctx, test.readFunc)
+			got := test.c.modifyConfig(ctx, nil, test.readFunc)
 			if got != test.want {
 				t.Errorf("modifyConfig(%v) returned unexpected ExitStatus.\ngot: %v\nwant %v", test.c.path, got, test.want)
 				return
