@@ -141,7 +141,7 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -180,7 +180,7 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 
 	instance, err := p.gceBetaService.GetInstance(project, zone, instName)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not get instance from compute API", "project", project, "zone", zone, "instance", instName, "error", err)
+		log.CtxLogger(ctx).Debugw("Could not get instance from compute API", "project", project, "zone", zone, "instance", instName, "error", err)
 		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not get instance from compute API: %w", err)
 	}
 	if instance.Scheduling == nil || len(instance.Scheduling.NodeAffinities) == 0 {
@@ -192,7 +192,7 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 	if errors.Is(err, ErrNoStamMatch) {
 		return []*mrpb.TimeSeries{}, err
 	} else if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not resolve node", "link", instance.SelfLink, "error", err)
+		log.CtxLogger(ctx).Debugw("Could not resolve node", "link", instance.SelfLink, "error", err)
 		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not resolve node: %w", err)
 	}
 	if n.UpcomingMaintenance == nil {

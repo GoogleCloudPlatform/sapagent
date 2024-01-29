@@ -174,7 +174,7 @@ func (p *Properties) createTSList(ctx context.Context, pid string, reqMetrics []
 			val, err = strconv.ParseInt(ssMap[metric], 10, 64)
 		}
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("error in parsing value", "could not convert value to type:", t, "metric:", metric, "Val: ", ssMap[metric], "err: ", err)
+			log.CtxLogger(ctx).Debugw("error in parsing value", "could not convert value to type:", t, "metric:", metric, "Val: ", ssMap[metric], "err: ", err)
 			return nil, err
 		}
 
@@ -195,7 +195,7 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err

@@ -125,7 +125,7 @@ func collectControlProcesses(ctx context.Context, p parameters) []*ProcessInfo {
 		val = multiSpaceChars.ReplaceAllString(val, " ")
 		pnameAndPid := strings.Split(val, " ")
 		if len(pnameAndPid) != 2 {
-			log.CtxLogger(ctx).Errorw("Could not parse output", "command", cmd+args, "regex", process)
+			log.CtxLogger(ctx).Debugw("Could not parse output", "command", cmd+args, "regex", process)
 			continue
 		}
 		processInfos = append(processInfos, &ProcessInfo{Name: pnameAndPid[0], PID: pnameAndPid[1]})
@@ -135,7 +135,7 @@ func collectControlProcesses(ctx context.Context, p parameters) []*ProcessInfo {
 
 func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessInfo {
 	if p.sapInstance == nil {
-		log.CtxLogger(ctx).Error("Error getting ProcessList in computeresources, no sapInstance set.")
+		log.CtxLogger(ctx).Debug("Error getting ProcessList in computeresources, no sapInstance set.")
 		return nil
 	}
 
@@ -148,7 +148,7 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 	scc := p.SAPControlClient
 	processes, err = sc.GetProcessList(ctx, scc)
 	if err != nil {
-		log.CtxLogger(ctx).Error("Error performing GetProcessList web method in computeresources", log.Error(err))
+		log.CtxLogger(ctx).Debug("Error performing GetProcessList web method in computeresources", log.Error(err))
 	}
 	wpDetails, err := sc.ABAPGetWPTable(ctx, scc)
 	if err != nil {
@@ -172,12 +172,12 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Could not parse PID", "pid", processInfo.PID, "process", processInfo.Name, "error", err)
+			log.CtxLogger(ctx).Debugw("Could not parse PID", "pid", processInfo.PID, "process", processInfo.Name, "error", err)
 			continue
 		}
 		proc, err := newProc(ctx, p.newProc, int32(pid))
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
+			log.CtxLogger(ctx).Debugw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
 			metricsCollectionErr = err
 			continue
 		}
@@ -186,7 +186,7 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 		}
 		cpuusage, err := proc.CPUPercentWithContext(ctx)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Could not get process CPU stats", "pid", pid, "error", err)
+			log.CtxLogger(ctx).Debugw("Could not get process CPU stats", "pid", pid, "error", err)
 			metricsCollectionErr = err
 			continue
 		}

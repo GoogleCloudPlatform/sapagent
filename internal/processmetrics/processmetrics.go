@@ -429,7 +429,7 @@ func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAP
 
 			instance.HanaDbUser, instance.HanaDbPassword, err = sapdiscovery.ReadHANACredentials(ctx, projectID, hanaConfig, params.GCEService)
 			if err != nil {
-				log.CtxLogger(ctx).Warnw("HANA DB Credentials not set, will not collect HANA DB Query related metrics.", "error", err)
+				log.CtxLogger(ctx).Infow("HANA DB Credentials not set, will not collect HANA DB Query related metrics.", "error", err)
 			}
 		}
 	}

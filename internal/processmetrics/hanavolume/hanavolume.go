@@ -73,7 +73,7 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	})
 
 	if result.Error != nil {
-		log.CtxLogger(ctx).Warnw("could not execute df -h command", "error", result.Error)
+		log.CtxLogger(ctx).Debugw("could not execute df -h command", "error", result.Error)
 		return nil, result.Error
 	}
 
@@ -88,7 +88,7 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -112,7 +112,7 @@ func (p *Properties) createTSList(ctx context.Context, cmdOutput string) []*mrpb
 		}
 		if path, ok := mountPaths[items[len(items)-1]]; ok {
 			if len(items) < 6 {
-				log.CtxLogger(ctx).Warnw("too few items. need exactly 6", "length:", len(items), "line:", line)
+				log.CtxLogger(ctx).Debugw("too few items. need exactly 6", "length:", len(items), "line:", line)
 				continue
 			}
 			size := items[1]

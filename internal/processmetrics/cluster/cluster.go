@@ -105,7 +105,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
-		log.CtxLogger(ctx).Errorw("Failure in reading crm_mon data from pacemaker", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failure in reading crm_mon data from pacemaker", log.Error(err))
 		return metrics, err
 	}
 	// TODO: Test actual timeseries in unit test instead of returning an extra int.
@@ -143,7 +143,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -167,7 +167,7 @@ func collectNodeState(ctx context.Context, p *InstanceProperties, read readPacem
 	now := tspb.Now()
 	nodeState, err := read(crm)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Failure in reading pacemaker node state", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failure in reading pacemaker node state", log.Error(err))
 		return nil, nil, err
 	}
 
@@ -197,7 +197,7 @@ func collectResourceState(ctx context.Context, p *InstanceProperties, read readP
 	now := tspb.Now()
 	resourceState, err := read(crm)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Failure in reading pacemaker resource state", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failure in reading pacemaker resource state", log.Error(err))
 		return nil, nil, err
 	}
 

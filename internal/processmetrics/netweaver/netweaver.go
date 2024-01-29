@@ -183,7 +183,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -207,7 +207,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	)
 	procs, err = sc.GetProcessList(ctx, scc)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error performing GetProcessList web method", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Error performing GetProcessList web method", log.Error(err))
 		return nil, err
 	}
 	metrics := collectServiceMetrics(ctx, p, procs, now)

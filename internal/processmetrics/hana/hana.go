@@ -146,7 +146,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Error in Collection", "attempt", attempt, "error", err)
+			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -213,7 +213,7 @@ func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec co
 	}
 	queryState, err := runHANAQuery(ctx, p, exec)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error in running query", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Error in running query", log.Error(err))
 		// Return a non-zero state in case of query failure.
 		// Not following the convention of process metrics here because if we return the error here
 		// query state metric will never get collected in an error state which can mask failures.
@@ -242,7 +242,7 @@ func runHANAQuery(ctx context.Context, p *InstanceProperties, exec commandlineex
 		ArgsToSplit: args,
 		User:        p.SAPInstance.GetUser(),
 	})
-	log.CtxLogger(ctx).Errorw("HANA query command returned", "sql", hdbsql, "stdout", result.StdOut, "stderror", result.StdErr, "state", result.ExitCode, "err", result.Error)
+	log.CtxLogger(ctx).Debugw("HANA query command returned", "sql", hdbsql, "stdout", result.StdOut, "stderror", result.StdErr, "state", result.ExitCode, "err", result.Error)
 	if strings.Contains(result.StdErr, "authentication failed") {
 		p.HANAQueryFailCount++
 	}
