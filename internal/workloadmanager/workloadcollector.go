@@ -81,6 +81,7 @@ type sendMetricsParams struct {
 var (
 	now               = currentTime
 	dailyUsageRoutine *recovery.RecoverableRoutine
+	collectRoutine    *recovery.RecoverableRoutine
 )
 
 const metricOverridePath = "/etc/google-cloud-sap-agent/wlmmetricoverride.yaml"
@@ -90,7 +91,14 @@ func currentTime() int64 {
 	return time.Now().Unix()
 }
 
-func start(ctx context.Context, params Parameters) {
+func start(ctx context.Context, a any) {
+	var params Parameters
+	if v, ok := a.(Parameters); ok {
+		params = v
+	} else {
+		log.CtxLogger(ctx).Info("Cannot collect Workload Manager metrics, no collection configuration detected")
+		return
+	}
 	log.CtxLogger(ctx).Info("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
 	cmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 	if cmf <= 0 {
@@ -190,7 +198,13 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 		dailyUsageRoutine.RoutineArg = usagemetrics.CollectWLMMetrics
 	}
 	dailyUsageRoutine.StartRoutine(ctx)
-	go start(ctx, params)
+	collectRoutine = &recovery.RecoverableRoutine{
+		Routine:             start,
+		RoutineArg:          params,
+		ErrorCode:           usagemetrics.WLMCollectionRoutineFailure,
+		ExpectedMinDuration: 10 * time.Second,
+	}
+	collectRoutine.StartRoutine(ctx)
 	return true
 }
 
