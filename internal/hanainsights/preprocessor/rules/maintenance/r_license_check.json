@@ -2,7 +2,7 @@
   "id": "r_license_check",
   "description": "Provides information about the current SAP HANA license status.",
   "labels": [
-    "scaleout"
+    "maintenance"
   ],
   "queries": [
     {
