@@ -34,6 +34,7 @@ import (
 
 	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -78,7 +79,8 @@ type sendMetricsParams struct {
 }
 
 var (
-	now = currentTime
+	now               = currentTime
+	dailyUsageRoutine *recovery.RecoverableRoutine
 )
 
 const metricOverridePath = "/etc/google-cloud-sap-agent/wlmmetricoverride.yaml"
@@ -173,11 +175,21 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 		log.CtxLogger(ctx).Info("Cannot collect Workload Manager metrics, no collection configuration detected")
 		return false
 	}
-	if params.Remote {
-		go usagemetrics.LogActionDaily(usagemetrics.RemoteWLMMetricsCollection)
-	} else {
-		go usagemetrics.LogActionDaily(usagemetrics.CollectWLMMetrics)
+	dailyUsageRoutine = &recovery.RecoverableRoutine{
+		Routine: func(_ context.Context, a any) {
+			if v, ok := a.(int); ok {
+				usagemetrics.LogActionDaily(v)
+			}
+		},
+		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		ExpectedMinDuration: 24 * time.Hour,
 	}
+	if params.Remote {
+		dailyUsageRoutine.RoutineArg = usagemetrics.RemoteWLMMetricsCollection
+	} else {
+		dailyUsageRoutine.RoutineArg = usagemetrics.CollectWLMMetrics
+	}
+	dailyUsageRoutine.StartRoutine(ctx)
 	go start(ctx, params)
 	return true
 }
