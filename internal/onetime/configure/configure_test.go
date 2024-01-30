@@ -1372,44 +1372,6 @@ func TestSetFlags(t *testing.T) {
 	}
 }
 
-func TestSnakeMarshal(t *testing.T) {
-	tests := []struct {
-		name   string
-		config *cpb.Configuration
-		want   []byte
-	}{
-		{
-			name: "SampleConfig1",
-			config: &cpb.Configuration{
-				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
-			},
-			want: []byte(`{"provide_sap_host_agent_metrics":true}`),
-		},
-		{
-			name: "SampleConfig2",
-			config: &cpb.Configuration{
-				CollectionConfiguration: &cpb.CollectionConfiguration{
-					AgentMetricsFrequency: 23,
-				},
-			},
-			want: []byte(`{"collection_configuration":{"agent_metrics_frequency":"23"}}`),
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := snakeMarshal(tc.config)
-			if err != nil {
-				t.Fatalf("snakeMarshal(%v) returned an unexpected error: %v", tc.config, err)
-			}
-
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("snakeMarshal(%v) returned an unexpected diff (-want +got):\n%v", tc.config, diff)
-			}
-		})
-	}
-}
-
 func TestShowFeatures(t *testing.T) {
 	tests := []struct {
 		name   string

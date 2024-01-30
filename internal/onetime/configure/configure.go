@@ -74,8 +74,6 @@ var (
 		"error": cpb.Configuration_ERROR,
 	}
 	spaces           = regexp.MustCompile(`\s+`)
-	keyMatchRegex    = regexp.MustCompile(`"(\w+)":`)
-	wordBarrierRegex = regexp.MustCompile(`(\w)([A-Z])`)
 )
 
 // Name implements the subcommand interface for features.
@@ -496,26 +494,8 @@ func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcom
 	return subcommands.ExitSuccess
 }
 
-func snakeMarshal(config *cpb.Configuration) ([]byte, error) {
-	camelCaseFile, err := protojson.Marshal(config)
-	if err != nil {
-		return nil, err
-	}
-	snakeCaseFile := keyMatchRegex.ReplaceAllFunc(
-		camelCaseFile,
-		func(match []byte) []byte {
-			return bytes.ToLower(wordBarrierRegex.ReplaceAll(
-				match,
-				[]byte(`${1}_${2}`),
-			))
-		},
-	)
-
-	return snakeCaseFile, nil
-}
-
 func writeFile(ctx context.Context, config *cpb.Configuration, path string) error {
-	file, err := snakeMarshal(config)
+	file, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(config)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Unable to marshal configuration.json")
 		return err
