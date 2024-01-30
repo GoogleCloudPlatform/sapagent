@@ -226,31 +226,56 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	var system, corosync, hana, netweaver, pacemaker, custom WorkloadMetrics
 	var wg sync.WaitGroup
 	wg.Add(5)
-	go func() {
-		defer wg.Done()
-		system = CollectSystemMetricsFromConfig(ctx, params)
-	}()
-	go func() {
-		defer wg.Done()
-		hana = CollectHANAMetricsFromConfig(ctx, params)
-	}()
-	go func() {
-		defer wg.Done()
-		netweaver = CollectNetWeaverMetricsFromConfig(ctx, params)
-	}()
-	go func() {
-		defer wg.Done()
-		pacemaker = CollectPacemakerMetricsFromConfig(ctx, params)
-		v := 0.0
-		if len(pacemaker.Metrics) > 0 && len(pacemaker.Metrics[0].Points) > 0 {
-			v = pacemaker.Metrics[0].Points[0].GetValue().GetDoubleValue()
-		}
-		corosync = CollectCorosyncMetricsFromConfig(ctx, params, v)
-	}()
-	go func() {
-		defer wg.Done()
-		custom = CollectCustomMetricsFromConfig(ctx, params)
-	}()
+	systemMetricsRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			defer wg.Done()
+			system = CollectSystemMetricsFromConfig(ctx, params)
+		},
+		ErrorCode:           usagemetrics.WLMCollectionSystemRoutineFailure,
+		ExpectedMinDuration: 5 * time.Second,
+	}
+	systemMetricsRoutine.StartRoutine(ctx)
+	hanaMetricsRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			defer wg.Done()
+			hana = CollectHANAMetricsFromConfig(ctx, params)
+		},
+		ErrorCode:           usagemetrics.WLMCollectionHANARoutineFailure,
+		ExpectedMinDuration: 5 * time.Second,
+	}
+	hanaMetricsRoutine.StartRoutine(ctx)
+	netweaverMetricsRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			defer wg.Done()
+			netweaver = CollectNetWeaverMetricsFromConfig(ctx, params)
+		},
+		ErrorCode:           usagemetrics.WLMCollectionNetweaverRoutineFailure,
+		ExpectedMinDuration: 5 * time.Second,
+	}
+	netweaverMetricsRoutine.StartRoutine(ctx)
+	pacemakerMetricsRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			defer wg.Done()
+			pacemaker = CollectPacemakerMetricsFromConfig(ctx, params)
+			v := 0.0
+			if len(pacemaker.Metrics) > 0 && len(pacemaker.Metrics[0].Points) > 0 {
+				v = pacemaker.Metrics[0].Points[0].GetValue().GetDoubleValue()
+			}
+			corosync = CollectCorosyncMetricsFromConfig(ctx, params, v)
+		},
+		ErrorCode:           usagemetrics.WLMCollectionPacemakerRoutineFailure,
+		ExpectedMinDuration: 5 * time.Second,
+	}
+	pacemakerMetricsRoutine.StartRoutine(ctx)
+	customMetricsRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			defer wg.Done()
+			custom = CollectCustomMetricsFromConfig(ctx, params)
+		},
+		ErrorCode:           usagemetrics.WLMCollectionCustomRoutineFailure,
+		ExpectedMinDuration: 5 * time.Second,
+	}
+	customMetricsRoutine.StartRoutine(ctx)
 	wg.Wait()
 
 	// Append the system metrics to all other metrics.

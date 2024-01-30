@@ -104,6 +104,11 @@ const (
 	CollectFastMetrcsRoutineFailure
 	HeartbeatRoutineFailure
 	WLMCollectionRoutineFailure
+	WLMCollectionSystemRoutineFailure
+	WLMCollectionHANARoutineFailure
+	WLMCollectionNetweaverRoutineFailure
+	WLMCollectionPacemakerRoutineFailure
+	WLMCollectionCustomRoutineFailure
 )
 
 // Agent wide action mappings.
