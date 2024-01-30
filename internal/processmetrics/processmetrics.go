@@ -484,23 +484,37 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 	}
 }
 
+type collectFastMetricsRoutineArgs struct {
+	c    Collector
+	slot int
+}
+
 func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
 	var wg sync.WaitGroup
 	msgs := make([][]*mrpb.TimeSeries, len(p.FastMovingCollectors))
 	defer (func() { msgs = nil })() // free up reference in memory.
 	log.CtxLogger(ctx).Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.Collectors))
-
+	var routines []*recovery.RecoverableRoutine
 	for i, collector := range p.FastMovingCollectors {
 		wg.Add(1)
-		go func(slot int, c Collector) {
-			defer wg.Done()
-			var err error
-			msgs[slot], err = c.CollectWithRetry(ctx) // Each collector writes to its own slot.
-			if err != nil {
-				log.CtxLogger(ctx).Errorw("Error collecting fast moving metrics", "error", err)
-			}
-			log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[slot]))
-		}(i, collector)
+		r := &recovery.RecoverableRoutine{
+			Routine: func(ctx context.Context, a any) {
+				defer wg.Done()
+				if args, ok := a.(collectFastMetricsRoutineArgs); ok {
+					var err error
+					msgs[args.slot], err = args.c.CollectWithRetry(ctx) // Each collector writes to its own slot.
+					if err != nil {
+						log.CtxLogger(ctx).Errorw("Error collecting fast moving metrics", "error", err)
+					}
+					log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[args.slot]))
+				}
+			},
+			RoutineArg:          collectFastMetricsRoutineArgs{c: collector, slot: i},
+			ErrorCode:           usagemetrics.CollectFastMetrcsRoutineFailure,
+			ExpectedMinDuration: time.Second,
+		}
+		routines = append(routines, r)
+		r.StartRoutine(ctx)
 	}
 	log.CtxLogger(ctx).Debug("Waiting for fast moving collectors to finish.")
 	wg.Wait()
