@@ -42,6 +42,9 @@ message SapDiscovery {
   // The GCP project number that this SapSystem belongs to.
   string project_number = 6;
 
+  // The properties of the workload.
+  WorkloadProperties workload_properties = 7;
+
   // Message describing SAP discovery system metadata
   message Metadata {
     // Customer defined, something like "E-commerce pre prod"
@@ -205,5 +208,30 @@ message SapDiscovery {
     // A list of host URIs that are part of the HA configuration if present.
     // An empty list indicates the component is not configured for HA.
     repeated string ha_hosts = 7;
+  }
+
+  // A set of properties describing an SAP workload.
+  message WorkloadProperties {
+    // A product name and version.
+    message ProductVersion {
+      string name = 1;
+      string version = 2;
+    }
+    // List of SAP Products and their versions running on the system.
+    repeated ProductVersion product_versions = 1;
+    // A SAP software component name, version, and type.
+    message SoftwareComponentProperties {
+      // Name of the component.
+      string name = 1;
+      // The component's major version.
+      string version = 2;
+      // The component's minor version.
+      string ext_version = 3;
+      // The component's type.
+      string type = 4;
+    }
+    // A list of SAP software components and their versions running on the
+    // system.
+    repeated SoftwareComponentProperties software_component_versions = 2;
   }
 }
