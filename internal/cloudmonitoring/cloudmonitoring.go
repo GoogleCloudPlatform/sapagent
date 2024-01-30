@@ -146,7 +146,7 @@ func LongExponentialBackOffPolicy(ctx context.Context, initial time.Duration, re
 	exp.InitialInterval = initial
 	exp.MaxInterval = maxInterval
 	exp.MaxElapsedTime = maxElapsedTime
-	log.CtxLogger(ctx).Info("LongExponentialBackOffPolicy", "exp", exp)
+	log.CtxLogger(ctx).Debug("LongExponentialBackOffPolicy", "exp", exp)
 	return backoff.WithContext(backoff.WithMaxRetries(exp, retries), ctx)
 }
 
@@ -157,7 +157,7 @@ func LongExponentialBackOffPolicyForProcessMetrics(ctx context.Context, initial 
 	exp.MaxInterval = maxInterval
 	exp.MaxElapsedTime = maxElapsedTime
 	exp.Multiplier = 2
-	log.CtxLogger(ctx).Info("LongExponentialBackOffPolicyForProcessMetrics", "exp", exp)
+	log.CtxLogger(ctx).Debug("LongExponentialBackOffPolicyForProcessMetrics", "exp", exp)
 	return backoff.WithContext(backoff.WithMaxRetries(exp, retries), ctx)
 }
 
