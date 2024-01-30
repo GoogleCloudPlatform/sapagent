@@ -25,7 +25,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
@@ -35,7 +34,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/memorymetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/osmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -60,6 +61,9 @@ type hostMetricsReaders struct {
 
 var (
 	metricsXML string = "<metrics></metrics>"
+
+	httpServerRoutine         *recovery.RecoverableRoutine
+	collectHostMetricsRoutine *recovery.RecoverableRoutine
 )
 
 func requestHandler(w http.ResponseWriter, r *http.Request) {
@@ -74,13 +78,34 @@ func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, p
 		log.CtxLogger(ctx).Info("Not providing SAP Host Agent metrics")
 		return false
 	}
-	go runHTTPServer(ctx, cancel)
-	go collectHostMetrics(ctx, params)
+	httpServerRoutine = &recovery.RecoverableRoutine{
+		Routine:             runHTTPServer,
+		RoutineArg:          cancel,
+		ErrorCode:           usagemetrics.HostMetricsHTTPServerRoutineFailure,
+		ExpectedMinDuration: time.Minute,
+	}
+	httpServerRoutine.StartRoutine(ctx)
+
+	collectHostMetricsRoutine = &recovery.RecoverableRoutine{
+		Routine:             collectHostMetrics,
+		RoutineArg:          params,
+		ErrorCode:           usagemetrics.HostMetricsCollectionRoutineFailure,
+		ExpectedMinDuration: time.Minute,
+	}
+	collectHostMetricsRoutine.StartRoutine(ctx)
+
 	return true
 }
 
 // runHTTPServer starts an HTTP server on localhost:18181 that stays alive forever.
-func runHTTPServer(ctx context.Context, cancel context.CancelFunc) {
+func runHTTPServer(ctx context.Context, a any) {
+	var cancel context.CancelFunc
+	if v, ok := a.(context.CancelFunc); ok {
+		cancel = v
+	} else {
+		log.CtxLogger(ctx).Info("Host Metrics Context arg is not a context.CancelFunc")
+		return
+	}
 	http.HandleFunc("/", requestHandler)
 	if err := http.ListenAndServe("localhost:18181", nil); err != nil {
 		usagemetrics.Error(usagemetrics.LocalHTTPListenerCreateFailure) // Could not create HTTP listener
@@ -93,7 +118,14 @@ func runHTTPServer(ctx context.Context, cancel context.CancelFunc) {
 }
 
 // collectHostMetrics continuously collects metrics for the SAP Host Agent.
-func collectHostMetrics(ctx context.Context, params Parameters) {
+func collectHostMetrics(ctx context.Context, a any) {
+	var params Parameters
+	if v, ok := a.(Parameters); ok {
+		params = v
+	} else {
+		log.CtxLogger(ctx).Info("Host Metrics Parameters arg is not a Parameters")
+		return
+	}
 
 	readers := hostMetricsReaders{
 		configmr: &configurationmetricreader.ConfigMetricReader{runtime.GOOS},

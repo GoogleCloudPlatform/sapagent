@@ -104,6 +104,8 @@ const (
 	CollectFastMetrcsRoutineFailure
 	HeartbeatRoutineFailure
 	WLMCollectionRoutineFailure
+	HostMetricsHTTPServerRoutineFailure
+	HostMetricsCollectionRoutineFailure
 	WLMCollectionSystemRoutineFailure
 	WLMCollectionHANARoutineFailure
 	WLMCollectionNetweaverRoutineFailure
