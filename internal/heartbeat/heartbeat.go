@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -60,6 +62,7 @@ type Monitor struct {
 	threshold        int64
 	registrationLock sync.RWMutex
 	runSpec          *runSpec
+	runRoutine       *recovery.RecoverableRoutine
 }
 
 // Parameters aggregates the data required to create and run a Monitor.
@@ -125,11 +128,16 @@ func (m *Monitor) Register(name string) (*Spec, error) {
 
 // Run will begin the asynchronous monitoring of registered services.
 func (m *Monitor) Run(ctx context.Context) {
-	go m.run(ctx)
+	m.runRoutine = &recovery.RecoverableRoutine{
+		Routine:             m.run,
+		ErrorCode:           usagemetrics.HeartbeatRoutineFailure,
+		ExpectedMinDuration: m.frequency,
+	}
+	m.runRoutine.StartRoutine(ctx)
 }
 
 // run will periodically increment the missed heartbeat count for registrants until instructed to stop.
-func (m *Monitor) run(ctx context.Context) {
+func (m *Monitor) run(ctx context.Context, _ any) {
 	ticker := time.NewTicker(m.frequency)
 	defer ticker.Stop()
 	// This is needed so that we can, in effect, set ticker.C = nil.

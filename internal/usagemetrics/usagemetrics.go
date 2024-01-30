@@ -101,6 +101,7 @@ const (
 	UsageMetricsDailyLogError
 	CollectMetricsRoutineFailure
 	SlowMetricsCollectionFailure
+	HeartbeatRoutineFailure
 	WLMCollectionRoutineFailure
 )
 
