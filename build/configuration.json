@@ -4,8 +4,10 @@
   "log_to_cloud": true,
   "collection_configuration": {
     "collect_workload_validation_metrics": false,
-    "collect_process_metrics": false,
-    "sap_system_discovery": true
+    "collect_process_metrics": false
+  },
+  "discovery_configuration": {
+    "enable_discovery": true
   },
   "hana_monitoring_configuration": {
     "enabled": false
