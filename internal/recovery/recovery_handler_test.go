@@ -52,7 +52,7 @@ func testRoutine(ctx context.Context, a any) {
 }
 
 func waitForSignal(ch chan int, signal int, t *testing.T) bool {
-	i := 0
+	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		select {
 		case x := <-ch:
@@ -60,12 +60,8 @@ func waitForSignal(ch chan int, signal int, t *testing.T) bool {
 				t.Errorf("Received unexpected signal. got: %d, want %d", x, signal)
 			}
 			return true
-		default:
-			i++
-			if i >= 100 {
-				return false
-			}
-			time.Sleep(time.Millisecond)
+		case <-ticker.C:
+			return false
 		}
 	}
 }
@@ -179,5 +175,88 @@ func TestRoutineRestarts(t *testing.T) {
 
 			cancel()
 		})
+	}
+}
+
+func routineWithSubroutine(ctx context.Context, a any) {
+	var args routineArgs
+	var ok bool
+	if args, ok = a.(routineArgs); !ok {
+		return
+	}
+	subRoutine := &RecoverableRoutine{
+		Routine:             subroutine,
+		RoutineArg:          args,
+		ErrorCode:           1234,
+		ExpectedMinDuration: time.Nanosecond,
+	}
+	subRoutine.StartRoutine(ctx)
+	args.outCh <- 1
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case x := <-args.inCh:
+			switch x {
+			case 0:
+				return
+			case 1:
+				panic("test panic")
+			}
+			return
+		}
+	}
+}
+
+func subroutine(ctx context.Context, a any) {
+	var args routineArgs
+	var ok bool
+	if args, ok = a.(routineArgs); !ok {
+		return
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			args.outCh <- 10
+			return
+		}
+	}
+}
+
+func TestPanicCancelsSubroutines(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	inCh := make(chan int)
+	outCh := make(chan int)
+
+	r := &RecoverableRoutine{
+		Routine:             routineWithSubroutine,
+		RoutineArg:          routineArgs{inCh: inCh, outCh: outCh},
+		ErrorCode:           1011,
+		ExpectedMinDuration: time.Nanosecond,
+	}
+	r.StartRoutine(ctx)
+	ticker := time.NewTicker(time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			t.Error("Unexpected context done")
+			return
+		case x := <-outCh:
+			if x == 1 {
+				// Routine has started, make it panic.
+				inCh <- 1
+			}
+			if x == 10 {
+				t.Error("Subroutine should not have finished")
+				return
+			}
+		case <-ticker.C:
+			return
+		}
 	}
 }

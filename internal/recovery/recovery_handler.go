@@ -43,22 +43,25 @@ func (r *RecoverableRoutine) StartRoutine(ctx context.Context) {
 		r.Backoff = backoff.NewExponentialBackOff()
 	}
 	go backoff.Retry(func() (err error) {
+		routineCtx, cancel := context.WithCancel(ctx)
 		defer func() {
 			if p := recover(); p != nil {
 				n := time.Now()
-				log.CtxLogger(ctx).Debugf("Checking if routine failed too quickly: %v ? %v, %v", r.lastRestart, n, r.ExpectedMinDuration)
+				log.CtxLogger(routineCtx).Debugf("Checking if routine failed too quickly: %v ? %v, %v", r.lastRestart, n, r.ExpectedMinDuration)
 				if n.Sub(r.lastRestart) >= r.ExpectedMinDuration {
 					// Routine ran long enough, reset the backoff.
-					log.CtxLogger(ctx).Debug("Resetting backoff before restart")
+					log.CtxLogger(routineCtx).Debug("Resetting backoff before restart")
 					r.Backoff.Reset()
 				}
 				err = errors.Errorf("Panic in routine, attempting to recover: %v", r)
 				usagemetrics.Error(r.ErrorCode)
+				// Cancel the context to cancel any subroutines
+				cancel()
 			}
 		}()
-		log.CtxLogger(ctx).Infof("Starting routine: %v", r)
+		log.CtxLogger(routineCtx).Debugw("Starting routine", "routine", r)
 		r.lastRestart = time.Now()
-		r.Routine(ctx, r.RoutineArg)
+		r.Routine(routineCtx, r.RoutineArg)
 		return nil
 	}, r.Backoff)
 }
