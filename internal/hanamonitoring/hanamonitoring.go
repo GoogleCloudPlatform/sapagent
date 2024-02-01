@@ -28,6 +28,7 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -71,10 +72,11 @@ type queryFunc func(ctx context.Context, query string, args ...any) (*sql.Rows, 
 
 // Parameters hold the parameters necessary to invoke Start().
 type Parameters struct {
-	Config            *cpb.Configuration
-	GCEService        gceInterface
-	BackOffs          *cloudmonitoring.BackOffIntervals
-	TimeSeriesCreator cloudmonitoring.TimeSeriesCreator
+	Config              *cpb.Configuration
+	GCEService          gceInterface
+	BackOffs            *cloudmonitoring.BackOffIntervals
+	TimeSeriesCreator   cloudmonitoring.TimeSeriesCreator
+	dailyMetricsRoutine *recovery.RecoverableRoutine
 }
 
 // queryOptions holds parameters for the queryAndSend workflows.
@@ -116,7 +118,14 @@ func Start(ctx context.Context, params Parameters) bool {
 	}
 
 	log.CtxLogger(ctx).Info("Starting HANA Monitoring.")
-	go usagemetrics.LogActionDaily(usagemetrics.CollectHANAMonitoringMetrics)
+	params.dailyMetricsRoutine = &recovery.RecoverableRoutine{
+		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectHANAMonitoringMetrics) },
+		RoutineArg:          nil,
+		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		ExpectedMinDuration: 24 * time.Hour,
+	}
+	params.dailyMetricsRoutine.StartRoutine(ctx)
+
 	go createWorkerPool(ctx, params, databases)
 	return true
 }
