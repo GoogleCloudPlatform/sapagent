@@ -111,6 +111,7 @@ const (
 	WLMCollectionNetweaverRoutineFailure
 	WLMCollectionPacemakerRoutineFailure
 	WLMCollectionCustomRoutineFailure
+	AgentMetricsCollectAndSubmitFailure
 )
 
 // Agent wide action mappings.

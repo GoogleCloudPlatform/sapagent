@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"time"
 
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -30,7 +31,9 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -42,49 +45,57 @@ const (
 	agentHealth = "/sap/agent/health"
 )
 
-// HealthMonitor is anything that can register and monitor entities capable of producing heart beats.
-type HealthMonitor interface {
-	Register(name string) (*heartbeat.Spec, error)
-	GetStatuses() map[string]bool
-}
+type (
+	// HealthMonitor is anything that can register and monitor entities capable of producing heart beats.
+	HealthMonitor interface {
+		Register(name string) (*heartbeat.Spec, error)
+		GetStatuses() map[string]bool
+	}
 
-// Service encapsulates the logic required to collect information on the agent process and to submit the data to cloud monitoring.
-type Service struct {
-	config              *cfgpb.Configuration
-	healthMonitor       HealthMonitor
-	timeSeriesSubmitter timeSeriesSubmitter
-	timeSeriesCreator   cloudmonitoring.TimeSeriesCreator
-	usageReader         usageReader
-	now                 now
-}
+	// Service encapsulates the logic required to collect information on the agent process and to submit the data to cloud monitoring.
+	Service struct {
+		config                  *cfgpb.Configuration
+		healthMonitor           HealthMonitor
+		timeSeriesSubmitter     timeSeriesSubmitter
+		timeSeriesCreator       cloudmonitoring.TimeSeriesCreator
+		usageReader             usageReader
+		now                     now
+		collectAndSubmitRoutine *recovery.RecoverableRoutine
+	}
 
-// Parameters aggregates the potential configuration values and inputs for Service.
-type Parameters struct {
-	BackOffs            *cloudmonitoring.BackOffIntervals
-	Config              *cfgpb.Configuration
-	HealthMonitor       HealthMonitor
-	now                 now
-	timeSeriesCreator   cloudmonitoring.TimeSeriesCreator
-	timeSeriesSubmitter timeSeriesSubmitter
-	usageReader         usageReader
-}
+	// Parameters aggregates the potential configuration values and inputs for Service.
+	Parameters struct {
+		BackOffs            *cloudmonitoring.BackOffIntervals
+		Config              *cfgpb.Configuration
+		HealthMonitor       HealthMonitor
+		now                 now
+		timeSeriesCreator   cloudmonitoring.TimeSeriesCreator
+		timeSeriesSubmitter timeSeriesSubmitter
+		usageReader         usageReader
+	}
 
-// timeSeriesSubmitter is a strategy by which metrics can be submitted to a monitoring service.
-type timeSeriesSubmitter func(ctx context.Context, request *mpb.CreateTimeSeriesRequest) error
+	// usage represents a snapshot of the agent process resource usage.
+	usage struct {
+		// cpu utilization percentage
+		cpu float64
+		// virtual memory consumption in bytes
+		memory uint64
+	}
 
-// usageReader is a strategy through which agent process metrics can be read.
-type usageReader func(ctx context.Context) (usage, error)
+	// collectAndSubmitArgs contains the args necessary to run the recoverable go routine
+	collectAndSubmitArgs struct {
+		s *Service
+	}
 
-// now is a strategy for getting the current timestamp.
-type now func() *tspb.Timestamp
+	// timeSeriesSubmitter is a strategy by which metrics can be submitted to a monitoring service.
+	timeSeriesSubmitter func(ctx context.Context, request *mpb.CreateTimeSeriesRequest) error
 
-// usage represents a snapshot of the agent process resource usage.
-type usage struct {
-	// cpu utilization percentage
-	cpu float64
-	// virtual memory consumption in bytes
-	memory uint64
-}
+	// usageReader is a strategy through which agent process metrics can be read.
+	usageReader func(ctx context.Context) (usage, error)
+
+	// now is a strategy for getting the current timestamp.
+	now func() *tspb.Timestamp
+)
 
 // NewService constructs and initializes a Service instance by using the provided parameters.
 func NewService(ctx context.Context, params Parameters) (*Service, error) {
@@ -149,18 +160,34 @@ func (s *Service) Start(ctx context.Context) {
 		return
 	}
 	log.CtxLogger(ctx).Info("Agent process metric collection beginning")
-	go s.collectAndSubmitLoop(ctx)
+	s.collectAndSubmitRoutine = &recovery.RecoverableRoutine{
+		Routine:             collectAndSubmitLoop,
+		RoutineArg:          collectAndSubmitArgs{s: s},
+		ErrorCode:           usagemetrics.AgentMetricsCollectAndSubmitFailure,
+		ExpectedMinDuration: time.Minute,
+	}
+	s.collectAndSubmitRoutine.StartRoutine(ctx)
 }
 
 // collectAndSubmitLoop collects agent process metrics and submits them periodically until it is instructed to stop.
-func (s *Service) collectAndSubmitLoop(ctx context.Context) {
+func collectAndSubmitLoop(ctx context.Context, a any) {
+	var args collectAndSubmitArgs
+	var ok bool
+	if args, ok = a.(collectAndSubmitArgs); !ok {
+		log.CtxLogger(ctx).Infow(
+			"args is not of type collectAndSubmitArgs, agent metrics collection will not be done",
+			"typeOfArgs", reflect.TypeOf(a),
+		)
+		return
+	}
+
 	// metricTicker will signal when metrics like cpu and memory are collected and submitted.
-	metricInterval := time.Second * time.Duration(s.config.GetCollectionConfiguration().AgentMetricsFrequency)
+	metricInterval := time.Second * time.Duration(args.s.config.GetCollectionConfiguration().AgentMetricsFrequency)
 	metricTicker := time.NewTicker(metricInterval)
 	defer metricTicker.Stop()
 
 	// healthTicker will signal when in-process service health is collected and submitted.
-	healthInterval := time.Second * time.Duration(s.config.GetCollectionConfiguration().AgentHealthFrequency)
+	healthInterval := time.Second * time.Duration(args.s.config.GetCollectionConfiguration().AgentHealthFrequency)
 	healthTicker := time.NewTicker(healthInterval)
 	defer healthTicker.Stop()
 
@@ -171,12 +198,12 @@ func (s *Service) collectAndSubmitLoop(ctx context.Context) {
 			return
 		case <-healthTicker.C:
 			log.CtxLogger(ctx).Debug("Collecting and submitting agent health")
-			if err := s.collectAndSubmitHealth(ctx); err != nil {
+			if err := args.s.collectAndSubmitHealth(ctx); err != nil {
 				log.CtxLogger(ctx).Warnw("Failure during agent health collection and submission", "error", err)
 			}
 		case <-metricTicker.C:
 			log.CtxLogger(ctx).Debug("Collecting and submitting agent metrics")
-			if err := s.collectAndSubmitMetrics(ctx); err != nil {
+			if err := args.s.collectAndSubmitMetrics(ctx); err != nil {
 				log.CtxLogger(ctx).Warnw("Failure during agent metrics collection and submission", "error", err)
 			}
 		}
