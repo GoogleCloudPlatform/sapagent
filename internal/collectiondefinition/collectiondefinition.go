@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -44,6 +45,10 @@ const (
 	LinuxConfigPath = `/etc/google-cloud-sap-agent/collection-definition.json`
 	// WindowsConfigPath is the path to the customer-defined collection definition file on Windows.
 	WindowsConfigPath = `C:\Program Files\Google\google-cloud-sap-agent\conf\collection-definition.json`
+)
+
+var (
+	updateRoutine *recovery.RecoverableRoutine
 )
 
 // A metricsMap can be used to uniquely identify a full set of metrics in
@@ -119,8 +124,21 @@ func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts St
 		return cd
 	}
 
-	go periodicRefresh(ctx, chs, opts)
+	minRoutineDuration := 24 * time.Hour
+	updateRoutine = &recovery.RecoverableRoutine{
+		Routine:             periodicRefresh,
+		RoutineArg:          periodicRefreshArgs{chs: chs, opts: opts},
+		ErrorCode:           usagemetrics.CollectionDefinitionUpdateRoutineFailure,
+		ExpectedMinDuration: minRoutineDuration,
+	}
+	updateRoutine.StartRoutine(ctx)
+
 	return cd
+}
+
+type periodicRefreshArgs struct {
+	chs  []chan<- *cdpb.CollectionDefinition
+	opts StartOptions
 }
 
 // periodicRefresh sets up an indefinite loop to retrieve the latest
@@ -128,7 +146,16 @@ func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts St
 // subscribed channels.
 //
 // The periodic loop is safeguarded by a heartbeat monitor.
-func periodicRefresh(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts StartOptions) {
+func periodicRefresh(ctx context.Context, a any) {
+	var args periodicRefreshArgs
+	if v, ok := a.(periodicRefreshArgs); ok {
+		args = v
+	} else {
+		log.CtxLogger(ctx).Debugw("periodicRefresh args not of the correct type", "args", a)
+		return
+	}
+	chs := args.chs
+	opts := args.opts
 	interval := 24 * time.Hour
 	if opts.LoadOptions.FetchOptions.Env == cpb.TargetEnvironment_INTEGRATION {
 		interval = 5 * time.Minute

@@ -115,6 +115,7 @@ const (
 	RemoteCollectSSHFailure
 	RemoteCollectGcloudFailure
 	ConfigureBackintFailure
+	CollectionDefinitionUpdateRoutineFailure
 )
 
 // Agent wide action mappings.

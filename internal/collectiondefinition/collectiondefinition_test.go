@@ -34,6 +34,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
@@ -213,7 +214,7 @@ func TestStart_HeartbeatSpec(t *testing.T) {
 			want:         2,
 		},
 	}
-
+	log.SetupLoggingForTest()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := 0
