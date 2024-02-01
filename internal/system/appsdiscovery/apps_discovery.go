@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -370,14 +371,14 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	if !strings.Contains(result.StdOut, r3transSuccessResult) {
 		return false, fmt.Errorf("R3trans returned unexpected result, database may not be connected and working:\n%s", result.StdOut)
 	}
-
 	log.CtxLogger(ctx).Debugw("DB appears good", "stdOut", result.StdOut)
 
 	// Now create the control file in /tmp
 	contents := `EXPORT
 	file='/tmp/r3trans/export_products.dat'
 	CLIENT=all
-	SELECT * FROM PRDVERS`
+	SELECT * FROM PRDVERS
+	SELECT * FROM CVERS`
 	file, err := d.FileSystem.Create(tmpControlFilePath)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Error creating control file", "error", err)
@@ -404,10 +405,112 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 		log.CtxLogger(ctx).Warnw("Error exporting data", "error", result.Error)
 		return false, result.Error
 	}
+	log.CtxLogger(ctx).Debugw("R3trans exported data", "stdOut", result.StdOut)
 
-	// Command success indicates system is ABAP. Additional details may be pulled out of this data in
-	// the future.
+	// Read output.txt
+	fileBytes, err := d.FileSystem.ReadFile(r3transOutputPath)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Error reading r3trans output file", "r3transOutputPath", r3transOutputPath, "error", err)
+		return false, err
+	}
+	fileString := string(fileBytes[:])
+	wlProps := parseR3transOutput(ctx, fileString)
+	log.CtxLogger(ctx).Infow("Workload Properties", "wlProps", prototext.Format(wlProps))
+
+	// Command success indicates system is ABAP.
+	// We'll add the WorkloadProperties to the SapSystemDetails once WLM is ready for the new fields.
 	return true, nil
+}
+
+func parseR3transOutput(ctx context.Context, s string) (wlProps *spb.SapDiscovery_WorkloadProperties) {
+	log.CtxLogger(ctx).Debugw("R3trans exported data", "fileString", s)
+	lines := strings.Split(s, "\n")
+	cversLines := false
+	prdversLines := false
+	cversEntries := []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{}
+	prdversEntries := []*spb.SapDiscovery_WorkloadProperties_ProductVersion{}
+	for _, l := range lines {
+		if strings.Contains(l, "CVERS") && strings.Contains(l, "REP") {
+			cversLines, prdversLines = true, false
+		} else if strings.Contains(l, "PRDVERS") && strings.Contains(l, "REP") {
+			prdversLines, cversLines = true, false
+		} else if !strings.Contains(l, "**") {
+			cversLines, prdversLines = false, false
+		} else {
+			if cversLines {
+				// Example line : "4 ETW000 ** 102 ** SAP_ABA                       750       0025      S"
+				cversSplit := strings.Split(l, "**")
+				re := regexp.MustCompile("\\s+")
+				if len(cversSplit) < 1 {
+					log.CtxLogger(ctx).Errorw("cvers entry does not have enough fields", "fields", cversSplit, "len(fields)", len(cversSplit))
+					continue
+				}
+				// Taking everything after the "**" which is "SAP_ABA                       750       0025      S"
+				// And splitting that on any number of spaces.
+				fields := re.Split(strings.TrimSpace(cversSplit[len(cversSplit)-1]), -1)
+				cversEntry := map[string]string{}
+				if len(fields) > 0 {
+					cversEntry["name"] = fields[0]
+				}
+				if len(fields) > 1 {
+					cversEntry["version"] = fields[1]
+				}
+				if len(fields) > 2 {
+					cversEntry["ext_version"] = fields[2]
+				}
+				if len(fields) == 3 {
+					// The last two fields are combined.
+					if len(fields[2]) < 1 {
+						log.CtxLogger(ctx).Errorw("Parsing component encountered ext_version that is too short.", "fields[2]", fields[2], "len(fields[2])", len(fields[2]))
+						continue
+					}
+					// This looks like "0000000000S" where "0000000000" is the ext_version and "S" is the type.
+					cversEntry["ext_version"] = string(fields[2][0 : len(fields[2])-1])
+					cversEntry["type"] = string(fields[2][len(fields[2])-1])
+				}
+				if len(fields) > 3 {
+					cversEntry["type"] = fields[3]
+				}
+				cversObj := &spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					Name:       cversEntry["name"],
+					Version:    cversEntry["version"],
+					ExtVersion: cversEntry["ext_version"],
+					Type:       cversEntry["type"],
+				}
+				cversEntries = append(cversEntries, cversObj)
+			}
+			if prdversLines {
+				re := regexp.MustCompile("\\s\\s+")
+				// Example of what this looks like:
+				// 4 ETW000 ** 394 ** 73554900100900000414SAP NETWEAVER   7.5   sap.com    SAP NETWEAVER 7.5       +20220927121631
+				// We split on multiple consecutive spaces so that we don't split in the middle of a given field.
+				prdversSplit := re.Split(l, -1)
+				if len(prdversSplit) < 2 {
+					log.CtxLogger(ctx).Errorw("prdvers entry does not have enough fields", "fields", prdversSplit, "len(fields)", len(prdversSplit))
+					continue
+				}
+				// Extracting the second to last element here gives us "SAP NETWEAVER 7.5"
+				fields := prdversSplit[len(prdversSplit)-2]
+				// Find the last space in the product description. This separates the name from the version.
+				lastIndex := strings.LastIndex(fields, " ")
+				if lastIndex < 0 {
+					log.CtxLogger(ctx).Errorw("Failed to distinguish name from version for prdvers entry", "fields", fields, "len(fields)", len(fields))
+					prdversEntries = append(prdversEntries, &spb.SapDiscovery_WorkloadProperties_ProductVersion{Name: fields})
+					continue
+				}
+				prvdersObj := &spb.SapDiscovery_WorkloadProperties_ProductVersion{
+					Name:    fields[:lastIndex],
+					Version: fields[lastIndex+1:],
+				}
+				prdversEntries = append(prdversEntries, prvdersObj)
+			}
+		}
+	}
+	wlProps = &spb.SapDiscovery_WorkloadProperties{
+		ProductVersions:           prdversEntries,
+		SoftwareComponentVersions: cversEntries,
+	}
+	return wlProps
 }
 
 func parseDBHosts(s string) (dbHosts []string) {

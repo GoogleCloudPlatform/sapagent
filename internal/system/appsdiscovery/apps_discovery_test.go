@@ -768,6 +768,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		want: SapSystemDetails{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -820,6 +822,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		want: SapSystemDetails{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -870,6 +874,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		want: SapSystemDetails{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -919,6 +925,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		want: SapSystemDetails{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -968,6 +976,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		want: SapSystemDetails{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -1021,6 +1031,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		want: SapSystemDetails{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -2609,6 +2621,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		want: true,
 	}, {
@@ -2631,6 +2645,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			MkDirErr:     []error{nil},
 			ChmodErr:     []error{errors.New("test error")},
 			RemoveAllErr: []error{nil},
+			ReadFileResp: [][]byte{[]byte{}},
+			ReadFileErr:  []error{nil},
 		},
 		wantErr: cmpopts.AnyError,
 	}, {
@@ -2643,6 +2659,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			MkDirErr:     []error{nil},
 			ChmodErr:     []error{nil},
 			RemoveAllErr: []error{nil},
+			ReadFileResp: [][]byte{[]byte{}},
+			ReadFileErr:  []error{nil},
 		},
 		executor: fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
@@ -2675,6 +2693,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			MkDirErr:     []error{nil},
 			ChmodErr:     []error{nil},
 			RemoveAllErr: []error{nil},
+			ReadFileResp: [][]byte{[]byte{}},
+			ReadFileErr:  []error{nil},
 		},
 		wantErr: cmpopts.AnyError,
 	}, {
@@ -2700,6 +2720,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			CreateResp:   []*os.File{nil},
 			CreateErr:    []error{errors.New("test error")},
 			RemoveAllErr: []error{nil},
+			ReadFileResp: [][]byte{[]byte{}},
+			ReadFileErr:  []error{nil},
 		},
 		wantErr: cmpopts.AnyError,
 	}, {
@@ -2727,6 +2749,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{errors.New("test error")},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		wantErr: cmpopts.AnyError,
 	}, {
@@ -2759,6 +2783,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		wantErr: cmpopts.AnyError,
 	}, {
@@ -2798,6 +2824,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
 		},
 		wantErr: cmpopts.AnyError,
 	}}
@@ -2820,6 +2848,184 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 
 			if got != tc.want {
 				t.Errorf("discoverNetweaverABAP(%v) = %v, want: %v", tc.app, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseR3transOutput(t *testing.T) {
+	type pv = spb.SapDiscovery_WorkloadProperties_ProductVersion
+	type scp = spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties
+	tests := []struct {
+		name         string
+		fileContents string
+		want         *spb.SapDiscovery_WorkloadProperties
+		wantErr      error
+	}{{
+		name: "ignoreNoise",
+		fileContents: `Test R3trans output
+		noise 123456789
+		4 ETW000 REP  CVERS                          *
+		4 ETW000 ** 102 ** EA-DFPS                       806       0000      N
+		noise line to ignore
+		4 ETW000 REP  PRDVERS                        *
+		4 ETW000 ** 394 ** 73554900100900005134S4HANA ON PREMISE             2021                          sap.com                       SAP S/4HANA 2021                                                        +20231215105300
+		more noise to ignore
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{&pv{Name: "SAP S/4HANA", Version: "2021"}},
+			SoftwareComponentVersions: []*scp{&scp{
+				Name:       "EA-DFPS",
+				Version:    "806",
+				ExtVersion: "0000",
+				Type:       "N",
+			}},
+		},
+	}, {
+		name: "touchingFields",
+		fileContents: `Test R3trans output
+		4 ETW000 REP  CVERS                          *
+		4 ETW000 ** 102 ** EA-DFPS                       806       0000000000N
+		4 ETW000 REP  PRDVERS                        *
+		4 ETW000 ** 394 ** 73554900100900005134S4HANA ON PREMISE             2021                          sap.com                       SAP S/4HANA 2021                                                        +20231215105300
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{&pv{Name: "SAP S/4HANA", Version: "2021"}},
+			SoftwareComponentVersions: []*scp{&scp{
+				Name:       "EA-DFPS",
+				Version:    "806",
+				ExtVersion: "0000000000",
+				Type:       "N",
+			}},
+		},
+	}, {
+		name: "cversLineButNoEntry",
+		fileContents: `Test R3trans output
+		4 ETW000 REP  CVERS                          *
+		4 ETW000 REP  PRDVERS                        *
+		4 ETW000 ** 394 ** 73554900100900005134S4HANA ON PREMISE             2021                          sap.com                       SAP S/4HANA 2021                                                        +20231215105300
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{&pv{Name: "SAP S/4HANA", Version: "2021"}},
+		},
+	}, {
+		name: "prdversLineButNoEntry",
+		fileContents: `Test R3trans output
+		4 ETW000 REP  PRDVERS                        *
+		4 ETW000 REP  CVERS                          *
+		4 ETW000 ** 102 ** EA-DFPS                       806       0000000000N
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			SoftwareComponentVersions: []*scp{&scp{
+				Name:       "EA-DFPS",
+				Version:    "806",
+				ExtVersion: "0000000000",
+				Type:       "N",
+			}},
+		},
+	}, {
+		name: "multipleEntries",
+		fileContents: `Test R3trans output
+		4 ETW000 REP  CVERS                          *
+		4 ETW000 ** 102 ** EA-DFPS                       806       0000      N
+		4 ETW000 ** 102 ** EA-HR                         608       0095      N
+		4 ETW000 ** 102 ** S4CORE                        106       0000000000R
+		4 ETW000 ** 102 ** S4COREOP                      106       0000000000I
+		4 ETW000 REP  PRDVERS                        *
+		4 ETW000 ** 394 ** 73554900100900005134S4HANA ON PREMISE             2021                          sap.com                       SAP S/4HANA 2021                                                        +20231215105300
+		4 ETW000 ** 394 ** 73554900100900000414SAP NETWEAVER                 7.5                           sap.com                       SAP NETWEAVER 7.5                                                       +20220927121631
+		4 ETW000 ** 394 ** 73555000100900003452SAP FIORI FRONT-END SERVER    6.0                           sap.com                       SAP FIORI FRONT-END SERVER 6.0                                          +20220928054714
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP S/4HANA", Version: "2021"},
+				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4CORE",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "R",
+				},
+				&scp{
+					Name:       "S4COREOP",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "I",
+				},
+			},
+		},
+	}, {
+		name: "partialComponents",
+		fileContents: `Test R3trans output
+		4 ETW000 REP  CVERS                          *
+		**
+		4 ETW000 ** 102 **
+		4 ETW000 ** 102 ** EA-DFPS
+		4 ETW000 ** 102 ** EA-HR                         608
+		4 ETW000 ** 102 ** S4COREOP                      106       0000000000I
+		4 ETW000 ** 102 ** EA-HR                         608       0095      N
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			SoftwareComponentVersions: []*scp{
+				&scp{},
+				&scp{},
+				&scp{
+					Name: "EA-DFPS",
+				},
+				&scp{
+					Name:    "EA-HR",
+					Version: "608",
+				},
+				&scp{
+					Name:       "S4COREOP",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "I",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+			},
+		},
+	}, {
+		name: "noProductVersion",
+		fileContents: `Test R3trans output
+		4 ETW000 REP  PRDVERS                        *
+		4 ETW000 ** 394 ** 73554900100900005134S4HANA ON PREMISE             2021                          sap.com                       SAPS/4HANA                                                        +20231215105300
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAPS/4HANA"},
+			},
+		},
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseR3transOutput(ctx, tc.fileContents)
+
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("parseR3transOutput(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
 			}
 		})
 	}
