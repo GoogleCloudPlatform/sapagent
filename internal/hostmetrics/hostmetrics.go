@@ -64,6 +64,7 @@ var (
 
 	httpServerRoutine         *recovery.RecoverableRoutine
 	collectHostMetricsRoutine *recovery.RecoverableRoutine
+	dailyUsageRoutineStarted  bool
 )
 
 func requestHandler(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +140,11 @@ func collectHostMetrics(ctx context.Context, a any) {
 	defer collectTicker.Stop()
 	defer heartbeatTicker.Stop()
 
-	go usagemetrics.LogActionDaily(usagemetrics.CollectHostMetrics)
+	if !dailyUsageRoutineStarted {
+		go usagemetrics.LogActionDaily(usagemetrics.CollectHostMetrics)
+		dailyUsageRoutineStarted = true
+	}
+
 	// Do not wait for the first 60s tick and start collection immediately
 	select {
 	case <-ctx.Done():
