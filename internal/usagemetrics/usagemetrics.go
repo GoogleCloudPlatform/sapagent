@@ -112,6 +112,8 @@ const (
 	WLMCollectionPacemakerRoutineFailure
 	WLMCollectionCustomRoutineFailure
 	AgentMetricsCollectAndSubmitFailure
+	RemoteCollectSSHFailure
+	RemoteCollectGcloudFailure
 )
 
 // Agent wide action mappings.

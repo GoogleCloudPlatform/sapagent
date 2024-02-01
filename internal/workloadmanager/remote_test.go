@@ -69,7 +69,7 @@ var (
 						InstanceId: "instanceId",
 						SapValidation: &workloadmanager.SapValidation{
 							ProjectId: "projectId",
-							Zone: "some-region-zone",
+							Zone:      "some-region-zone",
 							ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
 								Details: map[string]string{
 									"agent":         "sapagent",
@@ -77,7 +77,7 @@ var (
 									"os":            "sles-15",
 								},
 								SapValidationType: "SYSTEM",
-								IsPresent: true,
+								IsPresent:         true,
 							}},
 						},
 					},
@@ -108,7 +108,7 @@ func TestCollectMetricsToJSON(t *testing.T) {
 		osVendorID:       "test-os",
 		osVersion:        "version",
 		Discovery: &fakeDiscoveryInterface{
-			instances:  &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
+			instances: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 		},
 	}
 	got := strings.TrimSpace(CollectMetricsToJSON(context.Background(), p))

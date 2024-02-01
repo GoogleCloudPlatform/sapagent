@@ -22,9 +22,12 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/gammazero/workerpool"
+	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -80,29 +83,45 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 	wp := workerpool.New(int(params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection().GetConcurrentCollections()))
 	mu := &sync.Mutex{}
 	metricsSent := 0
+	var routines []*recovery.RecoverableRoutine
 	for _, inst := range rc.GetRemoteCollectionInstances() {
 		inst := inst
 		ch := make(chan WorkloadMetrics)
 		wp.Submit(func() {
 			log.CtxLogger(ctx).Infow("Collecting metrics from", "instance", inst)
+			var r *recovery.RecoverableRoutine
 			if rc.GetRemoteCollectionSsh() != nil {
-				go collectRemoteSSH(ctx, collectOptions{
-					exists:     params.Exists,
-					execute:    params.Execute,
-					configPath: tempFile.Name(),
-					rc:         rc,
-					i:          inst,
-					wm:         ch,
-				})
+				r = &recovery.RecoverableRoutine{
+					Routine: collectRemoteSSH,
+					RoutineArg: collectOptions{
+						exists:     params.Exists,
+						execute:    params.Execute,
+						configPath: tempFile.Name(),
+						rc:         rc,
+						i:          inst,
+						wm:         ch,
+					},
+					ErrorCode:           usagemetrics.RemoteCollectSSHFailure,
+					ExpectedMinDuration: time.Minute,
+				}
 			} else if rc.GetRemoteCollectionGcloud() != nil {
-				go collectRemoteGcloud(ctx, collectOptions{
-					exists:     params.Exists,
-					execute:    params.Execute,
-					configPath: tempFile.Name(),
-					rc:         rc,
-					i:          inst,
-					wm:         ch,
-				})
+				r = &recovery.RecoverableRoutine{
+					Routine: collectRemoteGcloud,
+					RoutineArg: collectOptions{
+						exists:     params.Exists,
+						execute:    params.Execute,
+						configPath: tempFile.Name(),
+						rc:         rc,
+						i:          inst,
+						wm:         ch,
+					},
+					ErrorCode:           usagemetrics.RemoteCollectGcloudFailure,
+					ExpectedMinDuration: time.Minute,
+				}
+			}
+			if r != nil {
+				routines = append(routines, r)
+				r.StartRoutine(ctx)
 			}
 			wm := <-ch
 			// lock so we can update the metricsSent
@@ -201,7 +220,15 @@ type collectOptions struct {
 //   - execute the binary to collect the metrics in JSON format in stdout
 //   - read the stdout and parse errors or JSON into Metrics
 //   - return the metrics from the host to the caller
-func collectRemoteGcloud(ctx context.Context, opts collectOptions) {
+func collectRemoteGcloud(ctx context.Context, a any) {
+	var opts collectOptions
+	var ok bool
+	if opts, ok = a.(collectOptions); !ok {
+		logger := log.CtxLogger(ctx)
+		logger.Infow("args is not of type collectOptions; wlm collection will not be done", "typeOfArgs", fmt.Sprintf("%T", a))
+		return
+	}
+
 	var metrics []*mrpb.TimeSeries
 	if !opts.exists("gcloud") {
 		log.CtxLogger(ctx).Error("gcloud command not found. Ensure the google cloud SDK is installed and that the gcloud command is in systemd's PATH environment variable: `systemctl show-environment`, `systemctl set-environment PATH=</path:/another/path>")
@@ -309,7 +336,15 @@ func appendSSHArgs(args []string, rc *cpb.WorkloadValidationRemoteCollection, i 
 //   - execute the binary to collect the metrics in JSON format in stdout
 //   - read the stdout and parse errors or JSON into Metrics
 //   - return the metrics from the host to the caller
-func collectRemoteSSH(ctx context.Context, opts collectOptions) {
+func collectRemoteSSH(ctx context.Context, a any) {
+	var opts collectOptions
+	var ok bool
+	if opts, ok = a.(collectOptions); !ok {
+		logger := log.CtxLogger(ctx)
+		logger.Infow("args is not of type collectOptions; wlm collection will not be done", "typeOfArgs", fmt.Sprintf("%T", a))
+		return
+	}
+
 	projectID := opts.i.ProjectId
 	zone := opts.i.Zone
 	instanceID := opts.i.InstanceId
