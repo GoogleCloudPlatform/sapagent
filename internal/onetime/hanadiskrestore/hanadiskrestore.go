@@ -479,7 +479,14 @@ func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexe
 		ArgsToSplit: "-f " + path,
 	})
 	if result.Error != nil {
-		return fmt.Errorf("failure unmounting directory: %s, stderr: %s, err: %s", path, result.StdErr, result.Error)
+		r := exec(ctx, commandlineexecutor.Params{
+			Executable:  "bash",
+			ArgsToSplit: fmt.Sprintf(" -c 'lsof | grep %s'", path), // NOLINT
+		})
+		msg := `failure unmounting directory: %s, stderr: %s, err: %s.
+		Here are the possible open references to the path, stdout: %s stderr: %s.
+		Please ensure these references are cleaned up for unmount to proceed and retry the command`
+		return fmt.Errorf(msg, path, result.StdErr, result.Error, r.StdOut, r.StdErr)
 	}
 	return nil
 }
