@@ -30,6 +30,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configurebackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
@@ -75,6 +76,7 @@ func registerSubCommands() {
 		&hanadiskrestore.Restorer{},
 		&readmetrics.ReadMetrics{},
 		&installbackint.InstallBackint{},
+		&configurebackint.ConfigureBackint{},
 		&configure.Configure{},
 		&version.Version{},
 		&migratehmadashboards.MigrateHMADashboards{},

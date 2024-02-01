@@ -114,6 +114,7 @@ const (
 	AgentMetricsCollectAndSubmitFailure
 	RemoteCollectSSHFailure
 	RemoteCollectGcloudFailure
+	ConfigureBackintFailure
 )
 
 // Agent wide action mappings.
@@ -144,6 +145,8 @@ const (
 	RemoteWLMMetricsCollection
 	ReliabilityStarted
 	ReliabilityFinished
+	ConfigureBackintStarted
+	ConfigureBackintFinished
 )
 
 var (

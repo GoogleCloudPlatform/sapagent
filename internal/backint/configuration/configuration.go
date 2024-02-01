@@ -121,7 +121,7 @@ func (p *Parameters) readParametersFile(read ReadConfigFile) (int, error) {
 		return usagemetrics.BackintConfigReadFailure, errors.New("empty parameters file")
 	}
 
-	config, err := unmarshal(p.ParamFile, content)
+	config, err := Unmarshal(p.ParamFile, content)
 	if err != nil {
 		return usagemetrics.BackintMalformedConfigFile, err
 	}
@@ -235,10 +235,10 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 	}
 }
 
-// unmarshal reads the content into a BackintConfiguration proto.
+// Unmarshal reads the content into a BackintConfiguration proto.
 // If a .json file is supplied, protojson handles the unmarshaling.
 // If a .txt file is provided, a custom parse is used.
-func unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration, error) {
+func Unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration, error) {
 	config := &bpb.BackintConfiguration{}
 	var err error
 	if strings.HasSuffix(parameterFile, ".json") {
@@ -320,10 +320,10 @@ func marshalLegacyParameters(parameterFile string, config *bpb.BackintConfigurat
 	if err != nil {
 		log.Logger.Errorw("Unable to marshal config", "err", err)
 	}
-	if err := os.WriteFile(configPath, configData, 0666); err != nil {
+	if err := os.WriteFile(configPath, configData, 0640); err != nil {
 		log.Logger.Errorw("Unable to write JSON parameters file", "configPath", configPath, "err", err)
 	}
-	if err := os.Chmod(configPath, 0666); err != nil {
+	if err := os.Chmod(configPath, 0640); err != nil {
 		log.Logger.Errorw("Unable to change permissions on JSON parameters file", "configPath", configPath, "err", err)
 	}
 	log.Logger.Infow("Successfully translated text parameters file to JSON", "parameterFileText", parameterFile, "parameterFileJSON", configPath)
