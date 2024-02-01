@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -83,7 +84,8 @@ type (
 	}
 
 	fakeCollector struct {
-		timeSeriesCount int
+		timeSeriesCount             int
+		timesCollectWtihRetryCalled int
 	}
 
 	fakeCollectorError struct {
@@ -103,6 +105,7 @@ func (f *fakeCollector) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error)
 }
 
 func (f *fakeCollector) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	f.timesCollectWtihRetryCalled++
 	m := make([]*mrpb.TimeSeries, f.timeSeriesCount)
 	for i := 0; i < f.timeSeriesCount; i++ {
 		m[i] = &mrpb.TimeSeries{}
@@ -651,5 +654,34 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				t.Errorf("collectAndSend() heartbeat mismatch got %d, want %d", got, test.want)
 			}
 		})
+	}
+}
+
+func TestCollectAndSendSlowMovingMetrics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &fakeCollector{
+		timeSeriesCount: 10,
+	}
+	p := &Properties{
+		Client:     &fake.TimeSeriesCreatorThreadSafe{},
+		Collectors: []Collector{c},
+		Config:     quickTestConfig,
+	}
+	wp := workerpool.New(1)
+	wp.Submit(func() {
+		collectAndSendSlowMovingMetrics(ctx, p, c, defaultBackOffIntervals, wp)
+	})
+
+	// Wait for some iterations
+	time.Sleep(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()) * time.Second * 2)
+	before := c.timesCollectWtihRetryCalled
+	cancel()
+
+	// Wait some more to ensure workers have stopped
+	time.Sleep(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()) * time.Second * 2)
+	after := c.timesCollectWtihRetryCalled
+
+	if before != after {
+		t.Errorf("collectAndSendSlowMovingMetrics() timesCalled mismatch got %d, want %d", after, before)
 	}
 }

@@ -540,9 +540,15 @@ func collectAndSendSlowMovingMetrics(ctx context.Context, p *Properties, c Colle
 	sent, batchCount, err := collectAndSendSlowMovingMetricsOnce(ctx, p, c, bo)
 	log.CtxLogger(ctx).Infow("Sent metrics from collectAndSendSlowMovingMetrics.", "sent", sent, "batches", batchCount, "error", err)
 	time.AfterFunc(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency())*time.Second, func() {
-		wp.Submit(func() {
-			collectAndSendSlowMovingMetrics(ctx, p, c, bo, wp)
-		})
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("Process metrics context cancelled, exiting collectAndSendSlowMovingMetrics.")
+			return
+		default:
+			wp.Submit(func() {
+				collectAndSendSlowMovingMetrics(ctx, p, c, bo, wp)
+			})
+		}
 	})
 	return err
 }
