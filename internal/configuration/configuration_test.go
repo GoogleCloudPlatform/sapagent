@@ -389,6 +389,179 @@ func TestApplyDefaults(t *testing.T) {
 				DiscoveryConfiguration: defaultDiscoveryProps,
 			},
 		},
+		{
+			name: "HasSapSystemNoEnableDiscovery",
+			configFromFile: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery: &wpb.BoolValue{Value: false},
+				},
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    &wpb.BoolValue{Value: false},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+					},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
+				},
+			},
+		},
+		{
+			name: "NoSapSystemHasEnableDiscovery",
+			configFromFile: &cpb.Configuration{
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery: &wpb.BoolValue{Value: false},
+				},
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+					},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
+				},
+			},
+		},
+		{
+			name: "HasSapSystemHasEnableDiscoveryBothEnabled",
+			configFromFile: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery: &wpb.BoolValue{Value: true},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery: &wpb.BoolValue{Value: true},
+				},
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    &wpb.BoolValue{Value: true},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+					},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: true},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
+				},
+			},
+		},
+		{
+			name: "HasSapSystemHasEnableDiscoveryBothDisabled",
+			configFromFile: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery: &wpb.BoolValue{Value: false},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery: &wpb.BoolValue{Value: false},
+				},
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    &wpb.BoolValue{Value: false},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+					},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
+				},
+			},
+		},
+		{
+			name: "SapSystemEnabledDiscoveryDisabled",
+			configFromFile: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery: &wpb.BoolValue{Value: true},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery: &wpb.BoolValue{Value: false},
+				},
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    &wpb.BoolValue{Value: true},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+					},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
+				},
+			},
+		},
+		{
+			name: "SapSystemDisabledDiscoveryEnabled",
+			configFromFile: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery: &wpb.BoolValue{Value: false},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery: &wpb.BoolValue{Value: true},
+				},
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: wpb.Bool(true),
+				LogToCloud:                 wpb.Bool(true),
+				AgentProperties:            testAgentProps,
+				CloudProperties:            testCloudProps,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					SapSystemDiscovery:    &wpb.BoolValue{Value: false},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						FetchLatestConfig:       wpb.Bool(true),
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+					},
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:                &wpb.BoolValue{Value: false},
+					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 60},
+					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
+				},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

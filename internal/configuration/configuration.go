@@ -155,6 +155,19 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 		config.CloudProperties = cloudProps
 	}
 
+	// Special logic for handling two flags to disable system discovery
+	if config.GetCollectionConfiguration().GetSapSystemDiscovery() != nil {
+		if config.GetDiscoveryConfiguration() == nil {
+			config.DiscoveryConfiguration = &cpb.DiscoveryConfiguration{}
+		}
+		if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() != config.GetCollectionConfiguration().GetSapSystemDiscovery().GetValue() {
+			// Flags differ, assume disable.
+			config.DiscoveryConfiguration.EnableDiscovery = wpb.Bool(false)
+		} else {
+			config.DiscoveryConfiguration.EnableDiscovery = config.GetCollectionConfiguration().GetSapSystemDiscovery()
+		}
+	}
+
 	config.CollectionConfiguration = applyDefaultCollectionConfiguration(config.GetCollectionConfiguration())
 	config.HanaMonitoringConfiguration = applyDefaultHMConfiguration(config.GetHanaMonitoringConfiguration())
 	config.DiscoveryConfiguration = applyDefaultDiscoveryConfiguration(config.GetDiscoveryConfiguration())
