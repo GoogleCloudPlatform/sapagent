@@ -35,7 +35,7 @@ import (
 var (
 	bucketEnvMap = map[cpb.TargetEnvironment]string{
 		cpb.TargetEnvironment_PRODUCTION:  "cloudsapdeploy",
-		cpb.TargetEnvironment_STAGING:     "cloudsapdeploytesting",
+		cpb.TargetEnvironment_STAGING:     "cloudsapdeploystaging",
 		cpb.TargetEnvironment_DEVELOPMENT: "sapagent-collection-definition-dev",
 		cpb.TargetEnvironment_INTEGRATION: "cloudsapdeployintegration",
 	}
