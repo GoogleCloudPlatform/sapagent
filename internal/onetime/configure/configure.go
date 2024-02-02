@@ -106,13 +106,12 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.setting, "setting", "", "The requested setting. Valid values are: bare_metal, log_to_cloud")
 	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
-	fs.Int64Var(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", 0, "Sets the frequency of workload validation metrics collection")
+	fs.Int64Var(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", 0, "Sets the frequency of workload validation metrics collection. Default value is 300(s)")
 	fs.Int64Var(&c.dbFrequency, "db-frequency", 0,
 		"Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
-	fs.Int64Var(&c.fastMetricsFrequency, "process-metrics-frequency", 0,
-		"Sets the frequency of fast moving process metrics collection")
+	fs.Int64Var(&c.fastMetricsFrequency, "process-metrics-frequency", 0, "Sets the frequency of fast moving process metrics collection. Default value is 5(s)")
 	fs.Int64Var(&c.slowMetricsFrequency, "slow-process-metrics-frequency", 0, "Sets the frequency of slow moving process metrics collection. Default value is 30(s)")
-	fs.Int64Var(&c.agentMetricsFrequency, "agent-metrics-frequency", 0, "Sets the agent metrics frequency")
+	fs.Int64Var(&c.agentMetricsFrequency, "agent-metrics-frequency", 0, "Sets the agent metrics frequency. Default value is 60(s)")
 	fs.Int64Var(&c.agentHealthFrequency, "agent-health-frequency", 0,
 		"Sets the agent health frequency. Default value is 60(s)")
 	fs.Int64Var(&c.heartbeatFrequency, "heartbeat-frequency", 0,
