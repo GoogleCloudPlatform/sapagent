@@ -129,7 +129,7 @@ type hostDiscoveryInterface interface {
 }
 
 type sapDiscoveryInterface interface {
-	DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances) []appsdiscovery.SapSystemDetails
+	DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances, conf *cpb.DiscoveryConfiguration) []appsdiscovery.SapSystemDetails
 }
 
 func removeDuplicates(res []*spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
@@ -320,7 +320,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 
 	instanceURI := fmt.Sprintf("projects/%s/zones/%s/instances/%s", cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
 	log.CtxLogger(ctx).Info("Starting SAP Discovery")
-	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances())
+	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances(), nil)
 	log.CtxLogger(ctx).Debugf("SAP Details: %v", sapDetails)
 	log.CtxLogger(ctx).Info("Starting host discovery")
 	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)

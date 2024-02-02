@@ -21,6 +21,7 @@ import (
 	"context"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
@@ -31,7 +32,7 @@ type SapDiscovery struct {
 }
 
 // DiscoverSAPApps fakes calls to the appsdiscovery.DiscoverSAPApps method.
-func (f *SapDiscovery) DiscoverSAPApps(ctx context.Context, apps *sappb.SAPInstances) []appsdiscovery.SapSystemDetails {
+func (f *SapDiscovery) DiscoverSAPApps(ctx context.Context, apps *sappb.SAPInstances, conf *cpb.DiscoveryConfiguration) []appsdiscovery.SapSystemDetails {
 	defer func() { f.DiscoverSapAppsCallCount++ }()
 	return f.DiscoverSapAppsResp[f.DiscoverSapAppsCallCount]
 }

@@ -188,4 +188,5 @@ message DiscoveryConfiguration {
   google.protobuf.BoolValue enable_discovery = 1;
   google.protobuf.Duration system_discovery_update_frequency = 2;
   google.protobuf.Duration sap_instances_update_frequency = 3;
+  google.protobuf.BoolValue enable_workload_discovery = 4;
 }

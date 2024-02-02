@@ -6,6 +6,9 @@
     "zone": "config-zone"
   },
   "discovery_configuration": {
-    "enable_discovery": true
+    "enable_discovery": false,
+    "enable_workload_discovery": false,
+    "system_discovery_update_frequency": "60s",
+    "sap_instances_update_frequency": "10s"
   }
 }

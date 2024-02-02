@@ -34,6 +34,8 @@ import (
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 var (
@@ -152,7 +154,7 @@ func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 }
 
 // DiscoverSAPApps attempts to identify the different SAP Applications running on the current host.
-func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances) []SapSystemDetails {
+func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances, conf *cpb.DiscoveryConfiguration) []SapSystemDetails {
 	sapSystems := []SapSystemDetails{}
 	if sapApps == nil {
 		log.CtxLogger(ctx).Debugw("No SAP applications found")
@@ -163,7 +165,7 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 		switch app.Type {
 		case sappb.InstanceType_NETWEAVER:
 			log.CtxLogger(ctx).Infow("discovering netweaver", "sid", app.Sapsid)
-			sys := d.discoverNetweaver(ctx, app)
+			sys := d.discoverNetweaver(ctx, app, conf)
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
@@ -209,7 +211,7 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 	return sapSystems
 }
 
-func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInstance) SapSystemDetails {
+func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInstance, conf *cpb.DiscoveryConfiguration) SapSystemDetails {
 	ascsHost, err := d.discoverASCS(ctx, app.Sapsid)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverASCS.", "error", err)
@@ -227,11 +229,15 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	if !ha {
 		haNodes = nil
 	}
-	isABAP, err := d.discoverNetweaverABAP(ctx, app)
-	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
+
+	log.CtxLogger(ctx).Debugw("Checking config", "config", conf)
+	if conf.GetEnableWorkloadDiscovery().GetValue() {
+		isABAP, err := d.discoverNetweaverABAP(ctx, app)
+		if err != nil {
+			log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
+		}
+		appProps.Abap = isABAP
 	}
-	appProps.Abap = isABAP
 
 	details := SapSystemDetails{
 		AppComponent: &spb.SapDiscovery_Component{

@@ -253,6 +253,9 @@ func applyDefaultDiscoveryConfiguration(configFromFile *cpb.DiscoveryConfigurati
 	if discoveryConfig.GetSystemDiscoveryUpdateFrequency() == nil {
 		discoveryConfig.SystemDiscoveryUpdateFrequency = dpb.New(time.Duration(4 * time.Hour))
 	}
+	if discoveryConfig.GetEnableWorkloadDiscovery() == nil {
+		discoveryConfig.EnableWorkloadDiscovery = wpb.Bool(true)
+	}
 	return discoveryConfig
 }
 

@@ -23,15 +23,19 @@ import (
 	"strings"
 	"testing"
 
+	dpb "google.golang.org/protobuf/types/known/durationpb"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/testing/protocmp"
 	fakefs "github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 const (
@@ -192,6 +196,12 @@ var (
 	defaultR3transResult = commandlineexecutor.Result{
 		StdOut: defaultR3transOutput,
 	}
+	defaultDiscoveryConfig = &cpb.DiscoveryConfiguration{
+		SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 30},
+		EnableDiscovery:                &wpb.BoolValue{Value: true},
+		SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 30},
+		EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
+	}
 )
 
 func sortSapSystemDetails(a, b SapSystemDetails) bool {
@@ -210,6 +220,7 @@ type fakeCommandExecutor struct {
 }
 
 func (f *fakeCommandExecutor) Execute(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+	log.Logger.Infof("fakeCommandExecutor.Execute: %v", params)
 	defer func() { f.executeCallCount++ }()
 	opts := []cmp.Option{}
 	if f.params[f.executeCallCount].Args == nil {
@@ -732,6 +743,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 		app        *sappb.SAPInstance
 		execute    commandlineexecutor.Execute
 		fileSystem *fakefs.FileSystem
+		config     *cpb.DiscoveryConfiguration
 		want       SapSystemDetails
 	}{{
 		name: "justNetweaverConnectedToDB",
@@ -1049,8 +1061,61 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
 		},
+	}, {
+		name: "workloadDiscoveryDisabled",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return defaultProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+		},
+		config: &cpb.DiscoveryConfiguration{
+			EnableWorkloadDiscovery: wpb.Bool(false),
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+						Abap:            false,
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:     []string{"test-instance"},
+		},
 	}}
-
+	log.SetupLoggingForTest()
 	ctx := context.Background()
 
 	for _, tc := range tests {
@@ -1059,7 +1124,10 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Execute:    tc.execute,
 				FileSystem: tc.fileSystem,
 			}
-			got := d.discoverNetweaver(ctx, tc.app)
+			if tc.config == nil {
+				tc.config = defaultDiscoveryConfig
+			}
+			got := d.discoverNetweaver(ctx, tc.app, tc.config)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform()); diff != "" {
 				t.Errorf("discoverNetweaver(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
 			}
@@ -1425,6 +1493,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 		executor     *fakeCommandExecutor
 		sapInstances *sappb.SAPInstances
 		fileSystem   *fakefs.FileSystem
+		config       *cpb.DiscoveryConfiguration
 		want         []SapSystemDetails
 	}{{
 		name:         "noSAPApps",
@@ -2072,6 +2141,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 		}},
 	}}
 
+	log.SetupLoggingForTest()
 	ctx := context.Background()
 
 	for _, tc := range tests {
@@ -2083,7 +2153,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 				},
 				FileSystem: tc.fileSystem,
 			}
-			got := d.DiscoverSAPApps(ctx, tc.sapInstances)
+			if tc.config == nil {
+				tc.config = defaultDiscoveryConfig
+			}
+			got := d.DiscoverSAPApps(ctx, tc.sapInstances, tc.config)
 			if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(SapSystemDetails{}), cmpopts.SortSlices(sortSapSystemDetails), protocmp.Transform(), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("discoverSAPApps(%v) returned an unexpected diff (-want +got): %v", tc.cp, diff)
 			}
