@@ -104,7 +104,7 @@ func SAPApplications(ctx context.Context) *sapb.SAPInstances {
 
 // instances is a testable version of SAPApplications.
 func instances(ctx context.Context, hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute, crmdata *pacemaker.CRMMon) *sapb.SAPInstances {
-	log.CtxLogger(ctx).Info("Discovering SAP Applications.")
+	log.CtxLogger(ctx).Debug("Discovering SAP Applications.")
 	var sapInstances []*sapb.SAPInstance
 
 	hana, err := hanaInstances(ctx, hrc, list, exec)
@@ -129,7 +129,7 @@ func instances(ctx context.Context, hrc replicationConfig, list listInstances, e
 // hanaInstances returns list of SAP HANA Instances present on the machine.
 // Returns error in case of failures.
 func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
-	log.CtxLogger(ctx).Info("Discovering SAP HANA instances.")
+	log.CtxLogger(ctx).Debug("Discovering SAP HANA instances.")
 
 	sapServicesEntries, err := list(ctx, exec)
 	if err != nil {
@@ -139,7 +139,7 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 	var instances []*sapb.SAPInstance
 
 	for _, entry := range sapServicesEntries {
-		log.CtxLogger(ctx).Infow("Processing SAP Instance", "instance", entry)
+		log.CtxLogger(ctx).Debugw("Processing SAP Instance", "instance", entry)
 		if entry.InstanceName != "HDB" {
 			log.CtxLogger(ctx).Debugw("Instance is not SAP HANA", "instance", entry)
 			continue
@@ -168,7 +168,7 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 
 		instances = append(instances, instance)
 	}
-	log.CtxLogger(ctx).Infow("Found SAP HANA instances", "count", len(instances), "instances", instances)
+	log.CtxLogger(ctx).Debugw("Found SAP HANA instances", "count", len(instances), "instances", instances)
 	return instances, nil
 }
 
@@ -304,7 +304,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 	lines := strings.Split(strings.TrimSuffix(result.StdOut, "\n"), "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "#") {
-			log.CtxLogger(ctx).Infow("Not processing the commented entry", "line", line)
+			log.CtxLogger(ctx).Debugw("Not processing the commented entry", "line", line)
 			continue
 		}
 		path := sapServicesStartsrvPattern.FindStringSubmatch(line)
@@ -332,7 +332,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 			log.CtxLogger(ctx).Debugw("Overriding SAP LD_LIBRARY_PATH with value found", "line", line)
 			entry.LDLibraryPath = libraryPath[1]
 		}
-		log.CtxLogger(ctx).Infow("Found SAP Instance", "entry", entry)
+		log.CtxLogger(ctx).Debugw("Found SAP Instance", "entry", entry)
 		sapServicesEntries = append(sapServicesEntries, entry)
 	}
 	return sapServicesEntries, nil
@@ -341,7 +341,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 // netweaverInstances returns list of SAP Netweaver instances present on the machine.
 func netweaverInstances(ctx context.Context, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
 	var instances []*sapb.SAPInstance
-	log.CtxLogger(ctx).Info("Discovering SAP NetWeaver instances.")
+	log.CtxLogger(ctx).Debug("Discovering SAP NetWeaver instances.")
 
 	sapServicesEntries, err := list(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
@@ -372,7 +372,7 @@ func netweaverInstances(ctx context.Context, list listInstances, exec commandlin
 			instances = append(instances, instance)
 		}
 	}
-	log.CtxLogger(ctx).Infow("Found SAP NetWeaver instances", "count", len(instances), "instances", instances)
+	log.CtxLogger(ctx).Debugw("Found SAP NetWeaver instances", "count", len(instances), "instances", instances)
 	return instances, nil
 }
 
@@ -511,7 +511,7 @@ func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.
 	// Value hana_db_user must be set to collect HANA DB query metrics.
 	user = hanaConfig.GetHanaDbUser()
 	if user == "" {
-		log.CtxLogger(ctx).Info("Using default value for hana_db_user.")
+		log.CtxLogger(ctx).Debug("Using default value for hana_db_user.")
 		user = "SYSTEM"
 	}
 
