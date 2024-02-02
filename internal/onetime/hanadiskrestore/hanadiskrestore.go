@@ -183,12 +183,12 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 
 // prepare stops HANA, unmounts data directory and detaches old data disk.
 func (r *Restorer) prepare(ctx context.Context) error {
-	if err := r.stopHANA(ctx, commandlineexecutor.ExecuteCommand); err != nil {
-		return fmt.Errorf("failed to stop HANA: %v", err)
-	}
 	mountPath, err := r.readDataDirMountPath(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return fmt.Errorf("failed to read data directory mount path: %v", err)
+	}
+	if err := r.stopHANA(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+		return fmt.Errorf("failed to stop HANA: %v", err)
 	}
 	if err := r.unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
@@ -475,8 +475,8 @@ func (r *Restorer) readDataDirMountPath(ctx context.Context, exec commandlineexe
 func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexecutor.Execute) error {
 	log.Logger.Infow("Unmount path", "directory", path)
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "umount",
-		ArgsToSplit: "-f " + path,
+		Executable:  "bash",
+		ArgsToSplit: fmt.Sprintf(" -c 'sync;unmount -f %s'", path),
 	})
 	if result.Error != nil {
 		r := exec(ctx, commandlineexecutor.Params{
