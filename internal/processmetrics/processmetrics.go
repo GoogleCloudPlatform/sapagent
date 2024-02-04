@@ -170,7 +170,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	p := create(ctx, parameters, mc, sapInstances)
 	collectAndSendRoutine = &recovery.RecoverableRoutine{
 		Routine: func(ctx context.Context, a any) {
-			if parameters, ok := a.(*Parameters); ok {
+			if parameters, ok := a.(Parameters); ok {
 				p.collectAndSend(ctx, parameters.BackOffs)
 			}
 		},
@@ -187,7 +187,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	// as per the retry policy, other collectors remain unaffected.
 	slowMetricsRoutine = &recovery.RecoverableRoutine{
 		Routine: func(ctx context.Context, a any) {
-			if parameters, ok := a.(*Parameters); ok {
+			if parameters, ok := a.(Parameters); ok {
 				createWorkerPoolForSlowMetrics(ctx, p, parameters.BackOffs)
 			}
 		},
