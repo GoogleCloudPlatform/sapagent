@@ -173,7 +173,7 @@ func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 // Returns true if the collection goroutine is started, and false otherwise.
 func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 	if params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() == nil &&
-		!params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics() {
+		!params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
 		log.CtxLogger(ctx).Info("Not collecting Workload Manager metrics")
 		return false
 	}

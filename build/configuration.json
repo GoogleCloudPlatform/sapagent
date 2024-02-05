@@ -3,7 +3,7 @@
   "log_level": "INFO",
   "log_to_cloud": true,
   "collection_configuration": {
-    "collect_workload_validation_metrics": false,
+    "collect_workload_validation_metrics": true,
     "collect_process_metrics": false
   },
   "discovery_configuration": {

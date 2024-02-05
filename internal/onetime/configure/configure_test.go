@@ -158,7 +158,7 @@ func TestSetStatus(t *testing.T) {
 			},
 			want: map[string]bool{
 				"hana_monitoring":     true,
-				"workload_validation": false,
+				"workload_validation": true,
 				"process_metrics":     false,
 				"host_metrics":        true,
 				"agent_metrics":       false,
@@ -172,7 +172,7 @@ func TestSetStatus(t *testing.T) {
 				LogLevel:                   2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectAgentMetrics:              true,
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 					CollectProcessMetrics:            true,
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
@@ -195,7 +195,7 @@ func TestSetStatus(t *testing.T) {
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectAgentMetrics:              true,
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 					CollectProcessMetrics:            true,
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
@@ -220,7 +220,7 @@ func TestSetStatus(t *testing.T) {
 				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectAgentMetrics:              true,
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 					CollectProcessMetrics:            true,
 				},
 				LogToCloud:                  &wpb.BoolValue{Value: true},
@@ -242,7 +242,7 @@ func TestSetStatus(t *testing.T) {
 				LogLevel:                   2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectAgentMetrics:              true,
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 					CollectProcessMetrics:            true,
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
@@ -271,7 +271,7 @@ func TestSetStatus(t *testing.T) {
 				"agent_metrics":       false,
 				"host_metrics":        false,
 				"process_metrics":     false,
-				"workload_validation": false,
+				"workload_validation": true,
 				"hana_monitoring":     false,
 			},
 		},
@@ -766,14 +766,14 @@ func TestModifyConfig(t *testing.T) {
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
+					CollectWorkloadValidationMetrics: wpb.Bool(false),
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
 			},
 			newConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
 			},
@@ -791,14 +791,14 @@ func TestModifyConfig(t *testing.T) {
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
 			},
 			newConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
+					CollectWorkloadValidationMetrics: wpb.Bool(false),
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
 			},
@@ -817,7 +817,7 @@ func TestModifyConfig(t *testing.T) {
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     true,
+					CollectWorkloadValidationMetrics:     wpb.Bool(true),
 					WorkloadValidationMetricsFrequency:   10,
 					WorkloadValidationDbMetricsFrequency: 20,
 				},
@@ -826,7 +826,7 @@ func TestModifyConfig(t *testing.T) {
 			newConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     true,
+					CollectWorkloadValidationMetrics:     wpb.Bool(true),
 					WorkloadValidationMetricsFrequency:   30,
 					WorkloadValidationDbMetricsFrequency: 50,
 				},
@@ -847,7 +847,7 @@ func TestModifyConfig(t *testing.T) {
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:   true,
+					CollectWorkloadValidationMetrics:   wpb.Bool(true),
 					WorkloadValidationMetricsFrequency: 10,
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
@@ -855,7 +855,7 @@ func TestModifyConfig(t *testing.T) {
 			newConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:   true,
+					CollectWorkloadValidationMetrics:   wpb.Bool(true),
 					WorkloadValidationMetricsFrequency: 10,
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
@@ -875,7 +875,7 @@ func TestModifyConfig(t *testing.T) {
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     true,
+					CollectWorkloadValidationMetrics:     wpb.Bool(true),
 					WorkloadValidationDbMetricsFrequency: 50,
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
@@ -883,7 +883,7 @@ func TestModifyConfig(t *testing.T) {
 			newConfig: &cpb.Configuration{
 				LogLevel: 2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     true,
+					CollectWorkloadValidationMetrics:     wpb.Bool(true),
 					WorkloadValidationDbMetricsFrequency: 50,
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
@@ -1274,7 +1274,7 @@ func TestWriteFile(t *testing.T) {
 				LogLevel:                   2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectAgentMetrics:              true,
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
 					EnableDiscovery: &wpb.BoolValue{Value: true},
@@ -1334,11 +1334,11 @@ func TestCheckCollectionConfig(t *testing.T) {
 			name: "validCollectionConfig",
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 				},
 			},
 			want: &cpb.CollectionConfiguration{
-				CollectWorkloadValidationMetrics: true,
+				CollectWorkloadValidationMetrics: wpb.Bool(true),
 			},
 		},
 	}
@@ -1393,7 +1393,7 @@ func TestShowFeatures(t *testing.T) {
 				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
 				LogLevel:                   2,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: true,
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
 					CollectAgentMetrics:              true,
 					CollectProcessMetrics:            false,
 				},

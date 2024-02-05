@@ -28,19 +28,20 @@ import (
 	"testing"
 	"time"
 
-	metricpb "google.golang.org/genproto/googleapis/api/metric"
-	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
-	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+
+	metricpb "google.golang.org/genproto/googleapis/api/metric"
+	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -60,7 +61,7 @@ var (
 		},
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
-			CollectWorkloadValidationMetrics: true,
+			CollectWorkloadValidationMetrics: wpb.Bool(true),
 		},
 	}
 	bmConfiguration = &cfgpb.Configuration{
@@ -72,7 +73,7 @@ var (
 		},
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
-			CollectWorkloadValidationMetrics: true,
+			CollectWorkloadValidationMetrics: wpb.Bool(true),
 		},
 	}
 	defaultConfigurationDBMetrics = &cfgpb.Configuration{
@@ -84,7 +85,7 @@ var (
 		},
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
-			CollectWorkloadValidationMetrics: true,
+			CollectWorkloadValidationMetrics: wpb.Bool(true),
 			WorkloadValidationDbMetricsConfig: &cfgpb.HANAMetricsConfig{
 				HanaDbUser:     "SYSTEM",
 				HanaDbPassword: "dummy-pass",
@@ -544,7 +545,7 @@ func TestStartMetricsCollection(t *testing.T) {
 			params: Parameters{
 				Config: &cfgpb.Configuration{
 					CollectionConfiguration: &cfgpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: false,
+						CollectWorkloadValidationMetrics: wpb.Bool(false),
 					}},
 				WorkloadConfig:   &wlmpb.WorkloadValidation{},
 				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),

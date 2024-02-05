@@ -184,11 +184,14 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc == nil {
 		cc = &cpb.CollectionConfiguration{}
 	}
+	if cc.GetCollectWorkloadValidationMetrics() == nil {
+		cc.CollectWorkloadValidationMetrics = wpb.Bool(true)
+	}
 	
-	if cc.GetCollectWorkloadValidationMetrics() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
+	if cc.GetCollectWorkloadValidationMetrics().GetValue() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
 		cc.WorkloadValidationMetricsFrequency = 300
 	}
-	if cc.GetCollectWorkloadValidationMetrics() && cc.GetWorkloadValidationDbMetricsFrequency() <= 0 {
+	if cc.GetCollectWorkloadValidationMetrics().GetValue() && cc.GetWorkloadValidationDbMetricsFrequency() <= 0 {
 		cc.WorkloadValidationDbMetricsFrequency = 3600 // Default frequency is 1 hour.
 	}
 	if cc.GetCollectProcessMetrics() && cc.GetProcessMetricsFrequency() <= 0 {

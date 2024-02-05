@@ -100,7 +100,8 @@ type validationMetric interface {
 func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts StartOptions) *cdpb.CollectionDefinition {
 	// If all agent services which rely on a collection definition are disabled,
 	// then we should short-circuit startup.
-	if !opts.LoadOptions.CollectionConfig.GetCollectWorkloadValidationMetrics() && opts.LoadOptions.CollectionConfig.GetWorkloadValidationRemoteCollection() == nil {
+	if !opts.LoadOptions.CollectionConfig.GetCollectWorkloadValidationMetrics().GetValue() &&
+		opts.LoadOptions.CollectionConfig.GetWorkloadValidationRemoteCollection() == nil {
 		log.CtxLogger(ctx).Info("A collection definition is not required for any enabled agent services")
 		return nil
 	}

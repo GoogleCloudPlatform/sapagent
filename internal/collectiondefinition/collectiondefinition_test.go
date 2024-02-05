@@ -147,7 +147,7 @@ func TestStart(t *testing.T) {
 			opts: StartOptions{
 				LoadOptions: LoadOptions{
 					CollectionConfig: &cpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: true,
+						CollectWorkloadValidationMetrics: wpb.Bool(true),
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 							FetchLatestConfig: wpb.Bool(false),
 						},
@@ -164,7 +164,7 @@ func TestStart(t *testing.T) {
 			opts: StartOptions{
 				LoadOptions: LoadOptions{
 					CollectionConfig: &cpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: true,
+						CollectWorkloadValidationMetrics: wpb.Bool(true),
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 							FetchLatestConfig: wpb.Bool(false),
 						},
@@ -232,7 +232,7 @@ func TestStart_HeartbeatSpec(t *testing.T) {
 				},
 				LoadOptions: LoadOptions{
 					CollectionConfig: &cpb.CollectionConfiguration{
-						CollectWorkloadValidationMetrics: true,
+						CollectWorkloadValidationMetrics: wpb.Bool(true),
 						WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 							FetchLatestConfig:       wpb.Bool(true),
 							ConfigTargetEnvironment: cpb.TargetEnvironment_DEVELOPMENT,

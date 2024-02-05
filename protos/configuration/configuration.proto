@@ -46,7 +46,7 @@ message Configuration {
 }
 
 message CollectionConfiguration {
-  bool collect_workload_validation_metrics = 1;
+  google.protobuf.BoolValue collect_workload_validation_metrics = 1;
   int64 workload_validation_metrics_frequency = 2;
   bool collect_process_metrics = 3;
   int64 process_metrics_frequency = 4;

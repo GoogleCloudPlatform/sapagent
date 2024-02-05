@@ -35,6 +35,7 @@ import (
 	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -91,7 +92,7 @@ var (
 func TestCollectMetricsToJSON(t *testing.T) {
 	c := &cfgpb.Configuration{
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
-			CollectWorkloadValidationMetrics: false,
+			CollectWorkloadValidationMetrics: wpb.Bool(true),
 		},
 	}
 	p := Parameters{
@@ -258,7 +259,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 			name: "returnsZeroWhenNotConfigured",
 			config: &cfgpb.Configuration{
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
+					CollectWorkloadValidationMetrics: wpb.Bool(false),
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
 						ConcurrentCollections: 1,
 					},
@@ -271,7 +272,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 			name: "returnsMetricsSentWhenConfiguredGcloud",
 			config: &cfgpb.Configuration{
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
+					CollectWorkloadValidationMetrics: wpb.Bool(false),
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
 						RemoteCollectionGcloud:    &cfgpb.RemoteCollectionGcloud{},
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{defaultRemoteInstance},
@@ -286,7 +287,7 @@ func TestCollectAndSendRemoteMetrics(t *testing.T) {
 			name: "returnsMetricsSentWhenConfiguredSSH",
 			config: &cfgpb.Configuration{
 				CollectionConfiguration: &cfgpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: false,
+					CollectWorkloadValidationMetrics: wpb.Bool(false),
 					WorkloadValidationRemoteCollection: &cfgpb.WorkloadValidationRemoteCollection{
 						RemoteCollectionSsh:       &cfgpb.RemoteCollectionSsh{},
 						RemoteCollectionInstances: []*cfgpb.RemoteCollectionInstance{defaultRemoteInstance},

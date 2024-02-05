@@ -192,11 +192,11 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 
 	if cc := config.GetCollectionConfiguration(); cc == nil {
 		featureStatus[agentMetrics] = false
-		featureStatus[workloadValidation] = false
+		featureStatus[workloadValidation] = true
 		featureStatus[processMetrics] = false
 	} else {
 		featureStatus[agentMetrics] = cc.GetCollectAgentMetrics()
-		featureStatus[workloadValidation] = cc.GetCollectWorkloadValidationMetrics()
+		featureStatus[workloadValidation] = cc.GetCollectWorkloadValidationMetrics().GetValue()
 		featureStatus[processMetrics] = cc.GetCollectProcessMetrics()
 	}
 
@@ -421,7 +421,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 	case "workload_validation":
 		if isEnabled != nil {
 			isCmdValid = true
-			checkCollectionConfig(config).CollectWorkloadValidationMetrics = *isEnabled
+			checkCollectionConfig(config).CollectWorkloadValidationMetrics = &wpb.BoolValue{Value: *isEnabled}
 		}
 		if c.validationMetricsFrequency != 0 {
 			if c.validationMetricsFrequency < 0 {
