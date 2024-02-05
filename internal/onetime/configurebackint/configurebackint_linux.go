@@ -86,13 +86,13 @@ func (*ConfigureBackint) Synopsis() string {
 func (*ConfigureBackint) Usage() string {
 	return `Usage: configurebackint -f=<path/to/backint/parameters.json|path/to/backint/parameters.txt>
 
-	[-bucket=<bucket-name>] [-recovery-bucket=<bucket-name>] [-log-to-cloud=<false>] [-log-level=<"INFO">]
-	[-compress=<false>] [-encryption-key=</path/to/key/file>] [-kms-key=</path/to/key/file>]
-	[-retries=<5>] [-parallel-streams=<1>] [-rate-limit-mb=<0>] [-service-account-key=</path/to/key/file>]
-	[-threads=<64>] [-file-read-timeout-ms=<60000>]	[-buffer-size-mb=<100>]
-	[-retry-backoff-initial=<10>]	[-retry-backoff-max=<300>] [-retry-backoff-multiplier=<2>]
-	[-log-delay-sec=<60>]	[-client-endpoint=<"custom.endpoint.com">]
-	[-folder-prefix=<"prefix/path">] [-recovery-folder-prefix=<"prefix/path">]
+	[-bucket=<bucket-name>] [-recovery_bucket=<bucket-name>] [-log_to_cloud=<false>] [-log_level=<"INFO">]
+	[-compress=<false>] [-encryption_key=</path/to/key/file>] [-kms_key=</path/to/key/file>]
+	[-retries=<5>] [-parallel_streams=<1>] [-rate_limit_mb=<0>] [-service_account_key=</path/to/key/file>]
+	[-threads=<64>] [-file_read_timeout_ms=<60000>]	[-buffer_size_mb=<100>]
+	[-retry_backoff_initial=<10>]	[-retry_backoff_max=<300>] [-retry_backoff_multiplier=<2>]
+	[-log_delay_sec=<60>]	[-client_endpoint=<"custom.endpoint.com">]
+	[-folder_prefix=<"prefix/path">] [-recovery_folder_prefix=<"prefix/path">]
 	[-h] [-v]` + "\n"
 }
 
@@ -104,26 +104,26 @@ func (c *ConfigureBackint) SetFlags(fs *flag.FlagSet) {
 
 	// Using underscores for config parameters to match the proto values.
 	fs.StringVar(&c.bucket, "bucket", "", "Specify the name of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from.")
-	fs.StringVar(&c.recoveryBucket, "recovery-bucket", "", "Specify the name of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from for RESTORE operations.")
-	fs.BoolVar(&c.logToCloud, "log-to-cloud", false, "To redirect the Backint related logs of Google Cloud's Agent for SAP, to Cloud Logging, specify true.")
-	fs.StringVar(&c.logLevel, "log-level", "", "Specify the logging level for the Backint feature of Google Cloud's Agent for SAP.")
+	fs.StringVar(&c.recoveryBucket, "recovery_bucket", "", "Specify the name of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from for RESTORE operations.")
+	fs.BoolVar(&c.logToCloud, "log_to_cloud", false, "To redirect the Backint related logs of Google Cloud's Agent for SAP, to Cloud Logging, specify true.")
+	fs.StringVar(&c.logLevel, "log_level", "", "Specify the logging level for the Backint feature of Google Cloud's Agent for SAP.")
 	fs.BoolVar(&c.compress, "compress", false, "Specify whether or not Google Cloud's Agent for SAP is to enable compression while writing backups to the Cloud Storage bucket.")
-	fs.StringVar(&c.encryptionKey, "encryption-key", "", "Specify the path to the customer-supplied encryption key that you've configured your Cloud Storage bucket to use to encrypt backups.")
-	fs.StringVar(&c.kmsKey, "kms-key", "", "Specify the path to the customer-managed encryption key that you've configured your Cloud Storage bucket to use to encrypt backups.")
+	fs.StringVar(&c.encryptionKey, "encryption_key", "", "Specify the path to the customer-supplied encryption key that you've configured your Cloud Storage bucket to use to encrypt backups.")
+	fs.StringVar(&c.kmsKey, "kms_key", "", "Specify the path to the customer-managed encryption key that you've configured your Cloud Storage bucket to use to encrypt backups.")
 	fs.Int64Var(&c.retries, "retries", 0, "Specifies the maximum number of times that Google Cloud's Agent for SAP retries a failed attempt to read or write to Cloud Storage.")
-	fs.Int64Var(&c.parallelStreams, "parallel-streams", 0, "Specify to enable parallel upload and specifies the maximum number of parallel upload streams that Google Cloud's Agent for SAP can use.")
-	fs.Int64Var(&c.rateLimitMb, "rate-limit-mb", 0, "Specify the upper limit, in MB, for the outbound network bandwidth of Compute Engine during backup or restore operations.")
-	fs.StringVar(&c.serviceAccountKey, "service-account-key", "", "If Google Cloud's Agent for SAP is not running on a Compute Engine VM, then specify the fully-qualified path to the JSON-encoded Google Cloud service account.")
+	fs.Int64Var(&c.parallelStreams, "parallel_streams", 0, "Specify to enable parallel upload and specifies the maximum number of parallel upload streams that Google Cloud's Agent for SAP can use.")
+	fs.Int64Var(&c.rateLimitMb, "rate_limit_mb", 0, "Specify the upper limit, in MB, for the outbound network bandwidth of Compute Engine during backup or restore operations.")
+	fs.StringVar(&c.serviceAccountKey, "service_account_key", "", "If Google Cloud's Agent for SAP is not running on a Compute Engine VM, then specify the fully-qualified path to the JSON-encoded Google Cloud service account.")
 	fs.Int64Var(&c.threads, "threads", 0, "Specify the number of worker threads.")
-	fs.Int64Var(&c.fileReadTimeoutMs, "file-read-timeout-ms", 0, "Specify the maximum amount of time, in milliseconds, that Google Cloud's Agent for SAP waits to open the backup file.")
-	fs.Int64Var(&c.bufferSizeMb, "buffer-size-mb", 0, "Specify this parameter to control the size of HTTPS requests to Cloud Storage during backup or restore operations.")
-	fs.Int64Var(&c.retryBackoffInitial, "retry-backoff-initial", 0, "Specify the initial value, in seconds, for the retry period used in the exponential backoff network retries.")
-	fs.Int64Var(&c.retryBackoffMax, "retry-backoff-max", 0, "Specify the maximum value, in seconds, for the retry period used in the exponential backoff network retries.")
-	fs.Float64Var(&c.retryBackoffMultiplier, "retry-backoff-multiplier", 0, "Specify the multiplier for the retry period used in the exponential backoff network retries.")
-	fs.Int64Var(&c.logDelaySec, "log-delay-sec", 0, "Specify the logging delay, in seconds, for progress updates during reads and writes to the Cloud Storage bucket.")
-	fs.StringVar(&c.clientEndpoint, "client-endpoint", "", "Specify the endpoint of the Cloud Storage client.")
-	fs.StringVar(&c.folderPrefix, "folder-prefix", "", "Specify the folder prefix of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from.")
-	fs.StringVar(&c.recoveryFolderPrefix, "recovery-folder-prefix", "", "Specify the folder prefix of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from for RESTORE operations.")
+	fs.Int64Var(&c.fileReadTimeoutMs, "file_read_timeout_ms", 0, "Specify the maximum amount of time, in milliseconds, that Google Cloud's Agent for SAP waits to open the backup file.")
+	fs.Int64Var(&c.bufferSizeMb, "buffer_size_mb", 0, "Specify this parameter to control the size of HTTPS requests to Cloud Storage during backup or restore operations.")
+	fs.Int64Var(&c.retryBackoffInitial, "retry_backoff_initial", 0, "Specify the initial value, in seconds, for the retry period used in the exponential backoff network retries.")
+	fs.Int64Var(&c.retryBackoffMax, "retry_backoff_max", 0, "Specify the maximum value, in seconds, for the retry period used in the exponential backoff network retries.")
+	fs.Float64Var(&c.retryBackoffMultiplier, "retry_backoff_multiplier", 0, "Specify the multiplier for the retry period used in the exponential backoff network retries.")
+	fs.Int64Var(&c.logDelaySec, "log_delay_sec", 0, "Specify the logging delay, in seconds, for progress updates during reads and writes to the Cloud Storage bucket.")
+	fs.StringVar(&c.clientEndpoint, "client_endpoint", "", "Specify the endpoint of the Cloud Storage client.")
+	fs.StringVar(&c.folderPrefix, "folder_prefix", "", "Specify the folder prefix of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from.")
+	fs.StringVar(&c.recoveryFolderPrefix, "recovery_folder_prefix", "", "Specify the folder prefix of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from for RESTORE operations.")
 }
 
 // Execute implements the subcommand interface for configurebackint.
@@ -220,45 +220,45 @@ func (c *ConfigureBackint) updateConfig(ctx context.Context, config *bpb.Backint
 		switch f.Name {
 		case "bucket":
 			config.Bucket = c.bucket
-		case "recovery-bucket":
+		case "recovery_bucket":
 			config.RecoveryBucket = c.recoveryBucket
-		case "log-to-cloud":
+		case "log_to_cloud":
 			config.LogToCloud = &wpb.BoolValue{Value: c.logToCloud}
-		case "log-level":
+		case "log_level":
 			config.LogLevel = bpb.LogLevel(bpb.LogLevel_value[strings.ToUpper(c.logLevel)])
 		case "compress":
 			config.Compress = c.compress
-		case "encryption-key":
+		case "encryption_key":
 			config.EncryptionKey = c.encryptionKey
-		case "kms-key":
+		case "kms_key":
 			config.KmsKey = c.kmsKey
 		case "retries":
 			config.Retries = c.retries
-		case "parallel-streams":
+		case "parallel_streams":
 			config.ParallelStreams = c.parallelStreams
-		case "rate-limit-mb":
+		case "rate_limit_mb":
 			config.RateLimitMb = c.rateLimitMb
-		case "service-account-key":
+		case "service_account_key":
 			config.ServiceAccountKey = c.serviceAccountKey
 		case "threads":
 			config.Threads = c.threads
-		case "file-read-timeout-ms":
+		case "file_read_timeout_ms":
 			config.FileReadTimeoutMs = c.fileReadTimeoutMs
-		case "buffer-size-mb":
+		case "buffer_size_mb":
 			config.BufferSizeMb = c.bufferSizeMb
-		case "retry-backoff-initial":
+		case "retry_backoff_initial":
 			config.RetryBackoffInitial = c.retryBackoffInitial
-		case "retry-backoff-max":
+		case "retry_backoff_max":
 			config.RetryBackoffMax = c.retryBackoffMax
-		case "retry-backoff-multiplier":
+		case "retry_backoff_multiplier":
 			config.RetryBackoffMultiplier = float32(c.retryBackoffMultiplier)
-		case "log-delay-sec":
+		case "log_delay_sec":
 			config.LogDelaySec = c.logDelaySec
-		case "client-endpoint":
+		case "client_endpoint":
 			config.ClientEndpoint = c.clientEndpoint
-		case "folder-prefix":
+		case "folder_prefix":
 			config.FolderPrefix = c.folderPrefix
-		case "recovery-folder-prefix":
+		case "recovery_folder_prefix":
 			config.RecoveryFolderPrefix = c.recoveryFolderPrefix
 		}
 	})

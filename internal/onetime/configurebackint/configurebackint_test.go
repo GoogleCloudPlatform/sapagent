@@ -221,7 +221,7 @@ func TestSynopsisForConfigureBackint(t *testing.T) {
 func TestSetFlagsForConfigureBackint(t *testing.T) {
 	b := ConfigureBackint{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"f", "v", "h", "bucket", "recovery-bucket", "log-to-cloud", "log-level", "compress", "encryption-key", "kms-key", "retries", "parallel-streams", "rate-limit-mb", "service-account-key", "threads", "file-read-timeout-ms", "buffer-size-mb", "retry-backoff-initial", "retry-backoff-max", "retry-backoff-multiplier", "log-delay-sec", "client-endpoint", "folder-prefix", "recovery-folder-prefix"}
+	flags := []string{"f", "v", "h", "bucket", "recovery_bucket", "log_to_cloud", "log_level", "compress", "encryption_key", "kms_key", "retries", "parallel_streams", "rate_limit_mb", "service_account_key", "threads", "file_read_timeout_ms", "buffer_size_mb", "retry_backoff_initial", "retry_backoff_max", "retry_backoff_multiplier", "log_delay_sec", "client_endpoint", "folder_prefix", "recovery_folder_prefix"}
 	b.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -338,26 +338,26 @@ func TestConfigureBackintHandler(t *testing.T) {
 			flags: map[string]string{
 				"f":                        "test.json",
 				"bucket":                   "test-bucket",
-				"recovery-bucket":          "backup-bucket",
-				"log-to-cloud":             "true",
-				"log-level":                "INFO",
+				"recovery_bucket":          "backup-bucket",
+				"log_to_cloud":             "true",
+				"log_level":                "INFO",
 				"compress":                 "true",
-				"encryption-key":           "/my/path",
-				"kms-key":                  "/another/path",
+				"encryption_key":           "/my/path",
+				"kms_key":                  "/another/path",
 				"retries":                  "5",
-				"parallel-streams":         "10",
-				"rate-limit-mb":            "100",
-				"service-account-key":      "another/path/here",
+				"parallel_streams":         "10",
+				"rate_limit_mb":            "100",
+				"service_account_key":      "another/path/here",
 				"threads":                  "1",
-				"file-read-timeout-ms":     "1000",
-				"buffer-size-mb":           "200",
-				"retry-backoff-initial":    "15",
-				"retry-backoff-max":        "250",
-				"retry-backoff-multiplier": "2.5",
-				"log-delay-sec":            "5",
-				"client-endpoint":          "my.endpoint",
-				"folder-prefix":            "my/prefix",
-				"recovery-folder-prefix":   "recover/prefix",
+				"file_read_timeout_ms":     "1000",
+				"buffer_size_mb":           "200",
+				"retry_backoff_initial":    "15",
+				"retry_backoff_max":        "250",
+				"retry_backoff_multiplier": "2.5",
+				"log_delay_sec":            "5",
+				"client_endpoint":          "my.endpoint",
+				"folder_prefix":            "my/prefix",
+				"recovery_folder_prefix":   "recover/prefix",
 			},
 			want: nil,
 		},
