@@ -21,6 +21,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -47,55 +48,64 @@ const (
 	maxQueryFailures = 2
 )
 
-type gceInterface interface {
-	GetSecret(ctx context.Context, projectID, secretName string) (string, error)
-}
+type (
+	gceInterface interface {
+		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
+	}
 
-// timeSeriesKey is a struct which holds the information which can uniquely identify each timeseries
-// and can be used as a Map key since every field is comparable.
-type timeSeriesKey struct {
-	MetricType   string
-	MetricKind   string
-	MetricLabels string
-}
+	// timeSeriesKey is a struct which holds the information which can uniquely identify each timeseries
+	// and can be used as a Map key since every field is comparable.
+	timeSeriesKey struct {
+		MetricType   string
+		MetricKind   string
+		MetricLabels string
+	}
 
-// prevVal struct stores the value of the last datapoint in the timeseries. It is needed to build
-// a cumulative timeseries which uses the previous data point value and timestamp since the process
-// started.
-type prevVal struct {
-	val       any
-	startTime *tspb.Timestamp
-}
+	// prevVal struct stores the value of the last datapoint in the timeseries. It is needed to build
+	// a cumulative timeseries which uses the previous data point value and timestamp since the process
+	// started.
+	prevVal struct {
+		val       any
+		startTime *tspb.Timestamp
+	}
 
-// queryFunc provides an easily testable translation to the SQL API.
-type queryFunc func(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	// queryFunc provides an easily testable translation to the SQL API.
+	queryFunc func(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 
-// Parameters hold the parameters necessary to invoke Start().
-type Parameters struct {
-	Config              *cpb.Configuration
-	GCEService          gceInterface
-	BackOffs            *cloudmonitoring.BackOffIntervals
-	TimeSeriesCreator   cloudmonitoring.TimeSeriesCreator
-	dailyMetricsRoutine *recovery.RecoverableRoutine
-}
+	// Parameters hold the parameters necessary to invoke Start().
+	Parameters struct {
+		Config                  *cpb.Configuration
+		GCEService              gceInterface
+		BackOffs                *cloudmonitoring.BackOffIntervals
+		TimeSeriesCreator       cloudmonitoring.TimeSeriesCreator
+		dailyMetricsRoutine     *recovery.RecoverableRoutine
+		createWorkerPoolRoutine *recovery.RecoverableRoutine
+	}
 
-// queryOptions holds parameters for the queryAndSend workflows.
-type queryOptions struct {
-	db             *database
-	query          *cpb.Query
-	timeout        int64
-	sampleInterval int64
-	failCount      int64
-	params         Parameters
-	wp             *workerpool.WorkerPool
-	runningSum     map[timeSeriesKey]prevVal
-}
+	// queryOptions holds parameters for the queryAndSend workflows.
+	queryOptions struct {
+		db             *database
+		query          *cpb.Query
+		timeout        int64
+		sampleInterval int64
+		failCount      int64
+		params         Parameters
+		wp             *workerpool.WorkerPool
+		runningSum     map[timeSeriesKey]prevVal
+	}
 
-// database holds the relevant information for querying and debugging the database.
-type database struct {
-	queryFunc queryFunc
-	instance  *cpb.HANAInstance
-}
+	// database holds the relevant information for querying and debugging the database.
+	database struct {
+		queryFunc queryFunc
+		instance  *cpb.HANAInstance
+	}
+
+	// createWorkerPoolArgs holds the parameters necessary to invoke the routine createWorkerPool().
+	createWorkerPoolArgs struct {
+		params    Parameters
+		databases []*database
+	}
+)
 
 // Start validates the configuration and creates the database connections.
 // Returns true if the query goroutine is started, and false otherwise.
@@ -126,16 +136,36 @@ func Start(ctx context.Context, params Parameters) bool {
 	}
 	params.dailyMetricsRoutine.StartRoutine(ctx)
 
-	go createWorkerPool(ctx, params, databases)
+	createWorkerPoolArgs := createWorkerPoolArgs{
+		params:    params,
+		databases: databases,
+	}
+	params.createWorkerPoolRoutine = &recovery.RecoverableRoutine{
+		Routine:             createWorkerPool,
+		RoutineArg:          createWorkerPoolArgs,
+		ErrorCode:           usagemetrics.HANAMonitoringCreateWorkerPoolFailure,
+		ExpectedMinDuration: time.Minute,
+	}
+	params.createWorkerPoolRoutine.StartRoutine(ctx)
 	return true
 }
 
 // createWorkerPool creates a job for each query on each database. If the SID
 // is not present in the config, the database will be queried to populate it.
-func createWorkerPool(ctx context.Context, params Parameters, databases []*database) {
-	cfg := params.Config.GetHanaMonitoringConfiguration()
+func createWorkerPool(ctx context.Context, a any) {
+	var args createWorkerPoolArgs
+	var ok bool
+	if args, ok = a.(createWorkerPoolArgs); !ok {
+		log.CtxLogger(ctx).Infow(
+			"args is not of type createWorkerPoolArgs",
+			"typeOfArgs", reflect.TypeOf(a),
+		)
+		return
+	}
+
+	cfg := args.params.Config.GetHanaMonitoringConfiguration()
 	wp := workerpool.New(int(cfg.GetExecutionThreads()))
-	for _, db := range databases {
+	for _, db := range args.databases {
 		if db.instance.GetSid() == "" {
 			ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
 			sid, err := fetchSID(ctxTimeout, db)
@@ -162,7 +192,7 @@ func createWorkerPool(ctx context.Context, params Parameters, databases []*datab
 					query:          query,
 					timeout:        cfg.GetQueryTimeoutSec(),
 					sampleInterval: sampleInterval,
-					params:         params,
+					params:         args.params,
 					wp:             wp,
 					runningSum:     make(map[timeSeriesKey]prevVal),
 				})
@@ -178,29 +208,36 @@ func createWorkerPool(ctx context.Context, params Parameters, databases []*datab
 func queryAndSend(ctx context.Context, opts queryOptions) (bool, error) {
 	user, host, port, queryName := opts.db.instance.GetUser(), opts.db.instance.GetHost(), opts.db.instance.GetPort(), opts.query.GetName()
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(opts.timeout))
-	sent, batchCount, err := queryAndSendOnce(ctxTimeout, opts.db, opts.query, opts.params, opts.runningSum)
-	cancel()
-	if err != nil {
-		opts.failCount++
-		log.CtxLogger(ctx).Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount, "error", err)
-		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
-	} else {
-		opts.failCount = 0
-		log.CtxLogger(ctx).Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", opts.sampleInterval)
-	}
+	select {
+	case <-ctx.Done():
+		log.CtxLogger(ctx).Debugw("Context cancelled, stopping queryAndSend worker", "err", ctx.Err())
+		cancel()
+		return false, ctx.Err()
+	default:
+		sent, batchCount, err := queryAndSendOnce(ctxTimeout, opts.db, opts.query, opts.params, opts.runningSum)
+		cancel()
+		if err != nil {
+			opts.failCount++
+			log.CtxLogger(ctx).Errorw("Error querying database or sending metrics", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount, "error", err)
+			usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
+		} else {
+			opts.failCount = 0
+			log.CtxLogger(ctx).Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", opts.sampleInterval)
+		}
 
-	if opts.failCount >= maxQueryFailures {
-		log.CtxLogger(ctx).Errorw("Query reached max failure count, not restarting.", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount)
-		return false, err
-	}
-	// Schedule to insert this query back into the task queue after the sampleInterval.
-	// Also release this worker back to the pool since AfterFunc() is non-blocking.
-	time.AfterFunc(time.Duration(opts.sampleInterval)*time.Second, func() {
-		opts.wp.Submit(func() {
-			queryAndSend(ctx, opts)
+		if opts.failCount >= maxQueryFailures {
+			log.CtxLogger(ctx).Errorw("Query reached max failure count, not restarting.", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount)
+			return false, err
+		}
+		// Schedule to insert this query back into the task queue after the sampleInterval.
+		// Also release this worker back to the pool since AfterFunc() is non-blocking.
+		time.AfterFunc(time.Duration(opts.sampleInterval)*time.Second, func() {
+			opts.wp.Submit(func() {
+				queryAndSend(ctx, opts)
+			})
 		})
-	})
-	return true, err
+		return true, err
+	}
 }
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.

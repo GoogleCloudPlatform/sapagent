@@ -116,6 +116,7 @@ const (
 	RemoteCollectGcloudFailure
 	ConfigureBackintFailure
 	CollectionDefinitionUpdateRoutineFailure
+	HANAMonitoringCreateWorkerPoolFailure
 )
 
 // Agent wide action mappings.
