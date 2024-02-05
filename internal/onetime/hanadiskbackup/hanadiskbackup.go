@@ -67,7 +67,7 @@ type (
 // Snapshot has args for snapshot subcommands.
 // TODO: Improve Disk Backup and Restore code coverage and reduce redundancy.
 type Snapshot struct {
-	project, host, port, sid             string
+	project, host, port, sid, instanceID string
 	hanaDBUser, password, passwordSecret string
 	disk, diskZone                       string
 
@@ -103,7 +103,8 @@ func (*Snapshot) Usage() string {
 
 // SetFlags implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&s.port, "port", "", "HANA port. (required)")
+	fs.StringVar(&s.port, "port", "", "HANA port. (optional - Either port or instance-id must be provided)")
+	fs.StringVar(&s.instanceID, "instance-id", "", "HANA instance ID. (optional - Either port or instance-id must be provided)")
 	fs.StringVar(&s.sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&s.hanaDBUser, "hana-db-user", "", "HANA DB Username. (required)")
 	fs.StringVar(&s.password, "password", "", "HANA password. (discouraged - use password-secret instead)")
@@ -222,8 +223,10 @@ func (s *Snapshot) validateParameters(os string) error {
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
-	case s.port == "" || s.sid == "" || s.hanaDBUser == "" || s.disk == "" || s.diskZone == "":
+	case s.sid == "" || s.hanaDBUser == "" || s.disk == "" || s.diskZone == "":
 		return fmt.Errorf("required arguments not passed. Usage:" + s.Usage())
+	case s.port == "" && s.instanceID == "":
+		return fmt.Errorf("either -port or -instance-id is required. Usage:" + s.Usage())
 	case s.password == "" && s.passwordSecret == "":
 		return fmt.Errorf("either -password or -password-secret is required. Usage:" + s.Usage())
 	}
@@ -238,8 +241,17 @@ func (s *Snapshot) validateParameters(os string) error {
 	if s.description == "" {
 		s.description = fmt.Sprintf("Snapshot created by Agent for SAP for HANA sid: %q", s.sid)
 	}
+	s.port = s.portValue()
 	log.Logger.Debug("Parameter validation successful.")
 	return nil
+}
+
+func (s *Snapshot) portValue() string {
+	if s.port == "" {
+		log.Logger.Debug("Building port number of the system database from instance ID", "instanceID", s.instanceID)
+		return fmt.Sprintf("3%s13", s.instanceID)
+	}
+	return s.port
 }
 
 func runQuery(h *sql.DB, q string) (string, error) {

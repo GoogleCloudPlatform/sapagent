@@ -216,11 +216,6 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name:     "EmptyPort",
-			snapshot: Snapshot{port: ""},
-			want:     cmpopts.AnyError,
-		},
-		{
 			name:     "EmptySID",
 			snapshot: Snapshot{port: "123", sid: ""},
 			want:     cmpopts.AnyError,
@@ -264,6 +259,20 @@ func TestValidateParameters(t *testing.T) {
 				diskZone:       "us-east1-a",
 				password:       "",
 				passwordSecret: "",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "EmptyPortAndInstanceID",
+			snapshot: Snapshot{
+				host:           "localhost",
+				port:           "",
+				instanceID:     "",
+				sid:            "HDB",
+				hanaDBUser:     "system",
+				disk:           "pd-1",
+				diskZone:       "us-east1-a",
+				passwordSecret: "secret",
 			},
 			want: cmpopts.AnyError,
 		},
@@ -319,6 +328,21 @@ func TestDefaultProject(t *testing.T) {
 	}
 	if s.project != "default-project" {
 		t.Errorf("project = %v, want = %v", s.project, "default-project")
+	}
+}
+
+func TestPortValue(t *testing.T) {
+	s := Snapshot{
+		sid:            "HDB",
+		instanceID:     "00",
+		hanaDBUser:     "system",
+		disk:           "pd-1",
+		diskZone:       "us-east1-a",
+		passwordSecret: "secret",
+	}
+	got := s.portValue()
+	if got != "30013" {
+		t.Errorf("portValue()=%v, want = %v", got, "0")
 	}
 }
 
