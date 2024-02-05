@@ -190,8 +190,8 @@ func HANAReplicationConfig(ctx context.Context, user, sid, instID string) (site 
 func readReplicationConfig(ctx context.Context, user, sid, instID string, exec commandlineexecutor.Execute) (mode int, HAMembers []string, exitStatus int64, err error) {
 	// Keeping the timeout for the execution of the script as 25 seconds, so if the process hangs,
 	// it will be killed and trace files will not be generated.
-	cmd := "timeout"
-	args := fmt.Sprintf("25 /usr/sap/%s/HDB%s/exe/hdbnsutil -sr_state >> /tmp/systemReplicationStatus.log 2>&1;", strings.ToUpper(sid), instID)
+	cmd := "sudo"
+	args := fmt.Sprintf("-i -u %sadm timeout 25 hdbnsutil -sr_state", strings.ToLower(sid))
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  cmd,
 		ArgsToSplit: args,
