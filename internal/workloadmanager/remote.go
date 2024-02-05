@@ -134,12 +134,13 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 				InstanceName: inst.GetInstanceName(),
 			}
 			metricsSent += sendMetrics(ctx, sendMetricsParams{
-				wm:                wm,
-				cp:                remoteCp,
-				bareMetal:         params.Config.GetBareMetal(),
-				timeSeriesCreator: params.TimeSeriesCreator,
-				backOffIntervals:  params.BackOffs,
-				wlmService:        params.WLMService,
+				wm:                    wm,
+				cp:                    remoteCp,
+				bareMetal:             params.Config.GetBareMetal(),
+				sendToCloudMonitoring: params.Config.GetSupportConfiguration().GetSendWorkloadValidationMetricsToCloudMonitoring().GetValue(),
+				timeSeriesCreator:     params.TimeSeriesCreator,
+				backOffIntervals:      params.BackOffs,
+				wlmService:            params.WLMService,
 			})
 		})
 	}

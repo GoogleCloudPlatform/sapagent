@@ -220,6 +220,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 4 * 60 * 60},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -255,6 +256,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -271,6 +273,9 @@ func TestApplyDefaults(t *testing.T) {
 					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
+				},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
 				},
 			},
 			want: &cpb.Configuration{
@@ -301,6 +306,9 @@ func TestApplyDefaults(t *testing.T) {
 					SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 1},
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
+				},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
 				},
 			},
 		},
@@ -343,6 +351,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -398,6 +407,7 @@ func TestApplyDefaults(t *testing.T) {
 					},
 				},
 				DiscoveryConfiguration: defaultDiscoveryProps,
+				SupportConfiguration:   &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -426,6 +436,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -453,6 +464,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -484,6 +496,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -515,6 +528,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -546,6 +560,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 		{
@@ -577,6 +592,7 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
+				SupportConfiguration: &cpb.SupportConfiguration{},
 			},
 		},
 	}

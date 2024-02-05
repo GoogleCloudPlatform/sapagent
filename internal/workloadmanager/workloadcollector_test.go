@@ -364,6 +364,8 @@ func TestSendMetrics(t *testing.T) {
 							Insight: &workloadmanager.Insight{
 								InstanceId: "test-instance-id",
 								SapValidation: &workloadmanager.SapValidation{
+									ProjectId: "test-project-id",
+									Zone:      "test-region-zone",
 									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
 										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
 									},
@@ -380,13 +382,15 @@ func TestSendMetrics(t *testing.T) {
 					Resource: &monitoredresourcepb.MonitoredResource{},
 					Points:   []*mrpb.Point{},
 				}}},
-				cp:                defaultConfiguration.GetCloudProperties(),
-				timeSeriesCreator: &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
-				backOffIntervals:  defaultBackOffIntervals,
+				cp:                    defaultConfiguration.GetCloudProperties(),
+				sendToCloudMonitoring: true,
+				timeSeriesCreator:     &fake.TimeSeriesCreator{Err: cmpopts.AnyError},
+				backOffIntervals:      defaultBackOffIntervals,
 			},
 			wantMetricCount: 0,
 		},
 		{
+			name: "failsSendToDataWarehouse",
 			wlmInterface: &wlmfake.TestWLM{
 				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
@@ -406,7 +410,6 @@ func TestSendMetrics(t *testing.T) {
 				}},
 				WriteInsightErrs: []error{cmpopts.AnyError},
 			},
-			name: "failsSendToDataWarehouse",
 			params: sendMetricsParams{
 				wm: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{{
 					Metric:   &metricpb.Metric{},

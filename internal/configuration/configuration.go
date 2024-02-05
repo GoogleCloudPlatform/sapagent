@@ -171,6 +171,11 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	config.CollectionConfiguration = applyDefaultCollectionConfiguration(config.GetCollectionConfiguration())
 	config.HanaMonitoringConfiguration = applyDefaultHMConfiguration(config.GetHanaMonitoringConfiguration())
 	config.DiscoveryConfiguration = applyDefaultDiscoveryConfiguration(config.GetDiscoveryConfiguration())
+
+	if config.GetSupportConfiguration() == nil {
+		config.SupportConfiguration = &cpb.SupportConfiguration{}
+	}
+
 	return config
 }
 

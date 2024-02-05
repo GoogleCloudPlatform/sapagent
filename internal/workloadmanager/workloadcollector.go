@@ -70,12 +70,13 @@ type wlmInterface interface {
 
 // sendMetricsParams defines the set of parameters required to call sendMetrics
 type sendMetricsParams struct {
-	wm                WorkloadMetrics
-	cp                *ipb.CloudProperties
-	bareMetal         bool
-	timeSeriesCreator cloudmonitoring.TimeSeriesCreator
-	backOffIntervals  *cloudmonitoring.BackOffIntervals
-	wlmService        wlmInterface
+	wm                    WorkloadMetrics
+	cp                    *ipb.CloudProperties
+	bareMetal             bool
+	sendToCloudMonitoring bool
+	timeSeriesCreator     cloudmonitoring.TimeSeriesCreator
+	backOffIntervals      *cloudmonitoring.BackOffIntervals
+	wlmService            wlmInterface
 }
 
 var (
@@ -99,7 +100,7 @@ func start(ctx context.Context, a any) {
 		log.CtxLogger(ctx).Info("Cannot collect Workload Manager metrics, no collection configuration detected")
 		return
 	}
-	log.CtxLogger(ctx).Info("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
+	log.CtxLogger(ctx).Infow("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
 	cmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 	if cmf <= 0 {
 		// default it to 5 minutes
@@ -158,12 +159,13 @@ func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 	log.CtxLogger(ctx).Info("Collecting metrics from this instance")
 	metrics := collectMetricsFromConfig(ctx, params, metricOverridePath)
 	sendMetrics(ctx, sendMetricsParams{
-		wm:                metrics,
-		cp:                params.Config.GetCloudProperties(),
-		bareMetal:         params.Config.GetBareMetal(),
-		timeSeriesCreator: params.TimeSeriesCreator,
-		backOffIntervals:  params.BackOffs,
-		wlmService:        params.WLMService,
+		wm:                    metrics,
+		cp:                    params.Config.GetCloudProperties(),
+		bareMetal:             params.Config.GetBareMetal(),
+		sendToCloudMonitoring: params.Config.GetSupportConfiguration().GetSendWorkloadValidationMetricsToCloudMonitoring().GetValue(),
+		timeSeriesCreator:     params.TimeSeriesCreator,
+		backOffIntervals:      params.BackOffs,
+		wlmService:            params.WLMService,
 	})
 }
 
@@ -391,36 +393,72 @@ func parseScannedText(text string) (key, value string, found bool) {
 	return strings.TrimSpace(key), strings.TrimSpace(value), found
 }
 
+// sendMetrics performs the request(s) to write collected metric data.
+//
+// There are two workflows for sending metric data, determined by the
+// send_to_cloud_monitoring configuration flag. The default workflow involves
+// sending a write request to Data Warehouse. The legacy workflow involves
+// storing metrics as time series data in Cloud Monitoring, with a secondary
+// write to Data Warehouse that is not taken into consideration for the
+// overall success or failure of the function.
 func sendMetrics(ctx context.Context, params sendMetricsParams) int {
-	if params.wm.Metrics == nil || len(params.wm.Metrics) == 0 {
-		log.CtxLogger(ctx).Info("No metrics to send to Cloud Monitoring")
+	if len(params.wm.Metrics) == 0 {
+		log.CtxLogger(ctx).Info("No Workload Manager metrics to send.")
 		return 0
 	}
 
-	// debugging metric data being sent
-	for _, m := range params.wm.Metrics {
-		if len(m.GetPoints()) == 0 {
-			log.CtxLogger(ctx).Debugw("  Metric has no point data", "metric", m.GetMetric().GetType())
-			continue
+	logMetricData(ctx, params.wm.Metrics)
+
+	if params.sendToCloudMonitoring {
+		sentMetrics := len(params.wm.Metrics)
+		log.CtxLogger(ctx).Infow("Sending metrics to Cloud Monitoring...", "number", len(params.wm.Metrics))
+		request := mpb.CreateTimeSeriesRequest{
+			Name:       fmt.Sprintf("projects/%s", params.cp.GetProjectId()),
+			TimeSeries: params.wm.Metrics,
 		}
-		log.CtxLogger(ctx).Debugw("  Metric", "metric", m.GetMetric().GetType(), "value", m.GetPoints()[0].GetValue().GetDoubleValue())
-		for k, v := range m.GetMetric().GetLabels() {
-			log.CtxLogger(ctx).Debugw("    Label", "key", k, "value", v)
+		if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, params.timeSeriesCreator, &request, params.backOffIntervals); err != nil {
+			log.CtxLogger(ctx).Warnw("Failed to send metrics to Cloud Monitoring", "error", err)
+			usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
+			sentMetrics = 0
+		} else {
+			log.CtxLogger(ctx).Infow("Sent metrics to Cloud Monitoring.", "number", len(params.wm.Metrics))
 		}
+
+		sendMetricsToDataWarehouseSecondary(ctx, params)
+
+		return sentMetrics
 	}
 
-	log.CtxLogger(ctx).Infow("Sending metrics to Cloud Monitoring...", "number", len(params.wm.Metrics))
-	request := mpb.CreateTimeSeriesRequest{
-		Name:       fmt.Sprintf("projects/%s", params.cp.GetProjectId()),
-		TimeSeries: params.wm.Metrics,
+	return sendMetricsToDataWarehouse(ctx, params)
+}
+
+// sendMetricsToDataWarehouse initiates the Data Warehouse write insight request.
+func sendMetricsToDataWarehouse(ctx context.Context, params sendMetricsParams) int {
+	sentMetrics := len(params.wm.Metrics)
+	log.CtxLogger(ctx).Infow("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
+	// Send request to regional endpoint. Ex: "us-central1-a" -> "us-central1"
+	location := params.cp.GetZone()
+	if params.bareMetal {
+		location = params.cp.GetRegion()
 	}
-	if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, params.timeSeriesCreator, &request, params.backOffIntervals); err != nil {
-		log.CtxLogger(ctx).Errorw("Failed to send metrics to Cloud Monitoring", "error", err)
+	locationParts := strings.Split(location, "-")
+	location = strings.Join([]string{locationParts[0], locationParts[1]}, "-")
+	req := createWriteInsightRequest(params.wm, params.cp)
+	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
+		log.CtxLogger(ctx).Warnw("Failed to send metrics to Data Warehouse", "error", err)
 		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
-		return 0
+		sentMetrics = 0
+	} else {
+		log.CtxLogger(ctx).Infow("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
 	}
-	log.CtxLogger(ctx).Infow("Sent metrics to Cloud Monitoring.", "number", len(params.wm.Metrics))
+	return sentMetrics
+}
 
+// sendMetricsToDataWarehouseSecondary initiates the Data Warehouse write
+// insight request. However, the log level has been lowered to DEBUG, and there
+// is no usagemetrics logging if the request fails.
+func sendMetricsToDataWarehouseSecondary(ctx context.Context, params sendMetricsParams) int {
+	sentMetrics := len(params.wm.Metrics)
 	log.CtxLogger(ctx).Debugw("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
 	// Send request to regional endpoint. Ex: "us-central1-a" -> "us-central1"
 	location := params.cp.GetZone()
@@ -432,12 +470,11 @@ func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	req := createWriteInsightRequest(params.wm, params.cp)
 	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
 		log.CtxLogger(ctx).Debugw("Failed to send metrics to Data Warehouse", "error", err)
-		// Do not log a usagemetrics error until this is the primary data pipeline.
-		return 0
+		sentMetrics = 0
+	} else {
+		log.CtxLogger(ctx).Debugw("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
 	}
-	log.CtxLogger(ctx).Debugw("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
-
-	return len(params.wm.Metrics)
+	return sentMetrics
 }
 
 func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configuration) []*mrpb.TimeSeries {
@@ -497,5 +534,19 @@ func createWriteInsightRequest(wm WorkloadMetrics, cp *ipb.CloudProperties) *wor
 				ValidationDetails: validations,
 			},
 		},
+	}
+}
+
+// logMetricData prints collected metric information to the agent log file.
+func logMetricData(ctx context.Context, metrics []*mrpb.TimeSeries) {
+	for _, m := range metrics {
+		if len(m.GetPoints()) == 0 {
+			log.CtxLogger(ctx).Debugw("Metric has no point data", "metric", m.GetMetric().GetType())
+			continue
+		}
+		log.CtxLogger(ctx).Debugw("Metric", "metric", m.GetMetric().GetType(), "value", m.GetPoints()[0].GetValue().GetDoubleValue())
+		for k, v := range m.GetMetric().GetLabels() {
+			log.CtxLogger(ctx).Debugw("  Label", "key", k, "value", v)
+		}
 	}
 }

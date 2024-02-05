@@ -42,6 +42,7 @@ message Configuration {
   HANAMonitoringConfiguration hana_monitoring_configuration = 8;
   google.protobuf.BoolValue log_to_cloud = 9;
   DiscoveryConfiguration discovery_configuration = 10;
+  SupportConfiguration support_configuration = 11;
 }
 
 message CollectionConfiguration {
@@ -189,4 +190,9 @@ message DiscoveryConfiguration {
   google.protobuf.Duration system_discovery_update_frequency = 2;
   google.protobuf.Duration sap_instances_update_frequency = 3;
   google.protobuf.BoolValue enable_workload_discovery = 4;
+}
+
+message SupportConfiguration {
+  google.protobuf.BoolValue
+      send_workload_validation_metrics_to_cloud_monitoring = 1;
 }

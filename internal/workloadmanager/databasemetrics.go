@@ -71,12 +71,13 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	appendLabels(metrics.Metrics[0].Metric.Labels, system.Metrics[0].Metric.Labels)
 
 	sendMetrics(ctx, sendMetricsParams{
-		wm:                metrics,
-		cp:                params.Config.GetCloudProperties(),
-		bareMetal:         params.Config.GetBareMetal(),
-		timeSeriesCreator: params.TimeSeriesCreator,
-		backOffIntervals:  params.BackOffs,
-		wlmService:        params.WLMService,
+		wm:                    metrics,
+		cp:                    params.Config.GetCloudProperties(),
+		bareMetal:             params.Config.GetBareMetal(),
+		sendToCloudMonitoring: params.Config.GetSupportConfiguration().GetSendWorkloadValidationMetricsToCloudMonitoring().GetValue(),
+		timeSeriesCreator:     params.TimeSeriesCreator,
+		backOffIntervals:      params.BackOffs,
+		wlmService:            params.WLMService,
 	})
 	return nil
 }
