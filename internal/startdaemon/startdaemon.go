@@ -451,7 +451,7 @@ func (pmp ProcessMetricsParams) startCollection(ctx context.Context) {
 		GCEService:     pmp.gceService,
 		GCEBetaService: pmp.gceBetaService,
 	}); success != true {
-		log.Logger.Error("Process metrics context cancelled")
+		log.Logger.Info("Process metrics collection not started")
 	}
 }
 

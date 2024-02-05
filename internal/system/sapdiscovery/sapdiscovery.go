@@ -109,14 +109,14 @@ func instances(ctx context.Context, hrc replicationConfig, list listInstances, e
 
 	hana, err := hanaInstances(ctx, hrc, list, exec)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Unable to discover HANA instances", log.Error(err))
+		log.CtxLogger(ctx).Infow("Unable to discover HANA instances", log.Error(err))
 	} else {
 		sapInstances = hana
 	}
 
 	netweaver, err := netweaverInstances(ctx, list, exec)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Unable to discover Netweaver instances", log.Error(err))
+		log.CtxLogger(ctx).Infow("Unable to discover Netweaver instances", log.Error(err))
 	} else {
 		sapInstances = append(sapInstances, netweaver...)
 	}
