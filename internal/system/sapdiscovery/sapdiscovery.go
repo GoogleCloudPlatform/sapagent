@@ -195,7 +195,6 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  cmd,
 		ArgsToSplit: args,
-		User:        user,
 	})
 	log.CtxLogger(ctx).Debugw("Tool hdbnsutil returned", "exitstatus", exitStatus)
 
