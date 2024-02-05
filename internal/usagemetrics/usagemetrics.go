@@ -117,6 +117,7 @@ const (
 	ConfigureBackintFailure
 	CollectionDefinitionUpdateRoutineFailure
 	HANAMonitoringCreateWorkerPoolFailure
+	CollectReliabilityMetricsRoutineFailure
 )
 
 // Agent wide action mappings.
@@ -149,6 +150,7 @@ const (
 	ReliabilityFinished
 	ConfigureBackintStarted
 	ConfigureBackintFinished
+	CollectReliabilityMetrics
 )
 
 var (

@@ -144,10 +144,10 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	// The fields provide_sap_host_agent_metrics and log_to_cloud will be
 	// defaulted to true if a user does not provide a value in the config.
 	if config.GetProvideSapHostAgentMetrics() == nil {
-		config.ProvideSapHostAgentMetrics = wpb.Bool(true)
+		config.ProvideSapHostAgentMetrics = &wpb.BoolValue{Value: true}
 	}
 	if config.GetLogToCloud() == nil {
-		config.LogToCloud = wpb.Bool(true)
+		config.LogToCloud = &wpb.BoolValue{Value: true}
 	}
 
 	// If the user did not pass cloud properties, set the values read from the metadata server.
@@ -162,7 +162,7 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 		}
 		if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() != config.GetCollectionConfiguration().GetSapSystemDiscovery().GetValue() {
 			// Flags differ, assume disable.
-			config.DiscoveryConfiguration.EnableDiscovery = wpb.Bool(false)
+			config.DiscoveryConfiguration.EnableDiscovery = &wpb.BoolValue{Value: false}
 		} else {
 			config.DiscoveryConfiguration.EnableDiscovery = config.GetCollectionConfiguration().GetSapSystemDiscovery()
 		}
@@ -183,9 +183,10 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	cc := configFromFile
 	if cc == nil {
 		cc = &cpb.CollectionConfiguration{}
+		cc.CollectReliabilityMetrics = &wpb.BoolValue{Value: false}
 	}
 	if cc.GetCollectWorkloadValidationMetrics() == nil {
-		cc.CollectWorkloadValidationMetrics = wpb.Bool(true)
+		cc.CollectWorkloadValidationMetrics = &wpb.BoolValue{Value: true}
 	}
 	
 	if cc.GetCollectWorkloadValidationMetrics().GetValue() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
@@ -199,6 +200,9 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	}
 	if cc.GetCollectProcessMetrics() && cc.GetSlowProcessMetricsFrequency() <= 0 {
 		cc.SlowProcessMetricsFrequency = 30
+	}
+	if cc.GetCollectReliabilityMetrics().GetValue() && cc.GetReliabilityMetricsFrequency() <= 0 {
+		cc.ReliabilityMetricsFrequency = 60
 	}
 	if cc.GetCollectAgentMetrics() && cc.GetAgentMetricsFrequency() <= 0 {
 		cc.AgentMetricsFrequency = 60
@@ -218,7 +222,7 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	}
 	if cc.GetWorkloadValidationCollectionDefinition() == nil {
 		cc.WorkloadValidationCollectionDefinition = &cpb.WorkloadValidationCollectionDefinition{
-			FetchLatestConfig:       wpb.Bool(true),
+			FetchLatestConfig:       &wpb.BoolValue{Value: true},
 			ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 		}
 	}
@@ -226,7 +230,7 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 		cc.WorkloadValidationCollectionDefinition.ConfigTargetEnvironment = cpb.TargetEnvironment_PRODUCTION
 	}
 	if cc.GetWorkloadValidationCollectionDefinition().GetFetchLatestConfig() == nil {
-		cc.WorkloadValidationCollectionDefinition.FetchLatestConfig = wpb.Bool(true)
+		cc.WorkloadValidationCollectionDefinition.FetchLatestConfig = &wpb.BoolValue{Value: true}
 	}
 	return cc
 }
@@ -253,7 +257,7 @@ func applyDefaultDiscoveryConfiguration(configFromFile *cpb.DiscoveryConfigurati
 		discoveryConfig = &cpb.DiscoveryConfiguration{}
 	}
 	if discoveryConfig.GetEnableDiscovery() == nil {
-		discoveryConfig.EnableDiscovery = wpb.Bool(true)
+		discoveryConfig.EnableDiscovery = &wpb.BoolValue{Value: true}
 	}
 	if discoveryConfig.GetSapInstancesUpdateFrequency() == nil {
 		discoveryConfig.SapInstancesUpdateFrequency = dpb.New(time.Duration(1 * time.Minute))
@@ -262,7 +266,7 @@ func applyDefaultDiscoveryConfiguration(configFromFile *cpb.DiscoveryConfigurati
 		discoveryConfig.SystemDiscoveryUpdateFrequency = dpb.New(time.Duration(4 * time.Hour))
 	}
 	if discoveryConfig.GetEnableWorkloadDiscovery() == nil {
-		discoveryConfig.EnableWorkloadDiscovery = wpb.Bool(true)
+		discoveryConfig.EnableWorkloadDiscovery = &wpb.BoolValue{Value: true}
 	}
 	return discoveryConfig
 }

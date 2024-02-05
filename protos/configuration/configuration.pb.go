@@ -410,6 +410,8 @@ type CollectionConfiguration struct {
 	ProcessMetricsToSkip                 []string            `protobuf:"bytes,19,rep,name=process_metrics_to_skip,json=processMetricsToSkip,proto3" json:"process_metrics_to_skip,omitempty"` // List of process metrics to skip during metrics collection
 	// Ex: ["/sap/nw/abap/sessions", "/sap/nw/abap/rfc"].
 	WorkloadValidationCollectionDefinition *WorkloadValidationCollectionDefinition `protobuf:"bytes,20,opt,name=workload_validation_collection_definition,json=workloadValidationCollectionDefinition,proto3" json:"workload_validation_collection_definition,omitempty"`
+	CollectReliabilityMetrics              *wrappers.BoolValue                     `protobuf:"bytes,21,opt,name=collect_reliability_metrics,json=collectReliabilityMetrics,proto3" json:"collect_reliability_metrics,omitempty"`
+	ReliabilityMetricsFrequency            int64                                   `protobuf:"varint,22,opt,name=reliability_metrics_frequency,json=reliabilityMetricsFrequency,proto3" json:"reliability_metrics_frequency,omitempty"`
 }
 
 func (x *CollectionConfiguration) Reset() {
@@ -584,6 +586,20 @@ func (x *CollectionConfiguration) GetWorkloadValidationCollectionDefinition() *W
 		return x.WorkloadValidationCollectionDefinition
 	}
 	return nil
+}
+
+func (x *CollectionConfiguration) GetCollectReliabilityMetrics() *wrappers.BoolValue {
+	if x != nil {
+		return x.CollectReliabilityMetrics
+	}
+	return nil
+}
+
+func (x *CollectionConfiguration) GetReliabilityMetricsFrequency() int64 {
+	if x != nil {
+		return x.ReliabilityMetricsFrequency
+	}
+	return 0
 }
 
 type AgentProperties struct {
@@ -1622,7 +1638,7 @@ var file_configuration_configuration_proto_rawDesc = []byte{
 	0x12, 0x0d, 0x0a, 0x09, 0x55, 0x4e, 0x44, 0x45, 0x46, 0x49, 0x4e, 0x45, 0x44, 0x10, 0x00, 0x12,
 	0x09, 0x0a, 0x05, 0x44, 0x45, 0x42, 0x55, 0x47, 0x10, 0x01, 0x12, 0x08, 0x0a, 0x04, 0x49, 0x4e,
 	0x46, 0x4f, 0x10, 0x02, 0x12, 0x0b, 0x0a, 0x07, 0x57, 0x41, 0x52, 0x4e, 0x49, 0x4e, 0x47, 0x10,
-	0x03, 0x12, 0x09, 0x0a, 0x05, 0x45, 0x52, 0x52, 0x4f, 0x52, 0x10, 0x04, 0x22, 0xe6, 0x0c, 0x0a,
+	0x03, 0x12, 0x09, 0x0a, 0x05, 0x45, 0x52, 0x52, 0x4f, 0x52, 0x10, 0x04, 0x22, 0x86, 0x0e, 0x0a,
 	0x17, 0x43, 0x6f, 0x6c, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x43, 0x6f, 0x6e, 0x66, 0x69,
 	0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x69, 0x0a, 0x23, 0x63, 0x6f, 0x6c, 0x6c,
 	0x65, 0x63, 0x74, 0x5f, 0x77, 0x6f, 0x72, 0x6b, 0x6c, 0x6f, 0x61, 0x64, 0x5f, 0x76, 0x61, 0x6c,
@@ -1725,7 +1741,17 @@ var file_configuration_configuration_proto_rawDesc = []byte{
 	0x69, 0x6f, 0x6e, 0x44, 0x65, 0x66, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x26, 0x77,
 	0x6f, 0x72, 0x6b, 0x6c, 0x6f, 0x61, 0x64, 0x56, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f,
 	0x6e, 0x43, 0x6f, 0x6c, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x44, 0x65, 0x66, 0x69, 0x6e,
-	0x69, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x6b, 0x0a, 0x0f, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x50, 0x72,
+	0x69, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x5a, 0x0a, 0x1b, 0x63, 0x6f, 0x6c, 0x6c, 0x65, 0x63, 0x74,
+	0x5f, 0x72, 0x65, 0x6c, 0x69, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x5f, 0x6d, 0x65, 0x74,
+	0x72, 0x69, 0x63, 0x73, 0x18, 0x15, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f,
+	0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x42, 0x6f, 0x6f,
+	0x6c, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x19, 0x63, 0x6f, 0x6c, 0x6c, 0x65, 0x63, 0x74, 0x52,
+	0x65, 0x6c, 0x69, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63,
+	0x73, 0x12, 0x42, 0x0a, 0x1d, 0x72, 0x65, 0x6c, 0x69, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79,
+	0x5f, 0x6d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x5f, 0x66, 0x72, 0x65, 0x71, 0x75, 0x65, 0x6e,
+	0x63, 0x79, 0x18, 0x16, 0x20, 0x01, 0x28, 0x03, 0x52, 0x1b, 0x72, 0x65, 0x6c, 0x69, 0x61, 0x62,
+	0x69, 0x6c, 0x69, 0x74, 0x79, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x46, 0x72, 0x65, 0x71,
+	0x75, 0x65, 0x6e, 0x63, 0x79, 0x22, 0x6b, 0x0a, 0x0f, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x50, 0x72,
 	0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x12, 0x18, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73,
 	0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69,
 	0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
@@ -1999,26 +2025,27 @@ var file_configuration_configuration_proto_depIdxs = []int32{
 	19, // 12: sapagent.protos.configuration.CollectionConfiguration.sap_system_discovery:type_name -> google.protobuf.BoolValue
 	12, // 13: sapagent.protos.configuration.CollectionConfiguration.workload_validation_db_metrics_config:type_name -> sapagent.protos.configuration.HANAMetricsConfig
 	11, // 14: sapagent.protos.configuration.CollectionConfiguration.workload_validation_collection_definition:type_name -> sapagent.protos.configuration.WorkloadValidationCollectionDefinition
-	9,  // 15: sapagent.protos.configuration.WorkloadValidationRemoteCollection.remote_collection_gcloud:type_name -> sapagent.protos.configuration.RemoteCollectionGcloud
-	10, // 16: sapagent.protos.configuration.WorkloadValidationRemoteCollection.remote_collection_ssh:type_name -> sapagent.protos.configuration.RemoteCollectionSsh
-	8,  // 17: sapagent.protos.configuration.WorkloadValidationRemoteCollection.remote_collection_instances:type_name -> sapagent.protos.configuration.RemoteCollectionInstance
-	2,  // 18: sapagent.protos.configuration.WorkloadValidationCollectionDefinition.config_target_environment:type_name -> sapagent.protos.configuration.TargetEnvironment
-	19, // 19: sapagent.protos.configuration.WorkloadValidationCollectionDefinition.fetch_latest_config:type_name -> google.protobuf.BoolValue
-	14, // 20: sapagent.protos.configuration.HANAMonitoringConfiguration.hana_instances:type_name -> sapagent.protos.configuration.HANAInstance
-	15, // 21: sapagent.protos.configuration.HANAMonitoringConfiguration.queries:type_name -> sapagent.protos.configuration.Query
-	16, // 22: sapagent.protos.configuration.Query.columns:type_name -> sapagent.protos.configuration.Column
-	0,  // 23: sapagent.protos.configuration.Column.metric_type:type_name -> sapagent.protos.configuration.MetricType
-	1,  // 24: sapagent.protos.configuration.Column.value_type:type_name -> sapagent.protos.configuration.ValueType
-	19, // 25: sapagent.protos.configuration.DiscoveryConfiguration.enable_discovery:type_name -> google.protobuf.BoolValue
-	21, // 26: sapagent.protos.configuration.DiscoveryConfiguration.system_discovery_update_frequency:type_name -> google.protobuf.Duration
-	21, // 27: sapagent.protos.configuration.DiscoveryConfiguration.sap_instances_update_frequency:type_name -> google.protobuf.Duration
-	19, // 28: sapagent.protos.configuration.DiscoveryConfiguration.enable_workload_discovery:type_name -> google.protobuf.BoolValue
-	19, // 29: sapagent.protos.configuration.SupportConfiguration.send_workload_validation_metrics_to_cloud_monitoring:type_name -> google.protobuf.BoolValue
-	30, // [30:30] is the sub-list for method output_type
-	30, // [30:30] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	19, // 15: sapagent.protos.configuration.CollectionConfiguration.collect_reliability_metrics:type_name -> google.protobuf.BoolValue
+	9,  // 16: sapagent.protos.configuration.WorkloadValidationRemoteCollection.remote_collection_gcloud:type_name -> sapagent.protos.configuration.RemoteCollectionGcloud
+	10, // 17: sapagent.protos.configuration.WorkloadValidationRemoteCollection.remote_collection_ssh:type_name -> sapagent.protos.configuration.RemoteCollectionSsh
+	8,  // 18: sapagent.protos.configuration.WorkloadValidationRemoteCollection.remote_collection_instances:type_name -> sapagent.protos.configuration.RemoteCollectionInstance
+	2,  // 19: sapagent.protos.configuration.WorkloadValidationCollectionDefinition.config_target_environment:type_name -> sapagent.protos.configuration.TargetEnvironment
+	19, // 20: sapagent.protos.configuration.WorkloadValidationCollectionDefinition.fetch_latest_config:type_name -> google.protobuf.BoolValue
+	14, // 21: sapagent.protos.configuration.HANAMonitoringConfiguration.hana_instances:type_name -> sapagent.protos.configuration.HANAInstance
+	15, // 22: sapagent.protos.configuration.HANAMonitoringConfiguration.queries:type_name -> sapagent.protos.configuration.Query
+	16, // 23: sapagent.protos.configuration.Query.columns:type_name -> sapagent.protos.configuration.Column
+	0,  // 24: sapagent.protos.configuration.Column.metric_type:type_name -> sapagent.protos.configuration.MetricType
+	1,  // 25: sapagent.protos.configuration.Column.value_type:type_name -> sapagent.protos.configuration.ValueType
+	19, // 26: sapagent.protos.configuration.DiscoveryConfiguration.enable_discovery:type_name -> google.protobuf.BoolValue
+	21, // 27: sapagent.protos.configuration.DiscoveryConfiguration.system_discovery_update_frequency:type_name -> google.protobuf.Duration
+	21, // 28: sapagent.protos.configuration.DiscoveryConfiguration.sap_instances_update_frequency:type_name -> google.protobuf.Duration
+	19, // 29: sapagent.protos.configuration.DiscoveryConfiguration.enable_workload_discovery:type_name -> google.protobuf.BoolValue
+	19, // 30: sapagent.protos.configuration.SupportConfiguration.send_workload_validation_metrics_to_cloud_monitoring:type_name -> google.protobuf.BoolValue
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_configuration_configuration_proto_init() }

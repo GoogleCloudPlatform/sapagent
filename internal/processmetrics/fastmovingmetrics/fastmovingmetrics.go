@@ -44,11 +44,12 @@ type (
 	// InstanceProperties has necessary context for Metrics collection.
 	// InstanceProperties implements Collector interface for HANA and Netweaver.
 	InstanceProperties struct {
-		SAPInstance     *sapb.SAPInstance
-		Config          *cnfpb.Configuration
-		Client          cloudmonitoring.TimeSeriesCreator
-		SkippedMetrics  map[string]bool
-		PMBackoffPolicy backoff.BackOffContext
+		SAPInstance       *sapb.SAPInstance
+		Config            *cnfpb.Configuration
+		Client            cloudmonitoring.TimeSeriesCreator
+		SkippedMetrics    map[string]bool
+		PMBackoffPolicy   backoff.BackOffContext
+		ReliabilityMetric bool
 	}
 )
 
@@ -85,11 +86,17 @@ const (
 )
 
 const (
-	metricURL          = "workload.googleapis.com"
-	availabilityPath   = "/sap/hana/availability"
-	haReplicationPath  = "/sap/hana/ha/replication"
-	haAvailabilityPath = "/sap/hana/ha/availability"
-	nwAvailabilityPath = "/sap/nw/availability"
+	metricURL              = "workload.googleapis.com"
+	pmHANAAvailabilityPath = "/sap/hana/availability"
+	pmHAReplicationPath    = "/sap/hana/ha/replication"
+	pmHAAvailabilityPath   = "/sap/hana/ha/availability"
+	pmNWAvailabilityPath   = "/sap/nw/availability"
+
+	// These paths are for internal reliability metrics.
+	reliabilityMetricURL   = "workloadmanager.googleapis.com"
+	rmHANAAvailabilityPath = "/internal/sap"
+	rmHAAvailabilityPath   = "/internal/sap"
+	rmNWAvailabilityPath   = "/internal/sap"
 )
 
 // Collect is an implementation of Collector interface from processmetrics.go for fast moving
@@ -141,13 +148,16 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		if p.SAPInstance.GetType() == sapb.InstanceType_NETWEAVER {
 			return nil, err
 		}
+		if p.ReliabilityMetric {
+			return nil, err
+		}
 
 		extraLabels := map[string]string{
 			"ha_members": strings.Join(p.SAPInstance.GetHanaHaMembers(), ","),
 		}
 		now := tspb.Now()
-		res = append(res, createMetrics(p, haReplicationPath, extraLabels, now, 0))
-		res = append(res, createMetrics(p, haAvailabilityPath, nil, now, 0))
+		res = append(res, createMetrics(p, pmHAReplicationPath, extraLabels, now, 0))
+		res = append(res, createMetrics(p, pmHAAvailabilityPath, nil, now, 0))
 	}
 	return res, nil
 }
@@ -164,18 +174,22 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		metrics           []*mrpb.TimeSeries
 		availabilityValue int64
 	)
-	if _, ok := ip.SkippedMetrics[availabilityPath]; !ok {
+	if _, ok := ip.SkippedMetrics[pmHANAAvailabilityPath]; !ok {
 		processes, err = sc.GetProcessList(ctx, scc)
 		if err != nil {
 			return nil, err
 		}
 		// If GetProcessList API didn't return an error.
 		availabilityValue = hanaAvailability(ip, processes)
-		metrics = append(metrics, createMetrics(ip, availabilityPath, nil, now, availabilityValue))
+		mPath := pmHANAAvailabilityPath
+		if ip.ReliabilityMetric {
+			mPath = rmHANAAvailabilityPath
+		}
+		metrics = append(metrics, createMetrics(ip, mPath, nil, now, availabilityValue))
 	}
 
-	skipHAAvailability := ip.SkippedMetrics[haAvailabilityPath]
-	skipHAReplication := ip.SkippedMetrics[haReplicationPath]
+	skipHAAvailability := ip.SkippedMetrics[pmHAAvailabilityPath]
+	skipHAReplication := ip.SkippedMetrics[pmHAReplicationPath]
 	if !skipHAAvailability && !skipHAReplication {
 		haReplicationValue, err := refreshHAReplicationConfig(ctx, ip)
 		if err != nil {
@@ -190,8 +204,12 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		extraLabels := map[string]string{
 			"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
 		}
-		metrics = append(metrics, createMetrics(ip, haReplicationPath, extraLabels, now, haReplicationValue))
-		metrics = append(metrics, createMetrics(ip, haAvailabilityPath, nil, now, haAvailabilityValue))
+		if ip.ReliabilityMetric {
+			metrics = append(metrics, createMetrics(ip, rmHAAvailabilityPath, nil, now, haAvailabilityValue))
+		} else {
+			metrics = append(metrics, createMetrics(ip, pmHAReplicationPath, extraLabels, now, haReplicationValue))
+			metrics = append(metrics, createMetrics(ip, pmHAAvailabilityPath, nil, now, haAvailabilityValue))
+		}
 	}
 
 	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in CollectReplicationHA()", "duration", time.Since(now.AsTime()))
@@ -265,7 +283,7 @@ func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) (int
 
 // collectNetWeaverMetrics builds a slice of SAP metrics containing all relevant NetWeaver metrics
 func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sapcontrol.ClientInterface) ([]*mrpb.TimeSeries, error) {
-	if _, ok := p.SkippedMetrics[nwAvailabilityPath]; ok {
+	if _, ok := p.SkippedMetrics[pmNWAvailabilityPath]; ok {
 		return nil, nil
 	}
 	now := tspb.Now()
@@ -282,8 +300,11 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	}
 
 	availabilityValue := collectNWAvailability(p, procs)
-	metrics = append(metrics, createMetrics(p, nwAvailabilityPath, nil, now, availabilityValue))
-
+	mPath := pmNWAvailabilityPath
+	if p.ReliabilityMetric {
+		mPath = rmNWAvailabilityPath
+	}
+	metrics = append(metrics, createMetrics(p, mPath, nil, now, availabilityValue))
 	return metrics, nil
 }
 
@@ -304,9 +325,13 @@ func collectNWAvailability(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 // createMetrics - create mrpb.TimeSeries object for the given metric.
 func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	mLabels := appendLabels(p, extraLabels)
+	metricType := metricURL + mPath
+	if p.ReliabilityMetric {
+		metricType = reliabilityMetricURL + mPath
+	}
 	params := timeseries.Params{
 		CloudProp:    p.Config.CloudProperties,
-		MetricType:   metricURL + mPath,
+		MetricType:   metricType,
 		MetricLabels: mLabels,
 		Timestamp:    now,
 		Int64Value:   val,

@@ -51,6 +51,7 @@ var (
 			CollectProcessMetrics:       true,
 			ProcessMetricsFrequency:     5,
 			SlowProcessMetricsFrequency: 30,
+			ReliabilityMetricsFrequency: 1,
 		},
 		CloudProperties: defaultCloudProperties,
 	}
@@ -60,6 +61,7 @@ var (
 			CollectProcessMetrics:       true,
 			ProcessMetricsFrequency:     1, // Use small value for quick unit tests.
 			SlowProcessMetricsFrequency: 6,
+			ReliabilityMetricsFrequency: 1,
 		},
 		CloudProperties: defaultCloudProperties,
 	}
@@ -69,6 +71,7 @@ var (
 			CollectProcessMetrics:       true,
 			ProcessMetricsFrequency:     5,
 			SlowProcessMetricsFrequency: 1,
+			ReliabilityMetricsFrequency: 1,
 		},
 		CloudProperties: defaultCloudProperties,
 	}
@@ -204,7 +207,7 @@ func fakeSAPInstances(app string) *sapb.SAPInstances {
 
 // The goal of these unit tests is to test the interaction of this package with respective collectors.
 // This assumes that the collector is tested by its own unit tests.
-func TestStart(t *testing.T) {
+func TestStartProcessMetrics(t *testing.T) {
 	tests := []struct {
 		name       string
 		parameters Parameters
@@ -295,15 +298,15 @@ func TestStart(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			got := Start(ctx, test.parameters)
+			got := startProcessMetrics(ctx, test.parameters)
 			if got != test.want {
-				t.Errorf("Start(%v), got: %t want: %t", test.parameters, got, test.want)
+				t.Errorf("StartProcessMetrics(%v), got: %t want: %t", test.parameters, got, test.want)
 			}
 		})
 	}
 }
 
-func TestCreate(t *testing.T) {
+func TestCreateProcessCollectors(t *testing.T) {
 	tests := []struct {
 		name                   string
 		sapInstances           *sapb.SAPInstances
@@ -341,13 +344,13 @@ func TestCreate(t *testing.T) {
 			params := Parameters{
 				Config: defaultConfig,
 			}
-			got := create(context.Background(), params, &fake.TimeSeriesCreatorThreadSafe{}, test.sapInstances)
+			got := createProcessCollectors(context.Background(), params, &fake.TimeSeriesCreatorThreadSafe{}, test.sapInstances)
 
 			if len(got.Collectors) != test.wantCollectorCount {
-				t.Errorf("create() returned %d collectors, want %d", len(got.Collectors), test.wantCollectorCount)
+				t.Errorf("createProcessCollectors() returned %d collectors, want %d", len(got.Collectors), test.wantCollectorCount)
 			}
 			if len(got.FastMovingCollectors) != test.wantFastCollectorCount {
-				t.Errorf("create() returned %d fast collectors, want %d", len(got.FastMovingCollectors), test.wantFastCollectorCount)
+				t.Errorf("createProcessCollectors() returned %d fast collectors, want %d", len(got.FastMovingCollectors), test.wantFastCollectorCount)
 			}
 		})
 	}
@@ -403,10 +406,10 @@ func TestCollectAndSend(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), test.runtime)
 			defer cancel()
 
-			got := test.properties.collectAndSend(ctx, defaultBackOffIntervals)
+			got := test.properties.collectAndSendFastMovingMetrics(ctx, defaultBackOffIntervals)
 
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("Failure in collectAndSend(), got: %v want: %v.", got, test.want)
+				t.Errorf("Failure in collectAndSendFastMovingMetrics(), got: %v want: %v.", got, test.want)
 			}
 		})
 	}
@@ -645,13 +648,13 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 					Interval: test.beatInterval,
 				},
 			}
-			properties := create(context.Background(), parameters, &fake.TimeSeriesCreatorThreadSafe{}, fakeSAPInstances("HANA"))
-			properties.collectAndSend(ctx, defaultBackOffIntervals)
+			properties := createProcessCollectors(context.Background(), parameters, &fake.TimeSeriesCreatorThreadSafe{}, fakeSAPInstances("HANA"))
+			properties.collectAndSendFastMovingMetrics(ctx, defaultBackOffIntervals)
 			<-ctx.Done()
 			lock.Lock()
 			defer lock.Unlock()
 			if got != test.want {
-				t.Errorf("collectAndSend() heartbeat mismatch got %d, want %d", got, test.want)
+				t.Errorf("collectAndSendFastMovingMetrics() heartbeat mismatch got %d, want %d", got, test.want)
 			}
 		})
 	}

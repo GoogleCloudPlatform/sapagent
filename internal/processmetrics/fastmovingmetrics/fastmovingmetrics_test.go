@@ -598,8 +598,8 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 		{
 			name: "SuccessHANAAvailability",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
-				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath}}},
-				SkippedMetrics: map[string]bool{haAvailabilityPath: true},
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath}}},
+				SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true},
 			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{ExitCode: 1, Error: cmpopts.AnyError}
@@ -612,8 +612,8 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 		{
 			name: "SkipMetrics",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
-				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath, availabilityPath}},
-			}, SkippedMetrics: map[string]bool{haAvailabilityPath: true, availabilityPath: true}},
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath, pmHANAAvailabilityPath}},
+			}, SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true, pmHANAAvailabilityPath: true}},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					ExitCode: 0,
@@ -633,8 +633,8 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 		{
 			name: "SkipMetricsHAReplication",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
-				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{haAvailabilityPath, availabilityPath}},
-			}, SkippedMetrics: map[string]bool{haAvailabilityPath: true, haReplicationPath: true}},
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath, pmHANAAvailabilityPath}},
+			}, SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true, pmHAReplicationPath: true}},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					ExitCode: 0,
@@ -649,6 +649,20 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 				},
 			},
 			},
+			wantCount: 1,
+		},
+		{
+			name: "SuccessHANAAvailabilityReliability",
+			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, ReliabilityMetric: true, Config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath}}},
+				SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{ExitCode: 1, Error: cmpopts.AnyError}
+			},
+			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
+				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
+			}},
 			wantCount: 1,
 		},
 	}
@@ -699,11 +713,11 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 				SAPInstance: defaultSAPInstance,
 				Config: &cpb.Configuration{
 					CollectionConfiguration: &cpb.CollectionConfiguration{
-						ProcessMetricsToSkip: []string{nwAvailabilityPath},
+						ProcessMetricsToSkip: []string{pmNWAvailabilityPath},
 					},
 				},
 				SkippedMetrics: map[string]bool{
-					nwAvailabilityPath: true,
+					pmNWAvailabilityPath: true,
 				},
 			},
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{

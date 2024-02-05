@@ -64,9 +64,10 @@ import (
 )
 
 var (
-	dailyMetricsRoutine   *recovery.RecoverableRoutine
-	collectAndSendRoutine *recovery.RecoverableRoutine
-	slowMetricsRoutine    *recovery.RecoverableRoutine
+	dailyMetricsRoutine                     *recovery.RecoverableRoutine
+	collectAndSendFastMetricsRoutine        *recovery.RecoverableRoutine
+	collectAndSendReliabilityMetricsRoutine *recovery.RecoverableRoutine
+	slowMetricsRoutine                      *recovery.RecoverableRoutine
 )
 
 type (
@@ -80,12 +81,13 @@ type (
 
 	// Properties has necessary context for Metrics collection.
 	Properties struct {
-		SAPInstances         *sapb.SAPInstances // Optional for production use cases, used by unit tests.
-		Config               *cpb.Configuration
-		Client               cloudmonitoring.TimeSeriesCreator
-		Collectors           []Collector
-		FastMovingCollectors []Collector
-		HeartbeatSpec        *heartbeat.Spec
+		SAPInstances          *sapb.SAPInstances // Optional for production use cases, used by unit tests.
+		Config                *cpb.Configuration
+		Client                cloudmonitoring.TimeSeriesCreator
+		Collectors            []Collector
+		FastMovingCollectors  []Collector
+		ReliabilityCollectors []Collector
+		HeartbeatSpec         *heartbeat.Spec
 	}
 
 	// CreateMetricClient provides an easily testable translation to the cloud monitoring API.
@@ -105,13 +107,14 @@ type (
 )
 
 const (
-	maxTSPerRequest               = 200 // Reference: https://cloud.google.com/monitoring/quotas
-	minimumFrequency              = 5
-	minimumFrequencyForSlowMoving = 30
+	maxTSPerRequest                = 200 // Reference: https://cloud.google.com/monitoring/quotas
+	minimumFrequency               = 5
+	minimumFrequencyForSlowMoving  = 30
+	minimumFrequencyForReliability = 60
 )
 
 /*
-Start starts collection if collect_process_metrics config option is enabled
+startProcessMetrics starts collection if collect_process_metrics config option is enabled
 in the configuration. The function is a NO-OP if the config option is not enabled.
 
 If the config option is enabled, start the metric collector jobs
@@ -119,7 +122,7 @@ in the background and return control to the caller with return value = true.
 
 Return false if the config option is not enabled.
 */
-func Start(ctx context.Context, parameters Parameters) bool {
+func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 	cpm := parameters.Config.GetCollectionConfiguration().GetCollectProcessMetrics()
 	cf := parameters.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
 	slowPmf := parameters.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
@@ -167,11 +170,11 @@ func Start(ctx context.Context, parameters Parameters) bool {
 	}
 	dailyMetricsRoutine.StartRoutine(ctx)
 
-	p := create(ctx, parameters, mc, sapInstances)
-	collectAndSendRoutine = &recovery.RecoverableRoutine{
+	p := createProcessCollectors(ctx, parameters, mc, sapInstances)
+	collectAndSendFastMetricsRoutine = &recovery.RecoverableRoutine{
 		Routine: func(ctx context.Context, a any) {
 			if parameters, ok := a.(Parameters); ok {
-				p.collectAndSend(ctx, parameters.BackOffs)
+				p.collectAndSendFastMovingMetrics(ctx, parameters.BackOffs)
 			}
 		},
 		RoutineArg:          parameters,
@@ -179,7 +182,7 @@ func Start(ctx context.Context, parameters Parameters) bool {
 		ExpectedMinDuration: time.Minute,
 	}
 	// NOMUTANTS--will be covered by integration testing
-	collectAndSendRoutine.StartRoutine(ctx)
+	collectAndSendFastMetricsRoutine.StartRoutine(ctx)
 
 	// createWorkerPool creates a pool of workers to start collecting slow moving metrics in parallel
 	// each collector has its own job of collecting and then sending the metrics to cloudmonitoring.
@@ -205,8 +208,8 @@ func NewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, er
 	return monitoring.NewMetricClient(ctx)
 }
 
-// create sets up the processmetrics properties and metric collectors for SAP Instances.
-func create(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
+// createProcessCollectors sets up the processmetrics properties and metric collectors for SAP Instances.
+func createProcessCollectors(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
 		SAPInstances:  sapInstances,
 		Config:        params.Config,
@@ -448,7 +451,7 @@ For unit testing, the caller can cancel the context to terminate the workflow.
 An exit induced by context cancellation returns the last error seen during
 the workflow or nil if no error occurred.
 */
-func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) error {
+func (p *Properties) collectAndSendFastMovingMetrics(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) error {
 
 	if len(p.Collectors) == 0 {
 		return fmt.Errorf("expected non-zero collectors, got: %d", len(p.Collectors))
@@ -456,11 +459,7 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 
 	cf := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
 	collectTicker := time.NewTicker(time.Duration(cf) * time.Second)
-
-	slowProcessMetricsFrequency := p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()
-	slowCollectTicker := time.NewTicker(time.Duration(slowProcessMetricsFrequency) * time.Second)
 	defer collectTicker.Stop()
-	defer slowCollectTicker.Stop()
 
 	heartbeatTicker := p.HeartbeatSpec.CreateTicker()
 	defer heartbeatTicker.Stop()
@@ -477,10 +476,10 @@ func (p *Properties) collectAndSend(ctx context.Context, bo *cloudmonitoring.Bac
 			p.HeartbeatSpec.Beat()
 			sent, batchCount, err := p.collectAndSendFastMovingMetricsOnce(ctx, bo)
 			if err != nil {
-				log.CtxLogger(ctx).Errorw("Error sending metrics", "error", err)
+				log.CtxLogger(ctx).Errorw("Error sending process metrics", "error", err)
 				lastErr = err
 			}
-			log.CtxLogger(ctx).Infow("Sent metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", cf)
+			log.CtxLogger(ctx).Infow("Sent process metrics from collectAndSendFastMovingMetrics.", "sent", sent, "batches", batchCount, "sleeping", cf)
 		}
 	}
 }
@@ -505,9 +504,9 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 					var err error
 					msgs[args.slot], err = args.c.CollectWithRetry(ctx) // Each collector writes to its own slot.
 					if err != nil {
-						log.CtxLogger(ctx).Errorw("Error collecting fast moving metrics", "error", err)
+						log.CtxLogger(ctx).Debugw("Error collecting fast moving metrics", "error", err)
 					}
-					log.Logger.Debugw("Collected metrics", "numberofmetrics", len(msgs[args.slot]))
+					log.CtxLogger(ctx).Debugw("Collected fast moving metrics", "numberofmetrics", len(msgs[args.slot]))
 				}
 			},
 			RoutineArg:          collectFastMetricsRoutineArgs{c: collector, slot: i},
@@ -518,6 +517,202 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 		r.StartRoutine(ctx)
 	}
 	log.CtxLogger(ctx).Debug("Waiting for fast moving collectors to finish.")
+	wg.Wait()
+	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
+}
+
+/*
+Start starts the collection of relevant metrics based on whether the
+collect_reliability_metrics or collect_process_metrics is enabled in the
+configuration. The function is a NO-OP if both config options are disabled".
+
+If the config option is enabled, start the metric collector jobs
+in the background and return control to the caller with return value = true.
+
+Return false if the config option is not enabled.
+*/
+func Start(ctx context.Context, parameters Parameters) bool {
+	rm := startReliabilityMetrics(ctx, parameters)
+	pm := startProcessMetrics(ctx, parameters)
+	return rm || pm
+}
+
+/*
+startReliabilityMetrics starts collection if collect_reliability_metrics config option is enabled
+in the configuration. The function is a NO-OP if the config option is not enabled.
+
+If the config option is enabled, start the metric collector jobs
+in the background and return control to the caller with return value = true.
+
+Return false if the config option is not enabled.
+*/
+func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
+	crm := parameters.Config.GetCollectionConfiguration().GetCollectReliabilityMetrics().GetValue()
+	cf := parameters.Config.GetCollectionConfiguration().GetReliabilityMetricsFrequency()
+
+	log.CtxLogger(ctx).Debugw("Configuration option for collect_reliability_metrics", "collectreliabilitymetrics", crm)
+	switch {
+	case !crm:
+		log.CtxLogger(ctx).Info("Not collecting Reliability Metrics.")
+		return false
+	case cf < minimumFrequencyForReliability:
+		log.CtxLogger(ctx).Infow("Reliability metrics frequency is smaller than minimum supported value.", "frequency", cf, "minimumfrequency", minimumFrequencyForReliability)
+		log.CtxLogger(ctx).Infow("Setting reliability metrics collection frequency to default value.", "frequency", minimumFrequencyForReliability)
+		parameters.Config.CollectionConfiguration.ReliabilityMetricsFrequency = minimumFrequencyForReliability
+	}
+
+	mc, err := parameters.MetricClient(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring client", "error", err)
+		usagemetrics.Error(usagemetrics.ProcessMetricsMetricClientCreateFailure) // Failed to create Cloud Monitoring client
+		return false
+	}
+
+	sapInstances := instancesWithCredentials(ctx, &parameters)
+	if len(sapInstances.GetInstances()) == 0 {
+		log.CtxLogger(ctx).Error("No SAP Instances found. Cannot start reliability metrics collection.")
+		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
+		return false
+	}
+
+	dailyMetricsRoutine = &recovery.RecoverableRoutine{
+		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectReliabilityMetrics) },
+		RoutineArg:          nil,
+		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		ExpectedMinDuration: 24 * time.Hour,
+	}
+	dailyMetricsRoutine.StartRoutine(ctx)
+
+	p := createReliabilityCollectors(ctx, parameters, mc, sapInstances)
+
+	log.CtxLogger(ctx).Info("Starting reliability metrics collection in background.")
+	collectAndSendReliabilityMetricsRoutine = &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			if parameters, ok := a.(Parameters); ok {
+				p.collectAndSendReliabilityMetrics(ctx, parameters.BackOffs)
+			}
+		},
+		RoutineArg:          parameters,
+		ErrorCode:           usagemetrics.CollectMetricsRoutineFailure,
+		ExpectedMinDuration: 5 * time.Minute,
+	}
+	collectAndSendReliabilityMetricsRoutine.StartRoutine(ctx)
+	return true
+}
+
+// createReliabilityCollectors sets up the processmetrics properties and metric collectors for SAP Instances.
+func createReliabilityCollectors(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
+	p := &Properties{
+		SAPInstances:  sapInstances,
+		Config:        params.Config,
+		Client:        client,
+		HeartbeatSpec: params.HeartbeatSpec,
+	}
+
+	// For retries logic and backoff policy: 3 retries on failures, which means 4 attempts in total.
+	// Attempt - 1 Failure: wait for 30 seconds
+	// Attempt - 2 Failure: wait for 60 seconds
+	// Attempt - 3 Failure: wait for 120 seconds
+
+	rmFreq := p.Config.GetCollectionConfiguration().GetReliabilityMetricsFrequency()
+
+	for _, instance := range p.SAPInstances.GetInstances() {
+		if instance.GetType() == sapb.InstanceType_HANA {
+			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for HANA", "instance", instance)
+			fmCollector := &fastmovingmetrics.InstanceProperties{
+				SAPInstance:       instance,
+				Config:            p.Config,
+				Client:            p.Client,
+				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(rmFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				ReliabilityMetric: true,
+			}
+			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
+		}
+		if instance.GetType() == sapb.InstanceType_NETWEAVER {
+			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for Netweaver", "instance", instance)
+			fmCollector := &fastmovingmetrics.InstanceProperties{
+				SAPInstance:       instance,
+				Config:            p.Config,
+				Client:            p.Client,
+				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(rmFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				ReliabilityMetric: true,
+			}
+			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
+		}
+	}
+
+	log.CtxLogger(ctx).Infow("Created reliability metrics collectors", "numberofcollectors", len(p.ReliabilityCollectors))
+	return p
+}
+
+func (p *Properties) collectAndSendReliabilityMetrics(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) error {
+
+	if len(p.ReliabilityCollectors) == 0 {
+		return fmt.Errorf("expected non-zero collectors, got: %d", len(p.Collectors))
+	}
+
+	rmf := p.Config.GetCollectionConfiguration().GetReliabilityMetricsFrequency()
+	reliabilityCollectTicker := time.NewTicker(time.Duration(rmf) * time.Second)
+	defer reliabilityCollectTicker.Stop()
+
+	heartbeatTicker := p.HeartbeatSpec.CreateTicker()
+	defer heartbeatTicker.Stop()
+
+	var lastErr error
+	for {
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("Process metrics context cancelled, exiting collectAndSend.")
+			return lastErr
+		case <-heartbeatTicker.C:
+			p.HeartbeatSpec.Beat()
+		case <-reliabilityCollectTicker.C:
+			p.HeartbeatSpec.Beat()
+			sent, batchCount, err := p.collectAndSendReliabilityMetricsOnce(ctx, bo)
+			if err != nil {
+				log.CtxLogger(ctx).Errorw("Error sending reliability metrics", "error", err)
+				lastErr = err
+			}
+			log.CtxLogger(ctx).Infow("Sent reliability metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", rmf)
+		}
+	}
+}
+
+type collectReliabilityMetricsRoutineArgs struct {
+	c    Collector
+	slot int
+}
+
+// collectAndSendReliabilityMetricsOnce collects and sends metrics from reliability collectors.
+func (p *Properties) collectAndSendReliabilityMetricsOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
+	var wg sync.WaitGroup
+	msgs := make([][]*mrpb.TimeSeries, len(p.ReliabilityCollectors))
+	defer (func() { msgs = nil })() // free up reference in memory.
+	log.CtxLogger(ctx).Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.ReliabilityCollectors))
+
+	var routines []*recovery.RecoverableRoutine
+	for i, collector := range p.ReliabilityCollectors {
+		wg.Add(1)
+		r := &recovery.RecoverableRoutine{
+			Routine: func(ctx context.Context, a any) {
+				defer wg.Done()
+				if args, ok := a.(collectReliabilityMetricsRoutineArgs); ok {
+					var err error
+					msgs[args.slot], err = args.c.CollectWithRetry(ctx) // Each collector writes to its own slot.
+					if err != nil {
+						log.CtxLogger(ctx).Debugw("Error collecting reliability metrics", "error", err)
+					}
+					log.CtxLogger(ctx).Debugw("Collected relaibility metrics", "numberofmetrics", len(msgs[args.slot]))
+				}
+			},
+			RoutineArg:          collectReliabilityMetricsRoutineArgs{c: collector, slot: i},
+			ErrorCode:           usagemetrics.CollectReliabilityMetricsRoutineFailure,
+			ExpectedMinDuration: time.Second,
+		}
+		routines = append(routines, r)
+		r.StartRoutine(ctx)
+	}
+	log.CtxLogger(ctx).Debug("Waiting for reliability collectors to finish.", "numberOfCollectors", len(routines))
 	wg.Wait()
 	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
 }

@@ -47,6 +47,7 @@ type Configure struct {
 	validationMetricsFrequency, dbFrequency                         int64
 	fastMetricsFrequency, slowMetricsFrequency                      int64
 	agentMetricsFrequency, agentHealthFrequency, heartbeatFrequency int64
+	reliabilityMetricsFrequency                                     int64
 	sampleIntervalSec, queryTimeoutSec                              int64
 	help, version                                                   bool
 	enable, disable, showall                                        bool
@@ -64,6 +65,7 @@ const (
 	sapDiscovery       = "sap_discovery"
 	agentMetrics       = "agent_metrics"
 	workloadValidation = "workload_validation"
+	reliabilityMetrics = "reliability_metrics"
 )
 
 var (
@@ -89,20 +91,21 @@ func (*Configure) Synopsis() string {
 // Usage implements the subcommand interface for features.
 func (*Configure) Usage() string {
 	return `Usage:
-configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_validation> | -setting=<bare_metal|log_to_cloud>]
+configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_validation|reliability_metrics> | -setting=<bare_metal|log_to_cloud>]
 [-enable|-disable] [-showall] [-v] [-h]
 [process-metrics-frequency=<int>] [slow-process-metrics-frequency=<int>]
 [process-metrics-to-skip=<"comma-separated-metrics">] [-add|-remove]
 [workload-validation-metrics-frequency=<int>] [db-frequency=<int>]
-[-agent-metrics-frequency=<int>] [agent-health-frequency=<int>] [heartbeat-frequency=<int>]
+[-agent-metrics-frequency=<int>] [agent-health-frequency=<int>]
+[heartbeat-frequency=<int>] [reliability_metrics_frequency=<int>]
 [sample-interval-sec=<int>] [query-timeout-sec=<int>]
 `
 }
 
 // SetFlags implements the subcommand interface for features.
 func (c *Configure) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&c.feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_validation")
-	fs.StringVar(&c.feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_validation")
+	fs.StringVar(&c.feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_validation, reliability_metrics")
+	fs.StringVar(&c.feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_validation, reliability_metrics")
 	fs.StringVar(&c.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.setting, "setting", "", "The requested setting. Valid values are: bare_metal, log_to_cloud")
 	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
@@ -120,6 +123,7 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 		"Sets the sample interval sec for HANA Monitoring. Default value is 300(s)")
 	fs.Int64Var(&c.queryTimeoutSec, "query-timeout-sec", 0,
 		"Sets the query timeout for HANA Monitoring. Default value is 300(s)")
+	fs.Int64Var(&c.reliabilityMetricsFrequency, "reliability_metrics_frequency", 0, "Sets the reliability metric collection frequency. Default value is 60(s)")
 	fs.BoolVar(&c.help, "help", false, "Display help")
 	fs.BoolVar(&c.help, "h", false, "Display help")
 	fs.BoolVar(&c.version, "version", false, "Print the agent version")
@@ -194,10 +198,12 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 		featureStatus[agentMetrics] = false
 		featureStatus[workloadValidation] = true
 		featureStatus[processMetrics] = false
+		featureStatus[reliabilityMetrics] = true
 	} else {
 		featureStatus[agentMetrics] = cc.GetCollectAgentMetrics()
 		featureStatus[workloadValidation] = cc.GetCollectWorkloadValidationMetrics().GetValue()
 		featureStatus[processMetrics] = cc.GetCollectProcessMetrics()
+		featureStatus[reliabilityMetrics] = cc.GetCollectReliabilityMetrics().GetValue()
 	}
 
 	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
@@ -318,12 +324,12 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 
 	isCmdValid := false
 	switch c.feature {
-	case "host_metrics":
+	case hostMetrics:
 		if isEnabled != nil {
 			isCmdValid = true
 			config.ProvideSapHostAgentMetrics = &wpb.BoolValue{Value: *isEnabled}
 		}
-	case "process_metrics":
+	case processMetrics:
 		if isEnabled != nil {
 			isCmdValid = true
 			checkCollectionConfig(config).CollectProcessMetrics = *isEnabled
@@ -359,7 +365,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 				return res
 			}
 		}
-	case "hana_monitoring":
+	case hanaMonitoring:
 		if isEnabled != nil {
 			isCmdValid = true
 			if hmc := config.GetHanaMonitoringConfiguration(); hmc != nil {
@@ -384,12 +390,12 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 			isCmdValid = true
 			config.HanaMonitoringConfiguration.QueryTimeoutSec = c.queryTimeoutSec
 		}
-	case "sap_discovery":
+	case sapDiscovery:
 		if isEnabled != nil {
 			isCmdValid = true
 			checkDiscoveryConfig(config).EnableDiscovery = &wpb.BoolValue{Value: *isEnabled}
 		}
-	case "agent_metrics":
+	case agentMetrics:
 		if isEnabled != nil {
 			isCmdValid = true
 			checkCollectionConfig(config).CollectAgentMetrics = *isEnabled
@@ -418,7 +424,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 			isCmdValid = true
 			checkCollectionConfig(config).HeartbeatFrequency = c.heartbeatFrequency
 		}
-	case "workload_validation":
+	case workloadValidation:
 		if isEnabled != nil {
 			isCmdValid = true
 			checkCollectionConfig(config).CollectWorkloadValidationMetrics = &wpb.BoolValue{Value: *isEnabled}
@@ -438,6 +444,19 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 			}
 			isCmdValid = true
 			checkCollectionConfig(config).WorkloadValidationDbMetricsFrequency = c.dbFrequency
+		}
+	case reliabilityMetrics:
+		if isEnabled != nil {
+			isCmdValid = true
+			checkCollectionConfig(config).CollectReliabilityMetrics.Value = *isEnabled
+		}
+		if c.reliabilityMetricsFrequency != 0 {
+			if c.reliabilityMetricsFrequency < 0 {
+				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				return subcommands.ExitUsageError
+			}
+			isCmdValid = true
+			checkCollectionConfig(config).ReliabilityMetricsFrequency = c.reliabilityMetricsFrequency
 		}
 	default:
 		onetime.LogMessageToFileAndConsole("Unsupported Metric")

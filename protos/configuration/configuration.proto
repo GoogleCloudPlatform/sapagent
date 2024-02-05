@@ -71,6 +71,8 @@ message CollectionConfiguration {
            // Ex: ["/sap/nw/abap/sessions", "/sap/nw/abap/rfc"].
   WorkloadValidationCollectionDefinition
       workload_validation_collection_definition = 20;
+  google.protobuf.BoolValue collect_reliability_metrics = 21;
+  int64 reliability_metrics_frequency = 22;
 }
 
 message AgentProperties {
