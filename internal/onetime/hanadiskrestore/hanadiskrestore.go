@@ -190,6 +190,7 @@ func (r *Restorer) prepare(ctx context.Context) error {
 	if err := r.stopHANA(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to stop HANA: %v", err)
 	}
+	time.Sleep(time.Second * 10)
 	if err := r.unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
@@ -476,7 +477,7 @@ func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexe
 	log.Logger.Infow("Unmount path", "directory", path)
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c 'sync;unmount -f %s'", path),
+		ArgsToSplit: fmt.Sprintf(" -c 'sync;umount -f %s'", path),
 	})
 	if result.Error != nil {
 		r := exec(ctx, commandlineexecutor.Params{
