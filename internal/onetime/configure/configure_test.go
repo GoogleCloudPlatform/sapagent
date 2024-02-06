@@ -163,7 +163,7 @@ func TestSetStatus(t *testing.T) {
 				"host_metrics":        true,
 				"agent_metrics":       false,
 				"sap_discovery":       true,
-				"reliability_metrics": true,
+				"reliability_metrics": false,
 			},
 		},
 		{
@@ -209,7 +209,7 @@ func TestSetStatus(t *testing.T) {
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{Enabled: true},
 			},
 			want: map[string]bool{
-				"host_metrics":        false,
+				"host_metrics":        true,
 				"sap_discovery":       true,
 				"agent_metrics":       true,
 				"process_metrics":     true,
@@ -278,11 +278,11 @@ func TestSetStatus(t *testing.T) {
 			want: map[string]bool{
 				"sap_discovery":       false,
 				"agent_metrics":       false,
-				"host_metrics":        false,
+				"host_metrics":        true,
 				"process_metrics":     false,
 				"workload_validation": true,
 				"hana_monitoring":     false,
-				"reliability_metrics": true,
+				"reliability_metrics": false,
 			},
 		},
 	}

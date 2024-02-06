@@ -186,7 +186,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 	if hm := config.GetProvideSapHostAgentMetrics(); hm != nil {
 		featureStatus[hostMetrics] = hm.GetValue()
 	} else {
-		featureStatus[hostMetrics] = false
+		featureStatus[hostMetrics] = true
 	}
 	if hmc := config.GetHanaMonitoringConfiguration(); hmc != nil {
 		featureStatus[hanaMonitoring] = hmc.GetEnabled()
@@ -198,7 +198,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 		featureStatus[agentMetrics] = false
 		featureStatus[workloadValidation] = true
 		featureStatus[processMetrics] = false
-		featureStatus[reliabilityMetrics] = true
+		featureStatus[reliabilityMetrics] = false
 	} else {
 		featureStatus[agentMetrics] = cc.GetCollectAgentMetrics()
 		featureStatus[workloadValidation] = cc.GetCollectWorkloadValidationMetrics().GetValue()
