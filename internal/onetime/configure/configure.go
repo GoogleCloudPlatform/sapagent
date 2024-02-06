@@ -93,12 +93,12 @@ func (*Configure) Usage() string {
 	return `Usage:
 configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_validation|reliability_metrics> | -setting=<bare_metal|log_to_cloud>]
 [-enable|-disable] [-showall] [-v] [-h]
-[process-metrics-frequency=<int>] [slow-process-metrics-frequency=<int>]
-[process-metrics-to-skip=<"comma-separated-metrics">] [-add|-remove]
-[workload-validation-metrics-frequency=<int>] [db-frequency=<int>]
-[-agent-metrics-frequency=<int>] [agent-health-frequency=<int>]
-[heartbeat-frequency=<int>] [reliability_metrics_frequency=<int>]
-[sample-interval-sec=<int>] [query-timeout-sec=<int>]
+[process_metrics_frequency=<int>] [slow_process_metrics_frequency=<int>]
+[process_metrics_to_skip=<"comma-separated-metrics">] [-add|-remove]
+[workload_validation_metrics_frequency=<int>] [workload_validation_db_metrics_frequency=<int>]
+[-agent_metrics_frequency=<int>] [agent_health_frequency=<int>]
+[heartbeat_frequency=<int>] [reliability_metrics_frequency=<int>]
+[sample_interval_sec=<int>] [query_timeout_sec=<int>]
 `
 }
 
@@ -108,21 +108,16 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_validation, reliability_metrics")
 	fs.StringVar(&c.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.setting, "setting", "", "The requested setting. Valid values are: bare_metal, log_to_cloud")
-	fs.StringVar(&c.skipMetrics, "process-metrics-to-skip", "", "Add or remove the list of metrics to skip during process metrics collection")
-	fs.Int64Var(&c.validationMetricsFrequency, "workload-validation-metrics-frequency", 0, "Sets the frequency of workload validation metrics collection. Default value is 300(s)")
-	fs.Int64Var(&c.dbFrequency, "db-frequency", 0,
-		"Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
-	fs.Int64Var(&c.fastMetricsFrequency, "process-metrics-frequency", 0, "Sets the frequency of fast moving process metrics collection. Default value is 5(s)")
-	fs.Int64Var(&c.slowMetricsFrequency, "slow-process-metrics-frequency", 0, "Sets the frequency of slow moving process metrics collection. Default value is 30(s)")
-	fs.Int64Var(&c.agentMetricsFrequency, "agent-metrics-frequency", 0, "Sets the agent metrics frequency. Default value is 60(s)")
-	fs.Int64Var(&c.agentHealthFrequency, "agent-health-frequency", 0,
-		"Sets the agent health frequency. Default value is 60(s)")
-	fs.Int64Var(&c.heartbeatFrequency, "heartbeat-frequency", 0,
-		"Sets the heartbeat frequency. Default value is 60(s)")
-	fs.Int64Var(&c.sampleIntervalSec, "sample-interval-sec", 0,
-		"Sets the sample interval sec for HANA Monitoring. Default value is 300(s)")
-	fs.Int64Var(&c.queryTimeoutSec, "query-timeout-sec", 0,
-		"Sets the query timeout for HANA Monitoring. Default value is 300(s)")
+	fs.StringVar(&c.skipMetrics, "process_metrics_to_skip", "", "Add or remove the list of metrics to skip during process metrics collection")
+	fs.Int64Var(&c.validationMetricsFrequency, "workload_validation_metrics_frequency", 0, "Sets the frequency of workload validation metrics collection. Default value is 300(s)")
+	fs.Int64Var(&c.dbFrequency, "workload_validation_db_metrics_frequency", 0, "Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
+	fs.Int64Var(&c.fastMetricsFrequency, "process_metrics_frequency", 0, "Sets the frequency of fast moving process metrics collection. Default value is 5(s)")
+	fs.Int64Var(&c.slowMetricsFrequency, "slow_process_metrics_frequency", 0, "Sets the frequency of slow moving process metrics collection. Default value is 30(s)")
+	fs.Int64Var(&c.agentMetricsFrequency, "agent_metrics_frequency", 0, "Sets the agent metrics frequency. Default value is 60(s)")
+	fs.Int64Var(&c.agentHealthFrequency, "agent_health_frequency", 0, "Sets the agent health frequency. Default value is 60(s)")
+	fs.Int64Var(&c.heartbeatFrequency, "heartbeat_frequency", 0, "Sets the heartbeat frequency. Default value is 60(s)")
+	fs.Int64Var(&c.sampleIntervalSec, "sample_interval_sec", 0, "Sets the sample interval sec for HANA Monitoring. Default value is 300(s)")
+	fs.Int64Var(&c.queryTimeoutSec, "query_timeout_sec", 0, "Sets the query timeout for HANA Monitoring. Default value is 300(s)")
 	fs.Int64Var(&c.reliabilityMetricsFrequency, "reliability_metrics_frequency", 0, "Sets the reliability metric collection frequency. Default value is 60(s)")
 	fs.BoolVar(&c.help, "help", false, "Display help")
 	fs.BoolVar(&c.help, "h", false, "Display help")

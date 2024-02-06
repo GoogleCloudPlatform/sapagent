@@ -1370,10 +1370,10 @@ func TestSetFlags(t *testing.T) {
 
 	flags := []string{
 		"feature", "f", "version", "v", "help", "h", "loglevel", "setting",
-		"enable", "disable", "showall", "add", "remove", "process-metrics-frequency", "db-frequency",
-		"sample-interval-sec", "query-timeout-sec", "process-metrics-to-skip", "slow-process-metrics-frequency",
-		"heartbeat-frequency", "agent-health-frequency", "agent-metrics-frequency",
-		"workload-validation-metrics-frequency", "reliability_metrics_frequency",
+		"enable", "disable", "showall", "add", "remove", "process_metrics_frequency", "workload_validation_db_metrics_frequency",
+		"sample_interval_sec", "query_timeout_sec", "process_metrics_to_skip", "slow_process_metrics_frequency",
+		"heartbeat_frequency", "agent_health_frequency", "agent_metrics_frequency",
+		"workload_validation_metrics_frequency", "reliability_metrics_frequency",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
