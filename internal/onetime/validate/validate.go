@@ -41,7 +41,7 @@ type Validate struct {
 func (*Validate) Name() string { return "validate" }
 
 // Synopsis returns a short string (less than one line) describing the command.
-func (*Validate) Synopsis() string { return "validate an Agent for SAP configuration file" }
+func (*Validate) Synopsis() string { return "validate the Agent for SAP - workload manager collection definition file" }
 
 // Usage returns a long string explaining the command and giving usage information.
 func (*Validate) Usage() string {
@@ -87,11 +87,11 @@ func (v *Validate) validateHandler(ctx context.Context) subcommands.ExitStatus {
 }
 
 func (v *Validate) validateWorkloadCollectionHandler(ctx context.Context, read collectiondefinition.ReadFile, path string) subcommands.ExitStatus {
-	fmt.Println("Beginning workload collection validation for file: " + path)
+	fmt.Println("Beginning workload collection definition validation for file: " + path)
 	log.Logger.Infow("Beginning workload collection validation.", "path", path)
 	cd, err := collectiondefinition.FromJSONFile(ctx, read, path)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Failed to load workload collection file.", err)
+		onetime.LogErrorToFileAndConsole("Failed to load workload collection definition file.", err)
 		return subcommands.ExitFailure
 	}
 
@@ -99,10 +99,10 @@ func (v *Validate) validateWorkloadCollectionHandler(ctx context.Context, read c
 	validator.Validate()
 	if !validator.Valid() {
 		err := collectiondefinition.ValidationError{FailureCount: validator.FailureCount()}
-		onetime.LogErrorToFileAndConsole("Validation Result: FAILURE", err)
+		onetime.LogErrorToFileAndConsole("Workload collection definition validation Result: FAILURE", err)
 	} else {
-		fmt.Println("Validation Result: SUCCESS")
-		log.Logger.Info("Validation Result: SUCCESS")
+		fmt.Println("Workload collection definition validation Result: SUCCESS")
+		log.Logger.Info("Workload collection definition validation Result: SUCCESS")
 	}
 	return subcommands.ExitSuccess
 }
