@@ -81,13 +81,13 @@ var (
 func TestDiscoverComputeResources(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     string
+		parent     *spb.SapDiscovery_Resource
 		hostList   []string
 		gceService *fake.TestGCE
 		want       []*spb.SapDiscovery_Resource
 	}{{
 		name:     "discoverEmptyList",
-		parent:   "projects/test-project/zones/test-zone/disks/test-disk",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/disks/test-disk"},
 		hostList: []string{},
 		gceService: &fake.TestGCE{
 			GetDiskResp: []*compute.Disk{{
@@ -95,45 +95,32 @@ func TestDiscoverComputeResources(t *testing.T) {
 			}},
 			GetDiskErr: []error{nil},
 		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:  "test-disk",
-		}},
+		want: nil,
 	}, {
 		name:     "discoverSingleItem",
-		parent:   "projects/test-project/zones/test-zone/disks/test-disk",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/disks/test-disk"},
 		hostList: []string{"projects/test-project/zones/test-zone/disks/other-disk"},
 		gceService: &fake.TestGCE{
 			GetDiskResp: []*compute.Disk{{
-				SelfLink: "test-disk",
-			}, {
 				SelfLink: "other-disk",
 			}},
-			GetDiskErr: []error{nil, nil},
+			GetDiskErr: []error{nil},
 		},
 		want: []*spb.SapDiscovery_Resource{{
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:      "test-disk",
-			RelatedResources: []string{"other-disk"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 			ResourceUri:      "other-disk",
-			RelatedResources: []string{"test-disk"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone/disks/test-disk"},
 		}},
 	}, {
 		name:     "discoverMultipleItems",
-		parent:   "projects/test-project/zones/test-zone/disks/test-disk",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/disks/test-disk"},
 		hostList: []string{"projects/test-project/zones/test-zone/disks/other-disk", "projects/test-project/regions/test-region/filestores/test-filestore"},
 		gceService: &fake.TestGCE{
 			GetDiskResp: []*compute.Disk{{
-				SelfLink: "test-disk",
-			}, {
 				SelfLink: "other-disk",
 			}},
-			GetDiskErr: []error{nil, nil},
+			GetDiskErr: []error{nil},
 			GetFilestoreResp: []*file.Instance{{
 				Name: "test-filestore",
 			}},
@@ -142,96 +129,47 @@ func TestDiscoverComputeResources(t *testing.T) {
 		want: []*spb.SapDiscovery_Resource{{
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:      "test-disk",
-			RelatedResources: []string{"other-disk", "test-filestore"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 			ResourceUri:      "other-disk",
-			RelatedResources: []string{"test-disk"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone/disks/test-disk"},
 		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 			ResourceUri:      "test-filestore",
-			RelatedResources: []string{"test-disk"},
-		}},
-	}, {
-		name:     "discoverfromParent",
-		parent:   "projects/test-project/zones/test-zone/instances/test-instance",
-		hostList: []string{},
-		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "test-instance",
-				Disks: []*compute.AttachedDisk{{
-					Source: "projects/test-project/zones/test-zone/disks/test-disk",
-				}},
-			}},
-			GetInstanceErr: []error{nil},
-			GetDiskResp:    []*compute.Disk{{SelfLink: "test-disk"}},
-			GetDiskErr:     []error{nil},
-		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:      "test-instance",
-			RelatedResources: []string{"test-disk"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-			ResourceUri:      "test-disk",
-			RelatedResources: []string{"test-instance"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone/disks/test-disk"},
 		}},
 	}, {
 		name:     "continueAfterError",
-		parent:   "projects/test-project/zones/test-zone/instances/test-instance",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/instances/test-instance"},
 		hostList: []string{"projects/test-project/zones/test-zone/disks/test-disk", "projects/test-project/regions/test-region/filestores/test-filestore"},
 		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "test-instance",
-			}},
-			GetInstanceErr:   []error{nil},
 			GetDiskResp:      []*compute.Disk{nil},
 			GetDiskErr:       []error{cmpopts.AnyError},
 			GetFilestoreResp: []*file.Instance{{Name: "test-filestore"}},
 			GetFilestoreErr:  []error{nil},
 		},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:      "test-instance",
-			RelatedResources: []string{"test-filestore"},
-		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 			ResourceUri:      "test-filestore",
-			RelatedResources: []string{"test-instance"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone/instances/test-instance"},
 		}},
 	}, {
 		name:     "skipEmptyName",
-		parent:   "projects/test-project/zones/test-zone/instances/test-instance",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/instances/test-instance"},
 		hostList: []string{"", "projects/test-project/regions/test-region/filestores/test-filestore"},
 		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "test-instance",
-			}},
-			GetInstanceErr:   []error{nil},
 			GetFilestoreResp: []*file.Instance{{Name: "test-filestore"}},
 			GetFilestoreErr:  []error{nil},
 		},
 		want: []*spb.SapDiscovery_Resource{{
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:      "test-instance",
-			RelatedResources: []string{"test-filestore"},
-		}, {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 			ResourceUri:      "test-filestore",
-			RelatedResources: []string{"test-instance"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone/instances/test-instance"},
 		}},
 	}, {
 		name:     "parentNameDiffersFromResourceURI",
-		parent:   "projects/test-project/zones/test-zone/instances/some-hostname",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/instances/some-hostname"},
 		hostList: []string{},
 		gceService: &fake.TestGCE{
 			GetInstanceResp: []*compute.Instance{{
@@ -239,20 +177,12 @@ func TestDiscoverComputeResources(t *testing.T) {
 			}},
 			GetInstanceErr: []error{nil},
 		},
-		want: []*spb.SapDiscovery_Resource{{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:  "test-instance",
-		}},
+		want: nil,
 	}, {
 		name:     "skipsAlreadyDiscoveredResource",
-		parent:   "projects/test-project/zones/test-zone/instances/test-instance",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/instances/test-instance"},
 		hostList: []string{"projects/test-project/regions/test-region/addresses/test-address", "test-instance"},
 		gceService: &fake.TestGCE{
-			GetInstanceResp: []*compute.Instance{{
-				SelfLink: "test-instance",
-			}},
-			GetInstanceErr: []error{nil},
 			GetAddressResp: []*compute.Address{{
 				SelfLink: "test-address",
 				Users:    []string{"test-instance"},
@@ -261,18 +191,13 @@ func TestDiscoverComputeResources(t *testing.T) {
 		},
 		want: []*spb.SapDiscovery_Resource{{
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:      "test-instance",
-			RelatedResources: []string{"test-address"},
-		}, {
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 			ResourceUri:      "test-address",
-			RelatedResources: []string{"test-instance"},
+			RelatedResources: []string{"projects/test-project/zones/test-zone/instances/test-instance"},
 		}},
 	}, {
 		name:     "skipsParentWithDifferentURIFromHostname",
-		parent:   "projects/test-project/zones/test-zone/instances/some-hostname",
+		parent:   &spb.SapDiscovery_Resource{ResourceUri: "projects/test-project/zones/test-zone/instances/some-hostname"},
 		hostList: []string{"projects/test-project/regions/test-region/addresses/test-address"},
 		gceService: &fake.TestGCE{
 			GetInstanceResp: []*compute.Instance{{
@@ -294,7 +219,7 @@ func TestDiscoverComputeResources(t *testing.T) {
 			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 			ResourceUri:      "test-address",
-			RelatedResources: []string{"test-instance"},
+			RelatedResources: []string{"test-instance", "projects/test-project/zones/test-zone/instances/some-hostname"},
 		}},
 	}}
 	for _, test := range tests {

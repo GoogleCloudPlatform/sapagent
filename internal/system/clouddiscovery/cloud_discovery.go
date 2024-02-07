@@ -118,22 +118,11 @@ func (d *CloudDiscovery) configureDiscoveryFunctions() {
 
 // DiscoverComputeResources attempts to gather information about the provided hosts and any additional
 // resources that are identified as related from the cloud descriptions.
-func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parent string, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
-	log.CtxLogger(ctx).Debugw("DiscoverComputeResources called", "parent", parent, "hostList", hostList)
+func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentResource *spb.SapDiscovery_Resource, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
+	log.CtxLogger(ctx).Debugw("DiscoverComputeResources called", "parent", parentResource, "hostList", hostList)
 	var res []*spb.SapDiscovery_Resource
 	var uris []string
 	var discoverQueue []toDiscover
-	var parentResource *spb.SapDiscovery_Resource
-	var err error
-	parentResource, discoverQueue, err = d.discoverResource(ctx, toDiscover{parent, nil}, cp.GetProjectId())
-	if err != nil {
-		return nil
-	}
-	uris = append(uris, parent)
-	if parent != parentResource.ResourceUri {
-		uris = append(uris, parentResource.ResourceUri)
-	}
-	res = append(res, parentResource)
 	for _, h := range hostList {
 		discoverQueue = append(discoverQueue, toDiscover{h, parentResource})
 	}

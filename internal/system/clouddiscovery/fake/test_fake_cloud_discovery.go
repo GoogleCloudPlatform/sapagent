@@ -29,7 +29,7 @@ import (
 
 // DiscoverComputeResourcesArgs encapsulates arguments sent to the DiscoverComputeResources function.
 type DiscoverComputeResourcesArgs struct {
-	Parent   string
+	Parent   *spb.SapDiscovery_Resource
 	HostList []string
 	CP       *ipb.CloudProperties
 }
@@ -43,14 +43,14 @@ type CloudDiscovery struct {
 }
 
 // DiscoverComputeResources is a fake implementation for the CloudDiscovery method.
-func (c *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parent string, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
+func (c *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parent *spb.SapDiscovery_Resource, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
 	defer func() {
 		c.discoverComputeResourcesCallCount++
 	}()
 
 	if len(c.DiscoverComputeResourcesArgs) > c.discoverComputeResourcesCallCount {
 		curArgs := DiscoverComputeResourcesArgs{Parent: parent, HostList: hostList, CP: cp}
-		if diff := cmp.Diff(c.DiscoverComputeResourcesArgs[c.discoverComputeResourcesCallCount], curArgs, protocmp.Transform()); diff != "" {
+		if diff := cmp.Diff(c.DiscoverComputeResourcesArgs[c.discoverComputeResourcesCallCount], curArgs, protocmp.Transform(), protocmp.IgnoreFields(&spb.SapDiscovery_Resource{}, "related_resources")); diff != "" {
 			c.DiscoverComputeResourcesArgsDiffs = append(c.DiscoverComputeResourcesArgsDiffs, diff)
 		}
 	}
