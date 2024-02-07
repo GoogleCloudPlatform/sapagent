@@ -63,6 +63,9 @@ var (
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{
 			CollectWorkloadValidationMetrics: wpb.Bool(true),
 		},
+		SupportConfiguration: &cfgpb.SupportConfiguration{
+			SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+		},
 	}
 	bmConfiguration = &cfgpb.Configuration{
 		BareMetal: true,
@@ -483,7 +486,6 @@ func TestStartMetricsCollection(t *testing.T) {
 				BackOffs:          defaultBackOffIntervals,
 			},
 			wlmInterface: &wlmfake.TestWLM{
-				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: true,
@@ -509,7 +511,6 @@ func TestStartMetricsCollection(t *testing.T) {
 				BackOffs:          defaultBackOffIntervals,
 			},
 			wlmInterface: &wlmfake.TestWLM{
-				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
 				WriteInsightErrs: []error{nil},
 			},
 			want: true,
@@ -535,8 +536,7 @@ func TestStartMetricsCollection(t *testing.T) {
 				BackOffs:          defaultBackOffIntervals,
 			},
 			wlmInterface: &wlmfake.TestWLM{
-				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
-				WriteInsightErrs: []error{nil},
+				WriteInsightErrs: []error{nil, nil},
 			},
 			want: true,
 		},
@@ -552,11 +552,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:           "linux",
 				BackOffs:         defaultBackOffIntervals,
 			},
-			wlmInterface: &wlmfake.TestWLM{
-				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
-				WriteInsightErrs: []error{nil},
-			},
-			want: false,
+			wlmInterface: &wlmfake.TestWLM{},
+			want:         false,
 		},
 		{
 			name: "failsDueToOS",
@@ -567,11 +564,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSType:           "windows",
 				BackOffs:         defaultBackOffIntervals,
 			},
-			wlmInterface: &wlmfake.TestWLM{
-				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
-				WriteInsightErrs: []error{nil},
-			},
-			want: false,
+			wlmInterface: &wlmfake.TestWLM{},
+			want:         false,
 		},
 		{
 			name: "failsDueToWorkloadConfig",
@@ -592,11 +586,8 @@ func TestStartMetricsCollection(t *testing.T) {
 				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 			},
-			wlmInterface: &wlmfake.TestWLM{
-				WriteInsightArgs: []wlmfake.WriteInsightArgs{{}},
-				WriteInsightErrs: []error{nil},
-			},
-			want: false,
+			wlmInterface: &wlmfake.TestWLM{},
+			want:         false,
 		},
 	}
 
@@ -605,7 +596,7 @@ func TestStartMetricsCollection(t *testing.T) {
 			test.wlmInterface.T = t
 			test.params.WLMService = test.wlmInterface
 			ctx, cancel := context.WithCancel(context.Background())
-			t.Cleanup(cancel)
+			defer cancel()
 			got := StartMetricsCollection(ctx, test.params)
 			if got != test.want {
 				t.Errorf("StartMetricsCollection(%#v) returned unexpected result, got: %t, want: %t", test.params, got, test.want)
@@ -635,14 +626,14 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 		},
 		{
 			name:         "Cancel1Beat",
-			beatInterval: time.Millisecond * 75,
-			timeout:      time.Millisecond * 140,
+			beatInterval: time.Millisecond * 100,
+			timeout:      time.Millisecond * 150,
 			want:         2,
 		},
 		{
 			name:         "Cancel2Beats",
-			beatInterval: time.Millisecond * 45,
-			timeout:      time.Millisecond * 125,
+			beatInterval: time.Millisecond * 100,
+			timeout:      time.Millisecond * 250,
 			want:         3,
 		},
 	}
