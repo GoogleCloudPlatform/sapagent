@@ -171,10 +171,7 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	config.CollectionConfiguration = applyDefaultCollectionConfiguration(config.GetCollectionConfiguration())
 	config.HanaMonitoringConfiguration = applyDefaultHMConfiguration(config.GetHanaMonitoringConfiguration())
 	config.DiscoveryConfiguration = applyDefaultDiscoveryConfiguration(config.GetDiscoveryConfiguration())
-
-	if config.GetSupportConfiguration() == nil {
-		config.SupportConfiguration = &cpb.SupportConfiguration{}
-	}
+	config.SupportConfiguration = applyDefaultSupportConfiguration(config.GetSupportConfiguration())
 
 	return config
 }
@@ -184,9 +181,6 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	if cc == nil {
 		cc = &cpb.CollectionConfiguration{}
 		cc.CollectReliabilityMetrics = &wpb.BoolValue{Value: false}
-	}
-	if cc.GetCollectWorkloadValidationMetrics() == nil {
-		cc.CollectWorkloadValidationMetrics = &wpb.BoolValue{Value: true}
 	}
 	
 	if cc.GetCollectWorkloadValidationMetrics().GetValue() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
@@ -269,6 +263,17 @@ func applyDefaultDiscoveryConfiguration(configFromFile *cpb.DiscoveryConfigurati
 		discoveryConfig.EnableWorkloadDiscovery = &wpb.BoolValue{Value: true}
 	}
 	return discoveryConfig
+}
+
+func applyDefaultSupportConfiguration(configFromFile *cpb.SupportConfiguration) *cpb.SupportConfiguration {
+	supportConfig := configFromFile
+	if supportConfig == nil {
+		supportConfig = &cpb.SupportConfiguration{}
+	}
+	if supportConfig.GetSendWorkloadValidationMetricsToCloudMonitoring() == nil {
+		supportConfig.SendWorkloadValidationMetricsToCloudMonitoring = &wpb.BoolValue{Value: true}
+	}
+	return supportConfig
 }
 
 // PrepareHMConf reads the default HANA Monitoring queries, parses them into a proto,

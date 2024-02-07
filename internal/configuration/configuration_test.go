@@ -208,10 +208,7 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -224,7 +221,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 4 * 60 * 60},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -249,10 +248,7 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -265,14 +261,16 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
 			name: "ConfigWithDefaultOverride",
 			configFromFile: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: false},
+					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
 					CollectProcessMetrics:            true,
 					CollectAgentMetrics:              true,
 					DataWarehouseEndpoint:            "https://other-workloadmanager-datawarehouse.googleapis.com/",
@@ -284,21 +282,23 @@ func TestApplyDefaults(t *testing.T) {
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
 				},
 				SupportConfiguration: &cpb.SupportConfiguration{
-					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: false},
 				},
 			},
 			want: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: false},
-					CollectProcessMetrics:            true,
-					ProcessMetricsFrequency:          5,
-					SlowProcessMetricsFrequency:      30,
-					CollectAgentMetrics:              true,
-					AgentMetricsFrequency:            60,
-					AgentHealthFrequency:             60,
-					HeartbeatFrequency:               60,
-					MissedHeartbeatThreshold:         10,
-					DataWarehouseEndpoint:            "https://other-workloadmanager-datawarehouse.googleapis.com/",
+					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
+					WorkloadValidationMetricsFrequency:   300,
+					WorkloadValidationDbMetricsFrequency: 3600,
+					CollectProcessMetrics:                true,
+					ProcessMetricsFrequency:              5,
+					SlowProcessMetricsFrequency:          30,
+					CollectAgentMetrics:                  true,
+					AgentMetricsFrequency:                60,
+					AgentHealthFrequency:                 60,
+					HeartbeatFrequency:                   60,
+					MissedHeartbeatThreshold:             10,
+					DataWarehouseEndpoint:                "https://other-workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -315,7 +315,7 @@ func TestApplyDefaults(t *testing.T) {
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
 				},
 				SupportConfiguration: &cpb.SupportConfiguration{
-					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: false},
 				},
 			},
 		},
@@ -346,10 +346,7 @@ func TestApplyDefaults(t *testing.T) {
 					Zone:       "config-zone",
 				},
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -362,7 +359,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 2},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: false},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -411,10 +410,7 @@ func TestApplyDefaults(t *testing.T) {
 					},
 				},
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -422,7 +418,9 @@ func TestApplyDefaults(t *testing.T) {
 					CollectReliabilityMetrics: &wpb.BoolValue{Value: false},
 				},
 				DiscoveryConfiguration: defaultDiscoveryProps,
-				SupportConfiguration:   &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -438,11 +436,8 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					SapSystemDiscovery:                   &wpb.BoolValue{Value: false},
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					SapSystemDiscovery:    &wpb.BoolValue{Value: false},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -454,7 +449,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -470,10 +467,7 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -486,7 +480,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -505,11 +501,8 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					SapSystemDiscovery:                   &wpb.BoolValue{Value: true},
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					SapSystemDiscovery:    &wpb.BoolValue{Value: true},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -521,7 +514,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -540,11 +535,8 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					SapSystemDiscovery:                   &wpb.BoolValue{Value: false},
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					SapSystemDiscovery:    &wpb.BoolValue{Value: false},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -556,7 +548,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -575,11 +569,8 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					SapSystemDiscovery:                   &wpb.BoolValue{Value: true},
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					SapSystemDiscovery:    &wpb.BoolValue{Value: true},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -591,7 +582,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 		{
@@ -610,11 +603,8 @@ func TestApplyDefaults(t *testing.T) {
 				AgentProperties:            testAgentProps,
 				CloudProperties:            testCloudProps,
 				CollectionConfiguration: &cpb.CollectionConfiguration{
-					SapSystemDiscovery:                   &wpb.BoolValue{Value: false},
-					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
-					WorkloadValidationMetricsFrequency:   300,
-					WorkloadValidationDbMetricsFrequency: 3600,
-					DataWarehouseEndpoint:                "https://workloadmanager-datawarehouse.googleapis.com/",
+					SapSystemDiscovery:    &wpb.BoolValue{Value: false},
+					DataWarehouseEndpoint: "https://workloadmanager-datawarehouse.googleapis.com/",
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
@@ -626,7 +616,9 @@ func TestApplyDefaults(t *testing.T) {
 					SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 14400},
 					EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 				},
-				SupportConfiguration: &cpb.SupportConfiguration{},
+				SupportConfiguration: &cpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
 			},
 		},
 	}

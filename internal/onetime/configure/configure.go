@@ -191,7 +191,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 
 	if cc := config.GetCollectionConfiguration(); cc == nil {
 		featureStatus[agentMetrics] = false
-		featureStatus[workloadValidation] = true
+		featureStatus[workloadValidation] = false
 		featureStatus[processMetrics] = false
 		featureStatus[reliabilityMetrics] = false
 	} else {
