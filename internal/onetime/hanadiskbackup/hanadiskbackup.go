@@ -64,6 +64,14 @@ type (
 	}
 )
 
+const (
+	metricPrefix = "workload.googleapis.com/sap/agent/"
+)
+
+var (
+	dbFreezeStartTime, workflowStartTime time.Time
+)
+
 // Snapshot has args for snapshot subcommands.
 // TODO: Improve Disk Backup and Restore code coverage and reduce redundancy.
 type Snapshot struct {
@@ -98,6 +106,7 @@ func (*Snapshot) Usage() string {
 	return `Usage: hanadiskbackup -port=<port-number> -sid=<HANA-sid> -hana_db_user=<HANA DB User>
 	-source-disk=<disk-name> -source-disk-zone=<disk-zone> [-host=<hostname>] [-project=<project-name>]
 	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
+	[-send-status-to-monitoring]=<true|false>
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
@@ -120,7 +129,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.storageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
 	fs.StringVar(&s.csekKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
 	fs.StringVar(&s.description, "snapshot-description", "", "Description of the new snapshot(optional)")
-	fs.BoolVar(&s.sendToMonitoring, "send-status-to-monitoring", true, "Send the execution status to cloud monitoring as a metric")
+	fs.BoolVar(&s.sendToMonitoring, "send-status-to-monitoring", false, "Flag to control whether to send metrics from this OTE to cloud monitoring")
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level")
@@ -210,10 +219,13 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		return subcommands.ExitFailure
 	}
 
+	workflowStartTime := time.Now()
 	if err = s.runWorkflow(ctx, runQuery); err != nil {
 		onetime.LogErrorToFileAndConsole("Error: Failed to run HANA disk snapshot workflow", err)
 		return subcommands.ExitFailure
 	}
+	workflowDur := time.Since(workflowStartTime)
+	defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals())
 	log.Print("SUCCESS: HANA backup and disk snapshot creation successful.")
 	s.status = true
 	return subcommands.ExitSuccess
@@ -290,6 +302,8 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 
 	op, err := s.createDiskSnapshot(ctx)
 	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
+	freezeTime := time.Since(dbFreezeStartTime)
+	defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals())
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error creating disk snapshot", "error", err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
@@ -390,6 +404,7 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 	if s.computeService == nil {
 		return nil, fmt.Errorf("computeService needed to proceed")
 	}
+	dbFreezeStartTime = time.Now()
 	if err := s.freezeXFS(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		return nil, err
 	}
@@ -466,7 +481,7 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
 			CloudProp:  s.cloudProps,
-			MetricType: "workload.googleapis.com/sap/agent/" + s.Name(),
+			MetricType: metricPrefix + s.Name() + "/status",
 			Timestamp:  tspb.Now(),
 			BoolValue:  s.status,
 			MetricLabels: map[string]string{
@@ -478,6 +493,31 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 	}
 	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.project); err != nil {
 		log.CtxLogger(ctx).Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
+		return false
+	}
+	return true
+}
+
+func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals) bool {
+	if !s.sendToMonitoring {
+		return false
+	}
+	log.CtxLogger(ctx).Infow("Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
+	ts := []*mrpb.TimeSeries{
+		timeseries.BuildFloat64(timeseries.Params{
+			CloudProp:    s.cloudProps,
+			MetricType:   mtype,
+			Timestamp:    tspb.Now(),
+			Float64Value: dur.Seconds(),
+			MetricLabels: map[string]string{
+				"sid":           s.sid,
+				"disk":          s.disk,
+				"snapshot_name": s.snapshotName,
+			},
+		}),
+	}
+	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.project); err != nil {
+		log.CtxLogger(ctx).Errorw("Error sending duration metric to cloud monitoring", "error", err.Error())
 		return false
 	}
 	return true

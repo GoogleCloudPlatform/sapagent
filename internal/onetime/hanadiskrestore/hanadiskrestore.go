@@ -26,18 +26,32 @@ import (
 
 	"flag"
 	backoff "github.com/cenkalti/backoff/v4"
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	// computeServiceFunc provides testable replacement for compute.Service API
 	computeServiceFunc func(context.Context) (*compute.Service, error)
+)
+
+const (
+	metricPrefix = "workload.googleapis.com/sap/agent/"
+)
+
+var (
+	workflowStartTime time.Time
 )
 
 // Restorer has args for hanadiskrestore subcommands
@@ -50,7 +64,9 @@ type Restorer struct {
 	baseDataPath, baseLogPath                                  string
 	logicalDataPath, logicalLogPath                            string
 	physicalDataPath, physicalLogPath                          string
+	timeSeriesCreator                                          cloudmonitoring.TimeSeriesCreator
 	help, version                                              bool
+	sendToMonitoring                                           bool
 	logLevel                                                   string
 	forceStopHANA                                              bool
 	newdiskName                                                string
@@ -72,6 +88,7 @@ func (*Restorer) Usage() string {
 	[-project=<project-name>] [-new-disk-type=<Type of the new disk>] [-force-stop-hana=<true|false>]
 	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
+	[-send-status-to-monitoring]=<true|false>
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
@@ -89,6 +106,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&r.diskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
 	fs.Int64Var(&r.provisionedIops, "provisioned-iops", 0, "Number of I/O operations per second that the disk can handle. (optional)")
 	fs.Int64Var(&r.provisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
+	fs.BoolVar(&r.sendToMonitoring, "send-status-to-monitoring", false, "Flag to control whether to send metrics from this OTE to cloud monitoring. (optional)")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
@@ -117,6 +135,12 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
+	mc, err := monitoring.NewMetricClient(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)
+		return subcommands.ExitFailure
+	}
+	r.timeSeriesCreator = mc
 	onetime.SetupOneTimeLogging(lp, r.Name(), log.StringLevelToZapcore(r.logLevel))
 	return r.restoreHandler(ctx, onetime.NewComputeService)
 }
@@ -170,6 +194,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		onetime.LogErrorToFileAndConsole("ERROR: HANA restore prepare failed,", err)
 		return subcommands.ExitFailure
 	}
+	workflowStartTime = time.Now()
 	if err := r.restoreFromSnapshot(ctx); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
 		// If restore fails, attach the old disk, rescan the volumes and delete the new disk.
@@ -177,6 +202,8 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		r.rescanVolumeGroups(ctx)
 		return subcommands.ExitFailure
 	}
+	workflowDur := time.Since(workflowStartTime)
+	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals())
 	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from disk snapshot successful. Please refer <link-to-public-doc> for next steps.")
 	return subcommands.ExitSuccess
 }
@@ -554,4 +581,28 @@ func (r *Restorer) waitForCompletionWithRetry(ctx context.Context, op *compute.O
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)
 	return backoff.Retry(func() error { return r.waitForCompletion(op) }, bo)
+}
+
+func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals) bool {
+	if !r.sendToMonitoring {
+		return false
+	}
+	log.CtxLogger(ctx).Infow("Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
+	ts := []*mrpb.TimeSeries{
+		timeseries.BuildFloat64(timeseries.Params{
+			CloudProp:    r.cloudProps,
+			MetricType:   mtype,
+			Timestamp:    tspb.Now(),
+			Float64Value: dur.Seconds(),
+			MetricLabels: map[string]string{
+				"sid":           r.sid,
+				"snapshot_name": r.sourceSnapshot,
+			},
+		}),
+	}
+	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, r.timeSeriesCreator, bo, r.project); err != nil {
+		log.CtxLogger(ctx).Errorw("Error sending duration metric to cloud monitoring", "error", err.Error())
+		return false
+	}
+	return true
 }

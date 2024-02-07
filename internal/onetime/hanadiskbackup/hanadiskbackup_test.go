@@ -795,3 +795,59 @@ func TestParseLogicalPath(t *testing.T) {
 		})
 	}
 }
+
+func TestSendDurationToCloudMonitoring(t *testing.T) {
+	tests := []struct {
+		name  string
+		mtype string
+		s     *Snapshot
+		dur   time.Duration
+		bo    *cloudmonitoring.BackOffIntervals
+		want  bool
+	}{
+		{
+			name:  "Success",
+			mtype: "Snapshot",
+			s: &Snapshot{
+				sendToMonitoring: true,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
+			},
+			dur:   time.Millisecond,
+			bo:    cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+			want:  true,
+		},
+		{
+			name:  "Failure",
+			mtype: "Snapshot",
+			s: &Snapshot{
+				sendToMonitoring: true,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			},
+			dur:   time.Millisecond,
+			bo:    cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+			want:  false,
+		},
+		{
+			name: "sendStatusFalse",
+			mtype: "Snapshot",
+			s: &Snapshot{
+				sendToMonitoring: false,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
+			},
+			dur: time.Millisecond,
+			bo: cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+			want: false,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo)
+			if got != tc.want {
+				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
+	}
+}

@@ -21,12 +21,15 @@ import (
 	"errors"
 	"os/exec"
 	"testing"
+	"time"
 
 	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -550,5 +553,61 @@ func TestSetFlagsForSnapshot(t *testing.T) {
 		if got == nil {
 			t.Errorf("SetFlags(%#v) flag not found: %s", fs, flag)
 		}
+	}
+}
+
+func TestSendDurationToCloudMonitoring(t *testing.T) {
+	tests := []struct {
+		name  string
+		mtype string
+		r     *Restorer
+		dur   time.Duration
+		bo    *cloudmonitoring.BackOffIntervals
+		want  bool
+	}{
+		{
+			name:  "Success",
+			mtype: "restore",
+			r: &Restorer{
+				sendToMonitoring:  true,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
+			},
+			dur:  time.Second,
+			bo:   &cloudmonitoring.BackOffIntervals{time.Millisecond, time.Millisecond},
+			want: true,
+		},
+		{
+			name:  "Failure",
+			mtype: "restore",
+			r: &Restorer{
+				sendToMonitoring:  true,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
+			},
+			dur:  time.Second,
+			bo:   &cloudmonitoring.BackOffIntervals{},
+			want: false,
+		},
+		{
+			name:  "SendStatusFalse",
+			mtype: "restore",
+			r: &Restorer{
+				sendToMonitoring:  false,
+				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
+			},
+			dur:  time.Second,
+			bo:   &cloudmonitoring.BackOffIntervals{},
+			want: false,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.r.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo)
+			if got != tc.want {
+				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
 	}
 }
