@@ -14,41 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package usagemetrics provides logging utility for the operational status of the GC SAP Agent.
+// Package usagemetrics provides logging utility for the operational status of Google Cloud Agent for SAP.
 package usagemetrics
 
-import (
-	"context"
-	"fmt"
-	"net/http"
-	"regexp"
-	"strings"
-	"sync"
-	"time"
-
-	compute "google.golang.org/api/compute/v1"
-	"golang.org/x/oauth2/google"
-	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-)
-
-// Status enumerates the supported usage logging statuses.
-type Status string
+import um "github.com/GoogleCloudPlatform/sapagent/shared/usagemetrics"
 
 // The following status values are supported.
 const (
-	StatusRunning       Status = "RUNNING"
-	StatusStarted       Status = "STARTED"
-	StatusStopped       Status = "STOPPED"
-	StatusConfigured    Status = "CONFIGURED"
-	StatusMisconfigured Status = "MISCONFIGURED"
-	StatusError         Status = "ERROR"
-	StatusInstalled     Status = "INSTALLED"
-	StatusUpdated       Status = "UPDATED"
-	StatusUninstalled   Status = "UNINSTALLED"
-	StatusAction        Status = "ACTION"
+	StatusRunning       um.Status = "RUNNING"
+	StatusStarted       um.Status = "STARTED"
+	StatusStopped       um.Status = "STOPPED"
+	StatusConfigured    um.Status = "CONFIGURED"
+	StatusMisconfigured um.Status = "MISCONFIGURED"
+	StatusError         um.Status = "ERROR"
+	StatusInstalled     um.Status = "INSTALLED"
+	StatusUpdated       um.Status = "UPDATED"
+	StatusUninstalled   um.Status = "UNINSTALLED"
+	StatusAction        um.Status = "ACTION"
 )
 
 // Agent wide error code mappings.
@@ -153,238 +135,51 @@ const (
 	CollectReliabilityMetrics
 )
 
-var (
-	// projectNumbers contains known project numbers for test instances.
-	projectNumbers = map[string]bool{
-		"922508251869":  true,
-		"155261204042":  true,
-		"114837167255":  true,
-		"161716815775":  true,
-		"607888266690":  true,
-		"863817768072":  true,
-		"39979408140":   true,
-		"510599941441":  true,
-		"1038306394601": true,
-		"714149369409":  true,
-		"450711760461":  true,
-		"600915385160":  true,
-		"208472317671":  true,
-		"824757391322":  true,
-		"977154783768":  true,
-		"148036532291":  true,
-		"425380551487":  true,
-		"811811474621":  true,
-		"975534532604":  true,
-		"475132212764":  true,
-		"201338458013":  true,
-		"269972924358":  true,
-		"605897091243":  true,
-		"1008799658123": true,
-		"916154365516":  true,
-		"843031526114":  true,
-		"562567328974":  true,
-		"894989386931":  true,
-		"108988699619":  true,
-		"221666662846":  true,
-		"625805418481":  true,
-		"211003240391":  true,
-		"1031874220405": true,
-		"709743230039":  true,
-		"597454869213":  true,
-		"190577778578":  true,
-		"1098359830385": true,
-		"245746275688":  true,
-		"776752604875":  true,
-		"743463339463":  true,
-		"771731819498":  true,
-		"124631552650":  true,
-		"966841751088":  true,
-		"624630633137":  true,
-	}
-	imageProjects [12]string = [12]string{
-		"centos-cloud",
-		"cos-cloud",
-		"debian-cloud",
-		"fedora-coreos-cloud",
-		"rhel-cloud",
-		"rhel-sap-cloud",
-		"suse-cloud",
-		"suse-sap-cloud",
-		"ubuntu-os-cloud",
-		"ubuntu-os-pro-cloud",
-		"windows-cloud",
-		"windows-sql-cloud",
-	}
-	imagePattern = regexp.MustCompile(
-		fmt.Sprintf("projects[/](?:%s)[/]global[/]images[/](.*)", strings.Join(imageProjects[:], "|")),
-	)
-	lock = sync.Mutex{}
-)
-
-// The TimeSource interface is a wrapper around time functionality needed for usage metrics logging.
-// A fake TimeSource can be supplied by tests to ensure test stability.
-type TimeSource interface {
-	Now() time.Time
-	Since(t time.Time) time.Duration
-}
-
-// A Logger is used to report the status of the agent to an internal metadata server.
-type Logger struct {
-	agentProps             *configpb.AgentProperties
-	cloudProps             *instancepb.CloudProperties
-	timeSource             TimeSource
-	image                  string
-	isTestProject          bool
-	lastCalled             map[Status]time.Time
-	dailyLogRunningStarted bool
-}
-
-// NewLogger creates a new Logger with an initialized hash map of Status to a last called timestamp.
-func NewLogger(agentProps *configpb.AgentProperties, cloudProps *instancepb.CloudProperties, timeSource TimeSource) *Logger {
-	l := &Logger{
-		agentProps: agentProps,
-		timeSource: timeSource,
-		lastCalled: make(map[Status]time.Time),
-	}
-	l.setCloudProps(cloudProps)
-	return l
-}
-
-// Running logs the RUNNING status.
-func (l *Logger) Running() {
-	l.logStatus(StatusRunning, "")
-}
-
-// Started logs the STARTED status.
-func (l *Logger) Started() {
-	l.logStatus(StatusStarted, "")
-}
-
-// Stopped logs the STOPPED status.
-func (l *Logger) Stopped() {
-	l.logStatus(StatusStopped, "")
-}
-
-// Configured logs the CONFIGURED status.
-func (l *Logger) Configured() {
-	l.logStatus(StatusConfigured, "")
-}
-
-// Misconfigured logs the MISCONFIGURED status.
-func (l *Logger) Misconfigured() {
-	l.logStatus(StatusMisconfigured, "")
-}
-
-// Error logs the ERROR status.
-//
-// Any calls to Error should have an id mapping in this mapping sheet: go/sap-core-eng-tool-mapping.
-func (l *Logger) Error(id int) {
-	l.logStatus(StatusError, fmt.Sprintf("%d", id))
-}
-
-// Installed logs the INSTALLED status.
-func (l *Logger) Installed() {
-	l.logStatus(StatusInstalled, "")
-}
-
-// Updated logs the UPDATED status.
-func (l *Logger) Updated(version string) {
-	l.logStatus(StatusUpdated, version)
-}
-
-// Uninstalled logs the UNINSTALLED status.
-func (l *Logger) Uninstalled() {
-	l.logStatus(StatusUninstalled, "")
-}
-
-// Action logs the ACTION status.
-func (l *Logger) Action(id int) {
-	l.logStatus(StatusAction, fmt.Sprintf("%d", id))
-}
-
-func (l *Logger) log(s string) {
-	log.Logger.Debugw("logging status", "status", s)
-	err := l.requestComputeAPIWithUserAgent(buildComputeURL(l.cloudProps), buildUserAgent(l.agentProps, l.image, s))
-	if err != nil {
-		log.Logger.Warnw("Failed to send agent status", "error", err)
-	}
-}
-
-func (l *Logger) logStatus(s Status, v string) {
-	if !l.agentProps.GetLogUsageMetrics() {
-		return
-	}
-	msg := string(s)
-	if v != "" {
-		msg = fmt.Sprintf("%s/%s", string(s), v)
-	}
-	l.log(msg)
-	lock.Lock()
-	defer lock.Unlock()
-	l.lastCalled[s] = l.timeSource.Now()
-}
-
-// requestComputeAPIWithUserAgent submits a GET request to the compute API with a custom user agent.
-func (l *Logger) requestComputeAPIWithUserAgent(url, ua string) error {
-	if l.isTestProject {
-		return nil
-	}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Add("Metadata-Flavor", "Google")
-	req.Header.Add("User-Agent", ua)
-	client, _ := google.DefaultClient(context.Background(), compute.ComputeScope)
-	if client == nil {
-		client = http.DefaultClient // If OAUTH fails, use the default http client.
-	}
-	if _, err = client.Do(req); err != nil {
-		return err
-	}
-	return nil
-}
-
-// setCloudProps sets the cloud properties and ensures that dependent fields are kept in sync.
-func (l *Logger) setCloudProps(cp *instancepb.CloudProperties) {
-	l.cloudProps = cp
-	if cp != nil {
-		l.image = parseImage(cp.GetImage())
-		l.isTestProject = projectNumbers[cp.GetNumericProjectId()]
-	} else {
-		l.image = metadataserver.ImageUnknown
-		l.isTestProject = false
-	}
-}
-
-// buildComputeURL returns a compute API URL with the proper projectId, zone, and instance name specified.
-func buildComputeURL(cp *instancepb.CloudProperties) string {
-	computeAPIURL := "https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/instances/%s"
-	if cp == nil {
-		return fmt.Sprintf(computeAPIURL, "unknown", "unknown", "unknown")
-	}
-	return fmt.Sprintf(computeAPIURL, cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
-}
-
-// buildUserAgent returns a User-Agent string that will be submitted to the compute API.
-//
-// User-Agent is of the form "sap-core-eng/AgentName/Version/image-os-version/logged-status"
-func buildUserAgent(ap *configpb.AgentProperties, image, status string) string {
-	ua := fmt.Sprintf("sap-core-eng/%s/%s/%s/%s", ap.GetName(), ap.GetVersion(), image, status)
-	ua = strings.ReplaceAll(strings.ReplaceAll(ua, " ", ""), "\n", "")
-	return ua
-}
-
-// parseImage retrieves the OS and version from the image URI.
-//
-// The metadata server returns image as "projects/PROJECT_NAME/global/images/OS-VERSION".
-func parseImage(image string) string {
-	if image == metadataserver.ImageUnknown {
-		return image
-	}
-	match := imagePattern.FindStringSubmatch(image)
-	if len(match) >= 2 {
-		return match[1]
-	}
-	return metadataserver.ImageUnknown
+// projectNumbers contains known project numbers for test instances.
+var projectExclusionList = []string{
+	"922508251869",
+	"155261204042",
+	"114837167255",
+	"161716815775",
+	"607888266690",
+	"863817768072",
+	"39979408140",
+	"510599941441",
+	"1038306394601",
+	"714149369409",
+	"450711760461",
+	"600915385160",
+	"208472317671",
+	"824757391322",
+	"977154783768",
+	"148036532291",
+	"425380551487",
+	"811811474621",
+	"975534532604",
+	"475132212764",
+	"201338458013",
+	"269972924358",
+	"605897091243",
+	"1008799658123",
+	"916154365516",
+	"843031526114",
+	"562567328974",
+	"894989386931",
+	"108988699619",
+	"221666662846",
+	"625805418481",
+	"211003240391",
+	"1031874220405",
+	"709743230039",
+	"597454869213",
+	"190577778578",
+	"1098359830385",
+	"245746275688",
+	"776752604875",
+	"743463339463",
+	"771731819498",
+	"124631552650",
+	"966841751088",
+	"624630633137",
+	"624630633137",
 }

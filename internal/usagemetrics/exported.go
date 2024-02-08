@@ -17,26 +17,43 @@ limitations under the License.
 package usagemetrics
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	um "github.com/GoogleCloudPlatform/sapagent/shared/usagemetrics"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-var logger = NewLogger(nil, nil, clockwork.NewRealClock())
+var logger = um.NewLogger(nil, nil, clockwork.NewRealClock(), projectExclusionList)
 
 // SetAgentProperties sets the configured agent properties on the standard logger.
 func SetAgentProperties(ap *cpb.AgentProperties) {
-	logger.agentProps = ap
+	logger.SetAgentProps(
+		&um.AgentProperties{
+			Name:            ap.GetName(),
+			Version:         ap.GetVersion(),
+			LogUsageMetrics: ap.GetLogUsageMetrics(),
+			LogPrefix:       "sap-core-eng",
+		})
 }
 
 // SetCloudProperties sets the configured cloud properties on the standard logger.
 func SetCloudProperties(cp *iipb.CloudProperties) {
-	logger.setCloudProps(cp)
+	logger.SetCloudProps(&um.CloudProperties{
+		ProjectID:     cp.ProjectId,
+		Zone:          cp.Zone,
+		InstanceName:  cp.InstanceName,
+		ProjectNumber: cp.GetNumericProjectId(),
+		Image:         cp.Image,
+	})
+}
+
+// ParseStatus parses the status string to a Status enum.
+func ParseStatus(status string) um.Status {
+	return um.Status(status)
 }
 
 // Running uses the standard logger to log the RUNNING status. This status is reported at most once per day.
@@ -93,11 +110,11 @@ func Action(id int) {
 
 // LogRunningDaily log that the agent is running once a day.
 func LogRunningDaily() {
-	if logger.dailyLogRunningStarted {
+	if logger.IsDailyLogRunningStarted() {
 		log.Logger.Debugw("Daily log of RUNNING status already started")
 		return
 	}
-	logger.dailyLogRunningStarted = true
+	logger.DailyLogRunningStarted()
 	log.Logger.Debugw("Starting daily log of RUNNING status")
 	for {
 		logger.Running()
@@ -113,6 +130,6 @@ func LogActionDaily(id int) {
 	for {
 		// sleep for 24 hours and a minute.
 		time.Sleep(24*time.Hour + 1*time.Minute)
-		logger.logStatus(StatusAction, fmt.Sprintf("%d", id))
+		logger.Action(id)
 	}
 }

@@ -133,7 +133,7 @@ func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
 		version = l.agentVersion
 	}
 	configureUsageMetricsForOTE(cloudProps, l.name, version, l.image)
-	switch usagemetrics.Status(l.status) {
+	switch usagemetrics.ParseStatus(l.status) {
 	case usagemetrics.StatusRunning:
 		usagemetrics.Running()
 	case usagemetrics.StatusStarted:

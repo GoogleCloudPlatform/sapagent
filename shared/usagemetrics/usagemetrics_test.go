@@ -26,8 +26,6 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 )
 
@@ -38,26 +36,56 @@ var (
 	// This value is used in tests to ensure that the Logger.isTestProject field is set to true.
 	testProjectNumber = "922508251869"
 
-	defaultAgentProps = &configpb.AgentProperties{
+	defaultAgentProps = &AgentProperties{
 		Version:         "1.0",
 		Name:            "Agent Name",
 		LogUsageMetrics: true,
+		LogPrefix:       "sap-core-eng",
 	}
-	defaultCloudProps = &instancepb.CloudProperties{
-		NumericProjectId: testProjectNumber,
-		ProjectId:        "test-project",
-		Zone:             "test-zone",
-		InstanceName:     "test-instance",
-		Image:            fmt.Sprintf("projects/rhel-cloud/global/images/%s", testImage),
+	defaultCloudProps = &CloudProperties{
+		ProjectNumber: testProjectNumber,
+		ProjectID:     "test-project",
+		Zone:          "test-zone",
+		InstanceName:  "test-instance",
+		Image:         fmt.Sprintf("projects/rhel-cloud/global/images/%s", testImage),
 	}
 	defaultNow        = time.Now()
 	defaultTimeSource = clockwork.NewFakeClockAt(defaultNow)
 )
 
+func TestLogger_IsDailyLogRunningStarted(t *testing.T) {
+	tests := []struct {
+		dailyLogRunningStarted bool
+	}{
+		{
+			dailyLogRunningStarted: true,
+		},
+		{
+			dailyLogRunningStarted: false,
+		},
+	}
+
+	for _, test := range tests {
+		logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
+		logger.dailyLogRunningStarted = test.dailyLogRunningStarted
+		if logger.IsDailyLogRunningStarted() != test.dailyLogRunningStarted {
+			t.Errorf("Logger.dailyLogRunningStarted = %v, want %v", logger.dailyLogRunningStarted, test.dailyLogRunningStarted)
+		}
+	}
+}
+
+func TestLogger_DailyLogRunningStarted(t *testing.T) {
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
+	logger.DailyLogRunningStarted()
+	if logger.dailyLogRunningStarted != true {
+		t.Errorf("Logger.dailyLogRunningStarted = %v, want %v", logger.dailyLogRunningStarted, true)
+	}
+}
+
 func TestLogger_Running(t *testing.T) {
 	tests := []struct {
 		name       string
-		agentProps *configpb.AgentProperties
+		agentProps *AgentProperties
 		nowOffset  time.Time
 		want       time.Time
 	}{
@@ -69,10 +97,11 @@ func TestLogger_Running(t *testing.T) {
 		},
 		{
 			name: "loggerDisabled",
-			agentProps: &configpb.AgentProperties{
+			agentProps: &AgentProperties{
 				Version:         "1.0",
 				Name:            "Agent Name",
 				LogUsageMetrics: false,
+				LogPrefix:       "sap-core-eng",
 			},
 			nowOffset: defaultNow.Add(24 * time.Hour),
 			want:      defaultNow,
@@ -87,7 +116,7 @@ func TestLogger_Running(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger := NewLogger(test.agentProps, defaultCloudProps, clockwork.NewFakeClockAt(test.nowOffset))
+			logger := NewLogger(test.agentProps, defaultCloudProps, clockwork.NewFakeClockAt(test.nowOffset), nil)
 			logger.lastCalled[StatusRunning] = defaultNow
 			logger.Running()
 			if got := logger.lastCalled[StatusRunning]; !got.Equal(test.want) {
@@ -100,7 +129,7 @@ func TestLogger_Running(t *testing.T) {
 func TestLogger_Started(t *testing.T) {
 	tests := []struct {
 		name       string
-		agentProps *configpb.AgentProperties
+		agentProps *AgentProperties
 		want       time.Time
 	}{
 		{
@@ -110,10 +139,11 @@ func TestLogger_Started(t *testing.T) {
 		},
 		{
 			name: "loggerDisabled",
-			agentProps: &configpb.AgentProperties{
+			agentProps: &AgentProperties{
 				Version:         "1.0",
 				Name:            "Agent Name",
 				LogUsageMetrics: false,
+				LogPrefix:       "sap-core-eng",
 			},
 			want: time.Time{},
 		},
@@ -121,7 +151,7 @@ func TestLogger_Started(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger := NewLogger(test.agentProps, defaultCloudProps, defaultTimeSource)
+			logger := NewLogger(test.agentProps, defaultCloudProps, defaultTimeSource, nil)
 			logger.Started()
 			if got := logger.lastCalled[StatusStarted]; !got.Equal(test.want) {
 				t.Errorf("Logger.Started() last called mismatch. got: %v want: %v", got, test.want)
@@ -131,7 +161,7 @@ func TestLogger_Started(t *testing.T) {
 }
 
 func TestLogger_Stopped(t *testing.T) {
-	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource)
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
 	logger.Stopped()
 	if got := logger.lastCalled[StatusStopped]; !got.Equal(defaultNow) {
 		t.Errorf("Logger.Stopped() last called mismatch. got: %v want: %v", got, defaultNow)
@@ -139,7 +169,7 @@ func TestLogger_Stopped(t *testing.T) {
 }
 
 func TestLogger_Configured(t *testing.T) {
-	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource)
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
 	logger.Configured()
 	if got := logger.lastCalled[StatusConfigured]; !got.Equal(defaultNow) {
 		t.Errorf("Logger.Configured() last called mismatch. got: %v want: %v", got, defaultNow)
@@ -147,7 +177,7 @@ func TestLogger_Configured(t *testing.T) {
 }
 
 func TestLogger_Misconfigured(t *testing.T) {
-	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource)
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
 	logger.Misconfigured()
 	if got := logger.lastCalled[StatusMisconfigured]; !got.Equal(defaultNow) {
 		t.Errorf("Logger.Misconfigured() last called mismatch. got: %v want: %v", got, defaultNow)
@@ -174,7 +204,7 @@ func TestLogger_Error(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger := NewLogger(defaultAgentProps, defaultCloudProps, clockwork.NewFakeClockAt(test.nowOffset))
+			logger := NewLogger(defaultAgentProps, defaultCloudProps, clockwork.NewFakeClockAt(test.nowOffset), nil)
 			logger.lastCalled[StatusError] = defaultNow
 			logger.Error(1)
 			if got := logger.lastCalled[StatusError]; !got.Equal(test.want) {
@@ -185,7 +215,7 @@ func TestLogger_Error(t *testing.T) {
 }
 
 func TestLogger_Installed(t *testing.T) {
-	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource)
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
 	logger.Installed()
 	if got := logger.lastCalled[StatusInstalled]; !got.Equal(defaultNow) {
 		t.Errorf("Logger.Installed() last called mismatch. got: %v want: %v", got, defaultNow)
@@ -193,7 +223,7 @@ func TestLogger_Installed(t *testing.T) {
 }
 
 func TestLogger_Updated(t *testing.T) {
-	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource)
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
 	logger.Updated("1.1")
 	if got := logger.lastCalled[StatusUpdated]; !got.Equal(defaultNow) {
 		t.Errorf("Logger.Updated(%s) last called mismatch. got: %v want: %v", "1.1", got, defaultNow)
@@ -201,7 +231,7 @@ func TestLogger_Updated(t *testing.T) {
 }
 
 func TestLogger_Uninstalled(t *testing.T) {
-	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource)
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
 	logger.Uninstalled()
 	if got := logger.lastCalled[StatusUninstalled]; !got.Equal(defaultNow) {
 		t.Errorf("Logger.Uninstalled() last called mismatch. got: %v want: %v", got, defaultNow)
@@ -209,7 +239,7 @@ func TestLogger_Uninstalled(t *testing.T) {
 }
 
 func TestLogger_Action(t *testing.T) {
-	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource)
+	logger := NewLogger(defaultAgentProps, defaultCloudProps, defaultTimeSource, nil)
 	logger.Action(1)
 	if got := logger.lastCalled[StatusAction]; !got.Equal(defaultNow) {
 		t.Errorf("Logger.Action(%d) last called mismatch. got: %v want: %v", 1, got, defaultNow)
@@ -219,7 +249,7 @@ func TestLogger_Action(t *testing.T) {
 func TestLogger_RequestComputeAPIWithUserAgent(t *testing.T) {
 	tests := []struct {
 		name          string
-		cloudProps    *instancepb.CloudProperties
+		cloudProps    *CloudProperties
 		url           string
 		ua            string
 		contentLength string
@@ -232,8 +262,8 @@ func TestLogger_RequestComputeAPIWithUserAgent(t *testing.T) {
 		},
 		{
 			name: "testProject",
-			cloudProps: &instancepb.CloudProperties{
-				NumericProjectId: testProjectNumber,
+			cloudProps: &CloudProperties{
+				ProjectNumber: testProjectNumber,
 			},
 			want: nil,
 		},
@@ -259,7 +289,7 @@ func TestLogger_RequestComputeAPIWithUserAgent(t *testing.T) {
 			if test.url != "" {
 				url = test.url
 			}
-			l := NewLogger(defaultAgentProps, test.cloudProps, defaultTimeSource)
+			l := NewLogger(defaultAgentProps, test.cloudProps, defaultTimeSource, []string{testProjectNumber})
 			if got := l.requestComputeAPIWithUserAgent(url, test.ua); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("Logger.requestComputeAPIWithUserAgent(%q, %q) got err=%v want err=%v", url, test.ua, got, test.want)
 			}
@@ -270,13 +300,13 @@ func TestLogger_RequestComputeAPIWithUserAgent(t *testing.T) {
 func TestBuildComputeURL(t *testing.T) {
 	tests := []struct {
 		name       string
-		cloudProps *instancepb.CloudProperties
+		cloudProps *CloudProperties
 		want       string
 	}{
 		{
 			name: "withCloudProperties",
-			cloudProps: &instancepb.CloudProperties{
-				ProjectId:    "test-project",
+			cloudProps: &CloudProperties{
+				ProjectID:    "test-project",
 				Zone:         "test-zone",
 				InstanceName: "test-instance",
 			},
@@ -300,7 +330,7 @@ func TestBuildComputeURL(t *testing.T) {
 func TestBuildUserAgent(t *testing.T) {
 	tests := []struct {
 		name       string
-		agentProps *configpb.AgentProperties
+		agentProps *AgentProperties
 		image      string
 		status     string
 		want       string
@@ -350,6 +380,65 @@ func TestParseImage(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if got := parseImage(test.image); got != test.want {
 				t.Errorf("parseImage(%q) got=%s want=%s", test.image, got, test.want)
+			}
+		})
+	}
+}
+
+func TestSetAgentProperties(t *testing.T) {
+	want := &AgentProperties{
+		Name:            "sapagent",
+		Version:         "1.0",
+		LogUsageMetrics: true,
+		LogPrefix:       "sap-core-eng",
+	}
+
+	logger := NewLogger(nil, nil, clockwork.NewRealClock(), nil)
+	logger.SetAgentProps(want)
+	if d := cmp.Diff(want, logger.agentProps, cmp.AllowUnexported(AgentProperties{})); d != "" {
+		t.Errorf("SetAgentProperties(%v) mismatch (-want, +got):\n%s", want, d)
+	}
+}
+
+func TestSetCloudProperties(t *testing.T) {
+	tests := []struct {
+		name              string
+		cloudProps        *CloudProperties
+		wantImage         string
+		wantIsTestProject bool
+	}{
+		{
+			name:              "nil",
+			cloudProps:        nil,
+			wantImage:         metadataserver.ImageUnknown,
+			wantIsTestProject: false,
+		},
+		{
+			name: "notNil",
+			cloudProps: &CloudProperties{
+				ProjectID:     "test-project",
+				Zone:          "test-zone",
+				InstanceName:  "test-instance-name",
+				Image:         "projects/rhel-cloud/global/images/rhel-8-v20220101",
+				ProjectNumber: testProjectNumber,
+			},
+			wantImage:         "rhel-8-v20220101",
+			wantIsTestProject: true,
+		},
+	}
+
+	for _, test := range tests {
+		logger := NewLogger(nil, nil, clockwork.NewRealClock(), []string{testProjectNumber})
+		t.Run(test.name, func(t *testing.T) {
+			logger.SetCloudProps(test.cloudProps)
+			if d := cmp.Diff(test.cloudProps, logger.cloudProps, cmp.AllowUnexported(CloudProperties{})); d != "" {
+				t.Errorf("SetCloudProperties(%v) mismatch (-want, +got):\n%s", test.cloudProps, d)
+			}
+			if logger.image != test.wantImage {
+				t.Errorf("SetCloudProperties(%v) unexpected image. got=%s want=%s", test.cloudProps, logger.image, test.wantImage)
+			}
+			if logger.isTestProject != test.wantIsTestProject {
+				t.Errorf("SetCloudProperties(%v) unexpected isTestProject. got=%t want=%t", test.cloudProps, logger.isTestProject, test.wantIsTestProject)
 			}
 		})
 	}
