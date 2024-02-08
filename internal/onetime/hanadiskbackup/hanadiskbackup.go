@@ -430,12 +430,12 @@ func (s *Snapshot) waitForCreationCompletion(op *compute.Operation) error {
 	return nil
 }
 
-// Each waitForCreationCompletion() returns immediately, we sleep for 120s between
-// retries a total 10 times => max_wait_duration = 120*10 = 20 minutes
+// Each waitForCreationCompletion() returns immediately, we sleep for 1s between
+// retries a total 300 times => max_wait_duration = 5 minutes
 // TODO: change timeout depending on disk snapshot limits
 func (s *Snapshot) waitForCreationCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
-	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)
+	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 300), ctx)
 	return backoff.Retry(func() error { return s.waitForCreationCompletion(op) }, bo)
 }
 
@@ -463,12 +463,12 @@ func (s *Snapshot) waitForUploadCompletion(op *compute.Operation) error {
 	return fmt.Errorf("snapshot %s not READY yet, snapshotStatus: %s, operationStatus: %s", s.snapshotName, ss.Status, op.Status)
 }
 
-// Each waitForUploadCompletionWithRetry() returns immediately, we sleep for 120s between
-// retries a total 120 times => max_wait_duration = 120*120 = 4 Hours
+// Each waitForUploadCompletionWithRetry() returns immediately, we sleep for 30s between
+// retries a total 480 times => max_wait_duration = 30*480 = 4 Hours
 // TODO: change timeout depending on disk snapshot limits
 func (s *Snapshot) waitForUploadCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
-	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 120), ctx)
+	constantBackoff := backoff.NewConstantBackOff(30 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 480), ctx)
 	return backoff.Retry(func() error { return s.waitForUploadCompletion(op) }, bo)
 }
 
