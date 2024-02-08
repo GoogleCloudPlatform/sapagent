@@ -573,7 +573,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
 			dur:  time.Second,
-			bo:   &cloudmonitoring.BackOffIntervals{time.Millisecond, time.Millisecond},
+			bo:   &cloudmonitoring.BackOffIntervals{LongExponential: time.Millisecond, ShortConstant: time.Millisecond},
 			want: true,
 		},
 		{

@@ -88,7 +88,7 @@ func (*Restorer) Usage() string {
 	[-project=<project-name>] [-new-disk-type=<Type of the new disk>] [-force-stop-hana=<true|false>]
 	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
-	[-send-status-to-monitoring]=<true|false>
+	[-send-metrics-to-monitoring]=<true|false>
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
@@ -106,11 +106,11 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&r.diskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
 	fs.Int64Var(&r.provisionedIops, "provisioned-iops", 0, "Number of I/O operations per second that the disk can handle. (optional)")
 	fs.Int64Var(&r.provisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
-	fs.BoolVar(&r.sendToMonitoring, "send-status-to-monitoring", false, "Flag to control whether to send metrics from this OTE to cloud monitoring. (optional)")
+	fs.BoolVar(&r.sendToMonitoring, "send-metrics-to-monitoring", false, "Send restore related metrics to cloud monitoring. (optional) Default: true")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
-}
+}	
 
 // Execute implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
@@ -601,7 +601,7 @@ func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 		}),
 	}
 	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, r.timeSeriesCreator, bo, r.project); err != nil {
-		log.CtxLogger(ctx).Errorw("Error sending duration metric to cloud monitoring", "error", err.Error())
+		log.CtxLogger(ctx).Debugw("Error sending duration metric to cloud monitoring", "error", err.Error())
 		return false
 	}
 	return true

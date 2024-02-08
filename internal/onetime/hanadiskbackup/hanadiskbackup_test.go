@@ -498,7 +498,7 @@ func TestSetFlagsForSnapshot(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"project", "host", "port", "sid", "hana-db-user", "password", "password-secret",
 		"snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file",
-		"snapshot-description", "send-status-to-monitoring", "csek-key-file", "storage-location"}
+		"snapshot-description", "send-metrics-to-monitoring", "csek-key-file", "storage-location"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -809,33 +809,33 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			name:  "Success",
 			mtype: "Snapshot",
 			s: &Snapshot{
-				sendToMonitoring: true,
+				sendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
-			dur:   time.Millisecond,
-			bo:    cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
-			want:  true,
+			dur:  time.Millisecond,
+			bo:   cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+			want: true,
 		},
 		{
 			name:  "Failure",
 			mtype: "Snapshot",
 			s: &Snapshot{
-				sendToMonitoring: true,
+				sendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
 			},
-			dur:   time.Millisecond,
-			bo:    cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
-			want:  false,
+			dur:  time.Millisecond,
+			bo:   cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+			want: false,
 		},
 		{
-			name: "sendStatusFalse",
+			name:  "sendStatusFalse",
 			mtype: "Snapshot",
 			s: &Snapshot{
-				sendToMonitoring: false,
+				sendToMonitoring:  false,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
-			dur: time.Millisecond,
-			bo: cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+			dur:  time.Millisecond,
+			bo:   cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
 			want: false,
 		},
 	}

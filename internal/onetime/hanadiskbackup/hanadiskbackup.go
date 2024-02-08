@@ -129,7 +129,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.storageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
 	fs.StringVar(&s.csekKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
 	fs.StringVar(&s.description, "snapshot-description", "", "Description of the new snapshot(optional)")
-	fs.BoolVar(&s.sendToMonitoring, "send-status-to-monitoring", false, "Flag to control whether to send metrics from this OTE to cloud monitoring")
+	fs.BoolVar(&s.sendToMonitoring, "send-metrics-to-monitoring", true, "Send backup related metrics to cloud monitoring. (optional) Default: true")
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level")
@@ -492,7 +492,7 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 		}),
 	}
 	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.project); err != nil {
-		log.CtxLogger(ctx).Errorw("Error sending status metric to cloud monitoring", "error", err.Error())
+		log.CtxLogger(ctx).Debugw("Error sending status metric to cloud monitoring", "error", err.Error())
 		return false
 	}
 	return true
@@ -517,7 +517,7 @@ func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 		}),
 	}
 	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.project); err != nil {
-		log.CtxLogger(ctx).Errorw("Error sending duration metric to cloud monitoring", "error", err.Error())
+		log.CtxLogger(ctx).Debugw("Error sending duration metric to cloud monitoring", "error", err.Error())
 		return false
 	}
 	return true
