@@ -88,7 +88,8 @@ type (
 
 	fakeCollector struct {
 		timeSeriesCount             int
-		timesCollectWtihRetryCalled int
+		timesCollectWithRetryCalled int
+		m                           *sync.Mutex
 	}
 
 	fakeCollectorError struct {
@@ -108,7 +109,13 @@ func (f *fakeCollector) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error)
 }
 
 func (f *fakeCollector) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
-	f.timesCollectWtihRetryCalled++
+	if f.m != nil {
+		f.m.Lock()
+		f.timesCollectWithRetryCalled++
+		f.m.Unlock()
+	} else {
+		f.timesCollectWithRetryCalled++
+	}
 	m := make([]*mrpb.TimeSeries, f.timeSeriesCount)
 	for i := 0; i < f.timeSeriesCount; i++ {
 		m[i] = &mrpb.TimeSeries{}
@@ -662,8 +669,10 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 
 func TestCollectAndSendSlowMovingMetrics(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	m := sync.Mutex{}
 	c := &fakeCollector{
 		timeSeriesCount: 10,
+		m:               &m,
 	}
 	p := &Properties{
 		Client:     &fake.TimeSeriesCreatorThreadSafe{},
@@ -677,12 +686,16 @@ func TestCollectAndSendSlowMovingMetrics(t *testing.T) {
 
 	// Wait for some iterations
 	time.Sleep(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()) * time.Second * 2)
-	before := c.timesCollectWtihRetryCalled
+	m.Lock()
+	before := c.timesCollectWithRetryCalled
+	m.Unlock()
 	cancel()
 
 	// Wait some more to ensure workers have stopped
 	time.Sleep(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()) * time.Second * 2)
-	after := c.timesCollectWtihRetryCalled
+	m.Lock()
+	after := c.timesCollectWithRetryCalled
+	m.Unlock()
 
 	if before != after {
 		t.Errorf("collectAndSendSlowMovingMetrics() timesCalled mismatch got %d, want %d", after, before)
