@@ -106,8 +106,12 @@ func (*Snapshot) Usage() string {
 	return `Usage: hanadiskbackup -port=<port-number> -sid=<HANA-sid> -hana_db_user=<HANA DB User>
 	-source-disk=<disk-name> -source-disk-zone=<disk-zone> [-host=<hostname>] [-project=<project-name>]
 	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
-	[-send-status-to-monitoring]=<true|false>
-	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
+	[-send-status-to-monitoring]=<true|false> [-source-disk-key-file=<path-to-key-file>]
+	[-storage-location=<storage-location>] [-csek-key-file=<path-to-key-file>]
+	[-snapshot-description=<description>] [-snapshot-name=<snapshot-name>]
+	[-snapshot-type=<snapshot-type>]
+	[-h] [-v] [-loglevel]=<debug|info|warn|error>
+	` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanadiskbackup.
