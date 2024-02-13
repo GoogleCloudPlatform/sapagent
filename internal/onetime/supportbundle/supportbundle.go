@@ -79,6 +79,7 @@ const (
 	linuxLogFilesPath     = `/var/log/`
 	agentOnetimeFilesPath = `/var/log/google-cloud-sap-agent/`
 	systemDBErrorsFile    = `_SYSTEM_DB_BACKUP_ERROR.txt`
+	journalCTLLogs        = `_JOURNAL_CTL_LOGS.txt`
 	tenantDBErrorsFile    = `_TENANT_DB_BACKUP_ERROR.txt`
 	backintErrorsFile     = `_BACKINT_ERROR.txt`
 	globalINIFile         = `/custom/config/global.ini`
@@ -158,6 +159,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	hasErrors = extractSystemDBErrors(ctx, destFilesPath, s.hostname, hanaPaths, exec, fs)
 	hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fs) || hasErrors
 	hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fs) || hasErrors
+	hasErrors = extractJournalCTLLogs(ctx, destFilesPath, s.hostname, exec, fs) || hasErrors
 	reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
@@ -373,6 +375,20 @@ func agentLogFiles(linuxLogFilesPath string, fu filesystem.FileSystem) []string 
 		}
 	}
 	return res
+}
+
+func extractJournalCTLLogs(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+	onetime.LogMessageToFileAndConsole("Extracting journal CTL logs...")
+	var hasErrors bool
+	p := commandlineexecutor.Params{
+		Executable:  "bash",
+		ArgsToSplit: "-c 'journalctl | grep google-cloud-sap-agent'",
+	}
+	if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, journalCTLLogs, fu); err != nil {
+		onetime.LogErrorToFileAndConsole("Error while executing command: journalctl | grep google-cloud-sap-agent", err)
+		hasErrors = true
+	}
+	return hasErrors
 }
 
 func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {

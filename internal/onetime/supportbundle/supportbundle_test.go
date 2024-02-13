@@ -647,6 +647,42 @@ func TestExtractTenantDBErrors(t *testing.T) {
 	}
 }
 
+func TestExtractJournalCTLLogs(t *testing.T) {
+	tests := []struct {
+		name     string
+		destFile string
+		hostname string
+		exec     commandlineexecutor.Execute
+		fs       filesystem.FileSystem
+		want     bool
+	}{
+		{
+			name:     "HasErrors",
+			destFile: "failure",
+			hostname: "sampleHost",
+			exec:     fakeExec,
+			fs:       mockedfilesystem{reqErr: os.ErrInvalid},
+			want:     true,
+		},
+		{
+			name:     "NoErrors",
+			destFile: "sampleFile",
+			hostname: "sampleHost",
+			exec:     fakeExec,
+			fs:       mockedfilesystem{},
+			want:     false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := extractJournalCTLLogs(context.Background(), test.destFile, test.hostname, test.exec, test.fs); got != test.want {
+				t.Errorf("extractJournalCTLLogs() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestExtractBackintErrors(t *testing.T) {
 	tests := []struct {
 		name       string
