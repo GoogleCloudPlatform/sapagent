@@ -110,7 +110,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
-}	
+}
 
 // Execute implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
@@ -217,7 +217,10 @@ func (r *Restorer) prepare(ctx context.Context) error {
 	if err := r.stopHANA(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to stop HANA: %v", err)
 	}
-	time.Sleep(time.Second * 10)
+	if err := r.waitForIndexServerToStopWithRetry(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+		return fmt.Errorf("hdbindexserver process still running after HANA is stopped: %v", err)
+	}
+
 	if err := r.unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
@@ -581,6 +584,31 @@ func (r *Restorer) waitForCompletionWithRetry(ctx context.Context, op *compute.O
 	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)
 	return backoff.Retry(func() error { return r.waitForCompletion(op) }, bo)
+}
+
+// waitForIndexServerToStop() waits for the hdb index server to stop.
+func (r *Restorer) waitForIndexServerToStop(ctx context.Context, exec commandlineexecutor.Execute) error {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "bash",
+		ArgsToSplit: `-c 'ps x | grep hdbindexs | grep -v grep'`,
+		User: r.hanaSidAdm,
+	})
+	if result.Error != nil {
+		return fmt.Errorf("failure waiting for index server to stop, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+
+	if result.ExitCode == 0 {
+		return fmt.Errorf("hdbindexs process is still running")
+	}
+	return nil
+}
+
+// waitForIndexServerToStopWithRetry() waits for the index server to stop with retry.
+// We sleep for 10s between retries a total 60 time => max_wait_duration =  10*60 = 10 minutes
+func (r *Restorer) waitForIndexServerToStopWithRetry(ctx context.Context, exec commandlineexecutor.Execute) error {
+	constantBackoff := backoff.NewConstantBackOff(10 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 60), ctx)
+	return backoff.Retry(func() error { return r.waitForIndexServerToStop(ctx, exec) }, bo)
 }
 
 func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals) bool {

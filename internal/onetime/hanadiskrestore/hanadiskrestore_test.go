@@ -46,9 +46,8 @@ var (
 		sourceSnapshot: "my-snapshot",
 	}
 
-	testCommandExecute = func(stdout, stderr string, err error) commandlineexecutor.Execute {
+	testCommandExecute = func(stdout, stderr string, exitCode int, err error) commandlineexecutor.Execute {
 		return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			exitCode := 0
 			var exitErr *exec.ExitError
 			if err != nil && errors.As(err, &exitErr) {
 				exitCode = exitErr.ExitCode()
@@ -193,6 +192,43 @@ func TestValidateParameters(t *testing.T) {
 	}
 }
 
+func TestWaitForIndexServerToStop(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        *Restorer
+		fakeExec commandlineexecutor.Execute
+		want     error
+	}{
+		{
+			name:     "CommandError",
+			r:        &Restorer{},
+			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
+			want:     cmpopts.AnyError,
+		},
+		{
+			name:     "ProcessRunning",
+			r:        &Restorer{},
+			fakeExec: testCommandExecute("", "", 0, nil),
+			want:     cmpopts.AnyError,
+		},
+		{
+			name:     "ProcessStopped",
+			r:        &Restorer{},
+			fakeExec: testCommandExecute("", "", 1, nil),
+			want:     nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.r.waitForIndexServerToStop(context.Background(), test.fakeExec)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("waitForIndexServerToStop() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 var defaultCloudProperties = &ipb.CloudProperties{
 	ProjectId: "default-project",
 }
@@ -265,12 +301,12 @@ func TestParseBasePath(t *testing.T) {
 	}{
 		{
 			name:     "Failure",
-			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
 			wantErr:  cmpopts.AnyError,
 		},
 		{
 			name:     "Success",
-			fakeExec: testCommandExecute("/hana/data/ABC", "", nil),
+			fakeExec: testCommandExecute("/hana/data/ABC", "", 0, nil),
 			want:     "/hana/data/ABC",
 		},
 	}
@@ -298,12 +334,12 @@ func TestParseLogicalPath(t *testing.T) {
 	}{
 		{
 			name:     "Failure",
-			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
 			wantErr:  cmpopts.AnyError,
 		},
 		{
 			name:     "Success",
-			fakeExec: testCommandExecute("/dev/mapper/vg-volume-1", "", nil),
+			fakeExec: testCommandExecute("/dev/mapper/vg-volume-1", "", 0, nil),
 			want:     "/dev/mapper/vg-volume-1",
 		},
 	}
@@ -331,12 +367,12 @@ func TestParsePhysicalPath(t *testing.T) {
 	}{
 		{
 			name:     "Failure",
-			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
 			wantErr:  cmpopts.AnyError,
 		},
 		{
 			name:     "Success",
-			fakeExec: testCommandExecute("/dev/sdb", "", nil),
+			fakeExec: testCommandExecute("/dev/sdb", "", 0, nil),
 			want:     "/dev/sdb",
 		},
 	}
@@ -363,12 +399,12 @@ func TestCheckDataDeviceForStripes(t *testing.T) {
 	}{
 		{
 			name:     "SpripesPresent",
-			fakeExec: testCommandExecute("", "", nil),
+			fakeExec: testCommandExecute("", "", 0, nil),
 			want:     cmpopts.AnyError,
 		},
 		{
 			name:     "StripesNotPresent",
-			fakeExec: testCommandExecute("", "exit code:1", &exec.ExitError{}),
+			fakeExec: testCommandExecute("", "exit code:1", 1, &exec.ExitError{}),
 		},
 	}
 
@@ -393,18 +429,18 @@ func TestStopHANA(t *testing.T) {
 		{
 			name:     "Failure",
 			r:        &Restorer{},
-			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
 			want:     cmpopts.AnyError,
 		},
 		{
 			name:     "StopSuccess",
 			r:        &Restorer{},
-			fakeExec: testCommandExecute("", "", nil),
+			fakeExec: testCommandExecute("", "", 0, nil),
 		},
 		{
 			name:     "ForceStopSuccess",
 			r:        &Restorer{forceStopHANA: true},
-			fakeExec: testCommandExecute("", "", nil),
+			fakeExec: testCommandExecute("", "", 0, nil),
 		},
 	}
 
@@ -427,12 +463,12 @@ func TestReadDataDirMountPath(t *testing.T) {
 	}{
 		{
 			name:     "Failure",
-			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
 			wantErr:  cmpopts.AnyError,
 		},
 		{
 			name:     "Success",
-			fakeExec: testCommandExecute("/hana/data/ABC", "", nil),
+			fakeExec: testCommandExecute("/hana/data/ABC", "", 0, nil),
 			want:     "/hana/data/ABC",
 		},
 	}
@@ -459,12 +495,12 @@ func TestUnmount(t *testing.T) {
 	}{
 		{
 			name:     "Failure",
-			fakeExec: testCommandExecute("", "", &exec.ExitError{}),
+			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
 			want:     cmpopts.AnyError,
 		},
 		{
 			name:     "Success",
-			fakeExec: testCommandExecute("", "", nil),
+			fakeExec: testCommandExecute("", "", 0, nil),
 		},
 	}
 
