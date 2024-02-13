@@ -188,11 +188,20 @@ func HANAReplicationConfig(ctx context.Context, user, sid, instID string) (site 
 
 // readReplicationConfig is a testable version of HANAReplicationConfig.
 func readReplicationConfig(ctx context.Context, user, sid, instID string, exec commandlineexecutor.Execute) (mode int, HAMembers []string, exitStatus int64, err error) {
-	// Keeping the timeout for the execution of the script as 25 seconds, so if the process hangs,
-	// it will be killed and trace files will not be generated.
 	cmd := "sudo"
-	args := fmt.Sprintf("-i -u %sadm timeout 25 hdbnsutil -sr_state", strings.ToLower(sid))
+	args := "" +
+		fmt.Sprintf("-i -u %sadm /usr/sap/%s/%s/HDBSettings.sh ", strings.ToLower(sid), sid, instID) +
+		fmt.Sprintf(" /usr/sap/%s/%s/exe/python_support/systemReplicationStatus.py --sapcontrol=1", sid, instID)
 	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  cmd,
+		ArgsToSplit: args,
+	})
+	exitStatus = int64(result.ExitCode)
+	log.CtxLogger(ctx).Debugw("systemReplicationStatus.py returned", "result", result)
+
+	cmd = "sudo"
+	args = fmt.Sprintf("-i -u %sadm hdbnsutil -sr_state", strings.ToLower(sid))
+	result = exec(ctx, commandlineexecutor.Params{
 		Executable:  cmd,
 		ArgsToSplit: args,
 	})
