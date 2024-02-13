@@ -166,14 +166,14 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)
+		onetime.LogErrorToFileAndConsole("Failed to create Cloud Monitoring metric client", err)
 		return subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
 
 	p, err := s.parseBasePath(ctx, "basepath_datavolumes", commandlineexecutor.ExecuteCommand)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Failed to parse HANA data path", "error", err)
+		onetime.LogErrorToFileAndConsole("Failed to parse HANA data path", err)
 		return subcommands.ExitFailure
 	}
 	s.hanaDataPath = p
@@ -197,6 +197,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	}
 
 	if err := s.checkPreConditions(ctx); err != nil {
+		onetime.LogErrorToFileAndConsole("ERROR: Failed to check preconditions", err)
 		return subcommands.ExitFailure
 	}
 
@@ -229,7 +230,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		return subcommands.ExitFailure
 	}
 	workflowDur := time.Since(workflowStartTime)
-	defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals())
+	s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals())
 	log.Print("SUCCESS: HANA backup and disk snapshot creation successful.")
 	s.status = true
 	return subcommands.ExitSuccess
@@ -481,7 +482,7 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 	if !s.sendToMonitoring {
 		return false
 	}
-	log.CtxLogger(ctx).Infow("Sending HANA disk snapshot status to cloud monitoring", "status", s.status)
+	log.CtxLogger(ctx).Infow("Optional: sending HANA disk snapshot status to cloud monitoring", "status", s.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
 			CloudProp:  s.cloudProps,
@@ -506,7 +507,7 @@ func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 	if !s.sendToMonitoring {
 		return false
 	}
-	log.CtxLogger(ctx).Infow("Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
+	log.CtxLogger(ctx).Infow("Optional: Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildFloat64(timeseries.Params{
 			CloudProp:    s.cloudProps,
