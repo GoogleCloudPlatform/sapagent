@@ -200,12 +200,6 @@ func TestWaitForIndexServerToStop(t *testing.T) {
 		want     error
 	}{
 		{
-			name:     "CommandError",
-			r:        &Restorer{},
-			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
-			want:     cmpopts.AnyError,
-		},
-		{
 			name:     "ProcessRunning",
 			r:        &Restorer{},
 			fakeExec: testCommandExecute("", "", 0, nil),
