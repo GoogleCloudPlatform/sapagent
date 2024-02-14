@@ -23,10 +23,10 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -41,17 +41,15 @@ type (
 	// NetweaverInstanceProperties have the required context for collecting metrics for cpu and
 	// memory per process for Netweaver.
 	NetweaverInstanceProperties struct {
-		Config                  *cnfpb.Configuration
-		Client                  cloudmonitoring.TimeSeriesCreator
-		Executor                commandlineexecutor.Execute
-		SAPInstance             *sapb.SAPInstance
-		NewProcHelper           newProcessWithContextHelper
-		SAPControlProcessParams commandlineexecutor.Params
-		ABAPProcessParams       commandlineexecutor.Params
-		SAPControlClient        sapcontrol.ClientInterface
-		LastValue               map[string]*process.IOCountersStat
-		SkippedMetrics          map[string]bool
-		PMBackoffPolicy         backoff.BackOffContext
+		Config           *cnfpb.Configuration
+		Client           cloudmonitoring.TimeSeriesCreator
+		Executor         commandlineexecutor.Execute
+		SAPInstance      *sapb.SAPInstance
+		NewProcHelper    newProcessWithContextHelper
+		SAPControlClient sapcontrol.ClientInterface
+		LastValue        map[string]*process.IOCountersStat
+		SkippedMetrics   map[string]bool
+		PMBackoffPolicy  backoff.BackOffContext
 	}
 )
 
@@ -71,8 +69,6 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 		lastValue:            p.LastValue,
 		sapInstance:          p.SAPInstance,
 		newProc:              p.NewProcHelper,
-		getProcessListParams: p.SAPControlProcessParams,
-		getABAPWPTableParams: p.ABAPProcessParams,
 		SAPControlClient:     p.SAPControlClient,
 	}
 	processes := collectProcessesForInstance(ctx, params)

@@ -47,7 +47,6 @@ type (
 		Client            cloudmonitoring.TimeSeriesCreator
 		Executor          commandlineexecutor.Execute
 		SAPInstance       *sapb.SAPInstance
-		ProcessListParams commandlineexecutor.Params
 		LastValue         map[string]*process.IOCountersStat
 		NewProcHelper     newProcessWithContextHelper
 		SAPControlClient  sapcontrol.ClientInterface
@@ -72,7 +71,6 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 		lastValue:            p.LastValue,
 		sapInstance:          p.SAPInstance,
 		newProc:              p.NewProcHelper,
-		getProcessListParams: p.ProcessListParams,
 		SAPControlClient:     p.SAPControlClient,
 	}
 	var metricsCollectionErr error

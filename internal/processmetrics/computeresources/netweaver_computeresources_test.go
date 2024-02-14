@@ -125,7 +125,6 @@ func TestCollectForNetweaver(t *testing.T) {
 				SAPInstance:             defaultSAPInstanceNetWeaver,
 				LastValue:               test.lastValue,
 				NewProcHelper:           newProcessWithContextHelperTest,
-				SAPControlProcessParams: test.processParams,
 				SkippedMetrics:          test.skippedMetrics,
 				SAPControlClient:        test.fakeClient,
 			}
