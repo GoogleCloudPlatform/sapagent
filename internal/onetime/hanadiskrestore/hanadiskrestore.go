@@ -591,14 +591,11 @@ func (r *Restorer) waitForIndexServerToStop(ctx context.Context, exec commandlin
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "bash",
 		ArgsToSplit: `-c 'ps x | grep hdbindexs | grep -v grep'`,
-		User: r.hanaSidAdm,
+		User:        r.hanaSidAdm,
 	})
-	if result.Error != nil {
-		return fmt.Errorf("failure waiting for index server to stop, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
 
 	if result.ExitCode == 0 {
-		return fmt.Errorf("hdbindexs process is still running")
+		return fmt.Errorf("failure waiting for index server to stop, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	return nil
 }
