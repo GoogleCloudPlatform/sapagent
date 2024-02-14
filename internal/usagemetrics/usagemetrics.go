@@ -34,6 +34,7 @@ const (
 )
 
 // Agent wide error code mappings.
+// Make sure to update the id mapping in this sheet: go/sap-core-eng-tool-mapping.
 const (
 	UnknownError = iota
 	CloudPropertiesNotSet
@@ -100,9 +101,11 @@ const (
 	CollectionDefinitionUpdateRoutineFailure
 	HANAMonitoringCreateWorkerPoolFailure
 	CollectReliabilityMetricsRoutineFailure
+	ConfigureInstanceFailure
 )
 
 // Agent wide action mappings.
+// Make sure to update the id mapping in this sheet: go/sap-core-eng-tool-mapping.
 const (
 	UnknownAction = iota
 	CollectWLMMetrics
@@ -133,6 +136,8 @@ const (
 	ConfigureBackintStarted
 	ConfigureBackintFinished
 	CollectReliabilityMetrics
+	ConfigureInstanceStarted
+	ConfigureInstanceFinished
 )
 
 // projectNumbers contains known project numbers for test instances.

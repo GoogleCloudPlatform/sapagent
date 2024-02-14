@@ -37,11 +37,15 @@ import (
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-// ImageUnknown is the default value if image information cannot be obtained from the metadata server.
-const ImageUnknown = "unknown"
+// Default values if information cannot be obtained from the metadata server.
+const (
+	ImageUnknown       = "unknown"
+	MachineTypeUnknown = "unknown"
+)
 
 var (
-	zonePattern = regexp.MustCompile("zones/([^/]*)")
+	zonePattern        = regexp.MustCompile("zones/([^/]*)")
+	machineTypePattern = regexp.MustCompile("machineTypes/([^/]*)")
 
 	// not a const so we can override in test suite.
 	metadataServerURL = "http://metadata.google.internal/computeMetadata/v1"
@@ -66,10 +70,11 @@ type projectInfo struct {
 }
 
 type instanceInfo struct {
-	ID    int64  `json:"id"`
-	Zone  string `json:"zone"`
-	Name  string `json:"name"`
-	Image string `json:"image"`
+	ID          int64  `json:"id"`
+	Zone        string `json:"zone"`
+	Name        string `json:"name"`
+	Image       string `json:"image"`
+	MachineType string `json:"machineType"`
 }
 
 // CloudPropertiesWithRetry fetches information from the GCE metadata server with a retry mechanism.
@@ -166,14 +171,19 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 	instance := resBodyJSON.Instance
 	instanceID := strconv.FormatInt(int64(instance.ID), 10)
 	zone := parseZone(instance.Zone)
+	machineType := parseMachineType(instance.MachineType)
 	instanceName := instance.Name
 	image := instance.Image
+
 	if image == "" {
 		image = ImageUnknown
 	}
+	if machineType == "" {
+		machineType = MachineTypeUnknown
+	}
 
 	log.Logger.Debugw("Default Cloud Properties from metadata server",
-		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image)
+		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image, "machinetype", machineType)
 
 	if projectID == "" || numericProjectID == "0" || instanceID == "0" || zone == "" || instanceName == "" {
 		return nil, fmt.Errorf("metadata server responded with incomplete information")
@@ -186,6 +196,7 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 		Zone:             zone,
 		InstanceName:     instanceName,
 		Image:            image,
+		MachineType:      machineType,
 	}, nil
 }
 
@@ -212,6 +223,17 @@ func parseZone(raw string) string {
 		zone = match[1]
 	}
 	return zone
+}
+
+// parseMachineType retrieves the machine type from the response.
+// The metadata server returns the machine type as
+// "projects/PROJECT_NUM/machineTypes/MACHINE_TYPE", we only need MACHINE_TYPE.
+func parseMachineType(raw string) string {
+	match := machineTypePattern.FindStringSubmatch(raw)
+	if len(match) >= 2 {
+		return match[1]
+	}
+	return ""
 }
 
 // FetchCloudProperties retrieves the cloud properties using a backoff policy.

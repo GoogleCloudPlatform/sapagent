@@ -28,6 +28,7 @@ message CloudProperties {
   string numeric_project_id = 6;
   string region = 7;  // This is needed only for baremtal systems and is not
                       // used for GCE instances.
+  string machine_type = 8;
 }
 
 message Disk {
