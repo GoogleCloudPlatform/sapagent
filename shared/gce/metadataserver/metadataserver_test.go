@@ -217,11 +217,10 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 				responseBody: marshalResponse(t, metadataServerResponse{
 					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
 					Instance: instanceInfo{
-						ID:          101,
-						Zone:        "projects/test-project/zones/test-zone",
-						Name:        "test-instance-name",
-						Image:       "test-image",
-						MachineType: "projects/test-project/machineTypes/test-machine-type",
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
 					},
 				})},
 			want: &instancepb.CloudProperties{
@@ -231,11 +230,10 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 				Zone:             "test-zone",
 				InstanceName:     "test-instance-name",
 				Image:            "test-image",
-				MachineType:      "test-machine-type",
 			},
 		},
 		{
-			name: "unknownImageAndMachineType",
+			name: "unknownImage",
 			url: endpoint{
 				uri: cloudPropertiesURI,
 				responseBody: marshalResponse(t, metadataServerResponse{
@@ -253,7 +251,6 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 				Zone:             "test-zone",
 				InstanceName:     "test-instance-name",
 				Image:            ImageUnknown,
-				MachineType:      MachineTypeUnknown,
 			},
 		},
 	}
@@ -315,11 +312,10 @@ func TestFetchCloudProperties(t *testing.T) {
 		responseBody: marshalResponse(t, metadataServerResponse{
 			Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
 			Instance: instanceInfo{
-				ID:          101,
-				Zone:        "projects/test-project/zones/test-zone",
-				Name:        "test-instance-name",
-				Image:       "test-image",
-				MachineType: "projects/test-project/machineTypes/test-machine-type",
+				ID:    101,
+				Zone:  "projects/test-project/zones/test-zone",
+				Name:  "test-instance-name",
+				Image: "test-image",
 			},
 		})}
 	want := &instancepb.CloudProperties{
@@ -329,7 +325,6 @@ func TestFetchCloudProperties(t *testing.T) {
 		Zone:             "test-zone",
 		InstanceName:     "test-instance-name",
 		Image:            "test-image",
-		MachineType:      "test-machine-type",
 	}
 
 	ts := mockMetadataServer(t, url)
