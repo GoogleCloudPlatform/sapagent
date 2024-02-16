@@ -1,6 +1,7 @@
 {
   "id": "r_table_consistency_check",
-  "description": "Validates the information about the time of the last table consistency check and falg those with age 30 or above",
+  "name": "SAP HANA Maintenance: Verify the time of the last table consistency check",
+  "description": "Regular consistency checks are required to detect hidden corruptions as early as possible.",
   "labels": [
     "security"
   ],

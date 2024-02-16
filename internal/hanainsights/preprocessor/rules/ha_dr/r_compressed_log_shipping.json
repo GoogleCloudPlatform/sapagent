@@ -1,6 +1,7 @@
 {
   "id": "r_compressed_log_shipping",
-  "description": "Data and log compression can be configured to reduce the amount of traffic between systems, especially over long distances (for example, when using the ASYNC replication mode).",
+  "name": "SAP HANA High Availability and Disaster Recovery: Enable data and log compression",
+  "description": "Data and log compression can be used for the initial full data shipping, the subsequential delta data shipping, as well as for the continuous log shipping. Data and log compression can be configured to reduce the amount of traffic between systems, especially over long distances (for example, when using the ASYNC replication mode).",
   "labels": [
     "ha_dr"
   ],
@@ -51,7 +52,7 @@
       },
       "actions": [
         {
-          "description": "It has been identified that either data or log or both have compression set to false (disabled). Data and log compression can be used for the initial full data shipping, the sub sequential delta data shipping, as well as for the continuous log shipping. Data and log compression can be configured to reduce the amount of traffic between systems, especially over long distances (for example, when using the ASYNC replication mode)"
+          "description": "It has been identified that either data or log or both have compression set to false (disabled). Set enable_log_compression and enable_data_compression to true for enabling data and log compression."
         }
       ],
       "references": [

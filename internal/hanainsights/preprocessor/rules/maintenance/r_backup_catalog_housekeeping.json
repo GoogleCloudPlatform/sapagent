@@ -1,5 +1,6 @@
 {
   "id": "r_backup_catalog_housekeeping",
+  "name": "SAP HANA Maintenance: Regular backup catalog housekeeping is needed to improve backup performance",
   "description": "The backup catalog can grow quite large over time, especially if it is not regularly cleaned up. This can lead to performance problems and can make it difficult to find the backups that are needed.",
   "labels": [
     "maintenance"

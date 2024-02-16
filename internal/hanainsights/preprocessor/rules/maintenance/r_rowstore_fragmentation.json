@@ -1,5 +1,6 @@
 {
   "id": "r_rowstore_fragmentation",
+  "name": "SAP HANA Maintenance: Check for appropriate configuration of the automatic_reorg_threshold parameter",
   "description": "The parameter automatic_reorg_threshold is a setting in the SAP HANA database that controls when automatic reorganization of row store tables is triggered.",
   "labels": [
     "maintenance"
@@ -41,7 +42,7 @@
       },
       "actions": [
         {
-          "description": "The automatic_reorg_threshold parameter specifies when automatic reorganization of row store tables is triggered. The current value of the parameter is greater than 30. This means that automatic reorganization is not being triggered as often as it could be. To improve the overall performance, you should consider reviewing the automatic_reorg_threshold parameter and lowering its value."
+          "description": "The current value of the parameter is greater than 30. To improve the overall performance, you should consider reviewing the automatic_reorg_threshold parameter and lowering its value."
         }
       ],
       "references": [

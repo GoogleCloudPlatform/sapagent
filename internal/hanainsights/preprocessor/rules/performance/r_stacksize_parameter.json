@@ -1,6 +1,7 @@
 {
   "id": "r_stacksize_parameter",
-  "description": "The thread stack parameter default_stack_size_kb and worker_stack_size_kb determines the amount a data a newly created thread can access.",
+  "name": "SAP HANA Performance: Verify default and worker stack size parameters",
+  "description": "The thread stack parameter default_stack_size_kb and worker_stack_size_kb determines the amount of data a newly created thread can access.",
   "labels": [
     "performance"
   ],
@@ -51,7 +52,7 @@
       },
       "actions": [
         {
-          "description": "At least one of the stack size parameters is less than 2048 KB. To address the crash and termination of Indexserver caused by stack overflow, It is recommended to increase the size of the stack size parameters default_stack_size_kb and worker_stack_size_kb to 2048 in systems with more than 235 GB allocation limit."
+          "description": "To address the crash and termination of Indexserver caused by stack overflow, it is recommended to increase the size of the stack size parameters default_stack_size_kb and worker_stack_size_kb to 2048 in systems with more than 235 GB allocation limit."
         }
       ],
       "references": [

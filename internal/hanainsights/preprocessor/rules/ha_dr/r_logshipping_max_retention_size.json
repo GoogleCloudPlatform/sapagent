@@ -1,6 +1,7 @@
 {
   "id": "r_logshipping_max_retention_size",
-  "description": "The SAP HANA parameter logshipping_max_retention_size defines the maximum amount of redo logs that are kept on primary site for synchronization with the secondary site.",
+  "name": "SAP HANA High Availability and Disaster Recovery: Use the recommended value for the logshipping_max_retention_size parameter",
+  "description": "In context of logreplay operations modes the logshipping_max_retention_size SAP HANA parameter defines the maximum amount of redo logs that are kept on primary site for synchronization with the secondary site (default: 1 TB). If the underlying file system isn't large enough to hold the complete configured retention size, it can happen in the worst case that the file system runs full and the primary site comes to a standstill.",
   "labels": [
     "ha_dr"
   ],
@@ -66,7 +67,7 @@
         },
       "actions": [
         {
-          "description": "In context of logreplay operations modes the logshipping_max_retention_size SAP HANA parameter defines the maximum amount of redo logs that are kept on primary site for synchronization with the secondary site (default: 1 TB). If the underlying file system isn't large enough to hold the complete configured retention size, it can happen in the worst case that the file system runs full and the primary site comes to a standstill. Therefore SAP recommends to configure this parameter with not more than 70% of the log volume size."
+          "description": "SAP recommends to configure this parameter with not more than 70% of the log volume size."
         }
       ],
       "references": [

@@ -1,6 +1,7 @@
 {
   "id": "r_os_kernel_check",
-  "description": "Check to see that all hosts in a scale-out environment have a consistent OS version and Kernel version.",
+  "name": "SAP HANA Scaleout: Check to see that all hosts in a scale-out environment have a consistent OS version and Kernel version",
+  "description": "In a scale-out SAP HANA environment, maintaining consistency in OS and kernel across all nodes within the system is crucial for optimal performance and stability.",
   "labels": [
     "scaleout"
   ],

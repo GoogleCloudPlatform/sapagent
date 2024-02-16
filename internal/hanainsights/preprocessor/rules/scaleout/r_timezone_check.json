@@ -1,6 +1,7 @@
 {
   "id": "r_timezone_check",
-  "description": "HANA scaleout system timezone check.",
+  "name": "SAP HANA Scaleout: Check to see that all hosts in a scale-out environment have a consistent timezone",
+  "description": "In a scale-out SAP HANA environment, maintaining consistency in timezones is crucial to maintain system stability.",
   "labels": [
     "scaleout"
   ],

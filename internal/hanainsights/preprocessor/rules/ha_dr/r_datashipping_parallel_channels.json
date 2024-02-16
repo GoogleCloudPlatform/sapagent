@@ -1,6 +1,7 @@
 {
   "id": "r_datashipping_parallel_channels",
-  "description": "The SAP HANA parameter datashipping_parallel_channels defines the number of network channels used by full or delta datashipping.",
+  "name": "SAP HANA High Availability and Disaster Recovery: Use the recommended value for the datashipping_parallel_channels parameter",
+  "description": "The SAP HANA parameter datashipping_parallel_channels defines the number of network channels used by full or delta datashipping. The default value is 4, which means that four network channels are used to ship data.",
   "labels": [
     "ha_dr"
   ],
@@ -36,7 +37,7 @@
       },
       "actions": [
         {
-          "description": "The SAP HANA parameter datashipping_parallel_channels defines the number of network channels used by full or delta datashipping. The default value is 4, which means that four network channels are used to ship data. To better utilise Google cloud network performance, the parameter can be adjusted to 8."
+          "description": "To better utilise Google Cloud network performance, the datashipping_parallel_channels parameter should be adjusted to a value of 8."
         }
       ],
       "references": [

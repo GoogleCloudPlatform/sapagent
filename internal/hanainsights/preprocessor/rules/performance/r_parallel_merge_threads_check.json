@@ -1,7 +1,7 @@
 {
-
   "id": "r_parallel_merge_threads_check",
-  "description": "Checks for appropriate configuration of the parallel_merge_threads parameter in SAP HANA environments.",
+  "name": "SAP HANA Performance: Check for appropriate configuration of the parallel_merge_threads parameter",
+  "description": "If parallel_merge_threads is set to a specific value, this value is used for parallelism while token_per_table defines the number of consumed tokens.",
   "labels":
   [
     "performance"
@@ -51,7 +51,7 @@
       "actions":
       [
         {
-          "description": "The parallel_merge_threads parameter is set to a value lower than the recommended (5). Monitor CPU usage closely to ensure it's not causing contention or impacting other workloads. Adjust the value as needed to find the optimal balance for your system."
+          "description": "The parallel_merge_threads parameter is below the recommended value (5). Monitor CPU usage closely to ensure it's not causing contention or impacting other workloads. Adjust the value as needed to find the optimal balance for your system."
         }
       ],
       "references":

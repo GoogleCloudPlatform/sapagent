@@ -1,6 +1,7 @@
 {
   "id": "r_license_check",
-  "description": "Provides information about the current SAP HANA license status.",
+  "name": "SAP HANA Maintenance: Check the status of the HANA license",
+  "description": "A permanent license key is required to operate on a HANA system. If a permanent license key expires, a (second) temporary license key is automatically generated and will be valid for 28 days.",
   "labels": [
     "maintenance"
   ],
@@ -21,7 +22,7 @@
       },
       "actions": [
         {
-          "description": "Request and apply a new permanent license key."
+          "description": "The HANA database does not have a permanent license key. Request and apply a new permanent license key."
         }
       ],
       "references": [

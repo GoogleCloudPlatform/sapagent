@@ -1,6 +1,7 @@
 {
   "id": "r_gc_unusedmemory_threshold_check",
-  "description": "Checks in databases with more than 235 GB allocation limit  if gc_unused_memory_threshold_rel/gc_unused_memory_threshold_abs was set to SAP recommended value .This parameter helps to reduce the risk of hiccups (e.g. due to MemoryReclaim waits) when garbage collection happens reactively",
+  "name": "SAP HANA Performance: Check for appropriate configuration of garbage collection parameters",
+  "description": "In databases with more than 235 GB allocation limit, the gc_unused_memory_threshold_rel and gc_unused_memory_threshold_abs parameters have to be configured. These parameters help to reduce the risk of hiccups (e.g. due to MemoryReclaim waits) when garbage collection happens reactively.",
   "labels":
   [
     "performance"
@@ -52,7 +53,7 @@
       },
       "actions": [
         {
-          "description": "Both garbage collection parameters is set to a default value . To address the risk of hiccups (e.g. due to MemoryReclaim waits), gc_unused_memory_threshold_rel needs to be set to value of 25% or gc_unused_memory_threshold_abs to a value 25% of allocation_limit."
+          "description": "Both garbage collection parameters are set to default values. To address the risk of hiccups (e.g. due to MemoryReclaim waits), gc_unused_memory_threshold_rel needs to be set to a value upto 25% or gc_unused_memory_threshold_abs to a value between 1 MB and 25% of allocation_limit."
         }
       ],
       "references": [

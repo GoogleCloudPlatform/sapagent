@@ -1,5 +1,6 @@
 {
   "id": "r_logmode_check",
+  "name": "SAP HANA Maintenance: Check the status of logmode",
   "description": "If log_mode is set to 'normal', HANA creates regular log backups, allowing for point-in-time recovery (restoring up to the moment before a failure). If log_mode is set to 'overwrite' , no log backups are created; you can only recover the database to the last data backup.",
   "labels": [
     "maintenance"

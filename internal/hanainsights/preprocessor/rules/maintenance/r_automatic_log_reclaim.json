@@ -1,5 +1,6 @@
 {
   "id": "r_automatic_log_reclaim",
+  "name": "SAP HANA Maintenance: Check for appropriate configuration of the log_disk_usage_reclaim_threshold parameter",
   "description": "If the log partition file system disk usage ('usedDiskSpace' in percent of 'totalDiskSpace') is above the specified threshold, the logger will automatically trigger an internal 'log release' (0 = disabled). As default, the logger will keep all free log segments cached for reuse, segments will only be removed if a reclaim is triggered explicitly via 'ALTER SYSTEM RECLAIM LOG' or if a 'DiskFull'/'LogFull' event is hit on logger level. This threshold parameter can be used to trigger the reclaim internally before a 'DiskFull'/'LogFull' situation occurs.",
   "labels": [
     "maintenance"
