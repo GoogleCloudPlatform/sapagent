@@ -212,6 +212,9 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			name: "x4SuccessApply",
 			c: ConfigureInstance{
 				machineType: "x4-megamem-1920",
+				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				execute:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				writeFile:   defaultWriteFile(5),
 				apply:       true,
 			},
 			want:    subcommands.ExitSuccess,
@@ -221,10 +224,22 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			name: "x4SuccessCheck",
 			c: ConfigureInstance{
 				machineType: "x4-megamem-1920",
-				apply:       true,
+				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				execute:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				writeFile:   defaultWriteFile(5),
+				check:       true,
 			},
-			want:    subcommands.ExitSuccess,
+			want:    subcommands.ExitFailure,
 			wantErr: nil,
+		},
+		{
+			name: "X4Fail",
+			c: ConfigureInstance{
+				machineType: "x4-megamem-1920",
+				readFile:    defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+			},
+			want:    subcommands.ExitFailure,
+			wantErr: cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {

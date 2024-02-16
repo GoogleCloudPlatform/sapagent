@@ -147,11 +147,14 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	LogToBoth(ctx, "ConfigureInstance starting")
 	usagemetrics.Action(usagemetrics.ConfigureInstanceStarted)
 	rebootRequired := false
+	var err error
 
 	log.CtxLogger(ctx).Infof("Using machine type: %s", c.machineType)
 	switch {
-	// TODO: Add support for X4 customizations
 	case strings.HasPrefix(c.machineType, "x4"):
+		if rebootRequired, err = c.configureX4(ctx); err != nil {
+			return subcommands.ExitFailure, err
+		}
 	default:
 		return subcommands.ExitUsageError, fmt.Errorf("unsupported machine type: %s", c.machineType)
 	}
