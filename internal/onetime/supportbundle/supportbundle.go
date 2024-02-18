@@ -327,6 +327,7 @@ func matchNameServerTraceAndBackup(name string) bool {
 	return false
 }
 
+// backintLogs returns the list of backint logs to be collected.
 func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
 	res := []string{}
 	fds, err := fs.ReadDir(globalPath + backintGCSPath)
@@ -346,6 +347,7 @@ func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.File
 	return res
 }
 
+// agentOTELogFiles returns the list of agent OTE log files to be collected.
 func agentOTELogFiles(agentOTEFilesPath string, fu filesystem.FileSystem) []string {
 	res := []string{}
 	fds, err := fu.ReadDir(agentOTEFilesPath)
@@ -377,6 +379,7 @@ func agentLogFiles(linuxLogFilesPath string, fu filesystem.FileSystem) []string 
 	return res
 }
 
+// extractJournalCTLLogs extracts the journalctl logs for google-cloud-sap-agent.
 func extractJournalCTLLogs(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
 	onetime.LogMessageToFileAndConsole("Extracting journal CTL logs...")
 	var hasErrors bool
@@ -391,6 +394,7 @@ func extractJournalCTLLogs(ctx context.Context, destFilesPath, hostname string, 
 	return hasErrors
 }
 
+// extractSystemDBErrors extracts the errors from system DB backup logs.
 func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
 	onetime.LogMessageToFileAndConsole("Extracting errors from System DB files...")
 	var hasErrors bool
@@ -407,6 +411,7 @@ func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, 
 	return hasErrors
 }
 
+// extractTenantDBErrors extracts the errors from tenant DB backup logs.
 func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
 	onetime.LogMessageToFileAndConsole("Extracting errors from TenantDB files...")
 	var hasErrors bool
@@ -424,6 +429,7 @@ func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname str
 	return hasErrors
 }
 
+// extractBackintErrors extracts the errors from backint logs.
 func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
 	onetime.LogMessageToFileAndConsole("Extracting errors from Backint logs...")
 	fds, err := fu.ReadDir(globalPath + backintGCSPath + "/logs")
@@ -445,6 +451,7 @@ func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostna
 	return hasErrors
 }
 
+// execAndWriteToFile executes the command and writes the output to the file.
 func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, params commandlineexecutor.Params, opFile string, fu filesystem.FileSystem) error {
 	res := exec(ctx, params)
 	if res.ExitCode != 0 && res.StdErr != "" {
@@ -464,8 +471,8 @@ func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exe
 	return nil
 }
 
+// pacemakerLogs collects the pacemaker logs.
 func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) error {
-
 	rhelParams := commandlineexecutor.Params{
 		Executable:  "grep",
 		ArgsToSplit: "-qE rhel /etc/os-release",
@@ -489,6 +496,7 @@ func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineex
 	return errors.New("incompatible os type for collecting pacemaker logs")
 }
 
+// checkForLinuxOSType checks if the OS type is RHEL or SLES.
 func checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, p commandlineexecutor.Params) bool {
 	res := exec(ctx, p)
 	if res.ExitCode != 0 || res.StdErr != "" {
@@ -498,6 +506,7 @@ func checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, 
 	return true
 }
 
+// slesPacemakerLogs collects the pacemaker logs for SLES OS type.
 func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
 	// time.Now().UTC() returns current time UTC format with milliseconds precision,
 	// we only need it till first 16 characters to satisfy the hb_report and crm_report command
@@ -535,6 +544,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	return nil
 }
 
+// rhelPacemakerLogs collects the pacemaker logs for RHEL OS type.
 func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
 	onetime.LogMessageToFileAndConsole("Collecting sosreport...")
 	p := commandlineexecutor.Params{
