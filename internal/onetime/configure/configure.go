@@ -176,6 +176,7 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 	return res
 }
 
+// setStatus returns a map of feature name and its status.
 func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 	featureStatus := make(map[string]bool)
 	if hm := config.GetProvideSapHostAgentMetrics(); hm != nil {
@@ -211,6 +212,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 	return featureStatus
 }
 
+// showFeatures displays the status of all features.
 func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
 	config := configuration.Read(c.path, os.ReadFile)
 	if config == nil {
@@ -512,6 +514,7 @@ func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcom
 	return subcommands.ExitSuccess
 }
 
+// writeFile writes the configuration to the given path.
 func writeFile(ctx context.Context, config *cpb.Configuration, path string) error {
 	file, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(config)
 	if err != nil {
@@ -532,6 +535,7 @@ func writeFile(ctx context.Context, config *cpb.Configuration, path string) erro
 	return nil
 }
 
+// checkCollectionConfig returns the collection configuration from the configuration file.
 func checkCollectionConfig(config *cpb.Configuration) *cpb.CollectionConfiguration {
 	if cc := config.GetCollectionConfiguration(); cc != nil {
 		return cc
@@ -539,6 +543,7 @@ func checkCollectionConfig(config *cpb.Configuration) *cpb.CollectionConfigurati
 	return &cpb.CollectionConfiguration{}
 }
 
+// checkDiscoveryConfig returns the discovery configuration from the configuration file.
 func checkDiscoveryConfig(config *cpb.Configuration) *cpb.DiscoveryConfiguration {
 	if dc := config.GetDiscoveryConfiguration(); dc != nil {
 		return dc
