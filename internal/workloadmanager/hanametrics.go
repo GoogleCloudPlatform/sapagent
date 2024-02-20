@@ -235,6 +235,8 @@ BlockDeviceLoop:
 	return diskInfo
 }
 
+// setDiskInfoForDevice sets the diskInfo map with the disk information
+// for the matched block device.
 func setDiskInfoForDevice(
 	ctx context.Context,
 	diskInfo map[string]string,

@@ -82,6 +82,7 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	return nil
 }
 
+// processInsights converts the HANA Insights results into a WorkloadMetrics instance.
 func processInsights(ctx context.Context, params Parameters, insights ruleengine.Insights) WorkloadMetrics {
 	labels := make(map[string]string)
 

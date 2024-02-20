@@ -185,6 +185,7 @@ func parseRemoteJSON(output string, metrics *[]*mrpb.TimeSeries) error {
 	return nil
 }
 
+// appendCommonGcloudArgs appends common gcloud args to the given args slice.
 func appendCommonGcloudArgs(args []string, rc *cpb.WorkloadValidationRemoteCollection, i *cpb.RemoteCollectionInstance) []string {
 	args = append(args, "--project", i.ProjectId, "--zone", i.Zone)
 	if rc.GetRemoteCollectionGcloud().GetTunnelThroughIap() {
@@ -199,6 +200,8 @@ func appendCommonGcloudArgs(args []string, rc *cpb.WorkloadValidationRemoteColle
 	return args
 }
 
+// gcloudInstanceName returns the instance name to use for gcloud commands.
+// If the SSH username is set, it will be prepended to the instance name.
 func gcloudInstanceName(rc *cpb.WorkloadValidationRemoteCollection, i *cpb.RemoteCollectionInstance) string {
 	if rc.GetRemoteCollectionGcloud().GetSshUsername() != "" {
 		return fmt.Sprintf("%s@%s", rc.GetRemoteCollectionGcloud().GetSshUsername(), i.GetInstanceName())
@@ -206,6 +209,7 @@ func gcloudInstanceName(rc *cpb.WorkloadValidationRemoteCollection, i *cpb.Remot
 	return i.GetInstanceName()
 }
 
+// collectOptions is a struct that contains the parameters needed to collect metrics from a remote host.
 type collectOptions struct {
 	exists     commandlineexecutor.Exists
 	execute    commandlineexecutor.Execute
@@ -313,6 +317,7 @@ func collectRemoteGcloud(ctx context.Context, a any) {
 	opts.wm <- WorkloadMetrics{Metrics: metrics}
 }
 
+// appendSSHArgs appends SSH arguments to the given args slice.
 func appendSSHArgs(args []string, rc *cpb.WorkloadValidationRemoteCollection, i *cpb.RemoteCollectionInstance, isScp bool) []string {
 	hostAddr := i.SshHostAddress
 	pkPath := rc.RemoteCollectionSsh.GetSshPrivateKeyPath()

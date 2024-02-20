@@ -186,6 +186,8 @@ func filterPrimitiveOpsByType(primitives []PrimitiveClass, primitiveType string)
 	return ops
 }
 
+// setPacemakerHanaOperations defines the pacemaker hana operations labels for
+// the metric validation collector.
 func setPacemakerHanaOperations(l map[string]string, sapHanaOperations []Op) {
 	for _, sapHanaOperation := range sapHanaOperations {
 		name := sapHanaOperation.Name
@@ -204,6 +206,8 @@ func setPacemakerHanaOperations(l map[string]string, sapHanaOperations []Op) {
 	}
 }
 
+// setPacemakerAPIAccess defines the pacemaker API access labels for
+// the metric validation collector.
 func setPacemakerAPIAccess(ctx context.Context, l map[string]string, projectID string, bearerToken string, exec commandlineexecutor.Execute) {
 	fenceAgentComputeAPIAccess, err := checkAPIAccess(ctx, exec,
 		"-H",
@@ -231,6 +235,9 @@ func setPacemakerAPIAccess(ctx context.Context, l map[string]string, projectID s
 	l["fence_agent_logging_api_access"] = strconv.FormatBool(fenceAgentLoggingAPIAccess)
 }
 
+// checkAPIAccess checks if the given API is accessible by the given bearer token.
+// The function returns true if the API is accessible, false if the API is not accessible,
+// and an error if the API check failed.
 func checkAPIAccess(ctx context.Context, exec commandlineexecutor.Execute, args ...string) (bool, error) {
 	/*
 	   ResponseError encodes a potential response error returned via the pacemaker authorization token
@@ -267,10 +274,8 @@ func checkAPIAccess(ctx context.Context, exec commandlineexecutor.Execute, args 
 	return jsonResponse.ResponseError == nil, nil
 }
 
-/*
-setPacemakerMaintenanceMode defines the pacemaker maintenance mode label for the metric validation
-collector.
-*/
+// setPacemakerMaintenanceMode defines the pacemaker maintenance mode label for
+// the metric validation collector.
 func setPacemakerMaintenanceMode(ctx context.Context, l map[string]string, crmAvailable bool, exec commandlineexecutor.Execute) {
 	result := commandlineexecutor.Result{}
 	if crmAvailable {
@@ -292,10 +297,8 @@ func setPacemakerMaintenanceMode(ctx context.Context, l map[string]string, crmAv
 	l["maintenance_mode_active"] = maintenanceModeLabel
 }
 
-/*
-setLabelsForRscNvPairs converts a list of pacemaker name/value XML nodes to metric labels if they
-match a specific name.
-*/
+// setLabelsForRscNvPairs converts a list of pacemaker name/value XML nodes to metric labels if they
+// match a specific name.
 func setLabelsForRSCNVPairs(l map[string]string, rscOptionNvPairs []NVPair, nameToFind string) {
 	for _, rscOptionNvPair := range rscOptionNvPairs {
 		if rscOptionNvPair.Name == nameToFind {
@@ -304,6 +307,8 @@ func setLabelsForRSCNVPairs(l map[string]string, rscOptionNvPairs []NVPair, name
 	}
 }
 
+// setPacemakerPrimitives iterates through the pacemaker primitives and sets the labels for
+// the metric validation collector.
 func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, instances []string, c *cnfpb.Configuration) map[string]string {
 	returnMap := map[string]string{}
 	var pcmkDelayMax []string
@@ -340,7 +345,6 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, in
 }
 
 // instanceNameFromPrimitiveID extracts the instance name from a Primitive ID.
-//
 // The ID string is expected to contain the instance name as a substring.
 // There does not appear to be a way to programmatically parse the instance
 // name from the primitive ID alone.
@@ -354,7 +358,6 @@ func instanceNameFromPrimitiveID(id string, instances []string) string {
 }
 
 // instanceAttributeValue extracts the value of a given instance attribute key.
-//
 // The return value is formatted as: "instance=value".
 func instanceAttributeValue(key string, attribute ClusterPropertySet, instance string) string {
 	if instance == "" {
@@ -368,6 +371,8 @@ func instanceAttributeValue(key string, attribute ClusterPropertySet, instance s
 	return ""
 }
 
+// iteratePrimitiveChild iterates through the child nodes of a primitive and sets the labels for
+// the metric validation collector.
 func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, classNode string, typeNode string, idNode string, returnMap map[string]string, instanceName string) string {
 	attributeChildren := attribute.NVPairs
 	fenceAttributes := map[string]string{}
@@ -404,6 +409,8 @@ func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, cl
 	return serviceAccountPath
 }
 
+// pacemakerHanaTopology defines the pacemaker hana topology labels for
+// the metric validation collector.
 func pacemakerHanaTopology(l map[string]string, sapHanaOperations []Op) {
 	for _, sapHanaOperation := range sapHanaOperations {
 		if sapHanaOperation.Name == "monitor" {
@@ -414,6 +421,7 @@ func pacemakerHanaTopology(l map[string]string, sapHanaOperations []Op) {
 	}
 }
 
+// getDefaultBearerToken returns a bearer token for the default credentials.
 func getDefaultBearerToken(ctx context.Context, tokenGetter DefaultTokenGetter) (string, error) {
 	credentials, err := tokenGetter(ctx, "https://www.googleapis.com/auth/cloud-platform")
 	if err != nil {
@@ -426,6 +434,7 @@ func getDefaultBearerToken(ctx context.Context, tokenGetter DefaultTokenGetter) 
 	return token.AccessToken, nil
 }
 
+// getJSONBearerToken returns a bearer token for the given JSON credentials.
 func getJSONBearerToken(ctx context.Context, serviceAccountJSONFile string, fileReader ConfigFileReader, credGetter JSONCredentialsGetter) (string, error) {
 	jsonStream, err := fileReader(serviceAccountJSONFile)
 	if err != nil {
@@ -447,6 +456,7 @@ func getJSONBearerToken(ctx context.Context, serviceAccountJSONFile string, file
 	return token.AccessToken, nil
 }
 
+// getBearerToken returns a bearer token for the given JSON credentials or default credentials.
 func getBearerToken(ctx context.Context, serviceAccountJSONFile string, fileReader ConfigFileReader, credGetter JSONCredentialsGetter, tokenGetter DefaultTokenGetter) (string, error) {
 	token := ""
 	err := error(nil)
