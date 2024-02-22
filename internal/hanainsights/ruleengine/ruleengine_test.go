@@ -51,18 +51,19 @@ func (fdb *fakeSQLDB) QueryContext(context.Context, string, ...any) (*sql.Rows, 
 }
 
 func TestAddRow(t *testing.T) {
-	cols := createColumns(2)
+	cols := createColumns(3)
 	for i := range cols {
 		val := fmt.Sprintf("value-%d", i)
 		cols[i] = &val
 	}
-
+	cols[2] = nil
 	kb := make(knowledgeBase)
 	want := make(knowledgeBase)
 	want["test-query:Col-0"] = []string{"value-0"}
 	want["test-query:Col-1"] = []string{"value-1"}
+	want["test-query:Col-2"] = []string{"nilstring"}
 
-	q := &rpb.Query{Name: "test-query", Columns: []string{"Col-0", "Col-1"}}
+	q := &rpb.Query{Name: "test-query", Columns: []string{"Col-0", "Col-1", "Col-2"}}
 	addRow(cols, q, kb)
 
 	if !reflect.DeepEqual(kb, want) {
@@ -326,6 +327,32 @@ func TestEvaluateAND(t *testing.T) {
 				t.Errorf("evaluateOR()=%v want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestCountRows(t *testing.T) {
+	tests := []struct {
+		name string
+		s    []string
+		want int
+	}{
+		{
+			name: "ZeroCount",
+			s:    []string{"nilstring", "nilstring"},
+			want: 0,
+		},
+		{
+			name: "ThreeCount",
+			s:    []string{"nilstring", "1", "2", "3"},
+			want: 3,
+		},
+	}
+
+	for _, tc := range tests {
+		got := countRows(tc.s)
+		if got != tc.want {
+			t.Errorf("countRows(%v) = %v, want: %v", tc.s, got, tc.want)
+		}
 	}
 }
 

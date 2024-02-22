@@ -103,11 +103,18 @@ func buildKnowledgeBase(ctx context.Context, db SQLDBHandle, queries []*rpb.Quer
 			log.CtxLogger(ctx).Debugw("Error running query", "query", query.Sql)
 			return err
 		}
+		zeroRows := true
 		for rows.Next() {
+			zeroRows = false
 			if err := rows.Scan(cols...); err != nil {
 				log.CtxLogger(ctx).Debugw("Error scanning query result", "query", query.Sql)
 				return err
 			}
+			addRow(cols, query, kb)
+		}
+		if zeroRows == true {
+			// Query returned zero rows, adding row with nilstring in knowledgebase.
+			// Evaluation conditions can now use nilstring for comparisons where no value is expected.
 			addRow(cols, query, kb)
 		}
 		log.CtxLogger(ctx).Debugw("Knowledge base built successfully", "query", query.Sql, "result", cols, "knowledgebase", kb)
@@ -121,6 +128,12 @@ func addRow(cols []any, q *rpb.Query, kb knowledgeBase) {
 		if val, ok := col.(*string); ok {
 			key := fmt.Sprintf("%s:%s", q.Name, q.Columns[i])
 			kb[key] = append(kb[key], *val)
+		} else {
+			// Add a nil string value to the knowledge base in case we get no parseable value from
+			// the query result for the column.
+			// This resolves the case where
+			key := fmt.Sprintf("%s:%s", q.Name, q.Columns[i])
+			kb[key] = append(kb[key], "nilstring")
 		}
 	}
 }
@@ -256,7 +269,7 @@ func insertFromKB(s string, kb knowledgeBase) (string, error) {
 		log.Logger.Debugw("Processing count() function on knowledge base.")
 		k := match[1]
 		if _, ok := kb[k]; ok {
-			return strconv.Itoa(len(kb[k])), nil
+			return strconv.Itoa(countRows(kb[k])), nil
 		}
 		return "", fmt.Errorf("could not insert count from knowledge base for: %s", s)
 	}
@@ -275,4 +288,14 @@ func insertFromKB(s string, kb knowledgeBase) (string, error) {
 	}
 	// If no function was found, no insertion needed - return the literal.
 	return s, nil
+}
+
+func countRows(s []string) int {
+	var count int
+	for _, v := range s {
+		if v != "nilstring" {
+			count++
+		}
+	}
+	return count
 }
