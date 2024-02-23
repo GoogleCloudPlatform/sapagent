@@ -34,7 +34,16 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
+
+type fakeDiscoveryInterface struct {
+	systems   []*spb.SapDiscovery
+	instances *sapb.SAPInstances
+}
+
+func (d *fakeDiscoveryInterface) GetSAPSystems() []*spb.SapDiscovery  { return d.systems }
+func (d *fakeDiscoveryInterface) GetSAPInstances() *sapb.SAPInstances { return d.instances }
 
 var (
 	defaultCloudProperties = &ipb.CloudProperties{
@@ -81,9 +90,8 @@ var (
 
 type (
 	fakeProperties struct {
-		SAPInstances *sapb.SAPInstances
-		Config       *cpb.Configuration
-		Client       cloudmonitoring.TimeSeriesCreator
+		Config *cpb.Configuration
+		Client cloudmonitoring.TimeSeriesCreator
 	}
 
 	fakeCollector struct {
@@ -226,8 +234,10 @@ func TestStartProcessMetrics(t *testing.T) {
 				Config:       defaultConfig,
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
-				SAPInstances: fakeSAPInstances("HANA"),
 				BackOffs:     defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
 			},
 			want: true,
 		},
@@ -241,8 +251,10 @@ func TestStartProcessMetrics(t *testing.T) {
 				},
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
-				SAPInstances: fakeSAPInstances("HANA"),
 				BackOffs:     defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
 			},
 			want: false,
 		},
@@ -261,8 +273,10 @@ func TestStartProcessMetrics(t *testing.T) {
 				Config:       quickTestConfig,
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
-				SAPInstances: fakeSAPInstances("HANA"),
 				BackOffs:     defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
 			},
 			want: false,
 		},
@@ -272,8 +286,10 @@ func TestStartProcessMetrics(t *testing.T) {
 				Config:       invalidSlowFrequencyTestConfig,
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
-				SAPInstances: fakeSAPInstances("HANA"),
 				BackOffs:     defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
 			},
 			want: false,
 		},
@@ -283,8 +299,10 @@ func TestStartProcessMetrics(t *testing.T) {
 				Config:       defaultConfig,
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClientFailure,
-				SAPInstances: fakeSAPInstances("HANA"),
 				BackOffs:     defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
 			},
 			want: false,
 		},
@@ -294,8 +312,10 @@ func TestStartProcessMetrics(t *testing.T) {
 				Config:       defaultConfig,
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
-				SAPInstances: fakeSAPInstances("NOSAP"),
 				BackOffs:     defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("NOSAP"),
+				},
 			},
 			want: false,
 		},
@@ -563,7 +583,6 @@ func TestInstancesWithCredentials(t *testing.T) {
 		{
 			name: "CredentialsSet",
 			params: &Parameters{
-				SAPInstances: fakeSAPInstances("HANA"),
 				Config: &cpb.Configuration{
 					CollectionConfiguration: &cpb.CollectionConfiguration{
 						HanaMetricsConfig: &cpb.HANAMetricsConfig{
@@ -573,6 +592,9 @@ func TestInstancesWithCredentials(t *testing.T) {
 					},
 				},
 				BackOffs: defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{
@@ -588,9 +610,11 @@ func TestInstancesWithCredentials(t *testing.T) {
 		{
 			name: "CredentialsNotSet",
 			params: &Parameters{
-				SAPInstances: fakeSAPInstances("HANA"),
-				Config:       quickTestConfig,
-				BackOffs:     defaultBackOffIntervals,
+				Config:   quickTestConfig,
+				BackOffs: defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
 			},
 			want: fakeSAPInstances("HANA"),
 		},
@@ -644,7 +668,6 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				Config:       defaultConfig,
 				OSType:       "linux",
 				MetricClient: fakeNewMetricClient,
-				SAPInstances: fakeSAPInstances("HANA"),
 				BackOffs:     defaultBackOffIntervals,
 				HeartbeatSpec: &heartbeat.Spec{
 					BeatFunc: func() {

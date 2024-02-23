@@ -61,6 +61,7 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
 var (
@@ -79,9 +80,14 @@ type (
 		CollectWithRetry(context.Context) ([]*mrpb.TimeSeries, error)
 	}
 
+	// discoveryInterface allows for a testable implementation of system discovery.
+	discoveryInterface interface {
+		GetSAPSystems() []*spb.SapDiscovery
+		GetSAPInstances() *sapb.SAPInstances
+	}
+
 	// Properties has necessary context for Metrics collection.
 	Properties struct {
-		SAPInstances          *sapb.SAPInstances // Optional for production use cases, used by unit tests.
 		Config                *cpb.Configuration
 		Client                cloudmonitoring.TimeSeriesCreator
 		Collectors            []Collector
@@ -98,11 +104,11 @@ type (
 		Config         *cpb.Configuration
 		OSType         string
 		MetricClient   CreateMetricClient
-		SAPInstances   *sapb.SAPInstances
 		BackOffs       *cloudmonitoring.BackOffIntervals
 		HeartbeatSpec  *heartbeat.Spec
 		GCEService     sapdiscovery.GCEInterface
 		GCEBetaService infra.GCEBetaInterface
+		Discovery      discoveryInterface
 	}
 )
 
@@ -211,7 +217,6 @@ func NewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, er
 // createProcessCollectors sets up the processmetrics properties and metric collectors for SAP Instances.
 func createProcessCollectors(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
-		SAPInstances:  sapInstances,
 		Config:        params.Config,
 		Client:        client,
 		HeartbeatSpec: params.HeartbeatSpec,
@@ -300,9 +305,9 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 
 	sids := make(map[string]bool)
 	clusterCollectorCreated := false
-	for _, instance := range p.SAPInstances.GetInstances() {
+	for _, instance := range sapInstances.GetInstances() {
 		sids[instance.GetSapsid()] = true
-		if p.SAPInstances.GetLinuxClusterMember() && clusterCollectorCreated == false {
+		if sapInstances.GetLinuxClusterMember() && clusterCollectorCreated == false {
 			log.CtxLogger(ctx).Infow("Creating cluster collector for instance", "instance", instance)
 			clusterCollector := &cluster.InstanceProperties{
 				SAPInstance:     instance,
@@ -317,10 +322,10 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 		if instance.GetType() == sapb.InstanceType_HANA {
 			log.CtxLogger(ctx).Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", instance)
 			hanaComputeresourcesCollector := &computeresources.HanaInstanceProperties{
-				Config:      p.Config,
-				Client:      p.Client,
-				Executor:    commandlineexecutor.ExecuteCommand,
-				SAPInstance: instance,
+				Config:           p.Config,
+				Client:           p.Client,
+				Executor:         commandlineexecutor.ExecuteCommand,
+				SAPInstance:      instance,
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				LastValue:        make(map[string]*process.IOCountersStat),
 				SkippedMetrics:   skippedMetrics,
@@ -350,10 +355,10 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			log.CtxLogger(ctx).Infow("Creating Netweaver per process CPU, memory usage metrics collector for instance.", "instance", instance)
 			netweaverComputeresourcesCollector := &computeresources.NetweaverInstanceProperties{
-				Config:      p.Config,
-				Client:      p.Client,
-				Executor:    commandlineexecutor.ExecuteCommand,
-				SAPInstance: instance,
+				Config:           p.Config,
+				Client:           p.Client,
+				Executor:         commandlineexecutor.ExecuteCommand,
+				SAPInstance:      instance,
 				SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
 				LastValue:        make(map[string]*process.IOCountersStat),
 				SkippedMetrics:   skippedMetrics,
@@ -399,15 +404,12 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 	return p
 }
 
-// instancesWithCredentials run SAP discovery to detect SAP instances on this machine and update
-// DB Credentials from configuration into the instances.
+// instancesWithCredentials uses the results from SAP discovery to detect
+// SAP instances on this machine and update DB Credentials from configuration
+// into the instances.
 func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAPInstances {
-	// For unit tests we do not want to run sap discovery, caller will pass the SAPInstances.
-	if params.SAPInstances == nil {
-		// TODO: Share SAP System Discovery results across agent.
-		params.SAPInstances = sapdiscovery.SAPApplications(ctx)
-	}
-	for _, instance := range params.SAPInstances.GetInstances() {
+	sapInstances := params.Discovery.GetSAPInstances()
+	for _, instance := range sapInstances.GetInstances() {
 		if instance.GetType() == sapb.InstanceType_HANA {
 			var err error
 			projectID := params.Config.GetCloudProperties().GetProjectId()
@@ -419,7 +421,7 @@ func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAP
 			}
 		}
 	}
-	return params.SAPInstances
+	return sapInstances
 }
 
 /*
@@ -585,7 +587,6 @@ func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
 // createReliabilityCollectors sets up the processmetrics properties and metric collectors for SAP Instances.
 func createReliabilityCollectors(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
-		SAPInstances:  sapInstances,
 		Config:        params.Config,
 		Client:        client,
 		HeartbeatSpec: params.HeartbeatSpec,
@@ -598,7 +599,7 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, client 
 
 	rmFreq := p.Config.GetCollectionConfiguration().GetReliabilityMetricsFrequency()
 
-	for _, instance := range p.SAPInstances.GetInstances() {
+	for _, instance := range sapInstances.GetInstances() {
 		if instance.GetType() == sapb.InstanceType_HANA {
 			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for HANA", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{

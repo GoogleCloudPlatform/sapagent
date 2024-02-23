@@ -380,7 +380,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 
 	// Start Process Metrics Collection
 	pmCtx := log.SetCtx(ctx, "context", "ProcessMetrics")
-	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceBetaService}
+	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceBetaService, systemDiscovery}
 	pmp.startCollection(pmCtx)
 
 	// Start HANA Monitoring
@@ -431,6 +431,7 @@ type ProcessMetricsParams struct {
 	healthMonitor  agentmetrics.HealthMonitor
 	gceService     *gce.GCE
 	gceBetaService *gcebeta.GCEBeta
+	discovery      *system.Discovery
 }
 
 // startCollection for ProcessMetricsParams initiates collection of ProcessMetrics.
@@ -450,6 +451,7 @@ func (pmp ProcessMetricsParams) startCollection(ctx context.Context) {
 		HeartbeatSpec:  pmHeartbeatSpec,
 		GCEService:     pmp.gceService,
 		GCEBetaService: pmp.gceBetaService,
+		Discovery:      pmp.discovery,
 	}); success != true {
 		log.Logger.Info("Process metrics collection not started")
 	}
