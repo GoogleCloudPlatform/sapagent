@@ -125,7 +125,7 @@ func TestCollectNetWeaverMetricsFromConfig(t *testing.T) {
 				Config:         defaultConfiguration,
 				WorkloadConfig: &wlmpb.WorkloadValidation{},
 				osVendorID:     "rhel",
-				Discovery: &fakeDiscoveryInterface{},
+				Discovery:      &fakeDiscoveryInterface{},
 				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},

@@ -1,0 +1,128 @@
+<!--
+Copyright 2022 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<?xml version="1.0" ?>
+<cib crm_feature_set="3.6.1" validate-with="pacemaker-3.5" epoch="747" num_updates="0" admin_epoch="0" cib-last-written="Wed Mar  2 20:26:14 2022" update-origin="instanceId" update-client="crm_attribute" update-user="root" have-quorum="1" dc-uuid="1">
+  <configuration>
+    <crm_config>
+      <cluster_property_set id="cib-bootstrap-options">
+        <nvpair id="cib-bootstrap-options-have-watchdog" name="have-watchdog" value="false"/>
+        <nvpair id="cib-bootstrap-options-dc-version" name="dc-version" value="2.0.5+20201202.ba59be712-150300.4.16.1-2.0.5+20201202.ba59be712"/>
+        <nvpair id="cib-bootstrap-options-cluster-infrastructure" name="cluster-infrastructure" value="corosync"/>
+        <nvpair id="cib-bootstrap-options-cluster-name" name="cluster-name" value="hacluster"/>
+        <nvpair name="maintenance-mode" value="false" id="cib-bootstrap-options-maintenance-mode"/>
+        <nvpair name="stonith-timeout" value="300s" id="cib-bootstrap-options-stonith-timeout"/>
+        <nvpair name="stonith-enabled" value="true" id="cib-bootstrap-options-stonith-enabled"/>
+      </cluster_property_set>
+      <cluster_property_set id="SAPHanaSR">
+        <nvpair id="SAPHanaSR-hana_has_site_srHook_sles-ha2" name="hana_has_site_srHook_sles-ha2" value="SOK"/>
+        <nvpair id="SAPHanaSR-hana_has_site_srHook_instanceId" name="hana_has_site_srHook_instanceId" value="PRIM"/>
+      </cluster_property_set>
+    </crm_config>
+    <nodes>
+      <node id="1" uname="instanceId">
+        <instance_attributes id="nodes-1">
+          <nvpair id="nodes-1-hana_has_op_mode" name="hana_has_op_mode" value="logreplay"/>
+          <nvpair id="nodes-1-lpa_has_lpt" name="lpa_has_lpt" value="1646252774"/>
+          <nvpair id="nodes-1-hana_has_vhost" name="hana_has_vhost" value="instanceId"/>
+          <nvpair id="nodes-1-hana_has_srmode" name="hana_has_srmode" value="syncmem"/>
+          <nvpair id="nodes-1-hana_has_remoteHost" name="hana_has_remoteHost" value="sles-ha2"/>
+          <nvpair id="nodes-1-hana_has_site" name="hana_has_site" value="instanceId"/>
+          <nvpair id="nodes-1-standby" name="standby" value="off"/>
+        </instance_attributes>
+      </node>
+      <node id="2" uname="sles-ha2">
+        <instance_attributes id="nodes-2">
+          <nvpair id="nodes-2-lpa_has_lpt" name="lpa_has_lpt" value="30"/>
+          <nvpair id="nodes-2-hana_has_op_mode" name="hana_has_op_mode" value="logreplay"/>
+          <nvpair id="nodes-2-hana_has_vhost" name="hana_has_vhost" value="sles-ha2"/>
+          <nvpair id="nodes-2-hana_has_site" name="hana_has_site" value="sles-ha2"/>
+          <nvpair id="nodes-2-hana_has_srmode" name="hana_has_srmode" value="syncmem"/>
+          <nvpair id="nodes-2-hana_has_remoteHost" name="hana_has_remoteHost" value="instanceId"/>
+          <nvpair id="nodes-2-standby" name="standby" value="off"/>
+        </instance_attributes>
+      </node>
+    </nodes>
+    <resources>
+      <primitive id="STONITH-instanceName" class="stonith" type="external/gcpstonith">
+        <operations>
+          <op name="monitor" interval="300s" timeout="120s" id="STONITH-instanceName-monitor-300s"/>
+          <op name="start" interval="0" timeout="60s" id="STONITH-instanceName-start-0"/>
+        </operations>
+        <instance_attributes id="STONITH-instanceName-instance_attributes">
+          <nvpair name="instance_name" value="instanceId" id="STONITH-instanceName-instance_attributes-instance_name"/>
+          <nvpair name="gcloud_path" value="/usr/bin/gcloud" id="STONITH-instanceName-instance_attributes-gcloud_path"/>
+          <nvpair name="logging" value="yes" id="STONITH-instanceName-instance_attributes-logging"/>
+          <nvpair name="pcmk_reboot_timeout" value="300" id="STONITH-instanceName-instance_attributes-pcmk_reboot_timeout"/>
+          <nvpair name="pcmk_monitor_retries" value="4" id="STONITH-instanceName-instance_attributes-pcmk_monitor_retries"/>
+          <nvpair name="pcmk_delay_max" value="30" id="STONITH-instanceName-instance_attributes-pcmk_delay_max"/>
+        </instance_attributes>
+      </primitive>
+      <group id="g-primary">
+        <primitive id="rsc_vip_int-primary" class="ocf" provider="heartbeat" type="IPaddr2">
+          <instance_attributes id="rsc_vip_int-primary-instance_attributes">
+            <nvpair name="ip" value="10.150.1.10" id="rsc_vip_int-primary-instance_attributes-ip"/>
+          </instance_attributes>
+          <operations>
+            <op name="monitor" interval="3600s" timeout="60s" id="rsc_vip_int-primary-monitor-3600s"/>
+          </operations>
+        </primitive>
+      </group>
+      <clone id="cln_SAPHanaTopology_HAS_HDB00">
+        <meta_attributes id="cln_SAPHanaTopology_HAS_HDB00-meta_attributes">
+          <nvpair name="clone-node-max" value="1" id="cln_SAPHanaTopology_HAS_HDB00-meta_attributes-clone-node-max"/>
+        </meta_attributes>
+        <primitive id="rsc_SAPHanaTopology_HAS_HDB00" class="ocf" provider="suse" type="SAPHanaTopology">
+          <operations id="rsc_sap2_HAS_HDB00-operations">
+            <op name="monitor" interval="10" timeout="600" id="rsc_sap2_HAS_HDB00-operations-monitor-10"/>
+          </operations>
+          <instance_attributes id="rsc_SAPHanaTopology_HAS_HDB00-instance_attributes">
+            <nvpair name="SID" value="HAS" id="rsc_SAPHanaTopology_HAS_HDB00-instance_attributes-SID"/>
+          </instance_attributes>
+        </primitive>
+      </clone>
+      <master id="msl_SAPHana_HAS_HDB00">
+        <meta_attributes id="msl_SAPHana_HAS_HDB00-meta_attributes">
+          <nvpair name="notify" value="true" id="msl_SAPHana_HAS_HDB00-meta_attributes-notify"/>
+        </meta_attributes>
+        <primitive id="rsc_SAPHana_HAS_HDB00" class="ocf" provider="suse" type="SAPHana">
+          <operations id="rsc_sap_HAS_HDB00-operations">
+            <op name="start" interval="0" timeout="3600" id="rsc_sap_HAS_HDB00-operations-start-0"/>
+          </operations>
+          <instance_attributes id="rsc_SAPHana_HAS_HDB00-instance_attributes">
+            <nvpair name="SID" value="HAS" id="rsc_SAPHana_HAS_HDB00-instance_attributes-SID"/>
+          </instance_attributes>
+        </primitive>
+      </master>
+    </resources>
+    <constraints>
+      <rsc_location id="LOC_STONITH_instanceId" rsc="STONITH-instanceName" score="-INFINITY" node="instanceId"/>
+      <rsc_location id="LOC_STONITH_sles-ha2" rsc="STONITH-sles-ha2" score="-INFINITY" node="sles-ha2"/>
+      <rsc_colocation id="col_saphana_ip_HAS_HDB00" score="4000" rsc="g-primary" rsc-role="Started" with-rsc="msl_SAPHana_HAS_HDB00" with-rsc-role="Master"/>
+      <rsc_order id="ord_SAPHana_HAS_HDB00" kind="Optional" first="cln_SAPHanaTopology_HAS_HDB00" then="msl_SAPHana_HAS_HDB00"/>
+    </constraints>
+    <rsc_defaults>
+      <meta_attributes id="rsc-options">
+        <nvpair name="resource-stickiness" value="1000" id="rsc-options-resource-stickiness"/>
+        <nvpair name="migration-threshold" value="5000" id="rsc-options-migration-threshold"/>
+      </meta_attributes>
+    </rsc_defaults>
+    <op_defaults>
+      <meta_attributes id="op-options">
+        <nvpair name="timeout" value="600" id="op-options-timeout"/>
+      </meta_attributes>
+    </op_defaults>
+  </configuration>
+</cib>

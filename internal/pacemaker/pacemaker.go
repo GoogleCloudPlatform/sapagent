@@ -212,9 +212,7 @@ func FailCount(crm *CRMMon) ([]ResourceFailCount, error) {
 	return fc, nil
 }
 
-/*
-XMLString obtains a string of encoded XML data describing the pacemaker metrics.
-*/
+// XMLString obtains a string of encoded XML data describing the pacemaker metrics.
 func XMLString(ctx context.Context, exec commandlineexecutor.Execute, crmAvailable bool) *string {
 	if crmAvailable {
 		result := exec(ctx, commandlineexecutor.Params{
