@@ -1,0 +1,34 @@
+{
+  "id": "r_hana_numa_awareness_check",
+  "name": "SAP HANA Performance: Check for load_table_numa_aware parameter configuration.",
+  "description": "The load_table_numa_aware parameter controls whether SAP HANA attempts to optimize data placement across NUMA nodes during table loading, potentially improving performance on NUMA-based systems.",
+  "labels": [
+    "performance",
+    "NUMA"
+  ],
+  "queries": [
+    {
+      "name": "q_numa_aware_check",
+      "sql": "SELECT DISTINCT VALUE AS VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND KEY='load_table_numa_aware'",
+      "columns": ["VALUE"]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_1",
+      "trigger": {
+        "lhs": "q_numa_aware_check:VALUE",
+        "operation": "NEQ",
+        "rhs": "true"
+      },
+      "actions": [
+        {
+          "description": "To optimize SAP HANA column store loads on systems with multiple NUMA nodes, set load_table_numa_aware to true. This ensures NUMA-aware distribution of table data, maximizing performance."
+        }
+      ],
+      "references": [
+        "https://me.sap.com/notes/0002470289"
+      ]
+    }
+  ]
+}
