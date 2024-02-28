@@ -212,18 +212,26 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 }
 
 func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInstance, conf *cpb.DiscoveryConfiguration) SapSystemDetails {
+	appProps := &spb.SapDiscovery_Component_ApplicationProperties{
+		ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+	}
 	ascsHost, err := d.discoverASCS(ctx, app.Sapsid)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverASCS.", "error", err)
+	} else {
+		appProps.AscsUri = ascsHost
 	}
 	nfsHost, err := d.discoverAppNFS(ctx, app.Sapsid)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverAppNFS.", "error", err)
+	} else {
+		appProps.NfsUri = nfsHost
 	}
-	appProps := &spb.SapDiscovery_Component_ApplicationProperties{
-		ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-		AscsUri:         ascsHost,
-		NfsUri:          nfsHost,
+	kernelVersion, err := d.discoverNetweaverKernelVersion(ctx, app.Sapsid)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverKernelVersion.", "error", err)
+	} else {
+		appProps.KernelVersion = kernelVersion
 	}
 	ha, haNodes := d.discoverNetweaverHA(ctx, app)
 	if !ha {

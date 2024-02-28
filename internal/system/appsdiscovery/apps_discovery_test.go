@@ -1550,6 +1550,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df", // Get NFS
 			}, {
+				Executable: "disp+work", // Kernel version
+				User:       "abcadm",
+			}, {
 				Executable: "sudo", // Failover config
 			}, {
 				Executable: "sudo", // hdbuserstore
@@ -1561,6 +1564,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 				defaultUserStoreResult,
@@ -1592,6 +1596,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						KernelVersion:   "SAP Kernel 785 Patch 100",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -1609,6 +1614,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df", // Get NFS
 			}, {
+				Executable: "disp+work", // Kernel version
+				User:       "abcadm",
+			}, {
 				Executable: "sudo", // Failover config
 			}, {
 				Executable: "sudo", // ABAP
@@ -1621,6 +1629,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df", // Get NFS
 			}, {
+				Executable: "disp+work", // Kernel version
+				User:       "defadm",
+			}, {
 				Executable: "sudo", // Failover config
 			}, {
 				Executable: "sudo", // ABAP
@@ -1632,12 +1643,14 @@ func TestDiscoverSAPApps(t *testing.T) {
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 				defaultUserStoreResult,
@@ -1671,6 +1684,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						KernelVersion:   "SAP Kernel 785 Patch 100",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -1685,6 +1699,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
 						AscsUri:         "some-test-ascs",
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						KernelVersion:   "SAP Kernel 785 Patch 100",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -1786,6 +1801,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
+				Executable: "disp+work", // Kernel version
+				User:       "abcadm",
+			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
@@ -1811,6 +1829,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				defaultUserStoreResult,
@@ -1837,6 +1856,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
+						KernelVersion:   "SAP Kernel 785 Patch 100",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -1889,6 +1909,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
+				Executable: "disp+work", // Kernel version
+				User:       "abcadm",
+			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
@@ -1907,6 +1930,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultHANAVersionResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				defaultUserStoreResult,
@@ -1928,6 +1952,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
+						KernelVersion:   "SAP Kernel 785 Patch 100",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -1970,6 +1995,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
+				Executable: "disp+work", // Kernel version
+				User:       "abcadm",
+			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
@@ -1995,6 +2023,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				defaultUserStoreResult,
@@ -2019,6 +2048,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
+						KernelVersion:   "SAP Kernel 785 Patch 100",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -2077,6 +2107,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
+				Executable: "disp+work", // Kernel version
+				User:       "abcadm",
+			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
@@ -2095,6 +2128,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultHANAVersionResult,
 				defaultProfileResult,
 				netweaverMountResult,
+				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				defaultUserStoreResult,
@@ -2116,6 +2150,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
+						KernelVersion:   "SAP Kernel 785 Patch 100",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
