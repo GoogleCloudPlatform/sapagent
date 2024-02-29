@@ -24,16 +24,21 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 
-	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	metricpb "google.golang.org/genproto/googleapis/api/metric"
+	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	cgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 var defaultInstanceProperties = &InstanceProperties{
-	Config: &cpb.Configuration{
+	Config: &cgpb.Configuration{
 		CloudProperties: &ipb.CloudProperties{
 			ProjectId:  "test-project",
 			Zone:       "test-zone",
@@ -41,6 +46,24 @@ var defaultInstanceProperties = &InstanceProperties{
 		},
 	},
 	PMBackoffPolicy: defaultBOPolicy(context.Background()),
+}
+
+func defaultResource() *monitoredresourcepb.MonitoredResource {
+	return &monitoredresourcepb.MonitoredResource{
+		Type: "gce_instance",
+		Labels: map[string]string{
+			"instance_id": "test-instance",
+			"project_id":  "test-project",
+			"zone":        "test-zone",
+		},
+	}
+}
+
+func sortTimeSeries(a, b *mrpb.TimeSeries) bool {
+	if a.GetPoints()[0].GetValue().GetInt64Value() < b.GetPoints()[0].GetValue().GetInt64Value() {
+		return true
+	}
+	return false
 }
 
 func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
@@ -52,6 +75,7 @@ func TestCollectNodeState(t *testing.T) {
 		name            string
 		properties      *InstanceProperties
 		fakeNodeState   readPacemakerNodeState
+		wantMetrics     []*mrpb.TimeSeries
 		wantValues      []int
 		wantMetricCount int
 		wantErr         error
@@ -65,6 +89,50 @@ func TestCollectNodeState(t *testing.T) {
 					"test-instance-2": "shutdown",
 				}, nil
 			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/nodes",
+						Labels: map[string]string{
+							"sid":  "",
+							"type": "INSTANCE_TYPE_UNDEFINED",
+							"node": "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: nodeUnclean,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/nodes",
+						Labels: map[string]string{
+							"sid":  "",
+							"type": "INSTANCE_TYPE_UNDEFINED",
+							"node": "test-instance-2",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: nodeShutdown,
+								},
+							},
+						},
+					},
+				},
+			},
 			wantValues:      []int{nodeUnclean, nodeShutdown},
 			wantMetricCount: 2,
 		},
@@ -77,6 +145,71 @@ func TestCollectNodeState(t *testing.T) {
 					"test-instance-2": "online",
 					"test-instance-3": "seeking",
 				}, nil
+			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/nodes",
+						Labels: map[string]string{
+							"sid":  "",
+							"type": "INSTANCE_TYPE_UNDEFINED",
+							"node": "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: nodeStandby,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/nodes",
+						Labels: map[string]string{
+							"sid":  "",
+							"type": "INSTANCE_TYPE_UNDEFINED",
+							"node": "test-instance-2",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: nodeOnline,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/nodes",
+						Labels: map[string]string{
+							"sid":  "",
+							"type": "INSTANCE_TYPE_UNDEFINED",
+							"node": "test-instance-3",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: stateUnknown,
+								},
+							},
+						},
+					},
+				},
 			},
 			wantValues:      []int{nodeStandby, stateUnknown, nodeOnline},
 			wantMetricCount: 3,
@@ -92,8 +225,8 @@ func TestCollectNodeState(t *testing.T) {
 		{
 			name: "MetricSkipped",
 			properties: &InstanceProperties{
-				Config: &cpb.Configuration{
-					CollectionConfiguration: &cpb.CollectionConfiguration{
+				Config: &cgpb.Configuration{
+					CollectionConfiguration: &cgpb.CollectionConfiguration{
 						ProcessMetricsToSkip: []string{
 							nodesPath,
 						},
@@ -113,6 +246,16 @@ func TestCollectNodeState(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gotMetrics, gotValues, gotErr := collectNodeState(context.Background(), test.properties, test.fakeNodeState, nil)
+			cmpOpts := []cmp.Option{
+				protocmp.Transform(),
+				// These fields get generated on the backend, and it'd make a messy test to check them all.
+				protocmp.IgnoreFields(&cpb.TimeInterval{}, "end_time", "start_time"),
+				protocmp.IgnoreFields(&mrpb.Point{}, "interval"),
+				cmpopts.SortSlices(sortTimeSeries),
+			}
+			if diff := cmp.Diff(test.wantMetrics, gotMetrics, cmpOpts...); diff != "" {
+				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
+			}
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
@@ -135,6 +278,7 @@ func TestCollectResourceState(t *testing.T) {
 		name              string
 		properties        *InstanceProperties
 		fakeResourceState readPacemakerResourceState
+		wantMetrics       []*mrpb.TimeSeries
 		wantValues        []int
 		wantMetricCount   int
 		wantErr           error
@@ -167,6 +311,96 @@ func TestCollectResourceState(t *testing.T) {
 				}
 				return rs, nil
 			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource1",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStarted,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource2",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-2",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStarting,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource3",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStarted,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource4",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-2",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStarted,
+								},
+							},
+						},
+					},
+				},
+			},
 			wantValues:      []int{resourceStarted, resourceStarting, resourceStarted, resourceStarted},
 			wantMetricCount: 4,
 		},
@@ -193,6 +427,74 @@ func TestCollectResourceState(t *testing.T) {
 				}
 				return rs, nil
 			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource1",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStopped,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource2",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-2",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceFailed,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource3",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-3",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: stateUnknown,
+								},
+							},
+						},
+					},
+				},
+			},
 			wantValues:      []int{resourceStopped, resourceFailed, stateUnknown},
 			wantMetricCount: 3,
 		},
@@ -214,6 +516,30 @@ func TestCollectResourceState(t *testing.T) {
 				}
 				return rs, nil
 			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource1",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStopped,
+								},
+							},
+						},
+					},
+				},
+			},
 			wantValues:      []int{resourceStopped},
 			wantMetricCount: 1,
 		},
@@ -229,8 +555,8 @@ func TestCollectResourceState(t *testing.T) {
 			name: "MetricSkipped",
 			properties: &InstanceProperties{
 				SAPInstance: &sapb.SAPInstance{Sapsid: "TST", Type: sapb.InstanceType_HANA},
-				Config: &cpb.Configuration{
-					CollectionConfiguration: &cpb.CollectionConfiguration{
+				Config: &cgpb.Configuration{
+					CollectionConfiguration: &cgpb.CollectionConfiguration{
 						ProcessMetricsToSkip: []string{resourcesPath},
 					},
 				},
@@ -259,7 +585,16 @@ func TestCollectResourceState(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gotMetrics, gotValues, gotErr := collectResourceState(context.Background(), test.properties, test.fakeResourceState, nil)
-
+			cmpOpts := []cmp.Option{
+				protocmp.Transform(),
+				// These fields get generated on the backend, and it'd make a messy test to check them all.
+				protocmp.IgnoreFields(&cpb.TimeInterval{}, "end_time", "start_time"),
+				protocmp.IgnoreFields(&mrpb.Point{}, "interval"),
+				cmpopts.SortSlices(sortTimeSeries),
+			}
+			if diff := cmp.Diff(test.wantMetrics, gotMetrics, cmpOpts...); diff != "" {
+				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
+			}
 			if diff := cmp.Diff(test.wantValues, gotValues); diff != "" {
 				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
 			}
@@ -356,6 +691,7 @@ func TestCollectFailCount(t *testing.T) {
 		name              string
 		properties        *InstanceProperties
 		fakeReadFailCount readPacemakerFailCount
+		wantMetrics       []*mrpb.TimeSeries
 		wantValues        []int
 		wantMetricCount   int
 		wantErr           error
@@ -371,6 +707,30 @@ func TestCollectFailCount(t *testing.T) {
 						FailCount:    1,
 					},
 				}, nil
+			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/failcounts",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource-1",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 1,
+								},
+							},
+						},
+					},
+				},
 			},
 			wantValues:      []int{1},
 			wantMetricCount: 1,
@@ -390,6 +750,52 @@ func TestCollectFailCount(t *testing.T) {
 						FailCount:    2,
 					},
 				}, nil
+			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/failcounts",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource-1",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-1",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 1,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/failcounts",
+						Labels: map[string]string{
+							"sid":      "",
+							"resource": "resource-2",
+							"type":     "INSTANCE_TYPE_UNDEFINED",
+							"node":     "test-instance-2",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: 2,
+								},
+							},
+						},
+					},
+				},
 			},
 			wantValues:      []int{2, 1},
 			wantMetricCount: 2,
@@ -412,8 +818,8 @@ func TestCollectFailCount(t *testing.T) {
 		{
 			name: "MetricsSkipped",
 			properties: &InstanceProperties{
-				Config: &cpb.Configuration{
-					CollectionConfiguration: &cpb.CollectionConfiguration{
+				Config: &cgpb.Configuration{
+					CollectionConfiguration: &cgpb.CollectionConfiguration{
 						ProcessMetricsToSkip: []string{
 							failCountsPath,
 						},
@@ -444,6 +850,16 @@ func TestCollectFailCount(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gotMetrics, gotValues, gotErr := collectFailCount(context.Background(), test.properties, test.fakeReadFailCount, nil)
+			cmpOpts := []cmp.Option{
+				protocmp.Transform(),
+				// These fields get generated on the backend, and it'd make a messy test to check them all.
+				protocmp.IgnoreFields(&cpb.TimeInterval{}, "end_time", "start_time"),
+				protocmp.IgnoreFields(&mrpb.Point{}, "interval"),
+				cmpopts.SortSlices(sortTimeSeries),
+			}
+			if diff := cmp.Diff(test.wantMetrics, gotMetrics, cmpOpts...); diff != "" {
+				t.Errorf("collectFailCount() returned unexpected diff (-want,+got): %s\n", diff)
+			}
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
 				t.Errorf("collectFailCount() returned unexpected diff (-want,+got): %s\n", diff)
