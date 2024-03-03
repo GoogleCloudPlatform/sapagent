@@ -68,6 +68,7 @@ type SapSystemDetails struct {
 	DBComponent         *spb.SapDiscovery_Component
 	AppHosts, DBHosts   []string
 	AppOnHost, DBOnHost bool
+	WorkloadProperties  *spb.SapDiscovery_WorkloadProperties
 }
 
 func removeDuplicates(s []string) []string {
@@ -238,11 +239,15 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		haNodes = nil
 	}
 
+	workloadProps := &spb.SapDiscovery_WorkloadProperties{}
 	log.CtxLogger(ctx).Debugw("Checking config", "config", conf)
 	if conf.GetEnableWorkloadDiscovery().GetValue() {
-		isABAP, err := d.discoverNetweaverABAP(ctx, app)
+		isABAP, wlProps, err := d.discoverNetweaverABAP(ctx, app)
 		if err != nil {
 			log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
+		}
+		if wlProps != nil {
+			workloadProps = wlProps
 		}
 		appProps.Abap = isABAP
 	}
@@ -255,7 +260,8 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 			},
 			HaHosts: haNodes,
 		},
-		AppHosts: haNodes,
+		AppHosts:           haNodes,
+		WorkloadProperties: workloadProps,
 	}
 
 	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)
@@ -360,13 +366,13 @@ func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string
 	return dbHosts, nil
 }
 
-func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAPInstance) (bool, error) {
+func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAPInstance) (bool, *spb.SapDiscovery_WorkloadProperties, error) {
 	if err := d.FileSystem.MkdirAll(r3transTmpFolder, 0777); err != nil {
-		return false, fmt.Errorf("error creating r3trans tmp folder: %v", err)
+		return false, nil, fmt.Errorf("error creating r3trans tmp folder: %v", err)
 	}
 	defer d.FileSystem.RemoveAll(r3transTmpFolder)
 	if err := d.FileSystem.Chmod(r3transTmpFolder, 0777); err != nil {
-		return false, fmt.Errorf("error changing r3trans tmp folder permissions: %v", err)
+		return false, nil, fmt.Errorf("error changing r3trans tmp folder permissions: %v", err)
 	}
 	sidLower := strings.ToLower(app.Sapsid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
@@ -379,11 +385,11 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	result := d.Execute(ctx, params)
 	log.CtxLogger(ctx).Debugw("R3trans result", "result", result)
 	if result.Error != nil {
-		return false, result.Error
+		return false, nil, result.Error
 	}
 
 	if !strings.Contains(result.StdOut, r3transSuccessResult) {
-		return false, fmt.Errorf("R3trans returned unexpected result, database may not be connected and working:\n%s", result.StdOut)
+		return false, nil, fmt.Errorf("R3trans returned unexpected result, database may not be connected and working:\n%s", result.StdOut)
 	}
 	log.CtxLogger(ctx).Debugw("DB appears good", "stdOut", result.StdOut)
 
@@ -396,12 +402,12 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	file, err := d.FileSystem.Create(tmpControlFilePath)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Error creating control file", "error", err)
-		return false, err
+		return false, nil, err
 	}
 	defer file.Close()
 	if _, err = d.FileSystem.WriteStringToFile(file, contents); err != nil {
 		log.CtxLogger(ctx).Warnw("Error writing control file", "error", err)
-		return false, err
+		return false, nil, err
 	}
 
 	log.CtxLogger(ctx).Debugw("Control file created")
@@ -410,14 +416,14 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	params.Args = []string{"-i", "-u", sidAdm, "R3trans", "-w", r3transOutputPath, tmpControlFilePath}
 	if result = d.Execute(ctx, params); result.Error != nil {
 		log.CtxLogger(ctx).Warnw("Error running R3trans with control file", "error", result.Error)
-		return false, result.Error
+		return false, nil, result.Error
 	}
 
 	// Export the data
 	params.Args = []string{"-i", "-u", sidAdm, "R3trans", "-w", r3transOutputPath, "-v", "-l", r3transTmpFolder + "export_products.dat"}
 	if result = d.Execute(ctx, params); result.Error != nil {
 		log.CtxLogger(ctx).Warnw("Error exporting data", "error", result.Error)
-		return false, result.Error
+		return false, nil, result.Error
 	}
 	log.CtxLogger(ctx).Debugw("R3trans exported data", "stdOut", result.StdOut)
 
@@ -425,15 +431,14 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	fileBytes, err := d.FileSystem.ReadFile(r3transOutputPath)
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Error reading r3trans output file", "r3transOutputPath", r3transOutputPath, "error", err)
-		return false, err
+		return false, nil, err
 	}
 	fileString := string(fileBytes[:])
 	wlProps := parseR3transOutput(ctx, fileString)
 	log.CtxLogger(ctx).Infow("Workload Properties", "wlProps", prototext.Format(wlProps))
 
 	// Command success indicates system is ABAP.
-	// We'll add the WorkloadProperties to the SapSystemDetails once WLM is ready for the new fields.
-	return true, nil
+	return true, wlProps, nil
 }
 
 func parseR3transOutput(ctx context.Context, s string) (wlProps *spb.SapDiscovery_WorkloadProperties) {

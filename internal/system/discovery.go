@@ -269,7 +269,7 @@ func runDiscovery(ctx context.Context, a any) {
 
 	updateTicker := time.NewTicker(args.config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().AsDuration())
 	for {
-		sapSystems := args.d.discoverSAPSystems(ctx, cp)
+		sapSystems := args.d.discoverSAPSystems(ctx, cp, args.config)
 
 		locationParts := strings.Split(cp.GetZone(), "-")
 		region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
@@ -315,12 +315,12 @@ func runDiscovery(ctx context.Context, a any) {
 	}
 }
 
-func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudProperties) []*spb.SapDiscovery {
+func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudProperties, config *cpb.Configuration) []*spb.SapDiscovery {
 	sapSystems := []*spb.SapDiscovery{}
 
 	instanceURI := fmt.Sprintf("projects/%s/zones/%s/instances/%s", cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
 	log.CtxLogger(ctx).Info("Starting SAP Discovery")
-	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances(), nil)
+	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances(), config.GetDiscoveryConfiguration())
 	log.CtxLogger(ctx).Debugf("SAP Details: %v", sapDetails)
 	log.CtxLogger(ctx).Info("Starting host discovery")
 	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)

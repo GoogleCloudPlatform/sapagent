@@ -900,7 +900,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CloudDiscoveryInterface: test.testCloudDiscovery,
 				HostDiscoveryInterface:  test.testHostDiscovery,
 			}
-			got := d.discoverSAPSystems(context.Background(), defaultCloudProperties)
+			got := d.discoverSAPSystems(context.Background(), defaultCloudProperties, test.config)
 			t.Logf("Got systems: %+v ", got)
 			t.Logf("Want systems: %+v ", test.want)
 			if diff := cmp.Diff(test.want, got, append(resourceListDiffOpts, protocmp.IgnoreFields(&spb.SapDiscovery{}, "update_time"))...); diff != "" {

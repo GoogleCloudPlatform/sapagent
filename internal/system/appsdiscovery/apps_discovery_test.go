@@ -149,6 +149,17 @@ tmpfs                              48G  2.0M   48G   1% /dev/shm
 unicode enabled version
 R3trans finished (0000).
 	`
+	r3transDataExample = `Test R3trans output
+	4 ETW000 REP  CVERS                          *
+	4 ETW000 ** 102 ** EA-DFPS                       806       0000      N
+	4 ETW000 ** 102 ** EA-HR                         608       0095      N
+	4 ETW000 ** 102 ** S4CORE                        106       0000000000R
+	4 ETW000 ** 102 ** S4COREOP                      106       0000000000I
+	4 ETW000 REP  PRDVERS                        *
+	4 ETW000 ** 394 ** 73554900100900005134S4HANA ON PREMISE             2021                          sap.com                       SAP S/4HANA 2021                                                        +20231215105300
+	4 ETW000 ** 394 ** 73554900100900000414SAP NETWEAVER                 7.5                           sap.com                       SAP NETWEAVER 7.5                                                       +20220927121631
+	4 ETW000 ** 394 ** 73555000100900003452SAP FIORI FRONT-END SERVER    6.0                           sap.com                       SAP FIORI FRONT-END SERVER 6.0                                          +20220928054714
+	`
 )
 
 var (
@@ -202,6 +213,39 @@ var (
 		SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 30},
 		EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
 	}
+	exampleWorkloadProperties = &spb.SapDiscovery_WorkloadProperties{
+		ProductVersions: []*pv{
+			&pv{Name: "SAP S/4HANA", Version: "2021"},
+			&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+			&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+		},
+		SoftwareComponentVersions: []*scp{
+			&scp{
+				Name:       "EA-DFPS",
+				Version:    "806",
+				ExtVersion: "0000",
+				Type:       "N",
+			},
+			&scp{
+				Name:       "EA-HR",
+				Version:    "608",
+				ExtVersion: "0095",
+				Type:       "N",
+			},
+			&scp{
+				Name:       "S4CORE",
+				Version:    "106",
+				ExtVersion: "0000000000",
+				Type:       "R",
+			},
+			&scp{
+				Name:       "S4COREOP",
+				Version:    "106",
+				ExtVersion: "0000000000",
+				Type:       "I",
+			},
+		},
+	}
 )
 
 func sortSapSystemDetails(a, b SapSystemDetails) bool {
@@ -218,6 +262,9 @@ type fakeCommandExecutor struct {
 	results          []commandlineexecutor.Result
 	executeCallCount int
 }
+
+type pv = spb.SapDiscovery_WorkloadProperties_ProductVersion
+type scp = spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties
 
 func (f *fakeCommandExecutor) Execute(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 	log.Logger.Infof("fakeCommandExecutor.Execute: %v", params)
@@ -780,7 +827,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
-			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileResp:          [][]byte{[]byte(r3transDataExample)},
 			ReadFileErr:           []error{nil},
 		},
 		want: SapSystemDetails{
@@ -795,9 +842,10 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
-			DBHosts:     []string{"test-instance"},
+			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: exampleWorkloadProperties,
 		},
 	}, {
 		name: "notHA",
@@ -848,8 +896,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 					}},
 				Sid: "abc",
 			},
-			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
-			DBHosts:     []string{"test-instance"},
+			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 	}, {
 		name: "ascsErr",
@@ -900,7 +949,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 	}, {
 		name: "nfsErr",
@@ -951,7 +1001,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 	}, {
 		name: "noDBSID",
@@ -1003,7 +1054,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 	}, {
 		name: "noDBHosts",
@@ -1058,8 +1110,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
+			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 	}, {
 		name: "workloadDiscoveryDisabled",
@@ -1111,8 +1164,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 					}},
 				Sid: "abc",
 			},
-			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
-			DBHosts:     []string{"test-instance"},
+			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 	}}
 	log.SetupLoggingForTest()
@@ -1600,10 +1654,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppOnHost:   true,
-			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
-			DBHosts:     []string{"test-instance"},
+			AppOnHost:          true,
+			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		}},
 	}, {
 		name: "twoNetweaver",
@@ -1688,10 +1743,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppOnHost:   true,
-			AppHosts:    []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent: &spb.SapDiscovery_Component{Sid: "DEH"},
-			DBHosts:     []string{"test-instance"},
+			AppOnHost:          true,
+			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		}, {
 			AppComponent: &spb.SapDiscovery_Component{
 				Sid: "def",
@@ -1708,7 +1764,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
 			},
-			DBHosts: []string{"test-instance"},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		}},
 	}, {
 		name: "twoHANA",
@@ -1871,8 +1928,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
 			},
-			DBOnHost: true,
-			DBHosts:  []string{"test-instance"},
+			DBOnHost:           true,
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		}},
 	}, {
 		name: "hanaThenNetweaverConnected",
@@ -2057,8 +2115,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
 			},
-			DBOnHost: false,
-			DBHosts:  []string{"test-instance"},
+			DBOnHost:           false,
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DB2",
@@ -2159,8 +2218,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
 			},
-			DBOnHost: false,
-			DBHosts:  []string{"test-instance"},
+			DBOnHost:           false,
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DB2",
@@ -2688,7 +2748,8 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 		app            *sappb.SAPInstance
 		executor       fakeCommandExecutor
 		testFilesystem *fakefs.FileSystem
-		want           bool
+		wantBool       bool
+		wantData       *spb.SapDiscovery_WorkloadProperties
 		wantErr        error
 	}{{
 		name: "success",
@@ -2729,10 +2790,11 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 			WriteStringToFileResp: []int{0},
 			WriteStringToFileErr:  []error{nil},
 			RemoveAllErr:          []error{nil},
-			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileResp:          [][]byte{[]byte(r3transDataExample)},
 			ReadFileErr:           []error{nil},
 		},
-		want: true,
+		wantBool: true,
+		wantData: exampleWorkloadProperties,
 	}, {
 		name: "mkDirErr",
 		app: &sappb.SAPInstance{
@@ -2949,21 +3011,21 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 				},
 				FileSystem: tc.testFilesystem,
 			}
-			got, err := d.discoverNetweaverABAP(ctx, tc.app)
+			gotBool, gotData, err := d.discoverNetweaverABAP(ctx, tc.app)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Fatalf("discoverNetweaverABAP(%v) returned an unexpected error: %v", tc.app, err)
+				t.Fatalf("discoverNetweaverABAP(%v) returned an unexpected error: %v", tc.name, err)
 			}
 
-			if got != tc.want {
-				t.Errorf("discoverNetweaverABAP(%v) = %v, want: %v", tc.app, got, tc.want)
+			if gotBool != tc.wantBool {
+				t.Errorf("discoverNetweaverABAP(%v) = %v, want: %v", tc.app, gotBool, tc.wantBool)
+			} else if diff := cmp.Diff(gotData, tc.wantData, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverNetweaverABAP(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
 			}
 		})
 	}
 }
 
 func TestParseR3transOutput(t *testing.T) {
-	type pv = spb.SapDiscovery_WorkloadProperties_ProductVersion
-	type scp = spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties
 	tests := []struct {
 		name         string
 		fileContents string
