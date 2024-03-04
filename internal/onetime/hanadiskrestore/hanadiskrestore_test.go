@@ -37,13 +37,13 @@ import (
 
 var (
 	defaultRestorer = Restorer{
-		project:        "my-project",
-		sid:            "my-sid",
-		hanaSidAdm:     "my-user",
-		dataDiskName:   "data-disk",
-		dataDiskZone:   "data-zone",
-		newDiskType:    "pd-ssd",
-		sourceSnapshot: "my-snapshot",
+		Project:        "my-project",
+		Sid:            "my-sid",
+		HanaSidAdm:     "my-user",
+		DataDiskName:   "data-disk",
+		DataDiskZone:   "data-zone",
+		NewDiskType:    "pd-ssd",
+		SourceSnapshot: "my-snapshot",
 	}
 
 	testCommandExecute = func(stdout, stderr string, exitCode int, err error) commandlineexecutor.Execute {
@@ -76,108 +76,123 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "ChangeDiskTypeWorkflow",
+			restorer: Restorer{
+				Project:                         "my-project",
+				Sid:                             "my-sid",
+				HanaSidAdm:                      "my-user",
+				DataDiskName:                    "data-disk",
+				DataDiskZone:                    "data-zone",
+				SourceSnapshot:                  "snapshot",
+				NewdiskName:                     "new-disk",
+				NewDiskType:                     "pd-ssd",
+				SkipDBSnapshotForChangeDiskType: true,
+			},
+			want: nil,
+		},
+		{
 			name:     "Emptyproject",
 			restorer: Restorer{},
 			want:     cmpopts.AnyError,
 		},
 		{
 			name:     "Emptysid",
-			restorer: Restorer{project: "my-project"},
+			restorer: Restorer{Project: "my-project"},
 			want:     cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDataDiskName",
 			restorer: Restorer{
-				sid: "my-sid",
+				Sid: "my-sid",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDataDiskZone",
 			restorer: Restorer{
-				sid:          "my-sid",
-				dataDiskName: "data-disk",
+				Sid:          "my-sid",
+				DataDiskName: "data-disk",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptySourceSnapshot",
 			restorer: Restorer{
-				sid:          "my-sid",
-				dataDiskName: "data-disk",
-				dataDiskZone: "data-zone",
+				Sid:          "my-sid",
+				DataDiskName: "data-disk",
+				DataDiskZone: "data-zone",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyNewDiskName",
 			restorer: Restorer{
-				sid:            "my-sid",
-				dataDiskName:   "data-disk",
-				dataDiskZone:   "data-zone",
-				sourceSnapshot: "snapshot",
+				Sid:            "my-sid",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDiskType",
 			restorer: Restorer{
-				project:        "my-project",
-				sid:            "my-sid",
-				hanaSidAdm:     "my-user",
-				dataDiskName:   "data-disk",
-				dataDiskZone:   "data-zone",
-				sourceSnapshot: "snapshot",
+				Project:        "my-project",
+				Sid:            "my-sid",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "newDiskTypeSet",
 			restorer: Restorer{
-				project:        "my-project",
-				sid:            "my-sid",
-				hanaSidAdm:     "my-user",
-				dataDiskName:   "data-disk",
-				dataDiskZone:   "data-zone",
-				newdiskName:    "new-disk",
-				sourceSnapshot: "snapshot",
-				newDiskType:    "pd-ssd",
+				Project:        "my-project",
+				Sid:            "my-sid",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				NewdiskName:    "new-disk",
+				SourceSnapshot: "snapshot",
+				NewDiskType:    "pd-ssd",
 			},
 		},
 		{
 			name: "Emptyproject",
 			restorer: Restorer{
-				sid:            "tst",
-				dataDiskName:   "data-disk",
-				dataDiskZone:   "data-zone",
-				sourceSnapshot: "snapshot",
-				newdiskName:    "new-disk",
-				newDiskType:    "pd-ssd",
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewdiskName:    "new-disk",
+				NewDiskType:    "pd-ssd",
 			},
 		},
 		{
 			name: "Emptyuser",
 			restorer: Restorer{
-				project:        "my-project",
-				sid:            "tst",
-				dataDiskName:   "data-disk",
-				dataDiskZone:   "data-zone",
-				sourceSnapshot: "snapshot",
-				newdiskName:    "new-disk",
-				newDiskType:    "pd-ssd",
+				Project:        "my-project",
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewdiskName:    "new-disk",
+				NewDiskType:    "pd-ssd",
 			},
 		},
 		{
 			name: "InvalidNewDiskName",
 			restorer: Restorer{
-				project:        "my-project",
-				sid:            "tst",
-				hanaSidAdm:     "my-user",
-				dataDiskName:   "data-disk",
-				dataDiskZone:   "data-zone",
-				sourceSnapshot: "snapshot",
-				newDiskType:    "pd-ssd",
-				newdiskName:    "new-disk-name-which-is-much-much-longer-than-sixty-three-charecters",
+				Project:        "my-project",
+				Sid:            "tst",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewDiskType:    "pd-ssd",
+				NewdiskName:    "new-disk-name-which-is-much-much-longer-than-sixty-three-charecters",
 			},
 			want: cmpopts.AnyError,
 		},
@@ -229,24 +244,24 @@ var defaultCloudProperties = &ipb.CloudProperties{
 
 func TestDefaultValues(t *testing.T) {
 	r := Restorer{
-		sid:            "hdb",
-		sourceSnapshot: "source-snapshot",
-		dataDiskName:   "data-disk-name",
-		dataDiskZone:   "data-disk-zone",
-		newdiskName:    "new-disk-name",
-		newDiskType:    "new-disk-type",
-		project:        "",
-		cloudProps:     defaultCloudProperties,
+		Sid:            "hdb",
+		SourceSnapshot: "source-snapshot",
+		DataDiskName:   "data-disk-name",
+		DataDiskZone:   "data-disk-zone",
+		NewdiskName:    "new-disk-name",
+		NewDiskType:    "new-disk-type",
+		Project:        "",
+		CloudProps:     defaultCloudProperties,
 	}
 	got := r.validateParameters("linux")
 	if got != nil {
 		t.Errorf("validateParameters()=%v, want=%v", got, nil)
 	}
-	if r.project != "default-project" {
-		t.Errorf("project = %v, want = %v", r.project, "default-project")
+	if r.Project != "default-project" {
+		t.Errorf("project = %v, want = %v", r.Project, "default-project")
 	}
-	if r.hanaSidAdm != "hdbadm" {
-		t.Errorf("user = %v, want = %v", r.hanaSidAdm, "hdbadm")
+	if r.HanaSidAdm != "hdbadm" {
+		t.Errorf("user = %v, want = %v", r.HanaSidAdm, "hdbadm")
 	}
 }
 
@@ -433,14 +448,14 @@ func TestStopHANA(t *testing.T) {
 		},
 		{
 			name:     "ForceStopSuccess",
-			r:        &Restorer{forceStopHANA: true},
+			r:        &Restorer{ForceStopHANA: true},
 			fakeExec: testCommandExecute("", "", 0, nil),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.r.stopHANA(context.Background(), test.fakeExec)
+			got := test.r.StopHANA(context.Background(), test.fakeExec)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("stopHANA() = %v, want %v", got, test.want)
 			}
@@ -599,7 +614,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			name:  "Success",
 			mtype: "restore",
 			r: &Restorer{
-				sendToMonitoring:  true,
+				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
 			dur:  time.Second,
@@ -610,7 +625,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			name:  "Failure",
 			mtype: "restore",
 			r: &Restorer{
-				sendToMonitoring:  true,
+				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
 			},
 			dur:  time.Second,
@@ -621,7 +636,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			name:  "SendStatusFalse",
 			mtype: "restore",
 			r: &Restorer{
-				sendToMonitoring:  false,
+				SendToMonitoring:  false,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
 			dur:  time.Second,

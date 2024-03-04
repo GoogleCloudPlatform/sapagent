@@ -41,21 +41,36 @@ import (
 )
 
 var defaultSnapshot = Snapshot{
-	project:    "my-project",
-	host:       "localhost",
-	port:       "123",
-	sid:        "HDB",
-	hanaDBUser: "system",
-	disk:       "pd-1",
-	diskZone:   "us-east1-a",
-	password:   "password",
-	cloudProps: defaultCloudProperties,
+	Project:    "my-project",
+	Host:       "localhost",
+	Port:       "123",
+	Sid:        "HDB",
+	HanaDBUser: "system",
+	Disk:       "pd-1",
+	DiskZone:   "us-east1-a",
+	Password:   "password",
+	CloudProps: defaultCloudProperties,
 }
 
 var (
 	testCommandExecute = func(stdout, stderr string, err error) commandlineexecutor.Execute {
 		return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			exitCode := 0
+			var exitErr *exec.ExitError
+			if err != nil && errors.As(err, &exitErr) {
+				exitCode = exitErr.ExitCode()
+			}
+			return commandlineexecutor.Result{
+				StdOut:   stdout,
+				StdErr:   stderr,
+				Error:    err,
+				ExitCode: exitCode,
+			}
+		}
+	}
+
+	testCommandExecuteWithExitCode = func(stdout, stderr string, exitCode int, err error) commandlineexecutor.Execute {
+		return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			var exitErr *exec.ExitError
 			if err != nil && errors.As(err, &exitErr) {
 				exitCode = exitErr.ExitCode()
@@ -216,88 +231,109 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name:     "EmptyPort",
+			snapshot: Snapshot{Port: ""},
+			want:     cmpopts.AnyError,
+		},
+		{
+			name: "ChangeDiskTypeWorkflow",
+			snapshot: Snapshot{
+				Host:                            "localhost",
+				Port:                            "123",
+				Sid:                             "HDB",
+				HanaDBUser:                      "system",
+				Disk:                            "pd-1",
+				DiskZone:                        "us-east1-a",
+				Password:                        "password",
+				PasswordSecret:                  "secret",
+				CloudProps:                      defaultCloudProperties,
+				SkipDBSnapshotForChangeDiskType: true,
+			},
+			want: nil,
+		},
+		{
 			name:     "EmptySID",
-			snapshot: Snapshot{port: "123", sid: ""},
+			snapshot: Snapshot{Port: "123", Sid: ""},
 			want:     cmpopts.AnyError,
 		},
 		{
 			name:     "EmptyUser",
-			snapshot: Snapshot{port: "123", sid: "HDB", hanaDBUser: ""},
+			snapshot: Snapshot{Port: "123", Sid: "HDB", HanaDBUser: ""},
 			want:     cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDisk",
 			snapshot: Snapshot{
-				host:       "localhost",
-				port:       "123",
-				sid:        "HDB",
-				hanaDBUser: "system",
-				disk:       "",
+				Host:       "localhost",
+				Port:       "123",
+				Sid:        "HDB",
+				HanaDBUser: "system",
+				Disk:       "",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDiskZone",
 			snapshot: Snapshot{
-				host:       "localhost",
-				port:       "123",
-				sid:        "HDB",
-				hanaDBUser: "system",
-				disk:       "pd-1",
-				diskZone:   "",
+				Host:       "localhost",
+				Port:       "123",
+				Sid:        "HDB",
+				HanaDBUser: "system",
+				Disk:       "pd-1",
+				DiskZone:   "",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyPasswordAndSecret",
 			snapshot: Snapshot{
-				host:           "localhost",
-				port:           "123",
-				sid:            "HDB",
-				hanaDBUser:     "system",
-				disk:           "pd-1",
-				diskZone:       "us-east1-a",
-				password:       "",
-				passwordSecret: "",
+				Host:           "localhost",
+				Port:           "123",
+				Sid:            "HDB",
+				HanaDBUser:     "system",
+				Disk:           "pd-1",
+				DiskZone:       "us-east1-a",
+				Password:       "",
+				PasswordSecret: "",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyPortAndInstanceID",
 			snapshot: Snapshot{
-				host:           "localhost",
-				port:           "",
-				instanceID:     "",
-				sid:            "HDB",
-				hanaDBUser:     "system",
-				disk:           "pd-1",
-				diskZone:       "us-east1-a",
-				passwordSecret: "secret",
+				Host:           "localhost",
+				Port:           "",
+				InstanceID:     "",
+				Sid:            "HDB",
+				HanaDBUser:     "system",
+				Disk:           "pd-1",
+				DiskZone:       "us-east1-a",
+				PasswordSecret: "secret",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "Emptyhost",
 			snapshot: Snapshot{
-				port:           "123",
-				sid:            "HDB",
-				host:           "",
-				hanaDBUser:     "system",
-				disk:           "pd-1",
-				diskZone:       "us-east1-a",
-				passwordSecret: "secret",
+				Port:           "123",
+				Sid:            "HDB",
+				Host:           "",
+				HanaDBUser:     "system",
+				Disk:           "pd-1",
+				DiskZone:       "us-east1-a",
+				PasswordSecret: "secret",
 			},
 		},
 		{
 			name: "Emptyproject",
 			snapshot: Snapshot{
-				port:           "123",
-				sid:            "HDB",
-				project:        "",
-				hanaDBUser:     "system",
-				disk:           "pd-1",
-				diskZone:       "us-east1-a",
-				passwordSecret: "secret",
+				Port:           "123",
+				Sid:            "HDB",
+				Project:        "",
+				HanaDBUser:     "system",
+				Disk:           "pd-1",
+				DiskZone:       "us-east1-a",
+				PasswordSecret: "secret",
 			},
 		},
 	}
@@ -313,32 +349,32 @@ func TestValidateParameters(t *testing.T) {
 
 func TestDefaultProject(t *testing.T) {
 	s := Snapshot{
-		port:           "123",
-		sid:            "HDB",
-		project:        "",
-		hanaDBUser:     "system",
-		disk:           "pd-1",
-		diskZone:       "us-east1-a",
-		passwordSecret: "secret",
-		cloudProps:     defaultCloudProperties,
+		Port:           "123",
+		Sid:            "HDB",
+		Project:        "",
+		HanaDBUser:     "system",
+		Disk:           "pd-1",
+		DiskZone:       "us-east1-a",
+		PasswordSecret: "secret",
+		CloudProps:     defaultCloudProperties,
 	}
 	got := s.validateParameters("linux")
 	if !cmp.Equal(got, nil, cmpopts.EquateErrors()) {
 		t.Errorf("validateParameters(linux=%v)=%v, want=%v", got, got, nil)
 	}
-	if s.project != "default-project" {
-		t.Errorf("project = %v, want = %v", s.project, "default-project")
+	if s.Project != "default-project" {
+		t.Errorf("project = %v, want = %v", s.Project, "default-project")
 	}
 }
 
 func TestPortValue(t *testing.T) {
 	s := Snapshot{
-		sid:            "HDB",
-		instanceID:     "00",
-		hanaDBUser:     "system",
-		disk:           "pd-1",
-		diskZone:       "us-east1-a",
-		passwordSecret: "secret",
+		Sid:            "HDB",
+		InstanceID:     "00",
+		HanaDBUser:     "system",
+		Disk:           "pd-1",
+		DiskZone:       "us-east1-a",
+		PasswordSecret: "secret",
 	}
 	got := s.portValue()
 	if got != "30013" {
@@ -370,7 +406,7 @@ func TestRunWorkflow(t *testing.T) {
 		{
 			name: "AbandonSnapshotFailure",
 			snapshot: Snapshot{
-				abandonPrepared: true,
+				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
 			run: func(h *sql.DB, q string) (string, error) {
@@ -381,7 +417,7 @@ func TestRunWorkflow(t *testing.T) {
 		{
 			name: "CreateHANASnapshotFailure",
 			snapshot: Snapshot{
-				abandonPrepared: true,
+				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
 			run: func(h *sql.DB, q string) (string, error) {
@@ -395,7 +431,7 @@ func TestRunWorkflow(t *testing.T) {
 		{
 			name: "CreateDiskSnapshotFailure",
 			snapshot: Snapshot{
-				abandonPrepared: true,
+				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
 			run: func(h *sql.DB, q string) (string, error) {
@@ -406,8 +442,8 @@ func TestRunWorkflow(t *testing.T) {
 		{
 			name: "CreateEncryptedDiskSnapshotFailure",
 			snapshot: Snapshot{
-				abandonPrepared: true,
-				diskKeyFile:     "test.json",
+				AbandonPrepared: true,
+				DiskKeyFile:     "test.json",
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
 			run: func(h *sql.DB, q string) (string, error) {
@@ -452,14 +488,14 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 			run: func(*sql.DB, string) (string, error) {
 				return "stale-snapshot", nil
 			},
-			snapshot: Snapshot{abandonPrepared: false},
+			snapshot: Snapshot{AbandonPrepared: false},
 			want:     cmpopts.AnyError,
 		},
 		{name: "PreparedSnapshotPresentAbandonTrue",
 			run: func(*sql.DB, string) (string, error) {
 				return "stale-snapshot", nil
 			},
-			snapshot: Snapshot{abandonPrepared: true},
+			snapshot: Snapshot{AbandonPrepared: true},
 			want:     nil,
 		},
 		{
@@ -470,7 +506,7 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 				}
 				return "stale-snapshot", nil
 			},
-			snapshot: Snapshot{abandonPrepared: true},
+			snapshot: Snapshot{AbandonPrepared: true},
 			want:     cmpopts.AnyError,
 		},
 	}
@@ -570,14 +606,14 @@ func TestSendStatusToMonitoring(t *testing.T) {
 		{
 			name: "SendMetricsDisabled",
 			snapshot: Snapshot{
-				sendToMonitoring:  false,
+				SendToMonitoring:  false,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
 		},
 		{
 			name: "SendMetricsEnabled",
 			snapshot: Snapshot{
-				sendToMonitoring:  true,
+				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
 			want: true,
@@ -585,7 +621,7 @@ func TestSendStatusToMonitoring(t *testing.T) {
 		{
 			name: "SendMetricsFailure",
 			snapshot: Snapshot{
-				sendToMonitoring:  true,
+				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
 			},
 		},
@@ -809,7 +845,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			name:  "Success",
 			mtype: "Snapshot",
 			s: &Snapshot{
-				sendToMonitoring:  true,
+				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
 			dur:  time.Millisecond,
@@ -820,7 +856,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			name:  "Failure",
 			mtype: "Snapshot",
 			s: &Snapshot{
-				sendToMonitoring:  true,
+				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
 			},
 			dur:  time.Millisecond,
@@ -831,7 +867,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			name:  "sendStatusFalse",
 			mtype: "Snapshot",
 			s: &Snapshot{
-				sendToMonitoring:  false,
+				SendToMonitoring:  false,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
 			},
 			dur:  time.Millisecond,
