@@ -316,8 +316,8 @@ func matchNameServerTraceAndBackup(name string) bool {
 	nameserverTrace := regexp.MustCompile(`nameserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
 	nameserverTopologyJSON := regexp.MustCompile(`nameserver.*topology.*json`)
 	indexServer := regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
-	backuplog := regexp.MustCompile(`backup.log`)
-	backintlog := regexp.MustCompile(`backint.log`)
+	backuplog := regexp.MustCompile(`backup(.*?).log`)
+	backintlog := regexp.MustCompile(`backint(.*?).log`)
 
 	if nameserverTrace.MatchString(name) || indexServer.MatchString(name) ||
 		backuplog.MatchString(name) || backintlog.MatchString(name) ||
