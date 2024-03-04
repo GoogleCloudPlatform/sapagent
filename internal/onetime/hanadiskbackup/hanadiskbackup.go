@@ -98,6 +98,7 @@ type Snapshot struct {
 	LogLevel                          string
 	hanaDataPath                      string
 	logicalDataPath, physicalDataPath string
+	labels                            string
 }
 
 // Name implements the subcommand interface for hanadiskbackup.
@@ -115,6 +116,7 @@ func (*Snapshot) Usage() string {
 	[-storage-location=<storage-location>] [-csek-key-file=<path-to-key-file>]
 	[-snapshot-description=<description>] [-snapshot-name=<snapshot-name>]
 	[-snapshot-type=<snapshot-type>]
+	[-labels="label1=value1,label2=value2"]
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>
 	` + "\n"
 }
@@ -143,6 +145,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level")
+	fs.StringVar(&s.labels, "labels", "", "Labels to be added to the disk snapshot")
 }
 
 // Execute implements the subcommand interface for hanadiskbackup.
@@ -177,7 +180,6 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		onetime.SetupOneTimeLogging(s.LogProperties, s.HANAChangeDiskTypeOTEName, log.StringLevelToZapcore(s.LogLevel))
 	}
 
-	onetime.LogMessageToFileAndConsole("Creating metrics client")
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to create Cloud Monitoring metric client", err)
@@ -343,7 +345,6 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	onetime.LogMessageToFileAndConsole("Waiting for disk snapshot to complete uploading.")
 	if err := s.waitForUploadCompletionWithRetry(ctx, op); err != nil {
 		log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
-		onetime.LogMessageToFileAndConsole("Error uploading disk snapshot")
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
@@ -480,6 +481,7 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 		Name:             s.SnapshotName,
 		SnapshotType:     s.SnapshotType,
 		StorageLocations: []string{s.StorageLocation},
+		Labels:           s.parseLabels(),
 	}
 
 	if s.DiskKeyFile != "" {
@@ -624,7 +626,6 @@ func (s *Snapshot) parseBasePath(ctx context.Context, pattern string, exec comma
 
 	basePath := strings.TrimSuffix(result.StdOut, "\n")
 	log.CtxLogger(ctx).Infow("Found HANA Base data directory", "hanaDataPath", basePath)
-	onetime.LogMessageToFileAndConsole("Base path parsed:" + basePath)
 	return basePath, nil
 }
 
@@ -649,7 +650,6 @@ func (s *Snapshot) unmount(ctx context.Context, path string, exec commandlineexe
 }
 
 func (s *Snapshot) freezeXFS(ctx context.Context, exec commandlineexecutor.Execute) error {
-	onetime.LogMessageToFileAndConsole("Freezing XFS:" + s.hanaDataPath)
 	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-f " + s.hanaDataPath})
 	if result.Error != nil {
 		return fmt.Errorf("failure freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
@@ -703,17 +703,13 @@ func (s *Snapshot) parsePhysicalPath(ctx context.Context, logicalPath string, ex
 func (s *Snapshot) checkDataDir(ctx context.Context) error {
 	var err error
 	log.CtxLogger(ctx).Infow("Data volume base path", "path", s.hanaDataPath)
-	onetime.LogMessageToFileAndConsole("Data volume base path parsed:" + s.hanaDataPath)
 	if s.logicalDataPath, err = s.parseLogicalPath(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-		onetime.LogMessageToFileAndConsole("Failed to parse logical path, exiting")
 		return err
 	}
 	if !strings.HasPrefix(s.logicalDataPath, "/dev/mapper") {
-		onetime.LogMessageToFileAndConsole("Logical device not supported, exiting")
 		return fmt.Errorf("only data disks using LVM are supported, exiting")
 	}
 	if s.physicalDataPath, err = s.parsePhysicalPath(ctx, s.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-		onetime.LogMessageToFileAndConsole("Failed to parse physical path, exiting")
 		return err
 	}
 	return s.checkDataDeviceForStripes(ctx, commandlineexecutor.ExecuteCommand)
@@ -726,7 +722,6 @@ func (s *Snapshot) checkDataDeviceForStripes(ctx context.Context, exec commandli
 		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", s.logicalDataPath),
 	})
 	if result.ExitCode == 0 {
-		onetime.LogMessageToFileAndConsole("Data device is not striped, exiting")
 		return fmt.Errorf("backup of striped HANA data disks are not currently supported, exiting")
 	}
 	return nil
@@ -757,4 +752,17 @@ func readKey(file, diskURI string, read configuration.ReadConfigFile) (string, e
 		}
 	}
 	return "", fmt.Errorf("no matching key for for the disk")
+}
+
+func (s *Snapshot) parseLabels() map[string]string {
+	labels := make(map[string]string)
+	if s.labels != "" {
+		for _, label := range strings.Split(s.labels, ",") {
+			split := strings.Split(label, "=")
+			if len(split) == 2 {
+				labels[split[0]] = split[1]
+			}
+		}
+	}
+	return labels
 }

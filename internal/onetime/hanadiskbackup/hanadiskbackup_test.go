@@ -131,6 +131,38 @@ func TestSnapshotHandler(t *testing.T) {
 	}
 }
 
+func TestParseLabels(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Snapshot
+		want map[string]string
+	}{
+		{
+			name: "Invalidlabel",
+			s: Snapshot{
+				labels: "label1,label2",
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "Success",
+			s: Snapshot{
+				labels: "label1=value1,label2=value2",
+			},
+			want: map[string]string{"label1": "value1", "label2": "value2"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.s.parseLabels()
+			if !cmp.Equal(got, test.want) {
+				t.Errorf("parseLabels() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestExecuteSnapshot(t *testing.T) {
 	tests := []struct {
 		name     string
