@@ -1,6 +1,6 @@
 {
 "id": "r_tables_preloaded_check",
-"name": "SAP HANA Performance: Check for appropriate configuration of the tables_preloaded_in_parallel parameter.",
+"name": "SAP HANA Performance: Check for appropriate configuration of the tables_preloaded_in_parallel parameter in X4 VMs",
 "description": "The tables_preloaded_in_parallel parameter allows you to control the number of tables loaded at the same time during system startup, providing flexibility for performance optimization.",
 "labels": [
   "performance"
@@ -41,7 +41,7 @@
       }
     ],
     "references": [
-      "https://me.sap.com/notes/2127458" ,
+      "https://me.sap.com/notes/2127458",
       "https://me.sap.com/notes/2700084",
       "https://cloud.google.com/solutions/sap/docs/sap-hana-planning-guide#hyperdisk_performance"
     ]
