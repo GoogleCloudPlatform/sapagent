@@ -182,6 +182,7 @@ func (r *Restorer) validateParameters(os string) error {
 	}
 
 	log.Logger.Debug("Parameter validation successful.")
+	log.Logger.Infof("List of parameters to be used: %+v", r)
 
 	return nil
 }
@@ -227,7 +228,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 	}
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals())
-	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from disk snapshot successful. Please refer <link-to-public-doc> for next steps.")
+	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/disk-snapshot-backup-recovery#recover_to_specific_point-in-time for next steps.")
 	return subcommands.ExitSuccess
 }
 
