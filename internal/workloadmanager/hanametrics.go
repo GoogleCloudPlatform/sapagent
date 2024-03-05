@@ -81,7 +81,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		// If the process is not running then the hanaProcessOrGlobalIni will contain the global.ini
 		// location similar to: /usr/sap/HAR/SYS/global/hdb/custom/config/global.ini
 
-		log.CtxLogger(ctx).Debugw("Could not find gobal.ini file", "globalinilocation", globalINILocationVal)
+		log.CtxLogger(ctx).Debugw("Could not find global.ini file", "globalinilocation", globalINILocationVal)
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 
