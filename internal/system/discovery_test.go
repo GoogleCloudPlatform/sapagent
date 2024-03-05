@@ -1053,6 +1053,84 @@ func TestComponentToInsight(t *testing.T) {
 	}
 }
 
+func TestInsightWorkloadPropertiesFromSystemWorkloadProperties(t *testing.T) {
+	tests := []struct {
+		name string
+		wlp  *spb.SapDiscovery_WorkloadProperties
+		want *workloadmanager.SapDiscoveryWorkloadProperties
+	}{{
+		name: "discoveryWlpToInsightWlp",
+		wlp:  &spb.SapDiscovery_WorkloadProperties{},
+		want: &workloadmanager.SapDiscoveryWorkloadProperties{},
+	}, {
+		name: "discoveryWlpToInsightWlpNilWlProps",
+		wlp:  nil,
+		want: nil,
+	}, {
+		name: "discoveryWlpToInsightWlpMultipleWorkloadProperties",
+		wlp: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
+				&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+					Name:    "TestProduct",
+					Version: "1.0.0",
+				},
+				&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+					Name:    "AnotherTestProduct",
+					Version: "1.3.1",
+				},
+			},
+			SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+				&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					Name:       "TestSoftwareComponent",
+					Version:    "1",
+					ExtVersion: "1.0.0",
+					Type:       "A",
+				},
+				&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					Name:       "AnotherTestSoftwareComponent",
+					Version:    "1",
+					ExtVersion: "1.3.1",
+					Type:       "B",
+				},
+			},
+		},
+		want: &workloadmanager.SapDiscoveryWorkloadProperties{
+			ProductVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
+				&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
+					Name:    "TestProduct",
+					Version: "1.0.0",
+				},
+				&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
+					Name:    "AnotherTestProduct",
+					Version: "1.3.1",
+				},
+			},
+			SoftwareComponentVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
+				&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
+					Name:       "TestSoftwareComponent",
+					Version:    "1",
+					ExtVersion: "1.0.0",
+					Type:       "A",
+				},
+				&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
+					Name:       "AnotherTestSoftwareComponent",
+					Version:    "1",
+					ExtVersion: "1.3.1",
+					Type:       "B",
+				},
+			},
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := insightWorkloadPropertiesFromSystemWorkloadProperties(test.wlp)
+			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
+				t.Errorf("insightWorkloadPropertiesFromSystemWorkloadProperties() mismatch (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestDiscoverySystemToInsight(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1073,7 +1151,8 @@ func TestDiscoverySystemToInsight(t *testing.T) {
 					RelatedResources: []string{"other/resource"},
 					UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
 				}}},
-			DatabaseLayer: &spb.SapDiscovery_Component{},
+			DatabaseLayer:      &spb.SapDiscovery_Component{},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 		want: &workloadmanager.Insight{
 			SapDiscovery: &workloadmanager.SapDiscovery{
@@ -1089,7 +1168,129 @@ func TestDiscoverySystemToInsight(t *testing.T) {
 						RelatedResources: []string{"other/resource"},
 						UpdateTime:       "2023-05-01T15:45:11Z",
 					}}},
-				DatabaseLayer: &workloadmanager.SapDiscoveryComponent{}}},
+				DatabaseLayer:      &workloadmanager.SapDiscoveryComponent{},
+				WorkloadProperties: &workloadmanager.SapDiscoveryWorkloadProperties{},
+			}},
+	}, {
+		name: "discoverySystemToInsightSystemNilWlProps",
+		sys: &spb.SapDiscovery{
+			SystemId:   "test-system",
+			UpdateTime: timestamppb.New(time.Unix(1682955911, 0)),
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				HostProject: "test/project",
+				Sid:         "SID",
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      "test/uri",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"other/resource"},
+					UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
+				}}},
+			DatabaseLayer:      &spb.SapDiscovery_Component{},
+			WorkloadProperties: nil,
+		},
+		want: &workloadmanager.Insight{
+			SapDiscovery: &workloadmanager.SapDiscovery{
+				SystemId:   "test-system",
+				UpdateTime: "2023-05-01T15:45:11Z",
+				ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+					HostProject: "test/project",
+					Sid:         "SID",
+					Resources: []*workloadmanager.SapDiscoveryResource{{
+						ResourceUri:      "test/uri",
+						ResourceKind:     "RESOURCE_KIND_INSTANCE",
+						ResourceType:     "RESOURCE_TYPE_COMPUTE",
+						RelatedResources: []string{"other/resource"},
+						UpdateTime:       "2023-05-01T15:45:11Z",
+					}}},
+				DatabaseLayer:      &workloadmanager.SapDiscoveryComponent{},
+				WorkloadProperties: nil,
+			}},
+	}, {
+		name: "discoverySystemToInsightSystemMultipleWorkloadProperties",
+		sys: &spb.SapDiscovery{
+			SystemId:   "test-system",
+			UpdateTime: timestamppb.New(time.Unix(1682955911, 0)),
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				HostProject: "test/project",
+				Sid:         "SID",
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceUri:      "test/uri",
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					RelatedResources: []string{"other/resource"},
+					UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
+				}}},
+			DatabaseLayer: &spb.SapDiscovery_Component{},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
+					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+						Name:    "TestProduct",
+						Version: "1.0.0",
+					},
+					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+						Name:    "AnotherTestProduct",
+						Version: "1.3.1",
+					},
+				},
+				SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+						Name:       "TestSoftwareComponent",
+						Version:    "1",
+						ExtVersion: "1.0.0",
+						Type:       "A",
+					},
+					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+						Name:       "AnotherTestSoftwareComponent",
+						Version:    "1",
+						ExtVersion: "1.3.1",
+						Type:       "B",
+					},
+				},
+			},
+		},
+		want: &workloadmanager.Insight{
+			SapDiscovery: &workloadmanager.SapDiscovery{
+				SystemId:   "test-system",
+				UpdateTime: "2023-05-01T15:45:11Z",
+				ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+					HostProject: "test/project",
+					Sid:         "SID",
+					Resources: []*workloadmanager.SapDiscoveryResource{{
+						ResourceUri:      "test/uri",
+						ResourceKind:     "RESOURCE_KIND_INSTANCE",
+						ResourceType:     "RESOURCE_TYPE_COMPUTE",
+						RelatedResources: []string{"other/resource"},
+						UpdateTime:       "2023-05-01T15:45:11Z",
+					}}},
+				DatabaseLayer: &workloadmanager.SapDiscoveryComponent{},
+				WorkloadProperties: &workloadmanager.SapDiscoveryWorkloadProperties{
+					ProductVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
+						&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
+							Name:    "TestProduct",
+							Version: "1.0.0",
+						},
+						&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
+							Name:    "AnotherTestProduct",
+							Version: "1.3.1",
+						},
+					},
+					SoftwareComponentVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
+						&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
+							Name:       "TestSoftwareComponent",
+							Version:    "1",
+							ExtVersion: "1.0.0",
+							Type:       "A",
+						},
+						&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
+							Name:       "AnotherTestSoftwareComponent",
+							Version:    "1",
+							ExtVersion: "1.3.1",
+							Type:       "B",
+						},
+					},
+				},
+			}},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

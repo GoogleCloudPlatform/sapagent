@@ -200,6 +200,35 @@ func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *work
 	return iComp
 }
 
+func insightWorkloadPropertiesFromSystemWorkloadProperties(wlp *spb.SapDiscovery_WorkloadProperties) *workloadmanager.SapDiscoveryWorkloadProperties {
+	if wlp == nil {
+		return nil
+	}
+	var iCompProps []*workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties
+	for _, scv := range wlp.SoftwareComponentVersions {
+		iCompProp := &workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
+			ExtVersion: scv.GetExtVersion(),
+			Name:       scv.GetName(),
+			Type:       scv.GetType(),
+			Version:    scv.GetVersion(),
+		}
+		iCompProps = append(iCompProps, iCompProp)
+	}
+
+	var iProdVers []*workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion
+	for _, pv := range wlp.ProductVersions {
+		iProdVer := &workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
+			Name:    pv.GetName(),
+			Version: pv.GetVersion(),
+		}
+		iProdVers = append(iProdVers, iProdVer)
+	}
+	return &workloadmanager.SapDiscoveryWorkloadProperties{
+		SoftwareComponentVersions: iCompProps,
+		ProductVersions:           iProdVers,
+	}
+}
+
 func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 	iDiscovery := &workloadmanager.SapDiscovery{
 		SystemId:      sys.SystemId,
@@ -208,10 +237,12 @@ func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
 	}
 	if sys.ApplicationLayer != nil {
 		iDiscovery.ApplicationLayer = insightComponentFromSystemComponent(sys.ApplicationLayer)
-
 	}
 	if sys.DatabaseLayer != nil {
 		iDiscovery.DatabaseLayer = insightComponentFromSystemComponent(sys.DatabaseLayer)
+	}
+	if sys.WorkloadProperties != nil {
+		iDiscovery.WorkloadProperties = insightWorkloadPropertiesFromSystemWorkloadProperties(sys.WorkloadProperties)
 	}
 
 	return &workloadmanager.Insight{SapDiscovery: iDiscovery}

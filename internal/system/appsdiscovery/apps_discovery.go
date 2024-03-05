@@ -71,14 +71,15 @@ type SapSystemDetails struct {
 	WorkloadProperties  *spb.SapDiscovery_WorkloadProperties
 }
 
-func removeDuplicates(s []string) []string {
+func removeDuplicates[T comparable](s []T) []T {
 	m := make(map[string]bool)
-	o := []string{}
+	var o []T
 	for _, s := range s {
-		if _, ok := m[s]; ok {
+		sStr := fmt.Sprintf("%v", s)
+		if _, ok := m[sStr]; ok {
 			continue
 		}
-		m[s] = true
+		m[sStr] = true
 		o = append(o, s)
 	}
 	return o
@@ -142,6 +143,13 @@ func mergeComponent(old, new *spb.SapDiscovery_Component) *spb.SapDiscovery_Comp
 	return merged
 }
 
+func mergeWorkloadProperties(old, new *spb.SapDiscovery_WorkloadProperties) *spb.SapDiscovery_WorkloadProperties {
+	if new == nil {
+		return old
+	}
+	return new
+}
+
 func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	merged := old
 	merged.AppOnHost = old.AppOnHost || new.AppOnHost
@@ -150,6 +158,7 @@ func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	merged.DBComponent = mergeComponent(old.DBComponent, new.DBComponent)
 	merged.AppHosts = removeDuplicates(append(merged.AppHosts, new.AppHosts...))
 	merged.DBHosts = removeDuplicates(append(merged.DBHosts, new.DBHosts...))
+	merged.WorkloadProperties = mergeWorkloadProperties(old.WorkloadProperties, new.WorkloadProperties)
 
 	return merged
 }
@@ -239,19 +248,6 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		haNodes = nil
 	}
 
-	workloadProps := &spb.SapDiscovery_WorkloadProperties{}
-	log.CtxLogger(ctx).Debugw("Checking config", "config", conf)
-	if conf.GetEnableWorkloadDiscovery().GetValue() {
-		isABAP, wlProps, err := d.discoverNetweaverABAP(ctx, app)
-		if err != nil {
-			log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
-		}
-		if wlProps != nil {
-			workloadProps = wlProps
-		}
-		appProps.Abap = isABAP
-	}
-
 	details := SapSystemDetails{
 		AppComponent: &spb.SapDiscovery_Component{
 			Sid: app.Sapsid,
@@ -260,8 +256,17 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 			},
 			HaHosts: haNodes,
 		},
-		AppHosts:           haNodes,
-		WorkloadProperties: workloadProps,
+		AppHosts: haNodes,
+	}
+
+	log.CtxLogger(ctx).Debugw("Checking config", "config", conf)
+	if conf.GetEnableWorkloadDiscovery().GetValue() {
+		isABAP, wlProps, err := d.discoverNetweaverABAP(ctx, app)
+		if err != nil {
+			log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
+		}
+		details.WorkloadProperties = wlProps
+		details.AppComponent.Properties.(*spb.SapDiscovery_Component_ApplicationProperties_).ApplicationProperties.Abap = isABAP
 	}
 
 	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)

@@ -266,6 +266,18 @@ type fakeCommandExecutor struct {
 type pv = spb.SapDiscovery_WorkloadProperties_ProductVersion
 type scp = spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties
 
+type PvByName []*pv
+
+func (a PvByName) Len() int           { return len(a) }
+func (a PvByName) Less(i, j int) bool { return a[i].Name < a[j].Name }
+func (a PvByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+type ScpByName []*scp
+
+func (a ScpByName) Len() int           { return len(a) }
+func (a ScpByName) Less(i, j int) bool { return a[i].Name < a[j].Name }
+func (a ScpByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
 func (f *fakeCommandExecutor) Execute(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 	log.Logger.Infof("fakeCommandExecutor.Execute: %v", params)
 	defer func() { f.executeCallCount++ }()
@@ -1166,7 +1178,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
 			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			WorkloadProperties: nil,
 		},
 	}}
 	log.SetupLoggingForTest()
@@ -1658,7 +1670,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
 			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			WorkloadProperties: nil,
 		}},
 	}, {
 		name: "twoNetweaver",
@@ -1747,7 +1759,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
 			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			WorkloadProperties: nil,
 		}, {
 			AppComponent: &spb.SapDiscovery_Component{
 				Sid: "def",
@@ -1765,7 +1777,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			WorkloadProperties: nil,
 		}},
 	}, {
 		name: "twoHANA",
@@ -1930,7 +1942,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 			DBOnHost:           true,
 			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			WorkloadProperties: nil,
 		}},
 	}, {
 		name: "hanaThenNetweaverConnected",
@@ -2117,7 +2129,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 			DBOnHost:           false,
 			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			WorkloadProperties: nil,
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DB2",
@@ -2220,7 +2232,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 			DBOnHost:           false,
 			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			WorkloadProperties: nil,
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DB2",
@@ -2275,7 +2287,7 @@ func TestRemoveDuplicates(t *testing.T) {
 	}, {
 		name:  "empty",
 		input: nil,
-		want:  []string{},
+		want:  nil,
 	}, {
 		name:  "unsortedSingleDuplicate",
 		input: []string{"foo", "bar", "foo"},
@@ -2596,6 +2608,167 @@ func TestMergeSystemDetails(t *testing.T) {
 			},
 		},
 	}, {
+		name: "mergeWlProperties",
+		oldDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{
+					&pv{Name: "SAP S/4HANA", Version: "2021"},
+					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+				},
+				SoftwareComponentVersions: []*scp{
+					&scp{
+						Name:       "EA-DFPS",
+						Version:    "806",
+						ExtVersion: "0000",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "EA-HR",
+						Version:    "608",
+						ExtVersion: "0095",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "S4COREOP",
+						Version:    "106",
+						ExtVersion: "0000000000",
+						Type:       "I",
+					},
+				},
+			},
+		},
+		newDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{
+					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+				},
+				SoftwareComponentVersions: []*scp{
+					&scp{
+						Name:       "EA-DFPS",
+						Version:    "806",
+						ExtVersion: "0000",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "EA-HR",
+						Version:    "608",
+						ExtVersion: "0095",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "S4CORE",
+						Version:    "106",
+						ExtVersion: "0000000000",
+						Type:       "R",
+					},
+				},
+			},
+		},
+		want: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{
+					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+				},
+				SoftwareComponentVersions: []*scp{
+					&scp{
+						Name:       "EA-DFPS",
+						Version:    "806",
+						ExtVersion: "0000",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "EA-HR",
+						Version:    "608",
+						ExtVersion: "0095",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "S4CORE",
+						Version:    "106",
+						ExtVersion: "0000000000",
+						Type:       "R",
+					},
+				},
+			},
+		},
+	}, {
+		name: "mergeNewWlProperties",
+		oldDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+		},
+		newDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{
+					&pv{Name: "SAP S/4HANA", Version: "2021"},
+					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+				},
+				SoftwareComponentVersions: []*scp{
+					&scp{
+						Name:       "EA-DFPS",
+						Version:    "806",
+						ExtVersion: "0000",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "EA-HR",
+						Version:    "608",
+						ExtVersion: "0095",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "S4CORE",
+						Version:    "106",
+						ExtVersion: "0000000000",
+						Type:       "R",
+					},
+					&scp{
+						Name:       "S4COREOP",
+						Version:    "106",
+						ExtVersion: "0000000000",
+						Type:       "I",
+					},
+				},
+			},
+		},
+		want: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{
+					&pv{Name: "SAP S/4HANA", Version: "2021"},
+					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+				},
+				SoftwareComponentVersions: []*scp{
+					&scp{
+						Name:       "EA-DFPS",
+						Version:    "806",
+						ExtVersion: "0000",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "EA-HR",
+						Version:    "608",
+						ExtVersion: "0095",
+						Type:       "N",
+					},
+					&scp{
+						Name:       "S4CORE",
+						Version:    "106",
+						ExtVersion: "0000000000",
+						Type:       "R",
+					},
+					&scp{
+						Name:       "S4COREOP",
+						Version:    "106",
+						ExtVersion: "0000000000",
+						Type:       "I",
+					},
+				},
+			},
+		},
+	}, {
 		name: "mergeDBProperties",
 		oldDetails: SapSystemDetails{
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2627,7 +2800,7 @@ func TestMergeSystemDetails(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := mergeSystemDetails(test.oldDetails, test.newDetails)
-			if diff := cmp.Diff(test.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(test.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.EquateEmpty(), protocmp.SortRepeatedFields(&spb.SapDiscovery_WorkloadProperties{}, "product_versions", "software_component_versions")); diff != "" {
 				t.Errorf("mergeSystemDetails() mismatch (-want, +got):\n%s", diff)
 			}
 		})
@@ -3195,6 +3368,248 @@ func TestParseR3transOutput(t *testing.T) {
 			got := parseR3transOutput(ctx, tc.fileContents)
 
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("parseR3transOutput(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
+			}
+		})
+	}
+}
+
+func TestMergeWorkloadProperties(t *testing.T) {
+	tests := []struct {
+		name    string
+		new     *spb.SapDiscovery_WorkloadProperties
+		old     *spb.SapDiscovery_WorkloadProperties
+		want    *spb.SapDiscovery_WorkloadProperties
+		wantErr error
+	}{{
+		name: "multipleEntriesWithOverlap",
+		old: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP S/4HANA", Version: "2021"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4COREOP",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "I",
+				},
+			},
+		},
+		new: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4CORE",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "R",
+				},
+			},
+		},
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4CORE",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "R",
+				},
+			},
+		},
+	}, {
+		name: "nilOld",
+		old:  nil,
+		new: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP S/4HANA", Version: "2021"},
+				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4CORE",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "R",
+				},
+				&scp{
+					Name:       "S4COREOP",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "I",
+				},
+			},
+		},
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP S/4HANA", Version: "2021"},
+				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4CORE",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "R",
+				},
+				&scp{
+					Name:       "S4COREOP",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "I",
+				},
+			},
+		},
+	}, {
+		name: "nilNew",
+		old: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP S/4HANA", Version: "2021"},
+				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4CORE",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "R",
+				},
+				&scp{
+					Name:       "S4COREOP",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "I",
+				},
+			},
+		},
+		new: nil,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{
+				&pv{Name: "SAP S/4HANA", Version: "2021"},
+				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
+				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
+			},
+			SoftwareComponentVersions: []*scp{
+				&scp{
+					Name:       "EA-DFPS",
+					Version:    "806",
+					ExtVersion: "0000",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "EA-HR",
+					Version:    "608",
+					ExtVersion: "0095",
+					Type:       "N",
+				},
+				&scp{
+					Name:       "S4CORE",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "R",
+				},
+				&scp{
+					Name:       "S4COREOP",
+					Version:    "106",
+					ExtVersion: "0000000000",
+					Type:       "I",
+				},
+			},
+		},
+	}, {
+		name: "allNil",
+		old:  nil,
+		new:  nil,
+		want: nil,
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mergeWorkloadProperties(tc.old, tc.new)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), protocmp.SortRepeatedFields(&spb.SapDiscovery_WorkloadProperties{}, "product_versions", "software_component_versions")); diff != "" {
 				t.Errorf("parseR3transOutput(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
 			}
 		})
