@@ -154,6 +154,8 @@ message SapDiscovery {
       // Indicates whether this is a Java or ABAP Netweaver instance.
       // true means it is ABAP, false means it is Java.
       bool abap = 5;
+      // Instance number of the SAP instance.
+      string instance_number = 6;
     }
     // A set of properties describing an SAP Database layer.
     message DatabaseProperties {
@@ -177,6 +179,8 @@ message SapDiscovery {
       string shared_nfs_uri = 3;
       // The version of the database software running in the system.
       string database_version = 4;
+      // Instance number of the SAP instance.
+      string instance_number = 5;
     }
     oneof properties {
       // The component is a SAP application.
