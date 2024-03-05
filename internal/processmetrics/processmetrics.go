@@ -50,6 +50,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/netweaver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/networkstats"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapservice"
 	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
@@ -59,6 +60,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	pcm "github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
@@ -109,6 +111,7 @@ type (
 		GCEService     sapdiscovery.GCEInterface
 		GCEBetaService infra.GCEBetaInterface
 		Discovery      discoveryInterface
+		PCMParams      pcm.Parameters
 	}
 )
 
@@ -398,6 +401,23 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 			PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 		}
 		p.Collectors = append(p.Collectors, maintenanceModeCollector)
+
+		if params.PCMParams.WorkloadConfig == nil {
+			log.CtxLogger(ctx).Debug("Cannot collect pacemaker metrics, no collection definition detected.")
+		} else {
+			log.CtxLogger(ctx).Debug("Creating pacemaker metrics collector.")
+			pacemakerCollector := &pacemaker.InstanceProperties{
+				Config:          p.Config,
+				Client:          p.Client,
+				Sids:            sids,
+				SkippedMetrics:  skippedMetrics,
+				PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
+				PacemakerCollector: &pacemaker.Params{
+					PCMParams: params.PCMParams,
+				},
+			}
+			p.Collectors = append(p.Collectors, pacemakerCollector)
+		}
 	}
 
 	log.CtxLogger(ctx).Infow("Created process metrics collectors.", "numberofcollectors", len(p.Collectors))

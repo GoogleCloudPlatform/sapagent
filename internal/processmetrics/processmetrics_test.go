@@ -29,12 +29,15 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
+	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
 
 type fakeDiscoveryInterface struct {
@@ -339,39 +342,74 @@ func TestCreateProcessCollectors(t *testing.T) {
 		sapInstances           *sapb.SAPInstances
 		wantCollectorCount     int
 		wantFastCollectorCount int
+		params                 Parameters
 	}{
 		{
 			name:                   "HANAStandaloneInstance",
 			sapInstances:           fakeSAPInstances("HANA"),
 			wantCollectorCount:     8,
 			wantFastCollectorCount: 1,
+			params: Parameters{
+				Config: defaultConfig,
+			},
 		},
 		{
 			name:                   "HANAClusterInstance",
 			sapInstances:           fakeSAPInstances("HANACluster"),
 			wantCollectorCount:     9,
 			wantFastCollectorCount: 1,
+			params: Parameters{
+				Config: defaultConfig,
+			},
 		},
 		{
 			name:                   "NetweaverClusterInstance",
 			sapInstances:           fakeSAPInstances("NetweaverCluster"),
 			wantCollectorCount:     9,
 			wantFastCollectorCount: 1,
+			params: Parameters{
+				Config: defaultConfig,
+			},
 		},
 		{
 			name:                   "TwoNetweaverInstancesOnSameMachine",
 			sapInstances:           fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
 			wantCollectorCount:     11,
 			wantFastCollectorCount: 2,
+			params: Parameters{
+				Config: defaultConfig,
+			},
+		},
+		{
+			name:                   "NonNilWorkloadConfig",
+			sapInstances:           fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
+			wantCollectorCount:     12,
+			wantFastCollectorCount: 2,
+			params: Parameters{
+				Config: defaultConfig,
+				PCMParams: pacemaker.Parameters{
+					Config: defaultConfig,
+					WorkloadConfig: &wlmpb.WorkloadValidation{
+						ValidationSystem: &wlmpb.ValidationSystem{
+							SystemMetrics: []*wlmpb.SystemMetric{
+								{
+									MetricInfo: &cmpb.MetricInfo{
+										Type:  "workload.googleapis.com/sap/validation/system",
+										Label: "agent",
+									},
+									Value: wlmpb.SystemVariable_AGENT_NAME,
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			params := Parameters{
-				Config: defaultConfig,
-			}
-			got := createProcessCollectors(context.Background(), params, &fake.TimeSeriesCreatorThreadSafe{}, test.sapInstances)
+			got := createProcessCollectors(context.Background(), test.params, &fake.TimeSeriesCreatorThreadSafe{}, test.sapInstances)
 
 			if len(got.Collectors) != test.wantCollectorCount {
 				t.Errorf("createProcessCollectors() returned %d collectors, want %d", len(got.Collectors), test.wantCollectorCount)

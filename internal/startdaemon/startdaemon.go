@@ -45,6 +45,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
@@ -378,9 +379,21 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	wmp := WorkloadManagerParams{wlmparams, instanceInfoReader, goos}
 	wmp.startCollection(wmCtx)
 
+	// Declaring pacemaker Params
+	pcmp := pacemaker.Parameters{
+		Config:                d.config,
+		WorkloadConfig:        cd.GetWorkloadValidation(),
+		ConfigFileReader:      pacemaker.ConfigFileReader(configFileReader),
+		DefaultTokenGetter:    pacemaker.DefaultTokenGetter(defaultTokenGetter),
+		JSONCredentialsGetter: pacemaker.JSONCredentialsGetter(jsonCredentialsGetter),
+		Execute:               execute,
+		Exists:                exists,
+		OSReleaseFilePath:     workloadmanager.OSReleaseFilePath,
+	}
+
 	// Start Process Metrics Collection
 	pmCtx := log.SetCtx(ctx, "context", "ProcessMetrics")
-	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceBetaService, systemDiscovery}
+	pmp := ProcessMetricsParams{d.config, goos, healthMonitor, gceService, gceBetaService, systemDiscovery, pcmp}
 	pmp.startCollection(pmCtx)
 
 	// Start HANA Monitoring
@@ -432,6 +445,7 @@ type ProcessMetricsParams struct {
 	gceService     *gce.GCE
 	gceBetaService *gcebeta.GCEBeta
 	discovery      *system.Discovery
+	pcmparams      pacemaker.Parameters
 }
 
 // startCollection for ProcessMetricsParams initiates collection of ProcessMetrics.
@@ -452,6 +466,7 @@ func (pmp ProcessMetricsParams) startCollection(ctx context.Context) {
 		GCEService:     pmp.gceService,
 		GCEBetaService: pmp.gceBetaService,
 		Discovery:      pmp.discovery,
+		PCMParams:      pmp.pcmparams,
 	}); success != true {
 		log.Logger.Info("Process metrics collection not started")
 	}
