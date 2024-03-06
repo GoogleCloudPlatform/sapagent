@@ -183,6 +183,9 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 		cc.CollectReliabilityMetrics = &wpb.BoolValue{Value: false}
 	}
 	
+	if cc.GetCollectWorkloadValidationMetrics() == nil {
+		cc.CollectWorkloadValidationMetrics = &wpb.BoolValue{Value: true}
+	}
 	if cc.GetCollectWorkloadValidationMetrics().GetValue() && cc.GetWorkloadValidationMetricsFrequency() <= 0 {
 		cc.WorkloadValidationMetricsFrequency = 300
 	}
@@ -269,9 +272,6 @@ func applyDefaultSupportConfiguration(configFromFile *cpb.SupportConfiguration) 
 	supportConfig := configFromFile
 	if supportConfig == nil {
 		supportConfig = &cpb.SupportConfiguration{}
-	}
-	if supportConfig.GetSendWorkloadValidationMetricsToCloudMonitoring() == nil {
-		supportConfig.SendWorkloadValidationMetricsToCloudMonitoring = &wpb.BoolValue{Value: true}
 	}
 	return supportConfig
 }

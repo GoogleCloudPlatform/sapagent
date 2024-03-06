@@ -158,7 +158,7 @@ func TestSetStatus(t *testing.T) {
 			},
 			want: map[string]bool{
 				"hana_monitoring":     true,
-				"workload_validation": false,
+				"workload_validation": true,
 				"process_metrics":     false,
 				"host_metrics":        true,
 				"agent_metrics":       false,
@@ -280,7 +280,7 @@ func TestSetStatus(t *testing.T) {
 				"agent_metrics":       false,
 				"host_metrics":        true,
 				"process_metrics":     false,
-				"workload_validation": false,
+				"workload_validation": true,
 				"hana_monitoring":     false,
 				"reliability_metrics": false,
 			},

@@ -178,34 +178,34 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 
 // setStatus returns a map of feature name and its status.
 func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
-	featureStatus := make(map[string]bool)
+	featureStatus := map[string]bool{
+		hostMetrics:        true,
+		hanaMonitoring:     false,
+		agentMetrics:       false,
+		workloadValidation: true,
+		processMetrics:     false,
+		reliabilityMetrics: false,
+		sapDiscovery:       false,
+	}
+
 	if hm := config.GetProvideSapHostAgentMetrics(); hm != nil {
 		featureStatus[hostMetrics] = hm.GetValue()
-	} else {
-		featureStatus[hostMetrics] = true
 	}
 	if hmc := config.GetHanaMonitoringConfiguration(); hmc != nil {
 		featureStatus[hanaMonitoring] = hmc.GetEnabled()
-	} else {
-		featureStatus[hanaMonitoring] = false
 	}
 
-	if cc := config.GetCollectionConfiguration(); cc == nil {
-		featureStatus[agentMetrics] = false
-		featureStatus[workloadValidation] = false
-		featureStatus[processMetrics] = false
-		featureStatus[reliabilityMetrics] = false
-	} else {
+	if cc := config.GetCollectionConfiguration(); cc != nil {
 		featureStatus[agentMetrics] = cc.GetCollectAgentMetrics()
-		featureStatus[workloadValidation] = cc.GetCollectWorkloadValidationMetrics().GetValue()
+		if wlm := cc.GetCollectWorkloadValidationMetrics(); wlm != nil {
+			featureStatus[workloadValidation] = wlm.GetValue()
+		}
 		featureStatus[processMetrics] = cc.GetCollectProcessMetrics()
 		featureStatus[reliabilityMetrics] = cc.GetCollectReliabilityMetrics().GetValue()
 	}
 
 	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
 		featureStatus[sapDiscovery] = true
-	} else {
-		featureStatus[sapDiscovery] = false
 	}
 
 	log.CtxLogger(ctx).Info("Feature status: ", featureStatus)
