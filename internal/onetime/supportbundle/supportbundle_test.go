@@ -1305,6 +1305,46 @@ func TestCollectRHELPacemakerLogs(t *testing.T) {
 	}
 }
 
+func TestExtractHANAVersion(t *testing.T) {
+	tests := []struct {
+		name          string
+		destFilesPath string
+		sid           string
+		hostname      string
+		exec          commandlineexecutor.Execute
+		fu            filesystem.FileSystem
+		want          bool
+	}{
+		{
+			name:          "NoErrors",
+			destFilesPath: "tmppath",
+			sid:           "deh",
+			hostname:      "testhost",
+			exec:          fakeExec,
+			fu:            mockedfilesystem{},
+			want:          false,
+		},
+		{
+			name:          "HasErrors",
+			destFilesPath: "tmppath",
+			sid:           "deh",
+			hostname:      "testhost",
+			exec:          fakeExecForErrOnly,
+			fu:            mockedfilesystem{},
+			want:          true,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		got := extractHANAVersion(ctx, tc.destFilesPath, tc.sid, tc.hostname, tc.exec, tc.fu)
+		if got != tc.want {
+			t.Errorf("extractHANAVersion(%v, %v, %v, %v, %v) = %v, want: %v", tc.destFilesPath, tc.sid, tc.hostname, tc.exec, tc.fu, got, tc.want)
+		}
+	}
+}
+
 func TestCollectSLESPacemakerLogs(t *testing.T) {
 	tests := []struct {
 		name          string

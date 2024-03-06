@@ -80,6 +80,7 @@ const (
 	agentOnetimeFilesPath = `/var/log/google-cloud-sap-agent/`
 	systemDBErrorsFile    = `_SYSTEM_DB_BACKUP_ERROR.txt`
 	journalCTLLogs        = `_JOURNAL_CTL_LOGS.txt`
+	hanaVersionFile       = `_HANA_VERSION.txt`
 	tenantDBErrorsFile    = `_TENANT_DB_BACKUP_ERROR.txt`
 	backintErrorsFile     = `_BACKINT_ERROR.txt`
 	globalINIFile         = `/custom/config/global.ini`
@@ -141,6 +142,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		onetime.LogErrorToFileAndConsole("Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
 		return subcommands.ExitUsageError
 	}
+	s.sid = strings.ToUpper(s.sid)
 	destFilesPath := fmt.Sprintf("%ssupportbundle-%s-%s", destFilePathPrefix, s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
 		onetime.LogErrorToFileAndConsole("Error while making directory: "+destFilesPath, err)
@@ -160,6 +162,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fs) || hasErrors
 	hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fs) || hasErrors
 	hasErrors = extractJournalCTLLogs(ctx, destFilesPath, s.hostname, exec, fs) || hasErrors
+	hasErrors = extractHANAVersion(ctx, destFilesPath, s.sid, s.hostname, exec, fs) || hasErrors
 	reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
 	reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
@@ -449,6 +452,22 @@ func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostna
 		}
 	}
 	return hasErrors
+}
+
+// extractHANAVersion extracts the HANA version from the sap env.
+func extractHANAVersion(ctx context.Context, destFilesPath, sid, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+	cmd := "-c 'source /usr/sap/" + sid + "/home/.sapenv.sh && /usr/sap/" + sid + "/*/HDB version'"
+	params := commandlineexecutor.Params{
+		User:        fmt.Sprintf("%sadm", strings.ToLower(sid)),
+		Executable:  "bash",
+		ArgsToSplit: cmd,
+	}
+	onetime.LogMessageToFileAndConsole("Executing command: bash -c 'HDB version'")
+	err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, params, hanaVersionFile, fu)
+	if err != nil {
+		return true
+	}
+	return false
 }
 
 // execAndWriteToFile executes the command and writes the output to the file.
