@@ -18,11 +18,14 @@ package networkstats
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -58,9 +61,120 @@ var (
 	}
 )
 
+func returnExecutor(out, err string) commandlineexecutor.Execute {
+	return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+		fmt.Println(out, err)
+		return commandlineexecutor.Result{
+			StdOut: out,
+			StdErr: err,
+			Error:  fmt.Errorf(err),
+		}
+	}
+}
+
 // ssOutput returns ssOutput as received from ss command.
 func ssOutput(strs ...string) string {
 	return strings.Join(strs, "\n") + "\n"
+}
+
+func TestFetchHDBSocket(t *testing.T) {
+	tests := []struct {
+		name    string
+		p       *Properties
+		wantOut string
+		wantErr error
+	}{
+		{
+			name: "CNF1",
+			p: &Properties{
+				Config:   defaultConfig,
+				Executor: returnExecutor("", "sudo: lsof: command not found"),
+			},
+			wantOut: "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CNF2",
+			p: &Properties{
+				Config:   defaultConfig,
+				Executor: returnExecutor("", "sudo: ss: command not found"),
+			},
+			wantOut: "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			p: &Properties{
+				Config:   defaultConfig,
+				Executor: returnExecutor("*:30013", ""),
+			},
+			wantOut: "*:30013",
+		},
+	}
+
+	ctx := context.Background()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			out, err := test.p.fetchHDBSocket(ctx)
+
+			if d := cmp.Diff(test.wantOut, out); d != "" {
+				t.Errorf("fetchHDBSocket() mismatch in out (-want, +got):\n%s", d)
+			}
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("fetchHDBSocket() error: got %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestFetchSSOutput(t *testing.T) {
+	tests := []struct {
+		name   string
+		p      *Properties
+		socket string
+		want   string
+	}{
+		{
+			name: "Success1",
+			p: &Properties{
+				Config: defaultConfig,
+				Executor: returnExecutor(ssOutput(
+					"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
+				), ""),
+			},
+			socket: "*:30013",
+			want: ssOutput(
+				"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
+			),
+		},
+		{
+			name: "Success2",
+			p: &Properties{
+				Config: defaultConfig,
+				Executor: returnExecutor(ssOutput(
+					"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
+					"ESTAB    0         0                127.0.0.1:30013          127.0.0.1:55494",
+					"\t cubic wscale:7,7 rto:204 rtt:0.017/0.008 send 154202352941bps lastsnd:28 lastrcv:28 lastack:28 pacing_rate 306153576640bps delivered:3 app_limited rcv_space:65483 minrtt:0.015",
+				), ""),
+			},
+			socket: "*:30013",
+			want: ssOutput(
+				"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
+				"ESTAB    0         0                127.0.0.1:30013          127.0.0.1:55494",
+				"\t cubic wscale:7,7 rto:204 rtt:0.017/0.008 send 154202352941bps lastsnd:28 lastrcv:28 lastack:28 pacing_rate 306153576640bps delivered:3 app_limited rcv_space:65483 minrtt:0.015",
+			),
+		},
+	}
+
+	ctx := context.Background()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.p.fetchSSOutput(ctx, test.socket)
+			if got != test.want {
+				t.Errorf("fetchSSOutput(%v) = %v, want: %v", test.socket, got, test.want)
+			}
+		})
+	}
 }
 
 func TestMapValues(t *testing.T) {
@@ -427,53 +541,28 @@ func TestParseSSOutput(t *testing.T) {
 	input := []struct {
 		name        string
 		ssOutput    string
-		wantPID     string
 		wantMetrics []string
 	}{
 		{
-			name: "NoPID1",
-			ssOutput: ssOutput(
-				"",
-				"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
-			),
-			wantPID:     "",
-			wantMetrics: nil,
-		},
-		{
-			name: "NoPID2",
-			ssOutput: ssOutput(
-				"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
-			),
-			wantPID:     "",
-			wantMetrics: nil,
-		},
-		{
 			name: "NoTCPMetrics",
 			ssOutput: ssOutput(
-				"20210",
 				"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
 			),
-			wantPID:     "",
 			wantMetrics: nil,
 		},
 		{
 			name: "TCPOutput",
 			ssOutput: ssOutput(
-				"20210",
 				"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
 				"ESTAB    0         0                127.0.0.1:30013          127.0.0.1:55494",
 				"\t cubic wscale:7,7 rto:204 rtt:0.017/0.008 send 154202352941bps lastsnd:28 lastrcv:28 lastack:28 pacing_rate 306153576640bps delivered:3 app_limited rcv_space:65483 minrtt:0.015",
 			),
-			wantPID:     "20210",
 			wantMetrics: []string{"wscale:7,7", "rto:204", "rtt:0.017/0.008", "send 154202352941bps", "lastsnd:28", "lastrcv:28", "lastack:28", "pacing_rate 306153576640bps", "delivered:3", "rcv_space:65483", "minrtt:0.015"},
 		},
 	}
 	for _, test := range input {
 		t.Run(test.name, func(t *testing.T) {
-			pid, list := parseSSOutput(context.Background(), test.ssOutput)
-			if pid != test.wantPID {
-				t.Fatalf("parseSSOutput with argstosplit returned unexpected diff in pid\nwant:%s\ngot:%s", test.wantPID, pid)
-			}
+			list := parseSSOutput(context.Background(), test.ssOutput)
 			if diff := cmp.Diff(test.wantMetrics, list); diff != "" {
 				t.Fatalf("parseSSOutput with argstosplit returned unexpected diff in metrics List(-want +got):\n%s", diff)
 			}

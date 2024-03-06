@@ -223,10 +223,13 @@ func splitParams(executable string) []string {
 	// Single quotes are used to filter for a specific substring (using grep) matching a given expression.
 	// To prevent malformed matching, it is recommended to write the expression,
 	// normally contained within single quotes, to be contained within back ticks.
+	// This is helpful for bash commands using '-c' flag where the command statement
+	// is enclosed within single quotes.
+	//
 	// For eg: instead of
 	// 		grep -Eo '([0-9]{1,3}\.){1,3}[0-9]{1,3}\:[0-9]{3,5}'
 	// use
-	// 		grep -Eo `([0-9]{1,3}\.){1,3}[0-9]{1,3}\:[0-9]{3,5}``
+	// 		grep -Eo `([0-9]{1,3}\.){1,3}[0-9]{1,3}\:[0-9]{3,5}`
 	for i := range arr {
 		arr[i] = strings.ReplaceAll(arr[i], "`", "'")
 	}

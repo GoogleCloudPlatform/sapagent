@@ -270,17 +270,10 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 		cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute))
 
 	log.CtxLogger(ctx).Info("Creating networkstats metrics collector.")
-	// Note: Backticks in grep -Eo `<regularExp>` get replaced by single quotes
-	// as explained in commandlineexecutor.go
-	cmd := "namesrv_sock=$(sudo lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`);echo $(pidof hdbnameserver);echo ss -tin src ${namesrv_sock} | sh"
 	networkstatsCollector := &networkstats.Properties{
-		Executor: commandlineexecutor.ExecuteCommand,
-		Config:   p.Config,
-		Client:   p.Client,
-		CommandParams: commandlineexecutor.Params{
-			Executable:  "bash",
-			ArgsToSplit: "-c '" + cmd + "'",
-		},
+		Executor:        commandlineexecutor.ExecuteCommand,
+		Config:          p.Config,
+		Client:          p.Client,
 		PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 		SkippedMetrics:  skippedMetrics,
 	}
