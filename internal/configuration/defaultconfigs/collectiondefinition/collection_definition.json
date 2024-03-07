@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 4,
+    "version": 5,
     "validation_system": {
       "system_metrics": [
         {
@@ -127,6 +127,44 @@
                 },
                 "if_false": {
                   "value_from_literal": "notrunning"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "os_settings"
+          },
+          "os_vendor": "ALL",
+          "command": "/usr/bin/google_cloud_sap_agent",
+          "args": ["configureinstance", "-check"],
+          "or_eval_rules": {
+            "or_eval_rules": [
+              {
+                "eval_rules": [
+                  {
+                    "output_source": "EXIT_CODE",
+                    "output_equals": "0"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "pass"
+                }
+              },
+              {
+                "eval_rules": [
+                  {
+                    "output_source": "EXIT_CODE",
+                    "output_equals": "1"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "fail"
+                },
+                "if_false": {
+                  "value_from_literal": ""
                 }
               }
             ]
