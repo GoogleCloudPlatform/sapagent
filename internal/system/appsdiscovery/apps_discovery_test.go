@@ -160,6 +160,11 @@ R3trans finished (0000).
 	4 ETW000 ** 394 ** 73554900100900000414SAP NETWEAVER                 7.5                           sap.com                       SAP NETWEAVER 7.5                                                       +20220927121631
 	4 ETW000 ** 394 ** 73555000100900003452SAP FIORI FRONT-END SERVER    6.0                           sap.com                       SAP FIORI FRONT-END SERVER 6.0                                          +20220928054714
 	`
+	defaultPCSOutput = `Cluster Name: ascscluster_ascs
+	Corosync Nodes:
+	 fs1-nw-node2 fs1-nw-node1
+	Pacemaker Nodes:
+	 fs1-nw-node2 fs1-nw-node1`
 )
 
 var (
@@ -212,6 +217,9 @@ var (
 		EnableDiscovery:                &wpb.BoolValue{Value: true},
 		SapInstancesUpdateFrequency:    &dpb.Duration{Seconds: 30},
 		EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
+	}
+	defaultPCSResult = commandlineexecutor.Result{
+		StdOut: defaultPCSOutput,
 	}
 	exampleWorkloadProperties = &spb.SapDiscovery_WorkloadProperties{
 		ProductVersions: []*pv{
@@ -737,11 +745,90 @@ func TestDiscoverNetweaverHA(t *testing.T) {
 			InstanceNumber: "00",
 			Sapsid:         "abc",
 		},
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return defaultFailoverConfigResult
+		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				}
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
 		},
 		wantHA:    true,
 		wantNodes: []string{"fs1-nw-node2", "fs1-nw-node1"},
+	}, {
+		name: "isHAWithPCS",
+		app: &sappb.SAPInstance{
+			InstanceNumber: "00",
+			Sapsid:         "abc",
+		},
+		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{StdOut: "HAActive: TRUE\nHANodes: "}
+				}
+			case "pcs":
+				return defaultPCSResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		wantHA:    true,
+		wantNodes: []string{"fs1-nw-node2", "fs1-nw-node1"},
+	}, {
+		name: "isHAWithPCSClusterLastLine",
+		app: &sappb.SAPInstance{
+			InstanceNumber: "00",
+			Sapsid:         "abc",
+		},
+		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{StdOut: "HAActive: TRUE\nHANodes: "}
+				}
+			case "pcs":
+				return commandlineexecutor.Result{
+					StdOut: "Pacemaker Nodes:",
+				}
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		wantHA: true,
+	}, {
+		name: "isHAWithPCSError",
+		app: &sappb.SAPInstance{
+			InstanceNumber: "00",
+			Sapsid:         "abc",
+		},
+		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{StdOut: "HAActive: TRUE\nHANodes: "}
+				}
+			case "pcs":
+				return commandlineexecutor.Result{StdErr: "pcs error", ExitCode: 1, Error: errors.New("pcs error")}
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		wantHA: true,
 	}, {
 		name: "noHA",
 		app: &sappb.SAPInstance{
@@ -763,8 +850,7 @@ func TestDiscoverNetweaverHA(t *testing.T) {
 				Error:    nil,
 			}
 		},
-		wantHA:    false,
-		wantNodes: []string{"fs1-nw-node1"},
+		wantHA: false,
 	}, {
 		name: "commandError",
 		app: &sappb.SAPInstance{
@@ -780,6 +866,7 @@ func TestDiscoverNetweaverHA(t *testing.T) {
 		},
 		wantHA: false,
 	}}
+	log.SetupLoggingForTest()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := SapDiscovery{

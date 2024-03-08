@@ -325,6 +325,7 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 }
 
 func (d *SapDiscovery) discoverNetweaverHA(ctx context.Context, app *sappb.SAPInstance) (bool, []string) {
+	log.CtxLogger(ctx).Debugw("Checking HA nodes", "app", app)
 	sidLower := strings.ToLower(app.Sapsid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	params := commandlineexecutor.Params{
@@ -337,6 +338,9 @@ func (d *SapDiscovery) discoverNetweaverHA(ctx context.Context, app *sappb.SAPIn
 	}
 
 	ha := strings.Contains(res.StdOut, "HAActive: TRUE")
+	if !ha {
+		return false, nil
+	}
 
 	i := strings.Index(res.StdOut, haNodes)
 	i += len(haNodes)
@@ -344,9 +348,30 @@ func (d *SapDiscovery) discoverNetweaverHA(ctx context.Context, app *sappb.SAPIn
 	var nodes []string
 	if len(lines) > 0 {
 		for _, n := range strings.Split(lines[0], ",") {
-			nodes = append(nodes, strings.TrimSpace(n))
+			n = strings.TrimSpace(n)
+			if len(n) > 0 {
+				nodes = append(nodes, n)
+			}
 		}
 	}
+	log.CtxLogger(ctx).Debugw("HA nodes", "nodes", nodes)
+	if len(nodes) == 0 {
+		log.CtxLogger(ctx).Debug("No HA nodes found in failover config, checking PCS")
+		params = commandlineexecutor.Params{
+			Executable: "pcs",
+			Args:       []string{"config", "show"},
+		}
+		res = d.Execute(ctx, params)
+
+		lines := strings.Split(res.StdOut, "\n")
+		for i, line := range lines {
+			if strings.Contains(line, "Pacemaker Nodes:") && i < len(lines)-1 {
+				nodes = strings.Split(strings.TrimSpace(lines[i+1]), " ")
+				break
+			}
+		}
+	}
+
 	return ha, nodes
 }
 
