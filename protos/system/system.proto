@@ -183,6 +183,8 @@ message SapDiscovery {
       string database_version = 4;
       // Instance number of the SAP instance.
       string instance_number = 5;
+      // SID of the system database.
+      string database_sid = 6;
     }
     oneof properties {
       // The component is a SAP application.
