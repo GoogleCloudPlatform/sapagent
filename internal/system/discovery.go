@@ -445,6 +445,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			s.DBComponent.Resources = removeDuplicates(dbRes)
 			system.DatabaseLayer = s.DBComponent
 		}
+		system.WorkloadProperties = s.WorkloadProperties
 		system.ProjectNumber = cp.GetNumericProjectId()
 		system.UpdateTime = timestamppb.Now()
 		sapSystems = append(sapSystems, system)

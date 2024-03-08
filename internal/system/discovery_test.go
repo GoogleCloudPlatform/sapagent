@@ -253,6 +253,22 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					},
 				},
 				AppHosts: []string{"some-app-host"},
+				WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+					ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
+						&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+							Name:    "some-product-name",
+							Version: "some-product-version",
+						},
+					},
+					SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+						&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+							Name:       "some-software-component-name",
+							Version:    "some-software-component-version",
+							ExtVersion: "some-software-component-ext-version",
+							Type:       "some-software-component-type",
+						},
+					},
+				},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -319,6 +335,22 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
+					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+						Name:    "some-product-name",
+						Version: "some-product-version",
+					},
+				},
+				SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+						Name:       "some-software-component-name",
+						Version:    "some-software-component-version",
+						ExtVersion: "some-software-component-ext-version",
+						Type:       "some-software-component-type",
+					},
+				},
+			},
 		}},
 	}, {
 		name:   "noASCSResource",
