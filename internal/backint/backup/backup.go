@@ -124,7 +124,8 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 				p.fileSize = int64(fileSize)
 			}
 
-			if strings.HasPrefix(line, "#FILE") && config.GetParallelStreams() > 1 {
+			// XML Multipart uploads are handled in the storage package.
+			if strings.HasPrefix(line, "#FILE") && config.GetParallelStreams() > 1 && !config.GetXmlMultipartUpload() {
 				// An error indicates the parallel jobs were not started so write to the output.
 				if out, err := backupFileParallel(ctx, p); err != nil {
 					mu.Lock()
@@ -164,9 +165,13 @@ func backupFile(ctx context.Context, p parameters) string {
 			return fmt.Sprintf("#ERROR %s\n", p.fileName)
 		}
 		defer f.Close()
-		if fileInfo, err := f.Stat(); err != nil || fileInfo.Mode()&0444 == 0 {
+		fileInfo, err := f.Stat()
+		if err != nil || fileInfo.Mode()&0444 == 0 {
 			log.CtxLogger(ctx).Errorw("Backup file does not have readable permissions", "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 			return fmt.Sprintf("#ERROR %s\n", p.fileName)
+		}
+		if p.fileSize == 0 && p.fileType == "#FILE" {
+			p.fileSize = fileInfo.Size()
 		}
 		p.reader = f
 	}
@@ -192,6 +197,11 @@ func backupFile(ctx context.Context, p parameters) string {
 		RetryBackoffInitial:    time.Duration(p.config.GetRetryBackoffInitial()) * time.Second,
 		RetryBackoffMax:        time.Duration(p.config.GetRetryBackoffMax()) * time.Second,
 		RetryBackoffMultiplier: float64(p.config.GetRetryBackoffMultiplier()),
+		// XML Multipart uploads are restricted to FILE types for size constraints.
+		XMLMultipartUpload:         p.config.GetXmlMultipartUpload() && p.fileType == "#FILE" && p.config.GetParallelStreams() > 1,
+		XMLMultipartWorkers:        p.config.GetParallelStreams(),
+		XMLMultipartServiceAccount: p.config.GetServiceAccountKey(),
+		XMLMultipartEndpoint:       p.config.GetClientEndpoint(),
 	}
 	bytesWritten, err := rw.Upload(ctx)
 	if err != nil {

@@ -35,6 +35,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"golang.org/x/oauth2/google"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -136,6 +137,22 @@ type ReadWriter struct {
 	// the backoff interval. Must be greater than 1 and the default value is 2.
 	RetryBackoffMultiplier float64
 
+	// XMLMultipartUpload is an optional parameter to configure the upload to use
+	// the XML multipart API rather than the GCS storage client API.
+	XMLMultipartUpload bool
+
+	// XMLMultipartWorkers defines the number of workers, or parts, used in the
+	// XML multipart upload. XMLMultipartUpload must be set to true to use.
+	XMLMultipartWorkers int64
+
+	// XMLMultipartServiceAccount will override application default credentials
+	// with a JSON credentials file for authenticating API requests.
+	XMLMultipartServiceAccount string
+
+	// XMLMultipartEndpoint will override the default client endpoint used for
+	// making requests.
+	XMLMultipartEndpoint string
+
 	numRetries                int64
 	bytesTransferred          int64
 	lastBytesTransferred      int64
@@ -189,6 +206,7 @@ func ConnectToBucket(ctx context.Context, p *ConnectParameters) (*storage.Bucket
 	}
 
 	bucket := client.Bucket(p.BucketName)
+
 	if !p.VerifyConnection {
 		log.CtxLogger(ctx).Infow("Created bucket but did not verify connection. Read/write calls may fail.", "bucket", p.BucketName)
 		return bucket, true
@@ -213,12 +231,19 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 
 	object := rw.BucketHandle.Object(rw.ObjectName).Retryer(rw.retryOptions("Failed to upload data to Google Cloud Storage, retrying.")...)
 	var writer io.WriteCloser
+	var err error
 	if rw.EncryptionKey != "" || rw.KMSKey != "" {
 		log.CtxLogger(ctx).Infow("Encryption enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 	}
 	if rw.DumpData {
 		log.CtxLogger(ctx).Warnw("dump_data set to true, discarding data during upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		writer = discardCloser{}
+	} else if rw.XMLMultipartUpload {
+		log.CtxLogger(ctx).Infow("XML Multipart API enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName, "workers", rw.XMLMultipartWorkers)
+		writer, err = rw.NewMultipartWriter(ctx, defaultNewClient, google.DefaultTokenSource, google.CredentialsFromJSON)
+		if err != nil {
+			return 0, err
+		}
 	} else {
 		if rw.EncryptionKey != "" {
 			decodedKey, err := base64.StdEncoding.DecodeString(rw.EncryptionKey)
@@ -248,7 +273,6 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 
 	log.CtxLogger(ctx).Infow("Upload starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
-	var err error
 	if rw.Compress {
 		log.CtxLogger(ctx).Infow("Compression enabled for upload", "bucket", rw.BucketName, "object", rw.ObjectName)
 		gzipWriter := gzip.NewWriter(rw)
@@ -266,9 +290,12 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		}
 	}
 
+	closeStart := time.Now()
 	if err := writer.Close(); err != nil {
 		return 0, err
 	}
+	rw.totalTransferTime += time.Since(closeStart)
+
 	// Verify object is in the bucket and bytesWritten matches the object's size in the bucket.
 	objectSize := int64(0)
 	if !rw.DumpData && rw.VerifyUpload {
@@ -468,20 +495,7 @@ func (rw *ReadWriter) defaultArgs() *ReadWriter {
 
 // retryOptions uses an exponential backoff to retry all errors except 404.
 func (rw *ReadWriter) retryOptions(failureMessage string) []storage.RetryOption {
-	backoff := gax.Backoff{
-		Initial:    10 * time.Second,
-		Max:        300 * time.Second,
-		Multiplier: 2,
-	}
-	if rw.RetryBackoffInitial > 0 {
-		backoff.Initial = rw.RetryBackoffInitial
-	}
-	if rw.RetryBackoffMax > 0 {
-		backoff.Max = rw.RetryBackoffMax
-	}
-	if rw.RetryBackoffMultiplier > 1 {
-		backoff.Multiplier = rw.RetryBackoffMultiplier
-	}
+	backoff := backoff(rw.RetryBackoffInitial, rw.RetryBackoffMax, rw.RetryBackoffMultiplier)
 	log.Logger.Infow("Using exponential backoff strategy for retries", "objectName", rw.ObjectName, "backoffInitial", backoff.Initial, "backoffMax", backoff.Max, "backoffMultiplier", backoff.Multiplier, "maxRetries", rw.MaxRetries)
 
 	return []storage.RetryOption{storage.WithErrorFunc(func(err error) bool {
@@ -501,4 +515,23 @@ func (rw *ReadWriter) retryOptions(failureMessage string) []storage.RetryOption 
 	}),
 		storage.WithBackoff(backoff),
 		storage.WithPolicy(storage.RetryAlways)}
+}
+
+// backoff returns a gax.Backoff object with the given overrides.
+func backoff(retryBackoffInitial, retryBackoffMax time.Duration, retryBackoffMultiplier float64) gax.Backoff {
+	backoff := gax.Backoff{
+		Initial:    10 * time.Second,
+		Max:        300 * time.Second,
+		Multiplier: 2,
+	}
+	if retryBackoffInitial > 0 {
+		backoff.Initial = retryBackoffInitial
+	}
+	if retryBackoffMax > 0 {
+		backoff.Max = retryBackoffMax
+	}
+	if retryBackoffMultiplier > 1 {
+		backoff.Multiplier = retryBackoffMultiplier
+	}
+	return backoff
 }

@@ -52,6 +52,7 @@ message BackintConfiguration {
   string client_endpoint = 28;
   string folder_prefix = 29;
   string recovery_folder_prefix = 30;
+  bool xml_multipart_upload = 31;
 }
 
 enum LogLevel {
