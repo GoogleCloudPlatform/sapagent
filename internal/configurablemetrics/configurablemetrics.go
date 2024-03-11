@@ -95,7 +95,7 @@ func CollectMetricsFromFile(ctx context.Context, reader FileReader, path string,
 
 	file, err := reader(path)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Could not read the file", log.Error(err))
+		log.CtxLogger(ctx).Warnw("Could not read the file", "path", path, "error", err)
 		return labels
 	}
 	defer file.Close()
@@ -124,7 +124,7 @@ func CollectMetricsFromFile(ctx context.Context, reader FileReader, path string,
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.CtxLogger(ctx).Warnw("Could not read the file", "path", path, log.Error(err))
+		log.CtxLogger(ctx).Warnw("Could not read the file", "path", path, "error", err)
 	}
 
 	return labels
@@ -193,28 +193,28 @@ func evaluateRule(ctx context.Context, rule *cmpb.EvalRule, output Output) bool 
 	case *cmpb.EvalRule_OutputLessThan:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", "error", err)
 			return false
 		}
 		return f < rule.GetOutputLessThan()
 	case *cmpb.EvalRule_OutputLessThanOrEqual:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", "error", err)
 			return false
 		}
 		return f <= rule.GetOutputLessThanOrEqual()
 	case *cmpb.EvalRule_OutputGreaterThan:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", "error", err)
 			return false
 		}
 		return f > rule.GetOutputGreaterThan()
 	case *cmpb.EvalRule_OutputGreaterThanOrEqual:
 		f, err := strconv.ParseFloat(source, 64)
 		if err != nil {
-			log.CtxLogger(ctx).Warnw("Failed to parse output as float", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Failed to parse output as float", "error", err)
 			return false
 		}
 		return f >= rule.GetOutputGreaterThanOrEqual()
@@ -244,7 +244,7 @@ func evaluationResult(ctx context.Context, res *cmpb.EvalResult, output Output) 
 	case *cmpb.EvalResult_ValueFromRegex:
 		pattern, err := regexp.Compile(res.GetValueFromRegex())
 		if err != nil {
-			log.Logger.Warnw("Regular Expression failed to compile", log.Error(err))
+			log.CtxLogger(ctx).Warnw("Regular Expression failed to compile", "regexp", res.GetValueFromRegex(), "error", err)
 			return ""
 		}
 		// Return the first capture group found in a regular expression match,
@@ -257,7 +257,7 @@ func evaluationResult(ctx context.Context, res *cmpb.EvalResult, output Output) 
 		}
 		return ""
 	default:
-		log.Logger.Debug("No evaluation result detected, defaulting to empty string.")
+		log.CtxLogger(ctx).Debug("No evaluation result detected, defaulting to empty string.")
 		return ""
 	}
 }

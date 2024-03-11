@@ -97,7 +97,7 @@ func start(ctx context.Context, a any) {
 	if v, ok := a.(Parameters); ok {
 		params = v
 	} else {
-		log.CtxLogger(ctx).Info("Cannot collect Workload Manager metrics, no collection configuration detected")
+		log.CtxLogger(ctx).Error("Cannot collect Workload Manager metrics, no collection configuration detected")
 		return
 	}
 	log.CtxLogger(ctx).Infow("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
@@ -127,7 +127,9 @@ func start(ctx context.Context, a any) {
 		return
 	default:
 		collectWorkloadMetricsOnce(ctx, params)
-		collectDBMetricsOnce(ctx, params)
+		if err := collectDBMetricsOnce(ctx, params); err != nil {
+			log.CtxLogger(ctx).Warn(err)
+		}
 	}
 
 	for {
@@ -137,13 +139,15 @@ func start(ctx context.Context, a any) {
 			return
 		case cd := <-params.WorkloadConfigCh:
 			params.WorkloadConfig = cd.GetWorkloadValidation()
-			log.CtxLogger(ctx).Info("Received updated workload collection configuration", "version", params.WorkloadConfig.GetVersion())
+			log.CtxLogger(ctx).Infow("Received updated workload collection configuration", "version", params.WorkloadConfig.GetVersion())
 		case <-heartbeatTicker.C:
 			params.HeartbeatSpec.Beat()
 		case <-configurableMetricsTicker.C:
 			collectWorkloadMetricsOnce(ctx, params)
 		case <-databaseMetricTicker.C:
-			collectDBMetricsOnce(ctx, params)
+			if err := collectDBMetricsOnce(ctx, params); err != nil {
+				log.CtxLogger(ctx).Warn(err)
+			}
 		}
 	}
 }
@@ -178,11 +182,11 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 		return false
 	}
 	if params.OSType == "windows" {
-		log.CtxLogger(ctx).Info("Workload Manager metrics collection is not supported for windows platform.")
+		log.CtxLogger(ctx).Warn("Workload Manager metrics collection is not supported for windows platform")
 		return false
 	}
 	if params.WorkloadConfig == nil {
-		log.CtxLogger(ctx).Info("Cannot collect Workload Manager metrics, no collection configuration detected")
+		log.CtxLogger(ctx).Error("Cannot collect Workload Manager metrics, no collection configuration detected")
 		return false
 	}
 	dailyUsageRoutine = &recovery.RecoverableRoutine{
@@ -218,7 +222,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	log.CtxLogger(ctx).Info("Collecting Workload Manager metrics...")
 	if fileInfo, err := params.OSStatReader(metricOverride); fileInfo != nil && err == nil {
 		log.CtxLogger(ctx).Info("Using override metrics from yaml file")
-		return collectOverrideMetrics(params.Config, params.ConfigFileReader, metricOverride)
+		return collectOverrideMetrics(ctx, params.Config, params.ConfigFileReader, metricOverride)
 	}
 
 	// Read the latest instance info for this system.
@@ -323,10 +327,10 @@ metric: hana
 	metric_value: 0
 	disk_log_mount: /hana/log
 */
-func collectOverrideMetrics(config *cnfpb.Configuration, reader ConfigFileReader, metricOverride string) WorkloadMetrics {
+func collectOverrideMetrics(ctx context.Context, config *cnfpb.Configuration, reader ConfigFileReader, metricOverride string) WorkloadMetrics {
 	file, err := reader(metricOverride)
 	if err != nil {
-		log.Logger.Warnw("Could not read the metric override file", "error", err)
+		log.CtxLogger(ctx).Warnw("Could not read the metric override file", "error", err)
 		return WorkloadMetrics{}
 	}
 	defer file.Close()
@@ -335,7 +339,7 @@ func collectOverrideMetrics(config *cnfpb.Configuration, reader ConfigFileReader
 	scanner := bufio.NewScanner(file)
 	metricEmitter := metricEmitter{scanner, ""}
 	for {
-		metricName, metricValue, labels, last := metricEmitter.getMetric()
+		metricName, metricValue, labels, last := metricEmitter.getMetric(ctx)
 		if metricName != "" {
 			wm.Metrics = append(wm.Metrics, createTimeSeries(metricTypePrefix+metricName, labels, metricValue, config)...)
 		}
@@ -347,13 +351,13 @@ func collectOverrideMetrics(config *cnfpb.Configuration, reader ConfigFileReader
 }
 
 // Reads all metric labels for a type. Returns false if there is more content in the scanner, true otherwise.
-func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
+func (e *metricEmitter) getMetric(ctx context.Context) (string, float64, map[string]string, bool) {
 	metricName := e.tmpMetricName
 	metricValue := 0.0
 	labels := make(map[string]string)
 	var err error
 	for e.scanner.Scan() {
-		key, value, found := parseScannedText(e.scanner.Text())
+		key, value, found := parseScannedText(ctx, e.scanner.Text())
 		if !found {
 			continue
 		}
@@ -366,14 +370,14 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 			metricName = value
 		case "metric_value":
 			if metricValue, err = strconv.ParseFloat(value, 64); err != nil {
-				log.Logger.Warnw("Failed to parse float", "value", value, "error", err)
+				log.CtxLogger(ctx).Warnw("Failed to parse float", "value", value, "error", err)
 			}
 		default:
 			labels[key] = strings.TrimSpace(value)
 		}
 	}
 	if err = e.scanner.Err(); err != nil {
-		log.Logger.Warnw("Could not read from the override metrics file", "error", err)
+		log.CtxLogger(ctx).Warnw("Could not read from the override metrics file", "error", err)
 	}
 	return metricName, metricValue, labels, true
 }
@@ -381,14 +385,14 @@ func (e *metricEmitter) getMetric() (string, float64, map[string]string, bool) {
 // parseScannedText extracts a key and value pair from a scanned line of text.
 //
 // The expected format for the text string is: '<key>: <value>'.
-func parseScannedText(text string) (key, value string, found bool) {
+func parseScannedText(ctx context.Context, text string) (key, value string, found bool) {
 	// Ignore empty lines and comments.
 	if text == "" || strings.HasPrefix(text, "#") {
 		return "", "", false
 	}
 	key, value, found = strings.Cut(text, ":")
 	if !found {
-		log.Logger.Warnw("Could not parse key, value pair. Expected format: '<key>: <value>'", "text", text)
+		log.CtxLogger(ctx).Warnw("Could not parse key, value pair. Expected format: '<key>: <value>'", "text", text)
 	}
 	return strings.TrimSpace(key), strings.TrimSpace(value), found
 }
@@ -403,7 +407,7 @@ func parseScannedText(text string) (key, value string, found bool) {
 // overall success or failure of the function.
 func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 	if len(params.wm.Metrics) == 0 {
-		log.CtxLogger(ctx).Info("No Workload Manager metrics to send.")
+		log.CtxLogger(ctx).Info("No Workload Manager metrics to send")
 		return 0
 	}
 
@@ -417,11 +421,11 @@ func sendMetrics(ctx context.Context, params sendMetricsParams) int {
 			TimeSeries: params.wm.Metrics,
 		}
 		if err := cloudmonitoring.CreateTimeSeriesWithRetry(ctx, params.timeSeriesCreator, &request, params.backOffIntervals); err != nil {
-			log.CtxLogger(ctx).Warnw("Failed to send metrics to Cloud Monitoring", "error", err)
+			log.CtxLogger(ctx).Errorw("Failed to send metrics to Cloud Monitoring", "error", err)
 			usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
 			sentMetrics = 0
 		} else {
-			log.CtxLogger(ctx).Infow("Sent metrics to Cloud Monitoring.", "number", len(params.wm.Metrics))
+			log.CtxLogger(ctx).Infow("Sent metrics to Cloud Monitoring", "number", len(params.wm.Metrics))
 		}
 
 		sendMetricsToDataWarehouseSecondary(ctx, params)
@@ -445,11 +449,11 @@ func sendMetricsToDataWarehouse(ctx context.Context, params sendMetricsParams) i
 	location = strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 	req := createWriteInsightRequest(params.wm, params.cp)
 	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
-		log.CtxLogger(ctx).Warnw("Failed to send metrics to Data Warehouse", "error", err)
+		log.CtxLogger(ctx).Errorw("Failed to send metrics to Data Warehouse", "error", err)
 		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
 		sentMetrics = 0
 	} else {
-		log.CtxLogger(ctx).Infow("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
+		log.CtxLogger(ctx).Infow("Sent metrics to Data Warehouse", "number", len(params.wm.Metrics))
 	}
 	return sentMetrics
 }
@@ -472,7 +476,7 @@ func sendMetricsToDataWarehouseSecondary(ctx context.Context, params sendMetrics
 		log.CtxLogger(ctx).Debugw("Failed to send metrics to Data Warehouse", "error", err)
 		sentMetrics = 0
 	} else {
-		log.CtxLogger(ctx).Debugw("Sent metrics to Data Warehouse.", "number", len(params.wm.Metrics))
+		log.CtxLogger(ctx).Debugw("Sent metrics to Data Warehouse", "number", len(params.wm.Metrics))
 	}
 	return sentMetrics
 }

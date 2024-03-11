@@ -69,7 +69,7 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 	rc := params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection()
 	// make sure collection via gcloud or ssh is defined
 	if rc.GetRemoteCollectionSsh() == nil && rc.GetRemoteCollectionGcloud() == nil {
-		log.CtxLogger(ctx).Error("remote_collection_gcloud and remote_collection_ssh are undefined for remote collection, one of them must be defined")
+		log.CtxLogger(ctx).Error("One of remote_collection_gcloud or remote_collection_ssh must be defined for remote collection")
 		return 0
 	}
 
@@ -229,8 +229,7 @@ func collectRemoteGcloud(ctx context.Context, a any) {
 	var opts collectOptions
 	var ok bool
 	if opts, ok = a.(collectOptions); !ok {
-		logger := log.CtxLogger(ctx)
-		logger.Infow("args is not of type collectOptions; wlm collection will not be done", "typeOfArgs", fmt.Sprintf("%T", a))
+		log.CtxLogger(ctx).Errorw("Cannot collect remote metrics using gcloud", "reason", fmt.Sprintf("args of type %T does not match collectOptions", a))
 		return
 	}
 
@@ -346,8 +345,7 @@ func collectRemoteSSH(ctx context.Context, a any) {
 	var opts collectOptions
 	var ok bool
 	if opts, ok = a.(collectOptions); !ok {
-		logger := log.CtxLogger(ctx)
-		logger.Infow("args is not of type collectOptions; wlm collection will not be done", "typeOfArgs", fmt.Sprintf("%T", a))
+		log.CtxLogger(ctx).Errorw("Cannot collect remote metrics using ssh", "reason", fmt.Sprintf("args of type %T does not match collectOptions", a))
 		return
 	}
 

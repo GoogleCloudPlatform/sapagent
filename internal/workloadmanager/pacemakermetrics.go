@@ -29,7 +29,7 @@ const sapValidationPacemaker = "workload.googleapis.com/sap/validation/pacemaker
 // by the WorkloadValidation config and formats the results as a time series to
 // be uploaded to a Collection Storage mechanism.
 func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.CtxLogger(ctx).Infow("Collecting Workload Manager Pacemaker metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
+	log.CtxLogger(ctx).Debugw("Collecting Workload Manager Pacemaker metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
 	pacemakerParams := pacemaker.Parameters{
 		Config:                params.Config,
 		WorkloadConfig:        params.WorkloadConfig,

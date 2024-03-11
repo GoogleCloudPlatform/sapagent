@@ -71,7 +71,7 @@ type (
 // OSVendorID and osVersion.
 func setOSReleaseInfo(ctx context.Context, configFileReader ConfigFileReader, osReleaseFilePath string) (string, error) {
 	if configFileReader == nil || osReleaseFilePath == "" {
-		log.CtxLogger(ctx).Debug("A ConfigFileReader and OSReleaseFilePath must be set.")
+		log.CtxLogger(ctx).Error("A ConfigFileReader and OSReleaseFilePath must be set")
 		return "", nil
 	}
 

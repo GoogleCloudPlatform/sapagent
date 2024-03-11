@@ -42,12 +42,12 @@ type InterfaceAddrsGetter func() ([]net.Addr, error)
 // WorkloadValidation config and formats the results as a time series to be
 // uploaded to a Collection Storage mechanism.
 func CollectSystemMetricsFromConfig(ctx context.Context, params Parameters) WorkloadMetrics {
-	log.CtxLogger(ctx).Infow("Collecting Workload Manager System metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
+	log.CtxLogger(ctx).Debugw("Collecting Workload Manager System metrics...", "definitionVersion", params.WorkloadConfig.GetVersion())
 	l := make(map[string]string)
 
 	system := params.WorkloadConfig.GetValidationSystem()
 	for _, m := range system.GetSystemMetrics() {
-		v := collectSystemVariable(m, params)
+		v := collectSystemVariable(ctx, m, params)
 		l[m.GetMetricInfo().GetLabel()] = v
 	}
 	for _, m := range system.GetOsCommandMetrics() {
@@ -61,7 +61,7 @@ func CollectSystemMetricsFromConfig(ctx context.Context, params Parameters) Work
 }
 
 // collectSystemVariable collects and returns the metric value for a given system metric variable.
-func collectSystemVariable(m *wlmpb.SystemMetric, params Parameters) string {
+func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Parameters) string {
 	v := m.GetValue()
 	switch v {
 	case wlmpb.SystemVariable_INSTANCE_NAME:
@@ -73,20 +73,20 @@ func collectSystemVariable(m *wlmpb.SystemMetric, params Parameters) string {
 	case wlmpb.SystemVariable_AGENT_VERSION:
 		return params.Config.GetAgentProperties().GetVersion()
 	case wlmpb.SystemVariable_NETWORK_IPS:
-		return networkIPAddrs(params)
+		return networkIPAddrs(ctx, params)
 	case wlmpb.SystemVariable_COLLECTION_CONFIG_VERSION:
 		return fmt.Sprint(params.WorkloadConfig.GetVersion())
 	default:
-		log.Logger.Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
+		log.CtxLogger(ctx).Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
 		return ""
 	}
 }
 
 // networkIPAddrs parses the network interface addresses from the system.
-func networkIPAddrs(params Parameters) string {
+func networkIPAddrs(ctx context.Context, params Parameters) string {
 	addrs, err := params.InterfaceAddrsGetter()
 	if err != nil {
-		log.Logger.Warnw("Could not get network interface addresses", "error", err)
+		log.CtxLogger(ctx).Debugw("Could not get network interface addresses", "error", err)
 		return ""
 	}
 	v := []string{}

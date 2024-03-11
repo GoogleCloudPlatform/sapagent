@@ -262,7 +262,7 @@ func TestOverrideMetrics(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		got := collectOverrideMetrics(&cfgpb.Configuration{}, test.reader, test.file)
+		got := collectOverrideMetrics(context.Background(), &cfgpb.Configuration{}, test.reader, test.file)
 
 		if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 			t.Errorf("collectOverrideMetrics returned unexpected metrics diff (-want +got):\n%s", diff)

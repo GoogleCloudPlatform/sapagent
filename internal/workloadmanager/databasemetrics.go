@@ -30,21 +30,19 @@ const sapValidationHANASecurity = "workload.googleapis.com/sap/validation/hanase
 // collectDBMetricsOnce  returns the result of metric collection using the HANA Insights module.
 func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	if params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig() == nil {
-		log.CtxLogger(ctx).Debug("Cannot collect database metrics without DB credentials.")
 		return fmt.Errorf("Cannot collect database metrics without DB credentials")
 	}
 
 	if len(params.hanaInsightRules) == 0 {
-		log.CtxLogger(ctx).Debug("HANA Insights rules not found")
 		return fmt.Errorf("HANA Insights rules not found")
 	}
 
 	if fileInfo, err := params.OSStatReader(metricOverridePath); fileInfo != nil && err == nil {
-		log.CtxLogger(ctx).Info("Using override metrics from yaml file, nothing to be done.")
+		log.CtxLogger(ctx).Debug("Using override metrics from yaml file, nothing to be done")
 		return nil
 	}
 
-	log.CtxLogger(ctx).Info("Collecting Workload Manager Database metrics...")
+	log.CtxLogger(ctx).Debug("Collecting Workload Manager Database metrics...")
 	dpb := databaseconnector.Params{
 		Username:       params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbUser(),
 		Password:       params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPassword(),
@@ -56,13 +54,11 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	}
 	db, err := databaseconnector.Connect(ctx, dpb)
 	if err != nil {
-		log.CtxLogger(ctx).Error(err)
 		return err
 	}
 
 	insights, err := ruleengine.Run(ctx, db, params.hanaInsightRules)
 	if err != nil {
-		log.CtxLogger(ctx).Error(err)
 		return err
 	}
 	metrics := processInsights(ctx, params, insights)
