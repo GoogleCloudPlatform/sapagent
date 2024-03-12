@@ -53,6 +53,7 @@ message BackintConfiguration {
   string folder_prefix = 29;
   string recovery_folder_prefix = 30;
   bool xml_multipart_upload = 31;
+  StorageClass storage_class = 32;
 }
 
 enum LogLevel {
@@ -70,4 +71,12 @@ enum Function {
   INQUIRE = 3;
   DELETE = 4;
   DIAGNOSE = 5;
+}
+
+enum StorageClass {
+  STORAGE_CLASS_UNSPECIFIED = 0;
+  STANDARD = 1;
+  NEARLINE = 2;
+  COLDLINE = 3;
+  ARCHIVE = 4;
 }

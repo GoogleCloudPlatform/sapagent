@@ -62,6 +62,7 @@ var (
 		BucketName:             defaultBucketName,
 		ObjectName:             defaultObjectName,
 		Metadata:               map[string]string{"X-Backup-Type": "FILE"},
+		StorageClass:           "STANDARD",
 		ChunkSizeMb:            DefaultChunkSizeMb,
 		XMLMultipartUpload:     true,
 		XMLMultipartWorkers:    16,

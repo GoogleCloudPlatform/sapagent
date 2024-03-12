@@ -83,6 +83,7 @@ type MultipartWriter struct {
 	objectName    string
 	fileType      string
 	baseURL       string
+	storageClass  string
 	uploadID      string
 	partSizeBytes int64
 	partNum       int64
@@ -126,6 +127,7 @@ func (rw *ReadWriter) NewMultipartWriter(ctx context.Context, newClient HTTPClie
 		token:                  token,
 		httpClient:             newClient(10*time.Minute, defaultTransport()),
 		baseURL:                baseURL,
+		storageClass:           rw.StorageClass,
 		partSizeBytes:          rw.ChunkSizeMb * 1024 * 1024,
 		partNum:                1,
 		maxRetries:             rw.MaxRetries,
@@ -204,6 +206,9 @@ func (w *MultipartWriter) initMultipartUpload() (string, error) {
 	req.Header.Add("Content-Length", "0")
 	req.Header.Add("Date", time.Now().Format(http.TimeFormat))
 	req.Header.Add("Content-Type", "application/octet-stream")
+	if w.storageClass != "" {
+		req.Header.Add("x-goog-storage-class", w.storageClass)
+	}
 	w.token.SetAuthHeader(req)
 
 	resp, err := w.httpClient.Do(req)

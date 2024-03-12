@@ -114,6 +114,9 @@ type ReadWriter struct {
 	// the object's size in the bucket. Read access on the bucket is required.
 	VerifyUpload bool
 
+	// StorageClass sets the storage class for uploads, default is "STANDARD".
+	StorageClass string
+
 	// DumpData discards bytes during upload rather than write to the bucket.
 	DumpData bool
 
@@ -258,6 +261,9 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		objectWriter.Metadata = rw.Metadata
 		if rw.Compress {
 			objectWriter.ObjectAttrs.ContentType = compressedContentType
+		}
+		if rw.StorageClass != "" {
+			objectWriter.ObjectAttrs.StorageClass = rw.StorageClass
 		}
 		// Set an individual chunk retry deadline to 10 minutes.
 		// Note, even with custom retries declared this value must also be set.

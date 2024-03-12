@@ -157,7 +157,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 func backupFile(ctx context.Context, p parameters) string {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
 	object := p.config.GetFolderPrefix() + p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + p.extension
-	log.CtxLogger(ctx).Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType)
+	log.CtxLogger(ctx).Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType, "storageClass", p.config.GetStorageClass().String())
 	if p.reader == nil {
 		f, err := parse.OpenFileWithRetries(fileNameTrim, os.O_RDONLY, 0, p.config.GetFileReadTimeoutMs())
 		if err != nil {
@@ -186,6 +186,7 @@ func backupFile(ctx context.Context, p parameters) string {
 		TotalBytes:     p.fileSize,
 		LogDelay:       time.Duration(p.config.GetLogDelaySec()) * time.Second,
 		Compress:       p.config.GetCompress(),
+		StorageClass:   p.config.GetStorageClass().String(),
 		DumpData:       p.config.GetDumpData(),
 		RateLimitBytes: p.config.GetRateLimitMb() * 1024 * 1024,
 		EncryptionKey:  p.config.GetEncryptionKey(),

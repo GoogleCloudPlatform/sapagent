@@ -291,6 +291,7 @@ func TestUpload(t *testing.T) {
 				Reader:       defaultBuffer(),
 				LogDelay:     time.Nanosecond,
 				ObjectName:   "object.txt",
+				StorageClass: "STANDARD",
 			},
 			want:      int64(defaultBuffer().Len()),
 			wantError: nil,

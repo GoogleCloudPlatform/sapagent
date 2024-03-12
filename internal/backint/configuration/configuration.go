@@ -233,6 +233,10 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 		}
 		log.Logger.Warnf("folder_prefix is set. All objects in the GCS bucket will be prefixed with '%s'", p.Config.GetFolderPrefix())
 	}
+	if p.Config.GetStorageClass() == bpb.StorageClass_STORAGE_CLASS_UNSPECIFIED {
+		log.Logger.Warn("storage_class defaulted to STANDARD")
+		p.Config.StorageClass = bpb.StorageClass_STANDARD
+	}
 }
 
 // Unmarshal reads the content into a BackintConfiguration proto.
