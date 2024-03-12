@@ -17,18 +17,21 @@ limitations under the License.
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 const (
@@ -77,13 +80,12 @@ type MultipartWriter struct {
 	token      *oauth2.Token
 	httpClient httpClient
 
-	objectName        string
-	fileType          string
-	baseURL           string
-	uploadID          string
-	partSizeBytes     int64
-	writtenTotalBytes int64
-	partNum           int64
+	objectName    string
+	fileType      string
+	baseURL       string
+	uploadID      string
+	partSizeBytes int64
+	partNum       int64
 
 	uploadErr              error
 	maxRetries             int64
@@ -152,13 +154,43 @@ func (rw *ReadWriter) NewMultipartWriter(ctx context.Context, newClient HTTPClie
 
 // Write buffers a full part then asynchronously sends the data.
 func (w *MultipartWriter) Write(p []byte) (int, error) {
-	// TODO: Fill in this function
-	return len(p), nil
+	bytesWritten := 0
+	for bytesWritten < len(p) {
+		if w.currentWorker == nil {
+			w.currentWorker = <-w.idleWorkers
+		}
+		if w.uploadErr != nil {
+			w.abortMultipartUpload()
+			return 0, w.uploadErr
+		}
+		n := copy(w.currentWorker.buffer[w.currentWorker.offset:], p[bytesWritten:])
+		bytesWritten += n
+		w.currentWorker.offset += int64(n)
+		if w.currentWorker.offset >= w.partSizeBytes {
+			go w.currentWorker.uploadPartAsync(w.partNum)
+			w.partNum++
+			w.currentWorker = nil
+		}
+	}
+	return bytesWritten, nil
 }
 
 // Close waits for all transfers to complete then generates the final object.
 func (w *MultipartWriter) Close() error {
-	// TODO: Fill in this function
+	if w.currentWorker != nil {
+		go w.currentWorker.uploadPartAsync(w.partNum)
+	}
+	for i := 0; i < len(w.workers); i++ {
+		<-w.idleWorkers
+	}
+	if w.uploadErr != nil {
+		w.abortMultipartUpload()
+		return w.uploadErr
+	}
+	if err := w.completeMultipartUpload(); err != nil {
+		w.abortMultipartUpload()
+		return err
+	}
 	return nil
 }
 
@@ -191,9 +223,91 @@ func (w *MultipartWriter) initMultipartUpload() (string, error) {
 	return parsedResult.UploadID, nil
 }
 
+// abortMultipartUpload aborts the upload to free resources from the bucket.
+func (w *MultipartWriter) abortMultipartUpload() error {
+	log.Logger.Infow("Aborting multipart upload", "object", w.objectName, "uploadID", w.uploadID)
+	abortURL := fmt.Sprintf("%s?uploadId=%s", w.baseURL, w.uploadID)
+	req, err := http.NewRequest("DELETE", abortURL, nil)
+	if err != nil {
+		log.Logger.Errorw("Failed to create request for abort", "object", w.objectName, "uploadID", w.uploadID, "err", err)
+		return err
+	}
+	req.Header.Add("Content-Length", "0")
+	req.Header.Add("Date", time.Now().Format(http.TimeFormat))
+	w.token.SetAuthHeader(req)
+	resp, err := w.httpClient.Do(req)
+	defer googleapi.CloseBody(resp)
+	if err != nil || checkResponse(resp) != nil {
+		log.Logger.Errorw("Failed to abort multipart upload.", "object", w.objectName, "uploadID", w.uploadID, "err", err, "resp", resp)
+		return err
+	}
+	log.Logger.Infow("Successfully aborted multipart upload.", "object", w.objectName, "uploadID", w.uploadID)
+	return nil
+}
+
+// completeMultipartUpload sends the final POST request to complete the
+// multipart upload, then writes final metadata to the object in the bucket.
+func (w *MultipartWriter) completeMultipartUpload() error {
+	bodyXML, err := completeMultipartUploadXML(w.parts)
+	if err != nil {
+		return fmt.Errorf("failed to build complete multipart upload XML for %v, err: %w", w.objectName, err)
+	}
+	completeURL := fmt.Sprintf("%s?uploadId=%s", w.baseURL, w.uploadID)
+
+	req, err := http.NewRequest("POST", completeURL, strings.NewReader(bodyXML))
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Content-Length", fmt.Sprintf("%v", len(bodyXML)))
+	req.Header.Add("Date", time.Now().Format(http.TimeFormat))
+	req.Header.Add("Content-Type", "application/xml")
+	w.token.SetAuthHeader(req)
+	resp, err := w.httpClient.Do(req)
+	defer googleapi.CloseBody(resp)
+	if err != nil {
+		return err
+	}
+	if err := checkResponse(resp); err != nil {
+		return err
+	}
+
+	// XML headers will force this key to be lowercase, set it after the upload.
+	update := storage.ObjectAttrsToUpdate{Metadata: map[string]string{"X-Backup-Type": w.fileType}}
+	if _, err := w.bucket.Object(w.objectName).Update(req.Context(), update); err != nil {
+		return err
+	}
+	return nil
+}
+
+// completeMultipartUploadXML creates the XML for the final POST request.
+// All parts and their ETag data must be included.
+func completeMultipartUploadXML(parts map[int64]objectPart) (string, error) {
+	upload := struct {
+		XMLName xml.Name     `xml:"CompleteMultipartUpload"`
+		Parts   []objectPart `xml:"Part"`
+	}{}
+	// Order parts in the XML request.
+	upload.Parts = make([]objectPart, 0, len(parts))
+	for partNum := int64(1); partNum <= int64(len(parts)); partNum++ {
+		part, ok := parts[partNum]
+		if !ok {
+			return "", fmt.Errorf("part %v not contained in parts", partNum)
+		}
+		upload.Parts = append(upload.Parts, part)
+	}
+
+	xmlStr := strings.Builder{}
+	encoder := xml.NewEncoder(&xmlStr)
+	encoder.Indent("", "  ")
+	if err := encoder.Encode(upload); err != nil {
+		return "", err
+	}
+	return xmlStr.String(), nil
+}
+
 // checkResponse verifies the response of http commands, returning any errors.
 func checkResponse(resp *http.Response) error {
-	if resp.StatusCode == http.StatusOK {
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
 		return nil
 	}
 
@@ -230,4 +344,58 @@ func token(ctx context.Context, serviceAccount string, tokenGetter DefaultTokenG
 		return nil, err
 	}
 	return tokenSource.Token()
+}
+
+// uploadPartAsync continues upload attempts until a success,
+// or the upload fails too many times.
+func (uw *uploadWorker) uploadPartAsync(partNum int64) {
+	backoff := backoff(uw.w.retryBackoffInitial, uw.w.retryBackoffMax, uw.w.retryBackoffMultiplier)
+	for {
+		if err := uw.uploadPart(partNum); err != nil {
+			uw.numRetries++
+			if uw.numRetries > uw.w.maxRetries {
+				log.Logger.Errorw("Max retries exceeded, cancelling operation.", "partNum", partNum, "numRetries", uw.numRetries, "maxRetries", uw.w.maxRetries, "objectName", uw.w.objectName, "error", err)
+				uw.w.uploadErr = fmt.Errorf("failed to upload part %v too many times, err: %w", partNum, err)
+				uw.w.idleWorkers <- uw
+				return
+			}
+			log.Logger.Infow("Failed to upload data to Google Cloud Storage, retrying.", "partNum", partNum, "numRetries", uw.numRetries, "maxRetries", uw.w.maxRetries, "objectName", uw.w.objectName, "error", err)
+			time.Sleep(backoff.Pause())
+			continue
+		}
+		uw.offset = 0
+		uw.numRetries = 0
+		uw.w.idleWorkers <- uw
+		return
+	}
+}
+
+// uploadPart uploads a part to the ongoing multipart upload.
+func (uw *uploadWorker) uploadPart(partNum int64) error {
+	data := uw.buffer[:uw.offset]
+	url := fmt.Sprintf("%s?uploadId=%s&partNumber=%v", uw.w.baseURL, uw.w.uploadID, partNum)
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Content-Length", fmt.Sprintf("%d", len(data)))
+	req.Header.Add("Date", time.Now().Format(http.TimeFormat))
+	uw.w.token.SetAuthHeader(req)
+	resp, err := uw.httpClient.Do(req)
+	defer googleapi.CloseBody(resp)
+	if err != nil {
+		return err
+	}
+	if err := checkResponse(resp); err != nil {
+		return err
+	}
+
+	etag := resp.Header.Get("ETag")
+	if etag == "" {
+		respStr := &strings.Builder{}
+		resp.Write(respStr)
+		return fmt.Errorf("uploadPart did not return in the expected format. Unable to get the ETag for part %v. Resp: %v", partNum, respStr.String())
+	}
+	uw.w.parts[partNum] = objectPart{PartNumber: partNum, ETag: etag}
+	return nil
 }

@@ -259,6 +259,18 @@ func TestUpload(t *testing.T) {
 			wantError: cmpopts.AnyError,
 		},
 		{
+			name: "XMLMultipartWriteFail",
+			rw: &ReadWriter{
+				BucketHandle: defaultBucketHandle,
+				Reader:       defaultBuffer(),
+				Copier: func(dst io.Writer, src io.Reader) (written int64, err error) {
+					return 0, errors.New("write error")
+				},
+				XMLMultipartUpload: true,
+			},
+			wantError: cmpopts.AnyError,
+		},
+		{
 			name: "FailBothEncryptionAndKMSDefined",
 			rw: &ReadWriter{
 				BucketHandle:  defaultBucketHandle,

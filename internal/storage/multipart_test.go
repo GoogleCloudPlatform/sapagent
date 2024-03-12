@@ -55,6 +55,7 @@ var (
 	defaultTokenGetter = func(context.Context, ...string) (oauth2.TokenSource, error) {
 		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "fake-token"}), nil
 	}
+	defaultToken = &oauth2.Token{AccessToken: "fake-token"}
 
 	defaultReadWriter = ReadWriter{
 		BucketHandle:           defaultBucketHandle,
@@ -68,6 +69,36 @@ var (
 		RetryBackoffInitial:    time.Millisecond,
 		RetryBackoffMax:        time.Millisecond,
 		RetryBackoffMultiplier: 2,
+	}
+
+	defaultMultipartWriter = func(newClient HTTPClient, partNum int64) *MultipartWriter {
+		w := &MultipartWriter{
+			bucket:                 defaultBucketHandle,
+			objectName:             defaultObjectName,
+			fileType:               "FILE",
+			token:                  defaultToken,
+			httpClient:             newClient(time.Millisecond, defaultTransport()),
+			baseURL:                fmt.Sprintf("https://%s.%s/%s", defaultBucketName, defaultClientEndpoint, defaultObjectName),
+			partSizeBytes:          DefaultChunkSizeMb,
+			partNum:                partNum,
+			maxRetries:             3,
+			retryBackoffInitial:    time.Millisecond,
+			retryBackoffMax:        time.Millisecond,
+			retryBackoffMultiplier: 2,
+			parts:                  make(map[int64]objectPart),
+			workers:                make([]*uploadWorker, 4),
+			idleWorkers:            make(chan *uploadWorker, 4),
+			uploadID:               fakeUploadID,
+		}
+		for i := 0; i < len(w.workers); i++ {
+			w.workers[i] = &uploadWorker{
+				w:          w,
+				httpClient: newClient(time.Millisecond, defaultTransport()),
+				buffer:     make([]byte, w.partSizeBytes),
+			}
+			w.idleWorkers <- w.workers[i]
+		}
+		return w
 	}
 
 	httpClientError = func(timeout time.Duration, trans *http.Transport) httpClient {
@@ -91,10 +122,37 @@ var (
 	httpClientSuccess = func(timeout time.Duration, trans *http.Transport) httpClient {
 		return &mockHTTPClient{
 			do: func(r *http.Request) (*http.Response, error) {
+				if r.URL.String() == initMultipartUploadURL {
+					return &http.Response{
+						Status:     "OK",
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader(xmlResponseBodyTemplate)),
+					}, nil
+				}
+
+				if r.URL.String() == completeMultipartUploadURL {
+					return &http.Response{
+						Status:     "OK",
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader(xmlResponseBodyTemplate)),
+					}, nil
+				}
+
+				partNumberStr := partNumberExtracter.FindStringSubmatch(r.URL.String())[1]
 				return &http.Response{
 					Status:     "OK",
 					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(xmlResponseBodyTemplate)),
+					Header:     http.Header{"Etag": []string{partNumberStr}},
+				}, nil
+			},
+		}
+	}
+	httpClientEmptyResponse = func(timeout time.Duration, trans *http.Transport) httpClient {
+		return &mockHTTPClient{
+			do: func(r *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "OK",
+					StatusCode: http.StatusOK,
 				}, nil
 			},
 		}
@@ -204,6 +262,122 @@ func TestNewMultipartWriter(t *testing.T) {
 			}
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("NewMultipartWriter() = %v, want %v", gotErr, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestWrite(t *testing.T) {
+	tests := []struct {
+		name          string
+		w             *MultipartWriter
+		p             []byte
+		wantBytes     int
+		wantUploadErr error
+	}{
+		{
+			name:      "WriteLessThanPartSizeSuccess",
+			w:         defaultMultipartWriter(httpClientSuccess, 1),
+			p:         []byte("123456789"),
+			wantBytes: 9,
+		},
+		{
+			name:      "WriteMoreThanPartSizeSuccess",
+			w:         defaultMultipartWriter(httpClientSuccess, 1),
+			p:         []byte("123456789123456789"),
+			wantBytes: 18,
+		},
+		{
+			name:          "WriteFailureRequestError",
+			w:             defaultMultipartWriter(httpClientError, 1),
+			p:             []byte("123456789123456789"),
+			wantBytes:     18,
+			wantUploadErr: cmpopts.AnyError,
+		},
+		{
+			name:          "WriteFailureBadResponse",
+			w:             defaultMultipartWriter(httpClientServerError, 1),
+			p:             []byte("123456789123456789"),
+			wantBytes:     18,
+			wantUploadErr: cmpopts.AnyError,
+		},
+		{
+			name:          "WriteFailureNoETag",
+			w:             defaultMultipartWriter(httpClientEmptyResponse, 1),
+			p:             []byte("123456789123456789"),
+			wantBytes:     18,
+			wantUploadErr: cmpopts.AnyError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotBytes, gotErr := test.w.Write(test.p)
+			// Wait for all workers to finish.
+			if test.w.currentWorker != nil {
+				go test.w.currentWorker.uploadPartAsync(test.w.partNum)
+			}
+			for i := 0; i < len(test.w.workers); i++ {
+				<-test.w.idleWorkers
+			}
+
+			if gotBytes != test.wantBytes {
+				t.Errorf("Write() = %v, want %v", gotBytes, test.wantBytes)
+			}
+			if gotErr != nil {
+				t.Errorf("Write() = %v, want <nil>", gotErr)
+			}
+			if !cmp.Equal(test.w.uploadErr, test.wantUploadErr, cmpopts.EquateErrors()) {
+				t.Errorf("Write() uploadErr = %v, want %v", test.w.uploadErr, test.wantUploadErr)
+			}
+		})
+	}
+}
+
+func TestClose(t *testing.T) {
+	tests := []struct {
+		name    string
+		w       *MultipartWriter
+		p       []byte
+		wantErr error
+	}{
+		{
+			name: "EmptyDataSuccess",
+			w:    defaultMultipartWriter(httpClientSuccess, 1),
+		},
+		{
+			name:    "CloseRequestError",
+			w:       defaultMultipartWriter(httpClientError, 1),
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "CloseRequestBadResponse",
+			w:       defaultMultipartWriter(httpClientServerError, 1),
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "ErrorOnLastWrite",
+			w:       defaultMultipartWriter(httpClientServerError, 1),
+			p:       []byte("12345"),
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "PartNumFailure",
+			w:       defaultMultipartWriter(httpClientSuccess, 2),
+			p:       []byte("12345"),
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "WriteAndCloseSuccess",
+			w:    defaultMultipartWriter(httpClientSuccess, 1),
+			p:    []byte("12345"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.w.Write(test.p)
+			gotErr := test.w.Close()
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Close() = %v, want %v", gotErr, test.wantErr)
 			}
 		})
 	}
