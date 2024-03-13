@@ -19,6 +19,7 @@ package usagemetrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -186,12 +187,18 @@ func (l *Logger) Action(id int) {
 	l.LogStatus(StatusAction, fmt.Sprintf("%d", id))
 }
 
-func (l *Logger) log(s string) {
+func (l *Logger) log(s string) error {
 	log.Logger.Debugw("logging status", "status", s)
+	if l.cloudProps == nil || l.cloudProps.Zone == "" {
+		log.Logger.Warnw("Unable to send agent status without properly set zone in cloud properties", "l.cloudProps", l.cloudProps)
+		return errors.New("unable to send agent status without properly set zone in cloud properties")
+	}
 	err := l.requestComputeAPIWithUserAgent(buildComputeURL(l.cloudProps), buildUserAgent(l.agentProps, l.image, s))
 	if err != nil {
-		log.Logger.Warnw("Failed to send agent status", "error", err)
+		log.Logger.Warnw("failed to send agent status", "error", err)
+		return err
 	}
+	return nil
 }
 
 // LogStatus logs the agent status if usage metrics logging is enabled.

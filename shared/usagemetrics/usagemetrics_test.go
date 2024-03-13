@@ -17,6 +17,7 @@ limitations under the License.
 package usagemetrics
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -46,6 +47,12 @@ var (
 		ProjectNumber: testProjectNumber,
 		ProjectID:     "test-project",
 		Zone:          "test-zone",
+		InstanceName:  "test-instance",
+		Image:         fmt.Sprintf("projects/rhel-cloud/global/images/%s", testImage),
+	}
+	zonelessCloudProps = &CloudProperties{
+		ProjectNumber: testProjectNumber,
+		ProjectID:     "test-project",
 		InstanceName:  "test-instance",
 		Image:         fmt.Sprintf("projects/rhel-cloud/global/images/%s", testImage),
 	}
@@ -79,6 +86,47 @@ func TestLogger_DailyLogRunningStarted(t *testing.T) {
 	logger.DailyLogRunningStarted()
 	if logger.dailyLogRunningStarted != true {
 		t.Errorf("Logger.dailyLogRunningStarted = %v, want %v", logger.dailyLogRunningStarted, true)
+	}
+}
+
+func TestLogger_Log(t *testing.T) {
+	tests := []struct {
+		name       string
+		agentProps *AgentProperties
+		want       error
+	}{
+		{
+			name:       "noCloudProps",
+			agentProps: defaultAgentProps,
+			want:       errors.New("unable to send agent status without properly set zone in cloud properties"),
+		},
+		{
+			name:       "noCloudPropZone",
+			agentProps: defaultAgentProps,
+			want:       errors.New("unable to send agent status without properly set zone in cloud properties"),
+		},
+		{
+			name:       "success",
+			agentProps: defaultAgentProps,
+			want:       nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			logger := NewLogger(defaultAgentProps, defaultCloudProps, clockwork.NewRealClock(), nil)
+			if test.name == "noCloudProps" {
+				logger = NewLogger(defaultAgentProps, nil, clockwork.NewRealClock(), nil)
+			}
+			if test.name == "noCloudPropZone" {
+				logger = NewLogger(defaultAgentProps, zonelessCloudProps, clockwork.NewRealClock(), nil)
+			}
+			logger.isTestProject = true
+			logger.log(test.name)
+			if got := logger.log(test.name); fmt.Sprint(got) != fmt.Sprint(test.want) {
+				t.Errorf("Logger.log() expected error mismatch. got: %v want: %v", got, test.want)
+			}
+		})
 	}
 }
 
