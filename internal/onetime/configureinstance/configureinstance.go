@@ -72,9 +72,9 @@ func (*ConfigureInstance) Usage() string {
     -check	Check settings and print errors, but do not apply any changes
     -apply	Make changes as necessary to the settings
 
-  Args:
-    -overrideType="type"	Bypass the metadata machine type lookup
-    -overrideOLAP=true		If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'
+  Args (optional):
+    [-overrideType="type"]	Override the machine type (by default this is retrieved from metadata)
+    [-overrideOLAP=true]	If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'
 
   Global options:
     [-h] [-v]` + "\n"

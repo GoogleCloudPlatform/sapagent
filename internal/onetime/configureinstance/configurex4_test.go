@@ -19,7 +19,6 @@ package configureinstance
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -46,8 +45,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateSystemConf",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", string(googleX4Conf), ""}),
-				execute:   defaultExecute([]int{0, 0, 0}, []string{"", "", ""}),
+				readFile:  defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", ""}),
 				writeFile: defaultWriteFile(1),
 				apply:     true,
 			},
@@ -57,8 +55,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateLoginConf",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", string(googleX4Conf), "", ""}),
-				execute:   defaultExecute([]int{0, 0, 0}, []string{"", "", ""}),
+				readFile:  defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", ""}),
 				writeFile: defaultWriteFile(2),
 				apply:     true,
 			},
@@ -68,8 +65,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateModprobe",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", string(googleX4Conf), "", "", ""}),
-				execute:   defaultExecute([]int{0, 0, 0}, []string{"", "", ""}),
+				readFile:  defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
 				writeFile: defaultWriteFile(3),
 				apply:     true,
 			},
@@ -79,8 +75,8 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRunDracut",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", ""}),
-				execute:   defaultExecute([]int{0, 0, 0, 0, 0, 0, 1}, []string{"", "", "", "", "", "", ""}),
+				readFile:  defaultReadFile([]error{nil, nil, nil, nil}, []string{"Name=RHEL", "", "", ""}),
+				execute:   defaultExecute([]int{1}, []string{""}),
 				writeFile: defaultWriteFile(4),
 				apply:     true,
 			},
@@ -90,8 +86,8 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateGrub",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				execute:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", ""}),
+				readFile:    defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
+				execute:     defaultExecute([]int{0}, []string{""}),
 				writeFile:   defaultWriteFile(5),
 				apply:       true,
 				machineType: "x4-megamem-1920",
@@ -102,8 +98,8 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailGrub2Mkconfig",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				execute:   defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 1}, []string{"", "", "", "", "", "", "", ""}),
+				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				execute:   defaultExecute([]int{0, 1}, []string{"", ""}),
 				writeFile: defaultWriteFile(5),
 				apply:     true,
 			},
@@ -111,25 +107,14 @@ func TestConfigureX4(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "SuccessWithUpdates",
+			name: "Success",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				execute:   defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				execute:   defaultExecute([]int{0, 0}, []string{"", ""}),
 				writeFile: defaultWriteFile(5),
 				check:     true,
 			},
 			want:    true,
-			wantErr: nil,
-		},
-		{
-			name: "SuccessNoUpdates",
-			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), strings.Join(systemConf, "\n"), strings.Join(logindConf, "\n"), string(modprobeConf), strings.Join([]string{grubLinuxDefault, grubLinuxLabel, grubDevice}, "\n")}),
-				execute:   defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "enabled Solution: HANA\nadditional enabled Notes: google-x4", "", "", "", "", "", ""}),
-				writeFile: defaultWriteFile(5),
-				apply:     true,
-			},
-			want:    false,
 			wantErr: nil,
 		},
 	}
@@ -173,7 +158,7 @@ func TestConfigureX4SLES(t *testing.T) {
 			name: "FailedSaptuneService",
 			c: ConfigureInstance{
 				readFile: defaultReadFile([]error{nil}, []string{"Name=SLES"}),
-				execute:  defaultExecute([]int{4}, []string{""}),
+				execute:  defaultExecute([]int{4, 4}, []string{"", ""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -182,7 +167,7 @@ func TestConfigureX4SLES(t *testing.T) {
 			name: "FailedToWriteX4Conf",
 			c: ConfigureInstance{
 				readFile: defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", ""}),
-				execute:  defaultExecute([]int{0}, []string{""}),
+				execute:  defaultExecute([]int{4, 0}, []string{"", ""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -191,7 +176,7 @@ func TestConfigureX4SLES(t *testing.T) {
 			name: "FailedSaptuneReapply",
 			c: ConfigureInstance{
 				readFile: defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
-				execute:  defaultExecute([]int{0, 0, 4}, []string{"", "", ""}),
+				execute:  defaultExecute([]int{4, 0, 0, 4}, []string{"", "", "", ""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -200,7 +185,7 @@ func TestConfigureX4SLES(t *testing.T) {
 			name: "Success",
 			c: ConfigureInstance{
 				readFile: defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
-				execute:  defaultExecute([]int{0, 0, 0}, []string{"", "", ""}),
+				execute:  defaultExecute([]int{4, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", ""}),
 			},
 			want:    true,
 			wantErr: nil,
@@ -226,37 +211,51 @@ func TestSaptuneService(t *testing.T) {
 		want error
 	}{
 		{
+			name: "SapconfFailDisable",
+			c: ConfigureInstance{
+				execute: defaultExecute([]int{0, 1}, []string{"", ""}),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SapconfFailStop",
+			c: ConfigureInstance{
+				execute: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "ServiceNotFound",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{4}, []string{""}),
+				execute: defaultExecute([]int{4, 4}, []string{"", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceFailedToEnable",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{1, 1}, []string{"", ""}),
+				execute: defaultExecute([]int{4, 1, 1}, []string{"", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceFailedToStart",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{1, 0, 1}, []string{"", "", ""}),
+				execute: defaultExecute([]int{4, 1, 0, 1}, []string{"", "", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceStartedAfterStopped",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{0, 0, 0}, []string{"", "", ""}),
+				execute: defaultExecute([]int{4, 0, 0, 0}, []string{"", "", "", ""}),
 			},
 			want: nil,
 		},
 		{
 			name: "ServiceAlreadyRunning",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{0}, []string{""}),
+				execute: defaultExecute([]int{4, 0}, []string{"", ""}),
 			},
 			want: nil,
 		},

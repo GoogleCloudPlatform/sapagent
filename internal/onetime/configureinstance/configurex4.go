@@ -130,6 +130,20 @@ func (c *ConfigureInstance) configureX4SLES(ctx context.Context) (bool, error) {
 // saptuneService checks if saptune service is running. If it is not running,
 // it will attempt to enable and start it through systemctl.
 func (c *ConfigureInstance) saptuneService(ctx context.Context) error {
+	// sapconf must be disabled and stopped before saptune can run.
+	sapconfStatus := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf"})
+	if sapconfStatus.ExitCode != 4 {
+		sapconfDisable := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "disable sapconf"})
+		if sapconfDisable.ExitCode != 0 {
+			return fmt.Errorf("sapconf service could not be disabled, code: %d, stderr: %s", sapconfDisable.ExitCode, sapconfDisable.StdErr)
+		}
+		sapconfStop := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "stop sapconf"})
+		if sapconfStop.ExitCode != 0 {
+			return fmt.Errorf("sapconf service could not be stopped, code: %d, stderr: %s", sapconfStop.ExitCode, sapconfStop.StdErr)
+		}
+		log.CtxLogger(ctx).Info("The sapconf service is disabled and stopped.")
+	}
+
 	saptuneStatus := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status saptune"})
 	if saptuneStatus.ExitCode == 4 {
 		return fmt.Errorf("saptune service could not be found, ensure it is installed before running 'configureinstance', code: %d, stderr: %s", saptuneStatus.ExitCode, saptuneStatus.StdErr)
