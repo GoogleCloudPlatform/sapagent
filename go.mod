@@ -78,7 +78,6 @@ require (
   golang.org/x/sync v0.6.0 // indirect
   golang.org/x/text v0.14.0 // indirect
   golang.org/x/time v0.5.0 // indirect
-  golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
   google.golang.org/appengine v1.6.8 // indirect
   google.golang.org/genproto/googleapis/rpc v0.0.0-20240304161311-37d4d3c04a78 // indirect
   google.golang.org/grpc v1.62.0 // indirect
