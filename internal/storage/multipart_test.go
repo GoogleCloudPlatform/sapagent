@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -86,6 +87,7 @@ var (
 			retryBackoffInitial:    time.Millisecond,
 			retryBackoffMax:        time.Millisecond,
 			retryBackoffMultiplier: 2,
+			mu:                     &sync.Mutex{},
 			parts:                  make(map[int64]objectPart),
 			workers:                make([]*uploadWorker, 4),
 			idleWorkers:            make(chan *uploadWorker, 4),

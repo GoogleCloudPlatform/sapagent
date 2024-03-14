@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -94,6 +95,7 @@ type MultipartWriter struct {
 	retryBackoffMax        time.Duration
 	retryBackoffMultiplier float64
 
+	mu            *sync.Mutex
 	parts         map[int64]objectPart
 	workers       []*uploadWorker
 	currentWorker *uploadWorker
@@ -134,6 +136,7 @@ func (rw *ReadWriter) NewMultipartWriter(ctx context.Context, newClient HTTPClie
 		retryBackoffInitial:    rw.RetryBackoffInitial,
 		retryBackoffMax:        rw.RetryBackoffMax,
 		retryBackoffMultiplier: rw.RetryBackoffMultiplier,
+		mu:                     &sync.Mutex{},
 		parts:                  make(map[int64]objectPart),
 		workers:                make([]*uploadWorker, rw.XMLMultipartWorkers),
 		idleWorkers:            make(chan *uploadWorker, rw.XMLMultipartWorkers),
@@ -360,7 +363,9 @@ func (uw *uploadWorker) uploadPartAsync(partNum int64) {
 			uw.numRetries++
 			if uw.numRetries > uw.w.maxRetries {
 				log.Logger.Errorw("Max retries exceeded, cancelling operation.", "partNum", partNum, "numRetries", uw.numRetries, "maxRetries", uw.w.maxRetries, "objectName", uw.w.objectName, "error", err)
+				uw.w.mu.Lock()
 				uw.w.uploadErr = fmt.Errorf("failed to upload part %v too many times, err: %w", partNum, err)
+				uw.w.mu.Unlock()
 				uw.w.idleWorkers <- uw
 				return
 			}
@@ -401,6 +406,8 @@ func (uw *uploadWorker) uploadPart(partNum int64) error {
 		resp.Write(respStr)
 		return fmt.Errorf("uploadPart did not return in the expected format. Unable to get the ETag for part %v. Resp: %v", partNum, respStr.String())
 	}
+	uw.w.mu.Lock()
+	defer uw.w.mu.Unlock()
 	uw.w.parts[partNum] = objectPart{PartNumber: partNum, ETag: etag}
 	return nil
 }
