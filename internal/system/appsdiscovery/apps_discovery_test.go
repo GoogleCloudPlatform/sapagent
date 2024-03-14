@@ -1703,8 +1703,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df", // Get NFS
 			}, {
-				Executable: "disp+work", // Kernel version
-				User:       "abcadm",
+				Executable: "sudo", // Kernel version
 			}, {
 				Executable: "sudo", // Failover config
 			}, {
@@ -1768,8 +1767,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df", // Get NFS
 			}, {
-				Executable: "disp+work", // Kernel version
-				User:       "abcadm",
+				Executable: "sudo", // Kernel version
 			}, {
 				Executable: "sudo", // Failover config
 			}, {
@@ -1783,8 +1781,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df", // Get NFS
 			}, {
-				Executable: "disp+work", // Kernel version
-				User:       "defadm",
+				Executable: "sudo", // Kernel version
 			}, {
 				Executable: "sudo", // Failover config
 			}, {
@@ -1957,8 +1954,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
-				Executable: "disp+work", // Kernel version
-				User:       "abcadm",
+				Executable: "sudo", // Kernel version
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
@@ -2066,8 +2062,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
-				Executable: "disp+work", // Kernel version
-				User:       "abcadm",
+				Executable: "sudo", // Kernel version
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
@@ -2152,8 +2147,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
-				Executable: "disp+work", // Kernel version
-				User:       "abcadm",
+				Executable: "sudo", // Kernel version
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
@@ -2265,8 +2259,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
-				Executable: "disp+work", // Kernel version
-				User:       "abcadm",
+				Executable: "sudo", // Kernel version
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},

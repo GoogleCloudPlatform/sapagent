@@ -744,9 +744,8 @@ func (d *SapDiscovery) discoverNetweaverKernelVersion(ctx context.Context, sid s
 	sidLower := strings.ToLower(sid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	p := commandlineexecutor.Params{
-		Executable: "disp+work",
-		Args:       []string{},
-		User:       sidAdm,
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, "disp+work"},
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
