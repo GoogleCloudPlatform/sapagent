@@ -80,9 +80,9 @@ type Snapshot struct {
 	HanaDBUser, Password, PasswordSecret             string
 	Disk, DiskZone                                   string
 
-	DiskKeyFile, StorageLocation, CSEKKeyFile string
-	SnapshotName, SnapshotType, Description   string
-	AbandonPrepared, SendToMonitoring         bool
+	DiskKeyFile, StorageLocation, CSEKKeyFile           string
+	SnapshotName, SnapshotType, Description             string
+	AbandonPrepared, SendToMonitoring, freezeFileSystem bool
 
 	db                                *sql.DB
 	gceService                        gceInterface
@@ -115,7 +115,7 @@ func (*Snapshot) Usage() string {
 	[-send-status-to-monitoring]=<true|false> [-source-disk-key-file=<path-to-key-file>]
 	[-storage-location=<storage-location>] [-csek-key-file=<path-to-key-file>]
 	[-snapshot-description=<description>] [-snapshot-name=<snapshot-name>]
-	[-snapshot-type=<snapshot-type>]
+	[-snapshot-type=<snapshot-type>] [-freeze-file-system=<true|false>]
 	[-labels="label1=value1,label2=value2"]
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>
 	` + "\n"
@@ -131,6 +131,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.PasswordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password.")
 	fs.StringVar(&s.Disk, "source-disk", "", "name of the disk from which you want to create a snapshot (required)")
 	fs.StringVar(&s.DiskZone, "source-disk-zone", "", "zone of the disk from which you want to create a snapshot. (required)")
+	fs.BoolVar(&s.freezeFileSystem, "freeze-file-system", false, "Freeze file system. (optional) Default: false")
 	fs.StringVar(&s.Host, "host", "localhost", "HANA host. (optional)")
 	fs.StringVar(&s.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.BoolVar(&s.AbandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
@@ -334,8 +335,11 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	}
 	op, err := s.createDiskSnapshot(ctx)
 	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
-	freezeTime := time.Since(dbFreezeStartTime)
-	defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals())
+	if s.freezeFileSystem {
+		freezeTime := time.Since(dbFreezeStartTime)
+		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals())
+	}
+
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error creating disk snapshot", "error", err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
@@ -650,6 +654,10 @@ func (s *Snapshot) unmount(ctx context.Context, path string, exec commandlineexe
 }
 
 func (s *Snapshot) freezeXFS(ctx context.Context, exec commandlineexecutor.Execute) error {
+	if !s.freezeFileSystem {
+		// NO-OP when freeze is not requested.
+		return nil
+	}
 	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-f " + s.hanaDataPath})
 	if result.Error != nil {
 		return fmt.Errorf("failure freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
@@ -659,6 +667,10 @@ func (s *Snapshot) freezeXFS(ctx context.Context, exec commandlineexecutor.Execu
 }
 
 func (s *Snapshot) unFreezeXFS(ctx context.Context, exec commandlineexecutor.Execute) error {
+	if !s.freezeFileSystem {
+		// NO-OP when freeze is not requested.
+		return nil
+	}
 	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-u " + s.hanaDataPath})
 	if result.Error != nil {
 		return fmt.Errorf("failure un freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
