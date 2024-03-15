@@ -25,9 +25,9 @@ import (
 	"runtime"
 
 	"google.golang.org/api/googleapi"
-	"google.golang.org/api/option/internaloption/internaloption"
+	"google.golang.org/api/option/internaloption"
 	"google.golang.org/api/option"
-	htransport "google.golang.org/api/transport/http/http"
+	htransport "google.golang.org/api/transport/http"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
