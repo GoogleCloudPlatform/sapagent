@@ -29,10 +29,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
+
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
@@ -149,14 +150,14 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
 					Location: "test-region",
-					Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{
+					Req: &dwpb.WriteInsightRequest{Insight: &dwpb.Insight{
 						InstanceId: "test-instance-id",
-						SapValidation: &workloadmanager.SapValidation{
+						SapValidation: &dwpb.SapValidation{
 							ProjectId: "test-project-id",
 							Zone:      "test-region-zone",
-							ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
+							ValidationDetails: []*dwpb.SapValidation_ValidationDetail{{
 								Details:           map[string]string{},
-								SapValidationType: "HANA_SECURITY",
+								SapValidationType: dwpb.SapValidation_HANA_SECURITY,
 								IsPresent:         true,
 							}}},
 					}},

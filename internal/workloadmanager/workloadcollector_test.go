@@ -30,7 +30,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
@@ -45,6 +44,7 @@ import (
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
@@ -107,7 +107,7 @@ var (
 	})
 )
 
-func validationDetailSort(a, b *workloadmanager.SapValidationValidationDetail) bool {
+func validationDetailSort(a, b *dwpb.SapValidation_ValidationDetail) bool {
 	return a.SapValidationType < b.SapValidationType
 }
 
@@ -295,14 +295,14 @@ func TestSendMetrics(t *testing.T) {
 					{
 						Project:  "test-project-id",
 						Location: "test-region",
-						Req: &workloadmanager.WriteInsightRequest{
-							Insight: &workloadmanager.Insight{
+						Req: &dwpb.WriteInsightRequest{
+							Insight: &dwpb.Insight{
 								InstanceId: "test-instance-id",
-								SapValidation: &workloadmanager.SapValidation{
+								SapValidation: &dwpb.SapValidation{
 									ProjectId: "test-project-id",
 									Zone:      "test-region-zone",
-									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
-										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+									ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
+										&dwpb.SapValidation_ValidationDetail{SapValidationType: dwpb.SapValidation_SAP_VALIDATION_TYPE_UNSPECIFIED},
 									},
 								},
 							},
@@ -329,13 +329,13 @@ func TestSendMetrics(t *testing.T) {
 					{
 						Project:  "bm-project-id",
 						Location: "us-central1",
-						Req: &workloadmanager.WriteInsightRequest{
-							Insight: &workloadmanager.Insight{
+						Req: &dwpb.WriteInsightRequest{
+							Insight: &dwpb.Insight{
 								InstanceId: "bm-instance-id",
-								SapValidation: &workloadmanager.SapValidation{
+								SapValidation: &dwpb.SapValidation{
 									ProjectId: "bm-project-id",
-									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
-										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+									ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
+										&dwpb.SapValidation_ValidationDetail{SapValidationType: dwpb.SapValidation_SAP_VALIDATION_TYPE_UNSPECIFIED},
 									},
 								},
 							},
@@ -364,14 +364,14 @@ func TestSendMetrics(t *testing.T) {
 					{
 						Project:  "test-project-id",
 						Location: "test-region",
-						Req: &workloadmanager.WriteInsightRequest{
-							Insight: &workloadmanager.Insight{
+						Req: &dwpb.WriteInsightRequest{
+							Insight: &dwpb.Insight{
 								InstanceId: "test-instance-id",
-								SapValidation: &workloadmanager.SapValidation{
+								SapValidation: &dwpb.SapValidation{
 									ProjectId: "test-project-id",
 									Zone:      "test-region-zone",
-									ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
-										&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+									ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
+										&dwpb.SapValidation_ValidationDetail{SapValidationType: dwpb.SapValidation_SAP_VALIDATION_TYPE_UNSPECIFIED},
 									},
 								},
 							},
@@ -399,14 +399,14 @@ func TestSendMetrics(t *testing.T) {
 				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
 					Location: "test-region",
-					Req: &workloadmanager.WriteInsightRequest{
-						Insight: &workloadmanager.Insight{
+					Req: &dwpb.WriteInsightRequest{
+						Insight: &dwpb.Insight{
 							InstanceId: "test-instance-id",
-							SapValidation: &workloadmanager.SapValidation{
+							SapValidation: &dwpb.SapValidation{
 								ProjectId: "test-project-id",
 								Zone:      "test-region-zone",
-								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
-									&workloadmanager.SapValidationValidationDetail{SapValidationType: "SAP_VALIDATION_TYPE_UNSPECIFIED"},
+								ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
+									&dwpb.SapValidation_ValidationDetail{SapValidationType: dwpb.SapValidation_SAP_VALIDATION_TYPE_UNSPECIFIED},
 								},
 							},
 						},
@@ -670,39 +670,39 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 					WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 						Project:  "test-project-id",
 						Location: "test-region",
-						Req: &workloadmanager.WriteInsightRequest{Insight: &workloadmanager.Insight{
+						Req: &dwpb.WriteInsightRequest{Insight: &dwpb.Insight{
 							InstanceId: "test-instance-id",
-							SapValidation: &workloadmanager.SapValidation{
+							SapValidation: &dwpb.SapValidation{
 								ProjectId: "test-project-id",
 								Zone:      "test-region-zone",
-								ValidationDetails: []*workloadmanager.SapValidationValidationDetail{
+								ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
 									{
-										SapValidationType: "SYSTEM",
+										SapValidationType: dwpb.SapValidation_SYSTEM,
 										IsPresent:         true,
 										Details:           map[string]string{},
 									},
 									{
-										SapValidationType: "NETWEAVER",
+										SapValidationType: dwpb.SapValidation_NETWEAVER,
 										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
-										SapValidationType: "HANA",
+										SapValidationType: dwpb.SapValidation_HANA,
 										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
-										SapValidationType: "PACEMAKER",
+										SapValidationType: dwpb.SapValidation_PACEMAKER,
 										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
-										SapValidationType: "COROSYNC",
+										SapValidationType: dwpb.SapValidation_COROSYNC,
 										IsPresent:         false,
 										Details:           map[string]string{},
 									},
 									{
-										SapValidationType: "CUSTOM",
+										SapValidationType: dwpb.SapValidation_CUSTOM,
 										IsPresent:         true,
 										Details:           map[string]string{},
 									},

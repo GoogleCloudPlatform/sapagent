@@ -25,11 +25,9 @@ import (
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
@@ -37,6 +35,7 @@ import (
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
 	hostdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
@@ -947,393 +946,6 @@ func TestDiscoverSAPSystems(t *testing.T) {
 	}
 }
 
-func TestResourceToInsight(t *testing.T) {
-	tests := []struct {
-		name string
-		res  *spb.SapDiscovery_Resource
-		want *workloadmanager.SapDiscoveryResource
-	}{{
-		name: "discoveryResourceToInsightResource",
-		res: &spb.SapDiscovery_Resource{
-			ResourceUri:      "test/uri",
-			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			RelatedResources: []string{"other/resource"},
-			UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-				VirtualHostname:  "virtual-hostname",
-				ClusterInstances: []string{"cluster-host1", "cluster-host2", "cluster-host3"},
-			},
-		},
-		want: &workloadmanager.SapDiscoveryResource{
-			ResourceUri:      "test/uri",
-			ResourceKind:     "RESOURCE_KIND_INSTANCE",
-			ResourceType:     "RESOURCE_TYPE_COMPUTE",
-			RelatedResources: []string{"other/resource"},
-			UpdateTime:       "2023-05-01T15:45:11Z",
-			InstanceProperties: &workloadmanager.SapDiscoveryResourceInstanceProperties{
-				VirtualHostname:  "virtual-hostname",
-				ClusterInstances: []string{"cluster-host1", "cluster-host2", "cluster-host3"},
-			},
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := insightResourceFromSystemResource(test.res)
-			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
-				t.Errorf("insightResourceFromSystemResource() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestComponentToInsight(t *testing.T) {
-	tests := []struct {
-		name string
-		comp *spb.SapDiscovery_Component
-		want *workloadmanager.SapDiscoveryComponent
-	}{{
-		name: "discoveryApplicationComponentToInsightComponent",
-		comp: &spb.SapDiscovery_Component{
-			HostProject: "test/project",
-			Sid:         "SID",
-			Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-				ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-					ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-					AscsUri:         "ascs/uri",
-					NfsUri:          "nfs/uri",
-					Abap:            true,
-					KernelVersion:   "kernel-version",
-				},
-			},
-			Resources: []*spb.SapDiscovery_Resource{{
-				ResourceUri:      "test/uri",
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				RelatedResources: []string{"other/resource"},
-				UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
-			}},
-			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
-		},
-		want: &workloadmanager.SapDiscoveryComponent{
-			HostProject: "test/project",
-			Sid:         "SID",
-			ApplicationProperties: &workloadmanager.SapDiscoveryComponentApplicationProperties{
-				ApplicationType: "NETWEAVER",
-				AscsUri:         "ascs/uri",
-				NfsUri:          "nfs/uri",
-				Abap:            true,
-				KernelVersion:   "kernel-version",
-			},
-			Resources: []*workloadmanager.SapDiscoveryResource{{
-				ResourceUri:      "test/uri",
-				ResourceKind:     "RESOURCE_KIND_INSTANCE",
-				ResourceType:     "RESOURCE_TYPE_COMPUTE",
-				RelatedResources: []string{"other/resource"},
-				UpdateTime:       "2023-05-01T15:45:11Z",
-			}},
-			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
-		},
-	}, {
-		name: "discoveryDatabaseComponentToInsightComponent",
-		comp: &spb.SapDiscovery_Component{
-			HostProject: "test/project",
-			Sid:         "SID",
-			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-				DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-					DatabaseType:       spb.SapDiscovery_Component_DatabaseProperties_HANA,
-					PrimaryInstanceUri: "primary/uri",
-					SharedNfsUri:       "shared/uri",
-					DatabaseVersion:    "database-version",
-				},
-			},
-			Resources: []*spb.SapDiscovery_Resource{{
-				ResourceUri:      "test/uri",
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				RelatedResources: []string{"other/resource"},
-				UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
-			}},
-			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
-		},
-		want: &workloadmanager.SapDiscoveryComponent{
-			HostProject: "test/project",
-			Sid:         "SID",
-			DatabaseProperties: &workloadmanager.SapDiscoveryComponentDatabaseProperties{
-				DatabaseType:       "HANA",
-				PrimaryInstanceUri: "primary/uri",
-				SharedNfsUri:       "shared/uri",
-				DatabaseVersion:    "database-version",
-			},
-			Resources: []*workloadmanager.SapDiscoveryResource{{
-				ResourceUri:      "test/uri",
-				ResourceKind:     "RESOURCE_KIND_INSTANCE",
-				ResourceType:     "RESOURCE_TYPE_COMPUTE",
-				RelatedResources: []string{"other/resource"},
-				UpdateTime:       "2023-05-01T15:45:11Z",
-			}},
-			HaHosts: []string{"ha-host1", "ha-host2", "ha-host3"},
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := insightComponentFromSystemComponent(test.comp)
-			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
-				t.Errorf("insightComponentFromSystemComponent() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestInsightWorkloadPropertiesFromSystemWorkloadProperties(t *testing.T) {
-	tests := []struct {
-		name string
-		wlp  *spb.SapDiscovery_WorkloadProperties
-		want *workloadmanager.SapDiscoveryWorkloadProperties
-	}{{
-		name: "discoveryWlpToInsightWlp",
-		wlp:  &spb.SapDiscovery_WorkloadProperties{},
-		want: &workloadmanager.SapDiscoveryWorkloadProperties{},
-	}, {
-		name: "discoveryWlpToInsightWlpNilWlProps",
-		wlp:  nil,
-		want: nil,
-	}, {
-		name: "discoveryWlpToInsightWlpMultipleWorkloadProperties",
-		wlp: &spb.SapDiscovery_WorkloadProperties{
-			ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-				&spb.SapDiscovery_WorkloadProperties_ProductVersion{
-					Name:    "TestProduct",
-					Version: "1.0.0",
-				},
-				&spb.SapDiscovery_WorkloadProperties_ProductVersion{
-					Name:    "AnotherTestProduct",
-					Version: "1.3.1",
-				},
-			},
-			SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-				&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-					Name:       "TestSoftwareComponent",
-					Version:    "1",
-					ExtVersion: "1.0.0",
-					Type:       "A",
-				},
-				&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-					Name:       "AnotherTestSoftwareComponent",
-					Version:    "1",
-					ExtVersion: "1.3.1",
-					Type:       "B",
-				},
-			},
-		},
-		want: &workloadmanager.SapDiscoveryWorkloadProperties{
-			ProductVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
-				&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
-					Name:    "TestProduct",
-					Version: "1.0.0",
-				},
-				&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
-					Name:    "AnotherTestProduct",
-					Version: "1.3.1",
-				},
-			},
-			SoftwareComponentVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
-				&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
-					Name:       "TestSoftwareComponent",
-					Version:    "1",
-					ExtVersion: "1.0.0",
-					Type:       "A",
-				},
-				&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
-					Name:       "AnotherTestSoftwareComponent",
-					Version:    "1",
-					ExtVersion: "1.3.1",
-					Type:       "B",
-				},
-			},
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := insightWorkloadPropertiesFromSystemWorkloadProperties(test.wlp)
-			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
-				t.Errorf("insightWorkloadPropertiesFromSystemWorkloadProperties() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDiscoverySystemToInsight(t *testing.T) {
-	tests := []struct {
-		name string
-		sys  *spb.SapDiscovery
-		want *workloadmanager.Insight
-	}{{
-		name: "discoverySystemToInsightSystem",
-		sys: &spb.SapDiscovery{
-			SystemId:   "test-system",
-			UpdateTime: timestamppb.New(time.Unix(1682955911, 0)),
-			ApplicationLayer: &spb.SapDiscovery_Component{
-				HostProject: "test/project",
-				Sid:         "SID",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceUri:      "test/uri",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					RelatedResources: []string{"other/resource"},
-					UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
-				}}},
-			DatabaseLayer:      &spb.SapDiscovery_Component{},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
-		},
-		want: &workloadmanager.Insight{
-			SapDiscovery: &workloadmanager.SapDiscovery{
-				SystemId:   "test-system",
-				UpdateTime: "2023-05-01T15:45:11Z",
-				ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-					HostProject: "test/project",
-					Sid:         "SID",
-					Resources: []*workloadmanager.SapDiscoveryResource{{
-						ResourceUri:      "test/uri",
-						ResourceKind:     "RESOURCE_KIND_INSTANCE",
-						ResourceType:     "RESOURCE_TYPE_COMPUTE",
-						RelatedResources: []string{"other/resource"},
-						UpdateTime:       "2023-05-01T15:45:11Z",
-					}}},
-				DatabaseLayer:      &workloadmanager.SapDiscoveryComponent{},
-				WorkloadProperties: &workloadmanager.SapDiscoveryWorkloadProperties{},
-			}},
-	}, {
-		name: "discoverySystemToInsightSystemNilWlProps",
-		sys: &spb.SapDiscovery{
-			SystemId:   "test-system",
-			UpdateTime: timestamppb.New(time.Unix(1682955911, 0)),
-			ApplicationLayer: &spb.SapDiscovery_Component{
-				HostProject: "test/project",
-				Sid:         "SID",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceUri:      "test/uri",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					RelatedResources: []string{"other/resource"},
-					UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
-				}}},
-			DatabaseLayer:      &spb.SapDiscovery_Component{},
-			WorkloadProperties: nil,
-		},
-		want: &workloadmanager.Insight{
-			SapDiscovery: &workloadmanager.SapDiscovery{
-				SystemId:   "test-system",
-				UpdateTime: "2023-05-01T15:45:11Z",
-				ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-					HostProject: "test/project",
-					Sid:         "SID",
-					Resources: []*workloadmanager.SapDiscoveryResource{{
-						ResourceUri:      "test/uri",
-						ResourceKind:     "RESOURCE_KIND_INSTANCE",
-						ResourceType:     "RESOURCE_TYPE_COMPUTE",
-						RelatedResources: []string{"other/resource"},
-						UpdateTime:       "2023-05-01T15:45:11Z",
-					}}},
-				DatabaseLayer:      &workloadmanager.SapDiscoveryComponent{},
-				WorkloadProperties: nil,
-			}},
-	}, {
-		name: "discoverySystemToInsightSystemMultipleWorkloadProperties",
-		sys: &spb.SapDiscovery{
-			SystemId:   "test-system",
-			UpdateTime: timestamppb.New(time.Unix(1682955911, 0)),
-			ApplicationLayer: &spb.SapDiscovery_Component{
-				HostProject: "test/project",
-				Sid:         "SID",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceUri:      "test/uri",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					RelatedResources: []string{"other/resource"},
-					UpdateTime:       timestamppb.New(time.Unix(1682955911, 0)),
-				}}},
-			DatabaseLayer: &spb.SapDiscovery_Component{},
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
-						Name:    "TestProduct",
-						Version: "1.0.0",
-					},
-					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
-						Name:    "AnotherTestProduct",
-						Version: "1.3.1",
-					},
-				},
-				SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-						Name:       "TestSoftwareComponent",
-						Version:    "1",
-						ExtVersion: "1.0.0",
-						Type:       "A",
-					},
-					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-						Name:       "AnotherTestSoftwareComponent",
-						Version:    "1",
-						ExtVersion: "1.3.1",
-						Type:       "B",
-					},
-				},
-			},
-		},
-		want: &workloadmanager.Insight{
-			SapDiscovery: &workloadmanager.SapDiscovery{
-				SystemId:   "test-system",
-				UpdateTime: "2023-05-01T15:45:11Z",
-				ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
-					HostProject: "test/project",
-					Sid:         "SID",
-					Resources: []*workloadmanager.SapDiscoveryResource{{
-						ResourceUri:      "test/uri",
-						ResourceKind:     "RESOURCE_KIND_INSTANCE",
-						ResourceType:     "RESOURCE_TYPE_COMPUTE",
-						RelatedResources: []string{"other/resource"},
-						UpdateTime:       "2023-05-01T15:45:11Z",
-					}}},
-				DatabaseLayer: &workloadmanager.SapDiscoveryComponent{},
-				WorkloadProperties: &workloadmanager.SapDiscoveryWorkloadProperties{
-					ProductVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
-						&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
-							Name:    "TestProduct",
-							Version: "1.0.0",
-						},
-						&workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
-							Name:    "AnotherTestProduct",
-							Version: "1.3.1",
-						},
-					},
-					SoftwareComponentVersions: []*workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
-						&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
-							Name:       "TestSoftwareComponent",
-							Version:    "1",
-							ExtVersion: "1.0.0",
-							Type:       "A",
-						},
-						&workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
-							Name:       "AnotherTestSoftwareComponent",
-							Version:    "1",
-							ExtVersion: "1.3.1",
-							Type:       "B",
-						},
-					},
-				},
-			}},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := insightFromSAPSystem(test.sys)
-			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
-				t.Errorf("insightFromSAPSystem() mismatch (-want, +got):\n%s", diff)
-			}
-		})
-	}
-}
-
 func TestWriteToCloudLogging(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1532,14 +1144,14 @@ func TestRunDiscovery(t *testing.T) {
 				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
 					Location: "test-zone",
-					Req: &workloadmanager.WriteInsightRequest{
-						Insight: &workloadmanager.Insight{
-							SapDiscovery: &workloadmanager.SapDiscovery{
-								ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+					Req: &dwpb.WriteInsightRequest{
+						Insight: &dwpb.Insight{
+							SapDiscovery: &spb.SapDiscovery{
+								ApplicationLayer: &spb.SapDiscovery_Component{
 									Sid:         "ABC",
 									HostProject: "12345",
 								},
-								DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+								DatabaseLayer: &spb.SapDiscovery_Component{
 									Sid:         "DEF",
 									HostProject: "12345",
 								},
@@ -1599,14 +1211,14 @@ func TestRunDiscovery(t *testing.T) {
 				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
 					Location: "test-zone",
-					Req: &workloadmanager.WriteInsightRequest{
-						Insight: &workloadmanager.Insight{
-							SapDiscovery: &workloadmanager.SapDiscovery{
-								ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+					Req: &dwpb.WriteInsightRequest{
+						Insight: &dwpb.Insight{
+							SapDiscovery: &spb.SapDiscovery{
+								ApplicationLayer: &spb.SapDiscovery_Component{
 									Sid:         "ABC",
 									HostProject: "12345",
 								},
-								DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+								DatabaseLayer: &spb.SapDiscovery_Component{
 									Sid:         "DEF",
 									HostProject: "12345",
 								},
@@ -1617,14 +1229,14 @@ func TestRunDiscovery(t *testing.T) {
 				}, {
 					Project:  "test-project-id",
 					Location: "test-zone",
-					Req: &workloadmanager.WriteInsightRequest{
-						Insight: &workloadmanager.Insight{
-							SapDiscovery: &workloadmanager.SapDiscovery{
-								ApplicationLayer: &workloadmanager.SapDiscoveryComponent{
+					Req: &dwpb.WriteInsightRequest{
+						Insight: &dwpb.Insight{
+							SapDiscovery: &spb.SapDiscovery{
+								ApplicationLayer: &spb.SapDiscovery_Component{
 									Sid:         "GHI",
 									HostProject: "12345",
 								},
-								DatabaseLayer: &workloadmanager.SapDiscoveryComponent{
+								DatabaseLayer: &spb.SapDiscovery_Component{
 									Sid:         "JKL",
 									HostProject: "12345",
 								},

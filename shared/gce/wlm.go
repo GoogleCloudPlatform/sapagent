@@ -18,22 +18,22 @@ package gce
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 	"google.golang.org/api/option"
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gce/wlm"
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // WLM is a wrapper for Workload Manager API services.
 type WLM struct {
-	service *workloadmanager.Service
+	service *wlm.DataWarehouseService
 }
 
 // NewWLMClient creates a new WLM service wrapper.
 func NewWLMClient(ctx context.Context, basePath string) (*WLM, error) {
-	s, err := workloadmanager.NewService(ctx, option.WithEndpoint(basePath))
+	s, err := wlm.NewService(ctx, option.WithEndpoint(basePath))
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating WLM client")
 	}
@@ -42,9 +42,8 @@ func NewWLMClient(ctx context.Context, basePath string) (*WLM, error) {
 }
 
 // WriteInsight wraps a call to the WLM insights:write API.
-func (w *WLM) WriteInsight(project string, location string, writeInsightRequest *workloadmanager.WriteInsightRequest) error {
-	name := fmt.Sprintf("projects/%s/locations/%s", project, location)
-	res, err := w.service.Projects.Locations.Insights.WriteInsight(name, writeInsightRequest).Do()
+func (w *WLM) WriteInsight(project string, location string, writeInsightRequest *dwpb.WriteInsightRequest) error {
+	res, err := w.service.WriteInsight(project, location, writeInsightRequest)
 	log.Logger.Debugw("WriteInsight response", "res", res, "err", err)
 	return err
 }

@@ -26,7 +26,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -37,6 +36,7 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
@@ -65,19 +65,19 @@ var (
 			WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 				Project:  "projectId",
 				Location: "some-region",
-				Req: &workloadmanager.WriteInsightRequest{
-					Insight: &workloadmanager.Insight{
+				Req: &dwpb.WriteInsightRequest{
+					Insight: &dwpb.Insight{
 						InstanceId: "instanceId",
-						SapValidation: &workloadmanager.SapValidation{
+						SapValidation: &dwpb.SapValidation{
 							ProjectId: "projectId",
 							Zone:      "some-region-zone",
-							ValidationDetails: []*workloadmanager.SapValidationValidationDetail{{
+							ValidationDetails: []*dwpb.SapValidation_ValidationDetail{{
 								Details: map[string]string{
 									"agent":         "sapagent",
 									"instance_name": "test-instance",
 									"os":            "sles-15",
 								},
-								SapValidationType: "SYSTEM",
+								SapValidationType: dwpb.SapValidation_SYSTEM,
 								IsPresent:         true,
 							}},
 						},

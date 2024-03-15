@@ -21,19 +21,25 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
+	"google.golang.org/protobuf/testing/protocmp"
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
+	syspb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
 var (
-	insightArgsDiffOpts = []cmp.Option{cmpopts.SortSlices(validationDetailSort),
-		cmpopts.IgnoreFields(workloadmanager.SapDiscovery{}, "UpdateTime")}
+	insightArgsDiffOpts = []cmp.Option{
+		protocmp.Transform(),
+		cmpopts.SortSlices(validationDetailSort),
+		protocmp.IgnoreFields(&syspb.SapDiscovery{}, "update_time"),
+		protocmp.SortRepeatedFields(&dwpb.SapValidation{}, "validation_details"),
+	}
 )
 
 // WriteInsightArgs is a structure storing arguments sent with WriteInsight.
 type WriteInsightArgs struct {
 	Project  string
 	Location string
-	Req      *workloadmanager.WriteInsightRequest
+	Req      *dwpb.WriteInsightRequest
 }
 
 // TestWLM is a fake implementation of the gce.WLM struct.
@@ -44,12 +50,12 @@ type TestWLM struct {
 	WriteInsightCallCount int
 }
 
-func validationDetailSort(a, b *workloadmanager.SapValidationValidationDetail) bool {
+func validationDetailSort(a, b *dwpb.SapValidation_ValidationDetail) bool {
 	return a.SapValidationType < b.SapValidationType
 }
 
 // WriteInsight is a fake implementation of the gce.WLM.WriteInsight call.
-func (w *TestWLM) WriteInsight(project, location string, req *workloadmanager.WriteInsightRequest) error {
+func (w *TestWLM) WriteInsight(project, location string, req *dwpb.WriteInsightRequest) error {
 	defer func() { w.WriteInsightCallCount++ }()
 
 	if w.WriteInsightCallCount < len(w.WriteInsightArgs) {

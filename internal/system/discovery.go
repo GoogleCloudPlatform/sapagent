@@ -26,20 +26,21 @@ import (
 	"sync"
 	"time"
 
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	backoff "github.com/cenkalti/backoff/v4"
 	logging "cloud.google.com/go/logging"
 	"golang.org/x/exp/slices"
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // Discovery is a type used to perform SAP System discovery operations.
@@ -117,7 +118,7 @@ type cloudLogInterface interface {
 }
 
 type wlmInterface interface {
-	WriteInsight(project, location string, writeInsightRequest *workloadmanager.WriteInsightRequest) error
+	WriteInsight(project, location string, writeInsightRequest *dwpb.WriteInsightRequest) error
 }
 
 type cloudDiscoveryInterface interface {
@@ -149,103 +150,6 @@ func removeDuplicates(res []*spb.SapDiscovery_Resource) []*spb.SapDiscovery_Reso
 		}
 	}
 	return out
-}
-
-func insightResourceFromSystemResource(r *spb.SapDiscovery_Resource) *workloadmanager.SapDiscoveryResource {
-	o := &workloadmanager.SapDiscoveryResource{
-		RelatedResources: r.RelatedResources,
-		ResourceKind:     r.ResourceKind.String(),
-		ResourceType:     r.ResourceType.String(),
-		ResourceUri:      r.ResourceUri,
-		UpdateTime:       r.UpdateTime.AsTime().Format(time.RFC3339),
-	}
-	if r.GetInstanceProperties() != nil {
-		o.InstanceProperties = &workloadmanager.SapDiscoveryResourceInstanceProperties{
-			VirtualHostname:  r.InstanceProperties.GetVirtualHostname(),
-			ClusterInstances: r.InstanceProperties.GetClusterInstances(),
-		}
-	}
-	return o
-}
-
-func insightComponentFromSystemComponent(comp *spb.SapDiscovery_Component) *workloadmanager.SapDiscoveryComponent {
-	iComp := &workloadmanager.SapDiscoveryComponent{
-		HostProject: comp.HostProject,
-		Sid:         comp.Sid,
-		HaHosts:     comp.HaHosts,
-	}
-
-	for _, r := range comp.Resources {
-		iComp.Resources = append(iComp.Resources, insightResourceFromSystemResource(r))
-	}
-
-	switch x := comp.Properties.(type) {
-	case *spb.SapDiscovery_Component_ApplicationProperties_:
-		iComp.ApplicationProperties = &workloadmanager.SapDiscoveryComponentApplicationProperties{
-			ApplicationType: x.ApplicationProperties.GetApplicationType().String(),
-			AscsUri:         x.ApplicationProperties.GetAscsUri(),
-			NfsUri:          x.ApplicationProperties.GetNfsUri(),
-			Abap:            x.ApplicationProperties.GetAbap(),
-			KernelVersion:   x.ApplicationProperties.GetKernelVersion(),
-		}
-	case *spb.SapDiscovery_Component_DatabaseProperties_:
-		iComp.DatabaseProperties = &workloadmanager.SapDiscoveryComponentDatabaseProperties{
-			DatabaseType:       x.DatabaseProperties.GetDatabaseType().String(),
-			PrimaryInstanceUri: x.DatabaseProperties.GetPrimaryInstanceUri(),
-			SharedNfsUri:       x.DatabaseProperties.GetSharedNfsUri(),
-			DatabaseVersion:    x.DatabaseProperties.GetDatabaseVersion(),
-		}
-	}
-
-	return iComp
-}
-
-func insightWorkloadPropertiesFromSystemWorkloadProperties(wlp *spb.SapDiscovery_WorkloadProperties) *workloadmanager.SapDiscoveryWorkloadProperties {
-	if wlp == nil {
-		return nil
-	}
-	var iCompProps []*workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties
-	for _, scv := range wlp.SoftwareComponentVersions {
-		iCompProp := &workloadmanager.SapDiscoveryWorkloadPropertiesSoftwareComponentProperties{
-			ExtVersion: scv.GetExtVersion(),
-			Name:       scv.GetName(),
-			Type:       scv.GetType(),
-			Version:    scv.GetVersion(),
-		}
-		iCompProps = append(iCompProps, iCompProp)
-	}
-
-	var iProdVers []*workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion
-	for _, pv := range wlp.ProductVersions {
-		iProdVer := &workloadmanager.SapDiscoveryWorkloadPropertiesProductVersion{
-			Name:    pv.GetName(),
-			Version: pv.GetVersion(),
-		}
-		iProdVers = append(iProdVers, iProdVer)
-	}
-	return &workloadmanager.SapDiscoveryWorkloadProperties{
-		SoftwareComponentVersions: iCompProps,
-		ProductVersions:           iProdVers,
-	}
-}
-
-func insightFromSAPSystem(sys *spb.SapDiscovery) *workloadmanager.Insight {
-	iDiscovery := &workloadmanager.SapDiscovery{
-		SystemId:      sys.SystemId,
-		ProjectNumber: sys.ProjectNumber,
-		UpdateTime:    sys.UpdateTime.AsTime().Format(time.RFC3339),
-	}
-	if sys.ApplicationLayer != nil {
-		iDiscovery.ApplicationLayer = insightComponentFromSystemComponent(sys.ApplicationLayer)
-	}
-	if sys.DatabaseLayer != nil {
-		iDiscovery.DatabaseLayer = insightComponentFromSystemComponent(sys.DatabaseLayer)
-	}
-	if sys.WorkloadProperties != nil {
-		iDiscovery.WorkloadProperties = insightWorkloadPropertiesFromSystemWorkloadProperties(sys.WorkloadProperties)
-	}
-
-	return &workloadmanager.Insight{SapDiscovery: iDiscovery}
 }
 
 type updateSapInstancesArgs struct {
@@ -286,6 +190,7 @@ func updateSAPInstances(ctx context.Context, a any) {
 }
 
 func runDiscovery(ctx context.Context, a any) {
+	log.CtxLogger(ctx).Info("Starting SAP System Discovery")
 	var args runDiscoveryArgs
 	var ok bool
 	if args, ok = a.(runDiscoveryArgs); !ok {
@@ -310,12 +215,14 @@ func runDiscovery(ctx context.Context, a any) {
 			log.CtxLogger(ctx).Info("Sending systems to WLM API")
 			for _, sys := range sapSystems {
 				// Send System to DW API
-				req := &workloadmanager.WriteInsightRequest{
-					Insight: insightFromSAPSystem(sys),
+				insightRequest := &dwpb.WriteInsightRequest{
+					Insight: &dwpb.Insight{
+						SapDiscovery: sys,
+						InstanceId:   cp.GetInstanceId(),
+					},
 				}
-				req.Insight.InstanceId = cp.GetInstanceId()
 
-				err := args.d.WlmService.WriteInsight(cp.ProjectId, region, req)
+				err := args.d.WlmService.WriteInsight(cp.ProjectId, region, insightRequest)
 				if err != nil {
 					log.CtxLogger(ctx).Warnw("Encountered error writing to WLM", "error", err)
 				}
@@ -417,11 +324,12 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 		if s.DBComponent != nil {
 			log.CtxLogger(ctx).Info("Discovering cloud resources for database")
 			dbRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, s.DBHosts, cp)
+			log.CtxLogger(ctx).Debugw("Database Resources", "res", dbRes)
 			if s.DBOnHost {
 				dbRes = append(dbRes, hostResources...)
 			}
 			if s.DBComponent.GetDatabaseProperties().GetSharedNfsUri() != "" {
-				log.CtxLogger(ctx).Info("Discovering cloud resources for database NFS")
+				log.CtxLogger(ctx).Debug("Discovering cloud resources for database NFS")
 				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, []string{s.DBComponent.GetDatabaseProperties().GetSharedNfsUri()}, cp)
 				if len(nfsRes) > 0 {
 					dbRes = append(dbRes, nfsRes...)
@@ -429,7 +337,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 				}
 			}
 			if len(s.DBComponent.GetHaHosts()) > 0 {
-
+				log.CtxLogger(ctx).Debug("Discovering cloud resources for database HA")
 				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, s.DBComponent.GetHaHosts(), cp)
 				// Find the instances
 				var haURIs []string
@@ -441,6 +349,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 				dbRes = append(dbRes, haRes...)
 				s.DBComponent.HaHosts = haURIs
 			}
+			log.CtxLogger(ctx).Debug("Done discovering DB")
 			s.DBComponent.HostProject = cp.GetNumericProjectId()
 			s.DBComponent.Resources = removeDuplicates(dbRes)
 			system.DatabaseLayer = s.DBComponent
@@ -450,6 +359,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 		system.UpdateTime = timestamppb.Now()
 		sapSystems = append(sapSystems, system)
 	}
+	log.CtxLogger(ctx).Debug("Done discovering systems")
 	return sapSystems
 }
 

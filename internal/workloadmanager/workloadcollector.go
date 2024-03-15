@@ -32,12 +32,12 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 
-	workloadmanager "google.golang.org/api/workloadmanager/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -65,7 +65,7 @@ type metricEmitter struct {
 }
 
 type wlmInterface interface {
-	WriteInsight(project, location string, writeInsightRequest *workloadmanager.WriteInsightRequest) error
+	WriteInsight(project, location string, writeInsightRequest *dwpb.WriteInsightRequest) error
 }
 
 // sendMetricsParams defines the set of parameters required to call sendMetrics
@@ -498,41 +498,41 @@ func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configu
 }
 
 // createWriteInsightRequest converts a WorkloadMetrics time series into a WriteInsightRequest.
-func createWriteInsightRequest(wm WorkloadMetrics, cp *ipb.CloudProperties) *workloadmanager.WriteInsightRequest {
-	validations := []*workloadmanager.SapValidationValidationDetail{}
+func createWriteInsightRequest(wm WorkloadMetrics, cp *ipb.CloudProperties) *dwpb.WriteInsightRequest {
+	validations := []*dwpb.SapValidation_ValidationDetail{}
 	for _, m := range wm.Metrics {
-		t := "SAP_VALIDATION_TYPE_UNSPECIFIED"
+		t := dwpb.SapValidation_SAP_VALIDATION_TYPE_UNSPECIFIED
 		switch m.GetMetric().GetType() {
 		case sapValidationSystem:
-			t = "SYSTEM"
+			t = dwpb.SapValidation_SYSTEM
 		case sapValidationCorosync:
-			t = "COROSYNC"
+			t = dwpb.SapValidation_COROSYNC
 		case sapValidationHANA:
-			t = "HANA"
+			t = dwpb.SapValidation_HANA
 		case sapValidationNetweaver:
-			t = "NETWEAVER"
+			t = dwpb.SapValidation_NETWEAVER
 		case sapValidationPacemaker:
-			t = "PACEMAKER"
+			t = dwpb.SapValidation_PACEMAKER
 		case sapValidationHANASecurity:
-			t = "HANA_SECURITY"
+			t = dwpb.SapValidation_HANA_SECURITY
 		case sapValidationCustom:
-			t = "CUSTOM"
+			t = dwpb.SapValidation_CUSTOM
 		}
 		v := false
 		if len(m.GetPoints()) > 0 {
 			v = m.GetPoints()[0].GetValue().GetDoubleValue() > 0
 		}
-		validations = append(validations, &workloadmanager.SapValidationValidationDetail{
+		validations = append(validations, &dwpb.SapValidation_ValidationDetail{
 			SapValidationType: t,
 			IsPresent:         v,
 			Details:           m.GetMetric().GetLabels(),
 		})
 	}
 
-	return &workloadmanager.WriteInsightRequest{
-		Insight: &workloadmanager.Insight{
+	return &dwpb.WriteInsightRequest{
+		Insight: &dwpb.Insight{
 			InstanceId: cp.GetInstanceId(),
-			SapValidation: &workloadmanager.SapValidation{
+			SapValidation: &dwpb.SapValidation{
 				ProjectId:         cp.GetProjectId(),
 				Zone:              cp.GetZone(),
 				ValidationDetails: validations,
