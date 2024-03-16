@@ -762,3 +762,244 @@ func TestCollectAndSendSlowMovingMetrics(t *testing.T) {
 		t.Errorf("collectAndSendSlowMovingMetrics() timesCalled mismatch got %d, want %d", after, before)
 	}
 }
+
+func TestSkipMetricsForNetweaverKernel(t *testing.T) {
+	tests := []struct {
+		name           string
+		Discovery      discoveryInterface
+		skippedMetrics map[string]bool
+		want           map[string]bool
+	}{
+		{
+			name: "AffectedKernelVersion794",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 794 Patch 003",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion753",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 753 Patch 1224",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion777",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 777 Patch 615",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion789",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 789 Patch 211",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion754",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 754 Patch 220",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion791",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 791 Patch 041",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion792",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 792 Patch 025",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion785",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 785 Patch 313",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "AffectedKernelVersion793",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 793 Patch 060",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want: map[string]bool{
+				"/sap/nw/abap/sessions": true,
+				"/sap/nw/abap/rfc":      true,
+			},
+		},
+		{
+			name: "KernelVersionNotAffected",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 794 Patch 007",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{"another/metric": true},
+			want:           map[string]bool{"another/metric": true},
+		},
+		{
+			name: "KernelVersionNotSet",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{},
+			want:           map[string]bool{},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			skipMetricsForNetweaverKernel(context.Background(), test.Discovery, test.skippedMetrics)
+			if diff := cmp.Diff(test.want, test.skippedMetrics); diff != "" {
+				t.Errorf("skipMetricsForNetweaverKernel() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

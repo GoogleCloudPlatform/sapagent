@@ -37,6 +37,7 @@ import (
 	"time"
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"golang.org/x/exp/slices"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
@@ -242,6 +243,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 	pmFastFreq := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
 
 	skippedMetrics := make(map[string]bool)
+	skipMetricsForNetweaverKernel(ctx, params.Discovery, skippedMetrics)
 	sl := p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip()
 	for _, metric := range sl {
 		skippedMetrics[metric] = true
@@ -760,4 +762,32 @@ func flatten(msgs [][]*mrpb.TimeSeries) []*mrpb.TimeSeries {
 		metrics = append(metrics, msg...)
 	}
 	return metrics
+}
+
+// skipMetricsForNetweaverKernel checks the kernel version of the netweaver system and skips the metrics
+// if the kernel version is affected by SAP Note: https://me.sap.com/notes/3366597/E.
+func skipMetricsForNetweaverKernel(ctx context.Context, discovery discoveryInterface, sm map[string]bool) {
+	affectedKernelVersions := []string{
+		"SAP Kernel 794 Patch 003",
+		"SAP Kernel 753 Patch 1224",
+		"SAP Kernel 777 Patch 615",
+		"SAP Kernel 789 Patch 211",
+		"SAP Kernel 754 Patch 220",
+		"SAP Kernel 791 Patch 041",
+		"SAP Kernel 792 Patch 025",
+		"SAP Kernel 785 Patch 313",
+		"SAP Kernel 793 Patch 060",
+	}
+	if discovery == nil {
+		return
+	}
+	for _, system := range discovery.GetSAPSystems() {
+		kv := system.GetApplicationLayer().GetApplicationProperties().GetKernelVersion()
+		if slices.Contains(affectedKernelVersions, kv) {
+			log.CtxLogger(ctx).Infow("The netweaver kernel does not have fix for SAP Note:3366597. Skipping metrics: /sap/nw/abap/sessions and /sap/nw/abap/rfc.", "KernelVersion", kv)
+			sm["/sap/nw/abap/sessions"] = true
+			sm["/sap/nw/abap/rfc"] = true
+			break
+		}
+	}
 }
