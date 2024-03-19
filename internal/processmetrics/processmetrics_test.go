@@ -778,7 +778,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 794 Patch 003",
+									KernelVersion: "SAP Kernel 794 Patch 000",
 								},
 							},
 						},
@@ -799,7 +799,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 753 Patch 1224",
+									KernelVersion: "SAP Kernel 753 Patch 122",
 								},
 							},
 						},
@@ -820,7 +820,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 777 Patch 615",
+									KernelVersion: "SAP Kernel 777 Patch 612",
 								},
 							},
 						},
@@ -841,7 +841,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 789 Patch 211",
+									KernelVersion: "SAP Kernel 789 Patch 200",
 								},
 							},
 						},
@@ -862,7 +862,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 754 Patch 220",
+									KernelVersion: "SAP Kernel 754 Patch 22",
 								},
 							},
 						},
@@ -883,7 +883,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 791 Patch 041",
+									KernelVersion: "SAP Kernel 791 Patch 040",
 								},
 							},
 						},
@@ -904,7 +904,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 792 Patch 025",
+									KernelVersion: "SAP Kernel 792 Patch 005",
 								},
 							},
 						},
@@ -925,7 +925,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 785 Patch 313",
+									KernelVersion: "SAP Kernel 785 Patch 312",
 								},
 							},
 						},
@@ -946,7 +946,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 						ApplicationLayer: &spb.SapDiscovery_Component{
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-									KernelVersion: "SAP Kernel 793 Patch 060",
+									KernelVersion: "SAP Kernel 793 Patch 059",
 								},
 							},
 						},
@@ -960,7 +960,7 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 			},
 		},
 		{
-			name: "KernelVersionNotAffected",
+			name: "KernelVersionNotAffected1",
 			Discovery: &fakeDiscoveryInterface{
 				systems: []*spb.SapDiscovery{
 					{
@@ -968,6 +968,24 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
 									KernelVersion: "SAP Kernel 794 Patch 007",
+								},
+							},
+						},
+					},
+				},
+			},
+			skippedMetrics: map[string]bool{"another/metric": true},
+			want:           map[string]bool{"another/metric": true},
+		},
+		{
+			name: "KernelVersionNotAffected2",
+			Discovery: &fakeDiscoveryInterface{
+				systems: []*spb.SapDiscovery{
+					{
+						ApplicationLayer: &spb.SapDiscovery_Component{
+							Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+								ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+									KernelVersion: "SAP Kernel 794 Patch 009",
 								},
 							},
 						},
@@ -1001,5 +1019,65 @@ func TestSkipMetricsForNetweaverKernel(t *testing.T) {
 				t.Errorf("skipMetricsForNetweaverKernel() returned diff (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestExtractKernelVersionAndPatch(t *testing.T) {
+	tests := []struct {
+		name          string
+		kernelVersion string
+		wantKernel    int
+		wantPatch     int
+		wantErr       error
+	}{
+		{
+			name:          "ValidKernelVersion",
+			kernelVersion: "SAP Kernel 794 Patch 003",
+			wantKernel:    794,
+			wantPatch:     3,
+		},
+		{
+			name:          "ValidKernelVersion2",
+			kernelVersion: "SAP Kernel 753 Patch 1224",
+			wantKernel:    753,
+			wantPatch:     1224,
+		},
+		{
+			name:          "InvalidKernelVersion",
+			kernelVersion: "SAP Kernel NA Patch 007",
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "InvalidPatch",
+			kernelVersion: "SAP Kernel 794 Patch NA",
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "InvalidKernelVersionWithLargeKernel",
+			kernelVersion: "SAP Kernel 794000000000000000000000 Patch 9",
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "InvalidKernelVersionWithLargePatch",
+			kernelVersion: "SAP Kernel 794 Patch 900000000000000000000000",
+			wantErr:       cmpopts.AnyError,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		gotKernel, gotPatch, err := extractKernelVersionAndPatch(ctx, tc.kernelVersion)
+		if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+			t.Errorf("extractKernelVersionAndPatch(%v) returned an unexpected error: %v, want: %v", tc.kernelVersion, err, tc.wantErr)
+			continue
+		}
+
+		if gotKernel != tc.wantKernel {
+			t.Errorf("extractKernelVersionAndPatch(%v) = %v, want: %v", tc.kernelVersion, gotKernel, tc.wantKernel)
+		}
+		if gotPatch != tc.wantPatch {
+			t.Errorf("extractKernelVersionAndPatch(%v) = %v, want: %v", tc.kernelVersion, gotPatch, tc.wantPatch)
+		}
 	}
 }

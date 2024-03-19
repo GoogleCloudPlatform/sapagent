@@ -33,6 +33,8 @@ package processmetrics
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -764,27 +766,51 @@ func flatten(msgs [][]*mrpb.TimeSeries) []*mrpb.TimeSeries {
 	return metrics
 }
 
+// extractKernelVersionAndPatch extracts the kernel version and patch version from the kernel version string.
+// The kernel version string is of the format: "SAP Kernel <version> Patch <patch version>"
+func extractKernelVersionAndPatch(ctx context.Context, kernelVersion string) (int, int, error) {
+	re := regexp.MustCompile(`SAP Kernel (\d+) Patch (\d+)`)
+	match := re.FindStringSubmatch(kernelVersion)
+	if len(match) != 3 {
+		return 0, 0, fmt.Errorf("invalid kernel version: %s", kernelVersion)
+	}
+	kv, err := strconv.Atoi(match[1])
+	if err != nil {
+		return 0, 0, err
+	}
+	pv, err := strconv.Atoi(match[2])
+	if err != nil {
+		return 0, 0, err
+	}
+	return kv, pv, nil
+}
+
 // skipMetricsForNetweaverKernel checks the kernel version of the netweaver system and skips the metrics
 // if the kernel version is affected by SAP Note: https://me.sap.com/notes/3366597/E.
 func skipMetricsForNetweaverKernel(ctx context.Context, discovery discoveryInterface, sm map[string]bool) {
-	affectedKernelVersions := []string{
-		"SAP Kernel 794 Patch 003",
-		"SAP Kernel 753 Patch 1224",
-		"SAP Kernel 777 Patch 615",
-		"SAP Kernel 789 Patch 211",
-		"SAP Kernel 754 Patch 220",
-		"SAP Kernel 791 Patch 041",
-		"SAP Kernel 792 Patch 025",
-		"SAP Kernel 785 Patch 313",
-		"SAP Kernel 793 Patch 060",
+	affectedKernelVersions := [][]int{
+		{794, 3},    // SAP Kernel 794 Patch 003
+		{753, 1224}, // SAP Kernel 753 Patch 1224
+		{777, 615},  // SAP Kernel 777 Patch 615
+		{789, 211},  // SAP Kernel 789 Patch 211
+		{754, 220},  // SAP Kernel 754 Patch 220
+		{791, 41},   // SAP Kernel 791 Patch 041
+		{792, 25},   // SAP Kernel 792 Patch 025
+		{785, 313},  // SAP Kernel 785 Patch 313
+		{793, 60},   // SAP Kernel 793 Patch 060
 	}
 	if discovery == nil {
 		return
 	}
 	for _, system := range discovery.GetSAPSystems() {
 		kv := system.GetApplicationLayer().GetApplicationProperties().GetKernelVersion()
-		if slices.Contains(affectedKernelVersions, kv) {
-			log.CtxLogger(ctx).Infow("The netweaver kernel does not have fix for SAP Note:3366597. Skipping metrics: /sap/nw/abap/sessions and /sap/nw/abap/rfc.", "KernelVersion", kv)
+		kernelVersion, patchVersion, err := extractKernelVersionAndPatch(ctx, kv) // kernelVersion and patchVersion are integers
+		if err != nil {
+			log.CtxLogger(ctx).Debugw("Error extracting kernel version and patch version", "error", err)
+			continue
+		}
+		if slices.ContainsFunc(affectedKernelVersions, func(s []int) bool { return kernelVersion == s[0] && patchVersion < s[1] }) {
+			log.CtxLogger(ctx).Infow("The netweaver kernel does not have fix for SAP Note:3366597. Skipping metrics: /sap/nw/abap/sessions and /sap/nw/abap/rfc.", "KernelVersion", kv, "KernelVersionNumber", kernelVersion, "PatchVersionNumber", patchVersion)
 			sm["/sap/nw/abap/sessions"] = true
 			sm["/sap/nw/abap/rfc"] = true
 			break
