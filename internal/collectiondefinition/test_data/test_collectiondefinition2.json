@@ -135,7 +135,8 @@
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/system",
-            "label": "os_settings"
+            "label": "os_settings",
+            "min_version": "3.2"
           },
           "os_vendor": "ALL",
           "command": "/usr/bin/google_cloud_sap_agent",

@@ -19,6 +19,8 @@ package collectiondefinition
 import (
 	"testing"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
@@ -898,7 +900,7 @@ func TestValidate(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			v := NewValidator("1.1", test.definition)
+			v := NewValidator(configuration.AgentVersion, test.definition)
 			v.Validate()
 			gotValid := v.Valid()
 			if gotValid != test.wantValid {
