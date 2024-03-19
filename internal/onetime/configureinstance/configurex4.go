@@ -191,16 +191,16 @@ func (c *ConfigureInstance) saptuneReapply(ctx context.Context, sapTuneReapply b
 		return nil
 	}
 	log.CtxLogger(ctx).Info("Executing SAPTune re-apply.")
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution revert HANA"}); res.ExitCode != 0 {
+	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution revert HANA", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune solution revert HANA' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution apply HANA"}); res.ExitCode != 0 {
+	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution apply HANA", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune solution apply HANA' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4"}); res.ExitCode != 0 {
+	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune note revert google-x4' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4"}); res.ExitCode != 0 {
+	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune note apply google-x4' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
 	return nil
