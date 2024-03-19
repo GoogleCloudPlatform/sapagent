@@ -46,7 +46,7 @@ type HanaChangeDiskType struct {
 	project, host, sid, hanaSidAdm                     string
 	disk, diskZone                                     string
 	newDiskType                                        string
-	diskKeyFile, storageLocation, csekKeyFile          string
+	diskKeyFile, storageLocation                       string
 	snapshotName, snapshotType, description            string
 	abandonPrepared                                    bool
 	forceStopHANA                                      bool
@@ -90,7 +90,6 @@ func (c *HanaChangeDiskType) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.description, "description", "", "Description of the new snapshot(optional)")
 	fs.StringVar(&c.diskKeyFile, "source-disk-key-file", "", `Path to the customer-supplied encryption key of the source disk. (optional)\n (required if the source disk is protected by a customer-supplied encryption key.)`)
 	fs.StringVar(&c.storageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
-	fs.StringVar(&c.csekKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
 	fs.StringVar(&c.newdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters")
 	fs.StringVar(&c.newDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.BoolVar(&c.forceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
@@ -172,7 +171,6 @@ func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.
 		Disk:                            c.disk,
 		DiskZone:                        c.diskZone,
 		DiskKeyFile:                     c.diskKeyFile,
-		CSEKKeyFile:                     c.csekKeyFile,
 		StorageLocation:                 c.storageLocation,
 		SnapshotName:                    c.snapshotName,
 		SnapshotType:                    "STANDARD",

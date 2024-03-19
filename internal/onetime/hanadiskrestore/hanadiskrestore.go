@@ -19,7 +19,9 @@ package hanadiskrestore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -30,6 +32,7 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -73,6 +76,7 @@ type Restorer struct {
 	LogLevel                                                   string
 	ForceStopHANA                                              bool
 	NewdiskName                                                string
+	CSEKKeyFile                                                string
 	ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
 }
 
@@ -92,6 +96,7 @@ func (*Restorer) Usage() string {
 	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
 	[-send-metrics-to-monitoring]=<true|false>
+	[csek-key-file]=<path-to-key-file>]
 	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
 }
 
@@ -109,6 +114,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&r.DiskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
 	fs.Int64Var(&r.ProvisionedIops, "provisioned-iops", 0, "Number of I/O operations per second that the disk can handle. (optional)")
 	fs.Int64Var(&r.ProvisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
+	fs.StringVar(&r.CSEKKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file for the source snapshot. (required if source snapshot is encrypted)`)
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.LogLevel, "loglevel", "info", "Sets the logging level")
@@ -317,11 +323,23 @@ func (r *Restorer) isDiskAttachedToInstance(diskName string) (string, bool, erro
 
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
 func (r *Restorer) restoreFromSnapshot(ctx context.Context) error {
+	snapShotKey := ""
+	if r.CSEKKeyFile != "" {
+		usagemetrics.Action(usagemetrics.EncryptedSnapshotRestore)
+		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.SourceSnapshot)
+		key, err := readKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
+		if err != nil {
+			usagemetrics.Error(usagemetrics.EncryptedSnapshotRestoreFailure)
+			return err
+		}
+		snapShotKey = key
+	}
 	disk := &compute.Disk{
-		Name:           r.NewdiskName,
-		Type:           r.NewDiskType,
-		Zone:           r.DataDiskZone,
-		SourceSnapshot: fmt.Sprintf("projects/%s/global/snapshots/%s", r.Project, r.SourceSnapshot),
+		Name:                        r.NewdiskName,
+		Type:                        r.NewDiskType,
+		Zone:                        r.DataDiskZone,
+		SourceSnapshot:              fmt.Sprintf("projects/%s/global/snapshots/%s", r.Project, r.SourceSnapshot),
+		SourceSnapshotEncryptionKey: &compute.CustomerEncryptionKey{RsaEncryptedKey: snapShotKey},
 	}
 	if r.DiskSizeGb > 0 {
 		disk.SizeGb = r.DiskSizeGb
@@ -675,4 +693,31 @@ func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 		return false
 	}
 	return true
+}
+
+// Key defines the contents of each entry in the encryption key file.
+// Reference: https://cloud.google.com/compute/docs/disks/customer-supplied-encryption#key_file
+type Key struct {
+	URI     string `json:"uri"`
+	Key     string `json:"key"`
+	KeyType string `json:"key-type"`
+}
+
+func readKey(file, diskURI string, read configuration.ReadConfigFile) (string, error) {
+	var keys []Key
+	fileContent, err := read(file)
+	if err != nil {
+		return "", err
+	}
+
+	if err := json.Unmarshal(fileContent, &keys); err != nil {
+		return "", err
+	}
+
+	for _, k := range keys {
+		if k.URI == diskURI {
+			return k.Key, nil
+		}
+	}
+	return "", fmt.Errorf("no matching key for for the disk")
 }

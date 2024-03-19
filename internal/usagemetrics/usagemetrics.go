@@ -102,6 +102,8 @@ const (
 	HANAMonitoringCreateWorkerPoolFailure
 	CollectReliabilityMetricsRoutineFailure
 	ConfigureInstanceFailure
+	EncryptedDiskSnapshotFailure
+	EncryptedSnapshotRestoreFailure
 )
 
 // Agent wide action mappings.
@@ -138,6 +140,8 @@ const (
 	CollectReliabilityMetrics
 	ConfigureInstanceStarted
 	ConfigureInstanceFinished
+	EncryptedDiskSnapshot
+	EncryptedSnapshotRestore
 )
 
 // projectNumbers contains known project numbers for test instances.

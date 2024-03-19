@@ -30,6 +30,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -652,6 +653,75 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			got := tc.r.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReadKey(t *testing.T) {
+
+	tests := []struct {
+		name       string
+		diskURI    string
+		fakeReader configuration.ReadConfigFile
+		wantKey    string
+		wantErr    error
+	}{
+		{
+			name:    "Success",
+			diskURI: "https://www.googleapis.com/compute/v1/projects/myproject/zones/us-central1-a/disks/example-disk",
+			fakeReader: func(string) ([]byte, error) {
+				testKeyFileText := []byte(`[
+					{
+					"uri": "https://www.googleapis.com/compute/v1/projects/myproject/zones/us-central1-a/disks/example-disk",
+					"key": "acXTX3rxrKAFTF0tYVLvydU1riRZTvUNC4g5I11NY+c=",
+					"key-type": "raw"
+					},
+					{
+					"uri": "https://www.googleapis.com/compute/v1/projects/myproject/global/snapshots/my-private-snapshot",
+					"key": "ieCx/NcW06PcT7Ep1X6LUTc/hLvUDYyzSZPPVCVPTV=",
+					"key-type": "rsa-encrypted"
+					}
+				]`)
+				return testKeyFileText, nil
+			},
+			wantKey: `acXTX3rxrKAFTF0tYVLvydU1riRZTvUNC4g5I11NY+c=`,
+		},
+		{
+			name:       "RedFileFailure",
+			fakeReader: func(string) ([]byte, error) { return nil, cmpopts.AnyError },
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name:       "MalformedJSON",
+			fakeReader: func(string) ([]byte, error) { return []byte(`[[]}`), nil },
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name:    "NoMatchingKey",
+			diskURI: "https://www.googleapis.com/compute/v1/projects/myproject/zones/us-central1-a/disks/example-disk",
+			fakeReader: func(string) ([]byte, error) {
+				testKeyFileText := []byte(`[
+					{
+					"uri": "https://www.googleapis.com/compute/v1/projects/myproject/global/snapshots/my-private-snapshot",
+					"key": "ieCx/NcW06PcT7Ep1X6LUTc/hLvUDYyzSZPPVCVPTV=",
+					"key-type": "rsa-encrypted"
+					}
+				]`)
+				return testKeyFileText, nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := readKey("", test.diskURI, test.fakeReader)
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("readKey()=%v, want=%v", err, test.wantErr)
+			}
+			if got != test.wantKey {
+				t.Errorf("readKey()=%v, want=%v", got, test.wantKey)
 			}
 		})
 	}

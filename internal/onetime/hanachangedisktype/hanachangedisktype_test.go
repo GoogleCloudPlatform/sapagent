@@ -38,7 +38,6 @@ var defaultChangeDiskType = &HanaChangeDiskType{
 	newdiskName:                     "default-newdiskname",
 	diskKeyFile:                     "default-disk-key-file",
 	storageLocation:                 "default-storage-location",
-	csekKeyFile:                     "default-csek-key-file",
 	abandonPrepared:                 true,
 	cloudProps:                      defaultCloudProperties,
 	forceStopHANA:                   true,
@@ -244,7 +243,7 @@ func TestSetFlagsForChangeDiskTypeWorkflow(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"provisioned-iops", "provisioned-throughput", "h", "v", "loglevel", "sid", "hana-sidadm",
 		"source-disk", "source-disk-zone", "new-disk-name", "skip-db-snapshot-for-change-disk-type",
-		"source-disk-key-file", "storage-location", "csek-key-file", "force-stop-hana"}
+		"source-disk-key-file", "storage-location", "force-stop-hana"}
 	c.SetFlags(fs)
 	for _, flag := range flags {
 		if fs.Lookup(flag) == nil {

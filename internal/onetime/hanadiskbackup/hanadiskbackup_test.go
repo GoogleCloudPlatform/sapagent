@@ -566,7 +566,7 @@ func TestSetFlagsForSnapshot(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"project", "host", "port", "sid", "hana-db-user", "password", "password-secret",
 		"snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file",
-		"snapshot-description", "send-metrics-to-monitoring", "csek-key-file", "storage-location"}
+		"snapshot-description", "send-metrics-to-monitoring", "storage-location"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

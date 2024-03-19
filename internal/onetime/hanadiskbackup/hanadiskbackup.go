@@ -80,7 +80,7 @@ type Snapshot struct {
 	HanaDBUser, Password, PasswordSecret             string
 	Disk, DiskZone                                   string
 
-	DiskKeyFile, StorageLocation, CSEKKeyFile           string
+	DiskKeyFile, StorageLocation                        string
 	SnapshotName, SnapshotType, Description             string
 	AbandonPrepared, SendToMonitoring, freezeFileSystem bool
 
@@ -113,7 +113,7 @@ func (*Snapshot) Usage() string {
 	-source-disk=<disk-name> -source-disk-zone=<disk-zone> [-host=<hostname>] [-project=<project-name>]
 	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
 	[-send-status-to-monitoring]=<true|false> [-source-disk-key-file=<path-to-key-file>]
-	[-storage-location=<storage-location>] [-csek-key-file=<path-to-key-file>]
+	[-storage-location=<storage-location>]
 	[-snapshot-description=<description>] [-snapshot-name=<snapshot-name>]
 	[-snapshot-type=<snapshot-type>] [-freeze-file-system=<true|false>]
 	[-labels="label1=value1,label2=value2"]
@@ -136,11 +136,10 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.BoolVar(&s.AbandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
 	fs.BoolVar(&s.SkipDBSnapshotForChangeDiskType, "skip-db-snapshot-for-change-disk-type", false, "Skip DB snapshot for change disk type, (optional) Default: false")
-	fs.StringVar(&s.SnapshotName, "snapshot-name", "", "Snapshot name override.(Optional - deafaults to 'hana-sid-snapshot-yyyymmdd-hhmmss')")
+	fs.StringVar(&s.SnapshotName, "snapshot-name", "", "Snapshot name override.(Optional - deafaults to 'snapshot-diskname-yyyymmdd-hhmmss'.)")
 	fs.StringVar(&s.SnapshotType, "snapshot-type", "STANDARD", "Snapshot type override.(Optional - deafaults to 'STANDARD', use 'ARCHIVE' for archive snapshots.)")
 	fs.StringVar(&s.DiskKeyFile, "source-disk-key-file", "", `Path to the customer-supplied encryption key of the source disk. (optional)\n (required if the source disk is protected by a customer-supplied encryption key.)`)
 	fs.StringVar(&s.StorageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
-	fs.StringVar(&s.CSEKKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file. (optional)`)
 	fs.StringVar(&s.Description, "snapshot-description", "", "Description of the new snapshot(optional)")
 	fs.BoolVar(&s.SendToMonitoring, "send-metrics-to-monitoring", true, "Send backup related metrics to cloud monitoring. (optional) Default: true")
 	fs.BoolVar(&s.help, "h", false, "Displays help")
@@ -488,13 +487,19 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 		Labels:           s.parseLabels(),
 	}
 
+	// In case customer is taking a snapshot from an encrypted disk, the snapshot created from it also
+	// needs to be encrypted. For simplicity we support the use case in which disk encryption and
+	// snapshot encryption key are the same.
 	if s.DiskKeyFile != "" {
+		usagemetrics.Action(usagemetrics.EncryptedDiskSnapshot)
 		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
 		srcDiskKey, err := readKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
 		if err != nil {
+			usagemetrics.Error(usagemetrics.EncryptedDiskSnapshotFailure)
 			return nil, err
 		}
 		snapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+		snapshot.SnapshotEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
 	}
 	if s.computeService == nil {
 		return nil, fmt.Errorf("computeService needed to proceed")
