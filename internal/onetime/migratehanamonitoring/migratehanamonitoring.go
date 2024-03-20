@@ -35,6 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/yamlpb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	hmmpb "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -77,8 +78,8 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
+	if len(args) < 3 {
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	lp, ok := args[1].(log.Parameters)
@@ -87,6 +88,12 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 		return subcommands.ExitUsageError
 	}
 	onetime.SetupOneTimeLogging(lp, m.Name(), log.StringLevelToZapcore(m.logLevel))
+	cloudProps, ok := args[2].(*ipb.CloudProperties)
+	if !ok {
+		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		return subcommands.ExitUsageError
+	}
+	onetime.ConfigureUsageMetricsForOTE(cloudProps, "", "")
 	return m.migrationHandler(f, os.ReadFile, os.WriteFile)
 }
 
@@ -265,4 +272,3 @@ func format(s string) string {
 	res = doubleQuotes.ReplaceAllString(res, "")
 	return res
 }
-

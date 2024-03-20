@@ -113,6 +113,7 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
+	onetime.ConfigureUsageMetricsForOTE(cloudProps, "", "")
 	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore("info"))
 
 	if !c.check && !c.apply {

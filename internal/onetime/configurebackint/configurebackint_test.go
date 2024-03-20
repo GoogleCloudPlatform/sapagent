@@ -152,6 +152,7 @@ func TestExecuteConfigureBackint(t *testing.T) {
 			args: []any{
 				"test",
 				"test2",
+				"test3",
 			},
 		},
 		{
@@ -196,6 +197,7 @@ func TestExecuteConfigureBackint(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				&ipb.CloudProperties{},
 			},
 		},
 	}

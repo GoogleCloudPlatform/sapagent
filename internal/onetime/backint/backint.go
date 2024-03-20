@@ -33,8 +33,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 const userAgent = "Backint for GCS"
@@ -96,8 +99,8 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		return subcommands.ExitSuccess
 	}
 	// this check will never be hit when executing the command line
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
+	if len(args) < 3 {
+		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
 	// this check will never be hit when executing the command line
@@ -107,6 +110,12 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		return subcommands.ExitUsageError
 	}
 
+	cloudProps, ok := args[2].(*ipb.CloudProperties)
+	if !ok {
+		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		return subcommands.ExitUsageError
+	}
+	onetime.ConfigureUsageMetricsForOTE(cloudProps, "", "")
 	onetime.SetupOneTimeLogging(lp, b.Name(), log.StringLevelToZapcore(b.logLevel))
 
 	return b.backintHandler(ctx, lp, s.NewClient)

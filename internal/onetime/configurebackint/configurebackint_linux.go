@@ -34,8 +34,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 type (
@@ -135,7 +137,7 @@ func (c *ConfigureBackint) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		onetime.PrintAgentVersion()
 		return subcommands.ExitSuccess
 	}
-	if len(args) < 2 {
+	if len(args) < 3 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
 		return subcommands.ExitUsageError
 	}
@@ -145,6 +147,13 @@ func (c *ConfigureBackint) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		return subcommands.ExitUsageError
 	}
 	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore("info"))
+
+	cloudProps, ok := args[2].(*ipb.CloudProperties)
+	if !ok {
+		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		return subcommands.ExitUsageError
+	}
+	onetime.ConfigureUsageMetricsForOTE(cloudProps, "", "")
 
 	if c.fileName == "" {
 		fmt.Printf("-f must be specified.\n%s\n", c.Usage())

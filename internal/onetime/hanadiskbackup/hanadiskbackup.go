@@ -180,6 +180,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		onetime.SetupOneTimeLogging(s.LogProperties, s.HANAChangeDiskTypeOTEName, log.StringLevelToZapcore(s.LogLevel))
 	}
 
+	onetime.ConfigureUsageMetricsForOTE(s.CloudProps, "", "")
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to create Cloud Monitoring metric client", err)
@@ -218,7 +219,6 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	}
 
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)
-	onetime.ConfigureUsageMetricsForOTE(s.CloudProps, "", "")
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
 	dbp := databaseconnector.Params{
 		Username:       s.HanaDBUser,

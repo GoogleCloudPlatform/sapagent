@@ -120,6 +120,8 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		return subcommands.ExitUsageError
 	}
 	onetime.SetupOneTimeLogging(lp, r.Name(), log.StringLevelToZapcore(r.logLevel))
+	onetime.ConfigureUsageMetricsForOTE(r.cloudProps, "", "")
+
 	log.CtxLogger(ctx).Info("ReadMetrics starting")
 	if r.projectID == "" {
 		r.projectID = r.cloudProps.GetProjectId()

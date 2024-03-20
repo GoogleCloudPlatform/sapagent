@@ -148,6 +148,8 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 			return subcommands.ExitUsageError
 		}
 	}
+	onetime.ConfigureUsageMetricsForOTE(r.CloudProps, "", "")
+
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)

@@ -32,7 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	hmmpb "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration"
-	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -100,7 +100,7 @@ func migrationConfig(ssl bool) *hmmpb.HANAMonitoringConfiguration {
 func agentForSAPConf() *cpb.Configuration {
 	conf := &cpb.Configuration{
 		ProvideSapHostAgentMetrics: wpb.Bool(true),
-		CloudProperties: &iipb.CloudProperties{
+		CloudProperties: &ipb.CloudProperties{
 			ProjectId:  "config-project-id",
 			InstanceId: "config-instance-id",
 			Zone:       "config-zone",
@@ -127,6 +127,7 @@ func TestExecuteMigrateHANAMonitoring(t *testing.T) {
 			args: []any{
 				"test",
 				"test2",
+				"test3",
 			},
 		},
 		{
@@ -136,6 +137,7 @@ func TestExecuteMigrateHANAMonitoring(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				&ipb.CloudProperties{},
 			},
 		},
 		{
@@ -147,6 +149,7 @@ func TestExecuteMigrateHANAMonitoring(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				&ipb.CloudProperties{},
 			},
 		},
 		{
@@ -158,6 +161,7 @@ func TestExecuteMigrateHANAMonitoring(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				&ipb.CloudProperties{},
 			},
 		},
 	}

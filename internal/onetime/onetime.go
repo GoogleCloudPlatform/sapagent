@@ -50,6 +50,13 @@ type (
 
 // ConfigureUsageMetricsForOTE configures usage metrics for Agent in one time execution mode.
 func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string) {
+	if name == "" {
+		name = configuration.AgentName
+	}
+	if version == "" {
+		version = configuration.AgentVersion
+	}
+
 	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
 		Name:            name,
 		Version:         version,

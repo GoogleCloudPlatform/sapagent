@@ -29,6 +29,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -58,6 +59,11 @@ var (
 	}
 	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
 		return fakeServer.Client(), nil
+	}
+
+	defaultCloudProperties = &ipb.CloudProperties{
+		ProjectId:    "default-project",
+		InstanceName: "default-instance",
 	}
 )
 
@@ -105,6 +111,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				"test2",
+				"test3",
 			},
 		},
 		{
@@ -114,6 +121,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -124,6 +132,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 			want: subcommands.ExitSuccess,
 		},
@@ -135,6 +144,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 			want: subcommands.ExitSuccess,
 		},
