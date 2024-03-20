@@ -137,6 +137,10 @@ func mergeComponent(old, new *spb.SapDiscovery_Component) *spb.SapDiscovery_Comp
 			}
 		}
 	}
+	if old.GetTopologyType() == spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT ||
+		new.GetTopologyType() == spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT {
+		merged.TopologyType = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
+	}
 
 	merged.HaHosts = removeDuplicates(append(merged.GetHaHosts(), new.GetHaHosts()...))
 
@@ -274,7 +278,8 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		return details
 	}
 	details.DBComponent = &spb.SapDiscovery_Component{
-		Sid: dbSID,
+		Sid:          dbSID,
+		TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 	}
 	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid)
 	if err != nil {
@@ -282,17 +287,25 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	}
 
 	details.DBHosts = dbHosts
+	if len(details.DBHosts) > 1 {
+		details.DBComponent.TopologyType = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
+	}
 	return details
 }
 
 func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid string) SapSystemDetails {
+	t := spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP
+	if len(dbHosts) > 1 {
+		t = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
+	}
 	return SapSystemDetails{
 		DBComponent: &spb.SapDiscovery_Component{
 			Sid: sid,
 			Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 				DatabaseProperties: dbProps,
 			},
-			HaHosts: app.HanaHaMembers,
+			HaHosts:      app.HanaHaMembers,
+			TopologyType: t,
 		},
 		DBHosts: removeDuplicates(append(dbHosts, app.HanaHaMembers...)),
 	}

@@ -42,13 +42,22 @@ const (
 	defaultInstanceName    = "test-instance-id"
 	defaultProjectID       = "test-project-id"
 	defaultZone            = "test-zone"
-	defaultUserstoreOutput = `
+	defaultUserStoreOutput = `
 KEY default
 	ENV: 
 	a:b:c
   ENV : test-instance:30013
   USER: SAPABAP1
   DATABASE: DEH
+Operation succeed.
+`
+	scaleoutUserStoreOutput = `
+KEY default
+ENV: 
+a:b:c
+ENV : test-instance:30013; test-instance2:30013
+USER: SAPABAP1
+DATABASE: DEH
 Operation succeed.
 `
 	defaultSID                = "ABC"
@@ -174,7 +183,7 @@ var (
 		Zone:         defaultZone,
 	}
 	defaultUserStoreResult = commandlineexecutor.Result{
-		StdOut: defaultUserstoreOutput,
+		StdOut: defaultUserStoreOutput,
 	}
 	netweaverMountResult = commandlineexecutor.Result{
 		StdOut: defaultAppMountOutput,
@@ -312,7 +321,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 		name: "appToDBWithIPAddr",
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
-				StdOut: defaultUserstoreOutput,
+				StdOut: defaultUserStoreOutput,
 				StdErr: "",
 			}
 		},
@@ -941,9 +950,70 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
 			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: exampleWorkloadProperties,
+		},
+	}, {
+		name: "justNetweaverConnectedToScaleoutDB",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return commandlineexecutor.Result{StdOut: scaleoutUserStoreOutput}
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return defaultProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte(r3transDataExample)},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+						Abap:            true,
+					}},
+				Sid:     "abc",
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
+			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+			},
+			DBHosts:            []string{"test-instance", "test-instance2"},
 			WorkloadProperties: exampleWorkloadProperties,
 		},
 	}, {
@@ -995,7 +1065,10 @@ func TestDiscoverNetweaver(t *testing.T) {
 					}},
 				Sid: "abc",
 			},
-			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
@@ -1209,8 +1282,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
 	}, {
@@ -1263,7 +1339,10 @@ func TestDiscoverNetweaver(t *testing.T) {
 					}},
 				Sid: "abc",
 			},
-			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
 		},
@@ -1336,8 +1415,54 @@ func TestDiscoverHANA(t *testing.T) {
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBHosts: []string{"test-instance"},
+		}},
+	}, {
+		name: "scaleout",
+		app: &sappb.SAPInstance{
+			Sapsid:         "abc",
+			Type:           sappb.InstanceType_HANA,
+			InstanceNumber: "00",
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				return landscapeMultipleNodesResult
+			case "df":
+				return hanaMountResult
+			default:
+				if strings.Contains(params.Executable, "HDB") {
+					return defaultHANAVersionResult
+				}
+			}
+			return commandlineexecutor.Result{
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "ABC"
+					}
+				}
+			}
+		}`,
+		want: []SapSystemDetails{{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.0 Rev 56",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+			},
+			DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
 		}},
 	}, {
 		name: "multiTenant",
@@ -1387,6 +1512,7 @@ func TestDiscoverHANA(t *testing.T) {
 							SharedNfsUri:    "1.2.3.4",
 							DatabaseVersion: "HANA 2.0 Rev 56",
 						}},
+					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 				},
 				DBHosts: []string{"test-instance"},
 			},
@@ -1399,8 +1525,75 @@ func TestDiscoverHANA(t *testing.T) {
 							SharedNfsUri:    "1.2.3.4",
 							DatabaseVersion: "HANA 2.0 Rev 56",
 						}},
+					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 				},
 				DBHosts: []string{"test-instance"},
+			},
+		},
+	}, {
+		name: "multiTenantScaleout",
+		app: &sappb.SAPInstance{
+			Sapsid:         "abc",
+			Type:           sappb.InstanceType_HANA,
+			InstanceNumber: "00",
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				return landscapeMultipleNodesResult
+			case "df":
+				return hanaMountResult
+			default:
+				if strings.Contains(params.Executable, "HDB") {
+					return defaultHANAVersionResult
+				}
+			}
+			return commandlineexecutor.Result{
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		topology: `{
+			"topology": {
+				"databases": {
+					"1": {
+						"name": "SYSTEMDB"
+					},
+					"3": {
+						"name": "ABC"
+					},
+					"4": {
+						"name": "DEF"
+					}
+				}
+			}
+		}`,
+		want: []SapSystemDetails{
+			SapSystemDetails{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+							SharedNfsUri:    "1.2.3.4",
+							DatabaseVersion: "HANA 2.0 Rev 56",
+						}},
+					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+				},
+				DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
+			},
+			SapSystemDetails{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "DEF",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+							SharedNfsUri:    "1.2.3.4",
+							DatabaseVersion: "HANA 2.0 Rev 56",
+						}},
+					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+				},
+				DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
 			},
 		},
 	}, {
@@ -1689,6 +1882,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 							SharedNfsUri:    "1.2.3.4",
 							DatabaseVersion: "HANA 2.0 Rev 56",
 						}},
+					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 				},
 				DBOnHost: true,
 				DBHosts:  []string{"test-instance"},
@@ -1752,9 +1946,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppOnHost:          true,
-			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			AppOnHost: true,
+			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
 		}},
@@ -1839,9 +2036,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
-			AppOnHost:          true,
-			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent:        &spb.SapDiscovery_Component{Sid: "DEH"},
+			AppOnHost: true,
+			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
 		}, {
@@ -1858,7 +2058,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			AppOnHost: true,
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "DEH",
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -1913,6 +2114,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
@@ -1925,6 +2127,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
@@ -2022,6 +2225,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost:           true,
 			DBHosts:            []string{"test-instance"},
@@ -2118,6 +2322,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
@@ -2206,7 +2411,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppOnHost: true,
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "DEH",
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost:           false,
 			DBHosts:            []string{"test-instance"},
@@ -2220,6 +2426,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
@@ -2308,7 +2515,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppOnHost: true,
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "DEH",
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost:           false,
 			DBHosts:            []string{"test-instance"},
@@ -2322,6 +2530,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.0 Rev 56",
 					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
@@ -2874,6 +3083,68 @@ func TestMergeSystemDetails(t *testing.T) {
 						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri: "1.2.3.4",
 					}},
+			},
+		},
+	}, {
+		name: "topologyTypeFavorsScaleOut",
+		oldDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+			},
+		},
+		newDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED,
+						SharedNfsUri: "1.2.3.4",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
+		},
+		want: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+			},
+		},
+	}, {
+		name: "topologyTypeFavorsScaleOutFromNew",
+		oldDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
+		},
+		newDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED,
+						SharedNfsUri: "1.2.3.4",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+			},
+		},
+		want: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
 		},
 	}}
