@@ -123,6 +123,9 @@ message SapDiscovery {
 
       // A list of instance URIs that are part of a cluster with this one.
       repeated string cluster_instances = 2;
+
+      // The VM's instance number.
+      uint64 instance_number = 3;
     }
 
     // A set of properties only applying to instance type resources.

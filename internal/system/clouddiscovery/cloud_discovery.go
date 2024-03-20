@@ -214,11 +214,9 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 		return nil, nil, err
 	}
 	if uri != host.name && res.ResourceKind == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
-		res.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{
-			VirtualHostname: host.name,
-		}
+		res.InstanceProperties.VirtualHostname = host.name
 	}
-	if host.parent != nil && err == nil {
+	if host.parent != nil {
 		if !slices.Contains(host.parent.RelatedResources, res.ResourceUri) {
 			host.parent.RelatedResources = append(host.parent.RelatedResources, res.ResourceUri)
 		}
@@ -286,6 +284,9 @@ func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI strin
 		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 		ResourceUri:  ci.SelfLink,
 		UpdateTime:   timestamppb.Now(),
+		InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+			InstanceNumber: ci.Id,
+		},
 	}
 
 	toAdd := []toDiscover{}
