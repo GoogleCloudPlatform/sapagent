@@ -203,7 +203,9 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		return subcommands.ExitFailure
 	}
 	log.CtxLogger(ctx).Infow("Starting HANA disk snapshot restore", "sid", r.Sid)
-	onetime.ConfigureUsageMetricsForOTE(r.CloudProps, "", "")
+	if r.CloudProps != nil {
+		onetime.ConfigureUsageMetricsForOTE(r.CloudProps, "", "")
+	}
 	usagemetrics.Action(usagemetrics.HANADiskRestore)
 
 	if r.computeService, err = computeServiceCreator(ctx); err != nil {
