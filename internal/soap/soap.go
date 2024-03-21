@@ -178,6 +178,7 @@ func (client *Client) post(body *bytes.Buffer) (*http.Response, error) {
 	}
 	if res.StatusCode >= 400 {
 		body, err := io.ReadAll(res.Body)
+		defer res.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("error reading response body: %v", err)
 		}
