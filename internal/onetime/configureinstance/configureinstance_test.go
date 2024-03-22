@@ -183,7 +183,7 @@ func TestSynopsisForConfigureInstance(t *testing.T) {
 func TestSetFlagsForConfigureInstance(t *testing.T) {
 	c := ConfigureInstance{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"check", "apply", "overrideType", "overrideOLAP", "h", "v"}
+	flags := []string{"check", "apply", "overrideType", "overrideHyperThreading", "h", "v"}
 	c.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

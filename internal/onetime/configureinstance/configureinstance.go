@@ -46,10 +46,10 @@ type (
 
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
-	check, apply  bool
-	machineType   string
-	overrideOLAP  bool
-	help, version bool
+	check, apply           bool
+	machineType            string
+	overrideHyperThreading bool
+	help, version          bool
 
 	writeFile writeFileFunc
 	readFile  readFileFunc
@@ -73,8 +73,8 @@ func (*ConfigureInstance) Usage() string {
     -apply	Make changes as necessary to the settings
 
   Args (optional):
-    [-overrideType="type"]	Override the machine type (by default this is retrieved from metadata)
-    [-overrideOLAP=true]	If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'
+    [-overrideType="type"]		Override the machine type (by default this is retrieved from metadata)
+    [-overrideHyperThreading=true]	If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'
 
   Global options:
     [-h] [-v]` + "\n"
@@ -85,7 +85,7 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.check, "check", false, "Check settings and print errors, but do not apply any changes")
 	fs.BoolVar(&c.apply, "apply", false, "Apply changes as necessary to the settings")
 	fs.StringVar(&c.machineType, "overrideType", "", "Bypass the metadata machine type lookup")
-	fs.BoolVar(&c.overrideOLAP, "overrideOLAP", false, "If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'")
+	fs.BoolVar(&c.overrideHyperThreading, "overrideHyperThreading", false, "If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'")
 	fs.BoolVar(&c.help, "h", false, "Displays help")
 	fs.BoolVar(&c.version, "v", false, "Displays the current version of the agent")
 }

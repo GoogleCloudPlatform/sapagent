@@ -42,12 +42,12 @@ var (
 // configureX4 checks and applies OS settings on X4.
 // Returns true if a reboot is required.
 func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
-	if c.machineType == "x4-megamem-1920" {
+	if c.machineType == "x4-megamem-1920" || c.machineType == "x4-megamem-1440" {
 		processingSystem := "OLTP"
-		if c.overrideOLAP {
+		if c.overrideHyperThreading {
 			processingSystem = "OLAP"
 		}
-		log.CtxLogger(ctx).Infof("x4-megamem-1920 detected, applying configuration for %s workloads.", processingSystem)
+		log.CtxLogger(ctx).Infof("%s detected, applying configuration for %s workloads.", c.machineType, processingSystem)
 	}
 	rebootSLES, err := c.configureX4SLES(ctx)
 	if err != nil {
@@ -73,8 +73,8 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 			return false, fmt.Errorf("'usr/bin/dracut --force' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 		}
 	}
-	if c.machineType == "x4-megamem-1920" && !c.overrideOLAP {
-		log.CtxLogger(ctx).Info("x4-megamem-1920 detected, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.")
+	if (c.machineType == "x4-megamem-1920" || c.machineType == "x4-megamem-1440") && !c.overrideHyperThreading {
+		log.CtxLogger(ctx).Infof("%s detected, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", c.machineType)
 		grubLinuxDefault = strings.TrimSuffix(grubLinuxDefault, `"`) + ` nosmt"`
 	}
 	rebootGrub, err := c.checkAndRegenerateLines(ctx, "/etc/default/grub", []string{grubLinuxDefault, grubLinuxLabel, grubDevice})

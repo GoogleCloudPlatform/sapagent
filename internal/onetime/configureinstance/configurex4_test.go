@@ -35,9 +35,9 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "Megamem1920FailedToReadReleaseFile",
 			c: ConfigureInstance{
-				readFile:     defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
-				machineType:  "x4-megamem-1920",
-				overrideOLAP: true,
+				readFile:               defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				machineType:            "x4-megamem-1920",
+				overrideHyperThreading: true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
