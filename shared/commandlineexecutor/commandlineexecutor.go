@@ -16,7 +16,35 @@ limitations under the License.
 
 /*
 Package commandlineexecutor creates an interface to streamline execution of shell commands
-across multiple platforms
+across multiple platforms.
+
+This package provides a simple interface to execute shell commands across multiple platforms.
+It also provides a way to check if a command exists and to get the exit code from an error.
+
+Example usage:
+
+	// Create a new commandlineexecutor.Params struct with the executable and arguments to run.
+	params := commandlineexecutor.Params{
+		Executable: "/bin/ls",
+		Args:       []string{"-l", "/usr/local/google"},
+	}
+
+	// Execute the command.
+	result := commandlineexecutor.ExecuteCommand(context.Background(), params)
+
+	// Check the result for any errors.
+	if result.Error != nil {
+		log.Error(result.Error)
+	}
+
+	// Print the standard output and standard error.
+	fmt.Printf("Standard output:\n%s", result.StdOut)
+	fmt.Printf("Standard error:\n%s", result.StdErr)
+
+	// Check the exit code.
+	if result.ExitCode != 0 {
+		log.Error("Command failed with exit code", result.ExitCode)
+	}
 */
 package commandlineexecutor
 
