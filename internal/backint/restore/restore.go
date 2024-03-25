@@ -76,13 +76,19 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			if len(s) > 2 {
 				destName = s[2]
 			}
-			wp.Submit(func() {
+			restoreFunc := func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, "")
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
-			})
+			}
+			// Log restores happen in serial, so do not submit to the workerpool.
+			if strings.Contains(fileName, "log_backup") {
+				restoreFunc()
+			} else {
+				wp.Submit(restoreFunc)
+			}
 		} else if strings.HasPrefix(line, "#EBID") {
 			s := parse.Split(line)
 			if len(s) < 3 {
@@ -95,13 +101,19 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			if len(s) > 3 {
 				destName = s[3]
 			}
-			wp.Submit(func() {
+			restoreFunc := func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
 				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, externalBackupID)
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
-			})
+			}
+			// Log restores happen in serial, so do not submit to the workerpool.
+			if strings.Contains(fileName, "log_backup") {
+				restoreFunc()
+			} else {
+				wp.Submit(restoreFunc)
+			}
 		} else {
 			log.CtxLogger(ctx).Infow("Unknown prefix encountered, treated as a comment", "line", line)
 		}
