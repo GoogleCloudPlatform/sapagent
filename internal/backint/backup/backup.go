@@ -194,12 +194,11 @@ func backupFile(ctx context.Context, p parameters) string {
 		MaxRetries:     p.config.GetRetries(),
 		VerifyUpload:   true,
 		// Match the previous Backint implementation's metadata format.
-		Metadata:               map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
-		RetryBackoffInitial:    time.Duration(p.config.GetRetryBackoffInitial()) * time.Second,
-		RetryBackoffMax:        time.Duration(p.config.GetRetryBackoffMax()) * time.Second,
-		RetryBackoffMultiplier: float64(p.config.GetRetryBackoffMultiplier()),
-		// XML Multipart uploads are restricted to FILE types for size constraints.
-		XMLMultipartUpload:         p.config.GetXmlMultipartUpload() && p.fileType == "#FILE" && p.config.GetParallelStreams() > 1,
+		Metadata:                   map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
+		RetryBackoffInitial:        time.Duration(p.config.GetRetryBackoffInitial()) * time.Second,
+		RetryBackoffMax:            time.Duration(p.config.GetRetryBackoffMax()) * time.Second,
+		RetryBackoffMultiplier:     float64(p.config.GetRetryBackoffMultiplier()),
+		XMLMultipartUpload:         p.config.GetXmlMultipartUpload() && p.config.GetParallelStreams() > 1,
 		XMLMultipartWorkers:        p.config.GetParallelStreams(),
 		XMLMultipartServiceAccount: p.config.GetServiceAccountKey(),
 		XMLMultipartEndpoint:       p.config.GetClientEndpoint(),
