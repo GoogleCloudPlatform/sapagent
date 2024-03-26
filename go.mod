@@ -13,7 +13,7 @@ require (
   cloud.google.com/go/monitoring v1.17.1
   cloud.google.com/go/secretmanager v1.11.5
   cloud.google.com/go/storage v1.36.0
-  github.com/SAP/go-hdb v1.1.6
+  github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/fsouza/fake-gcs-server v1.45.2
   github.com/gammazero/workerpool v1.1.3
