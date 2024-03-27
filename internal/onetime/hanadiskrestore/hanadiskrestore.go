@@ -317,7 +317,6 @@ func (r *Restorer) isDiskAttachedToInstance(diskName string) (string, bool, erro
 		return "", false, fmt.Errorf("failed to get instance: %v", err)
 	}
 	for _, disk := range instance.Disks {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Disk name %s", disk.Source))
 		if strings.Contains(disk.Source, diskName) {
 			return disk.DeviceName, true, nil
 		}
