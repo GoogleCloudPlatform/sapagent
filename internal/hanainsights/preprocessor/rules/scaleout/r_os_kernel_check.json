@@ -24,12 +24,12 @@
           "operation": "OR",
           "child_evals": [
             {
-              "lhs": "size(q_oskernel_check)",
+              "lhs": "count(q_oskernel_check)",
               "operation": "GT",
               "rhs": "1"
             },
             {
-              "lhs": "size(q_osversion_check)",
+              "lhs": "count(q_osversion_check)",
               "operation": "GT",
               "rhs": "1"
             }

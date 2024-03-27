@@ -16,7 +16,7 @@
     {
       "id": "rec_1",
       "trigger": {
-        "lhs": "size(q_timezone_check)",
+        "lhs": "count(q_timezone_check)",
         "operation": "GT",
         "rhs": "1"
       },
