@@ -20,12 +20,12 @@ package wlm
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"runtime"
 
 	"google.golang.org/api/googleapi"
-	"google3/third_party/golang/google_api/internal/gensupport"
 	"google.golang.org/api/option/internaloption"
 	"google.golang.org/api/option"
 	htransport "google.golang.org/api/transport/http"
@@ -111,21 +111,18 @@ func (d *DataWarehouseService) WriteInsight(project, location string, req *dwpb.
 	bodyStr := string(bodyBytes)
 	log.Logger.Debugw("Sending request", "url", httpReq.URL, "body", bodyStr)
 	httpRes, err := d.c.Do(httpReq)
-	if httpRes != nil && httpRes.StatusCode == http.StatusNotModified {
-		if httpRes.Body != nil {
-			httpRes.Body.Close()
-		}
-		return nil, gensupport.WrapError(&googleapi.Error{
-			Code:   httpRes.StatusCode,
-			Header: httpRes.Header,
-		})
-	}
 	if err != nil {
 		return nil, err
 	}
 	defer googleapi.CloseBody(httpRes)
+	if httpRes != nil && httpRes.StatusCode == http.StatusNotModified {
+		return nil, &googleapi.Error{
+			Code:   httpRes.StatusCode,
+			Header: httpRes.Header,
+		}
+	}
 	if err := googleapi.CheckResponse(httpRes); err != nil {
-		return nil, gensupport.WrapError(err)
+		return nil, err
 	}
 	target := &WriteInsightResponse{
 		ServerResponse: googleapi.ServerResponse{
@@ -133,7 +130,7 @@ func (d *DataWarehouseService) WriteInsight(project, location string, req *dwpb.
 			HTTPStatusCode: httpRes.StatusCode,
 		},
 	}
-	if err := gensupport.DecodeResponse(target, httpRes); err != nil {
+	if err := json.NewDecoder(httpRes.Body).Decode(target); err != nil {
 		return nil, err
 	}
 	return target, nil
