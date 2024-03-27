@@ -20,7 +20,6 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/wlm"
 	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
@@ -46,6 +45,5 @@ func NewWLMClient(ctx context.Context, basePath string) (*WLM, error) {
 func (w *WLM) WriteInsight(project string, location string, writeInsightRequest *dwpb.WriteInsightRequest) error {
 	res, err := w.service.WriteInsight(project, location, writeInsightRequest)
 	log.Logger.Debugw("WriteInsight response", "res", res, "err", err)
-	defer googleapi.CloseBody(res)
 	return err
 }

@@ -25,6 +25,7 @@ import (
 	"runtime"
 
 	"google.golang.org/api/googleapi"
+	"google3/third_party/golang/google_api/internal/gensupport"
 	"google.golang.org/api/option/internaloption"
 	"google.golang.org/api/option"
 	htransport "google.golang.org/api/transport/http"
@@ -44,6 +45,12 @@ const (
 type DataWarehouseService struct {
 	c        *http.Client
 	BasePath string
+}
+
+// WriteInsightResponse is a wrapper for the response from a WriteInsight request.
+type WriteInsightResponse struct {
+	// ServerResponse contains the HTTP response code and headers from the server.
+	googleapi.ServerResponse `json:"-"`
 }
 
 // NewService creates a new Data Warehouse service.
@@ -75,7 +82,7 @@ func NewService(ctx context.Context, opts ...option.ClientOption) (*DataWarehous
 }
 
 // WriteInsight sends the WriteInsightRequest to the Data Warehouse.
-func (d *DataWarehouseService) WriteInsight(project, location string, req *dwpb.WriteInsightRequest) (*http.Response, error) {
+func (d *DataWarehouseService) WriteInsight(project, location string, req *dwpb.WriteInsightRequest) (*WriteInsightResponse, error) {
 	reqHeaders := make(http.Header)
 	reqHeaders.Set("x-goog-api-client", "gl-go/"+runtime.Version())
 	reqHeaders.Set("User-Agent", googleapi.UserAgent)
@@ -103,5 +110,31 @@ func (d *DataWarehouseService) WriteInsight(project, location string, req *dwpb.
 	bodyBytes := buf.String()
 	bodyStr := string(bodyBytes)
 	log.Logger.Debugw("Sending request", "url", httpReq.URL, "body", bodyStr)
-	return d.c.Do(httpReq)
+	httpRes, err := d.c.Do(httpReq)
+	if httpRes != nil && httpRes.StatusCode == http.StatusNotModified {
+		if httpRes.Body != nil {
+			httpRes.Body.Close()
+		}
+		return nil, gensupport.WrapError(&googleapi.Error{
+			Code:   httpRes.StatusCode,
+			Header: httpRes.Header,
+		})
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer googleapi.CloseBody(httpRes)
+	if err := googleapi.CheckResponse(httpRes); err != nil {
+		return nil, gensupport.WrapError(err)
+	}
+	target := &WriteInsightResponse{
+		ServerResponse: googleapi.ServerResponse{
+			Header:         httpRes.Header,
+			HTTPStatusCode: httpRes.StatusCode,
+		},
+	}
+	if err := gensupport.DecodeResponse(target, httpRes); err != nil {
+		return nil, err
+	}
+	return target, nil
 }
