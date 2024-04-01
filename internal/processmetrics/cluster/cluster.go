@@ -201,13 +201,15 @@ func collectResourceState(ctx context.Context, p *InstanceProperties, read readP
 		return nil, nil, err
 	}
 
-	resourceNames := make(map[string]bool)
+	// This is a map to prevent duplicates keyed on resource name and node it is monitoring.
+	resource := make(map[string]bool)
 	for _, r := range resourceState {
-		if _, ok := resourceNames[r.Name]; ok {
-			log.CtxLogger(ctx).Debugw("Duplicate entry for resource", "name", r.Name)
+		key := r.Name + ":" + r.Node
+		if _, ok := resource[key]; ok {
+			log.CtxLogger(ctx).Debugw("Duplicate entry for resource", "name", r.Name, "node", r.Node)
 			continue
 		}
-		resourceNames[r.Name] = true
+		resource[key] = true
 		rValue := stateFromString(resourceStates, r.Role)
 		metricValues = append(metricValues, rValue)
 		extraLabels := map[string]string{
