@@ -82,6 +82,7 @@ var (
 							}},
 						},
 					},
+					AgentVersion: "3.2",
 				},
 			}},
 			WriteInsightErrs: []error{nil},

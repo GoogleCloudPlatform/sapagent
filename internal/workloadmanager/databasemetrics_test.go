@@ -150,17 +150,20 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 				WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 					Project:  "test-project-id",
 					Location: "test-region",
-					Req: &dwpb.WriteInsightRequest{Insight: &dwpb.Insight{
-						InstanceId: "test-instance-id",
-						SapValidation: &dwpb.SapValidation{
-							ProjectId: "test-project-id",
-							Zone:      "test-region-zone",
-							ValidationDetails: []*dwpb.SapValidation_ValidationDetail{{
-								Details:           map[string]string{},
-								SapValidationType: dwpb.SapValidation_HANA_SECURITY,
-								IsPresent:         true,
-							}}},
-					}},
+					Req: &dwpb.WriteInsightRequest{
+						Insight: &dwpb.Insight{
+							InstanceId: "test-instance-id",
+							SapValidation: &dwpb.SapValidation{
+								ProjectId: "test-project-id",
+								Zone:      "test-region-zone",
+								ValidationDetails: []*dwpb.SapValidation_ValidationDetail{{
+									Details:           map[string]string{},
+									SapValidationType: dwpb.SapValidation_HANA_SECURITY,
+									IsPresent:         true,
+								}}},
+						},
+						AgentVersion: "3.2",
+					},
 				}},
 				WriteInsightErrs: []error{nil},
 			},

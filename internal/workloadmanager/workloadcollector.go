@@ -32,6 +32,7 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
@@ -538,6 +539,7 @@ func createWriteInsightRequest(wm WorkloadMetrics, cp *ipb.CloudProperties) *dwp
 				ValidationDetails: validations,
 			},
 		},
+		AgentVersion: configuration.AgentVersion,
 	}
 }
 

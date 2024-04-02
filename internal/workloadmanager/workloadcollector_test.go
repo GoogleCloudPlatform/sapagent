@@ -306,6 +306,7 @@ func TestSendMetrics(t *testing.T) {
 									},
 								},
 							},
+							AgentVersion: "3.2",
 						},
 					}},
 				WriteInsightErrs: []error{nil},
@@ -339,6 +340,7 @@ func TestSendMetrics(t *testing.T) {
 									},
 								},
 							},
+							AgentVersion: "3.2",
 						},
 					},
 				},
@@ -375,6 +377,7 @@ func TestSendMetrics(t *testing.T) {
 									},
 								},
 							},
+							AgentVersion: "3.2",
 						},
 					},
 				},
@@ -410,6 +413,7 @@ func TestSendMetrics(t *testing.T) {
 								},
 							},
 						},
+						AgentVersion: "3.2",
 					},
 				}},
 				WriteInsightErrs: []error{cmpopts.AnyError},
@@ -670,44 +674,46 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 					WriteInsightArgs: []wlmfake.WriteInsightArgs{{
 						Project:  "test-project-id",
 						Location: "test-region",
-						Req: &dwpb.WriteInsightRequest{Insight: &dwpb.Insight{
-							InstanceId: "test-instance-id",
-							SapValidation: &dwpb.SapValidation{
-								ProjectId: "test-project-id",
-								Zone:      "test-region-zone",
-								ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
-									{
-										SapValidationType: dwpb.SapValidation_SYSTEM,
-										IsPresent:         true,
-										Details:           map[string]string{},
+						Req: &dwpb.WriteInsightRequest{
+							Insight: &dwpb.Insight{
+								InstanceId: "test-instance-id",
+								SapValidation: &dwpb.SapValidation{
+									ProjectId: "test-project-id",
+									Zone:      "test-region-zone",
+									ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
+										{
+											SapValidationType: dwpb.SapValidation_SYSTEM,
+											IsPresent:         true,
+											Details:           map[string]string{},
+										},
+										{
+											SapValidationType: dwpb.SapValidation_NETWEAVER,
+											IsPresent:         false,
+											Details:           map[string]string{},
+										},
+										{
+											SapValidationType: dwpb.SapValidation_HANA,
+											IsPresent:         false,
+											Details:           map[string]string{},
+										},
+										{
+											SapValidationType: dwpb.SapValidation_PACEMAKER,
+											IsPresent:         false,
+											Details:           map[string]string{},
+										},
+										{
+											SapValidationType: dwpb.SapValidation_COROSYNC,
+											IsPresent:         false,
+											Details:           map[string]string{},
+										},
+										{
+											SapValidationType: dwpb.SapValidation_CUSTOM,
+											IsPresent:         true,
+											Details:           map[string]string{},
+										},
 									},
-									{
-										SapValidationType: dwpb.SapValidation_NETWEAVER,
-										IsPresent:         false,
-										Details:           map[string]string{},
-									},
-									{
-										SapValidationType: dwpb.SapValidation_HANA,
-										IsPresent:         false,
-										Details:           map[string]string{},
-									},
-									{
-										SapValidationType: dwpb.SapValidation_PACEMAKER,
-										IsPresent:         false,
-										Details:           map[string]string{},
-									},
-									{
-										SapValidationType: dwpb.SapValidation_COROSYNC,
-										IsPresent:         false,
-										Details:           map[string]string{},
-									},
-									{
-										SapValidationType: dwpb.SapValidation_CUSTOM,
-										IsPresent:         true,
-										Details:           map[string]string{},
-									},
-								},
-							}},
+								}},
+							AgentVersion: "3.2",
 						},
 					}},
 				},

@@ -30,6 +30,7 @@ import (
 	logging "cloud.google.com/go/logging"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/encoding/protojson"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -221,6 +222,7 @@ func runDiscovery(ctx context.Context, a any) {
 						InstanceId:   cp.GetInstanceId(),
 					},
 				}
+				insightRequest.AgentVersion = configuration.AgentVersion
 
 				err := args.d.WlmService.WriteInsight(cp.ProjectId, region, insightRequest)
 				if err != nil {

@@ -1158,6 +1158,7 @@ func TestRunDiscovery(t *testing.T) {
 								ProjectNumber: "12345",
 							},
 						},
+						AgentVersion: "3.2",
 					},
 				}},
 				WriteInsightErrs: []error{nil},
@@ -1225,6 +1226,7 @@ func TestRunDiscovery(t *testing.T) {
 								ProjectNumber: "12345",
 							},
 						},
+						AgentVersion: "3.2",
 					},
 				}, {
 					Project:  "test-project-id",
@@ -1243,6 +1245,7 @@ func TestRunDiscovery(t *testing.T) {
 								ProjectNumber: "12345",
 							},
 						},
+						AgentVersion: "3.2",
 					},
 				}},
 				WriteInsightErrs: []error{nil, nil},
