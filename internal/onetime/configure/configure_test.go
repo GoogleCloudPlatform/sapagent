@@ -158,7 +158,7 @@ func TestSetStatus(t *testing.T) {
 			},
 			want: map[string]bool{
 				"hana_monitoring":     true,
-				"workload_validation": true,
+				"workload_evaluation": true,
 				"process_metrics":     false,
 				"host_metrics":        true,
 				"agent_metrics":       false,
@@ -187,7 +187,7 @@ func TestSetStatus(t *testing.T) {
 				"agent_metrics":       true,
 				"host_metrics":        true,
 				"process_metrics":     true,
-				"workload_validation": true,
+				"workload_evaluation": true,
 				"reliability_metrics": true,
 				"hana_monitoring":     false,
 			},
@@ -213,7 +213,7 @@ func TestSetStatus(t *testing.T) {
 				"sap_discovery":       true,
 				"agent_metrics":       true,
 				"process_metrics":     true,
-				"workload_validation": true,
+				"workload_evaluation": true,
 				"hana_monitoring":     true,
 				"reliability_metrics": true,
 			},
@@ -236,7 +236,7 @@ func TestSetStatus(t *testing.T) {
 				"agent_metrics":       true,
 				"host_metrics":        true,
 				"process_metrics":     true,
-				"workload_validation": true,
+				"workload_evaluation": true,
 				"hana_monitoring":     true,
 				"sap_discovery":       false,
 				"reliability_metrics": false,
@@ -265,7 +265,7 @@ func TestSetStatus(t *testing.T) {
 				"agent_metrics":       true,
 				"hana_monitoring":     true,
 				"process_metrics":     true,
-				"workload_validation": true,
+				"workload_evaluation": true,
 				"reliability_metrics": true,
 			},
 		},
@@ -280,7 +280,7 @@ func TestSetStatus(t *testing.T) {
 				"agent_metrics":       false,
 				"host_metrics":        true,
 				"process_metrics":     false,
-				"workload_validation": true,
+				"workload_evaluation": true,
 				"hana_monitoring":     false,
 				"reliability_metrics": false,
 			},
@@ -769,7 +769,7 @@ func TestModifyConfig(t *testing.T) {
 			name: "EnableWorkloadValidation",
 			c: &Configure{
 				enable:       true,
-				feature:      "workload_validation",
+				feature:      "workload_evaluation",
 				path:         path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
@@ -794,7 +794,7 @@ func TestModifyConfig(t *testing.T) {
 			name: "DisableWorkloadValidation",
 			c: &Configure{
 				disable:      true,
-				feature:      "workload_validation",
+				feature:      "workload_evaluation",
 				path:         path.Join(t.TempDir(), "/configuration.json"),
 				restartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
@@ -818,7 +818,7 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetFreqWorkloadValidation",
 			c: &Configure{
-				feature:                    "workload_validation",
+				feature:                    "workload_evaluation",
 				validationMetricsFrequency: 30,
 				dbFrequency:                50,
 				path:                       path.Join(t.TempDir(), "/configuration.json"),
@@ -848,7 +848,7 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqWorkloadValidation1",
 			c: &Configure{
-				feature:                    "workload_validation",
+				feature:                    "workload_evaluation",
 				validationMetricsFrequency: -30,
 				dbFrequency:                50,
 				path:                       path.Join(t.TempDir(), "/configuration.json"),
@@ -876,7 +876,7 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqWorkloadValidation2",
 			c: &Configure{
-				feature:                    "workload_validation",
+				feature:                    "workload_evaluation",
 				validationMetricsFrequency: 30,
 				dbFrequency:                -50,
 				path:                       path.Join(t.TempDir(), "/configuration.json"),
@@ -1370,10 +1370,10 @@ func TestSetFlags(t *testing.T) {
 
 	flags := []string{
 		"feature", "f", "version", "v", "help", "h", "loglevel", "setting",
-		"enable", "disable", "showall", "add", "remove", "process_metrics_frequency", "workload_validation_db_metrics_frequency",
+		"enable", "disable", "showall", "add", "remove", "process_metrics_frequency", "workload_evaluation_db_metrics_frequency",
 		"sample_interval_sec", "query_timeout_sec", "process_metrics_to_skip", "slow_process_metrics_frequency",
 		"heartbeat_frequency", "agent_health_frequency", "agent_metrics_frequency",
-		"workload_validation_metrics_frequency", "reliability_metrics_frequency",
+		"workload_evaluation_metrics_frequency", "reliability_metrics_frequency",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

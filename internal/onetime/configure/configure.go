@@ -64,7 +64,7 @@ const (
 	hanaMonitoring     = "hana_monitoring"
 	sapDiscovery       = "sap_discovery"
 	agentMetrics       = "agent_metrics"
-	workloadValidation = "workload_validation"
+	workloadValidation = "workload_evaluation"
 	reliabilityMetrics = "reliability_metrics"
 )
 
@@ -91,11 +91,11 @@ func (*Configure) Synopsis() string {
 // Usage implements the subcommand interface for features.
 func (*Configure) Usage() string {
 	return `Usage:
-configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_validation|reliability_metrics> | -setting=<bare_metal|log_to_cloud>]
+configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_evaluation|reliability_metrics> | -setting=<bare_metal|log_to_cloud>]
 [-enable|-disable] [-showall] [-v] [-h]
 [process_metrics_frequency=<int>] [slow_process_metrics_frequency=<int>]
 [process_metrics_to_skip=<"comma-separated-metrics">] [-add|-remove]
-[workload_validation_metrics_frequency=<int>] [workload_validation_db_metrics_frequency=<int>]
+[workload_evaluation_metrics_frequency=<int>] [workload_evaluation_db_metrics_frequency=<int>]
 [-agent_metrics_frequency=<int>] [agent_health_frequency=<int>]
 [heartbeat_frequency=<int>] [reliability_metrics_frequency=<int>]
 [sample_interval_sec=<int>] [query_timeout_sec=<int>]
@@ -104,13 +104,13 @@ configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|
 
 // SetFlags implements the subcommand interface for features.
 func (c *Configure) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&c.feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_validation, reliability_metrics")
-	fs.StringVar(&c.feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_validation, reliability_metrics")
+	fs.StringVar(&c.feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
+	fs.StringVar(&c.feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
 	fs.StringVar(&c.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.setting, "setting", "", "The requested setting. Valid values are: bare_metal, log_to_cloud")
 	fs.StringVar(&c.skipMetrics, "process_metrics_to_skip", "", "Add or remove the list of metrics to skip during process metrics collection")
-	fs.Int64Var(&c.validationMetricsFrequency, "workload_validation_metrics_frequency", 0, "Sets the frequency of workload validation metrics collection. Default value is 300(s)")
-	fs.Int64Var(&c.dbFrequency, "workload_validation_db_metrics_frequency", 0, "Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
+	fs.Int64Var(&c.validationMetricsFrequency, "workload_evaluation_metrics_frequency", 0, "Sets the frequency of workload validation metrics collection. Default value is 300(s)")
+	fs.Int64Var(&c.dbFrequency, "workload_evaluation_db_metrics_frequency", 0, "Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
 	fs.Int64Var(&c.fastMetricsFrequency, "process_metrics_frequency", 0, "Sets the frequency of fast moving process metrics collection. Default value is 5(s)")
 	fs.Int64Var(&c.slowMetricsFrequency, "slow_process_metrics_frequency", 0, "Sets the frequency of slow moving process metrics collection. Default value is 30(s)")
 	fs.Int64Var(&c.agentMetricsFrequency, "agent_metrics_frequency", 0, "Sets the agent metrics frequency. Default value is 60(s)")
