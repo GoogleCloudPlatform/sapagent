@@ -42,19 +42,27 @@ var severityMapping = map[zapcore.Level]logging.Severity{
 	zapcore.FatalLevel:  logging.Critical,
 }
 
-// CloudLoggingClient create a logging.Client for writing logs to CloudLogging, will be nil if a ping fails
+// CloudLoggingClient create a logging.Client for writing logs to CloudLogging, will be nil if a ping fails.
 func CloudLoggingClient(ctx context.Context, projectID string) *logging.Client {
-	client, err := logging.NewClient(ctx, projectID)
-	if err != nil {
-		return nil
-	}
-	err = client.Ping(ctx)
+client, err := CreateClient(ctx, projectID)
 	if err != nil {
 		return nil
 	}
 	return client
 }
 
+// CreateClient creates a logging.Client for writing logs to CloudLogging.
+func CreateClient(ctx context.Context, projectID string) (*logging.Client, error) {
+	client, err := logging.NewClient(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("error creating Cloud Logging client: %v", err)
+	}
+	err = client.Ping(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error pinging Cloud Logging: %v", err)
+	}
+	return client, nil
+}
 // CloudCore that will be used as a zapcore.Core
 type CloudCore struct {
 	GoogleCloudLogger GoogleCloudLogger
