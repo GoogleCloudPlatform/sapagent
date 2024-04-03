@@ -229,7 +229,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 	}
 
 	// For retries logic and backoff policy:
-	// For fast moving process metrics we are going ahead with 3 retries on failures, which means 4 attempts in total.
+	// For slow moving process metrics we are going ahead with 3 retries on failures, which means 4 attempts in total.
 	// Attempt - 1 Failure: wait for 30 seconds
 	// Attempt - 2 Failure: wait for 60 seconds
 	// Attempt - 3 Failure: wait for 120 seconds
@@ -238,6 +238,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 	// Attempt - 1 Failure: wait for 5 seconds
 	// Attempt - 2 Failure: wait for 10 seconds
 	// Attempt - 3 Failure: wait for 20 seconds
+
 	// Note: There is also randomization factor associated with exponential backoffs the intervals can
 	// have a delta of 3-4 seconds, which does not affect the overall process.
 
