@@ -23,8 +23,14 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+var defaultCloudProperties = &ipb.CloudProperties{
+	ProjectId:    "default-project",
+	InstanceName: "default-instance",
+}
 
 type (
 	mockedFileReader struct {
@@ -101,6 +107,7 @@ func TestExecuteVersion(t *testing.T) {
 			args: []any{
 				"test",
 				"test2",
+				"test3",
 			},
 		},
 		{
@@ -110,6 +117,7 @@ func TestExecuteVersion(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -119,6 +127,7 @@ func TestExecuteVersion(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -128,6 +137,7 @@ func TestExecuteVersion(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 	}

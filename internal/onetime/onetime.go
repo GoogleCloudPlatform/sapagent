@@ -48,8 +48,50 @@ type (
 	}
 )
 
+// Init performs all initialization steps for OTE subcommands.
+// Args are verified, usage metrics configured, and logging is set up.
+// If name is empty, file logging and usage metrics will not occur.
+// Returns the parsed args, and a bool indicating if initialization completed.
+func Init(ctx context.Context, help, version bool, name, logLevel string, f *flag.FlagSet, args ...any) (log.Parameters, *iipb.CloudProperties, subcommands.ExitStatus, bool) {
+	if help {
+		return log.Parameters{}, nil, HelpCommand(f), false
+	}
+	if version {
+		return log.Parameters{}, nil, PrintAgentVersion(), false
+	}
+
+	if len(args) < 3 {
+		log.CtxLogger(ctx).Errorf("Not enough args for Init(). Want: 3, Got: %d", len(args))
+		return log.Parameters{}, nil, subcommands.ExitUsageError, false
+	}
+	lp, ok := args[1].(log.Parameters)
+	if !ok {
+		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
+		return log.Parameters{}, nil, subcommands.ExitUsageError, false
+	}
+	cloudProps, ok := args[2].(*iipb.CloudProperties)
+	if !ok {
+		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
+		return log.Parameters{}, nil, subcommands.ExitUsageError, false
+	}
+
+	if name == "" {
+		return lp, cloudProps, subcommands.ExitSuccess, true
+	}
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	SetupOneTimeLogging(lp, name, log.StringLevelToZapcore(logLevel))
+	ConfigureUsageMetricsForOTE(cloudProps, "", "")
+	return lp, cloudProps, subcommands.ExitSuccess, true
+}
+
 // ConfigureUsageMetricsForOTE configures usage metrics for Agent in one time execution mode.
 func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string) {
+	if cp == nil {
+		log.Logger.Error("CloudProperties is nil, not configuring usage metrics for OTE.")
+		return
+	}
 	if name == "" {
 		name = configuration.AgentName
 	}
@@ -112,6 +154,7 @@ func HelpCommand(f *flag.FlagSet) subcommands.ExitStatus {
 }
 
 // PrintAgentVersion prints the current version of the agent to stdout.
-func PrintAgentVersion() {
+func PrintAgentVersion() subcommands.ExitStatus {
 	fmt.Printf("Google Cloud Agent for SAP version %s.%s\n", configuration.AgentVersion, configuration.AgentBuildChange)
+	return subcommands.ExitSuccess
 }

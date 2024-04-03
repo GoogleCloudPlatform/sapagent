@@ -24,8 +24,14 @@ import (
 	"flag"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+var defaultCloudProperties = &ipb.CloudProperties{
+	ProjectId:    "default-project",
+	InstanceName: "default-instance",
+}
 
 type (
 	mockedFileReader struct {
@@ -92,6 +98,7 @@ func TestExecuteMaintenance(t *testing.T) {
 			args: []any{
 				"test",
 				"test2",
+				"test3",
 			},
 		},
 		{
@@ -101,6 +108,7 @@ func TestExecuteMaintenance(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -110,6 +118,7 @@ func TestExecuteMaintenance(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -119,6 +128,7 @@ func TestExecuteMaintenance(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 	}

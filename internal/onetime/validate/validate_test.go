@@ -26,11 +26,17 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 //go:embed testdata/collectiondefinition_invalid.json
 var invalidCollectionDefinition []byte
+
+var defaultCloudProperties = &ipb.CloudProperties{
+	ProjectId:    "default-project",
+	InstanceName: "default-instance",
+}
 
 func TestExecuteValidate(t *testing.T) {
 	tests := []struct {
@@ -46,12 +52,12 @@ func TestExecuteValidate(t *testing.T) {
 		},
 		{
 			name: "FailAssertFirstArgs",
-			args: []any{"test1", "test2"},
+			args: []any{"test1", "test2", "test3"},
 			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "Success",
-			args: []any{"test", log.Parameters{}},
+			args: []any{"test", log.Parameters{}, defaultCloudProperties},
 			want: subcommands.ExitSuccess,
 		},
 		{
@@ -59,7 +65,7 @@ func TestExecuteValidate(t *testing.T) {
 			v: Validate{
 				version: true,
 			},
-			args: []any{"test", log.Parameters{}},
+			args: []any{"test", log.Parameters{}, defaultCloudProperties},
 			want: subcommands.ExitSuccess,
 		},
 		{
@@ -67,7 +73,7 @@ func TestExecuteValidate(t *testing.T) {
 			v: Validate{
 				help: true,
 			},
-			args: []any{"test", log.Parameters{}},
+			args: []any{"test", log.Parameters{}, defaultCloudProperties},
 			want: subcommands.ExitSuccess,
 		},
 	}

@@ -122,33 +122,18 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if r.help {
-		return onetime.HelpCommand(f)
-	}
-	if r.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 3 && !r.SkipDBSnapshotForChangeDiskType {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	var ok bool
-	if !r.SkipDBSnapshotForChangeDiskType {
-		r.LogProperties, ok = args[1].(log.Parameters)
-		if !ok {
-			log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-			return subcommands.ExitUsageError
+	// Help and version will return before the args are parsed.
+	if r.help || r.version || !r.SkipDBSnapshotForChangeDiskType {
+		lp, cloudProps, exitStatus, completed := onetime.Init(ctx, r.help, r.version, r.Name(), r.LogLevel, f, args...)
+		if !completed {
+			return exitStatus
 		}
+		r.LogProperties = lp
+		r.CloudProps = cloudProps
+	} else {
+		onetime.SetupOneTimeLogging(r.LogProperties, r.HANAChangeDiskTypeOTEName, log.StringLevelToZapcore(r.LogLevel))
+		onetime.ConfigureUsageMetricsForOTE(r.CloudProps, "", "")
 	}
-	if !r.SkipDBSnapshotForChangeDiskType {
-		r.CloudProps, ok = args[2].(*ipb.CloudProperties)
-		if !ok {
-			log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
-			return subcommands.ExitUsageError
-		}
-	}
-	onetime.ConfigureUsageMetricsForOTE(r.CloudProps, "", "")
 
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
@@ -156,12 +141,6 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return subcommands.ExitFailure
 	}
 	r.timeSeriesCreator = mc
-	if r.SkipDBSnapshotForChangeDiskType {
-		onetime.SetupOneTimeLogging(r.LogProperties, r.HANAChangeDiskTypeOTEName, log.StringLevelToZapcore(r.LogLevel))
-	} else {
-		onetime.SetupOneTimeLogging(r.LogProperties, r.Name(), log.StringLevelToZapcore(r.LogLevel))
-	}
-
 	return r.restoreHandler(ctx, onetime.NewComputeService)
 }
 
@@ -203,9 +182,6 @@ func (r *Restorer) restoreHandler(ctx context.Context, computeServiceCreator com
 		return subcommands.ExitFailure
 	}
 	log.CtxLogger(ctx).Infow("Starting HANA disk snapshot restore", "sid", r.Sid)
-	if r.CloudProps != nil {
-		onetime.ConfigureUsageMetricsForOTE(r.CloudProps, "", "")
-	}
 	usagemetrics.Action(usagemetrics.HANADiskRestore)
 
 	if r.computeService, err = computeServiceCreator(ctx); err != nil {

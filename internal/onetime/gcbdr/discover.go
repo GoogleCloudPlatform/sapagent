@@ -166,26 +166,12 @@ func (d *Discovery) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for Discovery.
 func (d *Discovery) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if d.help {
-		return onetime.HelpCommand(f)
+	_, _, exitStatus, completed := onetime.Init(ctx, d.help, d.version, d.Name(), d.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if d.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 2 {
-		onetime.LogErrorToFileAndConsole("Error in args", errors.New("not enough args"))
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		onetime.LogErrorToFileAndConsole("Error in args", errors.New("unexpected args[1]"))
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
-	_, exitStatus := d.discoveryHandler(ctx, f, commandlineexecutor.ExecuteCommand, d.FSH)
+
+	_, exitStatus = d.discoveryHandler(ctx, f, commandlineexecutor.ExecuteCommand, d.FSH)
 	return exitStatus
 }
 

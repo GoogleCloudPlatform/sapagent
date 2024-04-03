@@ -150,39 +150,19 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if s.help {
-		return onetime.HelpCommand(f)
-	}
-	if s.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 3 && !s.SkipDBSnapshotForChangeDiskType {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	var ok bool
-	if !s.SkipDBSnapshotForChangeDiskType {
-		s.LogProperties, ok = args[1].(log.Parameters)
-		if !ok {
-			log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-			return subcommands.ExitUsageError
+	// Help and version will return before the args are parsed.
+	if s.help || s.version || !s.SkipDBSnapshotForChangeDiskType {
+		lp, cloudProps, exitStatus, completed := onetime.Init(ctx, s.help, s.version, s.Name(), s.LogLevel, f, args...)
+		if !completed {
+			return exitStatus
 		}
-	}
-	if !s.SkipDBSnapshotForChangeDiskType {
-		s.CloudProps, ok = args[2].(*ipb.CloudProperties)
-		if !ok {
-			log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
-			return subcommands.ExitUsageError
-		}
-		onetime.SetupOneTimeLogging(s.LogProperties, s.Name(), log.StringLevelToZapcore(s.LogLevel))
+		s.LogProperties = lp
+		s.CloudProps = cloudProps
 	} else {
 		onetime.SetupOneTimeLogging(s.LogProperties, s.HANAChangeDiskTypeOTEName, log.StringLevelToZapcore(s.LogLevel))
-	}
-
-	if s.CloudProps != nil {
 		onetime.ConfigureUsageMetricsForOTE(s.CloudProps, "", "")
 	}
+
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to create Cloud Monitoring metric client", err)

@@ -103,28 +103,12 @@ func (c *HanaChangeDiskType) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanadiskbackup.
 func (c *HanaChangeDiskType) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if c.help {
-		return onetime.HelpCommand(f)
+	lp, cloudProps, exitStatus, completed := onetime.Init(ctx, c.help, c.version, c.Name(), c.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if c.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 3 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	c.cloudProps, ok = args[2].(*ipb.CloudProperties)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore(c.logLevel))
+	c.cloudProps = cloudProps
+
 	if err := c.validateParams(runtime.GOOS); err != nil {
 		log.Print(err.Error())
 		return subcommands.ExitUsageError

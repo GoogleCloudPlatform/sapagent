@@ -31,7 +31,6 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -92,29 +91,10 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for configureinstance.
 func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if c.help {
-		return onetime.HelpCommand(f)
+	_, cloudProps, exitStatus, completed := onetime.Init(ctx, c.help, c.version, c.Name(), "info", f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if c.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 3 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	cloudProps, ok := args[2].(*ipb.CloudProperties)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
-		return subcommands.ExitUsageError
-	}
-	onetime.ConfigureUsageMetricsForOTE(cloudProps, "", "")
-	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore("info"))
 
 	if !c.check && !c.apply {
 		fmt.Printf("-check or -apply must be specified.\n%s\n", c.Usage())

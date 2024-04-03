@@ -37,7 +37,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 type (
@@ -116,23 +115,11 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if s.help {
-		return onetime.HelpCommand(f)
+	_, _, exitStatus, completed := onetime.Init(ctx, s.help, s.version, s.Name(), s.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if s.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, s.Name(), log.StringLevelToZapcore(s.logLevel))
+
 	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
 }
 

@@ -37,7 +37,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 type (
@@ -130,30 +129,10 @@ func (c *ConfigureBackint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for configurebackint.
 func (c *ConfigureBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if c.help {
-		return onetime.HelpCommand(f)
+	_, _, exitStatus, completed := onetime.Init(ctx, c.help, c.version, c.Name(), "INFO", f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if c.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 3 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore("info"))
-
-	cloudProps, ok := args[2].(*ipb.CloudProperties)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
-		return subcommands.ExitUsageError
-	}
-	onetime.ConfigureUsageMetricsForOTE(cloudProps, "", "")
 
 	if c.fileName == "" {
 		fmt.Printf("-f must be specified.\n%s\n", c.Usage())

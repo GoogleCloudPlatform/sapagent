@@ -41,7 +41,9 @@ type Validate struct {
 func (*Validate) Name() string { return "validate" }
 
 // Synopsis returns a short string (less than one line) describing the command.
-func (*Validate) Synopsis() string { return "validate the Agent for SAP - workload manager collection definition file" }
+func (*Validate) Synopsis() string {
+	return "validate the Agent for SAP - workload manager collection definition file"
+}
 
 // Usage returns a long string explaining the command and giving usage information.
 func (*Validate) Usage() string {
@@ -59,23 +61,11 @@ func (v *Validate) SetFlags(fs *flag.FlagSet) {
 
 // Execute executes the command and returns an ExitStatus.
 func (v *Validate) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if v.help {
-		return onetime.HelpCommand(f)
+	_, _, exitStatus, completed := onetime.Init(ctx, v.help, v.version, v.Name(), v.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if v.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, v.Name(), log.StringLevelToZapcore(v.logLevel))
+
 	return v.validateHandler(ctx)
 }
 

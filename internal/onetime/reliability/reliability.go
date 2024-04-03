@@ -113,29 +113,11 @@ func (r *Reliability) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for reliability.
 func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if r.help {
-		return onetime.HelpCommand(f)
+	_, cloudProps, exitStatus, completed := onetime.Init(ctx, r.help, r.version, r.Name(), r.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if r.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 3 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	r.cloudProps, ok = args[2].(*ipb.CloudProperties)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, r.Name(), log.StringLevelToZapcore(r.logLevel))
-	onetime.ConfigureUsageMetricsForOTE(r.cloudProps, "", "")
+	r.cloudProps = cloudProps
 
 	log.CtxLogger(ctx).Info("Reliability starting")
 	r.queries = defaultQueries
@@ -151,6 +133,7 @@ func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 			BucketName:      r.bucketName,
 			UserAgentSuffix: userAgent,
 		}
+		var ok bool
 		if r.bucket, ok = storage.ConnectToBucket(ctx, connectParams); !ok {
 			log.CtxLogger(ctx).Errorw("Failed to connect to bucket", "bucketName", r.bucketName)
 			return subcommands.ExitFailure

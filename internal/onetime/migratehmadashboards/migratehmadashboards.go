@@ -85,23 +85,11 @@ func (m *MigrateHMADashboards) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for Migrating HANA Monitoring Agent.
 func (m *MigrateHMADashboards) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if m.help {
-		return onetime.HelpCommand(f)
+	_, _, exitStatus, completed := onetime.Init(ctx, m.help, m.version, m.Name(), m.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if m.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, m.Name(), log.StringLevelToZapcore(m.logLevel))
+
 	dc, err := dashboard.NewDashboardsClient(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create dashboard client: error", err)

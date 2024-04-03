@@ -132,27 +132,10 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for feature.
 func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	// this check will never be hit when executing the command line
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
-		return subcommands.ExitUsageError
+	_, _, exitStatus, completed := onetime.Init(ctx, c.help, c.version, c.Name(), "INFO", fs, args...)
+	if !completed {
+		return exitStatus
 	}
-	// This check will never be hit when executing the command line
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-
-	if c.help {
-		fs.Usage()
-		return subcommands.ExitSuccess
-	}
-	if c.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	onetime.SetupOneTimeLogging(lp, c.Name(), log.StringLevelToZapcore("info"))
 
 	if c.path == "" {
 		c.path = configuration.LinuxConfigPath

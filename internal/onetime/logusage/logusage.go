@@ -77,28 +77,12 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for logusage.
 func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if l.help {
-		return onetime.HelpCommand(f)
+	// Do not call SetupOnetimeLogging so file logging does not happen for this OTE.
+	_, cloudProps, exitStatus, completed := onetime.Init(ctx, l.help, l.version, "", "", f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if l.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 3 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	_, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	cloudProps, ok := args[2].(*iipb.CloudProperties)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
-		return subcommands.ExitUsageError
-	}
-	// Do not call SetupOnetimeLogging so file logging does not happen for this OTE
+
 	return l.logUsageHandler(cloudProps)
 }
 

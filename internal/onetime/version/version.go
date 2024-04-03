@@ -23,7 +23,6 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // Version has args for version subcommands.
@@ -53,24 +52,10 @@ func (v *Version) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for version.
 func (v *Version) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if v.help {
-		return onetime.HelpCommand(f)
-	}
-	if v.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
+	_, _, exitStatus, completed := onetime.Init(ctx, v.help, v.version, v.Name(), v.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
 
-	onetime.SetupOneTimeLogging(lp, v.Name(), log.StringLevelToZapcore(v.logLevel))
-	onetime.PrintAgentVersion()
-	return subcommands.ExitSuccess
+	return onetime.PrintAgentVersion()
 }

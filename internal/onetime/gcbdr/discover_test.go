@@ -31,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	hdpb "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrhanadiscovery"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -91,6 +92,11 @@ var (
 			}
 		}
 	}
+
+	defaultCloudProperties = &ipb.CloudProperties{
+		ProjectId:    "default-project",
+		InstanceName: "default-instance",
+	}
 )
 
 func successfulProtoMessage(xmlString string) []*hdpb.Application {
@@ -137,6 +143,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				"test2",
+				"test3",
 			},
 		},
 		{
@@ -146,6 +153,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -155,6 +163,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -164,6 +173,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 	}

@@ -85,23 +85,10 @@ func (h *HANAInsights) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanainsights.
 func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	if h.help {
-		return onetime.HelpCommand(f)
+	_, _, exitStatus, completed := onetime.Init(ctx, h.help, h.version, h.Name(), h.logLevel, f, args...)
+	if !completed {
+		return exitStatus
 	}
-	if h.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 3, Got: %d", len(args))
-		return subcommands.ExitUsageError
-	}
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-	onetime.SetupOneTimeLogging(lp, h.Name(), log.StringLevelToZapcore(h.logLevel))
 
 	return h.hanaInsightsHandler(ctx, gce.NewGCEClient, os.WriteFile, os.MkdirAll)
 }

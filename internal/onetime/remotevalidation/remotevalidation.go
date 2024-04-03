@@ -126,8 +126,7 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		return onetime.HelpCommand(f)
 	}
 	if r.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
+		return onetime.PrintAgentVersion()
 	}
 
 	log.SetupLoggingToDiscard()

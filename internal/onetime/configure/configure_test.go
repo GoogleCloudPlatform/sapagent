@@ -33,7 +33,13 @@ import (
 
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
+
+var defaultCloudProperties = &ipb.CloudProperties{
+	ProjectId:    "default-project",
+	InstanceName: "default-instance",
+}
 
 func joinLines(lines []string) string {
 	return strings.Join(lines, "\n")
@@ -48,15 +54,18 @@ func TestExecute(t *testing.T) {
 	}{
 		{
 			name: "FailLengthArgs",
+			c:    &Configure{},
 			want: subcommands.ExitUsageError,
 			args: []any{},
 		},
 		{
 			name: "FailAssertArgs",
+			c:    &Configure{},
 			want: subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				"test2",
+				"test3",
 			},
 		},
 		{
@@ -66,6 +75,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -76,6 +86,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 			want: subcommands.ExitSuccess,
 		},
@@ -87,6 +98,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 			want: subcommands.ExitSuccess,
 		},
@@ -97,6 +109,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 		{
@@ -113,6 +126,7 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
+				defaultCloudProperties,
 			},
 		},
 	}
