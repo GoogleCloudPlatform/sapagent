@@ -334,7 +334,7 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool, startTime
 	for i := int64(0); i < p.config.GetParallelStreams(); i++ {
 		if err := storage.DeleteObject(ctx, p.bucketHandle, object+strconv.FormatInt(i, 10), p.config.GetRetries()); err != nil {
 			log.CtxLogger(ctx).Errorw("Error deleting temporary chunked object", "object", object+strconv.FormatInt(i, 10), "err", err)
-			chunkError = true
+			// Do not set chunkError as the full upload and compose were successful.
 		}
 	}
 
