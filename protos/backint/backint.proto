@@ -54,6 +54,7 @@ message BackintConfiguration {
   string recovery_folder_prefix = 30;
   bool xml_multipart_upload = 31;
   StorageClass storage_class = 32;
+  map<string, string> metadata = 33;
 }
 
 enum LogLevel {

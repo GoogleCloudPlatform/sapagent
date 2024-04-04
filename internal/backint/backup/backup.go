@@ -157,7 +157,12 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 func backupFile(ctx context.Context, p parameters) string {
 	fileNameTrim := parse.TrimAndClean(p.fileName)
 	object := p.config.GetFolderPrefix() + p.config.GetUserId() + fileNameTrim + "/" + p.externalBackupID + p.extension
-	log.CtxLogger(ctx).Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType, "storageClass", p.config.GetStorageClass().String())
+	metadata := p.config.GetMetadata()
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+	metadata["X-Backup-Type"] = strings.ReplaceAll(p.fileType, "#", "")
+	log.CtxLogger(ctx).Infow("Backing up file", "fileType", p.fileType, "fileName", p.fileName, "obj", object, "fileSize", p.fileSize, "fileType", p.fileType, "storageClass", p.config.GetStorageClass().String(), "metadata", metadata)
 	if p.reader == nil {
 		f, err := parse.OpenFileWithRetries(fileNameTrim, os.O_RDONLY, 0, p.config.GetFileReadTimeoutMs())
 		if err != nil {
@@ -177,24 +182,23 @@ func backupFile(ctx context.Context, p parameters) string {
 	}
 
 	rw := storage.ReadWriter{
-		Reader:         p.reader,
-		Copier:         p.copier,
-		BucketHandle:   p.bucketHandle,
-		BucketName:     p.config.GetBucket(),
-		ChunkSizeMb:    p.config.GetBufferSizeMb(),
-		ObjectName:     object,
-		TotalBytes:     p.fileSize,
-		LogDelay:       time.Duration(p.config.GetLogDelaySec()) * time.Second,
-		Compress:       p.config.GetCompress(),
-		StorageClass:   p.config.GetStorageClass().String(),
-		DumpData:       p.config.GetDumpData(),
-		RateLimitBytes: p.config.GetRateLimitMb() * 1024 * 1024,
-		EncryptionKey:  p.config.GetEncryptionKey(),
-		KMSKey:         p.config.GetKmsKey(),
-		MaxRetries:     p.config.GetRetries(),
-		VerifyUpload:   true,
-		// Match the previous Backint implementation's metadata format.
-		Metadata:                   map[string]string{"X-Backup-Type": strings.ReplaceAll(p.fileType, "#", "")},
+		Reader:                     p.reader,
+		Copier:                     p.copier,
+		BucketHandle:               p.bucketHandle,
+		BucketName:                 p.config.GetBucket(),
+		ChunkSizeMb:                p.config.GetBufferSizeMb(),
+		ObjectName:                 object,
+		TotalBytes:                 p.fileSize,
+		LogDelay:                   time.Duration(p.config.GetLogDelaySec()) * time.Second,
+		Compress:                   p.config.GetCompress(),
+		StorageClass:               p.config.GetStorageClass().String(),
+		DumpData:                   p.config.GetDumpData(),
+		RateLimitBytes:             p.config.GetRateLimitMb() * 1024 * 1024,
+		EncryptionKey:              p.config.GetEncryptionKey(),
+		KMSKey:                     p.config.GetKmsKey(),
+		MaxRetries:                 p.config.GetRetries(),
+		VerifyUpload:               true,
+		Metadata:                   metadata,
 		RetryBackoffInitial:        time.Duration(p.config.GetRetryBackoffInitial()) * time.Second,
 		RetryBackoffMax:            time.Duration(p.config.GetRetryBackoffMax()) * time.Second,
 		RetryBackoffMultiplier:     float64(p.config.GetRetryBackoffMultiplier()),
