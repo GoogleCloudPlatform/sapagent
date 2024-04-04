@@ -113,7 +113,7 @@ func TestExecute(t *testing.T) {
 					return fakestorage.NewServer([]fakestorage.Object{}).Client(), nil
 				},
 			},
-			config: defaultConfig,
+			config: &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100, MaxDiagnoseSizeGb: 1},
 			want:   false,
 		},
 		{
@@ -132,12 +132,12 @@ func TestExecute(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Set the file sizes to be much smaller for the test.
-			defer func(prevOneGB, prevSixteenGB int64) {
-				oneGB = prevOneGB
-				sixteenGB = prevSixteenGB
-			}(oneGB, sixteenGB)
-			oneGB /= 8
-			sixteenGB = oneGB
+			defer func(prevSmallFileSize, prevLargeFileSize int64) {
+				smallFileSize = prevSmallFileSize
+				largeFileSize = prevLargeFileSize
+			}(smallFileSize, largeFileSize)
+			smallFileSize /= 8
+			largeFileSize = smallFileSize
 
 			got := Execute(context.Background(), test.config, test.params, bytes.NewBufferString(""))
 			if got != test.want {

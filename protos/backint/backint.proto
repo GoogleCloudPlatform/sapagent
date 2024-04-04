@@ -55,6 +55,7 @@ message BackintConfiguration {
   bool xml_multipart_upload = 31;
   StorageClass storage_class = 32;
   map<string, string> metadata = 33;
+  int64 max_diagnose_size_gb = 34;
 }
 
 enum LogLevel {

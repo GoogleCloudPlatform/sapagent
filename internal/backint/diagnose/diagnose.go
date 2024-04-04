@@ -43,8 +43,8 @@ import (
 )
 
 var (
-	oneGB         = int64(1024 * 1024 * 1024)
-	sixteenGB     = 16 * oneGB
+	smallFileSize = int64(1024 * 1024 * 1024)
+	largeFileSize = 16 * smallFileSize
 	fileName1     = "backint-diagnose-file1.txt"
 	fileName2     = "backint-diagnose-file2.txt"
 	fileNotExists = "/tmp/backint-diagnose-file-not-exists.txt"
@@ -96,7 +96,11 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // attempting to clean up the temporary files locally and in the bucket.
 func diagnose(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, output io.Writer) error {
 	dir := fmt.Sprintf("/tmp/backint-diagnose/%s/", strconv.FormatInt(time.Now().UnixMilli(), 10))
-	files, err := createFiles(ctx, dir, fileName1, fileName2, oneGB, sixteenGB)
+	if config.GetMaxDiagnoseSizeGb() > 0 {
+		log.Logger.Infof("Max diagnose file size overridden to %d GB", config.GetMaxDiagnoseSizeGb())
+		largeFileSize = config.GetMaxDiagnoseSizeGb() * 1024 * 1024 * 1024
+	}
+	files, err := createFiles(ctx, dir, fileName1, fileName2, smallFileSize, largeFileSize)
 	if err != nil {
 		return fmt.Errorf("createFiles error: %v", err)
 	}
@@ -208,7 +212,7 @@ func diagnoseBackup(ctx context.Context, opts diagnoseOptions) error {
 		file.externalBackupID = strings.Trim(splitLines[0][1], `"`)
 	}
 
-	opts.input = fmt.Sprintf("#PIPE %q %d", fileNotExists, oneGB)
+	opts.input = fmt.Sprintf("#PIPE %q %d", fileNotExists, smallFileSize)
 	opts.want = "#ERROR <file_name>"
 	if _, err := performDiagnostic(ctx, opts); err != nil {
 		return err
