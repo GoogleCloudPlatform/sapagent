@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	// Register hdb driver.
@@ -47,6 +48,26 @@ type (
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
 		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
+	}
+
+	// CMDDBConnection stores connection information for querying via hdbsql command line
+	CMDDBConnection struct {
+		SIDAdmUser string // system user to run the queries from
+		HDBUserKey string // HDB Userstore Key providing auth and instance details
+	}
+
+	// DBHandle provides an object to connect to and query databases, abstracting the underlying connector
+	DBHandle struct {
+		useCMD      bool
+		goHDBHandle *sql.DB
+		cmdDBHandle *CMDDBConnection
+	}
+
+	// QueryResults is a struct to process the results of a database query
+	QueryResults struct {
+		useCMD      bool
+		goHDBResult *sql.Rows
+		cmdDBResult string // Stores entire raw query result
 	}
 )
 
@@ -76,4 +97,26 @@ func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
 	}
 	log.CtxLogger(ctx).Debug("Database connection successful")
 	return db, nil
+}
+
+// Database Handle Functions for Querying and handling results
+
+// QueryContext Queries the database via the goHDB driver or cmdline accordingly
+func (db *DBHandle) QueryContext(ctx context.Context, query string, exec commandlineexecutor.Execute) (*QueryResults, error) {
+	if db.useCMD {
+		// TODO: Implement cmdline querying logic
+		return nil, nil
+	}
+	// Query via go HDB Driver
+	result, err := db.goHDBHandle.QueryContext(ctx, query)
+	return &QueryResults{
+		useCMD:      false,
+		goHDBResult: result,
+	}, err
+}
+
+// ReadRow parses the next row of results into destination
+func (qr *QueryResults) ReadRow(dest ...any) error {
+	// TODO: Implement row parsing logic
+	return nil
 }
