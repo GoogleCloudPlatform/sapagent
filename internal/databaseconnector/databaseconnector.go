@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -38,6 +39,8 @@ type (
 		PasswordSecret string
 		Host           string
 		Port           string
+		HDBUserKey     string
+		SID            string
 		EnableSSL      bool
 		HostNameInCert string
 		RootCAFile     string
@@ -101,18 +104,70 @@ func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
 
 // Database Handle Functions for Querying and handling results
 
-// QueryContext Queries the database via the goHDB driver or cmdline accordingly
-func (db *DBHandle) QueryContext(ctx context.Context, query string, exec commandlineexecutor.Execute) (*QueryResults, error) {
+// NewGoDBHandle instantiates a go-hdb driver database handle.
+// TODO: The current logic in Connect() will go here, and Connect() will call either of the
+// two constructors based on the connecting parameters it gets.
+func NewGoDBHandle(ctx context.Context, p Params) (*DBHandle, error) {
+	// TODO: Implement Constructor for go-hdb connector
+	return nil, nil
+}
+
+// NewCMDDBHandle instantiates a command-line database handle
+func NewCMDDBHandle(p Params) (*DBHandle, error) {
+	if p.SID == "" {
+		return nil, fmt.Errorf("sid not provided")
+	}
+	if p.HDBUserKey == "" {
+		return nil, fmt.Errorf("hdb userstore Key not provided")
+	}
+
+	cmdDBconnection := CMDDBConnection{
+		SIDAdmUser: strings.ToLower(p.SID),
+		HDBUserKey: p.HDBUserKey,
+	}
+
+	return &DBHandle{
+		useCMD:      true,
+		cmdDBHandle: &cmdDBconnection,
+	}, nil
+}
+
+// Query queries the database via the goHDB driver or command-line accordingly.
+func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexecutor.Execute) (*QueryResults, error) {
 	if db.useCMD {
-		// TODO: Implement cmdline querying logic
-		return nil, nil
+		sidadmArgs := []string{"-i", "-u", fmt.Sprintf("%sadm", db.cmdDBHandle.SIDAdmUser)}                           // Arguments to run command in sidadm user
+		hdbsqlArgs := []string{"hdbsql", "-U", db.cmdDBHandle.HDBUserKey, "-a", "-x", "-quiet", "-Z", "CHOPBLANKS=0"} // Arguments to run hdbsql query in parse-able format
+
+		// Builds a command equivalent to $sudo -i -u <sidadm> hdbsql -U <key> -a -x -quiet <query>
+		args := append(sidadmArgs, hdbsqlArgs...)
+		args = append(args, query)
+
+		result := exec(ctx, commandlineexecutor.Params{
+			Executable: "sudo",
+			Args:       args,
+		})
+		if result.Error != nil || result.ExitCode != 0 {
+			log.CtxLogger(ctx).Errorw("Running hdbsql query failed", " stdout:", result.StdOut, " stderr", result.StdErr, " error", result.Error)
+			return nil, fmt.Errorf(result.StdErr)
+		}
+
+		return &QueryResults{
+			useCMD:      true,
+			cmdDBResult: result.StdOut,
+		}, nil
 	}
 	// Query via go HDB Driver
 	result, err := db.goHDBHandle.QueryContext(ctx, query)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Query execution failed, err", err)
+		return nil, err
+	}
+
 	return &QueryResults{
 		useCMD:      false,
 		goHDBResult: result,
-	}, err
+	}, nil
+
 }
 
 // ReadRow parses the next row of results into destination

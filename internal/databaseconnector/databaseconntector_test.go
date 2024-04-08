@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
@@ -140,4 +141,62 @@ func TestConnect(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestQueryValid(t *testing.T) {
+	testCMDDBHandle, _ := NewCMDDBHandle(Params{
+		SID:        "testSID",
+		HDBUserKey: "testHDBUserKey",
+	})
+	testQueryOut := `test1, test2
+	test3, test4
+	test5, test6
+	`
+	testName := "ValidQuery"
+	testQuery := "TEST VALID 'QUERY'"
+	fakeExec := func(ctx context.Context, cmdParams commandlineexecutor.Params) commandlineexecutor.Result {
+		if cmdParams.Args[len(cmdParams.Args)-1] == testQuery {
+			return commandlineexecutor.Result{
+				StdOut:   testQueryOut,
+				ExitCode: 0,
+			}
+		}
+		return commandlineexecutor.Result{
+			StdOut:   "incorrect result",
+			ExitCode: 0,
+		}
+	}
+
+	t.Run(testName, func(t *testing.T) {
+		gotRes, gotErr := testCMDDBHandle.Query(context.Background(), testQuery, fakeExec)
+		if gotErr != nil {
+			t.Fatalf("Query(%s) returns error=%s, want error=nil", testQuery, gotErr)
+		}
+		if gotRes.cmdDBResult != testQueryOut {
+			t.Errorf("Query(%s).cmdDBResult=%s, want=%s", testQuery, gotRes.cmdDBResult, testQueryOut)
+		}
+	})
+}
+
+func TestQueryInvalid(t *testing.T) {
+	testCMDDBHandle, _ := NewCMDDBHandle(Params{
+		SID:        "testSID",
+		HDBUserKey: "testHDBUserKey",
+	})
+
+	testName := "InvalidQuery"
+	testQuery := "TEST INVALID QUERY"
+	fakeExec := func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdErr:   "test error",
+			ExitCode: 3, // Exit code for invalid queries
+		}
+	}
+
+	t.Run(testName, func(t *testing.T) {
+		gotRes, gotErr := testCMDDBHandle.Query(context.Background(), testQuery, fakeExec)
+		if gotRes != nil || gotErr == nil {
+			t.Errorf("Query(%s)=(%#v, %v), want=(nil, any error)", testQuery, gotRes, gotErr)
+		}
+	})
 }
