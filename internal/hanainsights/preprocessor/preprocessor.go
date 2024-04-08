@@ -35,6 +35,7 @@ var (
 
 	// RuleFilenames has list of filenames containing rule definitions.
 	RuleFilenames = []string{
+		
 		"rules/knowledgebase.json",
 		"rules/ha_dr/r_logshipping_async_buffer_size.json",
 		"rules/ha_dr/r_datashipping_parallel_channels.json",
@@ -73,6 +74,7 @@ var (
 		"rules/maintenance/r_logmode_check.json",
 		"rules/performance/r_hana_numa_awareness_check.json",
 		"rules/performance/r_tables_preloaded_check.json",
+		
 	}
 
 	// CountPattern regex is used to identify possible matches in the trigger condition using count()

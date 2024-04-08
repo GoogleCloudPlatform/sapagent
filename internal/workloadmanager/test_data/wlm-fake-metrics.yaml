@@ -1,0 +1,163 @@
+#
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+metric: system
+    metric_value: 1
+    instance_name: fake-wlmmetrics-1
+    os: sles-15-SP3
+    gcloud: true
+    gsutil: true
+    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
+    agent: sapagent
+    agent_version: 3.2
+    agent_state: running
+    os_settings: pass
+metric: corosync
+    metric_value: 1
+    instance_name: fake-wlmmetrics-1
+    os: sles-15-SP3
+    gcloud: true
+    gsutil: true
+    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
+    agent: sapagent
+    agent_version: 3.2
+    agent_state: running
+    os_settings: pass
+    consensus:
+    token_retransmits_before_loss_const: 10
+    two_node: 1
+    max_messages: 20
+    fail_recv_const:
+    join: 60
+    transport: udpu
+    token: 20000
+    transport_runtime: udpu
+    join_runtime: 60
+    token_retransmits_before_loss_const_runtime: 10
+    max_messages_runtime: 20
+    consensus_runtime:
+    token_runtime: 20000
+    fail_recv_const_runtime:
+    two_node_runtime: 1
+metric: pacemaker
+    metric_value: 1
+    instance_name: fake-wlmmetrics-1
+    os: sles-15-SP3
+    gcloud: true
+    gsutil: true
+    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
+    agent: sapagent
+    agent_version: 3.2
+    agent_state: running
+    os_settings: pass
+    pcmk_reboot_timeout: 300
+    pcmk_monitor_retries: 4
+    pcmk_delay_max: 30
+    fence_agent: gcpstonith
+    location_preference_set: true
+    resource_stickiness: 1000
+    migration_threshold: 5000
+    saphana_start_timeout: 3600
+    saphana_stop_timeout: 3600
+    saphana_promote_timeout: 3600
+    saphana_demote_timeout: 3600
+    fence_agent_compute_api_access: true
+    fence_agent_logging_api_access: true
+    maintenance_mode_active: false
+metric: hana
+    metric_value: 1
+    instance_name: fake-wlmmetrics-1
+    os: sles-15-SP3
+    gcloud: true
+    gsutil: true
+    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
+    agent: sapagent
+    agent_version: 3.2
+    agent_state: running
+    os_settings: pass
+    fast_restart: disabled
+    ha_sr_hook_configured: yes
+    numa_balancing: disabled
+    transparent_hugepages: disabled
+    disk_data_type: pd-ssd
+    disk_data_mount: /hana/data
+    disk_data_size: 457409822720
+    disk_data_pd_size: 895500681216
+    disk_log_type: pd-ssd
+    disk_log_mount: /hana/log
+    disk_log_size: 134217728000
+    disk_log_pd_size: 895500681216
+
+metric: netweaver
+    metric_value: 1
+    instance_name: fake-wlmmetrics-1
+    os: sles-15-SP3
+    gcloud: true
+    gsutil: true
+    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
+    agent: sapagent
+    agent_version: 3.2
+    agent_state: running
+    os_settings: pass
+
+metric: hanasecurity
+    metric_value: 1
+    instance_name: fake-wlmmetrics-1
+    os: sles-15-SP3
+    gcloud: true
+    gsutil: true
+    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
+    agent: sapagent
+    agent_version: 3.2
+    agent_state: running
+    os_settings: pass
+        r_logshipping_async_buffer_size_rec_1: false
+    r_datashipping_parallel_channels_rec_1: false
+    r_compressed_log_shipping_rec_1: false
+    r_sap_hana_internal_support_role_rec_1: false
+    r_dev_privs_in_prod_rec_1: false
+    r_system_replication_allowed_sender_rec_1: false
+    r_vulnerability_cve_2019_0357_rec_1: false
+    r_backup_encryption_rec_1: false
+    r_log_encryption_rec_1: false
+    r_password_policy_force_first_password_change_rec_1: false
+    r_password_policy_minimal_password_length_rec_1: false
+    r_password_policy_password_expire_warning_time_rec_1: false
+    r_password_policy_password_layout_rec_1: false
+    r_persistence_encryption_rec_1: false
+    r_prod_users_with_debug_roles_rec_1: false
+    r_password_policy_last_used_passwords_rec_1: false
+    r_password_policy_maximum_invalid_connect_attempts_rec_1: false
+    r_password_policy_password_lock_time_rec_1: false
+    r_password_policy_maximum_password_lifetime_rec_1: false
+    r_password_policy_maximum_unused_initial_password_lifetime_rec_1: false
+    r_password_policy_maximum_unused_productive_password_lifetime_rec_1: false
+    r_password_policy_minimum_password_lifetime_rec_1: false
+    r_rowstore_fragmentation_rec_1: false
+    r_automatic_log_reclaim_rec_1: false
+    r_backup_catalog_housekeeping_rec_1: false
+    r_table_consistency_check_rec_1: false
+    r_timezone_check_rec_1: false
+    r_os_kernel_check_rec_1: false
+    r_stacksize_parameter_rec_1: false
+    r_logshipping_max_retention_size_rec_1: false
+    r_parallel_merge_threads_check_rec_1: false
+    r_gc_unusedmemory_threshold_check_rec_1: false
+    r_max_cpuload_for_parallel_merge_check_rec_1: false
+    r_license_check_rec_1: false
+    r_logmode_check_rec_1: false
+    r_hana_numa_awareness_check_rec_1: false
+    r_tables_preloaded_check_rec_1: false
