@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -120,6 +121,14 @@ func instances(ctx context.Context, hrc replicationConfig, list listInstances, e
 	} else {
 		sapInstances = append(sapInstances, netweaver...)
 	}
+
+	if len(sapInstances) > 0 {
+		_, err = getInstanceNumbers(ctx, sapInstances[0].GetInstanceNumber(), sapInstances[0].GetUser(), exec)
+		if err != nil {
+			log.CtxLogger(ctx).Errorw("Encountered error while getting instance numbers.", "err", err)
+		}
+	}
+
 	return &sapb.SAPInstances{
 		Instances:          sapInstances,
 		LinuxClusterMember: pacemaker.Enabled(crmdata),
@@ -165,7 +174,7 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 			LdLibraryPath:  entry.LDLibraryPath,
 			SapcontrolPath: fmt.Sprintf("%s/sapcontrol", entry.LDLibraryPath),
 		}
-
+		log.CtxLogger(ctx).Debugw("Found SAP HANA instance", "instance", prototext.Format(instance))
 		instances = append(instances, instance)
 	}
 	log.CtxLogger(ctx).Debugw("Found SAP HANA instances", "count", len(instances), "instances", instances)
@@ -377,6 +386,7 @@ func netweaverInstances(ctx context.Context, list listInstances, exec commandlin
 			if err != nil {
 				log.CtxLogger(ctx).Debugw("Could not build Netweaver URL for health check", log.Error(err))
 			}
+			log.CtxLogger(ctx).Debugw("Found SAP NetWeaver instance", "instance", prototext.Format(instance))
 			instances = append(instances, instance)
 		}
 	}
@@ -537,4 +547,39 @@ func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.
 		return "", "", err
 	}
 	return user, password, nil
+}
+
+// getInstanceNumbers takes in the SAP instance number of the current machine
+// and returns a map of hostnames to instance numbers that the current machine knows about.
+func getInstanceNumbers(ctx context.Context, instanceNumber string, user string, exec commandlineexecutor.Execute) ([]map[string]string, error) {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", user, "sapcontrol", "-nr", instanceNumber, "-function", "GetSystemInstanceList"},
+	})
+	log.CtxLogger(ctx).Debugw("getInstanceNumbers command result.", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	// parse the output
+	lines := strings.Split(result.StdOut, "\n")
+	startParsing := false
+	instanceNumbers := []map[string]string{}
+	for _, line := range lines {
+		if startParsing {
+			words := strings.Split(line, ", ")
+			if len(words) > 1 {
+				instanceNumber := map[string]string{
+					"Hostname":       words[0],
+					"InstanceNumber": words[1],
+				}
+				instanceNumbers = append(instanceNumbers, instanceNumber)
+				log.CtxLogger(ctx).Debugw("Found instance number", "instanceNumber", instanceNumber)
+			}
+			// This means that the next lines are the ones we want to parse.
+		} else if strings.HasPrefix(line, "hostname,") {
+			startParsing = true
+		}
+	}
+	log.CtxLogger(ctx).Debugw("Found instance numbers", "count", len(instanceNumbers), "instanceNumbers", instanceNumbers)
+	return instanceNumbers, nil
 }

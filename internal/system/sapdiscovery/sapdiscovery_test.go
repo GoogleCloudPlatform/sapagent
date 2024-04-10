@@ -134,6 +134,14 @@ const (
 	
 	Mapping: HO2_21 -> HO2_22
 	done.`
+
+	defaultInstancesListOutput = `
+04.04.2024 07:27:12\nGetSystemInstanceList
+OK
+hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+tst-s4app11, 11, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, YELLOW
+tstascs11, 12, 51213, 51214, 1, MESSAGESERVER|ENQUE, GREEN
+`
 )
 
 func TestInstances(t *testing.T) {
@@ -1136,6 +1144,63 @@ func TestBuildURLAndServiceName(t *testing.T) {
 
 			if gotServiceName != test.wantServiceName {
 				t.Errorf("buildURLAndServiceName() returned service name = %s, want %s.", gotServiceName, test.wantServiceName)
+			}
+		})
+	}
+}
+
+func TestGetInstanceNumbers(t *testing.T) {
+	tests := []struct {
+		name     string
+		fakeExec commandlineexecutor.Execute
+		want     []map[string]string
+		wantErr  error
+	}{
+		{
+			name: "NetweaverInstance",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: defaultInstancesListOutput,
+				}
+			},
+			want: []map[string]string{
+				map[string]string{
+					"Hostname":       "tst-s4app11",
+					"InstanceNumber": "11",
+				},
+				map[string]string{
+					"Hostname":       "tstascs11",
+					"InstanceNumber": "12",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "Error",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						Error: cmpopts.AnyError,
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want:    nil,
+			wantErr: cmpopts.AnyError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					got, gotErr := getInstanceNumbers(context.Background(), "test", "test", test.fakeExec)
+					if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+						t.Errorf("getInstanceNumbers() unexpected diff in output: (-want +got):\n%s", diff)
+					}
+					if diff := cmp.Diff(test.wantErr, gotErr, protocmp.Transform()); diff != "" {
+						t.Errorf("getInstanceNumbers() unexpected diff in err: (-want +got):\n%s", diff)
+					}
+				})
 			}
 		})
 	}
