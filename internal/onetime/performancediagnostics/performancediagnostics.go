@@ -22,10 +22,12 @@ package performancediagnostics
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"flag"
@@ -43,9 +45,10 @@ const (
 
 // Diagnose has args for performance diagnostics OTE subcommands.
 type Diagnose struct {
-	logLevel, path     string
-	bucket, bundleName string
-	help, version      bool
+	logLevel, path           string
+	testBucket, resultBucket string
+	scope, bundleName        string
+	help, version            bool
 }
 
 type zipperHelper struct{}
@@ -81,13 +84,15 @@ func (*Diagnose) Synopsis() string {
 
 // Usage implements the subcommand interface for features.
 func (*Diagnose) Usage() string {
-	return `Usage: performancediagnostics -bucket=<bucket name> [-bundle_name=<diagnostics bundle name>] [-path=<path to save bundle>] [-h] [-v] [-loglevel=<debug|info|warn|error]>`
+	return `Usage: performancediagnostics [-scope=<all|backup|io>] [-test-bucket=<name of bucket used to run backup>] [-result-bucket=<name of bucket to upload the report] [-bundle_name=<diagnostics bundle name>] [-path=<path to save bundle>] [-h] [-v] [-loglevel=<debug|info|warn|error]>`
 }
 
 // SetFlags implements the subcommand interface for features.
 func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&d.bucket, "bucket", "", "Sets the bucket name for running the diagnostics on. (required)")
-	fs.StringVar(&d.bundleName, "bundle_name", "", "Sets the name for generated bundle. (optional) Default: performance-diagnostics-<current_timestamp>")
+	fs.StringVar(&d.scope, "scope", "all", "Sets the scope for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all>. Default: all")
+	fs.StringVar(&d.testBucket, "test-bucket", "", "Sets the bucket name for running the backint and gsutil operations on. (optional)")
+	fs.StringVar(&d.resultBucket, "result-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")
+	fs.StringVar(&d.bundleName, "bundle-name", "", "Sets the name for generated bundle. (optional) Default: performance-diagnostics-<current_timestamp>")
 	fs.StringVar(&d.path, "path", "", "Sets the path to save the bundle. (optional) Default: /tmp/google-cloud-sap-agent/")
 	fs.StringVar(&d.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
 	fs.BoolVar(&d.help, "help", false, "Display help.")
@@ -120,12 +125,12 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 	}
 
 	onetime.SetupOneTimeLogging(lp, d.Name(), log.StringLevelToZapcore("info"))
-	return d.diagnosticsHandler(ctx, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
+	return d.diagnosticsHandler(ctx, fs, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
 }
 
 // diagnosticsHandler is the main handler for the performance diagnostics OTE subcommand.
-func (d *Diagnose) diagnosticsHandler(ctx context.Context, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
-	if !d.validateParams(ctx) {
+func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
+	if !d.validateParams(ctx, flagSet) {
 		return subcommands.ExitUsageError
 	}
 	destFilesPath := path.Join(d.path, d.bundleName)
@@ -136,12 +141,27 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, exec commandlineexecu
 	onetime.LogMessageToFileAndConsole("Collecting Performance Diagnostics Report for Agent for SAP...")
 
 	// Performance diagnostics operations.
+	ops := d.listOperations(ctx, strings.Split(d.scope, ","))
+	for op := range ops {
+		if op == "all" {
+			// Perform all operations
+		} else if op == "backup" {
+			// Perform backup operation
+		} else if op == "io" {
+			// Perform IO Operation
+		}
+	}
 
 	return subcommands.ExitSuccess
 }
 
 // validateParams checks if the parameters provided to the OTE subcommand are valid.
-func (d *Diagnose) validateParams(ctx context.Context) bool {
+func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) bool {
+	if (strings.Contains(d.scope, "backup") || strings.Contains(d.scope, "all")) && d.testBucket == "" {
+		onetime.LogErrorToFileAndConsole("invalid flag usage", errors.New("test bucket cannot be empty to perform backup operation"))
+		flagSet.Usage()
+		return false
+	}
 	if d.path == "" {
 		log.CtxLogger(ctx).Debugw("No path for bundle provided. Setting bundle path to default", "path", bundlePath)
 		d.path = bundlePath
@@ -151,9 +171,28 @@ func (d *Diagnose) validateParams(ctx context.Context) bool {
 		d.bundleName = "performance-diagnostics-" + strconv.FormatInt(timestamp, 10)
 		log.CtxLogger(ctx).Debugw("No name for bundle provided. Setting bundle name using timestamp", "bundle_name", timestamp)
 	}
-	if d.bucket == "" {
-		onetime.LogMessageToFileAndConsole("no bucket name provided")
-		return false
-	}
 	return true
+}
+
+// listOperations returns a map of operations to be performed.
+func (d *Diagnose) listOperations(ctx context.Context, operations []string) map[string]struct{} {
+	ops := make(map[string]struct{})
+	for _, op := range operations {
+		if _, ok := ops[op]; ok {
+			log.CtxLogger(ctx).Debugw("Duplicate operation already listed", "operation", op)
+		}
+		if op == "all" {
+			if len(ops) > 1 {
+				ops = map[string]struct{}{"all": {}}
+				break
+			}
+		} else if op == "backup" {
+			ops[op] = struct{}{}
+		} else if op == "io" {
+			ops[op] = struct{}{}
+		} else {
+			log.CtxLogger(ctx).Debugw("Invalid operation provided", "operation", op)
+		}
+	}
+	return ops
 }
