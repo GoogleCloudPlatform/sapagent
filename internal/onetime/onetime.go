@@ -46,17 +46,42 @@ type (
 	GCEInterface interface {
 		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
 	}
+
+	// InternallyInvokedOTE is a struct which contains necessary context for an OTE when it is not
+	// invoked via command line.
+	// Follow the practice used in third_party/sapagent/internal/onetime/hanachangedisktype/hanachangedisktype.go
+	// to invoke an OTE internally.
+	InternallyInvokedOTE struct {
+		InvokedBy string
+		Lp        log.Parameters
+		Cp        *iipb.CloudProperties
+	}
+
+	// Options is a struct which contains necessary context for Init function to initialise the OTEs.
+	Options struct {
+		Help, Version  bool
+		Name, LogLevel string
+		Fs             *flag.FlagSet
+		IIOTE          *InternallyInvokedOTE
+	}
 )
 
 // Init performs all initialization steps for OTE subcommands.
 // Args are verified, usage metrics configured, and logging is set up.
 // If name is empty, file logging and usage metrics will not occur.
 // Returns the parsed args, and a bool indicating if initialization completed.
-func Init(ctx context.Context, help, version bool, name, logLevel string, f *flag.FlagSet, args ...any) (log.Parameters, *iipb.CloudProperties, subcommands.ExitStatus, bool) {
-	if help {
-		return log.Parameters{}, nil, HelpCommand(f), false
+func Init(ctx context.Context, opt Options, args ...any) (log.Parameters, *iipb.CloudProperties, subcommands.ExitStatus, bool) {
+	if opt.IIOTE != nil {
+		// OTE is invoked internally, no need to run the below assertions, setting up one time logging
+		// and usage metrics is enough.
+		SetupOneTimeLogging(opt.IIOTE.Lp, opt.IIOTE.InvokedBy, log.StringLevelToZapcore(opt.LogLevel))
+		ConfigureUsageMetricsForOTE(opt.IIOTE.Cp, "", "")
+		return opt.IIOTE.Lp, opt.IIOTE.Cp, subcommands.ExitSuccess, true
 	}
-	if version {
+	if opt.Help {
+		return log.Parameters{}, nil, HelpCommand(opt.Fs), false
+	}
+	if opt.Version {
 		return log.Parameters{}, nil, PrintAgentVersion(), false
 	}
 
@@ -75,13 +100,13 @@ func Init(ctx context.Context, help, version bool, name, logLevel string, f *fla
 		return log.Parameters{}, nil, subcommands.ExitUsageError, false
 	}
 
-	if name == "" {
+	if opt.Name == "" {
 		return lp, cloudProps, subcommands.ExitSuccess, true
 	}
-	if logLevel == "" {
-		logLevel = "info"
+	if opt.LogLevel == "" {
+		opt.LogLevel = "info"
 	}
-	SetupOneTimeLogging(lp, name, log.StringLevelToZapcore(logLevel))
+	SetupOneTimeLogging(lp, opt.Name, log.StringLevelToZapcore(opt.LogLevel))
 	ConfigureUsageMetricsForOTE(cloudProps, "", "")
 	return lp, cloudProps, subcommands.ExitSuccess, true
 }

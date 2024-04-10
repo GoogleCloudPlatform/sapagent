@@ -51,11 +51,11 @@ type HanaChangeDiskType struct {
 	abandonPrepared                                    bool
 	forceStopHANA                                      bool
 	skipDBSnapshotForChangeDiskType                    bool
-	cloudProps                                         *ipb.CloudProperties
 	newdiskName                                        string
 	provisionedIops, provisionedThroughput, diskSizeGb int64
 	help, version                                      bool
 	logLevel                                           string
+	IIOTEParams                                        *onetime.InternallyInvokedOTE
 }
 
 // Name implements the subcommand interface for hanachangedisktype.
@@ -103,20 +103,26 @@ func (c *HanaChangeDiskType) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanadiskbackup.
 func (c *HanaChangeDiskType) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp, cloudProps, exitStatus, completed := onetime.Init(ctx, c.help, c.version, c.Name(), c.logLevel, f, args...)
+	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     c.Name(),
+		Help:     c.help,
+		Version:  c.version,
+		LogLevel: c.logLevel,
+		Fs:       f,
+		IIOTE:    c.IIOTEParams,
+	}, args...)
 	if !completed {
 		return exitStatus
 	}
-	c.cloudProps = cloudProps
 
-	if err := c.validateParams(runtime.GOOS); err != nil {
+	if err := c.validateParams(runtime.GOOS, cp); err != nil {
 		log.Print(err.Error())
 		return subcommands.ExitUsageError
 	}
-	return c.changeDiskTypeHandler(ctx, f, lp)
+	return c.changeDiskTypeHandler(ctx, f, lp, cp)
 }
 
-func (c *HanaChangeDiskType) validateParams(os string) error {
+func (c *HanaChangeDiskType) validateParams(os string, cp *ipb.CloudProperties) error {
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
@@ -126,7 +132,7 @@ func (c *HanaChangeDiskType) validateParams(os string) error {
 		return fmt.Errorf("required arguments not passed. Usage: %s", c.Usage())
 	}
 	if c.project == "" {
-		c.project = c.cloudProps.GetProjectId()
+		c.project = cp.GetProjectId()
 	}
 	if len(c.newdiskName) > 63 {
 		return fmt.Errorf("the new-disk-name is longer than 63 chars which is not supported, please provide a shorter name")
@@ -146,24 +152,26 @@ func (c *HanaChangeDiskType) validateParams(os string) error {
 	return nil
 }
 
-func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.FlagSet, lp log.Parameters) subcommands.ExitStatus {
+func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties) subcommands.ExitStatus {
 	s := &hanadiskbackup.Snapshot{
-		Project:                         c.project,
-		Host:                            c.host,
-		Sid:                             c.sid,
-		HanaSidAdm:                      c.hanaSidAdm,
-		Disk:                            c.disk,
-		DiskZone:                        c.diskZone,
-		DiskKeyFile:                     c.diskKeyFile,
-		StorageLocation:                 c.storageLocation,
-		SnapshotName:                    c.snapshotName,
-		SnapshotType:                    "STANDARD",
-		Description:                     c.description,
-		CloudProps:                      c.cloudProps,
-		LogProperties:                   lp,
+		Project:         c.project,
+		Host:            c.host,
+		Sid:             c.sid,
+		HanaSidAdm:      c.hanaSidAdm,
+		Disk:            c.disk,
+		DiskZone:        c.diskZone,
+		DiskKeyFile:     c.diskKeyFile,
+		StorageLocation: c.storageLocation,
+		SnapshotName:    c.snapshotName,
+		SnapshotType:    "STANDARD",
+		Description:     c.description,
+		IIOTEParams: &onetime.InternallyInvokedOTE{
+			Lp:        lp,
+			Cp:        cp,
+			InvokedBy: c.Name(),
+		},
 		LogLevel:                        c.logLevel,
 		SkipDBSnapshotForChangeDiskType: c.skipDBSnapshotForChangeDiskType,
-		HANAChangeDiskTypeOTEName:       c.Name(),
 	}
 	onetime.LogMessageToFileAndConsole("Starting with Snapshot workflow")
 	exitStatus := s.Execute(ctx, f)
@@ -180,14 +188,16 @@ func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.
 		DiskSizeGb:                      c.diskSizeGb,
 		ProvisionedIops:                 c.provisionedIops,
 		ProvisionedThroughput:           c.provisionedThroughput,
-		CloudProps:                      c.cloudProps,
-		LogProperties:                   lp,
 		SourceSnapshot:                  c.snapshotName,
 		DataDiskName:                    c.disk,
 		DataDiskZone:                    c.diskZone,
 		LogLevel:                        c.logLevel,
 		SkipDBSnapshotForChangeDiskType: c.skipDBSnapshotForChangeDiskType,
-		HANAChangeDiskTypeOTEName:       c.Name(),
+		IIOTEParams: &onetime.InternallyInvokedOTE{
+			Lp:        lp,
+			Cp:        cp,
+			InvokedBy: c.Name(),
+		},
 	}
 	exitStatus = r.Execute(ctx, f)
 	if exitStatus != subcommands.ExitSuccess {

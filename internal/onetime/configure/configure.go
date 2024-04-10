@@ -132,7 +132,13 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for feature.
 func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, c.help, c.version, c.Name(), "INFO", fs, args...)
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     c.Name(),
+		Help:     c.help,
+		Version:  c.version,
+		Fs:       fs,
+		LogLevel: "INFO",
+	}, args...)
 	if !completed {
 		return exitStatus
 	}

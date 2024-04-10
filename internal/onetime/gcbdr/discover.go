@@ -166,7 +166,13 @@ func (d *Discovery) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for Discovery.
 func (d *Discovery) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, d.help, d.version, d.Name(), d.logLevel, f, args...)
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     d.Name(),
+		Help:     d.help,
+		Version:  d.version,
+		LogLevel: d.logLevel,
+		Fs:       f,
+	}, args...)
 	if !completed {
 		return exitStatus
 	}

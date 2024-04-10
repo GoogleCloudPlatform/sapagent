@@ -90,11 +90,16 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for backint.
 func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp, _, exitStatus, completed := onetime.Init(ctx, b.help, b.version, b.Name(), b.logLevel, f, args...)
+	lp, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     b.Name(),
+		Help:     b.help,
+		Version:  b.version,
+		LogLevel: b.logLevel,
+		Fs:       f,
+	}, args...)
 	if !completed {
 		return exitStatus
 	}
-
 	return b.backintHandler(ctx, lp, s.NewClient)
 }
 

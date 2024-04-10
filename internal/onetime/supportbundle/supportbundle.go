@@ -115,7 +115,13 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, s.help, s.version, s.Name(), s.logLevel, f, args...)
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     s.Name(),
+		Help:     s.help,
+		Version:  s.version,
+		LogLevel: s.logLevel,
+		Fs:       f,
+	}, args...)
 	if !completed {
 		return exitStatus
 	}

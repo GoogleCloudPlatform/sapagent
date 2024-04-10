@@ -113,7 +113,13 @@ func (b *InstallBackint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for installbackint.
 func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, b.help, b.version, b.Name(), b.logLevel, f, args...)
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     b.Name(),
+		Help:     b.help,
+		Version:  b.version,
+		LogLevel: b.logLevel,
+		Fs:       f,
+	}, args...)
 	if !completed {
 		return exitStatus
 	}

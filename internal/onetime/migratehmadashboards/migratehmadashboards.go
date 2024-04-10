@@ -85,7 +85,13 @@ func (m *MigrateHMADashboards) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for Migrating HANA Monitoring Agent.
 func (m *MigrateHMADashboards) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, m.help, m.version, m.Name(), m.logLevel, f, args...)
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     m.Name(),
+		Help:     m.help,
+		Version:  m.version,
+		LogLevel: m.logLevel,
+		Fs:       f,
+	}, args...)
 	if !completed {
 		return exitStatus
 	}

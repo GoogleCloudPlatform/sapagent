@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
@@ -49,7 +50,6 @@ var defaultSnapshot = Snapshot{
 	Disk:       "pd-1",
 	DiskZone:   "us-east1-a",
 	Password:   "password",
-	CloudProps: defaultCloudProperties,
 }
 
 var (
@@ -123,7 +123,7 @@ func TestSnapshotHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService)
+			got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
 			}
@@ -204,6 +204,17 @@ func TestExecuteSnapshot(t *testing.T) {
 			},
 		},
 		{
+			name: "InternallyInvoked",
+			snapshot: Snapshot{
+				IIOTEParams: &onetime.InternallyInvokedOTE{
+					Lp:        log.Parameters{},
+					Cp:        defaultCloudProperties,
+					InvokedBy: "test",
+				},
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
 			name: "SuccessForAgentVersion",
 			snapshot: Snapshot{
 				help: true,
@@ -278,7 +289,6 @@ func TestValidateParameters(t *testing.T) {
 				DiskZone:                        "us-east1-a",
 				Password:                        "password",
 				PasswordSecret:                  "secret",
-				CloudProps:                      defaultCloudProperties,
 				SkipDBSnapshotForChangeDiskType: true,
 			},
 			want: nil,
@@ -371,7 +381,7 @@ func TestValidateParameters(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.validateParameters(test.os)
+			got := test.snapshot.validateParameters(test.os, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateParameters(snapshot=%v, os=%v)=%v, want=%v", test.snapshot, test.os, got, test.want)
 			}
@@ -388,9 +398,8 @@ func TestDefaultProject(t *testing.T) {
 		Disk:           "pd-1",
 		DiskZone:       "us-east1-a",
 		PasswordSecret: "secret",
-		CloudProps:     defaultCloudProperties,
 	}
-	got := s.validateParameters("linux")
+	got := s.validateParameters("linux", defaultCloudProperties)
 	if !cmp.Equal(got, nil, cmpopts.EquateErrors()) {
 		t.Errorf("validateParameters(linux=%v)=%v, want=%v", got, got, nil)
 	}
@@ -487,7 +496,7 @@ func TestRunWorkflow(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.runWorkflow(context.Background(), test.run)
+			got := test.snapshot.runWorkflow(context.Background(), test.run, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("runWorkflow()=%v, want=%v", got, test.want)
 			}
@@ -660,7 +669,7 @@ func TestSendStatusToMonitoring(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.sendStatusToMonitoring(context.Background(), cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond))
+			got := test.snapshot.sendStatusToMonitoring(context.Background(), cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond), defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("sendStatusToMonitoring()=%v, want=%v", got, test.want)
 			}
@@ -912,7 +921,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo)
+			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
 			}

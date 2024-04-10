@@ -98,7 +98,13 @@ func (r *ReadMetrics) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for readmetrics.
 func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, cloudProps, exitStatus, completed := onetime.Init(ctx, r.help, r.version, r.Name(), r.logLevel, f, args...)
+	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     r.Name(),
+		Help:     r.help,
+		Version:  r.version,
+		LogLevel: r.logLevel,
+		Fs:       f,
+	}, args...)
 	if !completed {
 		return exitStatus
 	}

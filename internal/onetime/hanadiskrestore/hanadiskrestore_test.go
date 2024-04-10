@@ -31,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -200,7 +201,7 @@ func TestValidateParameters(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.restorer.validateParameters(test.os)
+			got := test.restorer.validateParameters(test.os, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateParameters(%q) = %v, want %v", test.os, got, test.want)
 			}
@@ -252,9 +253,8 @@ func TestDefaultValues(t *testing.T) {
 		NewdiskName:    "new-disk-name",
 		NewDiskType:    "new-disk-type",
 		Project:        "",
-		CloudProps:     defaultCloudProperties,
 	}
-	got := r.validateParameters("linux")
+	got := r.validateParameters("linux", defaultCloudProperties)
 	if got != nil {
 		t.Errorf("validateParameters()=%v, want=%v", got, nil)
 	}
@@ -294,7 +294,7 @@ func TestRestoreHandler(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.restorer.restoreHandler(context.Background(), test.fakeComputeService)
+			got := test.restorer.restoreHandler(context.Background(), test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("restoreHandler() = %v, want %v", got, test.want)
 			}
@@ -557,6 +557,17 @@ func TestExecute(t *testing.T) {
 			want:     subcommands.ExitFailure,
 		},
 		{
+			name: "InternallyInvoked",
+			r: Restorer{
+				IIOTEParams: &onetime.InternallyInvokedOTE{
+					InvokedBy: "test",
+					Lp:        log.Parameters{},
+					Cp:        defaultCloudProperties,
+				},
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
 			name:     "Version",
 			r:        Restorer{version: true},
 			testArgs: []any{"subcommdand_name", log.Parameters{}, &ipb.CloudProperties{}},
@@ -650,7 +661,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.r.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo)
+			got := tc.r.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
 			}

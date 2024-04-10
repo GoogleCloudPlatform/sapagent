@@ -91,7 +91,13 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for configureinstance.
 func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, cloudProps, exitStatus, completed := onetime.Init(ctx, c.help, c.version, c.Name(), "info", f, args...)
+	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     c.Name(),
+		Help:     c.help,
+		Version:  c.version,
+		Fs:       f,
+		LogLevel: "INFO",
+	}, args...)
 	if !completed {
 		return exitStatus
 	}

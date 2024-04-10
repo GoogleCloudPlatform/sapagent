@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -39,8 +40,8 @@ var defaultChangeDiskType = &HanaChangeDiskType{
 	diskKeyFile:                     "default-disk-key-file",
 	storageLocation:                 "default-storage-location",
 	abandonPrepared:                 true,
-	cloudProps:                      defaultCloudProperties,
 	forceStopHANA:                   true,
+	skipDBSnapshotForChangeDiskType: true,
 }
 
 var defaultCloudProperties = &ipb.CloudProperties{
@@ -81,7 +82,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "SuccessfullyParseArgs",
 			cdt:  *defaultChangeDiskType,
-			want: subcommands.ExitUsageError,
+			want: subcommands.ExitFailure,
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -111,6 +112,17 @@ func TestExecute(t *testing.T) {
 				log.Parameters{},
 				&ipb.CloudProperties{},
 			},
+		},
+		{
+			name: "InternallyInvoked",
+			cdt: HanaChangeDiskType{
+				IIOTEParams: &onetime.InternallyInvokedOTE{
+					Lp:        log.Parameters{},
+					Cp:        defaultCloudProperties,
+					InvokedBy: "test",
+				},
+			},
+			want: subcommands.ExitUsageError,
 		},
 	}
 	for _, test := range tests {
@@ -230,7 +242,7 @@ func TestValidateParams(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotErr := tc.c.validateParams(tc.os)
+			gotErr := tc.c.validateParams(tc.os, defaultCloudProperties)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("validateParams(%v) returned error: %v, want error: %v", tc.os, gotErr, tc.wantErr)
 			}
@@ -253,5 +265,5 @@ func TestSetFlagsForChangeDiskTypeWorkflow(t *testing.T) {
 }
 
 func TestChangeDiskTypeHandler(t *testing.T) {
-	defaultChangeDiskType.changeDiskTypeHandler(context.Background(), &flag.FlagSet{}, log.Parameters{})
+	defaultChangeDiskType.changeDiskTypeHandler(context.Background(), &flag.FlagSet{}, log.Parameters{}, defaultCloudProperties)
 }

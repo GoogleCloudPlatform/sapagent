@@ -89,8 +89,6 @@ type Snapshot struct {
 	computeService                    *compute.Service
 	status                            bool
 	timeSeriesCreator                 cloudmonitoring.TimeSeriesCreator
-	CloudProps                        *ipb.CloudProperties
-	LogProperties                     log.Parameters
 	help, version                     bool
 	SkipDBSnapshotForChangeDiskType   bool
 	HANAChangeDiskTypeOTEName         string
@@ -99,6 +97,7 @@ type Snapshot struct {
 	hanaDataPath                      string
 	logicalDataPath, physicalDataPath string
 	labels                            string
+	IIOTEParams                       *onetime.InternallyInvokedOTE
 }
 
 // Name implements the subcommand interface for hanadiskbackup.
@@ -151,16 +150,16 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Help and version will return before the args are parsed.
-	if s.help || s.version || !s.SkipDBSnapshotForChangeDiskType {
-		lp, cloudProps, exitStatus, completed := onetime.Init(ctx, s.help, s.version, s.Name(), s.LogLevel, f, args...)
-		if !completed {
-			return exitStatus
-		}
-		s.LogProperties = lp
-		s.CloudProps = cloudProps
-	} else {
-		onetime.SetupOneTimeLogging(s.LogProperties, s.HANAChangeDiskTypeOTEName, log.StringLevelToZapcore(s.LogLevel))
-		onetime.ConfigureUsageMetricsForOTE(s.CloudProps, "", "")
+	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+		Name:     s.Name(),
+		Help:     s.help,
+		Version:  s.version,
+		LogLevel: s.LogLevel,
+		Fs:       f,
+		IIOTE:    s.IIOTEParams,
+	}, args...)
+	if !completed {
+		return exitStatus
 	}
 
 	mc, err := monitoring.NewMetricClient(ctx)
@@ -176,18 +175,18 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return subcommands.ExitFailure
 	}
 	s.hanaDataPath = p
-	return s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService)
+	return s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp)
 }
 
-func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc) subcommands.ExitStatus {
+func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties) subcommands.ExitStatus {
 	var err error
 	s.status = false
-	if err = s.validateParameters(runtime.GOOS); err != nil {
+	if err = s.validateParameters(runtime.GOOS, cp); err != nil {
 		log.Print(err.Error())
 		return subcommands.ExitFailure
 	}
 
-	defer s.sendStatusToMonitoring(ctx, cloudmonitoring.NewDefaultBackOffIntervals())
+	defer s.sendStatusToMonitoring(ctx, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 
 	s.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
@@ -226,23 +225,23 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 
 	workflowStartTime := time.Now()
 	if s.SkipDBSnapshotForChangeDiskType {
-		err := s.runWorkflowForChangeDiskType(ctx, runQuery)
+		err := s.runWorkflowForChangeDiskType(ctx, runQuery, cp)
 		if err != nil {
 			onetime.LogErrorToFileAndConsole("Error: Failed to run HANA disk snapshot workflow", err)
 			return subcommands.ExitFailure
 		}
-	} else if err = s.runWorkflow(ctx, runQuery); err != nil {
+	} else if err = s.runWorkflow(ctx, runQuery, cp); err != nil {
 		onetime.LogErrorToFileAndConsole("Error: Failed to run HANA disk snapshot workflow", err)
 		return subcommands.ExitFailure
 	}
 	workflowDur := time.Since(workflowStartTime)
-	s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals())
+	s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	log.Print("SUCCESS: HANA backup and disk snapshot creation successful.")
 	s.status = true
 	return subcommands.ExitSuccess
 }
 
-func (s *Snapshot) validateParameters(os string) error {
+func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error {
 	if s.SkipDBSnapshotForChangeDiskType {
 		log.Logger.Debug("Skipping parameter validation for change disk type workflow.")
 		return nil
@@ -258,7 +257,7 @@ func (s *Snapshot) validateParameters(os string) error {
 		return fmt.Errorf("either -password or -password-secret is required. Usage:" + s.Usage())
 	}
 	if s.Project == "" {
-		s.Project = s.CloudProps.GetProjectId()
+		s.Project = cp.GetProjectId()
 	}
 	if s.SnapshotName == "" {
 		t := time.Now()
@@ -295,8 +294,8 @@ func runQuery(h *sql.DB, q string) (string, error) {
 	return val, nil
 }
 
-func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
-	_, ok, err := s.gceService.DiskAttachedToInstance(s.Project, s.DiskZone, s.CloudProps.GetInstanceName(), s.Disk)
+func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc, cp *ipb.CloudProperties) (err error) {
+	_, ok, err := s.gceService.DiskAttachedToInstance(s.Project, s.DiskZone, cp.GetInstanceName(), s.Disk)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole(fmt.Sprintf("ERROR: Failed to check if the source-disk=%v is attached to the instance", s.Disk), err)
 		return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", s.Disk)
@@ -318,7 +317,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
 	if s.freezeFileSystem {
 		freezeTime := time.Since(dbFreezeStartTime)
-		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals())
+		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	}
 
 	if err != nil {
@@ -343,13 +342,13 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc) (err error) {
 	return nil
 }
 
-func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, run queryFunc) (err error) {
+func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, run queryFunc, cp *ipb.CloudProperties) (err error) {
 	err = s.prepareForChangeDiskTypeWorkflow(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("Error preparing for change disk type workflow", err)
 		return err
 	}
-	_, ok, err := s.gceService.DiskAttachedToInstance(s.Project, s.DiskZone, s.CloudProps.GetInstanceName(), s.Disk)
+	_, ok, err := s.gceService.DiskAttachedToInstance(s.Project, s.DiskZone, cp.GetInstanceName(), s.Disk)
 	if err != nil {
 		return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", s.Disk)
 	}
@@ -555,14 +554,14 @@ func (s *Snapshot) waitForUploadCompletionWithRetry(ctx context.Context, op *com
 }
 
 // sendStatusToMonitoring sends the status of one time execution to cloud monitoring as a GAUGE metric.
-func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) bool {
+func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {
 	if !s.SendToMonitoring {
 		return false
 	}
 	log.CtxLogger(ctx).Infow("Optional: sending HANA disk snapshot status to cloud monitoring", "status", s.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  s.CloudProps,
+			CloudProp:  cp,
 			MetricType: metricPrefix + s.Name() + "/status",
 			Timestamp:  tspb.Now(),
 			BoolValue:  s.status,
@@ -580,14 +579,14 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 	return true
 }
 
-func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals) bool {
+func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {
 	if !s.SendToMonitoring {
 		return false
 	}
 	log.CtxLogger(ctx).Infow("Optional: Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildFloat64(timeseries.Params{
-			CloudProp:    s.CloudProps,
+			CloudProp:    cp,
 			MetricType:   mtype,
 			Timestamp:    tspb.Now(),
 			Float64Value: dur.Seconds(),
