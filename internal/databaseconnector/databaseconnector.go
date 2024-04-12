@@ -22,6 +22,8 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -53,24 +55,25 @@ type (
 		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
 	}
 
-	// CMDDBConnection stores connection information for querying via hdbsql command line
+	// CMDDBConnection stores connection information for querying via hdbsql command line.
 	CMDDBConnection struct {
 		SIDAdmUser string // system user to run the queries from
 		HDBUserKey string // HDB Userstore Key providing auth and instance details
 	}
 
-	// DBHandle provides an object to connect to and query databases, abstracting the underlying connector
+	// DBHandle provides an object to connect to and query databases, abstracting the underlying connector.
 	DBHandle struct {
 		useCMD      bool
 		goHDBHandle *sql.DB
 		cmdDBHandle *CMDDBConnection
 	}
 
-	// QueryResults is a struct to process the results of a database query
+	// QueryResults is a struct to process the results of a database query.
 	QueryResults struct {
-		useCMD      bool
-		goHDBResult *sql.Rows
-		cmdDBResult string // Stores entire raw query result
+		useCMD           bool
+		goHDBResult      *sql.Rows
+		cmdDBResult      []string // Stores the entire query result split by rows.
+		cmdDBResultIndex int      // Stores current index of the command-line queried result.
 	}
 )
 
@@ -112,7 +115,7 @@ func NewGoDBHandle(ctx context.Context, p Params) (*DBHandle, error) {
 	return nil, nil
 }
 
-// NewCMDDBHandle instantiates a command-line database handle
+// NewCMDDBHandle instantiates a command-line database handle.
 func NewCMDDBHandle(p Params) (*DBHandle, error) {
 	if p.SID == "" {
 		return nil, fmt.Errorf("sid not provided")
@@ -134,44 +137,141 @@ func NewCMDDBHandle(p Params) (*DBHandle, error) {
 
 // Query queries the database via the goHDB driver or command-line accordingly.
 func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexecutor.Execute) (*QueryResults, error) {
-	if db.useCMD {
-		sidadmArgs := []string{"-i", "-u", fmt.Sprintf("%sadm", db.cmdDBHandle.SIDAdmUser)}                           // Arguments to run command in sidadm user
-		hdbsqlArgs := []string{"hdbsql", "-U", db.cmdDBHandle.HDBUserKey, "-a", "-x", "-quiet", "-Z", "CHOPBLANKS=0"} // Arguments to run hdbsql query in parse-able format
-
-		// Builds a command equivalent to $sudo -i -u <sidadm> hdbsql -U <key> -a -x -quiet <query>
-		args := append(sidadmArgs, hdbsqlArgs...)
-		args = append(args, query)
-
-		result := exec(ctx, commandlineexecutor.Params{
-			Executable: "sudo",
-			Args:       args,
-		})
-		if result.Error != nil || result.ExitCode != 0 {
-			log.CtxLogger(ctx).Errorw("Running hdbsql query failed", " stdout:", result.StdOut, " stderr", result.StdErr, " error", result.Error)
-			return nil, fmt.Errorf(result.StdErr)
+	if !db.useCMD {
+		// Query via go HDB Driver.
+		resultRows, err := db.goHDBHandle.QueryContext(ctx, query)
+		if err != nil {
+			log.CtxLogger(ctx).Errorw("Query execution failed, err", err)
+			return nil, err
 		}
-
 		return &QueryResults{
-			useCMD:      true,
-			cmdDBResult: result.StdOut,
+			useCMD:      false,
+			goHDBResult: resultRows,
 		}, nil
 	}
-	// Query via go HDB Driver
-	result, err := db.goHDBHandle.QueryContext(ctx, query)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Query execution failed, err", err)
-		return nil, err
+	// Query via hdbsql command-line.
+	sidadmArgs := []string{"-i", "-u", fmt.Sprintf("%sadm", db.cmdDBHandle.SIDAdmUser)}                           // Arguments to run command in sidadm user
+	hdbsqlArgs := []string{"hdbsql", "-U", db.cmdDBHandle.HDBUserKey, "-a", "-x", "-quiet", "-Z", "CHOPBLANKS=0"} // Arguments to run hdbsql query in parse-able format
+
+	// Builds a command equivalent to [$sudo -i -u <sidadm> hdbsql -U <key> -a -x -quiet <query>].
+	args := append(sidadmArgs, hdbsqlArgs...)
+	args = append(args, query)
+
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable: "sudo",
+		Args:       args,
+	})
+	if result.Error != nil || result.ExitCode != 0 {
+		log.CtxLogger(ctx).Errorw("Running hdbsql query failed", " stdout:", result.StdOut, " stderr", result.StdErr, " error", result.Error)
+		return nil, fmt.Errorf(result.StdErr)
 	}
 
 	return &QueryResults{
-		useCMD:      false,
-		goHDBResult: result,
+		useCMD:           true,
+		cmdDBResult:      strings.Split(result.StdOut, "\n"),
+		cmdDBResultIndex: -1,
 	}, nil
-
 }
 
-// ReadRow parses the next row of results into destination
+// Next iterates to the next row of result. Returns false if no more rows remain or the next row could not be read.
+func (qr *QueryResults) Next() bool {
+	if !qr.useCMD {
+		// Results fetched via go-hdb driver.
+		return qr.goHDBResult.Next()
+	}
+	// Results fetched via command-line.
+	if qr.cmdDBResultIndex == (len(qr.cmdDBResult) - 1) {
+		// No more rows to read.
+		return false
+	}
+	qr.cmdDBResultIndex++
+	return true
+}
+
+// ReadRow parses the current row of results into destination.
 func (qr *QueryResults) ReadRow(dest ...any) error {
-	// TODO: Implement row parsing logic
+	if !qr.useCMD {
+		// Results fetched via go-hdb driver.
+		return qr.goHDBResult.Scan(dest...)
+	}
+	// Results fetched via command-line.
+	if qr.cmdDBResultIndex <= -1 {
+		return fmt.Errorf("called ReadRow() before calling Next()")
+	}
+	if qr.cmdDBResultIndex >= len(qr.cmdDBResult) {
+		return fmt.Errorf("No more results to read")
+	}
+	return parseIntoValues(qr.cmdDBResult[qr.cmdDBResultIndex], dest...)
+}
+
+// Tokenize rows of hdbsql command-line results.
+// This regexp matches values separated by commas, while not counting commas inside quotes.
+// For non-primitive data types (i.e. string, date, etc.) it matches values inside the quotes.
+// Eg: an hdbsql result: `1,"Doe, John",70.5,True`
+// will be matched as: 	["1", "Doe, John", "70.5", "True"]
+// TODO: Add support to parse values containing double quotes.
+var cmdResultPattern = regexp.MustCompile(`("([^"]*)"|(\w[^",]*)|\?)`)
+
+func parseIntoValues(resultRow string, dest ...any) error {
+	nullChar := "?" // Represents NULL characters in the query output.
+
+	matches := cmdResultPattern.FindAllStringSubmatch(resultRow, -1)
+	if len(matches) != len(dest) {
+		return fmt.Errorf("result has %d columns, but %d destination arguments provided", len(matches), len(dest))
+	}
+
+	// Parse each matched token as per the provided destination pointer type.
+	// For NULL values the value is set to the default/zero values.
+	for i, match := range matches {
+		if len(match) < 3 {
+			return fmt.Errorf("could not parse result")
+		}
+		switch d := dest[i].(type) {
+		case (*string):
+			// Extracts actual string from capturing group.
+			// For NULL values, match[2] is an empty string "".
+			*d = match[2]
+		case (*int64):
+			if match[0] == nullChar {
+				*d = 0
+				continue
+			}
+			val, err := strconv.ParseInt(match[0], 10, 64)
+			if err != nil {
+				return fmt.Errorf("failed to parse %s as int64: %v", match[0], err)
+			}
+			*d = val
+		case (*float64):
+			if match[0] == nullChar {
+				*d = 0.0
+				continue
+			}
+			val, err := strconv.ParseFloat(match[0], 64)
+			if err != nil {
+				return fmt.Errorf("failed to parse %s as float64: %v", match[0], err)
+			}
+			*d = val
+		case (*bool):
+			if match[0] == nullChar {
+				*d = false
+				continue
+			}
+			val, err := strconv.ParseBool(match[0])
+			if err != nil {
+				return fmt.Errorf("failed to parse %s as bool: %v", match[0], err)
+			}
+			*d = val
+		case (*any):
+			// Non primitive or alphanumeric data types are enclosed in quotes.
+			// For NULL values, match[2] is an empty string "".
+			if match[0] == nullChar || strings.HasPrefix(match[0], `"`) {
+				*d = match[2] // Gets result enclosed in quotes (e.g. strings, date, etc) as string.
+				continue
+			}
+			*d = match[0] // Gets result not enclosed in quotes (e.g. int, float, etc) as string.
+		default:
+			return fmt.Errorf("unsupported destination argument type: %T", d)
+		}
+	}
 	return nil
 }
