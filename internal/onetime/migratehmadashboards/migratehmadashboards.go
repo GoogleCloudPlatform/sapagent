@@ -72,7 +72,7 @@ func (*MigrateHMADashboards) Synopsis() string {
 
 // Usage implements the subcommand interface for MigrateHMADashboards.
 func (*MigrateHMADashboards) Usage() string {
-	return `Usage: migratehmadashboards -project=<project-name> [-h] [-v] [-loglevel]=<debug|info|warn|error>\n`
+	return `Usage: migratehmadashboards -project=<project-name> [-h] [-v] [-loglevel=<debug|info|warn|error>]\n`
 }
 
 // SetFlags implements the subcommand interface for MigrateHMADashboards.

@@ -74,7 +74,7 @@ func (*HanaChangeDiskType) Usage() string {
 	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
 	[skip-db-snapshot-for-change-disk-type=<true|false>]
-	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
+	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for changedisktype.

@@ -57,7 +57,7 @@ func (*MigrateHANAMonitoring) Synopsis() string {
 
 // Usage implements the subcommand interface for migrating hana monitoring agent.
 func (*MigrateHANAMonitoring) Usage() string {
-	return "Usage: migratehma [-h] [-v] [-loglevel]=<debug|info|warn|error>\n"
+	return "Usage: migratehma [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
 }
 
 // SetFlags implements the subcommand interface for migrating hana monitoring agent.

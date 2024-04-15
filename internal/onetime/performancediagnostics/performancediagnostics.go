@@ -84,7 +84,9 @@ func (*Diagnose) Synopsis() string {
 
 // Usage implements the subcommand interface for features.
 func (*Diagnose) Usage() string {
-	return `Usage: performancediagnostics [-scope=<all|backup|io>] [-test-bucket=<name of bucket used to run backup>] [-result-bucket=<name of bucket to upload the report] [-bundle_name=<diagnostics bundle name>] [-path=<path to save bundle>] [-h] [-v] [-loglevel=<debug|info|warn|error]>`
+	return `Usage: performancediagnostics [-scope=<all|backup|io>] [-test-bucket=<name of bucket used to run backup>]
+	[-result-bucket=<name of bucket to upload the report] [-bundle_name=<diagnostics bundle name>]
+	[-path=<path to save bundle>] [-h] [-v] [-loglevel=<debug|info|warn|error]>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for features.

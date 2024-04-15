@@ -96,7 +96,7 @@ func (*Restorer) Usage() string {
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
 	[-send-metrics-to-monitoring]=<true|false>
 	[csek-key-file]=<path-to-key-file>]
-	[-h] [-v] [-loglevel]=<debug|info|warn|error>` + "\n"
+	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanadiskrestore.

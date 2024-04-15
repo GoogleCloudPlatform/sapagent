@@ -47,7 +47,7 @@ func (*Validate) Synopsis() string {
 
 // Usage returns a long string explaining the command and giving usage information.
 func (*Validate) Usage() string {
-	return "Usage: validate [-workloadcollection <filename>] [-h] [-v] [-loglevel]=<debug|info|warn|error>\n"
+	return "Usage: validate [-workloadcollection <filename>] [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
 }
 
 // SetFlags adds the flags for this command to the specified set.

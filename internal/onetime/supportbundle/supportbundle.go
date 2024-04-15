@@ -98,7 +98,8 @@ func (*SupportBundle) Synopsis() string {
 
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
-	return `Usage: supportbundle [-sid=<SAP System Identifier> -instance-numbers=<Instance numbers> -hostname=<Hostname>] [-h] [-v] [-loglevel]=<debug|info|warn|error>
+	return `Usage: supportbundle -sid=<SAP System Identifier> -instance-numbers=<Instance numbers>
+	-hostname=<Hostname> [-h] [-v] [-loglevel=<debug|info|warn|error>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
 

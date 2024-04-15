@@ -116,7 +116,7 @@ func (*Snapshot) Usage() string {
 	[-snapshot-description=<description>] [-snapshot-name=<snapshot-name>]
 	[-snapshot-type=<snapshot-type>] [-freeze-file-system=<true|false>]
 	[-labels="label1=value1,label2=value2"]
-	[-h] [-v] [-loglevel]=<debug|info|warn|error>
+	[-h] [-v] [-loglevel=<debug|info|warn|error>]
 	` + "\n"
 }
 
