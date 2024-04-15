@@ -78,6 +78,7 @@ type (
 )
 
 // Connect creates a SQL connection to a HANA database utilizing the go-hdb driver.
+// TODO: This will be replaced by CreateDBHandle() completely once the latter is integrated with all workflows.
 func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
 	if p.Password == "" && p.PasswordSecret == "" {
 		return nil, fmt.Errorf("Could not attempt to connect to database %s, both password and secret name are empty", p.Host)
@@ -105,18 +106,53 @@ func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
 	return db, nil
 }
 
+// CreateDBHandle creates a DB handle to the database that queries using either the go-hdb driver or hdbsql command-line.
+// TODO: Replace the above Connect() with CreateDBHandle() completely once integrated with all workflows.
+func CreateDBHandle(ctx context.Context, p Params) (handle *DBHandle, err error) {
+	// we want to use go-hdb for username:password authorizations and hdbsql command-line for hdbuserstore key authorization.
+	if p.HDBUserKey != "" {
+		log.CtxLogger(ctx).Debug("Using hdbsql command-line")
+		return NewCMDDBHandle(p)
+	}
+	log.CtxLogger(ctx).Debug("Using go-hdb driver")
+	return NewGoDBHandle(ctx, p)
+}
+
 // Database Handle Functions for Querying and handling results
 
 // NewGoDBHandle instantiates a go-hdb driver database handle.
-// TODO: The current logic in Connect() will go here, and Connect() will call either of the
-// two constructors based on the connecting parameters it gets.
-func NewGoDBHandle(ctx context.Context, p Params) (*DBHandle, error) {
-	// TODO: Implement Constructor for go-hdb connector
-	return nil, nil
+func NewGoDBHandle(ctx context.Context, p Params) (handle *DBHandle, err error) {
+	if p.Password == "" && p.PasswordSecret == "" {
+		return nil, fmt.Errorf("could not attempt to connect to database %s, both password and secret name are empty", p.Host)
+	}
+	if p.Password == "" && p.PasswordSecret != "" {
+		if p.Password, err = p.GCEService.GetSecret(ctx, p.Project, p.PasswordSecret); err != nil {
+			return nil, err
+		}
+		log.CtxLogger(ctx).Debug("Read from secret manager successful")
+	}
+
+	// Escape the special characters in the password string, HANA studio does this implicitly.
+	p.Password = url.QueryEscape(p.Password)
+	dataSource := "hdb://" + p.Username + ":" + p.Password + "@" + p.Host + ":" + p.Port
+	if p.EnableSSL {
+		dataSource = dataSource + "?TLSServerName=" + p.HostNameInCert + "&TLSRootCAFile=" + p.RootCAFile
+	}
+
+	db, err := sql.Open("hdb", dataSource)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not open connection to database.", "username", p.Username, "host", p.Host, "port", p.Port, "err", err)
+		return nil, err
+	}
+	log.CtxLogger(ctx).Debug("Database connection successful")
+	return &DBHandle{
+		useCMD:      false,
+		goHDBHandle: db,
+	}, nil
 }
 
 // NewCMDDBHandle instantiates a command-line database handle.
-func NewCMDDBHandle(p Params) (*DBHandle, error) {
+func NewCMDDBHandle(p Params) (handle *DBHandle, err error) {
 	if p.SID == "" {
 		return nil, fmt.Errorf("sid not provided")
 	}
@@ -166,9 +202,16 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 		return nil, fmt.Errorf(result.StdErr)
 	}
 
+	result.StdOut = strings.TrimSuffix(result.StdOut, "\n")
+	resultRows := []string{}
+	if result.StdOut != "" {
+		// Non empty result
+		resultRows = strings.Split(result.StdOut, "\n")
+	}
+
 	return &QueryResults{
 		useCMD:           true,
-		cmdDBResult:      strings.Split(result.StdOut, "\n"),
+		cmdDBResult:      resultRows,
 		cmdDBResultIndex: -1,
 	}, nil
 }

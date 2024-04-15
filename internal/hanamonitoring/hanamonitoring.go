@@ -19,7 +19,6 @@ package hanamonitoring
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"reflect"
 	"sort"
@@ -32,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
@@ -70,7 +70,7 @@ type (
 	}
 
 	// queryFunc provides an easily testable translation to the SQL API.
-	queryFunc func(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	queryFunc func(ctx context.Context, query string, exec commandlineexecutor.Execute) (*databaseconnector.QueryResults, error)
 
 	// Parameters hold the parameters necessary to invoke Start().
 	Parameters struct {
@@ -249,7 +249,7 @@ func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, param
 	log.CtxLogger(ctx).Infow("Successfuly executed: ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort())
 	var metrics []*mrpb.TimeSeries
 	for rows.Next() {
-		if err := rows.Scan(cols...); err != nil {
+		if err := rows.ReadRow(cols...); err != nil {
 			return 0, 0, err
 		}
 		metrics = append(metrics, createMetricsForRow(ctx, db.instance.GetName(), db.instance.GetSid(), query, cols, params, runningSum)...)
@@ -286,7 +286,7 @@ func createColumns(queryColumns []*cpb.Column) []any {
 }
 
 // queryDatabase attempts to execute the specified query, returning a sql.Rows iterator and a slice for storing the column results of each row.
-func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (*sql.Rows, []any, error) {
+func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (*databaseconnector.QueryResults, []any, error) {
 	if query == nil {
 		return nil, nil, errors.New("no query specified")
 	}
@@ -294,7 +294,7 @@ func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (
 	if cols == nil {
 		return nil, nil, errors.New("no columns specified")
 	}
-	rows, err := queryFunc(ctx, query.GetSql())
+	rows, err := queryFunc(ctx, query.GetSql(), commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -314,15 +314,17 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 			EnableSSL:      i.GetEnableSsl(),
 			HostNameInCert: i.GetHostNameInCertificate(),
 			RootCAFile:     i.GetTlsRootCaFile(),
+			HDBUserKey:     i.GetHdbuserstoreKey(),
+			SID:            i.GetSid(),
 			GCEService:     params.GCEService,
 			Project:        params.Config.GetCloudProperties().GetProjectId(),
 		}
-		handle, err := databaseconnector.Connect(ctx, dbp)
+		handle, err := databaseconnector.CreateDBHandle(ctx, dbp)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
 			continue
 		}
-		databases = append(databases, &database{queryFunc: handle.QueryContext, instance: i})
+		databases = append(databases, &database{queryFunc: handle.Query, instance: i})
 	}
 	return databases
 }
@@ -460,13 +462,13 @@ func createCumulativeMetric(ctx context.Context, c *cpb.Column, val any, labels 
 // fetchSID is responsible for fetching the SID for a HANA instance if it not
 // already set by executing a query on the M_DATABASE table.
 func fetchSID(ctx context.Context, db *database) (string, error) {
-	rows, err := db.queryFunc(ctx, "SELECT SYSTEM_ID AS sid FROM M_DATABASE LIMIT 1;")
+	rows, err := db.queryFunc(ctx, "SELECT SYSTEM_ID AS sid FROM M_DATABASE LIMIT 1;", commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return "", err
 	}
 	rows.Next()
 	var sid string
-	if err := rows.Scan(&sid); err != nil {
+	if err := rows.ReadRow(&sid); err != nil {
 		return "", err
 	}
 	return sid, nil

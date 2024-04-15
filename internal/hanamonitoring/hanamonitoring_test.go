@@ -18,7 +18,6 @@ package hanamonitoring
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -29,6 +28,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -102,11 +103,11 @@ func newTimeSeriesKey(metricType, metricLabels string) timeSeriesKey {
 	return tsk
 }
 
-func fakeQueryFunc(context.Context, string, ...any) (*sql.Rows, error) {
-	return &sql.Rows{}, nil
+func fakeQueryFunc(context.Context, string, commandlineexecutor.Execute) (*databaseconnector.QueryResults, error) {
+	return &databaseconnector.QueryResults{}, nil
 }
 
-func fakeQueryFuncError(context.Context, string, ...any) (*sql.Rows, error) {
+func fakeQueryFuncError(context.Context, string, commandlineexecutor.Execute) (*databaseconnector.QueryResults, error) {
 	return nil, cmpopts.AnyError
 }
 
@@ -230,9 +231,7 @@ func TestStart(t *testing.T) {
 }
 
 func TestQueryAndSend(t *testing.T) {
-	// fakeQueryFuncError is needed here since a sql.Rows object cannot be easily
-	// created outside of the database/sql package. However, we can still test
-	// that the queryAndSend() workflow returns an error and retries or cancels
+	// We test that the queryAndSend() workflow returns an error and retries or cancels
 	// the query based on the failCount.
 	tests := []struct {
 		name    string
@@ -387,7 +386,8 @@ func TestQueryDatabase(t *testing.T) {
 }
 
 func TestConnectToDatabases(t *testing.T) {
-	// Connecting to a database with empty user, host and port arguments will still be able to validate the hdb driver and create a *sql.DB.
+	// For go-hdb driver: Connecting to a database with empty user, host and port arguments will still be able to validate the driver and create a Database Handle.
+	// For command-line based access: Connecting to a database needs the SID and HDBUserstore key.
 	tests := []struct {
 		name    string
 		params  Parameters
@@ -487,6 +487,44 @@ func TestConnectToDatabases(t *testing.T) {
 			},
 			want: 0,
 		},
+		{
+			name: "ConnectViaHDBUserstoreKey",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{Sid: "fakeSID", HdbuserstoreKey: "fakeKey"},
+							&configpb.HANAInstance{Sid: "fakeSID", HdbuserstoreKey: "fakeKey"},
+							&configpb.HANAInstance{Sid: "fakeSID", HdbuserstoreKey: "fakeKey"}},
+					},
+				},
+			},
+			want: 3,
+		},
+		{
+			name: "ConnectViaHDBUserstoreKeyFailsNoSID",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{HdbuserstoreKey: "fakeKey"}},
+					},
+				},
+			},
+			want: 0,
+		},
+		{
+			name: "ConnectViaHDBUserstoreKeyFailsNoKey",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{Sid: "fakeSID"}},
+					},
+				},
+			},
+			want: 0,
+		},
 	}
 
 	for _, test := range tests {
@@ -541,7 +579,7 @@ func TestCreateMetricsForRow(t *testing.T) {
 	}
 }
 
-// For the following test, sql.Rows.Scan() requires pointers in order to populate the column values.
+// For the following test, QueryResults.ReadRow() requires pointers in order to populate the column values.
 // These values will eventually be passed to createGaugeMetric(). Simulate this behavior by creating pointers and populating them with a value.
 func TestCreateGaugeMetric(t *testing.T) {
 	tests := []struct {

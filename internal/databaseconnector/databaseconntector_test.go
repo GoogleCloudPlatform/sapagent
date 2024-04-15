@@ -19,7 +19,6 @@ package databaseconnector
 import (
 	"context"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -163,11 +162,15 @@ func TestQueryValid(t *testing.T) {
 		SID:        "testSID",
 		HDBUserKey: "testHDBUserKey",
 	})
-	testQueryOut := `test1, test2
-	test3, test4
-	test5, test6
-	`
-	testResultRows := strings.Split(testQueryOut, "\n")
+	testQueryOut := `1,"test2"
+3,"test4"
+5,"test6"
+`
+	testResultRows := []string{
+		`1,"test2"`,
+		`3,"test4"`,
+		`5,"test6"`,
+	}
 	testName := "ValidQuery"
 	testQuery := "TEST VALID 'QUERY'"
 	fakeExec := func(ctx context.Context, cmdParams commandlineexecutor.Params) commandlineexecutor.Result {
