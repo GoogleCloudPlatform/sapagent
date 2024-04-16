@@ -39,6 +39,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -58,7 +59,7 @@ type diagnoseFile struct {
 }
 
 // executeFunc abstracts the execution of each of the Backint functions.
-type executeFunc func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool
+type executeFunc func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProps *ipb.CloudProperties) bool
 
 // removeFunc abstracts removing a file from the file system.
 type removeFunc func(name string) error
@@ -67,6 +68,7 @@ type removeFunc func(name string) error
 type diagnoseOptions struct {
 	config        *bpb.BackintConfiguration
 	connectParams *storage.ConnectParameters
+	cloudProps    *ipb.CloudProperties
 	output        io.Writer
 	files         []*diagnoseFile
 	execute       executeFunc
@@ -75,10 +77,10 @@ type diagnoseOptions struct {
 }
 
 // Execute logs information and performs the diagnostic. Returns false on failures.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, output io.Writer) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, output io.Writer, cloudProps *ipb.CloudProperties) bool {
 	log.CtxLogger(ctx).Infow("DIAGNOSE starting", "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintDiagnoseStarted)
-	if err := diagnose(ctx, config, connectParams, output); err != nil {
+	if err := diagnose(ctx, config, connectParams, output, cloudProps); err != nil {
 		log.CtxLogger(ctx).Errorw("DIAGNOSE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintDiagnoseFailure)
 		output.Write([]byte(fmt.Sprintf("\nDIAGNOSE failed: %v\n", err.Error())))
@@ -94,7 +96,7 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // Several files will be created, uploaded, queried, downloaded, and deleted.
 // Results are written to the output. Any issues will return errors after
 // attempting to clean up the temporary files locally and in the bucket.
-func diagnose(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, output io.Writer) error {
+func diagnose(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, output io.Writer, cloudProps *ipb.CloudProperties) error {
 	dir := fmt.Sprintf("/tmp/backint-diagnose/%s/", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	if config.GetMaxDiagnoseSizeGb() > 0 {
 		log.Logger.Infof("Max diagnose file size overridden to %d GB", config.GetMaxDiagnoseSizeGb())
@@ -104,7 +106,7 @@ func diagnose(ctx context.Context, config *bpb.BackintConfiguration, connectPara
 	if err != nil {
 		return fmt.Errorf("createFiles error: %v", err)
 	}
-	opts := diagnoseOptions{config: config, connectParams: connectParams, output: output, files: files}
+	opts := diagnoseOptions{config: config, connectParams: connectParams, output: output, files: files, cloudProps: cloudProps}
 	defer removeFiles(ctx, opts, os.Remove)
 
 	opts.execute = backup.Execute
@@ -350,7 +352,7 @@ func diagnoseDelete(ctx context.Context, opts diagnoseOptions) error {
 func performDiagnostic(ctx context.Context, opts diagnoseOptions) ([][]string, error) {
 	in := bytes.NewBufferString(opts.input)
 	out := bytes.NewBufferString("")
-	if ok := opts.execute(ctx, opts.config, opts.connectParams, in, out); !ok {
+	if ok := opts.execute(ctx, opts.config, opts.connectParams, in, out, opts.cloudProps); !ok {
 		return nil, fmt.Errorf("failed to execute: %s", opts.input)
 	}
 	opts.output.Write(out.Bytes())

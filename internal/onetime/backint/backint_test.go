@@ -207,7 +207,7 @@ func TestBackintHandler(t *testing.T) {
 				defer f.Close()
 			}
 
-			got := test.backint.backintHandler(context.Background(), log.Parameters{}, test.client)
+			got := test.backint.backintHandler(context.Background(), log.Parameters{}, defaultCloudProperties, test.client)
 			if got != test.want {
 				t.Errorf("(%#v).backintHandler()=%v, want %v", test.backint, got, test.want)
 			}
@@ -365,7 +365,7 @@ func TestRun(t *testing.T) {
 				defer f.Close()
 			}
 
-			got := run(context.Background(), test.config, test.params)
+			got := run(context.Background(), test.config, test.params, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("run(%#v) = %v, want %v", test.config, got, test.want)
 			}

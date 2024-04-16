@@ -37,6 +37,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 const userAgent = "Backint for GCS"
@@ -90,7 +91,7 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for backint.
 func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	lp, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.Options{
 		Name:     b.Name(),
 		Help:     b.help,
 		Version:  b.version,
@@ -100,10 +101,11 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 	if !completed {
 		return exitStatus
 	}
-	return b.backintHandler(ctx, lp, s.NewClient)
+
+	return b.backintHandler(ctx, lp, cloudProps, s.NewClient)
 }
 
-func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client storage.Client) subcommands.ExitStatus {
+func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, cloudProps *ipb.CloudProperties, client storage.Client) subcommands.ExitStatus {
 	log.CtxLogger(ctx).Info("Backint starting")
 	p := configuration.Parameters{
 		User:        b.user,
@@ -137,7 +139,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 	}
 
 	usagemetrics.Action(usagemetrics.BackintRunning)
-	if ok := run(ctx, config, connectParams); !ok {
+	if ok := run(ctx, config, connectParams, cloudProps); !ok {
 		return subcommands.ExitUsageError
 	}
 
@@ -147,7 +149,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, client 
 
 // run opens the input file and creates the output file then selects which Backint function
 // to execute based on the configuration. Issues with file operations or config will return false.
-func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters) bool {
+func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, cloudProps *ipb.CloudProperties) bool {
 	usagemetrics.Action(usagemetrics.BackintRunning)
 	log.CtxLogger(ctx).Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	inFile, err := os.Open(config.GetInputFile())
@@ -173,15 +175,15 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *s
 
 	switch config.GetFunction() {
 	case bpb.Function_BACKUP:
-		return backup.Execute(ctx, config, connectParams, inFile, outFile)
+		return backup.Execute(ctx, config, connectParams, inFile, outFile, cloudProps)
 	case bpb.Function_INQUIRE:
-		return inquire.Execute(ctx, config, connectParams, inFile, outFile)
+		return inquire.Execute(ctx, config, connectParams, inFile, outFile, cloudProps)
 	case bpb.Function_DELETE:
-		return delete.Execute(ctx, config, connectParams, inFile, outFile)
+		return delete.Execute(ctx, config, connectParams, inFile, outFile, cloudProps)
 	case bpb.Function_RESTORE:
-		return restore.Execute(ctx, config, connectParams, inFile, outFile)
+		return restore.Execute(ctx, config, connectParams, inFile, outFile, cloudProps)
 	case bpb.Function_DIAGNOSE:
-		return diagnose.Execute(ctx, config, connectParams, outFile)
+		return diagnose.Execute(ctx, config, connectParams, outFile, cloudProps)
 	default:
 		log.CtxLogger(ctx).Errorw("Unsupported Backint function", "function", config.GetFunction().String())
 		return false

@@ -31,10 +31,13 @@ import (
 
 	store "cloud.google.com/go/storage"
 	"github.com/gammazero/workerpool"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/metrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -60,6 +63,7 @@ type parameters struct {
 
 	config       *bpb.BackintConfiguration
 	bucketHandle *store.BucketHandle
+	cloudProps   *ipb.CloudProperties
 	fileType     string
 	fileName     string
 	fileSize     int64
@@ -71,10 +75,10 @@ type parameters struct {
 }
 
 // Execute logs information and performs the requested backup. Returns false on failures.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProps *ipb.CloudProperties) bool {
 	log.CtxLogger(ctx).Infow("BACKUP starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintBackupStarted)
-	if err := backup(ctx, config, connectParams, input, output); err != nil {
+	if err := backup(ctx, config, connectParams, input, output, cloudProps); err != nil {
 		log.CtxLogger(ctx).Errorw("BACKUP failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintBackupFailure)
 		return false
@@ -86,7 +90,7 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 
 // backup uploads pipes and files based on each line of the input. Results for each upload are
 // written to the output. Issues with file operations will return errors.
-func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) error {
+func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProps *ipb.CloudProperties) error {
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
@@ -105,6 +109,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 			p := parameters{
 				config:           config,
 				connectParams:    connectParams,
+				cloudProps:       cloudProps,
 				fileType:         s[0],
 				fileName:         s[1],
 				wp:               wp,
@@ -207,7 +212,9 @@ func backupFile(ctx context.Context, p parameters) string {
 		XMLMultipartServiceAccount: p.config.GetServiceAccountKey(),
 		XMLMultipartEndpoint:       p.config.GetClientEndpoint(),
 	}
+	startTime := time.Now()
 	bytesWritten, err := rw.Upload(ctx)
+	metrics.SendToCloudMonitoring(ctx, "backup", p.fileName, bytesWritten, time.Since(startTime), p.config.GetSendMonitoringMetrics().GetValue(), err == nil, p.cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error uploading file", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 		return fmt.Sprintf("#ERROR %s\n", p.fileName)

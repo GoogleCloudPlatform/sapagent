@@ -31,18 +31,21 @@ import (
 
 	store "cloud.google.com/go/storage"
 	"github.com/gammazero/workerpool"
+	"github.com/GoogleCloudPlatform/sapagent/internal/backint/metrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
+	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // Execute logs information and performs the requested restore. Returns false on failures.
-func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
+func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProps *ipb.CloudProperties) bool {
 	log.CtxLogger(ctx).Infow("RESTORE starting", "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	usagemetrics.Action(usagemetrics.BackintRestoreStarted)
-	if err := restore(ctx, config, connectParams, input, output); err != nil {
+	if err := restore(ctx, config, connectParams, input, output, cloudProps); err != nil {
 		log.CtxLogger(ctx).Errorw("RESTORE failed", "err", err)
 		usagemetrics.Error(usagemetrics.BackintRestoreFailure)
 		return false
@@ -54,7 +57,7 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 
 // restore downloads files from the bucket based on each line of the input. Results for each
 // restore are written to the output. Issues with file operations will return errors.
-func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) error {
+func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProps *ipb.CloudProperties) error {
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
@@ -78,7 +81,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			}
 			restoreFunc := func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
-				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, "")
+				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, "", cloudProps)
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -103,7 +106,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			}
 			restoreFunc := func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
-				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, externalBackupID)
+				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, externalBackupID, cloudProps)
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -128,7 +131,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // restoreFile queries the bucket to see if the backup exists.
 // If externalBackupID is not specified, the latest backup for fileName is used.
 // If found, the file is downloaded and saved to destName.
-func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, copier storage.IOFileCopier, fileName, destName, externalBackupID string) []byte {
+func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, copier storage.IOFileCopier, fileName, destName, externalBackupID string, cloudProps *ipb.CloudProperties) []byte {
 	// A trailing slash ensures a complete match for the file name, otherwise
 	// "file-name" and "file-name1" could both be returned.
 	prefix := config.GetFolderPrefix() + config.GetUserId() + parse.TrimAndClean(fileName) + "/"
@@ -189,7 +192,9 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		RetryBackoffMax:        time.Duration(config.GetRetryBackoffMax()) * time.Second,
 		RetryBackoffMultiplier: float64(config.GetRetryBackoffMultiplier()),
 	}
+	startTime := time.Now()
 	bytesWritten, err := rw.Download(ctx)
+	metrics.SendToCloudMonitoring(ctx, "restore", fileName, bytesWritten, time.Since(startTime), config.GetSendMonitoringMetrics().GetValue(), err == nil, cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error downloading file", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "err", err)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))

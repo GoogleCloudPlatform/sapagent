@@ -180,6 +180,9 @@ func (p *Parameters) applyDefaults(numCPU int64) {
 	if p.Config.GetLogToCloud() == nil {
 		p.Config.LogToCloud = wpb.Bool(true)
 	}
+	if p.Config.GetSendMonitoringMetrics() == nil {
+		p.Config.SendMonitoringMetrics = wpb.Bool(true)
+	}
 	if p.Config.GetRetries() <= 0 {
 		log.Logger.Warn("retries defaulted to 5")
 		p.Config.Retries = 5

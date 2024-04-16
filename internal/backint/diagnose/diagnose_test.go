@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (
@@ -69,7 +70,7 @@ var (
 	}
 	defaultConfig  = &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100}
 	defaultOptions = diagnoseOptions{
-		execute: func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
+		execute: func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProperties *ipb.CloudProperties) bool {
 			return false
 		},
 		config:        defaultConfig,
@@ -83,13 +84,17 @@ var (
 			},
 		},
 	}
-	defaultRemoveFunc = func(name string) error { return nil }
+	defaultRemoveFunc      = func(name string) error { return nil }
+	defaultCloudProperties = &ipb.CloudProperties{
+		ProjectId:    "default-project",
+		InstanceName: "default-instance",
+	}
 )
 
 // defaultExecute utilizes a closure to write the input line by line
 // to the output. execute() can then be called multiple times per test case.
-func defaultExecute(lines []string) func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
-	return func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer) bool {
+func defaultExecute(lines []string) func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProperties *ipb.CloudProperties) bool {
+	return func(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProperties *ipb.CloudProperties) bool {
 		if len(lines) == 0 {
 			return false
 		}
@@ -139,7 +144,7 @@ func TestExecute(t *testing.T) {
 			smallFileSize /= 8
 			largeFileSize = smallFileSize
 
-			got := Execute(context.Background(), test.config, test.params, bytes.NewBufferString(""))
+			got := Execute(context.Background(), test.config, test.params, bytes.NewBufferString(""), defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("Execute() = %v, want: %v", got, test.want)
 			}

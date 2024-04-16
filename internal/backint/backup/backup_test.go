@@ -35,6 +35,7 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (
@@ -66,7 +67,11 @@ var (
 		stat:             os.Stat,
 		connectParams:    defaultConnectParameters,
 	}
-	defaultContent = []byte("test content")
+	defaultContent         = []byte("test content")
+	defaultCloudProperties = &ipb.CloudProperties{
+		ProjectId:    "default-project",
+		InstanceName: "default-instance",
+	}
 )
 
 // fakeServer creates a new server with objects in the bucketName.
@@ -173,7 +178,7 @@ func TestBackup(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := backup(context.Background(), defaultParameters.config, defaultConnectParameters, test.input, bytes.NewBufferString(""))
+			got := backup(context.Background(), defaultParameters.config, defaultConnectParameters, test.input, bytes.NewBufferString(""), defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("backup() = %v, want %v", got, test.want)
 			}
@@ -184,7 +189,7 @@ func TestBackup(t *testing.T) {
 func TestBackupParallelSuccess(t *testing.T) {
 	input := bytes.NewBufferString("#FILE /object.txt 12345")
 	config := &bpb.BackintConfiguration{ParallelStreams: 2, FileReadTimeoutMs: 100}
-	got := backup(context.Background(), config, defaultConnectParameters, input, bytes.NewBufferString(""))
+	got := backup(context.Background(), config, defaultConnectParameters, input, bytes.NewBufferString(""), defaultCloudProperties)
 	if got != nil {
 		t.Errorf("backup() = %v, want <nil>", got)
 	}

@@ -35,6 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (
@@ -91,6 +92,10 @@ var (
 	fakeFile      = func() *os.File {
 		f, _ := os.Open("fake-file.txt")
 		return f
+	}
+	defaultCloudProperties = &ipb.CloudProperties{
+		ProjectId:    "default-project",
+		InstanceName: "default-instance",
 	}
 )
 
@@ -173,7 +178,7 @@ func TestRestore(t *testing.T) {
 
 			input := bytes.NewBufferString(test.input)
 			output := bytes.NewBufferString("")
-			got := restore(context.Background(), defaultConfig, defaultConnectParameters, input, output)
+			got := restore(context.Background(), defaultConfig, defaultConnectParameters, input, output, defaultCloudProperties)
 			if output.String() != test.want {
 				t.Errorf("restore() = %s, want: %s", output.String(), test.want)
 			}
@@ -186,7 +191,7 @@ func TestRestore(t *testing.T) {
 
 func TestRestoreScannerError(t *testing.T) {
 	want := cmpopts.AnyError
-	got := restore(context.Background(), defaultConfig, defaultConnectParameters, fakeFile(), bytes.NewBufferString(""))
+	got := restore(context.Background(), defaultConfig, defaultConnectParameters, fakeFile(), bytes.NewBufferString(""), defaultCloudProperties)
 	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
 		t.Errorf("restore() = %v, want: %v", got, want)
 	}
@@ -263,7 +268,7 @@ func TestRestoreFileBackupTypePipe(t *testing.T) {
 				defer f.Close()
 			}
 
-			got := restoreFile(context.Background(), defaultConfig, test.bucket, test.copier, test.fileName, test.destName, test.externalBackupID)
+			got := restoreFile(context.Background(), defaultConfig, test.bucket, test.copier, test.fileName, test.destName, test.externalBackupID, defaultCloudProperties)
 			if !strings.HasPrefix(string(got), test.wantPrefix) {
 				t.Errorf("restoreFile(%s, %s) = %s, wantPrefix: %s", test.fileName, test.externalBackupID, got, test.wantPrefix)
 			}
@@ -278,7 +283,7 @@ func TestRestoreFileBackupTypeFile(t *testing.T) {
 	destName := t.TempDir() + "/file-object.txt"
 	wantPrefix := "#RESTORED"
 
-	got := restoreFile(context.Background(), defaultConfig, defaultBucketHandle, io.Copy, fileName, destName, externalBackupID)
+	got := restoreFile(context.Background(), defaultConfig, defaultBucketHandle, io.Copy, fileName, destName, externalBackupID, defaultCloudProperties)
 	if !strings.HasPrefix(string(got), wantPrefix) {
 		t.Errorf("restoreFile(%s, %s) = %s, wantPrefix: %s", fileName, externalBackupID, got, wantPrefix)
 	}
