@@ -43,6 +43,7 @@ message Configuration {
   google.protobuf.BoolValue log_to_cloud = 9;
   DiscoveryConfiguration discovery_configuration = 10;
   SupportConfiguration support_configuration = 11;
+  UAPConfiguration uap_configuration = 12;
 }
 
 message CollectionConfiguration {
@@ -198,4 +199,8 @@ message DiscoveryConfiguration {
 message SupportConfiguration {
   google.protobuf.BoolValue
       send_workload_validation_metrics_to_cloud_monitoring = 1;
+}
+
+message UAPConfiguration {
+  google.protobuf.BoolValue enabled = 1;
 }
