@@ -21,12 +21,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/GoogleCloudPlatform/agentcommunication_client/client"
+	client "github.com/GoogleCloudPlatform/agentcommunication_client"
 	"google.golang.org/api/option"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
-	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb/agentcommunicationpb"
+	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb"
 )
 
 const (

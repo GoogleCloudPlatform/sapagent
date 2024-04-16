@@ -23,6 +23,8 @@ cloud.google.com/go/storage v1.36.0 h1:P0mOkAcaJxhCTvAkMhxMfrTKiNcub4YmmPBtlhAyT
 cloud.google.com/go/storage v1.36.0/go.mod h1:M6M/3V/D3KpzMTJyPOR/HU6n2Si5QdaXYEsng2xgOs8=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15 h1:Nfrki2YgdAkq5U7e+CBfHdDZiqHAlCn5V9OW1NZkQrk=
+github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15/go.mod h1:Zw96j4gRzfoC3G09m4CrBZuyAF0Fy1nMwdd4pojUNVE=
 github.com/SAP/go-hdb v1.8.0 h1:keRMLcfSzamjol3PVCdwX0RB+iUeE3Jg+ZvPKthOzRM=
 github.com/SAP/go-hdb v1.8.0/go.mod h1:8NptOH2Y6LNVClNTEiY3nZi/EvUdagh8I1/0gtRLuqg=
 github.com/benbjohnson/clock v1.1.0 h1:Q92kusRqC1XV2MjkWETPvjJVqKetz1OzxZB7mHJLju8=

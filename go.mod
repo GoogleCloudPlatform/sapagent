@@ -22,6 +22,7 @@ require (
   github.com/google/go-cmp v0.6.0
   github.com/google/subcommands v1.2.0
   github.com/googleapis/gax-go/v2 v2.12.2
+  github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15
   github.com/jonboulle/clockwork v0.3.0
   github.com/natefinch/lumberjack v0.0.0-20230119042236-215739b3bcdc
   github.com/pkg/errors v0.9.1

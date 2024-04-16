@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
-	"github.com/GoogleCloudPlatform/agentcommunication_client/client"
-	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb/agentcommunicationpb"
+	client "github.com/GoogleCloudPlatform/agentcommunication_client"
+	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/option"
