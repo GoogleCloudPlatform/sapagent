@@ -105,28 +105,20 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for feature.
 func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	// this check will never be hit when executing the command line
-	if len(args) < 2 {
-		log.CtxLogger(ctx).Errorf("Not enough args for Execute(). Want: 2, Got: %d", len(args))
-		return subcommands.ExitUsageError
+	_, _, exitStatus, completed := onetime.Init(
+		ctx,
+		onetime.Options{
+			Name:     d.Name(),
+			Help:     d.help,
+			Version:  d.version,
+			LogLevel: d.logLevel,
+			Fs:       fs,
+		},
+		args,
+	)
+	if !completed {
+		return exitStatus
 	}
-	// This check will never be hit when executing the command line
-	lp, ok := args[1].(log.Parameters)
-	if !ok {
-		log.CtxLogger(ctx).Errorf("Unable to assert args[1] of type %T to log.Parameters.", args[1])
-		return subcommands.ExitUsageError
-	}
-
-	if d.help {
-		fs.Usage()
-		return subcommands.ExitSuccess
-	}
-	if d.version {
-		onetime.PrintAgentVersion()
-		return subcommands.ExitSuccess
-	}
-
-	onetime.SetupOneTimeLogging(lp, d.Name(), log.StringLevelToZapcore("info"))
 	return d.diagnosticsHandler(ctx, fs, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
 }
 
