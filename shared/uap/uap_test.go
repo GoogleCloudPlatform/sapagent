@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"testing"
 
-	apb "google3/google/protobuf/any_go_proto"
-	"google3/third_party/agentcommunication_client/client"
-	acpb "google3/third_party/agentcommunication_client/gapic/agentcommunicationpb/agentcommunicationpb"
+	apb "google.golang.org/protobuf/types/known/anypb"
+	"github.com/GoogleCloudPlatform/agentcommunication_client/client"
+	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb/agentcommunicationpb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/option"
