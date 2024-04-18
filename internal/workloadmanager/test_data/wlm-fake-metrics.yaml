@@ -65,6 +65,7 @@ metric: pacemaker
     os_settings: pass
     pcmk_reboot_timeout: 300
     pcmk_monitor_retries: 4
+    pcmk_delay_base: 30
     pcmk_delay_max: 30
     fence_agent: gcpstonith
     location_preference_set: true
@@ -74,6 +75,8 @@ metric: pacemaker
     saphana_stop_timeout: 3600
     saphana_promote_timeout: 3600
     saphana_demote_timeout: 3600
+    saphanatopology_monitor_interval: 30
+    saphanatopology_monitor_timeout: 60
     fence_agent_compute_api_access: true
     fence_agent_logging_api_access: true
     maintenance_mode_active: false
@@ -100,6 +103,7 @@ metric: hana
     disk_log_mount: /hana/log
     disk_log_size: 134217728000
     disk_log_pd_size: 895500681216
+    ha_in_same_zone: false
 
 metric: netweaver
     metric_value: 1
