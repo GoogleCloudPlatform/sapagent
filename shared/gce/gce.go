@@ -21,12 +21,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	backoff "github.com/cenkalti/backoff/v4"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/pkg/errors"
 	smpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // GCE is a wrapper for Google Compute Engine services.
@@ -254,4 +258,119 @@ func (g *GCE) DiskAttachedToInstance(project, zone, instanceName, diskName strin
 		}
 	}
 	return "", false, nil
+}
+
+// waitForSnapshotCreationCompletion waits for the given snapshot creation operation to complete.
+func (g *GCE) waitForSnapshotCreationCompletion(ctx context.Context, op *compute.Operation, project, snapshotName string) error {
+	ss, err := g.service.Snapshots.Get(project, snapshotName).Do()
+	if err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Snapshot creation status", "snapshot", snapshotName, "SnapshotStatus", ss.Status, "OperationStatus", op.Status)
+	if ss.Status == "CREATING" {
+		return fmt.Errorf("snapshot creation is in progress, snapshot name: %s, status:  CREATING", snapshotName)
+	}
+	log.CtxLogger(ctx).Infow("Snapshot creation progress", "snapshot", snapshotName, "status", ss.Status)
+	return nil
+}
+
+// WaitForSnapshotCreationCompletionWithRetry waits for the given compute operation to complete.
+// We sleep for 1s between retries a total 300 times => max_wait_duration = 5 minutes
+func (g *GCE) WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 300), ctx)
+	return backoff.Retry(func() error { return g.waitForSnapshotCreationCompletion(ctx, op, project, snapshotName) }, bo)
+}
+
+// waitForUploadCompletion waits for the given snapshot upload operation to complete.
+func (g *GCE) waitForUploadCompletion(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	zos := compute.NewZoneOperationsService(g.service)
+	tracker, err := zos.Wait(project, diskZone, op.Name).Do()
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name)
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Operation in progress", "Name", op.Name, "percentage", tracker.Progress, "status", tracker.Status)
+	if tracker.Status != "DONE" {
+		return fmt.Errorf("compute operation is not DONE yet")
+	}
+
+	ss, err := g.service.Snapshots.Get(project, snapshotName).Do()
+	if err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Snapshot upload status", "snapshot", snapshotName, "SnapshotStatus", ss.Status, "OperationStatus", op.Status)
+
+	if ss.Status == "READY" {
+		return nil
+	}
+	return fmt.Errorf("snapshot %s not READY yet, snapshotStatus: %s, operationStatus: %s", snapshotName, ss.Status, op.Status)
+}
+
+// WaitForSnapshotUploadCompletionWithRetry waits for the given compute operation to complete.
+// We sleep for 30s between retries a total 480 times => max_wait_duration = 30*480 = 4 Hours
+func (g *GCE) WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	constantBackoff := backoff.NewConstantBackOff(30 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 480), ctx)
+	return backoff.Retry(func() error { return g.waitForUploadCompletion(ctx, op, project, diskZone, snapshotName) }, bo)
+}
+
+// waitForDiskOpCompletion waits for the given disk operation to complete.
+func (g *GCE) waitForDiskOpCompletion(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error {
+	zos := compute.NewZoneOperationsService(g.service)
+	tracker, err := zos.Wait(project, dataDiskZone, op.Name).Do()
+	if err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Operation in progress", "Name", op.Name, "percentage", tracker.Progress, "status", tracker.Status)
+	if tracker.Status != "DONE" {
+		return fmt.Errorf("compute operation is not DONE yet")
+	}
+	return nil
+}
+
+// WaitForDiskOpCompletionWithRetry waits for the given compute operation to complete.
+// We sleep for 120s between retries a total 10 times => max_wait_duration = 10*120 = 20 Minutes
+func (g *GCE) WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error {
+	constantBackoff := backoff.NewConstantBackOff(120 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 10), ctx)
+	return backoff.Retry(func() error { return g.waitForDiskOpCompletion(ctx, op, project, dataDiskZone) }, bo)
+}
+
+// AttachDisk attaches the disk with the given name to the instance.
+func (g *GCE) AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error {
+	log.CtxLogger(ctx).Infow("Attaching disk", "diskName", diskName)
+	attachDiskToVM := &compute.AttachedDisk{
+		DeviceName: diskName, // Keep the device name and disk name same.
+		Source:     fmt.Sprintf("projects/%s/zones/%s/disks/%s", project, dataDiskZone, diskName),
+	}
+	op, err := g.service.Instances.AttachDisk(project, dataDiskZone, cp.GetInstanceName(), attachDiskToVM).Do()
+	if err != nil {
+		return fmt.Errorf("failed to attach disk: %v", err)
+	}
+	if err := g.WaitForDiskOpCompletionWithRetry(ctx, op, project, dataDiskZone); err != nil {
+		return fmt.Errorf("attach disk operation failed: %v", err)
+	}
+	return nil
+}
+
+// DetachDisk detaches given disk from the instance.
+func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error {
+	log.CtxLogger(ctx).Infow("Detatching disk", "diskName", dataDiskName, "deviceName", dataDiskDeviceName)
+	op, err := g.service.Instances.DetachDisk(project, dataDiskZone, cp.GetInstanceName(), dataDiskDeviceName).Do()
+	if err != nil {
+		return fmt.Errorf("failed to detach old data disk: %v", err)
+	}
+	if err := g.WaitForDiskOpCompletionWithRetry(ctx, op, project, dataDiskZone); err != nil {
+		return fmt.Errorf("detach data disk operation failed: %v", err)
+	}
+
+	_, ok, err := g.DiskAttachedToInstance(project, dataDiskZone, cp.GetInstanceName(), dataDiskName)
+	if err != nil {
+		return fmt.Errorf("failed to check if disk %v is still attached to the instance", dataDiskName)
+	}
+	if ok {
+		return fmt.Errorf("Disk %v is still attached to the instance", dataDiskName)
+	}
+	return nil
 }

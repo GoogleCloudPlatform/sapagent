@@ -34,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -270,6 +271,7 @@ func TestRestoreHandler(t *testing.T) {
 	tests := []struct {
 		name               string
 		restorer           Restorer
+		fakeNewGCE         gceServiceFunc
 		fakeComputeService computeServiceFunc
 		want               subcommands.ExitStatus
 	}{
@@ -277,6 +279,12 @@ func TestRestoreHandler(t *testing.T) {
 			name:     "InvalidParameters",
 			restorer: Restorer{},
 			want:     subcommands.ExitFailure,
+		},
+		{
+			name:       "GCEServiceCreationFailure",
+			restorer:   defaultRestorer,
+			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return nil, cmpopts.AnyError },
+			want:       subcommands.ExitFailure,
 		},
 		{
 			name:               "ComputeServiceCreateFailure",
@@ -294,7 +302,7 @@ func TestRestoreHandler(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.restorer.restoreHandler(context.Background(), test.fakeComputeService, defaultCloudProperties)
+			got := test.restorer.restoreHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("restoreHandler() = %v, want %v", got, test.want)
 			}

@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"flag"
-	backoff "github.com/cenkalti/backoff/v4"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
@@ -62,6 +61,8 @@ type (
 	gceInterface interface {
 		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
+		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
+		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 	}
 )
 
@@ -194,7 +195,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		return subcommands.ExitFailure
 	}
 
-	if err := s.checkPreConditions(ctx); err != nil {
+	if err := s.checkDataDir(ctx); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to check preconditions", err)
 		return subcommands.ExitFailure
 	}
@@ -327,13 +328,13 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc, cp *ipb.Cloud
 	}
 
 	onetime.LogMessageToFileAndConsole("Waiting for disk snapshot to complete uploading.")
-	if err := s.waitForUploadCompletionWithRetry(ctx, op); err != nil {
+	if err := s.gceService.WaitForSnapshotUploadCompletionWithRetry(ctx, op, s.Project, s.DiskZone, s.SnapshotName); err != nil {
 		log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
 
-	log.Logger.Info("Disk snapshot created, marking HANA snapshot as successful.")
+	log.CtxLogger(ctx).Info("Disk snapshot created, marking HANA snapshot as successful.")
 	if _, err = run(s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, s.SnapshotName)); err != nil {
 		log.CtxLogger(ctx).Errorw("Error marking HANA snapshot as SUCCESSFUL")
 		usagemetrics.Error(usagemetrics.DiskSnapshotDoneDBNotComplete)
@@ -358,29 +359,25 @@ func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, run queryFu
 	op, err := s.createDiskSnapshot(ctx)
 	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error creating disk snapshot", "error", err)
 		return err
 	}
 
-	log.Logger.Info("Waiting for disk snapshot to complete uploading.")
-	if err := s.waitForUploadCompletionWithRetry(ctx, op); err != nil {
-		log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
+	log.CtxLogger(ctx).Info("Waiting for disk snapshot to complete uploading.")
+	if err := s.gceService.WaitForSnapshotUploadCompletionWithRetry(ctx, op, s.Project, s.DiskZone, s.SnapshotName); err != nil {
 		return err
 	}
 
-	log.Logger.Info("Disk snapshot created.")
+	log.CtxLogger(ctx).Info("Disk snapshot created.")
 	return nil
 }
 
 func (s *Snapshot) prepareForChangeDiskTypeWorkflow(ctx context.Context, exec commandlineexecutor.Execute) (err error) {
 	onetime.LogMessageToFileAndConsole("Stopping HANA")
 	hdr := hanadiskrestore.Restorer{}
-	err = hdr.StopHANA(ctx, exec)
-	if err != nil {
+	if err = hdr.StopHANA(ctx, exec); err != nil {
 		return err
 	}
-	err = hdr.WaitForIndexServerToStopWithRetry(ctx, exec)
-	if err != nil {
+	if err = hdr.WaitForIndexServerToStopWithRetry(ctx, exec); err != nil {
 		return err
 	}
 	return nil
@@ -492,116 +489,10 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 	if op, err = s.computeService.Disks.CreateSnapshot(s.Project, s.DiskZone, s.Disk, snapshot).Do(); err != nil {
 		return nil, err
 	}
-	if err := s.waitForCreationCompletionWithRetry(ctx, op); err != nil {
+	if err := s.gceService.WaitForSnapshotCreationCompletionWithRetry(ctx, op, s.Project, s.DiskZone, s.SnapshotName); err != nil {
 		return nil, err
 	}
 	return op, nil
-}
-
-func (s *Snapshot) waitForCreationCompletion(op *compute.Operation) error {
-	ss, err := s.computeService.Snapshots.Get(s.Project, s.SnapshotName).Do()
-	if err != nil {
-		return err
-	}
-	log.Logger.Infow("Snapshot creation status", "snapshot", s.SnapshotName, "SnapshotStatus", ss.Status, "OperationStatus", op.Status)
-	if ss.Status == "CREATING" {
-		return fmt.Errorf("snapshot creation is in progress, snapshot name: %s, status:  CREATING", s.SnapshotName)
-	}
-	log.Logger.Infow("Snapshot creation progress", "snapshot", s.SnapshotName, "status", ss.Status)
-	return nil
-}
-
-// Each waitForCreationCompletion() returns immediately, we sleep for 1s between
-// retries a total 300 times => max_wait_duration = 5 minutes
-// TODO: change timeout depending on disk snapshot limits
-func (s *Snapshot) waitForCreationCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
-	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 300), ctx)
-	return backoff.Retry(func() error { return s.waitForCreationCompletion(op) }, bo)
-}
-
-func (s *Snapshot) waitForUploadCompletion(op *compute.Operation) error {
-	zos := compute.NewZoneOperationsService(s.computeService)
-	tracker, err := zos.Wait(s.Project, s.DiskZone, op.Name).Do()
-	if err != nil {
-		log.Logger.Errorw("Error in operation", "operation", op.Name)
-		return err
-	}
-	log.Logger.Infow("Operation in progress", "Name", op.Name, "percentage", tracker.Progress, "status", tracker.Status)
-	if tracker.Status != "DONE" {
-		return fmt.Errorf("Compute operation is not DONE yet")
-	}
-
-	ss, err := s.computeService.Snapshots.Get(s.Project, s.SnapshotName).Do()
-	if err != nil {
-		return err
-	}
-	log.Logger.Infow("Snapshot upload status", "snapshot", s.SnapshotName, "SnapshotStatus", ss.Status, "OperationStatus", op.Status)
-
-	if ss.Status == "READY" {
-		return nil
-	}
-	return fmt.Errorf("snapshot %s not READY yet, snapshotStatus: %s, operationStatus: %s", s.SnapshotName, ss.Status, op.Status)
-}
-
-// Each waitForUploadCompletionWithRetry() returns immediately, we sleep for 30s between
-// retries a total 480 times => max_wait_duration = 30*480 = 4 Hours
-// TODO: change timeout depending on disk snapshot limits
-func (s *Snapshot) waitForUploadCompletionWithRetry(ctx context.Context, op *compute.Operation) error {
-	constantBackoff := backoff.NewConstantBackOff(30 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 480), ctx)
-	return backoff.Retry(func() error { return s.waitForUploadCompletion(op) }, bo)
-}
-
-// sendStatusToMonitoring sends the status of one time execution to cloud monitoring as a GAUGE metric.
-func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {
-	if !s.SendToMonitoring {
-		return false
-	}
-	log.CtxLogger(ctx).Infow("Optional: sending HANA disk snapshot status to cloud monitoring", "status", s.status)
-	ts := []*mrpb.TimeSeries{
-		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  cp,
-			MetricType: metricPrefix + s.Name() + "/status",
-			Timestamp:  tspb.Now(),
-			BoolValue:  s.status,
-			MetricLabels: map[string]string{
-				"sid":           s.Sid,
-				"disk":          s.Disk,
-				"snapshot_name": s.SnapshotName,
-			},
-		}),
-	}
-	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.Project); err != nil {
-		log.CtxLogger(ctx).Debugw("Error sending status metric to cloud monitoring", "error", err.Error())
-		return false
-	}
-	return true
-}
-
-func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {
-	if !s.SendToMonitoring {
-		return false
-	}
-	log.CtxLogger(ctx).Infow("Optional: Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
-	ts := []*mrpb.TimeSeries{
-		timeseries.BuildFloat64(timeseries.Params{
-			CloudProp:    cp,
-			MetricType:   mtype,
-			Timestamp:    tspb.Now(),
-			Float64Value: dur.Seconds(),
-			MetricLabels: map[string]string{
-				"sid":           s.Sid,
-				"disk":          s.Disk,
-				"snapshot_name": s.SnapshotName,
-			},
-		}),
-	}
-	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.Project); err != nil {
-		log.CtxLogger(ctx).Debugw("Error sending duration metric to cloud monitoring", "error", err.Error())
-		return false
-	}
-	return true
 }
 
 func (s *Snapshot) parseBasePath(ctx context.Context, pattern string, exec commandlineexecutor.Execute) (string, error) {
@@ -663,10 +554,6 @@ func (s *Snapshot) unFreezeXFS(ctx context.Context, exec commandlineexecutor.Exe
 	}
 	log.CtxLogger(ctx).Infow("Filesystem unfrozen successfully", "hanaDataPath", s.hanaDataPath)
 	return nil
-}
-
-func (s *Snapshot) checkPreConditions(ctx context.Context) error {
-	return s.checkDataDir(ctx)
 }
 
 // parseLogicalPath parses the logical path from the base path.
@@ -763,4 +650,55 @@ func (s *Snapshot) parseLabels() map[string]string {
 		}
 	}
 	return labels
+}
+
+// sendStatusToMonitoring sends the status of one time execution to cloud monitoring as a GAUGE metric.
+func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {
+	if !s.SendToMonitoring {
+		return false
+	}
+	log.CtxLogger(ctx).Infow("Optional: sending HANA disk snapshot status to cloud monitoring", "status", s.status)
+	ts := []*mrpb.TimeSeries{
+		timeseries.BuildBool(timeseries.Params{
+			CloudProp:  cp,
+			MetricType: metricPrefix + s.Name() + "/status",
+			Timestamp:  tspb.Now(),
+			BoolValue:  s.status,
+			MetricLabels: map[string]string{
+				"sid":           s.Sid,
+				"disk":          s.Disk,
+				"snapshot_name": s.SnapshotName,
+			},
+		}),
+	}
+	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.Project); err != nil {
+		log.CtxLogger(ctx).Debugw("Error sending status metric to cloud monitoring", "error", err.Error())
+		return false
+	}
+	return true
+}
+
+func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {
+	if !s.SendToMonitoring {
+		return false
+	}
+	log.CtxLogger(ctx).Infow("Optional: Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
+	ts := []*mrpb.TimeSeries{
+		timeseries.BuildFloat64(timeseries.Params{
+			CloudProp:    cp,
+			MetricType:   mtype,
+			Timestamp:    tspb.Now(),
+			Float64Value: dur.Seconds(),
+			MetricLabels: map[string]string{
+				"sid":           s.Sid,
+				"disk":          s.Disk,
+				"snapshot_name": s.SnapshotName,
+			},
+		}),
+	}
+	if _, _, err := cloudmonitoring.SendTimeSeries(ctx, ts, s.timeSeriesCreator, bo, s.Project); err != nil {
+		log.CtxLogger(ctx).Debugw("Error sending duration metric to cloud monitoring", "error", err.Error())
+		return false
+	}
+	return true
 }

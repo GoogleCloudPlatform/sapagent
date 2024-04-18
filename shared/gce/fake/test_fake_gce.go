@@ -23,6 +23,7 @@ import (
 
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // GetDiskArguments is a struct to match arguments passed in to the GetDisk function for validation.
@@ -110,6 +111,14 @@ type TestGCE struct {
 	DiskAttachedToInstanceDeviceName string
 	IsDiskAttached                   bool
 	DiskAttachedToInstanceErr        error
+
+	CreationCompletionErr error
+	UploadCompletionErr   error
+	DiskOpErr             error
+
+	AttachDiskOperation *compute.Operation
+	AttachDiskErr       error
+	DetachDiskErr       error
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -320,4 +329,29 @@ func (g *TestGCE) GetHealthCheck(projectID, name string) (*compute.HealthCheck, 
 // DiskAttachedToInstance fakes calls to the cloud APIs to access a disk attached to an instance.
 func (g *TestGCE) DiskAttachedToInstance(project, zone, instanceName, diskName string) (string, bool, error) {
 	return g.DiskAttachedToInstanceDeviceName, g.IsDiskAttached, g.DiskAttachedToInstanceErr
+}
+
+// WaitForSnapshotCreationCompletionWithRetry fakes calls to the cloud APIs to wait for a disk creation operation to complete.
+func (g *TestGCE) WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	return g.CreationCompletionErr
+}
+
+// WaitForSnapshotUploadCompletionWithRetry fakes calls to the cloud APIs to wait for a disk upload operation to complete.
+func (g *TestGCE) WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	return g.UploadCompletionErr
+}
+
+// AttachDisk fakes calls to the cloud APIs to attach a disk to an instance.
+func (g *TestGCE) AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) (*compute.Operation, error) {
+	return g.AttachDiskOperation, g.AttachDiskErr
+}
+
+// DetachDisk fakes calls to the cloud APIs to detach a disk from an instance.
+func (g *TestGCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error {
+	return g.DetachDiskErr
+}
+
+// WaitForDiskOpCompletionWithRetry fakes calls to the cloud APIs to wait for a disk operation to complete.
+func (g *TestGCE) WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error {
+	return g.DiskOpErr
 }
