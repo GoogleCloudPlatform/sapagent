@@ -137,7 +137,7 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 		Help:     c.help,
 		Version:  c.version,
 		Fs:       fs,
-		LogLevel: "INFO",
+		LogLevel: c.logLevel,
 	}, args...)
 	if !completed {
 		return exitStatus

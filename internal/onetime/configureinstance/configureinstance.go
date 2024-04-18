@@ -96,7 +96,7 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 		Help:     c.help,
 		Version:  c.version,
 		Fs:       f,
-		LogLevel: "INFO",
+		LogLevel: "info",
 	}, args...)
 	if !completed {
 		return exitStatus

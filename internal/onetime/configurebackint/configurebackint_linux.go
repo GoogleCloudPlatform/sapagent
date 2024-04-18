@@ -134,7 +134,7 @@ func (c *ConfigureBackint) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		Help:     c.help,
 		Version:  c.version,
 		Fs:       f,
-		LogLevel: "INFO",
+		LogLevel: c.logLevel,
 	}, args...)
 	if !completed {
 		return exitStatus
