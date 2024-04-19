@@ -45,14 +45,15 @@ type (
 
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
-	check, apply           bool
+	Check, Apply           bool
 	machineType            string
-	overrideHyperThreading bool
+	OverrideHyperThreading bool
 	help, version          bool
 
-	writeFile writeFileFunc
-	readFile  readFileFunc
-	execute   commandlineexecutor.Execute
+	writeFile   writeFileFunc
+	readFile    readFileFunc
+	ExecuteFunc commandlineexecutor.Execute
+	IIOTEParams *onetime.InternallyInvokedOTE
 }
 
 // Name implements the subcommand interface for configureinstance.
@@ -81,10 +82,10 @@ func (*ConfigureInstance) Usage() string {
 
 // SetFlags implements the subcommand interface for configureinstance.
 func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&c.check, "check", false, "Check settings and print errors, but do not apply any changes")
-	fs.BoolVar(&c.apply, "apply", false, "Apply changes as necessary to the settings")
+	fs.BoolVar(&c.Check, "check", false, "Check settings and print errors, but do not apply any changes")
+	fs.BoolVar(&c.Apply, "apply", false, "Apply changes as necessary to the settings")
 	fs.StringVar(&c.machineType, "overrideType", "", "Bypass the metadata machine type lookup")
-	fs.BoolVar(&c.overrideHyperThreading, "overrideHyperThreading", false, "If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'")
+	fs.BoolVar(&c.OverrideHyperThreading, "overrideHyperThreading", false, "If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'")
 	fs.BoolVar(&c.help, "h", false, "Displays help")
 	fs.BoolVar(&c.version, "v", false, "Displays the current version of the agent")
 }
@@ -96,18 +97,19 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 		Help:     c.help,
 		Version:  c.version,
 		Fs:       f,
-		LogLevel: "info",
+		LogLevel: "INFO",
+		IIOTE:    c.IIOTEParams,
 	}, args...)
 	if !completed {
 		return exitStatus
 	}
 
-	if !c.check && !c.apply {
+	if !c.Check && !c.Apply {
 		fmt.Printf("-check or -apply must be specified.\n%s\n", c.Usage())
 		log.CtxLogger(ctx).Errorf("-check or -apply must be specified")
 		return subcommands.ExitUsageError
 	}
-	if c.check && c.apply {
+	if c.Check && c.Apply {
 		fmt.Printf("Only one of -check or -apply must be specified.\n%s\n", c.Usage())
 		log.CtxLogger(ctx).Errorf("Only one of -check or -apply must be specified")
 		return subcommands.ExitUsageError
@@ -118,10 +120,10 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 
 	c.writeFile = os.WriteFile
 	c.readFile = os.ReadFile
-	c.execute = commandlineexecutor.ExecuteCommand
+	c.ExecuteFunc = commandlineexecutor.ExecuteCommand
 	exitStatus, err := c.configureInstanceHandler(ctx)
 	if err != nil {
-		fmt.Println("ConfigureInstance: FAILED, detailed logs are at /var/log/google-cloud-sap-agent/configureinstance.log, err: ", err)
+		fmt.Println(fmt.Sprintf("ConfigureInstance: FAILED, detailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))+" err: ", err)
 		log.CtxLogger(ctx).Errorw("ConfigureInstance failed", "err", err)
 		usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
 	}
@@ -148,17 +150,17 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 
 	usagemetrics.Action(usagemetrics.ConfigureInstanceFinished)
 	exitStatus := subcommands.ExitSuccess
-	if c.apply || (c.check && !rebootRequired) {
+	if c.Apply || (c.Check && !rebootRequired) {
 		LogToBoth(ctx, "ConfigureInstance: SUCCESS")
 	}
-	if c.apply && rebootRequired {
+	if c.Apply && rebootRequired {
 		LogToBoth(ctx, "\nPlease note that a reboot is required for the changes to take effect.")
 	}
-	if c.check && rebootRequired {
+	if c.Check && rebootRequired {
 		LogToBoth(ctx, "ConfigureInstance: Your system configuration doesn't match best practice for your instance type. Please run 'configureinstance -apply' to fix.")
 		exitStatus = subcommands.ExitFailure
 	}
-	LogToBoth(ctx, "\nDetailed logs are at /var/log/google-cloud-sap-agent/configureinstance.log")
+	LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at /var/log/google-cloud-sap-agent/%s", onetime.LogFilePath(c.Name(), c.IIOTEParams)))
 	return exitStatus, nil
 }
 
@@ -177,7 +179,7 @@ func (c *ConfigureInstance) checkAndRegenerateFile(ctx context.Context, filePath
 	}
 	if errors.Is(err, os.ErrNotExist) || !bytes.Equal(got, want) {
 		log.CtxLogger(ctx).Infow("File is out of date.", "filePath", filePath, "got", string(got), "want", string(want))
-		if c.check {
+		if c.Check {
 			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
 		} else {
 			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)
@@ -228,7 +230,7 @@ func (c *ConfigureInstance) checkAndRegenerateLines(ctx context.Context, filePat
 	}
 
 	if regenerate {
-		if c.check {
+		if c.Check {
 			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
 		} else {
 			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)

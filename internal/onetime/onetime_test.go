@@ -78,3 +78,35 @@ func TestHelpCommand(t *testing.T) {
 		t.Errorf("HelpCommand()=%v, want: %v", got, want)
 	}
 }
+
+func TestLogFilesPath(t *testing.T) {
+	tests := []struct {
+		name  string
+		s     string
+		iiote *InternallyInvokedOTE
+		want  string
+	}{
+		{
+			name: "IIOTEParamsNil",
+			s:    "snapshot",
+			want: `/var/log/google-cloud-sap-agent/snapshot.log`,
+		},
+		{
+			name: "IIOTEParamsNotNil",
+			s:    "snapshot",
+			iiote: &InternallyInvokedOTE{
+				InvokedBy: "changedisktype",
+			},
+			want: `/var/log/google-cloud-sap-agent/changedisktype.log`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := LogFilePath(test.s, test.iiote)
+			if got != test.want {
+				t.Errorf("LogFilesPath(%v, %v)=%s, want: %s", test.s, test.iiote, got, test.want)
+			}
+		})
+	}
+}

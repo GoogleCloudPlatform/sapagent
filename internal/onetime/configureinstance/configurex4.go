@@ -44,7 +44,7 @@ var (
 func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 	if c.machineType == "x4-megamem-1920" || c.machineType == "x4-megamem-1440" {
 		processingSystem := "OLTP"
-		if c.overrideHyperThreading {
+		if c.OverrideHyperThreading {
 			processingSystem = "OLAP"
 		}
 		log.CtxLogger(ctx).Infof("%s detected, applying configuration for %s workloads.", c.machineType, processingSystem)
@@ -67,13 +67,13 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if rebootModprobe && c.apply {
+	if rebootModprobe && c.Apply {
 		log.CtxLogger(ctx).Info("Regenerating modprobe by running 'usr/bin/dracut --force'.")
-		if res := c.execute(ctx, commandlineexecutor.Params{Executable: "usr/bin/dracut", ArgsToSplit: "--force"}); res.ExitCode != 0 {
+		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "usr/bin/dracut", ArgsToSplit: "--force"}); res.ExitCode != 0 {
 			return false, fmt.Errorf("'usr/bin/dracut --force' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 		}
 	}
-	if (c.machineType == "x4-megamem-1920" || c.machineType == "x4-megamem-1440") && !c.overrideHyperThreading {
+	if (c.machineType == "x4-megamem-1920" || c.machineType == "x4-megamem-1440") && !c.OverrideHyperThreading {
 		log.CtxLogger(ctx).Infof("%s detected, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", c.machineType)
 		grubLinuxDefault = strings.TrimSuffix(grubLinuxDefault, `"`) + ` nosmt"`
 	}
@@ -82,11 +82,11 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if rebootGrub {
-		if c.check {
+		if c.Check {
 			log.CtxLogger(ctx).Info("Run 'configureinstance -apply' to regenerate grub.")
 		} else {
 			log.CtxLogger(ctx).Info("Regenerating grub by running 'grub2-mkconfig'.")
-			if res := c.execute(ctx, commandlineexecutor.Params{Executable: "grub2-mkconfig", ArgsToSplit: "-o /boot/grub2/grub.cfg"}); res.ExitCode != 0 {
+			if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "grub2-mkconfig", ArgsToSplit: "-o /boot/grub2/grub.cfg"}); res.ExitCode != 0 {
 				return false, fmt.Errorf("'grub2-mkconfig -o /boot/grub2/grub.cfg' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 			}
 		}
@@ -131,30 +131,30 @@ func (c *ConfigureInstance) configureX4SLES(ctx context.Context) (bool, error) {
 // it will attempt to enable and start it through systemctl.
 func (c *ConfigureInstance) saptuneService(ctx context.Context) error {
 	// sapconf must be disabled and stopped before saptune can run.
-	sapconfStatus := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf"})
+	sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf"})
 	if sapconfStatus.ExitCode != 4 {
-		sapconfDisable := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "disable sapconf"})
+		sapconfDisable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "disable sapconf"})
 		if sapconfDisable.ExitCode != 0 {
 			return fmt.Errorf("sapconf service could not be disabled, code: %d, stderr: %s", sapconfDisable.ExitCode, sapconfDisable.StdErr)
 		}
-		sapconfStop := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "stop sapconf"})
+		sapconfStop := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "stop sapconf"})
 		if sapconfStop.ExitCode != 0 {
 			return fmt.Errorf("sapconf service could not be stopped, code: %d, stderr: %s", sapconfStop.ExitCode, sapconfStop.StdErr)
 		}
 		log.CtxLogger(ctx).Info("The sapconf service is disabled and stopped.")
 	}
 
-	saptuneStatus := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status saptune"})
+	saptuneStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status saptune"})
 	if saptuneStatus.ExitCode == 4 {
 		return fmt.Errorf("saptune service could not be found, ensure it is installed before running 'configureinstance', code: %d, stderr: %s", saptuneStatus.ExitCode, saptuneStatus.StdErr)
 	}
 	if saptuneStatus.ExitCode != 0 {
 		log.CtxLogger(ctx).Info("Attempting to enable and start saptune.")
-		saptuneEnable := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable saptune"})
+		saptuneEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable saptune"})
 		if saptuneEnable.ExitCode != 0 {
 			return fmt.Errorf("saptune service could not be enabled, code: %d, stderr: %s", saptuneEnable.ExitCode, saptuneEnable.StdErr)
 		}
-		saptuneStart := c.execute(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "start saptune"})
+		saptuneStart := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "start saptune"})
 		if saptuneStart.ExitCode != 0 {
 			return fmt.Errorf("saptune service could not be started, code: %d, stderr: %s", saptuneStart.ExitCode, saptuneStart.StdErr)
 		}
@@ -167,7 +167,7 @@ func (c *ConfigureInstance) saptuneService(ctx context.Context) error {
 // Returns true if saptune reapply is required.
 func (c *ConfigureInstance) saptuneSolutions(ctx context.Context) bool {
 	sapTuneReapply := false
-	saptuneSolutions := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status"})
+	saptuneSolutions := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status"})
 	if match, _ := regexp.MatchString(`enabled Solution:\s*HANA`, saptuneSolutions.StdOut); !match {
 		log.CtxLogger(ctx).Info("Enabled solution is not `HANA`, SAPTune re-apply required.")
 		sapTuneReapply = true
@@ -186,21 +186,21 @@ func (c *ConfigureInstance) saptuneReapply(ctx context.Context, sapTuneReapply b
 		log.CtxLogger(ctx).Info("SAPTune re-apply is not required.")
 		return nil
 	}
-	if c.check {
+	if c.Check {
 		log.CtxLogger(ctx).Info("Run 'configureinstance -apply' to execute SAPTune re-apply.")
 		return nil
 	}
 	log.CtxLogger(ctx).Info("Executing SAPTune re-apply.")
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution revert HANA", Timeout: 120}); res.ExitCode != 0 {
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution revert HANA", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune solution revert HANA' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution apply HANA", Timeout: 120}); res.ExitCode != 0 {
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution apply HANA", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune solution apply HANA' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4", Timeout: 120}); res.ExitCode != 0 {
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune note revert google-x4' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
-	if res := c.execute(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: 120}); res.ExitCode != 0 {
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: 120}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune note apply google-x4' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 	}
 	return nil

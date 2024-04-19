@@ -43,6 +43,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehmadashboards"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/readmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/reliability"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
@@ -86,6 +87,7 @@ func registerSubCommands() {
 		&hanachangedisktype.HanaChangeDiskType{},
 		&reliability.Reliability{},
 		&gcbdr.Discovery{FSH: filesystem.Helper{}},
+		&performancediagnostics.Diagnose{},
 		subcommands.HelpCommand(), // Implement "help"
 	}
 	for _, command := range scs {

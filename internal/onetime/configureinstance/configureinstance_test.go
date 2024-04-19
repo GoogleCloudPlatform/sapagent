@@ -138,8 +138,8 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			name: "BothSubcommandsSupplied",
 			want: subcommands.ExitUsageError,
 			c: ConfigureInstance{
-				check: true,
-				apply: true,
+				Check: true,
+				Apply: true,
 			},
 			args: []any{
 				"test",
@@ -151,7 +151,7 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			name: "UnsupportedMachineType",
 			want: subcommands.ExitUsageError,
 			c: ConfigureInstance{
-				apply:       true,
+				Apply:       true,
 				machineType: "",
 			},
 			args: []any{
@@ -213,9 +213,9 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			c: ConfigureInstance{
 				machineType: "x4-megamem-1920",
 				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				execute:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
 				writeFile:   defaultWriteFile(5),
-				apply:       true,
+				Apply:       true,
 			},
 			want:    subcommands.ExitSuccess,
 			wantErr: nil,
@@ -225,9 +225,9 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			c: ConfigureInstance{
 				machineType: "x4-megamem-1920",
 				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				execute:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
 				writeFile:   defaultWriteFile(5),
-				check:       true,
+				Check:       true,
 			},
 			want:    subcommands.ExitFailure,
 			wantErr: nil,
@@ -275,7 +275,7 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
 				writeFile: defaultWriteFile(1),
-				check:     true,
+				Check:     true,
 			},
 			wantRegenerated: true,
 			wantErr:         nil,
@@ -285,7 +285,7 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
 				writeFile: defaultWriteFile(0),
-				apply:     true,
+				Apply:     true,
 			},
 			wantRegenerated: false,
 			wantErr:         cmpopts.AnyError,
@@ -295,7 +295,7 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
 				writeFile: defaultWriteFile(1),
-				apply:     true,
+				Apply:     true,
 			},
 			wantRegenerated: true,
 			wantErr:         nil,
@@ -344,7 +344,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{"#key=value"}),
 				writeFile: defaultWriteFile(1),
-				apply:     true,
+				Apply:     true,
 			},
 			wantLines:       []string{"key=value"},
 			wantRegenerated: true,
@@ -355,7 +355,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{"key=1"}),
 				writeFile: defaultWriteFile(1),
-				apply:     true,
+				Apply:     true,
 			},
 			wantLines:       []string{"key=2"},
 			wantRegenerated: true,
@@ -366,7 +366,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{"key=1"}),
 				writeFile: defaultWriteFile(1),
-				apply:     true,
+				Apply:     true,
 			},
 			wantLines:       []string{"key=1"},
 			wantRegenerated: false,
@@ -377,7 +377,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				writeFile: defaultWriteFile(1),
-				apply:     true,
+				Apply:     true,
 			},
 			wantLines:       []string{`key="test=2 new=3"`},
 			wantRegenerated: true,
@@ -388,7 +388,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				writeFile: defaultWriteFile(1),
-				check:     true,
+				Check:     true,
 			},
 			wantLines:       []string{`another_key=value`},
 			wantRegenerated: true,
@@ -399,7 +399,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				writeFile: defaultWriteFile(0),
-				apply:     true,
+				Apply:     true,
 			},
 			wantLines:       []string{`another_key=value`},
 			wantRegenerated: false,

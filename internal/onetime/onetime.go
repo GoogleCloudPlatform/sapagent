@@ -183,3 +183,11 @@ func PrintAgentVersion() subcommands.ExitStatus {
 	fmt.Printf("Google Cloud Agent for SAP version %s.%s\n", configuration.AgentVersion, configuration.AgentBuildChange)
 	return subcommands.ExitSuccess
 }
+
+// LogFilePath returns the log file path for the OTE invoked depending if it is invoked internally or via command line.
+func LogFilePath(name string, iiote *InternallyInvokedOTE) string {
+	if iiote == nil {
+		return fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", name)
+	}
+	return fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", iiote.InvokedBy)
+}

@@ -37,7 +37,7 @@ func TestConfigureX4(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:               defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
 				machineType:            "x4-megamem-1920",
-				overrideHyperThreading: true,
+				OverrideHyperThreading: true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -47,7 +47,7 @@ func TestConfigureX4(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", ""}),
 				writeFile: defaultWriteFile(1),
-				apply:     true,
+				Apply:     true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -57,7 +57,7 @@ func TestConfigureX4(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", ""}),
 				writeFile: defaultWriteFile(2),
-				apply:     true,
+				Apply:     true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -67,7 +67,7 @@ func TestConfigureX4(t *testing.T) {
 			c: ConfigureInstance{
 				readFile:  defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
 				writeFile: defaultWriteFile(3),
-				apply:     true,
+				Apply:     true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -75,10 +75,10 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRunDracut",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil}, []string{"Name=RHEL", "", "", ""}),
-				execute:   defaultExecute([]int{1}, []string{""}),
-				writeFile: defaultWriteFile(4),
-				apply:     true,
+				readFile:    defaultReadFile([]error{nil, nil, nil, nil}, []string{"Name=RHEL", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
+				writeFile:   defaultWriteFile(4),
+				Apply:       true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -87,9 +87,9 @@ func TestConfigureX4(t *testing.T) {
 			name: "FailRegenerateGrub",
 			c: ConfigureInstance{
 				readFile:    defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
-				execute:     defaultExecute([]int{0}, []string{""}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				writeFile:   defaultWriteFile(5),
-				apply:       true,
+				Apply:       true,
 				machineType: "x4-megamem-1920",
 			},
 			want:    false,
@@ -98,10 +98,10 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailGrub2Mkconfig",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
-				execute:   defaultExecute([]int{0, 1}, []string{"", ""}),
-				writeFile: defaultWriteFile(5),
-				apply:     true,
+				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
+				writeFile:   defaultWriteFile(5),
+				Apply:       true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -109,10 +109,10 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "Success",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
-				execute:   defaultExecute([]int{0, 0}, []string{"", ""}),
-				writeFile: defaultWriteFile(5),
-				check:     true,
+				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
+				writeFile:   defaultWriteFile(5),
+				Check:       true,
 			},
 			want:    true,
 			wantErr: nil,
@@ -157,8 +157,8 @@ func TestConfigureX4SLES(t *testing.T) {
 		{
 			name: "FailedSaptuneService",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil}, []string{"Name=SLES"}),
-				execute:  defaultExecute([]int{4, 4}, []string{"", ""}),
+				readFile:    defaultReadFile([]error{nil}, []string{"Name=SLES"}),
+				ExecuteFunc: defaultExecute([]int{4, 4}, []string{"", ""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -166,8 +166,8 @@ func TestConfigureX4SLES(t *testing.T) {
 		{
 			name: "FailedToWriteX4Conf",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", ""}),
-				execute:  defaultExecute([]int{4, 0}, []string{"", ""}),
+				readFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 0}, []string{"", ""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -175,8 +175,8 @@ func TestConfigureX4SLES(t *testing.T) {
 		{
 			name: "FailedSaptuneReapply",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
-				execute:  defaultExecute([]int{4, 0, 0, 4}, []string{"", "", "", ""}),
+				readFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
+				ExecuteFunc: defaultExecute([]int{4, 0, 0, 4}, []string{"", "", "", ""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -184,8 +184,8 @@ func TestConfigureX4SLES(t *testing.T) {
 		{
 			name: "Success",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
-				execute:  defaultExecute([]int{4, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", ""}),
+				readFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
+				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", ""}),
 			},
 			want:    true,
 			wantErr: nil,
@@ -213,49 +213,49 @@ func TestSaptuneService(t *testing.T) {
 		{
 			name: "SapconfFailDisable",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{0, 1}, []string{"", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "SapconfFailStop",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceNotFound",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{4, 4}, []string{"", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 4}, []string{"", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceFailedToEnable",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{4, 1, 1}, []string{"", "", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 1, 1}, []string{"", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceFailedToStart",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{4, 1, 0, 1}, []string{"", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 1, 0, 1}, []string{"", "", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceStartedAfterStopped",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{4, 0, 0, 0}, []string{"", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0}, []string{"", "", "", ""}),
 			},
 			want: nil,
 		},
 		{
 			name: "ServiceAlreadyRunning",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{4, 0}, []string{"", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 0}, []string{"", ""}),
 			},
 			want: nil,
 		},
@@ -279,21 +279,21 @@ func TestSaptuneSolutions(t *testing.T) {
 		{
 			name: "SolutionUpdate",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{0}, []string{"enabled Solution: NOT_HANA"}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: NOT_HANA"}),
 			},
 			want: true,
 		},
 		{
 			name: "NoteUpdate",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: NOT_google-x4"}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: NOT_google-x4"}),
 			},
 			want: true,
 		},
 		{
 			name: "NoUpdateRequired",
 			c: ConfigureInstance{
-				execute: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: google-x4"}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: google-x4"}),
 			},
 			want: false,
 		},
@@ -323,15 +323,15 @@ func TestSaptuneReapply(t *testing.T) {
 			name:           "CheckMode",
 			sapTuneReapply: true,
 			c: ConfigureInstance{
-				check: true,
+				Check: true,
 			},
 		},
 		{
 			name:           "FailSolutionRevert",
 			sapTuneReapply: true,
 			c: ConfigureInstance{
-				apply:   true,
-				execute: defaultExecute([]int{1}, []string{""}),
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -339,8 +339,8 @@ func TestSaptuneReapply(t *testing.T) {
 			name:           "FailSolutionApply",
 			sapTuneReapply: true,
 			c: ConfigureInstance{
-				apply:   true,
-				execute: defaultExecute([]int{0, 1}, []string{"", ""}),
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -348,8 +348,8 @@ func TestSaptuneReapply(t *testing.T) {
 			name:           "FailNoteRevert",
 			sapTuneReapply: true,
 			c: ConfigureInstance{
-				apply:   true,
-				execute: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -357,8 +357,8 @@ func TestSaptuneReapply(t *testing.T) {
 			name:           "FailNoteApply",
 			sapTuneReapply: true,
 			c: ConfigureInstance{
-				apply:   true,
-				execute: defaultExecute([]int{0, 0, 0, 1}, []string{"", "", "", ""}),
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 1}, []string{"", "", "", ""}),
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -366,8 +366,8 @@ func TestSaptuneReapply(t *testing.T) {
 			name:           "Success",
 			sapTuneReapply: true,
 			c: ConfigureInstance{
-				apply:   true,
-				execute: defaultExecute([]int{0, 0, 0, 0}, []string{"", "", "", ""}),
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0}, []string{"", "", "", ""}),
 			},
 		},
 	}
