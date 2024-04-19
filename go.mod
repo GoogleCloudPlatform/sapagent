@@ -13,6 +13,7 @@ require (
   cloud.google.com/go/monitoring v1.17.1
   cloud.google.com/go/secretmanager v1.11.5
   cloud.google.com/go/storage v1.36.0
+  github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15
   github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/fsouza/fake-gcs-server v1.45.2
@@ -22,7 +23,6 @@ require (
   github.com/google/go-cmp v0.6.0
   github.com/google/subcommands v1.2.0
   github.com/googleapis/gax-go/v2 v2.12.2
-  github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15
   github.com/jonboulle/clockwork v0.3.0
   github.com/natefinch/lumberjack v0.0.0-20230119042236-215739b3bcdc
   github.com/pkg/errors v0.9.1
@@ -31,7 +31,7 @@ require (
   go.uber.org/zap v1.24.0
   golang.org/x/exp v0.0.0-20230321023759-10a507213a29
   golang.org/x/oauth2 v0.17.0
-  golang.org/x/sys v0.17.0
+  golang.org/x/sys v0.18.0
   google.golang.org/api v0.168.0
   google.golang.org/genproto v0.0.0-20240205150955-31a09d347014
   google.golang.org/genproto/googleapis/api v0.0.0-20240205150955-31a09d347014
@@ -74,8 +74,8 @@ require (
   go.opentelemetry.io/otel/trace v1.24.0 // indirect
   go.uber.org/atomic v1.7.0 // indirect
   go.uber.org/multierr v1.6.0 // indirect
-  golang.org/x/crypto v0.19.0 // indirect
-  golang.org/x/net v0.21.0 // indirect
+  golang.org/x/crypto v0.21.0 // indirect
+  golang.org/x/net v0.23.0 // indirect
   golang.org/x/sync v0.6.0 // indirect
   golang.org/x/text v0.14.0 // indirect
   golang.org/x/time v0.5.0 // indirect
