@@ -20,7 +20,6 @@ package hanadiskbackup
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -32,9 +31,8 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -75,7 +73,6 @@ var (
 )
 
 // Snapshot has args for snapshot subcommands.
-// TODO: Improve Disk Backup and Restore code coverage and reduce redundancy.
 type Snapshot struct {
 	Project, Host, Port, Sid, HanaSidAdm, InstanceID string
 	HanaDBUser, Password, PasswordSecret             string
@@ -169,13 +166,6 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
-
-	p, err := s.parseBasePath(ctx, "basepath_datavolumes", commandlineexecutor.ExecuteCommand)
-	if err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: Failed to parse HANA data path", err)
-		return subcommands.ExitFailure
-	}
-	s.hanaDataPath = p
 	return s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp)
 }
 
@@ -195,11 +185,10 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		return subcommands.ExitFailure
 	}
 
-	if err := s.checkDataDir(ctx); err != nil {
+	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = hanabackup.CheckDataDir(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to check preconditions", err)
 		return subcommands.ExitFailure
 	}
-
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
 	dbp := databaseconnector.Params{
@@ -315,8 +304,11 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc, cp *ipb.Cloud
 		return err
 	}
 	op, err := s.createDiskSnapshot(ctx)
-	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
 	if s.freezeFileSystem {
+		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+			onetime.LogErrorToFileAndConsole("Error unfreezing XFS", err)
+			return err
+		}
 		freezeTime := time.Since(dbFreezeStartTime)
 		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	}
@@ -357,7 +349,14 @@ func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, run queryFu
 		return fmt.Errorf("source-disk=%v is not attached to the instance", s.Disk)
 	}
 	op, err := s.createDiskSnapshot(ctx)
-	s.unFreezeXFS(ctx, commandlineexecutor.ExecuteCommand)
+	if s.freezeFileSystem {
+		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+			onetime.LogErrorToFileAndConsole("Error unfreezing XFS", err)
+			return err
+		}
+		freezeTime := time.Since(dbFreezeStartTime)
+		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
+	}
 	if err != nil {
 		return err
 	}
@@ -373,26 +372,11 @@ func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, run queryFu
 
 func (s *Snapshot) prepareForChangeDiskTypeWorkflow(ctx context.Context, exec commandlineexecutor.Execute) (err error) {
 	onetime.LogMessageToFileAndConsole("Stopping HANA")
-	hdr := hanadiskrestore.Restorer{}
-	if err = hdr.StopHANA(ctx, exec); err != nil {
+	if err = hanabackup.StopHANA(ctx, false, s.HanaSidAdm, s.Sid, exec); err != nil {
 		return err
 	}
-	if err = hdr.WaitForIndexServerToStopWithRetry(ctx, exec); err != nil {
+	if err = hanabackup.WaitForIndexServerToStopWithRetry(ctx, s.HanaSidAdm, exec); err != nil {
 		return err
-	}
-	return nil
-}
-
-// waitForIndexServerToStop() waits for the hdb index server to stop.
-func (s *Snapshot) waitForIndexServerToStop(ctx context.Context, exec commandlineexecutor.Execute) error {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: `-c 'ps x | grep hdbindexs | grep -v grep'`,
-		User:        s.HanaSidAdm,
-	})
-
-	if result.ExitCode == 0 {
-		return fmt.Errorf("failure waiting for index server to stop, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	return nil
 }
@@ -471,7 +455,7 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 	if s.DiskKeyFile != "" {
 		usagemetrics.Action(usagemetrics.EncryptedDiskSnapshot)
 		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
-		srcDiskKey, err := readKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
+		srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
 		if err != nil {
 			usagemetrics.Error(usagemetrics.EncryptedDiskSnapshotFailure)
 			return nil, err
@@ -483,8 +467,10 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 		return nil, fmt.Errorf("computeService needed to proceed")
 	}
 	dbFreezeStartTime = time.Now()
-	if err := s.freezeXFS(ctx, commandlineexecutor.ExecuteCommand); err != nil {
-		return nil, err
+	if s.freezeFileSystem {
+		if err := hanabackup.FreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+			return nil, err
+		}
 	}
 	if op, err = s.computeService.Disks.CreateSnapshot(s.Project, s.DiskZone, s.Disk, snapshot).Do(); err != nil {
 		return nil, err
@@ -493,150 +479,6 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 		return nil, err
 	}
 	return op, nil
-}
-
-func (s *Snapshot) parseBasePath(ctx context.Context, pattern string, exec commandlineexecutor.Execute) (string, error) {
-	args := `-c 'grep ` + pattern + ` /usr/sap/*/SYS/global/hdb/custom/config/global.ini | cut -d= -f 2'`
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
-		ArgsToSplit: args,
-	})
-	if result.Error != nil {
-		return "", fmt.Errorf("failure parsing base path, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-
-	basePath := strings.TrimSuffix(result.StdOut, "\n")
-	log.CtxLogger(ctx).Infow("Found HANA Base data directory", "hanaDataPath", basePath)
-	return basePath, nil
-}
-
-// unmount unmounts the given directory.
-func (s *Snapshot) unmount(ctx context.Context, path string, exec commandlineexecutor.Execute) error {
-	log.CtxLogger(ctx).Infow("Unmount path", "directory", path)
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c 'sync;umount -f %s'", path),
-	})
-	if result.Error != nil {
-		r := exec(ctx, commandlineexecutor.Params{
-			Executable:  "bash",
-			ArgsToSplit: fmt.Sprintf(" -c 'lsof | grep %s'", path), // NOLINT
-		})
-		msg := `failure unmounting directory: %s, stderr: %s, err: %s.
-		Here are the possible open references to the path, stdout: %s stderr: %s.
-		Please ensure these references are cleaned up for unmount to proceed and retry the command`
-		return fmt.Errorf(msg, path, result.StdErr, result.Error, r.StdOut, r.StdErr)
-	}
-	return nil
-}
-
-func (s *Snapshot) freezeXFS(ctx context.Context, exec commandlineexecutor.Execute) error {
-	if !s.freezeFileSystem {
-		// NO-OP when freeze is not requested.
-		return nil
-	}
-	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-f " + s.hanaDataPath})
-	if result.Error != nil {
-		return fmt.Errorf("failure freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	log.CtxLogger(ctx).Infow("Filesystem frozen successfully", "hanaDataPath", s.hanaDataPath)
-	return nil
-}
-
-func (s *Snapshot) unFreezeXFS(ctx context.Context, exec commandlineexecutor.Execute) error {
-	if !s.freezeFileSystem {
-		// NO-OP when freeze is not requested.
-		return nil
-	}
-	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-u " + s.hanaDataPath})
-	if result.Error != nil {
-		return fmt.Errorf("failure un freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	log.CtxLogger(ctx).Infow("Filesystem unfrozen successfully", "hanaDataPath", s.hanaDataPath)
-	return nil
-}
-
-// parseLogicalPath parses the logical path from the base path.
-func (s *Snapshot) parseLogicalPath(ctx context.Context, basePath string, exec commandlineexecutor.Execute) (string, error) {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
-		ArgsToSplit: fmt.Sprintf("-c 'df --output=source %s | tail -n 1'", basePath),
-	})
-	if result.Error != nil {
-		return "", fmt.Errorf("failure parsing logical path, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	logicalDevice := strings.TrimSuffix(result.StdOut, "\n")
-	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
-	return logicalDevice, nil
-}
-
-// parsePhysicalPath parses the physical path from the logical path.
-func (s *Snapshot) parsePhysicalPath(ctx context.Context, logicalPath string, exec commandlineexecutor.Execute) (string, error) {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
-		ArgsToSplit: fmt.Sprintf("-c '/sbin/lvdisplay -m %s | grep \"Physical volume\" | awk \"{print \\$3}\"'", logicalPath),
-	})
-	if result.Error != nil {
-		return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	phyisicalDevice := strings.TrimSuffix(result.StdOut, "\n")
-	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", phyisicalDevice)
-	return phyisicalDevice, nil
-}
-
-// checkDataDir checks if the data directory is valid and has a valid physical volume.
-func (s *Snapshot) checkDataDir(ctx context.Context) error {
-	var err error
-	log.CtxLogger(ctx).Infow("Data volume base path", "path", s.hanaDataPath)
-	if s.logicalDataPath, err = s.parseLogicalPath(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	if !strings.Contains(s.logicalDataPath, "/dev/mapper") {
-		return fmt.Errorf("only data disks using LVM are supported, exiting")
-	}
-	if s.physicalDataPath, err = s.parsePhysicalPath(ctx, s.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	return s.checkDataDeviceForStripes(ctx, commandlineexecutor.ExecuteCommand)
-}
-
-// checkDataDeviceForStripes checks if the data device is striped.
-func (s *Snapshot) checkDataDeviceForStripes(ctx context.Context, exec commandlineexecutor.Execute) error {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
-		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", s.logicalDataPath),
-	})
-	if result.ExitCode == 0 {
-		return fmt.Errorf("backup of striped HANA data disks are not currently supported, exiting")
-	}
-	return nil
-}
-
-// Key defines the contents of each entry in the encryption key file.
-// Reference: https://cloud.google.com/compute/docs/disks/customer-supplied-encryption#key_file
-type Key struct {
-	URI     string `json:"uri"`
-	Key     string `json:"key"`
-	KeyType string `json:"key-type"`
-}
-
-func readKey(file, diskURI string, read configuration.ReadConfigFile) (string, error) {
-	var keys []Key
-	fileContent, err := read(file)
-	if err != nil {
-		return "", err
-	}
-
-	if err := json.Unmarshal(fileContent, &keys); err != nil {
-		return "", err
-	}
-
-	for _, k := range keys {
-		if k.URI == diskURI {
-			return k.Key, nil
-		}
-	}
-	return "", fmt.Errorf("no matching key for for the disk")
 }
 
 func (s *Snapshot) parseLabels() map[string]string {

@@ -19,7 +19,6 @@ package hanadiskrestore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -27,12 +26,11 @@ import (
 	"time"
 
 	"flag"
-	backoff "github.com/cenkalti/backoff/v4"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -70,7 +68,6 @@ var (
 )
 
 // Restorer has args for hanadiskrestore subcommands
-// TODO: Improve Disk Backup and Restore code coverage and reduce redundancy.
 type Restorer struct {
 	Project, Sid, HanaSidAdm, DataDiskName, DataDiskDeviceName string
 	DataDiskZone, SourceSnapshot, NewDiskType                  string
@@ -227,7 +224,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
 		// If restore fails, attach the old disk, rescan the volumes and delete the new disk.
 		r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone)
-		r.rescanVolumeGroups(ctx)
+		hanabackup.RescanVolumeGroups(ctx)
 		return subcommands.ExitFailure
 	}
 	workflowDur := time.Since(workflowStartTime)
@@ -238,24 +235,24 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 
 // prepare stops HANA, unmounts data directory and detaches old data disk.
 func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties) error {
-	mountPath, err := r.readDataDirMountPath(ctx, commandlineexecutor.ExecuteCommand)
+	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return fmt.Errorf("failed to read data directory mount path: %v", err)
 	}
-	if err := r.StopHANA(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.StopHANA(ctx, r.ForceStopHANA, r.HanaSidAdm, r.Sid, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to stop HANA: %v", err)
 	}
-	if err := r.WaitForIndexServerToStopWithRetry(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.WaitForIndexServerToStopWithRetry(ctx, r.HanaSidAdm, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("hdbindexserver process still running after HANA is stopped: %v", err)
 	}
 
-	if err := r.unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
 	if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 		// If detach fails, rescan the volume groups to ensure the directories are mounted.
-		r.rescanVolumeGroups(ctx)
+		hanabackup.RescanVolumeGroups(ctx)
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
 
@@ -264,16 +261,16 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties) error {
 }
 
 func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.CloudProperties) error {
-	mountPath, err := r.readDataDirMountPath(ctx, commandlineexecutor.ExecuteCommand)
+	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return fmt.Errorf("failed to read data directory mount path: %v", err)
 	}
-	if err := r.unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 	if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 		// If detach fails, rescan the volume groups to ensure the directories are mounted.
-		r.rescanVolumeGroups(ctx)
+		hanabackup.RescanVolumeGroups(ctx)
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
 	log.CtxLogger(ctx).Info("HANA restore prepareForHANAChangeDiskType succeeded.")
@@ -286,7 +283,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 	if r.CSEKKeyFile != "" {
 		usagemetrics.Action(usagemetrics.EncryptedSnapshotRestore)
 		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.SourceSnapshot)
-		key, err := readKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
+		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
 		if err != nil {
 			usagemetrics.Error(usagemetrics.EncryptedSnapshotRestoreFailure)
 			return err
@@ -335,7 +332,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 
 	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
 
-	r.rescanVolumeGroups(ctx)
+	hanabackup.RescanVolumeGroups(ctx)
 	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
 	return nil
 }
@@ -343,13 +340,13 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 // checkPreConditions checks if the HANA data and log disks are on the same physical disk.
 // Also verifies that the data disk is attached to the instance.
 func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperties) error {
-	if err := r.checkDataDir(ctx); err != nil {
+	var err error
+	if r.baseDataPath, r.logicalDataPath, r.physicalDataPath, err = hanabackup.CheckDataDir(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		return err
 	}
-	if err := r.checkLogDir(ctx); err != nil {
+	if r.baseLogPath, r.logicalLogPath, r.physicalLogPath, err = hanabackup.CheckLogDir(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		return err
 	}
-
 	log.CtxLogger(ctx).Infow("Checking preconditions", "Data directory", r.baseDataPath, "Data file system",
 		r.logicalDataPath, "Data physical volume", r.physicalDataPath, "Log directory", r.baseLogPath,
 		"Log file system", r.logicalLogPath, "Log physical volume", r.physicalLogPath)
@@ -384,240 +381,6 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		r.NewDiskType = fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.Project, r.DataDiskZone, r.NewDiskType)
 	}
 	return nil
-}
-
-// checkDataDir checks if the data directory is valid and has a valid physical volume.
-func (r *Restorer) checkDataDir(ctx context.Context) error {
-	var err error
-	if r.baseDataPath, err = r.parseBasePath(ctx, "basepath_datavolumes", commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	log.CtxLogger(ctx).Infow("Data volume base path", "path", r.baseDataPath)
-	if r.logicalDataPath, err = r.parseLogicalPath(ctx, r.baseDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	if !strings.HasPrefix(r.logicalDataPath, "/dev/mapper") {
-		return fmt.Errorf("only data disks using LVM are supported, exiting")
-	}
-	if r.physicalDataPath, err = r.parsePhysicalPath(ctx, r.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	return r.checkDataDeviceForStripes(ctx, commandlineexecutor.ExecuteCommand)
-}
-
-// checkLogDir checks if the log directory is valid and has a valid physical volume.
-func (r *Restorer) checkLogDir(ctx context.Context) error {
-	var err error
-	if r.baseLogPath, err = r.parseBasePath(ctx, "basepath_logvolumes", commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	log.CtxLogger(ctx).Infow("Log volume base path", "path", r.baseLogPath)
-
-	if r.logicalLogPath, err = r.parseLogicalPath(ctx, r.baseLogPath, commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	if r.physicalLogPath, err = r.parsePhysicalPath(ctx, r.logicalLogPath, commandlineexecutor.ExecuteCommand); err != nil {
-		return err
-	}
-	return nil
-}
-
-// parseBasePath parses the base path from the global.ini file.
-func (r *Restorer) parseBasePath(ctx context.Context, pattern string, exec commandlineexecutor.Execute) (string, error) {
-	args := `-c 'grep ` + pattern + ` /usr/sap/*/SYS/global/hdb/custom/config/global.ini | cut -d= -f 2'`
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: args,
-	})
-	if result.Error != nil {
-		return "", fmt.Errorf("failure parsing base path, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	return strings.TrimSuffix(result.StdOut, "\n"), nil
-}
-
-// parseLogicalPath parses the logical path from the base path.
-func (r *Restorer) parseLogicalPath(ctx context.Context, basePath string, exec commandlineexecutor.Execute) (string, error) {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf("-c 'df --output=source %s | tail -n 1'", basePath),
-	})
-	if result.Error != nil {
-		return "", fmt.Errorf("failure parsing logical path, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	logicalDevice := strings.TrimSuffix(result.StdOut, "\n")
-	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
-	return logicalDevice, nil
-}
-
-// parsePhysicalPath parses the physical path from the logical path.
-func (r *Restorer) parsePhysicalPath(ctx context.Context, logicalPath string, exec commandlineexecutor.Execute) (string, error) {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf("-c '/sbin/lvdisplay -m %s | grep \"Physical volume\" | awk \"{print \\$3}\"'", logicalPath),
-	})
-	if result.Error != nil {
-		return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	phyisicalDevice := strings.TrimSuffix(result.StdOut, "\n")
-	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", phyisicalDevice)
-	return phyisicalDevice, nil
-}
-
-// checkDataDeviceForStripes checks if the data device is striped.
-func (r *Restorer) checkDataDeviceForStripes(ctx context.Context, exec commandlineexecutor.Execute) error {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", r.logicalDataPath),
-	})
-	if result.ExitCode == 0 {
-		return fmt.Errorf("restore of striped HANA data disks are not currently supported, exiting")
-	}
-	return nil
-}
-
-// StopHANA stops the HANA instance.
-func (r *Restorer) StopHANA(ctx context.Context, exec commandlineexecutor.Execute) error {
-	var cmd string
-	if r.ForceStopHANA {
-		log.CtxLogger(ctx).Infow("HANA force stopped", "sid", r.Sid)
-		cmd = fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && /usr/sap/%s/*/HDB stop'", r.Sid, r.Sid) // NOLINT
-	} else {
-		log.CtxLogger(ctx).Infow("Stopping HANA", "sid", r.Sid)
-		cmd = fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && /usr/sap/%s/*/HDB kill'", r.Sid, r.Sid) // NOLINT
-	}
-	result := exec(ctx, commandlineexecutor.Params{
-		User:        r.HanaSidAdm,
-		Executable:  "bash",
-		ArgsToSplit: cmd,
-		Timeout:     300,
-	})
-	if result.Error != nil {
-		return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	log.CtxLogger(ctx).Infow("HANA stopped", "sid", r.Sid)
-	return nil
-}
-
-// readDataDirMountPath reads the data directory mount path.
-func (r *Restorer) readDataDirMountPath(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c 'df --output=target %s| tail -n 1'", r.baseDataPath),
-	})
-	if result.Error != nil {
-		return "", fmt.Errorf("failure reading data directory mount path, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	return strings.TrimSuffix(result.StdOut, "\n"), nil
-}
-
-// unmount unmounts the given directory.
-func (r *Restorer) unmount(ctx context.Context, path string, exec commandlineexecutor.Execute) error {
-	log.Logger.Infow("Unmount path", "directory", path)
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c 'sync;umount -f %s'", path),
-	})
-	if result.Error != nil {
-		r := exec(ctx, commandlineexecutor.Params{
-			Executable:  "bash",
-			ArgsToSplit: fmt.Sprintf(" -c 'lsof | grep %s'", path), // NOLINT
-		})
-		msg := `failure unmounting directory: %s, stderr: %s, err: %s.
-		Here are the possible open references to the path, stdout: %s stderr: %s.
-		Please ensure these references are cleaned up for unmount to proceed and retry the command`
-		return fmt.Errorf(msg, path, result.StdErr, result.Error, r.StdOut, r.StdErr)
-	}
-	return nil
-}
-
-// rescanVolumeGroups rescans all volume groups and mounts them.
-func (r *Restorer) rescanVolumeGroups(ctx context.Context) error {
-	log.CtxLogger(ctx).Infow("Rescanning volume groups", "sid", r.Sid)
-	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "/sbin/dmsetup",
-		ArgsToSplit: "remove_all",
-	})
-	if result.Error != nil {
-		return fmt.Errorf("failure removing device definitions from the Device Mapper driver, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "/sbin/vgscan",
-		ArgsToSplit: "-v --mknodes",
-	})
-	if result.Error != nil {
-		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "/sbin/vgchange",
-		ArgsToSplit: "-ay",
-	})
-	if result.Error != nil {
-		return fmt.Errorf("failure changing volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable: "/sbin/lvscan",
-	})
-	if result.Error != nil {
-		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	time.Sleep(5 * time.Second)
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "mount",
-		ArgsToSplit: "-av",
-	})
-	if result.Error != nil {
-		return fmt.Errorf("failure mounting volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	return nil
-}
-
-// waitForIndexServerToStop() waits for the hdb index server to stop.
-func (r *Restorer) waitForIndexServerToStop(ctx context.Context, exec commandlineexecutor.Execute) error {
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: `-c 'ps x | grep hdbindexs | grep -v grep'`,
-		User:        r.HanaSidAdm,
-	})
-
-	if result.ExitCode == 0 {
-		return fmt.Errorf("failure waiting for index server to stop, stderr: %s, err: %s", result.StdErr, result.Error)
-	}
-	return nil
-}
-
-// WaitForIndexServerToStopWithRetry waits for the index server to stop with retry.
-// We sleep for 10s between retries a total 60 time => max_wait_duration =  10*60 = 10 minutes
-func (r *Restorer) WaitForIndexServerToStopWithRetry(ctx context.Context, exec commandlineexecutor.Execute) error {
-	constantBackoff := backoff.NewConstantBackOff(10 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 60), ctx)
-	return backoff.Retry(func() error { return r.waitForIndexServerToStop(ctx, exec) }, bo)
-}
-
-// Key defines the contents of each entry in the encryption key file.
-// Reference: https://cloud.google.com/compute/docs/disks/customer-supplied-encryption#key_file
-type Key struct {
-	URI     string `json:"uri"`
-	Key     string `json:"key"`
-	KeyType string `json:"key-type"`
-}
-
-func readKey(file, diskURI string, read configuration.ReadConfigFile) (string, error) {
-	var keys []Key
-	fileContent, err := read(file)
-	if err != nil {
-		return "", err
-	}
-
-	if err := json.Unmarshal(fileContent, &keys); err != nil {
-		return "", err
-	}
-
-	for _, k := range keys {
-		if k.URI == diskURI {
-			return k.Key, nil
-		}
-	}
-	return "", fmt.Errorf("no matching key for for the disk")
 }
 
 func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {

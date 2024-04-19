@@ -18,8 +18,6 @@ package hanadiskrestore
 
 import (
 	"context"
-	"errors"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -30,10 +28,8 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -48,21 +44,7 @@ var (
 		NewDiskType:    "pd-ssd",
 		SourceSnapshot: "my-snapshot",
 	}
-
-	testCommandExecute = func(stdout, stderr string, exitCode int, err error) commandlineexecutor.Execute {
-		return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			var exitErr *exec.ExitError
-			if err != nil && errors.As(err, &exitErr) {
-				exitCode = exitErr.ExitCode()
-			}
-			return commandlineexecutor.Result{
-				StdOut:   stdout,
-				StdErr:   stderr,
-				Error:    err,
-				ExitCode: exitCode,
-			}
-		}
-	}
+	defaultCloudProperties = &ipb.CloudProperties{ProjectId: "default-project"}
 )
 
 func TestValidateParameters(t *testing.T) {
@@ -210,41 +192,6 @@ func TestValidateParameters(t *testing.T) {
 	}
 }
 
-func TestWaitForIndexServerToStop(t *testing.T) {
-	tests := []struct {
-		name     string
-		r        *Restorer
-		fakeExec commandlineexecutor.Execute
-		want     error
-	}{
-		{
-			name:     "ProcessRunning",
-			r:        &Restorer{},
-			fakeExec: testCommandExecute("", "", 0, nil),
-			want:     cmpopts.AnyError,
-		},
-		{
-			name:     "ProcessStopped",
-			r:        &Restorer{},
-			fakeExec: testCommandExecute("", "", 1, nil),
-			want:     nil,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := test.r.waitForIndexServerToStop(context.Background(), test.fakeExec)
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("waitForIndexServerToStop() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-var defaultCloudProperties = &ipb.CloudProperties{
-	ProjectId: "default-project",
-}
-
 func TestDefaultValues(t *testing.T) {
 	r := Restorer{
 		Sid:            "hdb",
@@ -305,229 +252,6 @@ func TestRestoreHandler(t *testing.T) {
 			got := test.restorer.restoreHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("restoreHandler() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestParseBasePath(t *testing.T) {
-	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     string
-		wantErr  error
-	}{
-		{
-			name:     "Failure",
-			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
-			wantErr:  cmpopts.AnyError,
-		},
-		{
-			name:     "Success",
-			fakeExec: testCommandExecute("/hana/data/ABC", "", 0, nil),
-			want:     "/hana/data/ABC",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			r := &Restorer{}
-			got, gotErr := r.parseBasePath(context.Background(), "", test.fakeExec)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("parseBasePath() = %v, want %v", gotErr, test.wantErr)
-			}
-			if got != test.want {
-				t.Errorf("parseBasePath() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestParseLogicalPath(t *testing.T) {
-	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     string
-		wantErr  error
-	}{
-		{
-			name:     "Failure",
-			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
-			wantErr:  cmpopts.AnyError,
-		},
-		{
-			name:     "Success",
-			fakeExec: testCommandExecute("/dev/mapper/vg-volume-1", "", 0, nil),
-			want:     "/dev/mapper/vg-volume-1",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			r := &Restorer{}
-			got, gotErr := r.parseLogicalPath(context.Background(), "", test.fakeExec)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("parseLogicalPath() = %v, want %v", gotErr, test.wantErr)
-			}
-			if got != test.want {
-				t.Errorf("parseLogicalPath() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestParsePhysicalPath(t *testing.T) {
-	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     string
-		wantErr  error
-	}{
-		{
-			name:     "Failure",
-			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
-			wantErr:  cmpopts.AnyError,
-		},
-		{
-			name:     "Success",
-			fakeExec: testCommandExecute("/dev/sdb", "", 0, nil),
-			want:     "/dev/sdb",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			r := &Restorer{}
-			got, gotErr := r.parsePhysicalPath(context.Background(), "", test.fakeExec)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("parsePhysicalPath() = %v, want %v", gotErr, test.wantErr)
-			}
-			if got != test.want {
-				t.Errorf("parsePhysicalPath() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestCheckDataDeviceForStripes(t *testing.T) {
-	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     error
-	}{
-		{
-			name:     "SpripesPresent",
-			fakeExec: testCommandExecute("", "", 0, nil),
-			want:     cmpopts.AnyError,
-		},
-		{
-			name:     "StripesNotPresent",
-			fakeExec: testCommandExecute("", "exit code:1", 1, &exec.ExitError{}),
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			r := &Restorer{}
-			got := r.checkDataDeviceForStripes(context.Background(), test.fakeExec)
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("checkDataDeviceForStripes() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestStopHANA(t *testing.T) {
-	tests := []struct {
-		name     string
-		r        *Restorer
-		fakeExec commandlineexecutor.Execute
-		want     error
-	}{
-		{
-			name:     "Failure",
-			r:        &Restorer{},
-			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
-			want:     cmpopts.AnyError,
-		},
-		{
-			name:     "StopSuccess",
-			r:        &Restorer{},
-			fakeExec: testCommandExecute("", "", 0, nil),
-		},
-		{
-			name:     "ForceStopSuccess",
-			r:        &Restorer{ForceStopHANA: true},
-			fakeExec: testCommandExecute("", "", 0, nil),
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := test.r.StopHANA(context.Background(), test.fakeExec)
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("stopHANA() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestReadDataDirMountPath(t *testing.T) {
-	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     string
-		wantErr  error
-	}{
-		{
-			name:     "Failure",
-			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
-			wantErr:  cmpopts.AnyError,
-		},
-		{
-			name:     "Success",
-			fakeExec: testCommandExecute("/hana/data/ABC", "", 0, nil),
-			want:     "/hana/data/ABC",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			r := &Restorer{}
-			got, gotErr := r.readDataDirMountPath(context.Background(), test.fakeExec)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("readDataDirMountPath() = %v, want %v", gotErr, test.wantErr)
-			}
-			if got != test.want {
-				t.Errorf("readDataDirMountPath() = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestUnmount(t *testing.T) {
-	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     error
-	}{
-		{
-			name:     "Failure",
-			fakeExec: testCommandExecute("", "", 1, &exec.ExitError{}),
-			want:     cmpopts.AnyError,
-		},
-		{
-			name:     "Success",
-			fakeExec: testCommandExecute("", "", 0, nil),
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			r := &Restorer{}
-			got := r.unmount(context.Background(), "", test.fakeExec)
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("unmount() = %v, want %v", got, test.want)
 			}
 		})
 	}
@@ -672,75 +396,6 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			got := tc.r.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestReadKey(t *testing.T) {
-
-	tests := []struct {
-		name       string
-		diskURI    string
-		fakeReader configuration.ReadConfigFile
-		wantKey    string
-		wantErr    error
-	}{
-		{
-			name:    "Success",
-			diskURI: "https://www.googleapis.com/compute/v1/projects/myproject/zones/us-central1-a/disks/example-disk",
-			fakeReader: func(string) ([]byte, error) {
-				testKeyFileText := []byte(`[
-					{
-					"uri": "https://www.googleapis.com/compute/v1/projects/myproject/zones/us-central1-a/disks/example-disk",
-					"key": "acXTX3rxrKAFTF0tYVLvydU1riRZTvUNC4g5I11NY+c=",
-					"key-type": "raw"
-					},
-					{
-					"uri": "https://www.googleapis.com/compute/v1/projects/myproject/global/snapshots/my-private-snapshot",
-					"key": "ieCx/NcW06PcT7Ep1X6LUTc/hLvUDYyzSZPPVCVPTV=",
-					"key-type": "rsa-encrypted"
-					}
-				]`)
-				return testKeyFileText, nil
-			},
-			wantKey: `acXTX3rxrKAFTF0tYVLvydU1riRZTvUNC4g5I11NY+c=`,
-		},
-		{
-			name:       "RedFileFailure",
-			fakeReader: func(string) ([]byte, error) { return nil, cmpopts.AnyError },
-			wantErr:    cmpopts.AnyError,
-		},
-		{
-			name:       "MalformedJSON",
-			fakeReader: func(string) ([]byte, error) { return []byte(`[[]}`), nil },
-			wantErr:    cmpopts.AnyError,
-		},
-		{
-			name:    "NoMatchingKey",
-			diskURI: "https://www.googleapis.com/compute/v1/projects/myproject/zones/us-central1-a/disks/example-disk",
-			fakeReader: func(string) ([]byte, error) {
-				testKeyFileText := []byte(`[
-					{
-					"uri": "https://www.googleapis.com/compute/v1/projects/myproject/global/snapshots/my-private-snapshot",
-					"key": "ieCx/NcW06PcT7Ep1X6LUTc/hLvUDYyzSZPPVCVPTV=",
-					"key-type": "rsa-encrypted"
-					}
-				]`)
-				return testKeyFileText, nil
-			},
-			wantErr: cmpopts.AnyError,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := readKey("", test.diskURI, test.fakeReader)
-			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("readKey()=%v, want=%v", err, test.wantErr)
-			}
-			if got != test.wantKey {
-				t.Errorf("readKey()=%v, want=%v", got, test.wantKey)
 			}
 		})
 	}
