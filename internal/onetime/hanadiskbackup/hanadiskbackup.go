@@ -591,7 +591,7 @@ func (s *Snapshot) checkDataDir(ctx context.Context) error {
 	if s.logicalDataPath, err = s.parseLogicalPath(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(s.logicalDataPath, "/dev/mapper") {
+	if !strings.Contains(s.logicalDataPath, "/dev/mapper") {
 		return fmt.Errorf("only data disks using LVM are supported, exiting")
 	}
 	if s.physicalDataPath, err = s.parsePhysicalPath(ctx, s.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
