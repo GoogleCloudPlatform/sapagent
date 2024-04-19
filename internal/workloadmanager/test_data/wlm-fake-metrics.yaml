@@ -128,7 +128,7 @@ metric: hanasecurity
     agent_version: 3.2
     agent_state: running
     os_settings: pass
-        r_logshipping_async_buffer_size_rec_1: false
+    r_logshipping_async_buffer_size_rec_1: false
     r_datashipping_parallel_channels_rec_1: false
     r_compressed_log_shipping_rec_1: false
     r_sap_hana_internal_support_role_rec_1: false
@@ -165,3 +165,4 @@ metric: hanasecurity
     r_logmode_check_rec_1: false
     r_hana_numa_awareness_check_rec_1: false
     r_tables_preloaded_check_rec_1: false
+    r_session_mgt_parameter_rec_1: false
