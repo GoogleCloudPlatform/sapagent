@@ -97,7 +97,7 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 		Help:     c.help,
 		Version:  c.version,
 		Fs:       f,
-		LogLevel: "INFO",
+		LogLevel: "info",
 		IIOTE:    c.IIOTEParams,
 	}, args...)
 	if !completed {
@@ -123,9 +123,14 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	c.ExecuteFunc = commandlineexecutor.ExecuteCommand
 	exitStatus, err := c.configureInstanceHandler(ctx)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("ConfigureInstance: FAILED, detailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))+" err: ", err)
-		log.CtxLogger(ctx).Errorw("ConfigureInstance failed", "err", err)
-		usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
+		if exitStatus == subcommands.ExitUsageError {
+			fmt.Println(fmt.Sprintf("ConfigureInstance: This machine type (%s) is not currently supported for automatic configuration, detailed logs are at %s", c.machineType, onetime.LogFilePath(c.Name(), c.IIOTEParams)))
+			log.CtxLogger(ctx).Infow("ConfigureInstance: This machine type is not currently supported for automatic configuration", "machineType", c.machineType)
+		} else {
+			fmt.Println(fmt.Sprintf("ConfigureInstance: FAILED, detailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))+" err: ", err)
+			log.CtxLogger(ctx).Errorw("ConfigureInstance failed", "err", err)
+			usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
+		}
 	}
 	return exitStatus
 }
