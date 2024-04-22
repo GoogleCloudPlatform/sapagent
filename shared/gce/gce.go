@@ -253,6 +253,7 @@ func (g *GCE) DiskAttachedToInstance(project, zone, instanceName, diskName strin
 		return "", false, fmt.Errorf("failed to get instance: %v", err)
 	}
 	for _, disk := range instance.Disks {
+		log.Logger.Debugw("Disk attached to instance", "disk", disk.Source, "diskName", diskName)
 		if strings.Contains(disk.Source, diskName) {
 			return disk.DeviceName, true, nil
 		}

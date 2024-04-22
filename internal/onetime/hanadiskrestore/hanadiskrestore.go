@@ -322,7 +322,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
 
-	_, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.DataDiskName)
+	_, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewdiskName)
 	if err != nil {
 		return fmt.Errorf("failed to check if new disk %v is attached to the instance", r.NewdiskName)
 	}
