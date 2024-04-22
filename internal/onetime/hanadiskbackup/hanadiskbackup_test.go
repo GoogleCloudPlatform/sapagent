@@ -18,7 +18,6 @@ package hanadiskbackup
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"os/exec"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -449,7 +449,7 @@ func TestRunWorkflow(t *testing.T) {
 				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
-			run: func(h *sql.DB, q string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "", cmpopts.AnyError
 			},
 			want: cmpopts.AnyError,
@@ -460,7 +460,7 @@ func TestRunWorkflow(t *testing.T) {
 				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
-			run: func(h *sql.DB, q string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
 					return "", cmpopts.AnyError
 				}
@@ -474,7 +474,7 @@ func TestRunWorkflow(t *testing.T) {
 				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
-			run: func(h *sql.DB, q string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
 			want: cmpopts.AnyError,
@@ -486,7 +486,7 @@ func TestRunWorkflow(t *testing.T) {
 				DiskKeyFile:     "test.json",
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
-			run: func(h *sql.DB, q string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
 			want: cmpopts.AnyError,
@@ -512,27 +512,27 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 	}{
 		{
 			name: "ReadSnapshotIDError",
-			run: func(*sql.DB, string) (string, error) {
+			run: func(context.Context, *databaseconnector.DBHandle, string) (string, error) {
 				return "", cmpopts.AnyError
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "NoPreparedSnaphot",
-			run: func(*sql.DB, string) (string, error) {
+			run: func(context.Context, *databaseconnector.DBHandle, string) (string, error) {
 				return "", nil
 			},
 			want: nil,
 		},
 		{name: "PreparedSnapshotPresentAbandonFalse",
-			run: func(*sql.DB, string) (string, error) {
+			run: func(context.Context, *databaseconnector.DBHandle, string) (string, error) {
 				return "stale-snapshot", nil
 			},
 			snapshot: Snapshot{AbandonPrepared: false},
 			want:     cmpopts.AnyError,
 		},
 		{name: "PreparedSnapshotPresentAbandonTrue",
-			run: func(*sql.DB, string) (string, error) {
+			run: func(context.Context, *databaseconnector.DBHandle, string) (string, error) {
 				return "stale-snapshot", nil
 			},
 			snapshot: Snapshot{AbandonPrepared: true},
@@ -540,7 +540,7 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 		},
 		{
 			name: "AbandonSnapshotFailure",
-			run: func(h *sql.DB, q string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CLOSE") {
 					return "", cmpopts.AnyError
 				}
@@ -552,7 +552,7 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.abandonPreparedSnapshot(test.run)
+			got := test.snapshot.abandonPreparedSnapshot(context.Background(), test.run)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("abandonPreparedSnapshot()=%v, want=%v", got, test.want)
 			}
@@ -573,7 +573,7 @@ func TestSetFlagsForSnapshot(t *testing.T) {
 	snapshot := Snapshot{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"project", "host", "port", "sid", "hana-db-user", "password", "password-secret",
-		"snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file",
+		"hdbuserstore-key", "snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file",
 		"snapshot-description", "send-metrics-to-monitoring", "storage-location"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
@@ -593,7 +593,7 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 	}{
 		{
 			name: "CreateSnapshotFailure",
-			run: func(h *sql.DB, q string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
 					return "", cmpopts.AnyError
 				}
@@ -603,7 +603,7 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 		},
 		{
 			name: "ReadSnapshotIDError",
-			run: func(h *sql.DB, q string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "SELECT BACKUP_ID FROM M_BACKUP_CATALOG") {
 					return "", cmpopts.AnyError
 				}
@@ -613,14 +613,14 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 		},
 		{
 			name: "EmptySnapshotID",
-			run: func(*sql.DB, string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "", nil
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "Success",
-			run: func(*sql.DB, string) (string, error) {
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "stale-snapshot", nil
 			},
 			want: nil,
@@ -629,7 +629,7 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, got := test.snapshot.createNewHANASnapshot(test.run)
+			_, got := test.snapshot.createNewHANASnapshot(context.Background(), test.run)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("createNewHANASnapshot()=%v, want=%v", got, test.want)
 			}

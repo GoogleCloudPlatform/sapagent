@@ -40,30 +40,30 @@ func valuesFromPointerArray(dest []any) []any {
 	return values
 }
 
-func TestConnectFailure(t *testing.T) {
+func TestCreateDBHandleFailure(t *testing.T) {
 	p := Params{
 		Username: "fakeUser",
 		Password: "fakePass",
 		Host:     "fakeHost",
 		Port:     "fakePort",
 	}
-	_, err := Connect(context.Background(), p)
+	_, err := CreateDBHandle(context.Background(), p)
 	if err == nil {
-		t.Errorf("Connect(%#v) = nil, want any error", p)
+		t.Errorf("CreateDBHandle(%#v) = nil, want any error", p)
 	}
 }
 
-func TestConnectValidatesDriver(t *testing.T) {
-	// Connect() with empty arguments will still be able to validate the hdb driver and create a *sql.DB.
-	// A call to Query() with this returned *sql.DB would encounter a ping error.
+func TestCreateDBHandleValidatesDriver(t *testing.T) {
+	// CreateDBHandle() with empty arguments will still be able to validate the hdb driver and create a *sql.DB.
+	// A call to Query() with this returned *DBHandle would encounter a ping error.
 	p := Params{Password: "fakePass"}
-	_, err := Connect(context.Background(), p)
+	_, err := CreateDBHandle(context.Background(), p)
 	if err != nil {
-		t.Errorf("Connect(%#v) = %v, want nil error", p, err)
+		t.Errorf("CreateDBHandle(%#v) = %v, want nil error", p, err)
 	}
 }
 
-func TestConnectWithSSLParams(t *testing.T) {
+func TestCreateDBHandleWithSSLParams(t *testing.T) {
 	tests := []struct {
 		name    string
 		p       Params
@@ -97,14 +97,14 @@ func TestConnectWithSSLParams(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := Connect(context.Background(), test.p); err == nil {
-				t.Errorf("Connect(%#v) = nil, want any error", test.p)
+			if _, err := CreateDBHandle(context.Background(), test.p); err == nil {
+				t.Errorf("CreateDBHandle(%#v) = nil, want any error", test.p)
 			}
 		})
 	}
 }
 
-func TestConnect(t *testing.T) {
+func TestCreateDBHandle(t *testing.T) {
 	tests := []struct {
 		name string
 		p    Params
@@ -146,12 +146,33 @@ func TestConnect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "HDBUserstoreKey",
+			p: Params{
+				HDBUserKey: "test-key",
+				SID:        "TST",
+			},
+		},
+		{
+			name: "HDBUserstoreKeyNoSID",
+			p: Params{
+				HDBUserKey: "test-key",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "HDBUserstoreKeyNoKey",
+			p: Params{
+				SID: "TST",
+			},
+			want: cmpopts.AnyError,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, got := Connect(context.Background(), test.p)
+			_, got := CreateDBHandle(context.Background(), test.p)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("Connect()=%v, want=%v", got, test.want)
+				t.Errorf("CreateDBHandle()=%v, want=%v", got, test.want)
 			}
 		})
 	}

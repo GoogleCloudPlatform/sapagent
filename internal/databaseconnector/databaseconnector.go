@@ -77,37 +77,7 @@ type (
 	}
 )
 
-// Connect creates a SQL connection to a HANA database utilizing the go-hdb driver.
-// TODO: This will be replaced by CreateDBHandle() completely once the latter is integrated with all workflows.
-func Connect(ctx context.Context, p Params) (handle *sql.DB, err error) {
-	if p.Password == "" && p.PasswordSecret == "" {
-		return nil, fmt.Errorf("Could not attempt to connect to database %s, both password and secret name are empty", p.Host)
-	}
-	if p.Password == "" && p.PasswordSecret != "" {
-		if p.Password, err = p.GCEService.GetSecret(ctx, p.Project, p.PasswordSecret); err != nil {
-			return nil, err
-		}
-		log.CtxLogger(ctx).Debug("Read from secret manager successful")
-	}
-
-	// Escape the special characters in the password string, HANA studio does this implicitly.
-	p.Password = url.QueryEscape(p.Password)
-	dataSource := "hdb://" + p.Username + ":" + p.Password + "@" + p.Host + ":" + p.Port
-	if p.EnableSSL {
-		dataSource = dataSource + "?TLSServerName=" + p.HostNameInCert + "&TLSRootCAFile=" + p.RootCAFile
-	}
-
-	db, err := sql.Open("hdb", dataSource)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not open connection to database.", "username", p.Username, "host", p.Host, "port", p.Port, "err", err)
-		return nil, err
-	}
-	log.CtxLogger(ctx).Debug("Database connection successful")
-	return db, nil
-}
-
 // CreateDBHandle creates a DB handle to the database that queries using either the go-hdb driver or hdbsql command-line.
-// TODO: Replace the above Connect() with CreateDBHandle() completely once integrated with all workflows.
 func CreateDBHandle(ctx context.Context, p Params) (handle *DBHandle, err error) {
 	// we want to use go-hdb for username:password authorizations and hdbsql command-line for hdbuserstore key authorization.
 	if p.HDBUserKey != "" {

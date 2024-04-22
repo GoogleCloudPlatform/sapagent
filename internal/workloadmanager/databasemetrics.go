@@ -47,12 +47,13 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 		Username:       params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbUser(),
 		Password:       params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPassword(),
 		PasswordSecret: params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPasswordSecretName(),
+		HDBUserKey:     params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHdbuserstoreKey(),
 		Host:           params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHostname(),
 		Port:           params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetPort(),
 		GCEService:     params.GCEService,
 		Project:        params.Config.GetCloudProperties().GetProjectId(),
 	}
-	db, err := databaseconnector.Connect(ctx, dpb)
+	db, err := databaseconnector.CreateDBHandle(ctx, dpb)
 	if err != nil {
 		return err
 	}

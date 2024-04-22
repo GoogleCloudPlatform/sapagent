@@ -126,6 +126,7 @@ message HANAMetricsConfig {
   string hana_db_password_secret_name = 3;
   string hostname = 4;
   string port = 5;
+  string hdbuserstore_key = 6;
 }
 
 message HANAMonitoringConfiguration {

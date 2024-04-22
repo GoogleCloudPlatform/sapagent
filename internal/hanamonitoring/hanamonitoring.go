@@ -285,7 +285,7 @@ func createColumns(queryColumns []*cpb.Column) []any {
 	return cols
 }
 
-// queryDatabase attempts to execute the specified query, returning a sql.Rows iterator and a slice for storing the column results of each row.
+// queryDatabase attempts to execute the specified query, returning a QueryResults iterator and a slice for storing the column results of each row.
 func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (*databaseconnector.QueryResults, []any, error) {
 	if query == nil {
 		return nil, nil, errors.New("no query specified")
@@ -301,7 +301,7 @@ func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (
 	return rows, cols, nil
 }
 
-// connectToDatabases attempts to create a *sql.DB connection for each HANAInstance.
+// connectToDatabases attempts to create a DB handle for each HANAInstance.
 func connectToDatabases(ctx context.Context, params Parameters) []*database {
 	var databases []*database
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {

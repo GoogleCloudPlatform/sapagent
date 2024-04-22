@@ -123,7 +123,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	}
 
 	// Collect DB Query metrics only if credentials are set and NOT a HANA secondary.
-	if p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "" && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
+	if ((p.SAPInstance.GetHanaDbUser() != "" && p.SAPInstance.GetHanaDbPassword() != "") || p.SAPInstance.GetHdbuserstoreKey() != "") && p.SAPInstance.GetSite() != sapb.InstanceSite_HANA_SECONDARY {
 		queryMetrics, err := collectHANAQueryMetrics(ctx, p, commandlineexecutor.ExecuteCommand)
 		if err != nil {
 			metricsCollectionErr = err
@@ -229,13 +229,18 @@ func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec co
 }
 
 // runHANAQuery runs the hana query and returns the state and time taken in a struct.
-// Uses SAP Instance's hana_db_user, hana_db_password for authentication with the DB.
+// Uses SAP Instance's hana_db_user/hana_db_password or hdbuserstore_key for authentication with the DB.
 // Returns an error in case of failures.
 func runHANAQuery(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) (queryState, error) {
 	port := fmt.Sprintf("3%s15", p.SAPInstance.GetInstanceNumber())
 	hdbsql := fmt.Sprintf("/usr/sap/%s/%s/exe/hdbsql", p.SAPInstance.GetSapsid(), p.SAPInstance.GetInstanceId())
-	args := fmt.Sprintf("-n localhost:%s -j -u %s -p %s '%s'",
-		port, p.SAPInstance.GetHanaDbUser(), p.SAPInstance.GetHanaDbPassword(), hanaQuery)
+	auth := ""
+	if p.SAPInstance.GetHdbuserstoreKey() != "" {
+		auth = fmt.Sprintf("-U %s", p.SAPInstance.GetHdbuserstoreKey())
+	} else {
+		auth = fmt.Sprintf("-n localhost:%s -u %s -p %s", port, p.SAPInstance.GetHanaDbUser(), p.SAPInstance.GetHanaDbPassword())
+	}
+	args := fmt.Sprintf("%s -j '%s'", auth, hanaQuery)
 
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  hdbsql,

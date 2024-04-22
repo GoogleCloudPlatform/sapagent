@@ -20,7 +20,6 @@ package hanainsights
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"runtime"
@@ -40,13 +39,13 @@ import (
 
 // HANAInsights has args for hanainsights subcommands.
 type HANAInsights struct {
-	project, host, port, sid       string
-	user, password, passwordSecret string
-	gceService                     onetime.GCEInterface
-	status                         bool
-	db                             *sql.DB
-	help, version                  bool
-	logLevel                       string
+	project, host, port, sid                        string
+	user, password, passwordSecret, hdbuserstoreKey string
+	gceService                                      onetime.GCEInterface
+	status                                          bool
+	db                                              *databaseconnector.DBHandle
+	help, version                                   bool
+	logLevel                                        string
 }
 
 const (
@@ -72,12 +71,13 @@ func (*HANAInsights) Usage() string {
 // SetFlags implements the subcommand interface for hanainsights.
 func (h *HANAInsights) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&h.project, "project", "", "GCP project. (required)")
-	fs.StringVar(&h.host, "host", "", "HANA host. (required)")
-	fs.StringVar(&h.port, "port", "", "HANA port. (required)")
+	fs.StringVar(&h.host, "host", "", "HANA host. (required if hdbuserstore-key not provided)")
+	fs.StringVar(&h.port, "port", "", "HANA port. (required if hdbuserstore-key not provided)")
 	fs.StringVar(&h.sid, "sid", "", "HANA SID. (required)")
 	fs.StringVar(&h.user, "user", "", "HANA username. (required)")
 	fs.StringVar(&h.password, "password", "", "HANA password. (discouraged - use password-secret instead)")
 	fs.StringVar(&h.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA Password")
+	fs.StringVar(&h.hdbuserstoreKey, "hdbuserstore-key", "", "HANA Userstore key specific to HANA instance")
 	fs.BoolVar(&h.help, "h", false, "Display help")
 	fs.BoolVar(&h.version, "v", false, "Display agent version")
 	fs.StringVar(&h.logLevel, "loglevel", "info", "Sets the logging level for a log file")
@@ -103,10 +103,10 @@ func (h *HANAInsights) validateParameters(os string) error {
 	switch {
 	case os == "windows":
 		return fmt.Errorf("hanainsights is only supported on Linux systems")
-	case h.host == "" || h.port == "" || h.sid == "" || h.user == "":
+	case (h.hdbuserstoreKey == "" && (h.host == "" || h.port == "")) || h.sid == "" || h.user == "":
 		return fmt.Errorf("required arguments not passed. Usage:" + h.Usage())
-	case h.password == "" && h.passwordSecret == "":
-		return fmt.Errorf("either -password or -password-secret is required. Usage:" + h.Usage())
+	case h.password == "" && h.passwordSecret == "" && h.hdbuserstoreKey == "":
+		return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + h.Usage())
 	}
 
 	log.Logger.Info("Parameter validation successful.")
@@ -130,12 +130,13 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		Username:       h.user,
 		Password:       h.password,
 		PasswordSecret: h.passwordSecret,
+		HDBUserKey:     h.hdbuserstoreKey,
 		Host:           h.host,
 		Port:           h.port,
 		GCEService:     h.gceService,
 		Project:        h.project,
 	}
-	if h.db, err = databaseconnector.Connect(ctx, dbp); err != nil {
+	if h.db, err = databaseconnector.CreateDBHandle(ctx, dbp); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to connect to database", err)
 		return subcommands.ExitFailure
 	}

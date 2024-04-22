@@ -373,6 +373,22 @@ func TestCollect(t *testing.T) {
 			wantErr:   nil,
 		},
 		{
+			name: "MetricCountTestUserstoreAuth",
+			properties: &InstanceProperties{
+				Config: defaultConfig,
+				SAPInstance: &sapb.SAPInstance{
+					Sapsid:          "TST",
+					InstanceNumber:  "00",
+					HdbuserstoreKey: "test-key",
+				},
+				SkippedMetrics: map[string]bool{
+					servicePath: true,
+				},
+			},
+			wantCount: 1, // Without HANA setup in unit test ENV, only query/state metric is generated.
+			wantErr:   nil,
+		},
+		{
 			name: "NoHANADBUserAndKey",
 			properties: &InstanceProperties{
 				Config: defaultConfig,

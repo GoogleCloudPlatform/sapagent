@@ -619,7 +619,7 @@ func TestInstancesWithCredentials(t *testing.T) {
 		want   *sapb.SAPInstances
 	}{
 		{
-			name: "CredentialsSet",
+			name: "CredentialsSetWithPassword",
 			params: &Parameters{
 				Config: &cpb.Configuration{
 					CollectionConfiguration: &cpb.CollectionConfiguration{
@@ -641,6 +641,33 @@ func TestInstancesWithCredentials(t *testing.T) {
 						HanaDbUser:     "test-db-user",
 						HanaDbPassword: "test-pass",
 						Sapsid:         "DEH",
+					},
+				},
+			},
+		},
+		{
+			name: "CredentialsSetWithHDBUserstore",
+			params: &Parameters{
+				Config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						HanaMetricsConfig: &cpb.HANAMetricsConfig{
+							HanaDbUser:      "test-db-user",
+							HdbuserstoreKey: "test-key",
+						},
+					},
+				},
+				BackOffs: defaultBackOffIntervals,
+				Discovery: &fakeDiscoveryInterface{
+					instances: fakeSAPInstances("HANA"),
+				},
+			},
+			want: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					&sapb.SAPInstance{
+						Type:            sapb.InstanceType_HANA,
+						HanaDbUser:      "test-db-user",
+						HdbuserstoreKey: "test-key",
+						Sapsid:          "DEH",
 					},
 				},
 			},

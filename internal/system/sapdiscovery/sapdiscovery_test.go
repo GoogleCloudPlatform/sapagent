@@ -1005,11 +1005,11 @@ func TestParseHTTPPort(t *testing.T) {
 
 func TestReadHANACredentials(t *testing.T) {
 	tests := []struct {
-		name                   string
-		hanaConfig             *cpb.HANAMetricsConfig
-		gceService             GCEInterface
-		wantUser, wantPassword string
-		wantErr                error
+		name                                        string
+		hanaConfig                                  *cpb.HANAMetricsConfig
+		gceService                                  GCEInterface
+		wantUser, wantPassword, wantHDBUserstoreKey string
+		wantErr                                     error
 	}{
 		{
 			name: "UserAndPasswordInConfigFile",
@@ -1021,7 +1021,7 @@ func TestReadHANACredentials(t *testing.T) {
 			wantPassword: "Dummy",
 		},
 		{
-			name:    "NoUserAndPassword",
+			name:    "NoCredentials",
 			wantErr: cmpopts.AnyError,
 		},
 		{
@@ -1064,10 +1064,19 @@ func TestReadHANACredentials(t *testing.T) {
 			},
 			wantErr: cmpopts.AnyError,
 		},
+		{
+			name: "HDBUserstoreKeyinConfigFile",
+			hanaConfig: &cpb.HANAMetricsConfig{
+				HanaDbUser:      "hdbadm",
+				HdbuserstoreKey: "hdbuserstore-test-key",
+			},
+			wantUser:            "hdbadm",
+			wantHDBUserstoreKey: "hdbuserstore-test-key",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotUser, gotPassword, gotErr := ReadHANACredentials(context.Background(), "test-project", test.hanaConfig, test.gceService)
+			gotUser, gotPassword, gotHDBUserstoreKey, gotErr := ReadHANACredentials(context.Background(), "test-project", test.hanaConfig, test.gceService)
 
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("ReadHANACredentials() returned error = %v, want %v", gotErr, test.wantErr)
@@ -1079,6 +1088,10 @@ func TestReadHANACredentials(t *testing.T) {
 
 			if gotPassword != test.wantPassword {
 				t.Errorf("ReadHANACredentials() returned Password = %s, want %s", gotPassword, test.wantPassword)
+			}
+
+			if gotHDBUserstoreKey != test.wantHDBUserstoreKey {
+				t.Errorf("ReadHANACredentials() returned HDBUserstoreKey = %s, want %s", gotHDBUserstoreKey, test.wantHDBUserstoreKey)
 			}
 		})
 	}

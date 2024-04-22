@@ -524,8 +524,9 @@ func sapInitRunning(ctx context.Context, exec commandlineexecutor.Execute) (bool
 	return true, nil
 }
 
-// ReadHANACredentials returns the HANA DB user and password key from configuration.
-func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.HANAMetricsConfig, gceService GCEInterface) (user, password string, err error) {
+// ReadHANACredentials returns either of a HANA DB user/password pair or a hdbuserstore key from configuration.
+// To connect to a HANA instance either of a user/password pair or a hdbuserstore key is required
+func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.HANAMetricsConfig, gceService GCEInterface) (user, password, hdbuserstoreKey string, err error) {
 	// Value hana_db_user must be set to collect HANA DB query metrics.
 	user = hanaConfig.GetHanaDbUser()
 	if user == "" {
@@ -533,20 +534,25 @@ func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.
 		user = "SYSTEM"
 	}
 
-	// Either hana_db_password or hana_db_password_secret_name must be set.
-	if hanaConfig.GetHanaDbPassword() == "" && hanaConfig.GetHanaDbPasswordSecretName() == "" {
-		return "", "", fmt.Errorf("both hana_db_password and hana_db_password_secret_name are empty")
+	// Either hdbuserstore_key, hana_db_password or hana_db_password_secret_name must be set for user/pass authentication.
+	if hanaConfig.GetHdbuserstoreKey() == "" && hanaConfig.GetHanaDbPassword() == "" && hanaConfig.GetHanaDbPasswordSecretName() == "" {
+		return "", "", "", fmt.Errorf("All of hana_db_password, hana_db_password_secret_name and hdbuserstore_key are empty")
+	}
+
+	// Return hdbuserstore credentials only, if set.
+	if hanaConfig.GetHdbuserstoreKey() != "" {
+		return user, "", hanaConfig.GetHdbuserstoreKey(), nil
 	}
 
 	if hanaConfig.GetHanaDbPassword() != "" {
-		return user, hanaConfig.GetHanaDbPassword(), nil
+		return user, hanaConfig.GetHanaDbPassword(), "", nil
 	}
 
 	password, err = gceService.GetSecret(ctx, projectID, hanaConfig.GetHanaDbPasswordSecretName())
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	return user, password, nil
+	return user, password, "", nil
 }
 
 // getInstanceNumbers takes in the SAP instance number of the current machine

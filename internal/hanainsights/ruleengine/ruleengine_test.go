@@ -18,36 +18,37 @@ package ruleengine
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 )
 
-func fakeQueryExec(context.Context, string, ...any) (*sql.Rows, error) {
-	return &sql.Rows{}, nil
+func fakeQueryExec(context.Context, string, commandlineexecutor.Execute) (*databaseconnector.QueryResults, error) {
+	return &databaseconnector.QueryResults{}, nil
 }
 
-func fakeQueryExecError(context.Context, string, ...any) (*sql.Rows, error) {
+func fakeQueryExecError(context.Context, string, commandlineexecutor.Execute) (*databaseconnector.QueryResults, error) {
 	return nil, cmpopts.AnyError
 }
 
 type (
-	fakeSQLDB struct {
+	fakeDBCHandle struct {
 		err error
 	}
 )
 
-func (fdb *fakeSQLDB) QueryContext(context.Context, string, ...any) (*sql.Rows, error) {
+func (fdb *fakeDBCHandle) Query(context.Context, string, commandlineexecutor.Execute) (*databaseconnector.QueryResults, error) {
 	if fdb.err != nil {
 		return nil, fdb.err
 	}
-	return &sql.Rows{}, nil
+	return &databaseconnector.QueryResults{}, nil
 }
 
 func TestAddRow(t *testing.T) {
@@ -508,7 +509,7 @@ func TestRun(t *testing.T) {
 		&rpb.Rule{Id: "abc", Queries: []*rpb.Query{&rpb.Query{}}, Recommendations: []*rpb.Recommendation{&rpb.Recommendation{}}},
 		&rpb.Rule{Id: "knowledgebase", Queries: []*rpb.Query{&rpb.Query{}}},
 	}
-	fdb := &fakeSQLDB{err: nil}
+	fdb := &fakeDBCHandle{err: nil}
 	_, got := Run(context.Background(), fdb, rules)
 	if !cmp.Equal(got, want, cmpopts.EquateErrors()) {
 		t.Errorf("Run()=%v want: %v", got, want)

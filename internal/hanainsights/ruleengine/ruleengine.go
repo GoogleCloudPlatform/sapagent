@@ -19,20 +19,21 @@ package ruleengine
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 )
 
 type (
-	// queryFunc provides an easily testable translation to the SQL API.
-	queryFunc func(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	// queryFunc provides an easily testable translation to the DBHandle query.
+	queryFunc func(ctx context.Context, query string, exec commandlineexecutor.Execute) (*databaseconnector.QueryResults, error)
 
 	// knowledgeBase is a map with key=<query_name:column_name> and value=<slice of string values read from HANA DB>.
 	knowledgeBase map[string][]string
@@ -46,14 +47,14 @@ type (
 	// Insights is a map of rules that evaluated to true with key=<rule-id> and value=<slice of recommendation-ids that evaluated to true>
 	Insights map[string][]ValidationResult
 
-	// SQLDBHandle is responsible for providing testable *sql.DB implemented methods.
-	SQLDBHandle interface {
-		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	// DBCHandle is responsible for providing testable *databaseconnector.DBHandle implemented methods.
+	DBCHandle interface {
+		Query(context.Context, string, commandlineexecutor.Execute) (*databaseconnector.QueryResults, error)
 	}
 )
 
 // Run starts the rule engine execution - executes the rules and generate insights.
-func Run(ctx context.Context, db SQLDBHandle, rules []*rpb.Rule) (Insights, error) {
+func Run(ctx context.Context, db DBCHandle, rules []*rpb.Rule) (Insights, error) {
 	// gkb is the global knowledge base with frequently accessed data.
 	gkb := buildGlobalKnowledgeBase(ctx, db, rules)
 
@@ -73,7 +74,7 @@ func Run(ctx context.Context, db SQLDBHandle, rules []*rpb.Rule) (Insights, erro
 	return insights, nil
 }
 
-func buildGlobalKnowledgeBase(ctx context.Context, db SQLDBHandle, rules []*rpb.Rule) knowledgeBase {
+func buildGlobalKnowledgeBase(ctx context.Context, db DBCHandle, rules []*rpb.Rule) knowledgeBase {
 	gkb := make(knowledgeBase)
 	for _, rule := range rules {
 		if rule.Id == "knowledgebase" {
@@ -95,10 +96,10 @@ func deepCopy(gkb knowledgeBase) knowledgeBase {
 }
 
 // buildKnowledgeBase runs all the queries and generates a result knowledge base for each rule.
-func buildKnowledgeBase(ctx context.Context, db SQLDBHandle, queries []*rpb.Query, kb knowledgeBase) error {
+func buildKnowledgeBase(ctx context.Context, db DBCHandle, queries []*rpb.Query, kb knowledgeBase) error {
 	for _, query := range queries {
 		cols := createColumns(len(query.Columns))
-		rows, err := QueryDatabase(ctx, db.QueryContext, query.Sql)
+		rows, err := QueryDatabase(ctx, db.Query, query.Sql)
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Error running query", "query", query.Sql)
 			return err
@@ -106,7 +107,7 @@ func buildKnowledgeBase(ctx context.Context, db SQLDBHandle, queries []*rpb.Quer
 		zeroRows := true
 		for rows.Next() {
 			zeroRows = false
-			if err := rows.Scan(cols...); err != nil {
+			if err := rows.ReadRow(cols...); err != nil {
 				log.CtxLogger(ctx).Debugw("Error scanning query result", "query", query.Sql)
 				return err
 			}
@@ -138,14 +139,14 @@ func addRow(cols []any, q *rpb.Query, kb knowledgeBase) {
 	}
 }
 
-// QueryDatabase attempts to execute the specified query, returning a sql.Rows iterator.
-func QueryDatabase(ctx context.Context, queryFunc queryFunc, sql string) (*sql.Rows, error) {
+// QueryDatabase attempts to execute the specified query, returning a QueryResults iterator.
+func QueryDatabase(ctx context.Context, queryFunc queryFunc, sql string) (*databaseconnector.QueryResults, error) {
 	if sql == "" {
 		return nil, errors.New("no query specified")
 	}
 	log.CtxLogger(ctx).Debugw("Executing query", "query", sql)
 
-	rows, err := queryFunc(ctx, sql)
+	rows, err := queryFunc(ctx, sql, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return nil, err
 	}

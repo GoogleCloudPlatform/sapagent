@@ -19,7 +19,6 @@ package hanadiskbackup
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"runtime"
@@ -47,7 +46,7 @@ import (
 
 type (
 	// queryFunc provides testable replacement to the SQL API.
-	queryFunc func(*sql.DB, string) (string, error)
+	queryFunc func(context.Context, *databaseconnector.DBHandle, string) (string, error)
 
 	// gceServiceFunc provides testable replacement for gce.New API.
 	gceServiceFunc func(context.Context) (*gce.GCE, error)
@@ -74,15 +73,15 @@ var (
 
 // Snapshot has args for snapshot subcommands.
 type Snapshot struct {
-	Project, Host, Port, Sid, HanaSidAdm, InstanceID string
-	HanaDBUser, Password, PasswordSecret             string
-	Disk, DiskZone                                   string
+	Project, Host, Port, Sid, HanaSidAdm, InstanceID      string
+	HanaDBUser, Password, PasswordSecret, HDBUserstoreKey string
+	Disk, DiskZone                                        string
 
 	DiskKeyFile, StorageLocation                        string
 	SnapshotName, SnapshotType, Description             string
 	AbandonPrepared, SendToMonitoring, freezeFileSystem bool
 
-	db                                *sql.DB
+	db                                *databaseconnector.DBHandle
 	gceService                        gceInterface
 	computeService                    *compute.Service
 	status                            bool
@@ -108,9 +107,9 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snaps
 func (*Snapshot) Usage() string {
 	return `Usage: hanadiskbackup -port=<port-number> -sid=<HANA-sid> -hana_db_user=<HANA DB User>
 	-source-disk=<disk-name> -source-disk-zone=<disk-zone> [-host=<hostname>] [-project=<project-name>]
-	[-password=<passwd> | -password-secret=<secret-name>] [-abandon-prepared=<true|false>]
-	[-send-status-to-monitoring]=<true|false> [-source-disk-key-file=<path-to-key-file>]
-	[-storage-location=<storage-location>]
+	[-password=<passwd> | -password-secret=<secret-name>] [-hdbuserstore-key=<userstore-key>] 
+	[-abandon-prepared=<true|false>] [-send-status-to-monitoring]=<true|false>]
+	[-source-disk-key-file=<path-to-key-file>] [-storage-location=<storage-location>]
 	[-snapshot-description=<description>] [-snapshot-name=<snapshot-name>]
 	[-snapshot-type=<snapshot-type>] [-freeze-file-system=<true|false>]
 	[-labels="label1=value1,label2=value2"]
@@ -124,8 +123,9 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&s.InstanceID, "instance-id", "", "HANA instance ID. (optional - Either port or instance-id must be provided)")
 	fs.StringVar(&s.HanaDBUser, "hana-db-user", "", "HANA DB Username. (required)")
-	fs.StringVar(&s.Password, "password", "", "HANA password. (discouraged - use password-secret instead)")
-	fs.StringVar(&s.PasswordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password.")
+	fs.StringVar(&s.Password, "password", "", "HANA password. (discouraged - use password-secret or hdbuserstore-key instead)")
+	fs.StringVar(&s.PasswordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password. (optional - either password-secret or hdbuserstore-key must be provided)")
+	fs.StringVar(&s.HDBUserstoreKey, "hdbuserstore-key", "", "HANA userstore key specific to HANA instance.")
 	fs.StringVar(&s.Disk, "source-disk", "", "name of the disk from which you want to create a snapshot (required)")
 	fs.StringVar(&s.DiskZone, "source-disk-zone", "", "zone of the disk from which you want to create a snapshot. (required)")
 	fs.BoolVar(&s.freezeFileSystem, "freeze-file-system", false, "Freeze file system. (optional) Default: false")
@@ -197,12 +197,13 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		PasswordSecret: s.PasswordSecret,
 		Host:           s.Host,
 		Port:           s.Port,
+		HDBUserKey:     s.HDBUserstoreKey,
 		GCEService:     s.gceService,
 		Project:        s.Project,
 	}
 	if s.SkipDBSnapshotForChangeDiskType {
 		onetime.LogMessageToFileAndConsole("Skipping connecting to HANA Database in case of changedisktype workflow.")
-	} else if s.db, err = databaseconnector.Connect(ctx, dbp); err != nil {
+	} else if s.db, err = databaseconnector.CreateDBHandle(ctx, dbp); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to connect to database", err)
 		return subcommands.ExitFailure
 	}
@@ -215,7 +216,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 
 	workflowStartTime := time.Now()
 	if s.SkipDBSnapshotForChangeDiskType {
-		err := s.runWorkflowForChangeDiskType(ctx, runQuery, cp)
+		err := s.runWorkflowForChangeDiskType(ctx, cp)
 		if err != nil {
 			onetime.LogErrorToFileAndConsole("Error: Failed to run HANA disk snapshot workflow", err)
 			return subcommands.ExitFailure
@@ -243,8 +244,8 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 		return fmt.Errorf("required arguments not passed. Usage:" + s.Usage())
 	case s.Port == "" && s.InstanceID == "":
 		return fmt.Errorf("either -port or -instance-id is required. Usage:" + s.Usage())
-	case s.Password == "" && s.PasswordSecret == "":
-		return fmt.Errorf("either -password or -password-secret is required. Usage:" + s.Usage())
+	case s.HDBUserstoreKey == "" && s.Password == "" && s.PasswordSecret == "":
+		return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + s.Usage())
 	}
 	if s.Project == "" {
 		s.Project = cp.GetProjectId()
@@ -270,14 +271,14 @@ func (s *Snapshot) portValue() string {
 	return s.Port
 }
 
-func runQuery(h *sql.DB, q string) (string, error) {
-	rows, err := h.Query(q)
+func runQuery(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+	rows, err := h.Query(ctx, q, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		return "", err
 	}
 	val := ""
 	for rows.Next() {
-		if err := rows.Scan(&val); err != nil {
+		if err := rows.ReadRow(&val); err != nil {
 			return "", err
 		}
 	}
@@ -294,12 +295,12 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc, cp *ipb.Cloud
 		return fmt.Errorf("source-disk=%v is not attached to the instance", s.Disk)
 	}
 	log.CtxLogger(ctx).Info("Start run HANA Disk based backup workflow")
-	if err = s.abandonPreparedSnapshot(run); err != nil {
+	if err = s.abandonPreparedSnapshot(ctx, run); err != nil {
 		usagemetrics.Error(usagemetrics.SnapshotDBNotReadyFailure)
 		return err
 	}
 	var snapshotID string
-	if snapshotID, err = s.createNewHANASnapshot(run); err != nil {
+	if snapshotID, err = s.createNewHANASnapshot(ctx, run); err != nil {
 		usagemetrics.Error(usagemetrics.SnapshotDBNotReadyFailure)
 		return err
 	}
@@ -327,7 +328,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc, cp *ipb.Cloud
 	}
 
 	log.CtxLogger(ctx).Info("Disk snapshot created, marking HANA snapshot as successful.")
-	if _, err = run(s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, s.SnapshotName)); err != nil {
+	if _, err = run(ctx, s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, s.SnapshotName)); err != nil {
 		log.CtxLogger(ctx).Errorw("Error marking HANA snapshot as SUCCESSFUL")
 		usagemetrics.Error(usagemetrics.DiskSnapshotDoneDBNotComplete)
 		return err
@@ -335,7 +336,7 @@ func (s *Snapshot) runWorkflow(ctx context.Context, run queryFunc, cp *ipb.Cloud
 	return nil
 }
 
-func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, run queryFunc, cp *ipb.CloudProperties) (err error) {
+func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, cp *ipb.CloudProperties) (err error) {
 	err = s.prepareForChangeDiskTypeWorkflow(ctx, commandlineexecutor.ExecuteCommand)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("Error preparing for change disk type workflow", err)
@@ -383,16 +384,16 @@ func (s *Snapshot) prepareForChangeDiskTypeWorkflow(ctx context.Context, exec co
 
 func (s *Snapshot) diskSnapshotFailureHandler(ctx context.Context, run queryFunc, snapshotID string) {
 	usagemetrics.Error(usagemetrics.DiskSnapshotCreateFailure)
-	if err := s.abandonHANASnapshot(run, snapshotID); err != nil {
+	if err := s.abandonHANASnapshot(ctx, run, snapshotID); err != nil {
 		log.CtxLogger(ctx).Errorw("Error discarding HANA snapshot")
 		usagemetrics.Error(usagemetrics.DiskSnapshotFailedDBNotComplete)
 	}
 }
 
-func (s *Snapshot) abandonPreparedSnapshot(run queryFunc) error {
+func (s *Snapshot) abandonPreparedSnapshot(ctx context.Context, run queryFunc) error {
 	// Read the already prepared snapshot.
 	snapshotIDQuery := `SELECT BACKUP_ID FROM M_BACKUP_CATALOG WHERE ENTRY_TYPE_NAME = 'data snapshot' AND STATE_NAME = 'prepared'`
-	snapshotID, err := run(s.db, snapshotIDQuery)
+	snapshotID, err := run(ctx, s.db, snapshotIDQuery)
 	if err != nil {
 		return err
 	}
@@ -405,27 +406,27 @@ func (s *Snapshot) abandonPreparedSnapshot(run queryFunc) error {
 	if !s.AbandonPrepared {
 		return fmt.Errorf("a HANA data snapshot is already prepared or is in progress, rerun with <-abandon-prepared=true> to abandon this snapshot")
 	}
-	if err = s.abandonHANASnapshot(run, snapshotID); err != nil {
+	if err = s.abandonHANASnapshot(ctx, run, snapshotID); err != nil {
 		return err
 	}
 	log.Logger.Info("Snapshot abandoned", "snapshotID", snapshotID)
 	return nil
 }
 
-func (s *Snapshot) abandonHANASnapshot(run queryFunc, snapshotID string) error {
-	_, err := run(s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`)
+func (s *Snapshot) abandonHANASnapshot(ctx context.Context, run queryFunc, snapshotID string) error {
+	_, err := run(ctx, s.db, `BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID `+snapshotID+` UNSUCCESSFUL`)
 	return err
 }
 
-func (s *Snapshot) createNewHANASnapshot(run queryFunc) (snapshotID string, err error) {
+func (s *Snapshot) createNewHANASnapshot(ctx context.Context, run queryFunc) (snapshotID string, err error) {
 	// Create a new HANA snapshot with the given name and return its ID.
 	log.Logger.Infow("Creating new HANA snapshot", "comment", s.SnapshotName)
-	_, err = run(s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT '%s'", s.SnapshotName))
+	_, err = run(ctx, s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT '%s'", s.SnapshotName))
 	if err != nil {
 		return "", err
 	}
 	snapshotIDQuery := `SELECT BACKUP_ID FROM M_BACKUP_CATALOG WHERE ENTRY_TYPE_NAME = 'data snapshot' AND STATE_NAME = 'prepared'`
-	if snapshotID, err = run(s.db, snapshotIDQuery); err != nil {
+	if snapshotID, err = run(ctx, s.db, snapshotIDQuery); err != nil {
 		return "", err
 	}
 	if snapshotID == "" {
