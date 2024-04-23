@@ -80,6 +80,7 @@ func registerSubCommands() {
 		&readmetrics.ReadMetrics{},
 		&installbackint.InstallBackint{},
 		&configure.Configure{},
+		&performancediagnostics.Diagnose{},
 		&configurebackint.ConfigureBackint{},
 		&configureinstance.ConfigureInstance{},
 		&version.Version{},

@@ -44,8 +44,9 @@ const userAgent = "Backint for GCS"
 
 // Backint has args for backint subcommands.
 type Backint struct {
-	user, function             string
-	inFile, outFile, paramFile string
+	IIOTEParams                *onetime.InternallyInvokedOTE
+	User, Function             string
+	inFile, OutFile, ParamFile string
 	backupID, backupLevel      string
 	count                      int64
 	version, help              bool
@@ -68,16 +69,16 @@ func (*Backint) Usage() string {
 
 // SetFlags implements the subcommand interface for backint.
 func (b *Backint) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&b.user, "user", "", "User consists of database name and SID of the HANA instance")
-	fs.StringVar(&b.user, "u", "", "User consists of database name and SID of the HANA instance")
-	fs.StringVar(&b.function, "function", "", "The requested function")
-	fs.StringVar(&b.function, "f", "", "The requested function")
+	fs.StringVar(&b.User, "user", "", "User consists of database name and SID of the HANA instance")
+	fs.StringVar(&b.User, "u", "", "User consists of database name and SID of the HANA instance")
+	fs.StringVar(&b.Function, "function", "", "The requested function")
+	fs.StringVar(&b.Function, "f", "", "The requested function")
 	fs.StringVar(&b.inFile, "input", "", "Input file for corresponding function (-f). If not set, input is read from stdin")
 	fs.StringVar(&b.inFile, "i", "", "Input file for corresponding function (-f). If not set, input is read from stdin")
-	fs.StringVar(&b.outFile, "output", "", "File where return values and messages are written. If not set, output is written to stdout")
-	fs.StringVar(&b.outFile, "o", "", "File where return values and messages are written. If not set, output is written to stdout")
-	fs.StringVar(&b.paramFile, "paramfile", "", "Parameter file required for GCS integration")
-	fs.StringVar(&b.paramFile, "p", "", "Parameter file required for GCS integration")
+	fs.StringVar(&b.OutFile, "output", "", "File where return values and messages are written. If not set, output is written to stdout")
+	fs.StringVar(&b.OutFile, "o", "", "File where return values and messages are written. If not set, output is written to stdout")
+	fs.StringVar(&b.ParamFile, "paramfile", "", "Parameter file required for GCS integration")
+	fs.StringVar(&b.ParamFile, "p", "", "Parameter file required for GCS integration")
 	fs.StringVar(&b.backupID, "backupid", "", "Database backup id, only usable if the function (-f) is backup")
 	fs.StringVar(&b.backupID, "s", "", "Database backup id, only usable if the function (-f) is backup")
 	fs.Int64Var(&b.count, "count", 0, "Total number of database objects associated to the backup id specified (-s)")
@@ -97,6 +98,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		Version:  b.version,
 		LogLevel: b.logLevel,
 		Fs:       f,
+		IIOTE:    b.IIOTEParams,
 	}, args...)
 	if !completed {
 		return exitStatus
@@ -108,11 +110,11 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, cloudProps *ipb.CloudProperties, client storage.Client) subcommands.ExitStatus {
 	log.CtxLogger(ctx).Info("Backint starting")
 	p := configuration.Parameters{
-		User:        b.user,
-		Function:    b.function,
+		User:        b.User,
+		Function:    b.Function,
 		InFile:      b.inFile,
-		OutFile:     b.outFile,
-		ParamFile:   b.paramFile,
+		OutFile:     b.OutFile,
+		ParamFile:   b.ParamFile,
 		BackupID:    b.backupID,
 		BackupLevel: b.backupLevel,
 		Count:       b.count,
@@ -122,7 +124,6 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, cloudPr
 		return subcommands.ExitUsageError
 	}
 	lp.LogToCloud = config.GetLogToCloud().GetValue()
-	onetime.SetupOneTimeLogging(lp, b.Name(), configuration.LogLevelToZapcore(config.GetLogLevel()))
 	log.CtxLogger(ctx).Infow("Args parsed and config validated", "config", config)
 
 	connectParams := &storage.ConnectParameters{

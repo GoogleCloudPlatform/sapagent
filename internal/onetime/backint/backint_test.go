@@ -175,9 +175,9 @@ func TestBackintHandler(t *testing.T) {
 		{
 			name: "FailConnectToBucket",
 			backint: &Backint{
-				user:      "test@TST",
-				function:  "backup",
-				paramFile: defaultParametersFile(t).Name(),
+				User:      "test@TST",
+				Function:  "backup",
+				ParamFile: defaultParametersFile(t).Name(),
 			},
 			client: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
 				return nil, errors.New("client create error")
@@ -187,11 +187,11 @@ func TestBackintHandler(t *testing.T) {
 		{
 			name: "SuccessfulBackup",
 			backint: &Backint{
-				user:      "test@TST",
-				function:  "backup",
-				paramFile: defaultParametersFile(t).Name(),
+				User:      "test@TST",
+				Function:  "backup",
+				ParamFile: defaultParametersFile(t).Name(),
 				inFile:    t.TempDir() + "/input.txt",
-				outFile:   t.TempDir() + "/output.txt",
+				OutFile:   t.TempDir() + "/output.txt",
 			},
 			client: defaultStorageClient,
 			want:   subcommands.ExitSuccess,
