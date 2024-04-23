@@ -174,6 +174,28 @@ R3trans finished (0000).
 	 fs1-nw-node2 fs1-nw-node1
 	Pacemaker Nodes:
 	 fs1-nw-node2 fs1-nw-node1`
+	defaultNetweaverInstanceListOutput = `04.03.2024 11:35:40
+	GetSystemInstanceList
+	OK
+	hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+	ascs, 01, 50113, 50114, 1, MESSAGESERVER, GREEN
+	ers, 10, 51013, 51014, 0.5, ENQREP, GREEN
+	app1, 11, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN
+	app2, 12, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, GRAY
+	`
+	oneAppInstanceListOutput = `04.03.2024 11:35:40
+	GetSystemInstanceList
+	OK
+	hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+	app1, 11, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN
+	`
+	twoAppInstanceListOutput = `04.03.2024 11:35:40
+	GetSystemInstanceList
+	OK
+	hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+	app1, 11, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN
+	app2, 12, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, GRAY
+	`
 )
 
 var (
@@ -262,6 +284,15 @@ var (
 				Type:       "I",
 			},
 		},
+	}
+	defaultNetweaverInstanceListResult = commandlineexecutor.Result{
+		StdOut: defaultNetweaverInstanceListOutput,
+	}
+	oneAppInstanceListResult = commandlineexecutor.Result{
+		StdOut: oneAppInstanceListOutput,
+	}
+	twoAppInstanceListResult = commandlineexecutor.Result{
+		StdOut: twoAppInstanceListOutput,
 	}
 )
 
@@ -1901,17 +1932,20 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // Failover config
 			}, {
-				Executable: "sudo", // hdbuserstore
-			}, {
-				Executable: "sudo", // hdbuserstore
+				Executable: "sudo", // Netweaver hosts
 			}, {
 				Executable: "sudo", // ABAP
+			}, {
+				Executable: "sudo", // hdbuserstore
+			}, {
+				Executable: "sudo", // hdbuserstore
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
+				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -1954,6 +1988,35 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "ascs",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ascs",
+					Number: "01",
+				}},
+			}, {
+				VirtualHostname: "ers",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ers",
+					Number: "10",
+				}},
+			}, {
+				VirtualHostname: "app1",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "11",
+				}},
+			}, {
+				VirtualHostname: "app2",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app2",
+					Number: "12",
+				}},
+			}},
 		}},
 	}, {
 		name: "twoNetweaver",
@@ -1968,6 +2031,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // Failover config
 			}, {
+				Executable: "sudo", // Netweaver hosts
+			}, {
 				Executable: "sudo", // ABAP
 			}, {
 				Executable: "sudo", // hdbuserstore
@@ -1982,6 +2047,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // Failover config
 			}, {
+				Executable: "sudo", // Netweaver hosts
+			}, {
 				Executable: "sudo", // ABAP
 			}, {
 				Executable: "sudo", // hdbuserstore
@@ -1993,6 +2060,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				netweaverMountResult,
 				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
+				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -2000,6 +2068,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				netweaverMountResult,
 				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
+				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -2044,6 +2113,35 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "ascs",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ascs",
+					Number: "01",
+				}},
+			}, {
+				VirtualHostname: "ers",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ers",
+					Number: "10",
+				}},
+			}, {
+				VirtualHostname: "app1",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "11",
+				}},
+			}, {
+				VirtualHostname: "app2",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app2",
+					Number: "12",
+				}},
+			}},
 		}, {
 			AppComponent: &spb.SapDiscovery_Component{
 				Sid: "def",
@@ -2063,6 +2161,35 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "ascs",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ascs",
+					Number: "01",
+				}},
+			}, {
+				VirtualHostname: "ers",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ers",
+					Number: "10",
+				}},
+			}, {
+				VirtualHostname: "app1",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "11",
+				}},
+			}, {
+				VirtualHostname: "app2",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app2",
+					Number: "12",
+				}},
+			}},
 		}},
 	}, {
 		name: "twoHANA",
@@ -2163,6 +2290,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "GetSystemInstanceList"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
@@ -2186,6 +2316,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				netweaverMountResult,
 				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
+				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -2230,6 +2361,35 @@ func TestDiscoverSAPApps(t *testing.T) {
 			DBOnHost:           true,
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "ascs",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ascs",
+					Number: "01",
+				}},
+			}, {
+				VirtualHostname: "ers",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ers",
+					Number: "10",
+				}},
+			}, {
+				VirtualHostname: "app1",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "11",
+				}},
+			}, {
+				VirtualHostname: "app2",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app2",
+					Number: "12",
+				}},
+			}},
 		}},
 	}, {
 		name: "hanaThenNetweaverConnected",
@@ -2272,6 +2432,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "GetSystemInstanceList"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
@@ -2288,6 +2451,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				netweaverMountResult,
 				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
+				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -2326,6 +2490,19 @@ func TestDiscoverSAPApps(t *testing.T) {
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "ascs",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+			}, {
+				VirtualHostname: "ers",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+			}, {
+				VirtualHostname: "app1",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+			}, {
+				VirtualHostname: "app2",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+			}},
 		}},
 	}, {
 		name: "netweaverThenHANANotConnected",
@@ -2358,6 +2535,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "GetSystemInstanceList"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
@@ -2381,6 +2561,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				netweaverMountResult,
 				defaultNetweaverKernelResult,
 				defaultFailoverConfigResult,
+				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
@@ -2417,110 +2598,35 @@ func TestDiscoverSAPApps(t *testing.T) {
 			DBOnHost:           false,
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
-		}, {
-			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "DB2",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
-					}},
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
-			},
-			DBOnHost: true,
-			DBHosts:  []string{"test-instance"},
-		}},
-	}, {
-		name: "hanaThenNetweaverNotConnected",
-		cp:   defaultCloudProperties,
-		sapInstances: &sappb.SAPInstances{
-			Instances: []*sappb.SAPInstance{
-				&sappb.SAPInstance{
-					Sapsid:         "DB2",
-					Type:           sappb.InstanceType_HANA,
-					InstanceNumber: "00",
-				},
-				&sappb.SAPInstance{
-					Sapsid:         "abc",
-					Type:           sappb.InstanceType_NETWEAVER,
-					InstanceNumber: "11",
-				},
-			},
-		},
-		executor: &fakeCommandExecutor{
-			params: []commandlineexecutor.Params{{
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "db2adm", "python", "/usr/sap/DB2/HDB00/exe/python_support/landscapeHostConfiguration.py"},
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "ascs",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ascs",
+					Number: "01",
+				}},
 			}, {
-				Executable: "df",
-				Args:       []string{"-h"},
+				VirtualHostname: "ers",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "ers",
+					Number: "10",
+				}},
 			}, {
-				Executable: "/usr/sap/DB2/HDB00/HDB",
-				Args:       []string{"version"},
-				User:       "db2adm",
+				VirtualHostname: "app1",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "11",
+				}},
 			}, {
-				Executable: "grep",
-				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
-			}, {
-				Executable: "df",
-				Args:       []string{"-h"},
-			}, {
-				Executable: "sudo", // Kernel version
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "11", "-function", "HAGetFailoverConfig"},
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
-			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
+				VirtualHostname: "app2",
+				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app2",
+					Number: "12",
+				}},
 			}},
-			results: []commandlineexecutor.Result{
-				landscapeSingleNodeResult,
-				hanaMountResult,
-				defaultHANAVersionResult,
-				defaultProfileResult,
-				netweaverMountResult,
-				defaultNetweaverKernelResult,
-				defaultFailoverConfigResult,
-				commandlineexecutor.Result{Error: errors.New("R3trans error")},
-				defaultUserStoreResult,
-				defaultUserStoreResult,
-			},
-		},
-		fileSystem: &fakefs.FileSystem{
-			MkDirErr:     []error{nil},
-			ChmodErr:     []error{nil},
-			ReadFileResp: [][]byte{[]byte{}},
-			ReadFileErr:  []error{nil},
-			RemoveAllErr: []error{nil},
-		},
-		want: []SapSystemDetails{{
-			AppComponent: &spb.SapDiscovery_Component{
-				Sid: "abc",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-						AscsUri:         "some-test-ascs",
-						NfsUri:          "1.2.3.4",
-						KernelVersion:   "SAP Kernel 785 Patch 100",
-					}},
-				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
-			},
-			AppOnHost: true,
-			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
-			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
-			},
-			DBOnHost:           false,
-			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: nil,
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DB2",
@@ -3962,6 +4068,189 @@ func TestMergeWorkloadProperties(t *testing.T) {
 			got := mergeWorkloadProperties(tc.old, tc.new)
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), protocmp.SortRepeatedFields(&spb.SapDiscovery_WorkloadProperties{}, "product_versions", "software_component_versions")); diff != "" {
 				t.Errorf("parseR3transOutput(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
+			}
+		})
+	}
+}
+
+func TestDiscoverNetweaverHosts(t *testing.T) {
+	tests := []struct {
+		name     string
+		app      *sappb.SAPInstance
+		exec     *fakeCommandExecutor
+		wantASCS []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance
+		wantERS  []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance
+		wantApp  []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance
+	}{{
+		name: "oneApp",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{
+				oneAppInstanceListResult,
+			},
+		},
+		wantApp: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "app1",
+			Number: "11",
+		}},
+	}, {
+		name: "twoApps",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{
+				twoAppInstanceListResult,
+			},
+		},
+		wantApp: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "app1",
+			Number: "11",
+		}, {
+			Name:   "app2",
+			Number: "12",
+		}},
+	}, {
+		name: "justASCS",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `04.03.2024 11:35:40
+				GetSystemInstanceList
+				OK
+				hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+				ascs, 01, 50113, 50114, 1, MESSAGESERVER, GREEN`,
+			}},
+		},
+		wantASCS: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "ascs",
+			Number: "01",
+		}},
+	}, {
+		name: "justERS",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `04.03.2024 11:35:40
+				GetSystemInstanceList
+				OK
+				hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+				ers, 10, 51013, 51014, 0.5, ENQREP, GREEN`,
+			}},
+		},
+		wantERS: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "ers",
+			Number: "10",
+		}},
+	}, {
+		name: "allParts",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultNetweaverInstanceListResult,
+			},
+		},
+		wantASCS: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "ascs",
+			Number: "01",
+		}},
+		wantERS: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "ers",
+			Number: "10",
+		}},
+		wantApp: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "app1",
+			Number: "11",
+		}, {
+			Name:   "app2",
+			Number: "12",
+		}},
+	}, {
+		name: "commandError",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdErr: "error",
+				Error:  errors.New("error"),
+			}},
+		},
+	}, {
+		name: "noOutput",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: "",
+			}},
+		},
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &SapDiscovery{
+				Execute: func(c context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+					return tc.exec.Execute(c, p)
+				},
+			}
+
+			got1, got2, got3 := d.discoverNetweaverHosts(ctx, tc.app)
+
+			if diff := cmp.Diff(tc.wantASCS, got1, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverNetweaverHosts(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
+			}
+			if diff := cmp.Diff(tc.wantERS, got2, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverNetweaverHosts(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
+			}
+			if diff := cmp.Diff(tc.wantApp, got3, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverNetweaverHosts(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
 			}
 		})
 	}

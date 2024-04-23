@@ -69,6 +69,7 @@ type SapSystemDetails struct {
 	AppHosts, DBHosts   []string
 	AppOnHost, DBOnHost bool
 	WorkloadProperties  *spb.SapDiscovery_WorkloadProperties
+	InstanceProperties  []*spb.SapDiscovery_Resource_InstanceProperties
 }
 
 func removeDuplicates[T comparable](s []T) []T {
@@ -163,6 +164,12 @@ func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	merged.AppHosts = removeDuplicates(append(merged.AppHosts, new.AppHosts...))
 	merged.DBHosts = removeDuplicates(append(merged.DBHosts, new.DBHosts...))
 	merged.WorkloadProperties = mergeWorkloadProperties(old.WorkloadProperties, new.WorkloadProperties)
+	for _, iProp := range new.InstanceProperties {
+		merged.InstanceProperties = append(merged.InstanceProperties, &spb.SapDiscovery_Resource_InstanceProperties{
+			VirtualHostname: iProp.VirtualHostname,
+			InstanceRole:    iProp.InstanceRole,
+		})
+	}
 
 	return merged
 }
@@ -252,6 +259,35 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		haNodes = nil
 	}
 
+	ascsHosts, ersHosts, appHosts := d.discoverNetweaverHosts(ctx, app)
+	log.CtxLogger(ctx).Debugw("ascsHosts", "ascsHosts", ascsHosts)
+	log.CtxLogger(ctx).Debugw("ersHosts", "ersHosts", ersHosts)
+	log.CtxLogger(ctx).Debugw("appHosts", "appHosts", appHosts)
+	var iProps []*spb.SapDiscovery_Resource_InstanceProperties
+	for _, a := range ascsHosts {
+		iProps = append(iProps, &spb.SapDiscovery_Resource_InstanceProperties{
+			VirtualHostname: a.Name,
+			InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+			AppInstances:    []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{a},
+		})
+	}
+
+	for _, e := range ersHosts {
+		iProps = append(iProps, &spb.SapDiscovery_Resource_InstanceProperties{
+			VirtualHostname: e.Name,
+			InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+			AppInstances:    []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{e},
+		})
+	}
+
+	for _, a := range appHosts {
+		iProps = append(iProps, &spb.SapDiscovery_Resource_InstanceProperties{
+			VirtualHostname: a.Name,
+			InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+			AppInstances:    []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{a},
+		})
+	}
+
 	details := SapSystemDetails{
 		AppComponent: &spb.SapDiscovery_Component{
 			Sid: app.Sapsid,
@@ -260,7 +296,8 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 			},
 			HaHosts: haNodes,
 		},
-		AppHosts: haNodes,
+		AppHosts:           haNodes,
+		InstanceProperties: iProps,
 	}
 
 	log.CtxLogger(ctx).Debugw("Checking config", "config", conf)
@@ -291,6 +328,50 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		details.DBComponent.TopologyType = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
 	}
 	return details
+}
+
+func (d *SapDiscovery) discoverNetweaverHosts(ctx context.Context, app *sappb.SAPInstance) ([]*spb.SapDiscovery_Resource_InstanceProperties_AppInstance, []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance, []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance) {
+	sidLower := strings.ToLower(app.Sapsid)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	cmd := commandlineexecutor.Params{
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, "sapcontrol", "-nr", app.InstanceNumber, "-function", "GetSystemInstanceList"},
+	}
+	res := d.Execute(ctx, cmd)
+	if res.Error != nil {
+		return nil, nil, nil
+	}
+	log.CtxLogger(ctx).Debugw("GetSystemInstanceList", "stdout", res.StdOut)
+	var ascsHosts, ersHosts, appHosts []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance
+
+	lines := strings.Split(res.StdOut, "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, ",")
+		if len(parts) < 6 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		if name == "hostname" {
+			continue
+		}
+		instanceNumber := strings.TrimSpace(parts[1])
+		features := strings.TrimSpace(parts[5])
+		log.CtxLogger(ctx).Debugw("features", "name", name, "features", features)
+		inst := &spb.SapDiscovery_Resource_InstanceProperties_AppInstance{
+			Name:   name,
+			Number: instanceNumber,
+		}
+		switch {
+		case strings.Contains(features, "MESSAGESERVER"):
+			ascsHosts = append(ascsHosts, inst)
+		case strings.Contains(features, "ENQREP"):
+			ersHosts = append(ersHosts, inst)
+		case strings.Contains(features, "ABAP"):
+			appHosts = append(appHosts, inst)
+		}
+	}
+
+	return ascsHosts, ersHosts, appHosts
 }
 
 func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid string) SapSystemDetails {

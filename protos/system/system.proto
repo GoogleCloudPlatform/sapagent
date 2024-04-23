@@ -126,6 +126,34 @@ message SapDiscovery {
 
       // The VM's instance number.
       uint64 instance_number = 3;
+
+      // Bitmask of instance roles.
+      enum InstanceRole {
+        // Unspecified instance role.
+        INSTANCE_ROLE_UNSPECIFIED = 0;
+        // Application central services.
+        INSTANCE_ROLE_ASCS = 1;
+        // Enqueue replication server.
+        INSTANCE_ROLE_ERS = 2;
+        // Application server.
+        INSTANCE_ROLE_APP_SERVER = 4;
+        // Database node.
+        INSTANCE_ROLE_DATABASE = 8;
+      }
+
+      // Bitmask of instance role, a resource may have multiple roles at once.
+      InstanceRole instance_role = 4;
+
+      // Fields to describe an SAP application server instance.
+      message AppInstance {
+        // Instance name of the SAP application instance.
+        string name = 1;
+        // Instance number of the SAP application instance.
+        string number = 2;
+      }
+
+      // App server instances on the host
+      repeated AppInstance app_instances = 5;
     }
 
     // A set of properties only applying to instance type resources.
