@@ -253,10 +253,10 @@ func waitForIndexServerToStop(ctx context.Context, user string, exec commandline
 }
 
 // WaitForIndexServerToStopWithRetry waits for the index server to stop with retry.
-// We sleep for 10s between retries a total 60 time => max_wait_duration =  10*60 = 10 minutes
+// We sleep for 10s between retries a total 90 time => max_wait_duration =  10*90 = 15 minutes
 func WaitForIndexServerToStopWithRetry(ctx context.Context, user string, exec commandlineexecutor.Execute) error {
 	constantBackoff := backoff.NewConstantBackOff(10 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 60), ctx)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 90), ctx)
 	return backoff.Retry(func() error { return waitForIndexServerToStop(ctx, user, exec) }, bo)
 }
 
