@@ -215,7 +215,7 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return err
 	}
 
-	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log\n\nNote: The default parameter values are optimized for performance\nFor more information: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/configure-backint-backup-recovery")
+	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log\n\nNote: The default parameter values are optimized for performance for most systems.\nFor more information: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/configure-backint-backup-recovery")
 	log.CtxLogger(ctx).Info("InstallBackint succeeded")
 	usagemetrics.Action(usagemetrics.InstallBackintFinished)
 	return nil
