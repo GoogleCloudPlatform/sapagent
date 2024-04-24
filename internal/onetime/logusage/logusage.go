@@ -38,7 +38,6 @@ type LogUsage struct {
 	name, agentVersion, agentPriorVersion, status, image string
 	action, usageError                                   int
 	help, version                                        bool
-	logLevel                                             string
 }
 
 // Name implements the subcommand interface for logusage.
@@ -51,7 +50,7 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 func (*LogUsage) Usage() string {
 	return `Usage: logusage [-name <tool or agent name>] [-av <tool or agent version>]
 	[-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]
-	[-image <image URL of the compute instance>] [-v] [-h] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-image <image URL of the compute instance>] [-v] [-h]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for logusage.
@@ -72,7 +71,6 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&l.image, "i", "", "the image url of the compute instance(optional), default value is retreived from metadata)")
 	fs.BoolVar(&l.help, "h", false, "help")
 	fs.BoolVar(&l.version, "v", false, "Displays the current version of the agent")
-	fs.StringVar(&l.logLevel, "loglevel", "", "Sets the logging level for a log file")
 }
 
 // Execute implements the subcommand interface for logusage.

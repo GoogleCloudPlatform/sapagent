@@ -90,7 +90,7 @@ func TestLogUsageHandler(t *testing.T) {
 		{
 			name: "AgentUpdatedWithoutPriorVersionAndAgentVersion",
 			logUsage: &LogUsage{
-				status:            "UPDATED",
+				status: "UPDATED",
 			},
 			want: subcommands.ExitUsageError,
 		},
@@ -319,7 +319,7 @@ func TestSetFlagsLogUsage(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	l.SetFlags(fs)
 
-	flags := []string{"name", "n", "agent-version", "av", "prior-version", "pv", "status", "s", "action", "a", "error", "e", "v", "h", "loglevel"}
+	flags := []string{"name", "n", "agent-version", "av", "prior-version", "pv", "status", "s", "action", "a", "error", "e", "v", "h"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {
