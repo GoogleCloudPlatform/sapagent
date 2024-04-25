@@ -32,7 +32,7 @@ var (
 	googleX4Conf []byte
 
 	systemConf       = []string{"DefaultTimeoutStartSec=300s", "DefaultTimeoutStopSec=300s", "DefaultTasksMax=infinity"}
-	logindConf       = []string{"UserTasksMax=infinity"}
+	logindConf       = []string{"UserTasksMax="}
 	modprobeConf     = []byte("blacklist idxd\nblacklist hpilo\nblacklist acpi_cpufreq\nblacklist qat_4xxx\nblacklist intel_qat\n")
 	grubLinuxDefault = `GRUB_CMDLINE_LINUX_DEFAULT="tsc=nowatchdog add_efi_memmap udev.children-max=512 nmi_watchdog=0 watchdog_thresh=60 mce=2 console=ttyS0,115200 earlyprintk=ttyS0,115200 uv_nmi.action=kdump bau=0 pci=nobar transparent_hugepage=never numa_balancing=disable"`
 	grubLinuxLabel   = "GRUB_ENABLE_LINUX_LABEL=true"
@@ -42,13 +42,6 @@ var (
 // configureX4 checks and applies OS settings on X4.
 // Returns true if a reboot is required.
 func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
-	if c.machineType == "x4-megamem-1920" || c.machineType == "x4-megamem-1440" {
-		processingSystem := "OLTP"
-		if c.OverrideHyperThreading {
-			processingSystem = "OLAP"
-		}
-		log.CtxLogger(ctx).Infof("%s detected, applying configuration for %s workloads.", c.machineType, processingSystem)
-	}
 	rebootSLES, err := c.configureX4SLES(ctx)
 	if err != nil {
 		return false, err
@@ -59,7 +52,7 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	rebootSystemdLogin, err := c.checkAndRegenerateLines(ctx, "/etc/systemd/logind.conf", logindConf)
+	rebootSystemdLogin, err := c.removeLines(ctx, "/etc/systemd/logind.conf", logindConf)
 	if err != nil {
 		return false, err
 	}
@@ -73,13 +66,21 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 			return false, fmt.Errorf("'usr/bin/dracut --force' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 		}
 	}
-	if (c.machineType == "x4-megamem-1920" || c.machineType == "x4-megamem-1440") && !c.OverrideHyperThreading {
-		log.CtxLogger(ctx).Infof("%s detected, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", c.machineType)
+	if c.HyperThreading == hyperThreadingOff || (c.machineType == "x4-megamem-1920" && c.HyperThreading == hyperThreadingDefault) {
+		log.CtxLogger(ctx).Infow("Hyper threading disabled, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.machineType, "hyperThreading", c.HyperThreading)
 		grubLinuxDefault = strings.TrimSuffix(grubLinuxDefault, `"`) + ` nosmt"`
 	}
 	rebootGrub, err := c.checkAndRegenerateLines(ctx, "/etc/default/grub", []string{grubLinuxDefault, grubLinuxLabel, grubDevice})
 	if err != nil {
 		return false, err
+	}
+	if c.HyperThreading == hyperThreadingOn || (c.machineType != "x4-megamem-1920" && c.HyperThreading == hyperThreadingDefault) {
+		log.CtxLogger(ctx).Infow("Hyper threading enabled, ensuring 'nosmt' is removed from 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.machineType, "hyperThreading", c.HyperThreading)
+		removeNosmt, err := c.removeValues(ctx, "/etc/default/grub", []string{"GRUB_CMDLINE_LINUX_DEFAULT=nosmt"})
+		if err != nil {
+			return false, err
+		}
+		rebootGrub = rebootGrub || removeNosmt
 	}
 	if rebootGrub {
 		if c.Check {

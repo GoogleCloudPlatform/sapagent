@@ -57,7 +57,7 @@ const (
 // Diagnose has args for performance diagnostics OTE subcommands.
 type Diagnose struct {
 	logLevel, path                      string
-	overrideHyperThreading              bool
+	hyperThreading                      string
 	paramFile, testBucket, resultBucket string
 	scope, bundleName                   string
 	help, version                       bool
@@ -136,7 +136,7 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&d.resultBucket, "result-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")
 	fs.StringVar(&d.bundleName, "bundle-name", "", "Sets the name for generated bundle. (optional) Default: performance-diagnostics-<current_timestamp>")
 	fs.StringVar(&d.path, "path", "", "Sets the path to save the bundle. (optional) Default: /tmp/google-cloud-sap-agent/")
-	fs.BoolVar(&d.overrideHyperThreading, "override-hyper-threading", false, "If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub' (optional flag, should be true if processing system is OLAP)")
+	fs.StringVar(&d.hyperThreading, "hyper-threading", "default", "Sets hyper threading settings for X4 machines")
 	fs.StringVar(&d.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
 	fs.BoolVar(&d.help, "help", false, "Display help.")
 	fs.BoolVar(&d.help, "h", false, "Display help.")
@@ -281,10 +281,10 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 		InvokedBy: d.Name(),
 	}
 	ci := &configureinstance.ConfigureInstance{
-		Check:                  true,
-		ExecuteFunc:            exec,
-		OverrideHyperThreading: d.overrideHyperThreading,
-		IIOTEParams:            ciOTEParams,
+		Check:          true,
+		ExecuteFunc:    exec,
+		HyperThreading: d.hyperThreading,
+		IIOTEParams:    ciOTEParams,
 	}
 	return ci.Execute(ctx, f)
 }

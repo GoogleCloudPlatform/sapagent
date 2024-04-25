@@ -177,7 +177,7 @@ func TestSetFlags(t *testing.T) {
 
 	flags := []string{
 		"scope", "test-bucket", "param-file", "result-bucket", "bundle-name",
-		"override-hyper-threading", "path", "loglevel", "help", "h", "version", "v",
+		"hyper-threading", "path", "loglevel", "help", "h", "version", "v",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

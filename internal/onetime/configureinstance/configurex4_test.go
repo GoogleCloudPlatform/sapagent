@@ -35,9 +35,8 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "Megamem1920FailedToReadReleaseFile",
 			c: ConfigureInstance{
-				readFile:               defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
-				machineType:            "x4-megamem-1920",
-				OverrideHyperThreading: true,
+				readFile:    defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				machineType: "x4-megamem-1920",
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -86,11 +85,24 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateGrub",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
-				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
-				writeFile:   defaultWriteFile(5),
-				Apply:       true,
-				machineType: "x4-megamem-1920",
+				readFile:       defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
+				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
+				writeFile:      defaultWriteFile(5),
+				Apply:          true,
+				machineType:    "x4-megamem-1920",
+				HyperThreading: hyperThreadingDefault,
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailRemoveNosmt",
+			c: ConfigureInstance{
+				readFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", ""}),
+				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
+				writeFile:      defaultWriteFile(5),
+				Apply:          true,
+				HyperThreading: hyperThreadingOn,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,

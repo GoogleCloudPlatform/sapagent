@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"flag"
+	"golang.org/x/exp/slices"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -43,12 +44,18 @@ type (
 	readFileFunc func(string) ([]byte, error)
 )
 
+const (
+	hyperThreadingDefault = "default"
+	hyperThreadingOn      = "on"
+	hyperThreadingOff     = "off"
+)
+
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
-	Check, Apply           bool
-	machineType            string
-	OverrideHyperThreading bool
-	help, version          bool
+	Check, Apply   bool
+	machineType    string
+	HyperThreading string
+	help, version  bool
 
 	writeFile   writeFileFunc
 	readFile    readFileFunc
@@ -73,8 +80,9 @@ func (*ConfigureInstance) Usage() string {
     -apply	Make changes as necessary to the settings
 
   Args (optional):
-    [-overrideType="type"]		Override the machine type (by default this is retrieved from metadata)
-    [-overrideHyperThreading=true]	If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'
+    [-overrideType="type"]	Override the machine type (by default this is retrieved from metadata)
+    [-hyperThreading="default"]	Sets hyper threading settings for X4 machines
+                              	Possible values: ["default", "on", "off"]
 
   Global options:
     [-h] [-v]` + "\n"
@@ -85,7 +93,7 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.Check, "check", false, "Check settings and print errors, but do not apply any changes")
 	fs.BoolVar(&c.Apply, "apply", false, "Apply changes as necessary to the settings")
 	fs.StringVar(&c.machineType, "overrideType", "", "Bypass the metadata machine type lookup")
-	fs.BoolVar(&c.OverrideHyperThreading, "overrideHyperThreading", false, "If true, removes 'nosmt' from the 'GRUB_CMDLINE_LINUX_DEFAULT' in '/etc/default/grub'")
+	fs.StringVar(&c.HyperThreading, "hyperThreading", "default", "Sets hyper threading settings for X4 machines")
 	fs.BoolVar(&c.help, "h", false, "Displays help")
 	fs.BoolVar(&c.version, "v", false, "Displays the current version of the agent")
 }
@@ -112,6 +120,11 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	if c.Check && c.Apply {
 		fmt.Printf("Only one of -check or -apply must be specified.\n%s\n", c.Usage())
 		log.CtxLogger(ctx).Errorf("Only one of -check or -apply must be specified")
+		return subcommands.ExitUsageError
+	}
+	if !slices.Contains([]string{hyperThreadingDefault, hyperThreadingOn, hyperThreadingOff}, c.HyperThreading) {
+		fmt.Printf(`hyperThreading must be one of: ["default", "on", "off"]`+"\n%s\n", c.Usage())
+		log.CtxLogger(ctx).Errorw(`hyperThreading must be one of: ["default", "on", "off"]`, "hyperThreading", c.HyperThreading)
 		return subcommands.ExitUsageError
 	}
 	if c.machineType == "" {
@@ -173,6 +186,88 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 func LogToBoth(ctx context.Context, msg string) {
 	fmt.Println(msg)
 	log.CtxLogger(ctx).Info(msg)
+}
+
+// removeLines verifies lines of filePath and removes any lines containing
+// the substrings present in removeLines. Returns true if any line is removed.
+// removeLines should be formatted with the longest substring key to be
+// removed to avoid removing other lines.
+func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, removeLines []string) (bool, error) {
+	fileLines, err := c.readFile(filePath)
+	if err != nil {
+		return false, err
+	}
+	regenerate := false
+	gotLines := strings.Split(string(fileLines), "\n")
+	for _, remove := range removeLines {
+		for i, got := range gotLines {
+			if strings.Contains(got, remove) {
+				log.CtxLogger(ctx).Infof("%s is out of date. Line: '%s' should be removed", filePath, got)
+				gotLines[i] = ""
+				regenerate = true
+			}
+		}
+	}
+
+	if regenerate {
+		if c.Check {
+			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
+		} else {
+			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)
+			if err := c.writeFile(filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
+	}
+
+	log.CtxLogger(ctx).Infof("%s is up to date", filePath)
+	return false, nil
+}
+
+// removeValues verifies lines of filePath and removes any values from the
+// key if they are present. Returns true if any line is regenerated.
+// removeLines should be formatted as a single key/value: 'key=value',
+// where the value will be removed from the key.
+func (c *ConfigureInstance) removeValues(ctx context.Context, filePath string, removeLines []string) (bool, error) {
+	fileLines, err := c.readFile(filePath)
+	if err != nil {
+		return false, err
+	}
+	regenerate := false
+	gotLines := strings.Split(string(fileLines), "\n")
+	for _, remove := range removeLines {
+		split := strings.SplitN(remove, "=", 2)
+		if len(split) != 2 {
+			return false, fmt.Errorf("removeLines should be formatted as 'key=value', got: '%s'", remove)
+		}
+		key := split[0]
+		value := split[1]
+		for i, got := range gotLines {
+			if strings.Contains(got, key) && strings.Contains(got, value) {
+				log.CtxLogger(ctx).Infof("%s is out of date. Value: '%s' should be removed from Key: '%s', Got: %s", filePath, value, key, got)
+				// Handle the replace if it's the first value or later in the list.
+				gotLines[i] = strings.ReplaceAll(gotLines[i], " "+value, "")
+				gotLines[i] = strings.ReplaceAll(gotLines[i], "="+value, "=")
+				regenerate = true
+			}
+		}
+	}
+
+	if regenerate {
+		if c.Check {
+			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
+		} else {
+			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)
+			if err := c.writeFile(filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
+	}
+
+	log.CtxLogger(ctx).Infof("%s is up to date", filePath)
+	return false, nil
 }
 
 // checkAndRegenerateFile verifies the contents of filePath and regenerates the
