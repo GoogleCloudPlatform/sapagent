@@ -21,21 +21,83 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"flag"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"google.golang.org/api/option"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	s "cloud.google.com/go/storage"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-var defaultCloudProperties = &ipb.CloudProperties{
-	ProjectId:    "default-project",
-	InstanceName: "default-instance",
+var (
+	fakeServer = fakestorage.NewServer([]fakestorage.Object{
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
+				Name:       "object.txt",
+			},
+			Content: []byte("test content"),
+		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket",
+				// The backup object name is in the format <userID>/<fileName>/<externalBackupID>.bak
+				Name: "test@TST/object.txt/12345.bak",
+			},
+			Content: []byte("test content"),
+		},
+	})
+	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
+		return fakeServer.Client(), nil
+	}
+	defaultCloudProperties = &ipb.CloudProperties{
+		ProjectId:    "default-project",
+		InstanceName: "default-instance",
+	}
+)
+
+type fakeBucketHandle struct {
+	attrs *s.BucketAttrs
+	err   error
+}
+
+func (f *fakeBucketHandle) Attrs(ctx context.Context) (*s.BucketAttrs, error) {
+	return f.attrs, f.err
+}
+
+func defaultParametersFile(t *testing.T) *os.File {
+	filePath := t.TempDir() + "/parameters.json"
+	f, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("os.Create(%v) failed: %v", filePath, err)
+	}
+	f.WriteString(`{
+		"bucket": "test-bucket",
+		"retries": 5,
+		"parallel_streams": 2,
+		"buffer_size_mb": 100,
+		"encryption_key": "",
+		"compress": false,
+		"kms_key": "",
+		"service_account_key": "",
+		"rate_limit_mb": 0,
+		"file_read_timeout_ms": 1000,
+		"dump_data": false,
+		"log_level": "INFO",
+		"log_delay_sec": 3
+	}`)
+	return f
 }
 
 func TestExecute(t *testing.T) {
@@ -257,48 +319,165 @@ func TestListOperations(t *testing.T) {
 	}
 }
 
+func TestCheckRetention(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       *Diagnose
+		client  storage.Client
+		ctb     connectToBucket
+		config  *bpb.BackintConfiguration
+		wantErr error
+	}{
+		{
+			name:    "NoBucket",
+			d:       &Diagnose{},
+			config:  &bpb.BackintConfiguration{},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ErrorConnectingToBucket",
+			d: &Diagnose{
+				testBucket: "test-bucket-1",
+			},
+			config: &bpb.BackintConfiguration{
+				Bucket: "test-bucket",
+			},
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool) {
+				return nil, false
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ConfigBucketHasRetention",
+			d:    &Diagnose{},
+			config: &bpb.BackintConfiguration{
+				Bucket: "test-bucket",
+			},
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool) {
+				fbh := &fakeBucketHandle{
+					attrs: &s.BucketAttrs{
+						Name: "test-bucket",
+						RetentionPolicy: &s.RetentionPolicy{
+							RetentionPeriod: time.Nanosecond,
+						},
+					},
+				}
+				return fbh, true
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "TestBucketPresentHasNoRetention",
+			d: &Diagnose{
+				testBucket: "test-bucket-1",
+			},
+			config: &bpb.BackintConfiguration{
+				Bucket: "test-bucket",
+			},
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool) {
+				fbh := &fakeBucketHandle{
+					attrs: &s.BucketAttrs{
+						Name: "test-bucket-1",
+					},
+				}
+				return fbh, true
+			},
+			wantErr: nil,
+		},
+		{
+			name: "TestBucketPresentHasRetention",
+			d: &Diagnose{
+				testBucket: "test-bucket-1",
+			},
+			config: &bpb.BackintConfiguration{
+				Bucket: "test-bucket",
+			},
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool) {
+				fbh := &fakeBucketHandle{
+					attrs: &s.BucketAttrs{
+						Name: "test-bucket-1",
+						RetentionPolicy: &s.RetentionPolicy{
+							RetentionPeriod: time.Nanosecond,
+						},
+					},
+				}
+				return fbh, true
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoRetention1",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			config: &bpb.BackintConfiguration{
+				Bucket: "test-bucket",
+			},
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool) {
+				fbh := &fakeBucketHandle{
+					attrs: &s.BucketAttrs{
+						Name: "test-bucket",
+					},
+				}
+				return fbh, true
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NoRetention2",
+			d: &Diagnose{
+				paramFile:  "/tmp/param_file.json",
+				testBucket: "test-bucket-1",
+			},
+			config: &bpb.BackintConfiguration{
+				Bucket: "test-bucket",
+			},
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool) {
+				fbh := &fakeBucketHandle{
+					attrs: &s.BucketAttrs{
+						Name: "test-bucket",
+					},
+				}
+				return fbh, true
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.d.checkRetention(ctx, tc.client, tc.ctb, tc.config)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("checkRetention(%v, %v, %v) returned error: %v, want error: %v", tc.client, tc.ctb, tc.config, gotErr, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestSetBucket(t *testing.T) {
 	tests := []struct {
 		name       string
 		d          *Diagnose
-		readFunc   ReadConfigFile
+		config     *bpb.BackintConfiguration
 		fs         filesystem.FileSystem
 		wantBucket string
 		wantErr    error
 	}{
 		{
-			name: "ReadError",
-			d:    &Diagnose{},
-			readFunc: func(string) ([]byte, error) {
-				return nil, fmt.Errorf("error")
-			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name: "UnmarshalError",
-			d:    &Diagnose{},
-			readFunc: func(string) ([]byte, error) {
-				fileContent := `{"test_bucket": "test_bucket", "enc": "true"}`
-				return []byte(fileContent), nil
-			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name: "NoBucket",
-			d:    &Diagnose{},
-			readFunc: func(string) ([]byte, error) {
-				return []byte{}, nil
-			},
+			name:    "NoBucket",
+			d:       &Diagnose{},
+			config:  &bpb.BackintConfiguration{},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "TestBucketEmpty",
 			d:    &Diagnose{},
-			readFunc: func(string) ([]byte, error) {
-				fileContent := `{"bucket": "test_bucket"}`
-				return []byte(fileContent), nil
+			config: &bpb.BackintConfiguration{
+				Bucket: "test_bucket",
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: nil,
 		},
 		{
 			name: "TestBucketPresent",
@@ -307,9 +486,8 @@ func TestSetBucket(t *testing.T) {
 				path:       "/tmp/",
 				paramFile:  "/param_file.json",
 			},
-			readFunc: func(string) ([]byte, error) {
-				fileContent := `{"bucket": "test_bucket2"}`
-				return []byte(fileContent), nil
+			config: &bpb.BackintConfiguration{
+				Bucket: "test_bucket",
 			},
 			fs:         filesystem.Helper{},
 			wantBucket: "test_bucket1",
@@ -320,9 +498,9 @@ func TestSetBucket(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotErr := tc.d.setBucket(ctx, tc.readFunc, tc.fs)
+			gotErr := tc.d.setBucket(ctx, tc.fs, tc.config)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("setBucket(%v, %v) returned error: %v, want error: %v", tc.readFunc, tc.fs, gotErr, tc.wantErr)
+				t.Errorf("setBucket(%v, %v) returned error: %v, want error: %v", tc.fs, tc.config, gotErr, tc.wantErr)
 			}
 
 			if tc.wantBucket != "" {
@@ -335,7 +513,7 @@ func TestSetBucket(t *testing.T) {
 					t.Fatalf("configuration.Unmarshal(%s) failed: %v", tc.d.paramFile, err)
 				}
 				if config.GetBucket() != tc.wantBucket {
-					t.Errorf("setBucket(%v, %v) = %v, want %v", tc.readFunc, tc.fs, config.GetBucket(), tc.wantBucket)
+					t.Errorf("setBucket(%v, %v) = %v, want %v", tc.fs, tc.config, config.GetBucket(), tc.wantBucket)
 				}
 			}
 		})
@@ -444,6 +622,74 @@ func TestGetParamFileName(t *testing.T) {
 			got := test.d.getParamFileName()
 			if got != test.want {
 				t.Errorf("getParamFileName(%#v) = %s, want %s", test.d, got, test.want)
+			}
+		})
+	}
+}
+
+func TestUnmarshalBackintConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		d          *Diagnose
+		read       ReadConfigFile
+		wantConfig *bpb.BackintConfiguration
+		wantErr    error
+	}{
+		{
+			name: "ErrorRead",
+			d:    &Diagnose{},
+			read: func(string) ([]byte, error) {
+				return nil, fmt.Errorf("error")
+			},
+			wantConfig: nil,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "EmptyParamFile",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				return []byte{}, nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "MalformedConfig",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				fileContent := `{"test_bucket": "test_bucket", "enc": "true"}`
+				return []byte(fileContent), nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ValidConfig",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				fileContent := `{"bucket": "test_bucket"}`
+				return []byte(fileContent), nil
+			},
+			wantConfig: &bpb.BackintConfiguration{
+				Bucket: "test_bucket",
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.d.unmarshalBackintConfig(ctx, tc.read)
+			if diff := cmp.Diff(tc.wantConfig, got, protocmp.Transform()); diff != "" {
+				t.Errorf("unmarshalBackintConfig(%v) returned an unexpected diff (-want +got): %v", tc.read, diff)
+			}
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("unmarshalBackintConfig(%v) returned an unexpected error: %v", tc.read, err)
 			}
 		})
 	}

@@ -88,7 +88,6 @@ func registerSubCommands() {
 		&hanachangedisktype.HanaChangeDiskType{},
 		&reliability.Reliability{},
 		&gcbdr.Discovery{FSH: filesystem.Helper{}},
-		&performancediagnostics.Diagnose{},
 		subcommands.HelpCommand(), // Implement "help"
 	}
 	for _, command := range scs {

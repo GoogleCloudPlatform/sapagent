@@ -39,11 +39,14 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	s "cloud.google.com/go/storage"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
@@ -66,6 +69,25 @@ type ReadConfigFile func(string) ([]byte, error)
 // moveFiles is a struct to store the old and new path of a file.
 type moveFiles struct {
 	oldPath, newPath string
+}
+
+// connectToBucket abstracts storage.ConnectToBucket function for testability.
+type connectToBucket func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool)
+
+// attributes interface provides abstraction for ease of testing.
+type attributes interface {
+	Attrs(ctx context.Context) (attrs *s.BucketAttrs, err error)
+}
+
+// options is a struct to store the parameters required for the OTE subcommand.
+type options struct {
+	read   ReadConfigFile
+	fs     filesystem.FileSystem
+	exec   commandlineexecutor.Execute
+	z      zipper.Zipper
+	lp     log.Parameters
+	cp     *ipb.CloudProperties
+	config *bpb.BackintConfiguration
 }
 
 type zipperHelper struct{}
@@ -138,27 +160,42 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 	if !completed {
 		return exitStatus
 	}
-	return d.diagnosticsHandler(ctx, fs, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{}, lp, cp)
+	opts := &options{
+		read: os.ReadFile,
+		fs:   filesystem.Helper{},
+		exec: commandlineexecutor.ExecuteCommand,
+		z:    zipperHelper{},
+		lp:   lp,
+		cp:   cp,
+	}
+	return d.diagnosticsHandler(ctx, fs, opts)
 }
 
 // diagnosticsHandler is the main handler for the performance diagnostics OTE subcommand.
-func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper, lp log.Parameters, cp *ipb.CloudProperties) subcommands.ExitStatus {
+func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet, opts *options) subcommands.ExitStatus {
 	if !d.validateParams(ctx, flagSet) {
 		return subcommands.ExitUsageError
 	}
+	config, err := d.unmarshalBackintConfig(ctx, os.ReadFile)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole("error while unmarshalling backint config, failed with error %v", err)
+		return subcommands.ExitFailure
+	}
+	opts.config = config
+
 	destFilesPath := path.Join(d.path, d.bundleName)
-	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
+	if err := opts.fs.MkdirAll(destFilesPath, 0777); err != nil {
 		onetime.LogErrorToFileAndConsole("error while making directory: "+destFilesPath, err)
 		return subcommands.ExitFailure
 	}
 	onetime.LogMessageToFileAndConsole("Collecting Performance Diagnostics Report for Agent for SAP...")
-	errsList := performDiagnosticsOps(ctx, d, flagSet, exec, fs, z, lp, cp)
+	errsList := performDiagnosticsOps(ctx, d, flagSet, opts)
 
 	oteLog := moveFiles{
 		oldPath: fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", d.Name()),
 		newPath: path.Join(d.path, d.bundleName, fmt.Sprintf("%s.log", d.Name())),
 	}
-	if err := addToBundle(ctx, []moveFiles{oteLog}, fs); err != nil {
+	if err := addToBundle(ctx, []moveFiles{oteLog}, opts.fs); err != nil {
 		errsList = append(errsList, fmt.Errorf("failure in adding performance diagnostics OTE to bundle, failed with error %v", err))
 	}
 
@@ -173,10 +210,10 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 }
 
 // performDiagnosticsOps performs the operations requested by the user.
-func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagSet, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper, lp log.Parameters, cp *ipb.CloudProperties) []error {
+func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagSet, opts *options) []error {
 	errsList := []error{}
 	// ConfigureInstance OTE subcommand needs to be run in every case.
-	exitStatus := d.runConfigureInstanceOTE(ctx, flagSet, exec, lp, cp)
+	exitStatus := d.runConfigureInstanceOTE(ctx, flagSet, opts.exec, opts.lp, opts.cp)
 	if exitStatus != subcommands.ExitSuccess {
 		errsList = append(errsList, fmt.Errorf("failure in executing ConfigureInstance OTE, failed with exist status %d", exitStatus))
 	}
@@ -185,12 +222,12 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 	for op := range ops {
 		if op == "all" {
 			// Perform all operations
-			if err := d.backup(ctx, fs, lp, cp); err != nil {
+			if err := d.backup(ctx, opts); err != nil {
 				errsList = append(errsList, fmt.Errorf("failure in executing backup diagnostic operations, failed with error %v", err))
 			}
 		} else if op == "backup" {
 			// Perform backup operation
-			if err := d.backup(ctx, fs, lp, cp); err != nil {
+			if err := d.backup(ctx, opts); err != nil {
 				errsList = append(errsList, fmt.Errorf("failure in executing backup diagnostic operations, failed with error %v", err))
 			}
 		} else if op == "io" {
@@ -274,9 +311,14 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 }
 
 // backup performs the backup operation.
-func (d *Diagnose) backup(ctx context.Context, fs filesystem.FileSystem, lp log.Parameters, cp *ipb.CloudProperties) error {
+func (d *Diagnose) backup(ctx context.Context, opts *options) error {
+	// Check for retention
+	if err := d.checkRetention(ctx, s.NewClient, getBucket, opts.config); err != nil {
+		return err
+	}
+
 	// Perform backint operation
-	if err := d.runBackint(ctx, fs, lp, cp); err != nil {
+	if err := d.runBackint(ctx, opts); err != nil {
 		return err
 	}
 	// Perform gsutil operation
@@ -285,9 +327,55 @@ func (d *Diagnose) backup(ctx context.Context, fs filesystem.FileSystem, lp log.
 	return nil
 }
 
+// getBucket is an abstraction of storage.ConnectToBucket() for ease of testing.
+func getBucket(ctx context.Context, connectParams *storage.ConnectParameters) (attributes, bool) {
+	return storage.ConnectToBucket(ctx, connectParams)
+}
+
+func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ctb connectToBucket, config *bpb.BackintConfiguration) error {
+	bucket := config.GetBucket()
+	if d.testBucket != "" {
+		bucket = d.testBucket
+	}
+	if bucket == "" {
+		onetime.LogErrorToFileAndConsole("error determining bucket", fmt.Errorf("no bucket provided, either in param-file or as test-bucket"))
+		return fmt.Errorf("no bucket provided, either in param-file or as test-bucket")
+	}
+
+	connectParams := &storage.ConnectParameters{
+		StorageClient:    client,
+		ServiceAccount:   config.GetServiceAccountKey(),
+		BucketName:       bucket,
+		UserAgentSuffix:  "Performance Diagnostics",
+		VerifyConnection: true,
+		MaxRetries:       config.GetRetries(),
+		Endpoint:         config.GetClientEndpoint(),
+	}
+
+	var bucketHandle attributes
+	var ok bool
+	if bucketHandle, ok = ctb(ctx, connectParams); !ok {
+		err := errors.New("error establishing connection to bucket, please check the logs")
+		onetime.LogErrorToFileAndConsole("failed connecting to bucket", err)
+		return err
+	}
+
+	attrs, err := bucketHandle.Attrs(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("failed to get bucket attributes, ensure the bucket exists and you have permission to access it", "error", err)
+		return err
+	}
+	if attrs.RetentionPolicy != nil {
+		err := errors.New("retention policy is set, backup operation will fail; please provide a bucket without retention policy")
+		onetime.LogErrorToFileAndConsole("Error performing backup operation", err)
+		return err
+	}
+	return nil
+}
+
 // runBackint runs the diagnose function of Backint OTE.
-func (d *Diagnose) runBackint(ctx context.Context, fs filesystem.FileSystem, lp log.Parameters, cp *ipb.CloudProperties) error {
-	if err := d.setBucket(ctx, os.ReadFile, fs); err != nil {
+func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
+	if err := d.setBucket(ctx, opts.fs, opts.config); err != nil {
 		return err
 	}
 
@@ -298,16 +386,16 @@ func (d *Diagnose) runBackint(ctx context.Context, fs filesystem.FileSystem, lp 
 		OutFile:   path.Join(d.path, d.bundleName, "backint-output.log"),
 		IIOTEParams: &onetime.InternallyInvokedOTE{
 			InvokedBy: "performance-diagnostics-backint",
-			Lp:        lp,
-			Cp:        cp,
+			Lp:        opts.lp,
+			Cp:        opts.cp,
 		},
 	}
 	if res := backintParams.Execute(ctx, &flag.FlagSet{}); res != subcommands.ExitSuccess {
-		onetime.SetupOneTimeLogging(lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
+		onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
 		onetime.LogMessageToFileAndConsole("Error while executing backint")
 		return fmt.Errorf("error while executing backint")
 	}
-	onetime.SetupOneTimeLogging(lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
+	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
 
 	paths := []moveFiles{
 		{
@@ -319,7 +407,7 @@ func (d *Diagnose) runBackint(ctx context.Context, fs filesystem.FileSystem, lp 
 			newPath: path.Join(d.path, d.bundleName, d.getParamFileName()),
 		},
 	}
-	if err := addToBundle(ctx, paths, fs); err != nil {
+	if err := addToBundle(ctx, paths, opts.fs); err != nil {
 		return err
 	}
 
@@ -327,7 +415,7 @@ func (d *Diagnose) runBackint(ctx context.Context, fs filesystem.FileSystem, lp 
 	// backint operation without modifying original parameters file.
 	// Deleting this temporary file.
 	if d.testBucket != "" {
-		if err := fs.RemoveAll(d.paramFile); err != nil {
+		if err := opts.fs.RemoveAll(d.paramFile); err != nil {
 			log.CtxLogger(ctx).Errorw("Error deleting temporary parameter file created for backint", "err", err)
 			return err
 		}
@@ -337,20 +425,7 @@ func (d *Diagnose) runBackint(ctx context.Context, fs filesystem.FileSystem, lp 
 }
 
 // setBucket sets the bucket in the parameter file for backint operation.
-func (d *Diagnose) setBucket(ctx context.Context, read ReadConfigFile, fs filesystem.FileSystem) error {
-	content, err := read(d.paramFile)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
-		return err
-	}
-
-	config, err := configuration.Unmarshal(d.paramFile, content)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error unmarshalling parameters file", "err", err)
-		return err
-	}
-
-	// If testBucket is not empty, then it will overwrite the bucket provided in paramFile.
+func (d *Diagnose) setBucket(ctx context.Context, fs filesystem.FileSystem, config *bpb.BackintConfiguration) error { // If testBucket is not empty, then it will overwrite the bucket provided in paramFile.
 	if d.testBucket != "" {
 		config.Bucket = d.testBucket
 
@@ -413,6 +488,26 @@ func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSyste
 		return fmt.Errorf("error while adding files to bundle")
 	}
 	return nil
+}
+
+func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
+	content, err := read(d.paramFile)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
+		return nil, err
+	}
+	if content == nil {
+		err := errors.New("param file is empty")
+		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
+		return nil, err
+	}
+
+	config, err := configuration.Unmarshal(d.paramFile, content)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error unmarshalling parameters file", "err", err)
+		return nil, err
+	}
+	return config, nil
 }
 
 // getParamFileName extracts the name of the parameter file from the path provided.
