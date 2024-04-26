@@ -23,6 +23,7 @@ import (
 
 	client "github.com/GoogleCloudPlatform/agentcommunication_client"
 	"google.golang.org/api/option"
+	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -46,10 +47,10 @@ var createConnection = func(ctx context.Context, channel string, regional bool, 
 	return client.CreateConnection(ctx, channel, regional, opts...)
 }
 
-func sendStatusMessage(ctx context.Context, msgID string, body string, status string, conn *client.Connection) error {
+func sendStatusMessage(ctx context.Context, msgID string, body *anypb.Any, status string, conn *client.Connection) error {
 	labels := map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": msgID, "state": status}
-	messageToSend := &acpb.MessageBody{Labels: labels, Body: &anypb.Any{Value: []byte(body)}}
-	log.CtxLogger(ctx).Infow("Sending status message to UAP.", "messageToSend", messageToSend)
+	messageToSend := &acpb.MessageBody{Labels: labels, Body: body}
+	log.CtxLogger(ctx).Debugw("Sending status message to UAP.", "messageToSend", messageToSend)
 	if err := sendMessage(conn, messageToSend); err != nil {
 		return fmt.Errorf("Error sending status message to UAP: %v", err)
 	}
@@ -57,13 +58,13 @@ func sendStatusMessage(ctx context.Context, msgID string, body string, status st
 }
 
 func listenForMessages(ctx context.Context, conn *client.Connection) *acpb.MessageBody {
-	log.CtxLogger(ctx).Info("Listening for messages from UAP Highway.")
+	log.CtxLogger(ctx).Debugw("Listening for messages from UAP Highway.")
 	msg, err := receive(conn)
 	if err != nil {
 		log.CtxLogger(ctx).Error(err)
 		return nil
 	}
-	log.CtxLogger(ctx).Infow("UAP Message received.", "msg", msg)
+	log.CtxLogger(ctx).Debugw("UAP Message received.", "msg", msg)
 	return msg
 }
 
@@ -87,7 +88,7 @@ func establishConnection(ctx context.Context, endpoint string, channel string) *
 // "channel" is the registered channel name to be used for communication
 // between the agent and the service provider.
 // "messageHandler" is the function that the agent will use to handle incoming messages.
-func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, messageHandler func(context.Context, string) (string, error)) {
+func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, messageHandler func(context.Context, *anypb.Any) (*anypb.Any, error)) error {
 	conn := establishConnection(ctx, endpoint, channel)
 	for {
 		// listen for messages
@@ -103,23 +104,27 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 			log.CtxLogger(ctx).Warn("No message_id label in message.")
 			continue
 		}
-		log.CtxLogger(ctx).Infow("Parsed id of message from label.", "msgID", msgID)
-		command := string(msg.GetBody().Value[:])
-		log.CtxLogger(ctx).Infow("Parsed command of message from body.", "command", command)
+		log.CtxLogger(ctx).Debugw("Parsed id of message from label.", "msgID", msgID)
 
 		// handle the message
-		responseMsg, err := messageHandler(ctx, command)
+		responseMsg, err := messageHandler(ctx, msg.GetBody())
 		statusMsg := succeeded
 		if err != nil {
 			log.CtxLogger(ctx).Infow("Encountered error during UAP message handling.", "err", err)
 			statusMsg = failed
 		}
-		log.CtxLogger(ctx).Infow("Message handling complete.", "responseMsg", responseMsg, "statusMsg", statusMsg)
+		log.CtxLogger(ctx).Debugw("Message handling complete.", "responseMsg", prototext.Format(responseMsg), "statusMsg", statusMsg)
 
 		// Send operation status message
 		err = sendStatusMessage(ctx, msgID, responseMsg, statusMsg, conn)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Encountered error during sendStatusMessage.", "err", err)
+		}
+
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("Context is done. Returning.")
+			return err
 		}
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
 	client "github.com/GoogleCloudPlatform/agentcommunication_client"
@@ -159,7 +160,7 @@ func TestSendStatusMessage(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			sendMessage = test.sendMessage
-			got := sendStatusMessage(ctx, "msgID", "body", "status", conn)
+			got := sendStatusMessage(ctx, "msgID", &apb.Any{Value: []byte("test status body")}, "status", conn)
 			if diff := cmp.Diff(test.want, got, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("sendStatusMessage() returned diff (-want +got):\n%s", diff)
 			}
@@ -207,5 +208,62 @@ func TestEstablishConnection(t *testing.T) {
 		t.Errorf("Logger.log() expected error mismatch. got: %v want: %v", got, want)
 	} else {
 		t.Logf("Logger.log() expected error MATCH. got: %v want: %v", got, want)
+	}
+}
+
+func TestCommunicateWithUAP(t *testing.T) {
+	tests := []struct {
+		name             string
+		want             error
+		createConnection func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error)
+		sendMessage      func(c *client.Connection, msg *acpb.MessageBody) error
+		receive          func(c *client.Connection) (*acpb.MessageBody, error)
+	}{
+		{
+			name: "typical",
+			want: nil,
+			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
+				return &client.Connection{}, nil
+			},
+			sendMessage: func(c *client.Connection, msg *acpb.MessageBody) error {
+				return nil
+			},
+			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				return &acpb.MessageBody{
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Body:   &apb.Any{},
+				}, nil
+			},
+		},
+		{
+			name: "error",
+			want: cmpopts.AnyError,
+			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
+				return &client.Connection{}, nil
+			},
+			sendMessage: func(c *client.Connection, msg *acpb.MessageBody) error {
+				return fmt.Errorf("test error")
+			},
+			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				return &acpb.MessageBody{
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Body:   &apb.Any{},
+				}, nil
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			createConnection = test.createConnection
+			sendMessage = test.sendMessage
+			receive = test.receive
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			cancel()
+			got := CommunicateWithUAP(ctx, "endpoint", "channel", func(context.Context, *apb.Any) (*apb.Any, error) { return nil, nil })
+			if diff := cmp.Diff(test.want, got, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("CommunicateWithUAP() returned diff (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
