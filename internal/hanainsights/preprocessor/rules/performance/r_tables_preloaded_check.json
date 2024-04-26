@@ -1,7 +1,7 @@
 {
 "id": "r_tables_preloaded_check",
 "name": "SAP HANA Performance: Check for appropriate configuration of the tables_preloaded_in_parallel parameter in X4 VMs",
-"description": "The tables_preloaded_in_parallel parameter allows you to control the number of tables loaded at the same time during system startup, providing flexibility for performance optimization.",
+"description": "The tables_preloaded_in_parallel parameter lets you control the number of tables loaded in parallel after you start your SAP HANA system, providing flexibility for performance optimization. We recommend a minimum value of 32.",
 "labels": [
   "performance"
 ],
