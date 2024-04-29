@@ -111,7 +111,6 @@ func NewGoDBHandle(ctx context.Context, p Params) (handle *DBHandle, err error) 
 
 	db, err := sql.Open("hdb", dataSource)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not open connection to database.", "username", p.Username, "host", p.Host, "port", p.Port, "err", err)
 		return nil, err
 	}
 	log.CtxLogger(ctx).Debug("Database connection successful")
@@ -147,7 +146,6 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 		// Query via go HDB Driver.
 		resultRows, err := db.goHDBHandle.QueryContext(ctx, query)
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Query execution failed, err", err)
 			return nil, err
 		}
 		return &QueryResults{
@@ -168,7 +166,6 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 		Args:       args,
 	})
 	if result.Error != nil || result.ExitCode != 0 {
-		log.CtxLogger(ctx).Errorw("Running hdbsql query failed", " stdout:", result.StdOut, " stderr", result.StdErr, " error", result.Error)
 		return nil, fmt.Errorf(result.StdErr)
 	}
 
