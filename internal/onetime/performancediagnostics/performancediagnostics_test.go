@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	s "cloud.google.com/go/storage"
@@ -70,6 +71,14 @@ var (
 type fakeBucketHandle struct {
 	attrs *s.BucketAttrs
 	err   error
+}
+
+func fakeExecForErr(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
+}
+
+func fakeExecForSuccess(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	return commandlineexecutor.Result{ExitCode: 0, StdErr: "success", Error: nil}
 }
 
 func (f *fakeBucketHandle) Attrs(ctx context.Context) (*s.BucketAttrs, error) {
@@ -466,12 +475,6 @@ func TestSetBucket(t *testing.T) {
 		wantErr    error
 	}{
 		{
-			name:    "NoBucket",
-			d:       &Diagnose{},
-			config:  &bpb.BackintConfiguration{},
-			wantErr: cmpopts.AnyError,
-		},
-		{
 			name: "TestBucketEmpty",
 			d:    &Diagnose{},
 			config: &bpb.BackintConfiguration{
@@ -690,6 +693,64 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 			}
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("unmarshalBackintConfig(%v) returned an unexpected error: %v", tc.read, err)
+			}
+		})
+	}
+}
+
+func TestRunPerfDiag(t *testing.T) {
+	tests := []struct {
+		name       string
+		d          *Diagnose
+		opts       *options
+		wantErrCnt int
+	}{
+		{
+			name: "TestBucketFromFlag",
+			d: &Diagnose{
+				testBucket: "test_bucket",
+			},
+			opts: &options{
+				exec: fakeExecForSuccess,
+			},
+			wantErrCnt: 0,
+		},
+		{
+			name: "TestBucketFromParamFile",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			opts: &options{
+				config: &bpb.BackintConfiguration{
+					Bucket: "test_bucket",
+				},
+				exec: fakeExecForSuccess,
+			},
+			wantErrCnt: 0,
+		},
+		{
+			name: "ErrorInCommandExecution",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			opts: &options{
+				config: &bpb.BackintConfiguration{
+					Bucket: "test_bucket",
+				},
+				exec: fakeExecForErr,
+			},
+			wantErrCnt: 4,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var d Diagnose
+			got := d.runPerfDiag(ctx, tc.opts)
+			if len(got) != tc.wantErrCnt {
+				t.Errorf("runPerfDiag(%v) returned an unexpected diff (-want +got): %d, %d", tc.opts, tc.wantErrCnt, got)
 			}
 		})
 	}
