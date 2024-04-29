@@ -189,6 +189,8 @@ message SapDiscovery {
       string instance_number = 6;
       // Instance number of the ASCS instance.
       string ascs_instance_number = 7;
+      // Instance number of the ERS instance.
+      string ers_instance_number = 8;
     }
     // A set of properties describing an SAP Database layer.
     message DatabaseProperties {

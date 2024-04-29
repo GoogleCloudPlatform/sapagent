@@ -148,6 +148,33 @@ func removeDuplicates(res []*spb.SapDiscovery_Resource) []*spb.SapDiscovery_Reso
 					outRes.RelatedResources = append(outRes.RelatedResources, rel)
 				}
 			}
+			if r.GetInstanceProperties() != nil {
+				log.Logger.Debugw("Stored instance properties", "properties", outRes.GetInstanceProperties().String())
+				log.Logger.Debugw("Duplicate instance properties", "properties", r.InstanceProperties.String())
+				if outRes.InstanceProperties == nil {
+					outRes.InstanceProperties = r.InstanceProperties
+				} else {
+					outRes.InstanceProperties.InstanceRole |= r.InstanceProperties.InstanceRole
+					if r.InstanceProperties.GetVirtualHostname() != "" {
+						outRes.InstanceProperties.VirtualHostname = r.InstanceProperties.VirtualHostname
+					}
+					apps := make(map[string]string, len(outRes.InstanceProperties.AppInstances))
+					for _, app := range outRes.InstanceProperties.AppInstances {
+						apps[app.Name] = app.Number
+						log.Logger.Debugw("App instance", "app", app.String())
+					}
+					for _, app := range r.InstanceProperties.AppInstances {
+						if _, o := apps[app.Name]; !o {
+							outRes.InstanceProperties.AppInstances = append(outRes.InstanceProperties.AppInstances, app)
+							apps[app.Name] = app.Number
+							log.Logger.Debugw("Adding app instance", "app", app.String())
+						} else {
+							log.Logger.Debugw("Duplicate app instance", "app", app.String())
+						}
+					}
+				}
+				log.Logger.Debugw("Merged properties", "properties", outRes.InstanceProperties.String())
+			}
 		}
 	}
 	return out
@@ -261,13 +288,13 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 	instanceURI := fmt.Sprintf("projects/%s/zones/%s/instances/%s", cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
 	log.CtxLogger(ctx).Info("Starting SAP Discovery")
 	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances(), config.GetDiscoveryConfiguration())
-	log.CtxLogger(ctx).Debugf("SAP Details: %v", sapDetails)
+	log.CtxLogger(ctx).Debugw("SAP Details", "details", sapDetails)
 	log.CtxLogger(ctx).Info("Starting host discovery")
 	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)
-	log.CtxLogger(ctx).Debugf("Host Resource Names: %v", hostResourceNames)
+	log.CtxLogger(ctx).Debugw("Host Resource Names", "names", hostResourceNames)
 	log.CtxLogger(ctx).Debug("Discovering current host")
 	hostResources := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, nil, append([]string{instanceURI}, hostResourceNames...), cp)
-	log.CtxLogger(ctx).Debugf("Host Resources: %v", hostResources)
+	log.CtxLogger(ctx).Debugw("Host Resources", "hostResources", hostResources)
 	var instanceResource *spb.SapDiscovery_Resource
 	// Find the instance resource
 	for _, r := range hostResources {
@@ -351,10 +378,57 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 				dbRes = append(dbRes, haRes...)
 				s.DBComponent.HaHosts = haURIs
 			}
+			for _, r := range dbRes {
+				if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+					if r.InstanceProperties == nil {
+						r.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{}
+					}
+					r.InstanceProperties.InstanceRole |= spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE
+				}
+			}
 			log.CtxLogger(ctx).Debug("Done discovering DB")
 			s.DBComponent.HostProject = cp.GetNumericProjectId()
 			s.DBComponent.Resources = removeDuplicates(dbRes)
 			system.DatabaseLayer = s.DBComponent
+		}
+		if len(s.InstanceProperties) > 0 {
+			for _, iProp := range s.InstanceProperties {
+				log.CtxLogger(ctx).Debugw("Discovering instance properties", "props", iProp)
+				res := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, []string{iProp.VirtualHostname}, cp)
+				log.CtxLogger(ctx).Debugf("Discovered instance properties: %s", res)
+				if res == nil {
+					continue
+				}
+				for _, r := range res {
+					if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+						if r.InstanceProperties == nil {
+							r.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{}
+						}
+						if iProp.VirtualHostname != "" {
+							r.InstanceProperties.VirtualHostname = iProp.VirtualHostname
+						}
+						r.InstanceProperties.InstanceRole |= iProp.InstanceRole
+						r.InstanceProperties.AppInstances = append(r.InstanceProperties.AppInstances, iProp.AppInstances...)
+						log.CtxLogger(ctx).Debugf("Adding instance properties to resource: %s", r.ResourceUri)
+					}
+				}
+				switch iProp.InstanceRole {
+				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE:
+					log.CtxLogger(ctx).Debug("Instance properties are for a database instance")
+					if system.GetDatabaseLayer() != nil {
+						system.DatabaseLayer.Resources = removeDuplicates(append(system.GetDatabaseLayer().Resources, res...))
+					}
+				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER:
+					fallthrough
+				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS:
+					fallthrough
+				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS:
+					log.CtxLogger(ctx).Debug("Instance properties are for a application instance")
+					if system.GetApplicationLayer() != nil {
+						system.ApplicationLayer.Resources = removeDuplicates(append(system.GetApplicationLayer().Resources, res...))
+					}
+				}
+			}
 		}
 		system.WorkloadProperties = s.WorkloadProperties
 		system.ProjectNumber = cp.GetNumericProjectId()

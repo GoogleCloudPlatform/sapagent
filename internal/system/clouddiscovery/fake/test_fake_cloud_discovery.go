@@ -50,7 +50,7 @@ func (c *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parent *s
 
 	if len(c.DiscoverComputeResourcesArgs) > c.discoverComputeResourcesCallCount {
 		curArgs := DiscoverComputeResourcesArgs{Parent: parent, HostList: hostList, CP: cp}
-		if diff := cmp.Diff(c.DiscoverComputeResourcesArgs[c.discoverComputeResourcesCallCount], curArgs, protocmp.Transform(), protocmp.IgnoreFields(&spb.SapDiscovery_Resource{}, "related_resources")); diff != "" {
+		if diff := cmp.Diff(c.DiscoverComputeResourcesArgs[c.discoverComputeResourcesCallCount], curArgs, protocmp.Transform(), protocmp.IgnoreFields(&spb.SapDiscovery_Resource{}, "related_resources"), protocmp.IgnoreFields(&spb.SapDiscovery_Resource{}, "instance_properties")); diff != "" {
 			c.DiscoverComputeResourcesArgsDiffs = append(c.DiscoverComputeResourcesArgsDiffs, diff)
 		}
 	}

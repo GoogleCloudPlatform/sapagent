@@ -1973,10 +1973,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "abc",
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						AscsUri:         "some-test-ascs",
-						NfsUri:          "1.2.3.4",
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-						KernelVersion:   "SAP Kernel 785 Patch 100",
+						AscsUri:            "some-test-ascs",
+						NfsUri:             "1.2.3.4",
+						ApplicationType:    spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						KernelVersion:      "SAP Kernel 785 Patch 100",
+						AscsInstanceNumber: "01",
+						ErsInstanceNumber:  "10",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -1991,17 +1993,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "ascs",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ascs",
-					Number: "01",
-				}},
 			}, {
 				VirtualHostname: "ers",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ers",
-					Number: "10",
-				}},
 			}, {
 				VirtualHostname: "app1",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
@@ -2098,10 +2092,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "abc",
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						AscsUri:         "some-test-ascs",
-						NfsUri:          "1.2.3.4",
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-						KernelVersion:   "SAP Kernel 785 Patch 100",
+						AscsUri:            "some-test-ascs",
+						NfsUri:             "1.2.3.4",
+						ApplicationType:    spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						KernelVersion:      "SAP Kernel 785 Patch 100",
+						AscsInstanceNumber: "01",
+						ErsInstanceNumber:  "10",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -2116,17 +2112,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "ascs",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ascs",
-					Number: "01",
-				}},
 			}, {
 				VirtualHostname: "ers",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ers",
-					Number: "10",
-				}},
 			}, {
 				VirtualHostname: "app1",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
@@ -2147,9 +2135,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "def",
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						AscsUri:         "some-test-ascs",
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-						KernelVersion:   "SAP Kernel 785 Patch 100",
+						AscsUri:            "some-test-ascs",
+						ApplicationType:    spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						KernelVersion:      "SAP Kernel 785 Patch 100",
+						AscsInstanceNumber: "01",
+						ErsInstanceNumber:  "10",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -2164,17 +2154,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "ascs",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ascs",
-					Number: "01",
-				}},
 			}, {
 				VirtualHostname: "ers",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ers",
-					Number: "10",
-				}},
 			}, {
 				VirtualHostname: "app1",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
@@ -2339,10 +2321,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "abc",
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-						AscsUri:         "some-test-ascs",
-						NfsUri:          "1.2.3.4",
-						KernelVersion:   "SAP Kernel 785 Patch 100",
+						ApplicationType:    spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:            "some-test-ascs",
+						NfsUri:             "1.2.3.4",
+						KernelVersion:      "SAP Kernel 785 Patch 100",
+						AscsInstanceNumber: "01",
+						ErsInstanceNumber:  "10",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -2364,17 +2348,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "ascs",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ascs",
-					Number: "01",
-				}},
 			}, {
 				VirtualHostname: "ers",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ers",
-					Number: "10",
-				}},
 			}, {
 				VirtualHostname: "app1",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
@@ -2469,10 +2445,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "abc",
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-						AscsUri:         "some-test-ascs",
-						NfsUri:          "1.2.3.4",
-						KernelVersion:   "SAP Kernel 785 Patch 100",
+						ApplicationType:    spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:            "some-test-ascs",
+						NfsUri:             "1.2.3.4",
+						KernelVersion:      "SAP Kernel 785 Patch 100",
+						AscsInstanceNumber: "01",
+						ErsInstanceNumber:  "10",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -2582,10 +2560,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Sid: "abc",
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
-						AscsUri:         "some-test-ascs",
-						NfsUri:          "1.2.3.4",
-						KernelVersion:   "SAP Kernel 785 Patch 100",
+						ApplicationType:    spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						AscsUri:            "some-test-ascs",
+						NfsUri:             "1.2.3.4",
+						KernelVersion:      "SAP Kernel 785 Patch 100",
+						AscsInstanceNumber: "01",
+						ErsInstanceNumber:  "10",
 					}},
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			},
@@ -2601,17 +2581,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "ascs",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ascs",
-					Number: "01",
-				}},
 			}, {
 				VirtualHostname: "ers",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
-				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
-					Name:   "ers",
-					Number: "10",
-				}},
 			}, {
 				VirtualHostname: "app1",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,

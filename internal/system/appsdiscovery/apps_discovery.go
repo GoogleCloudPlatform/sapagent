@@ -268,16 +268,16 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		iProps = append(iProps, &spb.SapDiscovery_Resource_InstanceProperties{
 			VirtualHostname: a.Name,
 			InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-			AppInstances:    []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{a},
 		})
+		appProps.AscsInstanceNumber = a.Number
 	}
 
 	for _, e := range ersHosts {
 		iProps = append(iProps, &spb.SapDiscovery_Resource_InstanceProperties{
 			VirtualHostname: e.Name,
 			InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
-			AppInstances:    []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{e},
 		})
+		appProps.ErsInstanceNumber = e.Number
 	}
 
 	for _, a := range appHosts {
