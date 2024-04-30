@@ -88,28 +88,67 @@ func (r *Reader) getDiskData(disks *compute.DiskList, diskName string) *compute.
 
 // Read queries instance information using the compute API and stores the result as instanceProperties.
 func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mapper NetworkInterfaceAddressMapper) {
-	if config.GetBareMetal() {
-		log.CtxLogger(ctx).Debug("Bare Metal configured, cannot get instance information from the Compute API")
+	instance, builder, err := r.ReadDiskMapping(ctx, config)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not read disk mapping", "error", err)
 		return
+	}
+
+	for _, networkInterface := range instance.NetworkInterfaces {
+		mapping, err := networkMappingForInterface(networkInterface, mapper)
+		if err != nil {
+			log.CtxLogger(ctx).Warnw("No mapping set for network", "name", networkInterface.Name, "ip", networkInterface.NetworkIP, "error", err)
+		}
+		builder.NetworkAdapters = append(builder.NetworkAdapters, &instancepb.NetworkAdapter{
+			Name:      networkInterface.Name,
+			Network:   networkInterface.Network,
+			NetworkIp: networkInterface.NetworkIP,
+			Mapping:   mapping,
+		})
+	}
+
+	// Get last migration info if available.
+	operationList, err := r.gceService.ListZoneOperations(
+		config.GetCloudProperties().GetProjectId(),
+		config.GetCloudProperties().GetZone(),
+		fmt.Sprintf(`(targetId eq %s) (status eq DONE) (operationType eq compute.instances.migrateOnHostMaintenance)`, config.GetCloudProperties().GetInstanceId()),
+		1,
+	)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not get zone operation list from compute API", "project",
+			config.GetCloudProperties().GetProjectId(), "zone", config.GetCloudProperties().GetZone(),
+			"instanceid", config.GetCloudProperties().GetInstanceId(), "error", err)
+	} else if len(operationList.Items) > 0 {
+		// Sort by EndTime and use the last (most recent) entry.
+		items := endTimeSort(operationList.Items)
+		sort.Sort(items)
+		builder.LastMigrationEndTimestamp = items[len(items)-1].EndTime
+	}
+	r.instanceProperties = builder
+}
+
+// ReadDiskMapping queries instance information using the compute API and stores the result as instanceProperties.
+func (r *Reader) ReadDiskMapping(ctx context.Context, config *configpb.Configuration) (*compute.Instance, *instancepb.InstanceProperties, error) {
+	if config.GetBareMetal() {
+		return nil, nil, fmt.Errorf("bare Metal configured, cannot get instance information from the Compute API")
 	}
 
 	cp := config.GetCloudProperties()
 	if cp == nil {
-		log.CtxLogger(ctx).Debug("No Metadata Cloud Properties found, cannot collect instance information from the Compute API")
-		return
+		return nil, nil, fmt.Errorf("no Metadata Cloud Properties found, cannot collect instance information from the Compute API")
+
 	}
 
 	// Nil check before dereferencing to avoid panics.
 	if r.dm == nil || r.gceService == nil {
-		log.CtxLogger(ctx).Debug("Disk mapper and GCE service must be non-nil to read instance info")
-		return
+		log.CtxLogger(ctx).Debug("")
+		return nil, nil, fmt.Errorf("disk mapper and GCE service must be non-nil to read instance info")
 	}
 
 	projectID, zone, instanceID := cp.GetProjectId(), cp.GetZone(), cp.GetInstanceId()
 	instance, err := r.gceService.GetInstance(projectID, zone, instanceID)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not get instance info from compute API, Enable the Compute Viewer IAM role for the Service Account", "project", projectID, "zone", zone, "instanceid", instanceID, "error", err)
-		return
+		return nil, nil, fmt.Errorf("could not get instance info from the Compute API, error: %v", err)
 	}
 
 	builder := instancepb.InstanceProperties{
@@ -165,36 +204,8 @@ func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mappe
 		})
 	}
 
-	for _, networkInterface := range instance.NetworkInterfaces {
-		mapping, err := networkMappingForInterface(networkInterface, mapper)
-		if err != nil {
-			log.CtxLogger(ctx).Warnw("No mapping set for network", "name", networkInterface.Name, "ip", networkInterface.NetworkIP, "error", err)
-		}
-		builder.NetworkAdapters = append(builder.NetworkAdapters, &instancepb.NetworkAdapter{
-			Name:      networkInterface.Name,
-			Network:   networkInterface.Network,
-			NetworkIp: networkInterface.NetworkIP,
-			Mapping:   mapping,
-		})
-	}
-
-	// Get last migration info if available.
-	operationList, err := r.gceService.ListZoneOperations(
-		projectID,
-		zone,
-		fmt.Sprintf(`(targetId eq %s) (status eq DONE) (operationType eq compute.instances.migrateOnHostMaintenance)`, instanceID),
-		1,
-	)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not get zone operation list from compute API", "project", projectID, "zone", zone, "instanceid", instanceID, "error", err)
-	} else if len(operationList.Items) > 0 {
-		// Sort by EndTime and use the last (most recent) entry.
-		items := endTimeSort(operationList.Items)
-		sort.Sort(items)
-		builder.LastMigrationEndTimestamp = items[len(items)-1].EndTime
-	}
-
-	r.instanceProperties = &builder
+	log.CtxLogger(ctx).Infow("Instance properties:", "instanceProperties", r.instanceProperties)
+	return instance, &builder, nil
 }
 
 // getDeviceType returns a formatted device type for a given disk type and name.

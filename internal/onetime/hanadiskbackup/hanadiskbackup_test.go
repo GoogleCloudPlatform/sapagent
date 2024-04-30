@@ -87,6 +87,7 @@ var (
 var defaultCloudProperties = &ipb.CloudProperties{
 	ProjectId:    "default-project",
 	InstanceName: "default-instance",
+	Zone:         "default-zone",
 }
 
 type fakeSnapshot interface {
@@ -125,6 +126,83 @@ func TestSnapshotHandler(t *testing.T) {
 			got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
+			}
+		})
+	}
+}
+
+func TestReadDiskMapping(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		want     error
+	}{
+		{
+			name: "Failure",
+			snapshot: Snapshot{
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{cmpopts.AnyError},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			snapshot: Snapshot{
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+			},
+			want: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.snapshot.readDiskMapping(context.Background(), defaultCloudProperties)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("readDiskMapping()=%v, want=%v", got, test.want)
 			}
 		})
 	}
@@ -388,14 +466,12 @@ func TestValidateParameters(t *testing.T) {
 	}
 }
 
-func TestDefaultProject(t *testing.T) {
+func TestDefaults(t *testing.T) {
 	s := Snapshot{
 		Port:           "123",
 		Sid:            "HDB",
 		Project:        "",
 		HanaDBUser:     "system",
-		Disk:           "pd-1",
-		DiskZone:       "us-east1-a",
 		PasswordSecret: "secret",
 	}
 	got := s.validateParameters("linux", defaultCloudProperties)
@@ -404,6 +480,10 @@ func TestDefaultProject(t *testing.T) {
 	}
 	if s.Project != "default-project" {
 		t.Errorf("project = %v, want = %v", s.Project, "default-project")
+	}
+
+	if s.DiskZone != "default-zone" {
+		t.Errorf("diskZone = %v, want = %v", s.DiskZone, "default-zone")
 	}
 }
 
