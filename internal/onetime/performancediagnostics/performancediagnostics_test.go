@@ -32,6 +32,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -751,6 +752,146 @@ func TestRunPerfDiag(t *testing.T) {
 			got := d.runPerfDiag(ctx, tc.opts)
 			if len(got) != tc.wantErrCnt {
 				t.Errorf("runPerfDiag(%v) returned an unexpected diff (-want +got): %d, %d", tc.opts, tc.wantErrCnt, got)
+			}
+		})
+	}
+}
+
+func TestRunFIOCommands(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    *options
+		wantCnt int
+	}{
+		{
+			name: "ErrorCreatingDir",
+			opts: &options{
+				exec: fakeExecForErr,
+				fs: &fake.FileSystem{
+					MkDirErr: []error{fmt.Errorf("error")},
+				},
+			},
+			wantCnt: 1,
+		},
+		{
+			name: "ErrorExecutingCommand",
+			opts: &options{
+				exec: fakeExecForErr,
+				fs: &fake.FileSystem{
+					MkDirErr: []error{nil},
+				},
+			},
+			wantCnt: 4,
+		},
+		{
+			name: "Success",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}, &os.File{}, &os.File{}, &os.File{}},
+					OpenFileErr:           []error{nil, nil, nil, nil},
+					WriteStringToFileResp: []int{0, 0, 0, 0},
+					WriteStringToFileErr:  []error{nil, nil, nil, nil},
+				},
+			},
+			wantCnt: 0,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var d Diagnose
+			got := d.runFIOCommands(ctx, tc.opts)
+			if len(got) != tc.wantCnt {
+				t.Errorf("runFIOCommands(%v) returned an unexpected diff (-want +got): %d %d", tc.opts, len(got), tc.wantCnt)
+			}
+		})
+	}
+}
+
+func TestExecAndWriteToFile(t *testing.T) {
+	tests := []struct {
+		name       string
+		opFile     string
+		targetPath string
+		params     commandlineexecutor.Params
+		opts       *options
+		wantErr    error
+	}{
+		{
+			name:       "CommandFailure",
+			opFile:     "test_file.txt",
+			targetPath: bundlePath,
+			params:     commandlineexecutor.Params{},
+			opts: &options{
+				exec: fakeExecForErr,
+				fs: &fake.FileSystem{
+					MkDirErr:     []error{nil},
+					OpenFileResp: []*os.File{&os.File{}},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:       "FileCreationFailure",
+			opFile:     "test_file.txt",
+			targetPath: bundlePath,
+			params:     commandlineexecutor.Params{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					MkDirErr:     []error{nil},
+					OpenFileErr:  []error{fmt.Errorf("error")},
+					OpenFileResp: []*os.File{&os.File{}},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:       "FalureWritingToFile",
+			opFile:     "test_file.txt",
+			targetPath: bundlePath,
+			params:     commandlineexecutor.Params{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					WriteStringToFileResp: []int{0},
+					WriteStringToFileErr:  []error{fmt.Errorf("error")},
+					OpenFileResp:          []*os.File{&os.File{}},
+					OpenFileErr:           []error{nil},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:       "Success",
+			opFile:     "test_file.txt",
+			targetPath: bundlePath,
+			params:     commandlineexecutor.Params{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					OpenFileErr:           []error{nil},
+					WriteStringToFileResp: []int{0},
+					WriteStringToFileErr:  []error{nil},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := execAndWriteToFile(ctx, tc.opFile, tc.targetPath, tc.params, tc.opts)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("execAndWriteToFile(%q, %q, %v, %v) returned error: %v, want error: %v", tc.opFile, tc.targetPath, tc.params, tc.opts, gotErr, tc.wantErr)
 			}
 		})
 	}

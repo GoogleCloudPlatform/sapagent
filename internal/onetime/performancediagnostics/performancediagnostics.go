@@ -232,6 +232,9 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 			}
 		} else if op == "io" {
 			// Perform IO Operation
+			if err := d.runFIOCommands(ctx, opts); len(err) > 0 {
+				errs = append(errs, err...)
+			}
 		}
 	}
 	return errs
@@ -463,6 +466,52 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 	}
 
 	return errs
+}
+
+// runFIOCommands runs the FIO commands in order to simulate HANA IO operations.
+func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
+	var errs []error
+	targetPath := path.Join(d.path, d.bundleName, "io")
+	if err := opts.fs.MkdirAll(targetPath, 0777); err != nil {
+		errs = append(errs, fmt.Errorf("error while making directory: %s, error %s", targetPath, err.Error()))
+		return errs
+	}
+	fileNames := []string{"data_randread_256K_100G", "data_randread_512K_100G", "data_randread_1M_100G", "data_randread_64M_100G"}
+	cmd := "sudo"
+	args := []string{
+		"fio --name=data_randread_256K_100G --filename=/hana/data/testfile --filesize=100G --time_based --ramp_time=2s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=256K --iodepth=256 --rw=randread",
+		"fio --name=data_randread_512K_100G --filename=/hana/data/testfile --filesize=100G --time_based --ramp_time=2s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=512K --iodepth=256 --rw=randread",
+		"fio --name=data_randread_1M_100G   --filename=/hana/data/testfile --filesize=100G --time_based --ramp_time=2s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=1M   --iodepth=64 --rw=randread",
+		"fio --name=data_randread_64M_100G  --filename=/hana/data/testfile --filesize=100G --time_based --ramp_time=2s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=64M  --iodepth=64 --rw=randread",
+	}
+	for i, arg := range args {
+		p := commandlineexecutor.Params{
+			Executable:  cmd,
+			ArgsToSplit: arg,
+			Timeout:     220,
+		}
+		if err := execAndWriteToFile(ctx, fileNames[i], targetPath, p, opts); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
+}
+
+// execAndWriteToFile executes the command and writes the output to the file.
+func execAndWriteToFile(ctx context.Context, opFile, targetPath string, params commandlineexecutor.Params, opts *options) error {
+	res := opts.exec(ctx, params)
+	if res.ExitCode != 0 && res.StdErr != "" {
+		return fmt.Errorf("error while executing %s command %v", res.StdErr, res.ExitCode)
+	}
+	f, err := opts.fs.OpenFile(targetPath+opFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := opts.fs.WriteStringToFile(f, res.StdOut); err != nil {
+		return err
+	}
+	return nil
 }
 
 // setBucket sets the bucket in the parameter file for backint operation.
