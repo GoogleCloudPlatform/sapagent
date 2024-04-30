@@ -26,6 +26,7 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -89,6 +90,24 @@ func TrimAndClean(str string) string {
 func RestoreFilename(str string) string {
 	str = fmt.Sprintf("%q", "/"+str)
 	return strings.ReplaceAll(str, `\\`, `\`)
+}
+
+// CreateObjectPath combines the folder prefix, user id, file name, ebid,
+// and extension to create the object name in the bucket. Optionally
+// shorten the file name's long folder structure by taking the basepath and
+// the preceding sub folder (in HANA systems this will be the tenant db).
+func CreateObjectPath(config *bpb.BackintConfiguration, fileNameTrim, externalBackupID, extension string) string {
+	if config.GetShortenFolderPath() {
+		split := strings.Split(fileNameTrim, "/")
+		if len(split) > 2 {
+			// '/usr/sap/DEH/SYS/global/hdb/backint/SYSTEMDB/log_backup_0_0_0_0'
+			// would shorten to: '/SYSTEMDB/log_backup_0_0_0_0'
+			fileNameShort := "/" + split[len(split)-2] + "/" + split[len(split)-1]
+			log.Logger.Infow("Shortening folder path", "old", fileNameTrim, "new", fileNameShort)
+			fileNameTrim = fileNameShort
+		}
+	}
+	return config.GetFolderPrefix() + config.GetUserId() + fileNameTrim + "/" + externalBackupID + extension
 }
 
 // OpenFileWithRetries will retry opening a file with an

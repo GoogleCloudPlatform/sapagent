@@ -185,7 +185,7 @@ func removeFiles(ctx context.Context, opts diagnoseOptions, remove removeFunc) b
 		}
 		if opts.connectParams != nil {
 			bucketHandle, _ := storage.ConnectToBucket(ctx, opts.connectParams)
-			object := opts.config.GetFolderPrefix() + opts.config.GetUserId() + file.fileName + "/" + file.externalBackupID + ".bak"
+			object := parse.CreateObjectPath(opts.config, file.fileName, file.externalBackupID, ".bak")
 			log.CtxLogger(ctx).Infow("Removing Cloud Storage Bucket file", "object", object)
 			if err := bucketHandle.Object(object).Delete(ctx); err != nil && !errors.Is(err, store.ErrObjectNotExist) {
 				log.CtxLogger(ctx).Errorw("Failed to remove Cloud Storage Bucket file", "link", fmt.Sprintf("https://console.cloud.google.com/storage/browser/_details/%s/%s", opts.config.GetBucket(), object), "object", object, "err", err)

@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )
 
 func TestSplit(t *testing.T) {
@@ -152,6 +153,62 @@ func TestRestoreFilename(t *testing.T) {
 		got := RestoreFilename(tc.str)
 		if got != tc.want {
 			t.Errorf("RestoreFilename(%v) = %v, want: %v", tc.str, got, tc.want)
+		}
+	}
+}
+
+func TestCreateObjectPath(t *testing.T) {
+	tests := []struct {
+		name             string
+		config           *bpb.BackintConfiguration
+		fileNameTrim     string
+		externalBackupID string
+		extension        string
+		want             string
+	}{
+		{
+			name: "EmptyString",
+			want: "/",
+		},
+		{
+			name: "FolderPrefixAndUserIDOnly",
+			config: &bpb.BackintConfiguration{
+				FolderPrefix:      "folder_prefix/",
+				UserId:            "user_id",
+				ShortenFolderPath: true,
+			},
+			want: "folder_prefix/user_id/",
+		},
+		{
+			name: "FullFilePath",
+			config: &bpb.BackintConfiguration{
+				FolderPrefix:      "folder_prefix/",
+				UserId:            "user_id",
+				ShortenFolderPath: false,
+			},
+			fileNameTrim:     "/this/is/a/long/file/path",
+			externalBackupID: "12345",
+			extension:        ".bak",
+			want:             "folder_prefix/user_id/this/is/a/long/file/path/12345.bak",
+		},
+		{
+			name: "ShortenFilePath",
+			config: &bpb.BackintConfiguration{
+				FolderPrefix:      "folder_prefix/",
+				UserId:            "user_id",
+				ShortenFolderPath: true,
+			},
+			fileNameTrim:     "/this/is/a/long/file/path",
+			externalBackupID: "12345",
+			extension:        ".bak",
+			want:             "folder_prefix/user_id/file/path/12345.bak",
+		},
+	}
+
+	for _, tc := range tests {
+		got := CreateObjectPath(tc.config, tc.fileNameTrim, tc.externalBackupID, tc.extension)
+		if got != tc.want {
+			t.Errorf("CreateObjectPath(%v, %v, %v, %v) = %v, want: %v", tc.config, tc.fileNameTrim, tc.externalBackupID, tc.extension, got, tc.want)
 		}
 	}
 }

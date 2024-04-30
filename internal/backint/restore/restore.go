@@ -132,9 +132,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // If externalBackupID is not specified, the latest backup for fileName is used.
 // If found, the file is downloaded and saved to destName.
 func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, copier storage.IOFileCopier, fileName, destName, externalBackupID string, cloudProps *ipb.CloudProperties) []byte {
-	// A trailing slash ensures a complete match for the file name, otherwise
-	// "file-name" and "file-name1" could both be returned.
-	prefix := config.GetFolderPrefix() + config.GetUserId() + parse.TrimAndClean(fileName) + "/"
+	prefix := parse.CreateObjectPath(config, parse.TrimAndClean(fileName), "", "")
 	if externalBackupID != "" {
 		prefix += fmt.Sprintf("%s.bak", externalBackupID)
 	}

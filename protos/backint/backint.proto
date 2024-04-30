@@ -57,6 +57,7 @@ message BackintConfiguration {
   map<string, string> metadata = 33;
   int64 max_diagnose_size_gb = 34;
   google.protobuf.BoolValue send_monitoring_metrics = 35;
+  bool shorten_folder_path = 36;
 }
 
 enum LogLevel {
