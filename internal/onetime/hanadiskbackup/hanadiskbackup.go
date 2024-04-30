@@ -200,6 +200,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		HDBUserKey:     s.HDBUserstoreKey,
 		GCEService:     s.gceService,
 		Project:        s.Project,
+		SID:            s.Sid,
 	}
 	if s.SkipDBSnapshotForChangeDiskType {
 		onetime.LogMessageToFileAndConsole("Skipping connecting to HANA Database in case of changedisktype workflow.")
@@ -242,8 +243,8 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
 	case s.Sid == "" || s.HanaDBUser == "" || s.Disk == "" || s.DiskZone == "":
 		return fmt.Errorf("required arguments not passed. Usage:" + s.Usage())
-	case s.Port == "" && s.InstanceID == "":
-		return fmt.Errorf("either -port or -instance-id is required. Usage:" + s.Usage())
+	case s.HDBUserstoreKey == "" && s.Port == "" && s.InstanceID == "":
+		return fmt.Errorf("either -port, -instance-id or -hdbuserstore-key is required. Usage:" + s.Usage())
 	case s.HDBUserstoreKey == "" && s.Password == "" && s.PasswordSecret == "":
 		return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + s.Usage())
 	}

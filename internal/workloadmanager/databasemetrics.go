@@ -52,6 +52,7 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 		Port:           params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetPort(),
 		GCEService:     params.GCEService,
 		Project:        params.Config.GetCloudProperties().GetProjectId(),
+		SID:            params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetSid(),
 	}
 	db, err := databaseconnector.CreateDBHandle(ctx, dpb)
 	if err != nil {

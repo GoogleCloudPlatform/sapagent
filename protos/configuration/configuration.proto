@@ -127,6 +127,7 @@ message HANAMetricsConfig {
   string hostname = 4;
   string port = 5;
   string hdbuserstore_key = 6;
+  string sid = 7;
 }
 
 message HANAMonitoringConfiguration {

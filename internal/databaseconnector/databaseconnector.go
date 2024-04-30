@@ -57,8 +57,11 @@ type (
 
 	// CMDDBConnection stores connection information for querying via hdbsql command line.
 	CMDDBConnection struct {
-		SIDAdmUser string // system user to run the queries from
-		HDBUserKey string // HDB Userstore Key providing auth and instance details
+		SIDAdmUser     string // system user to run the queries from
+		HDBUserKey     string // HDB Userstore Key providing auth and instance details
+		EnableSSL      bool
+		HostNameInCert string
+		RootCAFile     string
 	}
 
 	// DBHandle provides an object to connect to and query databases, abstracting the underlying connector.
@@ -130,8 +133,11 @@ func NewCMDDBHandle(p Params) (handle *DBHandle, err error) {
 	}
 
 	cmdDBconnection := CMDDBConnection{
-		SIDAdmUser: strings.ToLower(p.SID),
-		HDBUserKey: p.HDBUserKey,
+		SIDAdmUser:     fmt.Sprintf("%sadm", strings.ToLower(p.SID)),
+		HDBUserKey:     p.HDBUserKey,
+		EnableSSL:      p.EnableSSL,
+		HostNameInCert: p.HostNameInCert,
+		RootCAFile:     p.RootCAFile,
 	}
 
 	return &DBHandle{
@@ -154,9 +160,12 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 		}, nil
 	}
 	// Query via hdbsql command-line.
-	sidadmArgs := []string{"-i", "-u", fmt.Sprintf("%sadm", db.cmdDBHandle.SIDAdmUser)}                           // Arguments to run command in sidadm user
+	sidadmArgs := []string{"-i", "-u", db.cmdDBHandle.SIDAdmUser}                                                 // Arguments to run command in sidadm user
 	hdbsqlArgs := []string{"hdbsql", "-U", db.cmdDBHandle.HDBUserKey, "-a", "-x", "-quiet", "-Z", "CHOPBLANKS=0"} // Arguments to run hdbsql query in parse-able format
 
+	if db.cmdDBHandle.EnableSSL {
+		hdbsqlArgs = append(hdbsqlArgs, "-e", "-sslhostnameincert", db.cmdDBHandle.HostNameInCert, "-ssltruststore", db.cmdDBHandle.RootCAFile)
+	}
 	// Builds a command equivalent to [$sudo -i -u <sidadm> hdbsql -U <key> -a -x -quiet <query>].
 	args := append(sidadmArgs, hdbsqlArgs...)
 	args = append(args, query)
@@ -238,9 +247,13 @@ func parseIntoValues(resultRow string, dest ...any) error {
 		}
 		switch d := dest[i].(type) {
 		case (*string):
-			// Extracts actual string from capturing group.
+			// Non primitive or alphanumeric data types are enclosed in quotes.
 			// For NULL values, match[2] is an empty string "".
-			*d = match[2]
+			if match[0] == nullChar || strings.HasPrefix(match[0], `"`) {
+				*d = match[2] // Gets result enclosed in quotes (e.g. strings, date, etc) as string.
+				continue
+			}
+			*d = match[0] // Gets result not enclosed in quotes (e.g. int, float, etc) as string.
 		case (*int64):
 			if match[0] == nullChar {
 				*d = 0

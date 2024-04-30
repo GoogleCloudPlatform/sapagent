@@ -135,6 +135,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		Port:           h.port,
 		GCEService:     h.gceService,
 		Project:        h.project,
+		SID:            h.sid,
 	}
 	if h.db, err = databaseconnector.CreateDBHandle(ctx, dbp); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to connect to database", err)
