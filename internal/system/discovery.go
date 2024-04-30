@@ -31,10 +31,10 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -82,6 +82,7 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *
 		Routine:             updateSAPInstances,
 		RoutineArg:          updateSapInstancesArgs{config, d},
 		ErrorCode:           usagemetrics.DiscoverSapInstanceFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 5 * time.Second,
 	}
 	d.sapInstancesRoutine.StartRoutine(ctx)
@@ -98,6 +99,7 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *
 		Routine:             runDiscovery,
 		RoutineArg:          runDiscoveryArgs{config, d},
 		ErrorCode:           usagemetrics.DiscoverSapSystemFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,
 	}
 

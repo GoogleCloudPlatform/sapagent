@@ -21,18 +21,19 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	um "github.com/GoogleCloudPlatform/sapagent/shared/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/usagemetrics"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-var logger = um.NewLogger(nil, nil, clockwork.NewRealClock(), projectExclusionList)
+// Logger is the standard usage logger for the SAP agent.
+var Logger = usagemetrics.NewLogger(nil, nil, clockwork.NewRealClock(), projectExclusionList)
 
-// SetAgentProperties sets the configured agent properties on the standard logger.
+// SetAgentProperties sets the configured agent properties on the standard Logger.
 func SetAgentProperties(ap *cpb.AgentProperties) {
-	logger.SetAgentProps(
-		&um.AgentProperties{
+	Logger.SetAgentProps(
+		&usagemetrics.AgentProperties{
 			Name:            ap.GetName(),
 			Version:         ap.GetVersion(),
 			LogUsageMetrics: ap.GetLogUsageMetrics(),
@@ -40,9 +41,9 @@ func SetAgentProperties(ap *cpb.AgentProperties) {
 		})
 }
 
-// SetCloudProperties sets the configured cloud properties on the standard logger.
+// SetCloudProperties sets the configured cloud properties on the standard Logger.
 func SetCloudProperties(cp *iipb.CloudProperties) {
-	logger.SetCloudProps(&um.CloudProperties{
+	Logger.SetCloudProps(&usagemetrics.CloudProperties{
 		ProjectID:     cp.ProjectId,
 		Zone:          cp.Zone,
 		InstanceName:  cp.InstanceName,
@@ -52,84 +53,84 @@ func SetCloudProperties(cp *iipb.CloudProperties) {
 }
 
 // ParseStatus parses the status string to a Status enum.
-func ParseStatus(status string) um.Status {
-	return um.Status(status)
+func ParseStatus(status string) usagemetrics.Status {
+	return usagemetrics.Status(status)
 }
 
-// Running uses the standard logger to log the RUNNING status. This status is reported at most once per day.
+// Running uses the standard Logger to log the RUNNING status. This status is reported at most once per day.
 func Running() {
-	logger.Running()
+	Logger.Running()
 }
 
-// Started uses the standard logger to log the STARTED status.
+// Started uses the standard Logger to log the STARTED status.
 func Started() {
-	logger.Started()
+	Logger.Started()
 }
 
-// Stopped uses the standard logger to log the STOPPED status.
+// Stopped uses the standard Logger to log the STOPPED status.
 func Stopped() {
-	logger.Stopped()
+	Logger.Stopped()
 }
 
-// Configured uses the standard logger to log the CONFIGURED status.
+// Configured uses the standard Logger to log the CONFIGURED status.
 func Configured() {
-	logger.Configured()
+	Logger.Configured()
 }
 
-// Misconfigured uses the standard logger to log the MISCONFIGURED status.
+// Misconfigured uses the standard Logger to log the MISCONFIGURED status.
 func Misconfigured() {
-	logger.Misconfigured()
+	Logger.Misconfigured()
 }
 
-// Error uses the standard logger to log the ERROR status. This status is reported at most once per day.
+// Error uses the standard Logger to log the ERROR status. This status is reported at most once per day.
 //
 // Any calls to Error should have an id mapping in this mapping sheet: go/sap-core-eng-tool-mapping.
 func Error(id int) {
-	logger.Error(id)
+	Logger.Error(id)
 }
 
-// Installed uses the standard logger to log the INSTALLED status.
+// Installed uses the standard Logger to log the INSTALLED status.
 func Installed() {
-	logger.Installed()
+	Logger.Installed()
 }
 
-// Updated uses the standard logger to log the UPDATED status.
+// Updated uses the standard Logger to log the UPDATED status.
 func Updated(version string) {
-	logger.Updated(version)
+	Logger.Updated(version)
 }
 
-// Uninstalled uses the standard logger to log the UNINSTALLED status.
+// Uninstalled uses the standard Logger to log the UNINSTALLED status.
 func Uninstalled() {
-	logger.Uninstalled()
+	Logger.Uninstalled()
 }
 
-// Action uses the standard logger to log the ACTION status.
+// Action uses the standard Logger to log the ACTION status.
 func Action(id int) {
-	logger.Action(id)
+	Logger.Action(id)
 }
 
 // LogRunningDaily log that the agent is running once a day.
 func LogRunningDaily() {
-	if logger.IsDailyLogRunningStarted() {
+	if Logger.IsDailyLogRunningStarted() {
 		log.Logger.Debugw("Daily log of RUNNING status already started")
 		return
 	}
-	logger.DailyLogRunningStarted()
+	Logger.DailyLogRunningStarted()
 	log.Logger.Debugw("Starting daily log of RUNNING status")
 	for {
-		logger.Running()
+		Logger.Running()
 		// sleep for 24 hours and a minute.
 		time.Sleep(24*time.Hour + 1*time.Minute)
 	}
 }
 
-// LogActionDaily uses the standard logger to log the ACTION once a day.
+// LogActionDaily uses the standard Logger to log the ACTION once a day.
 // Should be called exactly once for each ACTION code.
 func LogActionDaily(id int) {
 	log.Logger.Debugw("Starting daily log action", "ACTION", id)
 	for {
 		// sleep for 24 hours and a minute.
 		time.Sleep(24*time.Hour + 1*time.Minute)
-		logger.Action(id)
+		Logger.Action(id)
 	}
 }

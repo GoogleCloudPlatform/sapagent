@@ -31,11 +31,11 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 )
 
 const (
@@ -164,6 +164,7 @@ func (s *Service) Start(ctx context.Context) {
 		Routine:             collectAndSubmitLoop,
 		RoutineArg:          collectAndSubmitArgs{s: s},
 		ErrorCode:           usagemetrics.AgentMetricsCollectAndSubmitFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
 	s.collectAndSubmitRoutine.StartRoutine(ctx)

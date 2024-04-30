@@ -23,14 +23,15 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
-	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/usagemetrics"
 )
 
 // RecoverableRoutine is a set of details about a goroutine, its arguments and how to handle its recovery.
 type RecoverableRoutine struct {
 	Routine             func(context.Context, any)
 	RoutineArg          any
+	UsageLogger         usagemetrics.Logger
 	ErrorCode           int
 	ExpectedMinDuration time.Duration
 	Backoff             backoff.BackOff
@@ -55,7 +56,7 @@ func (r *RecoverableRoutine) StartRoutine(ctx context.Context) {
 					r.Backoff.Reset()
 				}
 				err = errors.Errorf("Panic in routine, attempting to recover: %v", r)
-				usagemetrics.Error(r.ErrorCode)
+				r.UsageLogger.Error(r.ErrorCode)
 				// Cancel the context to cancel any subroutines
 				cancel()
 			}

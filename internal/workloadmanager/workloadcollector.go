@@ -34,13 +34,13 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 )
 
 /*
@@ -197,6 +197,7 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 			}
 		},
 		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 24 * time.Hour,
 	}
 	if params.Remote {
@@ -209,6 +210,7 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 		Routine:             start,
 		RoutineArg:          params,
 		ErrorCode:           usagemetrics.WLMCollectionRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,
 	}
 	collectRoutine.StartRoutine(ctx)
@@ -239,6 +241,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 			system = CollectSystemMetricsFromConfig(ctx, params)
 		},
 		ErrorCode:           usagemetrics.WLMCollectionSystemRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 5 * time.Second,
 	}
 	systemMetricsRoutine.StartRoutine(ctx)
@@ -248,6 +251,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 			hana = CollectHANAMetricsFromConfig(ctx, params)
 		},
 		ErrorCode:           usagemetrics.WLMCollectionHANARoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 5 * time.Second,
 	}
 	hanaMetricsRoutine.StartRoutine(ctx)
@@ -257,6 +261,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 			netweaver = CollectNetWeaverMetricsFromConfig(ctx, params)
 		},
 		ErrorCode:           usagemetrics.WLMCollectionNetweaverRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 5 * time.Second,
 	}
 	netweaverMetricsRoutine.StartRoutine(ctx)
@@ -271,6 +276,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 			corosync = CollectCorosyncMetricsFromConfig(ctx, params, v)
 		},
 		ErrorCode:           usagemetrics.WLMCollectionPacemakerRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 5 * time.Second,
 	}
 	pacemakerMetricsRoutine.StartRoutine(ctx)
@@ -280,6 +286,7 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 			custom = CollectCustomMetricsFromConfig(ctx, params)
 		},
 		ErrorCode:           usagemetrics.WLMCollectionCustomRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 5 * time.Second,
 	}
 	customMetricsRoutine.StartRoutine(ctx)

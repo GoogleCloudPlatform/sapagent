@@ -28,9 +28,9 @@ func TestRunning(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusRunning)
+	prevLastCalled := Logger.LastCalled(StatusRunning)
 	Running()
-	if logger.LastCalled(StatusRunning).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusRunning).Equal(prevLastCalled) {
 		t.Errorf("Running() did not update lastCalled timestamp for RUNNING status")
 	}
 }
@@ -40,9 +40,9 @@ func TestStarted(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusStarted)
+	prevLastCalled := Logger.LastCalled(StatusStarted)
 	Started()
-	if logger.LastCalled(StatusStarted).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusStarted).Equal(prevLastCalled) {
 		t.Errorf("Started() did not update lastCalled timestamp for STARTED status")
 	}
 }
@@ -52,9 +52,9 @@ func TestStopped(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusStopped)
+	prevLastCalled := Logger.LastCalled(StatusStopped)
 	Stopped()
-	if logger.LastCalled(StatusStopped).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusStopped).Equal(prevLastCalled) {
 		t.Errorf("Stopped() did not update lastCalled timestamp for STOPPED status")
 	}
 }
@@ -64,9 +64,9 @@ func TestConfigured(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusConfigured)
+	prevLastCalled := Logger.LastCalled(StatusConfigured)
 	Configured()
-	if logger.LastCalled(StatusConfigured).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusConfigured).Equal(prevLastCalled) {
 		t.Errorf("Configured() did not update lastCalled timestamp for CONFIGURED status")
 	}
 }
@@ -76,9 +76,9 @@ func TestMisconfigured(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusMisconfigured)
+	prevLastCalled := Logger.LastCalled(StatusMisconfigured)
 	Misconfigured()
-	if logger.LastCalled(StatusMisconfigured).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusMisconfigured).Equal(prevLastCalled) {
 		t.Errorf("Misconfigured() did not update lastCalled timestamp for MISCONFIGURED status")
 	}
 }
@@ -88,9 +88,9 @@ func TestError(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusError)
+	prevLastCalled := Logger.LastCalled(StatusError)
 	Error(1)
-	if logger.LastCalled(StatusError).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusError).Equal(prevLastCalled) {
 		t.Error("Error() did not update lastCalled timestamp for ERROR status")
 	}
 }
@@ -100,9 +100,9 @@ func TestInstalled(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusInstalled)
+	prevLastCalled := Logger.LastCalled(StatusInstalled)
 	Installed()
-	if logger.LastCalled(StatusInstalled).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusInstalled).Equal(prevLastCalled) {
 		t.Errorf("Installed() did not update lastCalled timestamp for INSTALLED status")
 	}
 }
@@ -112,9 +112,9 @@ func TestUpdated(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusUpdated)
+	prevLastCalled := Logger.LastCalled(StatusUpdated)
 	Updated("2.0")
-	if logger.LastCalled(StatusUpdated).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusUpdated).Equal(prevLastCalled) {
 		t.Errorf("Updated() did not update lastCalled timestamp for UPDATED status")
 	}
 }
@@ -124,9 +124,9 @@ func TestUninstalled(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusUninstalled)
+	prevLastCalled := Logger.LastCalled(StatusUninstalled)
 	Uninstalled()
-	if logger.LastCalled(StatusUninstalled).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusUninstalled).Equal(prevLastCalled) {
 		t.Errorf("Uninstalled() did not update lastCalled timestamp for UNINSTALLED status")
 	}
 }
@@ -136,9 +136,9 @@ func TestAction(t *testing.T) {
 	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
 	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
 
-	prevLastCalled := logger.LastCalled(StatusAction)
+	prevLastCalled := Logger.LastCalled(StatusAction)
 	Action(1)
-	if logger.LastCalled(StatusAction).Equal(prevLastCalled) {
+	if Logger.LastCalled(StatusAction).Equal(prevLastCalled) {
 		t.Errorf("Action() did not update lastCalled timestamp for ACTION status")
 	}
 }

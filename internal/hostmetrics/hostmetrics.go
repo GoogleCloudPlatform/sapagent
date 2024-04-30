@@ -34,10 +34,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/memorymetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/osmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
@@ -83,6 +83,7 @@ func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, p
 		Routine:             runHTTPServer,
 		RoutineArg:          cancel,
 		ErrorCode:           usagemetrics.HostMetricsHTTPServerRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
 	httpServerRoutine.StartRoutine(ctx)
@@ -91,6 +92,7 @@ func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, p
 		Routine:             collectHostMetrics,
 		RoutineArg:          params,
 		ErrorCode:           usagemetrics.HostMetricsCollectionRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
 	collectHostMetricsRoutine.StartRoutine(ctx)
@@ -129,7 +131,7 @@ func collectHostMetrics(ctx context.Context, a any) {
 	}
 
 	readers := hostMetricsReaders{
-		configmr: &configurationmetricreader.ConfigMetricReader{runtime.GOOS},
+		configmr: &configurationmetricreader.ConfigMetricReader{OS: runtime.GOOS},
 		cpusr:    cpustatsreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand),
 		mmr:      memorymetricreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand),
 		dsr:      diskstatsreader.New(runtime.GOOS, os.ReadFile, commandlineexecutor.ExecuteCommand),

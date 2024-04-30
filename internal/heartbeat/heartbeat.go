@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
@@ -131,6 +131,7 @@ func (m *Monitor) Run(ctx context.Context) {
 	m.runRoutine = &recovery.RecoverableRoutine{
 		Routine:             m.run,
 		ErrorCode:           usagemetrics.HeartbeatRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: m.frequency,
 	}
 	m.runRoutine.StartRoutine(ctx)

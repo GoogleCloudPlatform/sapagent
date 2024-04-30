@@ -30,9 +30,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -130,6 +130,7 @@ func Start(ctx context.Context, chs []chan<- *cdpb.CollectionDefinition, opts St
 		Routine:             periodicRefresh,
 		RoutineArg:          periodicRefreshArgs{chs: chs, opts: opts},
 		ErrorCode:           usagemetrics.CollectionDefinitionUpdateRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: minRoutineDuration,
 	}
 	updateRoutine.StartRoutine(ctx)

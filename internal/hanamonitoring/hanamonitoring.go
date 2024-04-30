@@ -28,11 +28,11 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -132,6 +132,7 @@ func Start(ctx context.Context, params Parameters) bool {
 		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectHANAMonitoringMetrics) },
 		RoutineArg:          nil,
 		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 24 * time.Hour,
 	}
 	params.dailyMetricsRoutine.StartRoutine(ctx)
@@ -144,6 +145,7 @@ func Start(ctx context.Context, params Parameters) bool {
 		Routine:             createWorkerPool,
 		RoutineArg:          createWorkerPoolArgs,
 		ErrorCode:           usagemetrics.HANAMonitoringCreateWorkerPoolFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
 	params.createWorkerPoolRoutine.StartRoutine(ctx)

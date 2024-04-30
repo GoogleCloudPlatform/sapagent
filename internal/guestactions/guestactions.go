@@ -25,12 +25,12 @@ import (
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/shared/uap"
 )
 
@@ -121,6 +121,7 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.GuestActionsStarted) },
 		RoutineArg:          nil,
 		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 24 * time.Hour,
 	}
 	dailyMetricsRoutine.StartRoutine(ctx)
@@ -129,6 +130,7 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 		Routine:             start,
 		RoutineArg:          guestActionsOptions{channel: defaultChannel, endpoint: defaultEndpoint},
 		ErrorCode:           usagemetrics.GuestActionsFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,
 	}
 	log.CtxLogger(ctx).Info("Starting UAP communication routine")

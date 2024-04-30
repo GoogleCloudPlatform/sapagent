@@ -55,12 +55,12 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/networkstats"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapservice"
-	"github.com/GoogleCloudPlatform/sapagent/internal/recovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	pcm "github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
@@ -178,6 +178,7 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectProcessMetrics) },
 		RoutineArg:          nil,
 		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 24 * time.Hour,
 	}
 	dailyMetricsRoutine.StartRoutine(ctx)
@@ -191,6 +192,7 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		},
 		RoutineArg:          parameters,
 		ErrorCode:           usagemetrics.CollectMetricsRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
 	// NOMUTANTS--will be covered by integration testing
@@ -208,6 +210,7 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		},
 		RoutineArg:          parameters,
 		ErrorCode:           usagemetrics.SlowMetricsCollectionFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
 	slowMetricsRoutine.StartRoutine(ctx)
@@ -513,6 +516,7 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 			},
 			RoutineArg:          collectFastMetricsRoutineArgs{c: collector, slot: i},
 			ErrorCode:           usagemetrics.CollectFastMetrcsRoutineFailure,
+			UsageLogger:         *usagemetrics.Logger,
 			ExpectedMinDuration: time.Second,
 		}
 		routines = append(routines, r)
@@ -581,6 +585,7 @@ func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
 		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectReliabilityMetrics) },
 		RoutineArg:          nil,
 		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 24 * time.Hour,
 	}
 	dailyMetricsRoutine.StartRoutine(ctx)
@@ -596,6 +601,7 @@ func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
 		},
 		RoutineArg:          parameters,
 		ErrorCode:           usagemetrics.CollectMetricsRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 5 * time.Minute,
 	}
 	collectAndSendReliabilityMetricsRoutine.StartRoutine(ctx)
@@ -708,6 +714,7 @@ func (p *Properties) collectAndSendReliabilityMetricsOnce(ctx context.Context, b
 			},
 			RoutineArg:          collectReliabilityMetricsRoutineArgs{c: collector, slot: i},
 			ErrorCode:           usagemetrics.CollectReliabilityMetricsRoutineFailure,
+			UsageLogger:         *usagemetrics.Logger,
 			ExpectedMinDuration: time.Second,
 		}
 		routines = append(routines, r)
