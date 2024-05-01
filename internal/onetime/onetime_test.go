@@ -17,6 +17,7 @@ limitations under the License.
 package onetime
 
 import (
+	"os"
 	"testing"
 
 	"flag"
@@ -24,6 +25,11 @@ import (
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func TestSetupOneTimeLogging(t *testing.T) {
 	tests := []struct {

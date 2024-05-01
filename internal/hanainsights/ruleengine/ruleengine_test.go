@@ -19,6 +19,7 @@ package ruleengine
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"testing"
 
@@ -26,9 +27,15 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func fakeQueryExec(context.Context, string, commandlineexecutor.Execute) (*databaseconnector.QueryResults, error) {
 	return &databaseconnector.QueryResults{}, nil

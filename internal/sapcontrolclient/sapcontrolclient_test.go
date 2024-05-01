@@ -21,11 +21,18 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 // DefaultSapcontrolSocket defines a default socket for mock sapcontrol service.
 // "10" is used as a default instance for mock sapcontrol service.

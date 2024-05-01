@@ -19,6 +19,7 @@ package migratehmadashboards
 import (
 	"context"
 	"embed"
+	"os"
 	"testing"
 
 	"flag"
@@ -31,6 +32,11 @@ import (
 	dashboard "cloud.google.com/go/monitoring/dashboard/apiv1"
 	dashboardpb "cloud.google.com/go/monitoring/dashboard/apiv1/dashboardpb"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 //go:embed testdata/*.json
 var dashboardsDir embed.FS

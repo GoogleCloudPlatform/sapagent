@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -64,7 +65,7 @@ var (
 
 	httpServerRoutine         *recovery.RecoverableRoutine
 	collectHostMetricsRoutine *recovery.RecoverableRoutine
-	dailyUsageRoutineStarted  bool
+	dailyUsageRoutineStarted  sync.Once
 )
 
 func requestHandler(w http.ResponseWriter, r *http.Request) {
@@ -142,10 +143,10 @@ func collectHostMetrics(ctx context.Context, a any) {
 	defer collectTicker.Stop()
 	defer heartbeatTicker.Stop()
 
-	if !dailyUsageRoutineStarted {
+	dailyUsageRoutineStarted.Do(func() {
+		// LogActionDaily never returns -only sleeps for 24 and then executes the provided function.
 		go usagemetrics.LogActionDaily(usagemetrics.CollectHostMetrics)
-		dailyUsageRoutineStarted = true
-	}
+	})
 
 	// Do not wait for the first 60s tick and start collection immediately
 	select {

@@ -20,15 +20,22 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	andEvalMetricWithRules = func(rules []*cmpb.EvalRule) *cmpb.EvalMetric {

@@ -17,6 +17,7 @@ limitations under the License.
 package configuration
 
 import (
+	"os"
 	"runtime"
 	"testing"
 
@@ -26,7 +27,13 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"go.uber.org/zap/zapcore"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	defaultReadConfigFile = func(p string) ([]byte, error) {

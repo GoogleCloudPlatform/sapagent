@@ -122,6 +122,11 @@ var (
 	}
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 func TestStart(t *testing.T) {
 	wantCollectionDefinition, err := unmarshal(configuration.DefaultCollectionDefinition)
 	if err != nil {
@@ -214,7 +219,6 @@ func TestStart_HeartbeatSpec(t *testing.T) {
 			want:         2,
 		},
 	}
-	log.SetupLoggingForTest()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := 0

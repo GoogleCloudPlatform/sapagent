@@ -18,6 +18,7 @@ package heartbeat
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -25,7 +26,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func createMonitor(t *testing.T, params Parameters) *Monitor {
 	t.Helper()

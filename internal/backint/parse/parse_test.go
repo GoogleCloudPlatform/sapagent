@@ -25,7 +25,13 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func TestSplit(t *testing.T) {
 	tests := []struct {

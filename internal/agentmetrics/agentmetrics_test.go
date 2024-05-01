@@ -19,6 +19,7 @@ package agentmetrics
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -37,7 +38,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 type fakeHealthMonitor struct {
 	statuses          map[string]bool

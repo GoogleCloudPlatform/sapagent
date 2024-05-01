@@ -33,6 +33,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 func fakeWritefileSuccess(name string, content []byte, perm os.FileMode) error {
 	return nil
 }

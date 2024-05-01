@@ -19,6 +19,7 @@ package clouddiscovery
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -29,10 +30,16 @@ import (
 	file "google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 const (
 	defaultRegion    = "test-region"

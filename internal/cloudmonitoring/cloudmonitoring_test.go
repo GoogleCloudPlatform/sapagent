@@ -19,6 +19,7 @@ package cloudmonitoring
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -33,6 +35,11 @@ import (
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	defaultBackOffIntervals = NewBackOffIntervals(time.Millisecond, time.Millisecond)

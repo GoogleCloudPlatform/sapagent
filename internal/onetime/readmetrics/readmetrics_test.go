@@ -38,6 +38,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 var (
 	defaultQueries = map[string]string{
 		"default_hana_availability":    defaultHanaAvailability,

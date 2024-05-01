@@ -17,6 +17,7 @@ limitations under the License.
 package yamlpb
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -24,7 +25,13 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/proto"
 	test_pb "github.com/GoogleCloudPlatform/sapagent/protos/yamlpbtest"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	defaultYAML string = `

@@ -19,6 +19,7 @@ package cloudmetricreader
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -37,6 +39,11 @@ import (
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	at                        = agenttime.New(agenttime.Clock{})

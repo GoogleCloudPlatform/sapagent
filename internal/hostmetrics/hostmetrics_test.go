@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -30,7 +31,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func TestRequestHandler_ReturnsXML(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

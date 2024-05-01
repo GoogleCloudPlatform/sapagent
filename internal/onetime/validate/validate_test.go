@@ -20,6 +20,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"os"
 	"testing"
 
 	"flag"
@@ -29,6 +30,11 @@ import (
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 //go:embed testdata/collectiondefinition_invalid.json
 var invalidCollectionDefinition []byte

@@ -36,6 +36,11 @@ import (
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 var defaultCloudProperties = &ipb.CloudProperties{
 	ProjectId:    "default-project",
 	InstanceName: "default-instance",

@@ -17,12 +17,19 @@ limitations under the License.
 package agenttime
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/google/go-cmp/cmp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	fc = clockwork.NewFakeClock()

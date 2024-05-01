@@ -17,11 +17,18 @@ limitations under the License.
 package usagemetrics
 
 import (
+	"os"
 	"testing"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func TestRunning(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.

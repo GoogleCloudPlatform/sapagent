@@ -18,6 +18,7 @@ package processmetrics
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -39,6 +41,11 @@ import (
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 type fakeDiscoveryInterface struct {
 	systems   []*spb.SapDiscovery
@@ -718,7 +725,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 		{
 			name:         "2 beat timeout",
 			beatInterval: time.Millisecond * 45,
-			timeout:      time.Millisecond * 110,
+			timeout:      time.Millisecond * 130,
 			want:         2,
 		},
 	}

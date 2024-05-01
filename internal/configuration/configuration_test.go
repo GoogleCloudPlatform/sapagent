@@ -18,6 +18,7 @@ package configuration
 
 import (
 	_ "embed"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -29,7 +30,13 @@ import (
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	testAgentProps = &cpb.AgentProperties{Name: AgentName, Version: AgentVersion}

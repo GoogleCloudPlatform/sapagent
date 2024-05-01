@@ -58,6 +58,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 
 	logging "cloud.google.com/go/logging"
 	"github.com/natefinch/lumberjack"
@@ -67,10 +68,11 @@ import (
 
 var (
 	// Logger used for logging structured messages
-	Logger    *zap.SugaredLogger
-	level     string
-	logfile   string
-	cloudCore *CloudCore
+	Logger           *zap.SugaredLogger
+	level            string
+	logfile          string
+	cloudCore        *CloudCore
+	constructionLock sync.Mutex
 
 	// loggerMap maps services identified by their serviceNames to respective SugaredLoggers.
 	loggerMap map[string]*zap.SugaredLogger
@@ -168,6 +170,8 @@ func StringLevelToZapcore(level string) zapcore.Level {
 
 // SetupLoggingForTest creates the Logger to log to the console during unit tests.
 func SetupLoggingForTest() {
+	constructionLock.Lock()
+	defer constructionLock.Unlock()
 	logger, _ := zap.NewDevelopment()
 	level = zapcore.DebugLevel.String()
 	logfile = ""
@@ -180,6 +184,8 @@ SetupLoggingToDiscard provides the configuration of the Logger to discard all lo
 Discarding logs is only used when the agent is run remotely during workload manager metrics remote collection.
 */
 func SetupLoggingToDiscard() {
+	constructionLock.Lock()
+	defer constructionLock.Unlock()
 	level = ""
 	logfile = ""
 	config := zap.NewProductionEncoderConfig()
@@ -202,6 +208,8 @@ func SetCtx(ctx context.Context, key, value string) context.Context {
 
 // CtxLogger  returns a zap logger with as much context as possible
 func CtxLogger(ctx context.Context) *zap.SugaredLogger {
+	constructionLock.Lock()
+	defer constructionLock.Unlock()
 	if serviceName, ok := ctx.Value(CtxKey).(string); ok {
 		if logger, exists := loggerMap[serviceName]; exists {
 			return logger

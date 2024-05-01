@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
@@ -45,6 +47,11 @@ import (
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	wvpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 type (
 	mockReadCloser struct{}

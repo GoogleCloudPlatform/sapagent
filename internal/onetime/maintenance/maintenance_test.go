@@ -28,6 +28,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 var defaultCloudProperties = &ipb.CloudProperties{
 	ProjectId:    "default-project",
 	InstanceName: "default-instance",

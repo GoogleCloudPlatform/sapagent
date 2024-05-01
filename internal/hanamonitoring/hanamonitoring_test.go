@@ -19,6 +19,7 @@ package hanamonitoring
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -28,8 +29,9 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -40,6 +42,11 @@ import (
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	gcefake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	defaultParams = Parameters{

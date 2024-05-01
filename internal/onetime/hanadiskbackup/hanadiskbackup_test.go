@@ -19,6 +19,7 @@ package hanadiskbackup
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -39,6 +40,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var defaultSnapshot = Snapshot{
 	Project:    "my-project",

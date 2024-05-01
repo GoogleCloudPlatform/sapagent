@@ -296,6 +296,11 @@ var (
 	}
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 func sortSapSystemDetails(a, b SapSystemDetails) bool {
 	if a.AppComponent != nil && b.AppComponent != nil &&
 		a.AppComponent.GetSid() == b.AppComponent.GetSid() {
@@ -906,7 +911,6 @@ func TestDiscoverNetweaverHA(t *testing.T) {
 		},
 		wantHA: false,
 	}}
-	log.SetupLoggingForTest()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := SapDiscovery{
@@ -1378,7 +1382,6 @@ func TestDiscoverNetweaver(t *testing.T) {
 			WorkloadProperties: nil,
 		},
 	}}
-	log.SetupLoggingForTest()
 	ctx := context.Background()
 
 	for _, tc := range tests {
@@ -2615,7 +2618,6 @@ func TestDiscoverSAPApps(t *testing.T) {
 		}},
 	}}
 
-	log.SetupLoggingForTest()
 	ctx := context.Background()
 
 	for _, tc := range tests {

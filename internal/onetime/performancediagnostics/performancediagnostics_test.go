@@ -42,6 +42,11 @@ import (
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 var (
 	fakeServer = fakestorage.NewServer([]fakestorage.Object{
 		{

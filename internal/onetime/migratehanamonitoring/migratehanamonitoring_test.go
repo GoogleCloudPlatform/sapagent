@@ -36,6 +36,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 var (
 	//go:embed testdata/configurationHM.yaml
 	oldAgentConfig string

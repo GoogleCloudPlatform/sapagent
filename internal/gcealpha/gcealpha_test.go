@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -28,7 +29,13 @@ import (
 	compute "google.golang.org/api/compute/v0.alpha"
 	"google.golang.org/api/googleapi"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fakehttp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 // cmpCodeOnly ignores the error message string, allowing comparisons on the error code only.
 var cmpCodeOnly = cmpopts.IgnoreFields(

@@ -20,13 +20,20 @@ package cpustatsreader
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func TestRead(t *testing.T) {
 	tests := []struct {

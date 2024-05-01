@@ -19,6 +19,7 @@ package computeresources
 import (
 	"context"
 	"errors"
+	"os"
 	"runtime"
 	"sort"
 	"testing"
@@ -28,12 +29,18 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	defaultSAPInstance = &sapb.SAPInstance{

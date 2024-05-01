@@ -17,17 +17,24 @@ limitations under the License.
 package configurationmetricreader
 
 import (
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	confpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func TestRead(t *testing.T) {
 	at := agenttime.New(agenttime.Clock{})

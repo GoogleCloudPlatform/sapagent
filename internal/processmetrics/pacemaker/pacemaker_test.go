@@ -18,6 +18,7 @@ package pacemaker
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -33,6 +35,11 @@ import (
 	cgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 type fakePacemakerCollector struct {
 	val    float64

@@ -31,6 +31,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
+
 // defaultWriteFile will return nil error up to numNil,
 // after which they will return an error.
 func defaultWriteFile(numNil int) func(string, []byte, os.FileMode) error {

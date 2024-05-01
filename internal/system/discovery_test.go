@@ -18,6 +18,7 @@ package system
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -113,6 +114,11 @@ var (
 		ResourceUri:  defaultInstanceURI,
 	}
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 func resourceLess(a, b *spb.SapDiscovery_Resource) bool {
 	return a.String() < b.String()
@@ -1490,7 +1496,6 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			},
 		}},
 	}}
-	log.SetupLoggingForTest()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			d := &Discovery{

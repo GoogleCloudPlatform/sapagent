@@ -18,6 +18,7 @@ package cluster
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -36,6 +38,11 @@ import (
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var defaultInstanceProperties = &InstanceProperties{
 	Config: &cgpb.Configuration{

@@ -73,7 +73,6 @@ func (f *FakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // NewServer returns a new FakeServer with a new web server object.
 func NewServer(r []HardCodedResponse) *httptest.Server {
-	log.SetupLoggingForTest()
 	f := &FakeServer{Responses: r}
 	return httptest.NewServer(http.Handler(f))
 }

@@ -18,6 +18,7 @@ package hanadiskrestore
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -33,6 +34,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	defaultRestorer = Restorer{

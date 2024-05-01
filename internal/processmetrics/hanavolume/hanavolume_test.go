@@ -19,6 +19,7 @@ package hanavolume
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -30,7 +31,13 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+func TestMain(t *testing.M) {
+	log.SetupLoggingForTest()
+	os.Exit(t.Run())
+}
 
 var (
 	defaultCloudProperties = &ipb.CloudProperties{
