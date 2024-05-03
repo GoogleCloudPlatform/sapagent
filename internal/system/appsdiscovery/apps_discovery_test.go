@@ -1448,6 +1448,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -1499,6 +1500,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
@@ -1556,6 +1558,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -1574,6 +1577,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -1632,6 +1636,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
@@ -1650,6 +1655,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
@@ -1946,6 +1952,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2261,6 +2268,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "abc",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2280,6 +2288,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "def",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2390,6 +2399,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "DEH",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2519,6 +2529,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "DEH",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2669,6 +2680,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
 						DatabaseVersion: "HANA 2.12 Rev 56",
+						DatabaseSid:     "DB2",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -3218,6 +3230,7 @@ func TestMergeSystemDetails(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED,
 						SharedNfsUri: "1.2.3.4",
+						DatabaseSid:  "DB1",
 					}},
 			},
 		},
@@ -3227,6 +3240,38 @@ func TestMergeSystemDetails(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri: "1.2.3.4",
+						DatabaseSid:  "DB1",
+					}},
+			},
+		},
+	}, {
+		name: "mergeDBPropertiesHasDBSID",
+		oldDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						DatabaseSid:  "DB1",
+					}},
+			},
+		},
+		newDetails: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED,
+						SharedNfsUri: "1.2.3.4",
+						DatabaseSid:  "DB2",
+					}},
+			},
+		},
+		want: SapSystemDetails{
+			DBComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri: "1.2.3.4",
+						DatabaseSid:  "DB1",
 					}},
 			},
 		},
