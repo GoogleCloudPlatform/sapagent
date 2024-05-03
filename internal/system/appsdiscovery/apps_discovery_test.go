@@ -98,7 +98,7 @@ tmpfs                              48G  2.0M   48G   1% /dev/shm
 	tmpfs                              48G  2.0M   48G   1% /dev/shm
 		`
 	defaultHANAVersionOutput = `HDB version info:
-  version:             2.00.056.00.1624618329
+  version:             2.12.056.34.1624618329
   branch:              fa/hana2sp05
   machine config:      linuxx86_64
   git hash:            1862616087c05005d2e3b87b8ca7a8149c3241fb
@@ -1447,11 +1447,17 @@ func TestDiscoverHANA(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
+						DatabaseVersion: "HANA 2.12 Rev 56",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBHosts: []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
 		}},
 	}, {
 		name: "scaleout",
@@ -1492,11 +1498,17 @@ func TestDiscoverHANA(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
+						DatabaseVersion: "HANA 2.12 Rev 56",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
 			DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
 		}},
 	}, {
 		name: "multiTenant",
@@ -1536,33 +1548,43 @@ func TestDiscoverHANA(t *testing.T) {
 				}
 			}
 		}`,
-		want: []SapSystemDetails{
-			SapSystemDetails{
-				DBComponent: &spb.SapDiscovery_Component{
-					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
-							SharedNfsUri:    "1.2.3.4",
-							DatabaseVersion: "HANA 2.0 Rev 56",
-						}},
-					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
-				},
-				DBHosts: []string{"test-instance"},
+		want: []SapSystemDetails{{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.12 Rev 56",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
-			SapSystemDetails{
-				DBComponent: &spb.SapDiscovery_Component{
-					Sid: "DEF",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
-							SharedNfsUri:    "1.2.3.4",
-							DatabaseVersion: "HANA 2.0 Rev 56",
-						}},
-					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
-				},
-				DBHosts: []string{"test-instance"},
+			DBHosts: []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
 			},
+		}, {
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEF",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.12 Rev 56",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
+			DBHosts: []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
+		},
 		},
 	}, {
 		name: "multiTenantScaleout",
@@ -1602,33 +1624,43 @@ func TestDiscoverHANA(t *testing.T) {
 				}
 			}
 		}`,
-		want: []SapSystemDetails{
-			SapSystemDetails{
-				DBComponent: &spb.SapDiscovery_Component{
-					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
-							SharedNfsUri:    "1.2.3.4",
-							DatabaseVersion: "HANA 2.0 Rev 56",
-						}},
-					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
-				},
-				DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
+		want: []SapSystemDetails{{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.12 Rev 56",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
-			SapSystemDetails{
-				DBComponent: &spb.SapDiscovery_Component{
-					Sid: "DEF",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
-							SharedNfsUri:    "1.2.3.4",
-							DatabaseVersion: "HANA 2.0 Rev 56",
-						}},
-					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
-				},
-				DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
+			DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
 			},
+		}, {
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEF",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.12 Rev 56",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+			},
+			DBHosts: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
+		},
 		},
 	}, {
 		name: "errGettingNodes",
@@ -1906,22 +1938,26 @@ func TestDiscoverSAPApps(t *testing.T) {
 			ReadFileResp: [][]byte{[]byte("")},
 			ReadFileErr:  []error{nil},
 		},
-		want: []SapSystemDetails{
-			{
-				DBComponent: &spb.SapDiscovery_Component{
-					Sid: "abc",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-							DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
-							SharedNfsUri:    "1.2.3.4",
-							DatabaseVersion: "HANA 2.0 Rev 56",
-						}},
-					TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
-				},
-				DBOnHost: true,
-				DBHosts:  []string{"test-instance"},
+		want: []SapSystemDetails{{
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "abc",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
+						SharedNfsUri:    "1.2.3.4",
+						DatabaseVersion: "HANA 2.12 Rev 56",
+					}},
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
-		},
+			DBOnHost: true,
+			DBHosts:  []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
+		}},
 	}, {
 		name: "justNetweaver",
 		cp:   defaultCloudProperties,
@@ -2224,12 +2260,18 @@ func TestDiscoverSAPApps(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
+						DatabaseVersion: "HANA 2.12 Rev 56",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "def",
@@ -2237,12 +2279,18 @@ func TestDiscoverSAPApps(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
+						DatabaseVersion: "HANA 2.12 Rev 56",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
 		}},
 	}, {
 		name: "netweaverThenHANAConnected",
@@ -2341,13 +2389,18 @@ func TestDiscoverSAPApps(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
+						DatabaseVersion: "HANA 2.12 Rev 56",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
-			DBOnHost:           true,
-			DBHosts:            []string{"test-instance"},
-			WorkloadProperties: nil,
+			DBOnHost: true,
+			DBHosts:  []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "ascs",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
@@ -2465,7 +2518,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
+						DatabaseVersion: "HANA 2.12 Rev 56",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2484,6 +2537,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				VirtualHostname: "app2",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 			}},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
 		}},
 	}, {
 		name: "netweaverThenHANANotConnected",
@@ -2609,12 +2668,18 @@ func TestDiscoverSAPApps(t *testing.T) {
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
 						DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:    "1.2.3.4",
-						DatabaseVersion: "HANA 2.0 Rev 56",
+						DatabaseVersion: "HANA 2.12 Rev 56",
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
 			DBOnHost: true,
 			DBHosts:  []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+					Name:    "SAP HANA",
+					Version: "2.12 SPS05 Rev56.34",
+				}},
+			},
 		}},
 	}}
 
@@ -3240,16 +3305,18 @@ func TestMergeSystemDetails(t *testing.T) {
 
 func TestDiscoverHANAVersion(t *testing.T) {
 	tests := []struct {
-		name    string
-		exec    func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
-		want    string
-		wantErr error
+		name        string
+		exec        func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		want        string
+		wantProdVer string
+		wantErr     error
 	}{{
 		name: "success",
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return defaultHANAVersionResult
 		},
-		want: "HANA 2.0 Rev 56",
+		want:        "HANA 2.12 Rev 56",
+		wantProdVer: "2.12 SPS05 Rev56.34",
 	}, {
 		name: "commandError",
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -3276,13 +3343,16 @@ func TestDiscoverHANAVersion(t *testing.T) {
 				Sapsid:         defaultSID,
 				InstanceNumber: defaultInstanceNumber,
 			}
-			got, err := d.discoverHANAVersion(context.Background(), app)
+			got, gotProdVer, err := d.discoverHANAVersion(context.Background(), app)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("discoverHANAVersion() error: got %v, want %v", err, tc.wantErr)
 			}
 
 			if got != tc.want {
 				t.Errorf("discoverHANAVersion() = %v, want: %v", got, tc.want)
+			}
+			if gotProdVer != tc.wantProdVer {
+				t.Errorf("discoverHANAVersion() productVersion = %v, want: %v", gotProdVer, tc.wantProdVer)
 			}
 		})
 	}

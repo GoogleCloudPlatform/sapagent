@@ -374,7 +374,7 @@ func (d *SapDiscovery) discoverNetweaverHosts(ctx context.Context, app *sappb.SA
 	return ascsHosts, ersHosts, appHosts
 }
 
-func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid string) SapSystemDetails {
+func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid, dbProductVersion string) SapSystemDetails {
 	t := spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP
 	if len(dbHosts) > 1 {
 		t = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
@@ -389,6 +389,12 @@ func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Compone
 			TopologyType: t,
 		},
 		DBHosts: removeDuplicates(append(dbHosts, app.HanaHaMembers...)),
+		WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
+				Name:    "SAP HANA",
+				Version: dbProductVersion,
+			}},
+		},
 	}
 }
 
@@ -398,7 +404,7 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 		return nil
 	}
 	dbNFS, _ := d.discoverDatabaseNFS(ctx)
-	version, _ := d.discoverHANAVersion(ctx, app)
+	version, dbProductVersion, _ := d.discoverHANAVersion(ctx, app)
 	dbProps := &spb.SapDiscovery_Component_DatabaseProperties{
 		DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 		SharedNfsUri:    dbNFS,
@@ -408,12 +414,12 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 	dbSIDs, err := d.discoverHANATenantDBs(ctx, app, dbHosts[0])
 	if err != nil {
 		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverHANATenantDBs. Only discovering primary HANA system.", "error", err)
-		return []SapSystemDetails{hanaSystemDetails(app, dbProps, dbHosts, app.Sapsid)}
+		return []SapSystemDetails{hanaSystemDetails(app, dbProps, dbHosts, app.Sapsid, dbProductVersion)}
 	}
 
 	systems := []SapSystemDetails{}
 	for _, s := range dbSIDs {
-		systems = append(systems, hanaSystemDetails(app, dbProps, dbHosts, s))
+		systems = append(systems, hanaSystemDetails(app, dbProps, dbHosts, s, dbProductVersion))
 	}
 	return systems
 }
@@ -892,7 +898,7 @@ func (d *SapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) 
 	return "", errors.New("unable to identify main database NFS")
 }
 
-func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPInstance) (string, error) {
+func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPInstance) (string, string, error) {
 	log.CtxLogger(ctx).Debug("Entered discoverHANAVersion")
 	sidLower := strings.ToLower(app.Sapsid)
 	sidUpper := strings.ToUpper(app.Sapsid)
@@ -906,12 +912,12 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
 		log.CtxLogger(ctx).Warnw("Error executing HDB version command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
-		return "", res.Error
+		return "", "", res.Error
 	}
 
 	match := hanaVersionRegex.FindStringSubmatch(res.StdOut)
 	if len(match) < 2 {
-		return "", errors.New("unable to identify HANA version")
+		return "", "", errors.New("unable to identify HANA version")
 	}
 
 	parts := strings.Split(match[1], ".")
@@ -919,9 +925,11 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 	majorVersion, _ := strconv.Atoi(parts[0])
 	minorVersion, _ := strconv.Atoi(parts[1])
 	revision, _ := strconv.Atoi(parts[2])
+	revisionMinor, _ := strconv.Atoi(parts[3])
 
 	version := fmt.Sprintf("HANA %d.%d Rev %d", majorVersion, minorVersion, revision)
-	return version, nil
+	s := fmt.Sprintf("%d.%d SPS%02d Rev%d.%02d", majorVersion, minorVersion, int(revision/10), revision, revisionMinor)
+	return version, s, nil
 }
 
 func (d *SapDiscovery) readAndUnmarshalJson(ctx context.Context, filepath string) (map[string]any, error) {
