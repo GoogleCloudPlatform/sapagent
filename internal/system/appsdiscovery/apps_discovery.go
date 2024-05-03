@@ -238,19 +238,19 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	}
 	ascsHost, err := d.discoverASCS(ctx, app.Sapsid)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverASCS.", "error", err)
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverASCS.", "error", err)
 	} else {
 		appProps.AscsUri = ascsHost
 	}
 	nfsHost, err := d.discoverAppNFS(ctx, app.Sapsid)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverAppNFS.", "error", err)
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverAppNFS.", "error", err)
 	} else {
 		appProps.NfsUri = nfsHost
 	}
 	kernelVersion, err := d.discoverNetweaverKernelVersion(ctx, app.Sapsid)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverKernelVersion.", "error", err)
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverNetweaverKernelVersion.", "error", err)
 	} else {
 		appProps.KernelVersion = kernelVersion
 	}
@@ -304,7 +304,7 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	if conf.GetEnableWorkloadDiscovery().GetValue() {
 		isABAP, wlProps, err := d.discoverNetweaverABAP(ctx, app)
 		if err != nil {
-			log.CtxLogger(ctx).Warnw("Encountered error during call to discoverNetweaverABAP.", "error", err)
+			log.CtxLogger(ctx).Infow("Encountered error during call to discoverNetweaverABAP.", "error", err)
 		}
 		details.WorkloadProperties = wlProps
 		details.AppComponent.Properties.(*spb.SapDiscovery_Component_ApplicationProperties_).ApplicationProperties.Abap = isABAP
@@ -413,7 +413,7 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 
 	dbSIDs, err := d.discoverHANATenantDBs(ctx, app, dbHosts[0])
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Encountered error during call to discoverHANATenantDBs. Only discovering primary HANA system.", "error", err)
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverHANATenantDBs. Only discovering primary HANA system.", "error", err)
 		return []SapSystemDetails{hanaSystemDetails(app, dbProps, dbHosts, app.Sapsid, dbProductVersion)}
 	}
 
@@ -483,13 +483,13 @@ func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list", "DEFAULT"},
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
+		log.CtxLogger(ctx).Infow("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
 		return nil, result.Error
 	}
 
 	dbHosts := parseDBHosts(result.StdOut)
 	if len(dbHosts) == 0 {
-		log.CtxLogger(ctx).Warnw("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
+		log.CtxLogger(ctx).Infow("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
 		return nil, errors.New("Unable to find DB hostname and port in hdbuserstore output")
 	}
 
@@ -531,12 +531,12 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	SELECT * FROM CVERS`
 	file, err := d.FileSystem.Create(tmpControlFilePath)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error creating control file", "error", err)
+		log.CtxLogger(ctx).Infow("Error creating control file", "error", err)
 		return false, nil, err
 	}
 	defer file.Close()
 	if _, err = d.FileSystem.WriteStringToFile(file, contents); err != nil {
-		log.CtxLogger(ctx).Warnw("Error writing control file", "error", err)
+		log.CtxLogger(ctx).Infow("Error writing control file", "error", err)
 		return false, nil, err
 	}
 
@@ -545,14 +545,14 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	// Run R3trans with the control file
 	params.Args = []string{"-i", "-u", sidAdm, "R3trans", "-w", r3transOutputPath, tmpControlFilePath}
 	if result = d.Execute(ctx, params); result.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error running R3trans with control file", "error", result.Error)
+		log.CtxLogger(ctx).Infow("Error running R3trans with control file", "error", result.Error)
 		return false, nil, result.Error
 	}
 
 	// Export the data
 	params.Args = []string{"-i", "-u", sidAdm, "R3trans", "-w", r3transOutputPath, "-v", "-l", r3transTmpFolder + "export_products.dat"}
 	if result = d.Execute(ctx, params); result.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error exporting data", "error", result.Error)
+		log.CtxLogger(ctx).Infow("Error exporting data", "error", result.Error)
 		return false, nil, result.Error
 	}
 	log.CtxLogger(ctx).Debugw("R3trans exported data", "stdOut", result.StdOut)
@@ -560,7 +560,7 @@ func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAP
 	// Read output.txt
 	fileBytes, err := d.FileSystem.ReadFile(r3transOutputPath)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error reading r3trans output file", "r3transOutputPath", r3transOutputPath, "error", err)
+		log.CtxLogger(ctx).Infow("Error reading r3trans output file", "r3transOutputPath", r3transOutputPath, "error", err)
 		return false, nil, err
 	}
 	fileString := string(fileBytes[:])
@@ -591,7 +591,7 @@ func parseR3transOutput(ctx context.Context, s string) (wlProps *spb.SapDiscover
 				cversSplit := strings.Split(l, "**")
 				re := regexp.MustCompile("\\s+")
 				if len(cversSplit) < 1 {
-					log.CtxLogger(ctx).Errorw("cvers entry does not have enough fields", "fields", cversSplit, "len(fields)", len(cversSplit))
+					log.CtxLogger(ctx).Infow("cvers entry does not have enough fields", "fields", cversSplit, "len(fields)", len(cversSplit))
 					continue
 				}
 				// Taking everything after the "**" which is "SAP_ABA                       750       0025      S"
@@ -610,7 +610,7 @@ func parseR3transOutput(ctx context.Context, s string) (wlProps *spb.SapDiscover
 				if len(fields) == 3 {
 					// The last two fields are combined.
 					if len(fields[2]) < 1 {
-						log.CtxLogger(ctx).Errorw("Parsing component encountered ext_version that is too short.", "fields[2]", fields[2], "len(fields[2])", len(fields[2]))
+						log.CtxLogger(ctx).Infow("Parsing component encountered ext_version that is too short.", "fields[2]", fields[2], "len(fields[2])", len(fields[2]))
 						continue
 					}
 					// This looks like "0000000000S" where "0000000000" is the ext_version and "S" is the type.
@@ -635,7 +635,7 @@ func parseR3transOutput(ctx context.Context, s string) (wlProps *spb.SapDiscover
 				// We split on multiple consecutive spaces so that we don't split in the middle of a given field.
 				prdversSplit := re.Split(l, -1)
 				if len(prdversSplit) < 2 {
-					log.CtxLogger(ctx).Errorw("prdvers entry does not have enough fields", "fields", prdversSplit, "len(fields)", len(prdversSplit))
+					log.CtxLogger(ctx).Infow("prdvers entry does not have enough fields", "fields", prdversSplit, "len(fields)", len(prdversSplit))
 					continue
 				}
 				// Extracting the second to last element here gives us "SAP NETWEAVER 7.5"
@@ -643,7 +643,7 @@ func parseR3transOutput(ctx context.Context, s string) (wlProps *spb.SapDiscover
 				// Find the last space in the product description. This separates the name from the version.
 				lastIndex := strings.LastIndex(fields, " ")
 				if lastIndex < 0 {
-					log.CtxLogger(ctx).Errorw("Failed to distinguish name from version for prdvers entry", "fields", fields, "len(fields)", len(fields))
+					log.CtxLogger(ctx).Infow("Failed to distinguish name from version for prdvers entry", "fields", fields, "len(fields)", len(fields))
 					prdversEntries = append(prdversEntries, &spb.SapDiscovery_WorkloadProperties_ProductVersion{Name: fields})
 					continue
 				}
@@ -695,13 +695,13 @@ func (d *SapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list"},
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Infow("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
 	re, err := regexp.Compile(`DATABASE\s*:\s*([a-zA-Z][a-zA-Z0-9]{2})`)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error compiling regex", "error", err)
+		log.CtxLogger(ctx).Infow("Error compiling regex", "error", err)
 		return "", err
 	}
 	sid := re.FindStringSubmatch(result.StdOut)
@@ -717,13 +717,13 @@ func (d *SapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 	})
 
 	if result.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Infow("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
 	re, err = regexp.Compile(`(dbid|dbms\/name)\s*=\s*([a-zA-Z][a-zA-Z0-9]{2})`)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error compiling regex", "error", err)
+		log.CtxLogger(ctx).Infow("Error compiling regex", "error", err)
 		return "", err
 	}
 	sid = re.FindStringSubmatch(result.StdOut)
@@ -751,7 +751,7 @@ func (d *SapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 	// has an exit status != 0. However, only 0 and 1 are considered true
 	// error exit codes for this script.
 	if result.Error != nil && result.ExitCode < 2 {
-		log.CtxLogger(ctx).Warnw("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
+		log.CtxLogger(ctx).Infow("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
 		return nil, result.Error
 	}
 
@@ -795,7 +795,7 @@ func (d *SapDiscovery) discoverASCS(ctx context.Context, sid string) (string, er
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
 
@@ -820,7 +820,7 @@ func (d *SapDiscovery) discoverAppNFS(ctx context.Context, sid string) (string, 
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Infow("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
 
@@ -849,7 +849,7 @@ func (d *SapDiscovery) discoverNetweaverKernelVersion(ctx context.Context, sid s
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error executing disp+work command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Infow("Error executing disp+work command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
 
@@ -879,7 +879,7 @@ func (d *SapDiscovery) discoverDatabaseNFS(ctx context.Context) (string, error) 
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Infow("Error executing df -h", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
 
@@ -911,7 +911,7 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
-		log.CtxLogger(ctx).Warnw("Error executing HDB version command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		log.CtxLogger(ctx).Infow("Error executing HDB version command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", "", res.Error
 	}
 
@@ -935,14 +935,14 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 func (d *SapDiscovery) readAndUnmarshalJson(ctx context.Context, filepath string) (map[string]any, error) {
 	file, err := d.FileSystem.ReadFile(filepath)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error reading file", "filepath", filepath, "error", err)
+		log.CtxLogger(ctx).Infow("Error reading file", "filepath", filepath, "error", err)
 		return nil, err
 	}
 
 	data := map[string]any{}
 	err = json.Unmarshal(file, &data)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error unmarshalling file", "filepath", filepath, "error", err, "contents", string(file))
+		log.CtxLogger(ctx).Infow("Error unmarshalling file", "filepath", filepath, "error", err, "contents", string(file))
 		return nil, err
 	}
 

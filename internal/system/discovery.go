@@ -255,7 +255,7 @@ func runDiscovery(ctx context.Context, a any) {
 
 				err := args.d.WlmService.WriteInsight(cp.ProjectId, region, insightRequest)
 				if err != nil {
-					log.CtxLogger(ctx).Warnw("Encountered error writing to WLM", "error", err)
+					log.CtxLogger(ctx).Infow("Encountered error writing to WLM", "error", err)
 				}
 
 				if args.d.CloudLogInterface == nil {
@@ -263,7 +263,7 @@ func runDiscovery(ctx context.Context, a any) {
 				}
 				err = args.d.writeToCloudLogging(sys)
 				if err != nil {
-					log.CtxLogger(ctx).Warnw("Encountered error writing to cloud logging", "error", err)
+					log.CtxLogger(ctx).Infow("Encountered error writing to cloud logging", "error", err)
 				}
 			}
 		}

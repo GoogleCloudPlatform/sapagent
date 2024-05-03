@@ -46,7 +46,7 @@ func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) []string {
 
 	addrs, err := d.discoverClusterAddresses(ctx)
 	if err != nil {
-		log.CtxLogger(ctx).Warnw("Error discovering cluster", "error", err)
+		log.CtxLogger(ctx).Infow("Error discovering cluster", "error", err)
 		return fs
 	}
 
@@ -69,7 +69,7 @@ func (d *HostDiscovery) discoverClustersCRM(ctx context.Context) ([]string, erro
 		ArgsToSplit: "config show",
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Warnw("running crm", "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Infow("running crm", "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return nil, result.Error
 	}
 

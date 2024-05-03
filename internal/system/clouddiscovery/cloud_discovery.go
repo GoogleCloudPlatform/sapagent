@@ -192,7 +192,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 		var err error
 		uri, err = d.GceService.GetURIForIP(project, addr)
 		if err != nil {
-			log.CtxLogger(ctx).Warnw("discoverResource URI error", "err", err, "addr", addr, "host", host.name)
+			log.CtxLogger(ctx).Infow("discoverResource URI error", "err", err, "addr", addr, "host", host.name)
 			return nil, nil, err
 		}
 		log.CtxLogger(ctx).Debugw("discoverResource uri for ip", "uri", uri)

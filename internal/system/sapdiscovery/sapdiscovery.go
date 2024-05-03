@@ -98,7 +98,7 @@ func SAPApplications(ctx context.Context) *sapb.SAPInstances {
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
-		log.CtxLogger(ctx).Debugw("Failure in reading crm_mon data from pacemaker", log.Error(err))
+		log.CtxLogger(ctx).Debugw("Failure in reading crm_mon data from pacemaker", "err", err)
 	}
 	return instances(ctx, HANAReplicationConfig, listSAPInstances, commandlineexecutor.ExecuteCommand, data)
 }
@@ -110,14 +110,14 @@ func instances(ctx context.Context, hrc replicationConfig, list listInstances, e
 
 	hana, err := hanaInstances(ctx, hrc, list, exec)
 	if err != nil {
-		log.CtxLogger(ctx).Infow("Unable to discover HANA instances", log.Error(err))
+		log.CtxLogger(ctx).Infow("Unable to discover HANA instances", "err", err)
 	} else {
 		sapInstances = hana
 	}
 
 	netweaver, err := netweaverInstances(ctx, list, exec)
 	if err != nil {
-		log.CtxLogger(ctx).Infow("Unable to discover Netweaver instances", log.Error(err))
+		log.CtxLogger(ctx).Infow("Unable to discover Netweaver instances", "err", err)
 	} else {
 		sapInstances = append(sapInstances, netweaver...)
 	}
@@ -377,7 +377,7 @@ func netweaverInstances(ctx context.Context, list listInstances, exec commandlin
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			instance.NetweaverHealthCheckUrl, instance.ServiceName, err = buildURLAndServiceName(entry.InstanceName, instance.NetweaverHttpPort)
 			if err != nil {
-				log.CtxLogger(ctx).Debugw("Could not build Netweaver URL for health check", log.Error(err))
+				log.CtxLogger(ctx).Debugw("Could not build Netweaver URL for health check", "err", err)
 			}
 			log.CtxLogger(ctx).Debugw("Found SAP NetWeaver instance", "instance", prototext.Format(instance))
 			instances = append(instances, instance)
