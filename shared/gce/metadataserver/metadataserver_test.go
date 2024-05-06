@@ -272,6 +272,163 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 	}
 }
 
+func TestReadCloudPropertiesWithRetry(t *testing.T) {
+	tests := []struct {
+		name string
+		url  endpoint
+		want *CloudProperties
+	}{
+		{
+			name: "missingProjectID",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				}),
+			},
+			want: nil,
+		},
+		{
+			name: "missingNumericProjectID",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project"},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				}),
+			},
+			want: nil,
+		},
+		{
+			name: "missingInstanceID",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						Zone:  "projects/test-project/zones/test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				})},
+			want: nil,
+		},
+		{
+			name: "missingZone",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				})},
+			want: nil,
+		},
+		{
+			name: "nonMatchingZone",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "test-zone",
+						Name:  "test-instance-name",
+						Image: "test-image",
+					},
+				})},
+			want: nil,
+		},
+		{
+			name: "missingInstanceName",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:    101,
+						Zone:  "projects/test-project/zones/test-zone",
+						Image: "test-image",
+					},
+				})},
+			want: nil,
+		},
+		{
+			name: "success",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:          101,
+						Zone:        "projects/test-project/zones/test-zone",
+						Name:        "test-instance-name",
+						Image:       "test-image",
+						MachineType: "projects/test-project/machineTypes/test-machine-type",
+					},
+				})},
+			want: &CloudProperties{
+				ProjectID:        "test-project",
+				NumericProjectID: "1",
+				InstanceID:       "101",
+				Zone:             "test-zone",
+				InstanceName:     "test-instance-name",
+				Image:            "test-image",
+				MachineType:      "test-machine-type",
+			},
+		},
+		{
+			name: "unknownImageAndMachineType",
+			url: endpoint{
+				uri: cloudPropertiesURI,
+				responseBody: marshalResponse(t, metadataServerResponse{
+					Project: projectInfo{ProjectID: "test-project", NumericProjectID: 1},
+					Instance: instanceInfo{
+						ID:   101,
+						Zone: "projects/test-project/zones/test-zone",
+						Name: "test-instance-name",
+					},
+				})},
+			want: &CloudProperties{
+				ProjectID:        "test-project",
+				NumericProjectID: "1",
+				InstanceID:       "101",
+				Zone:             "test-zone",
+				InstanceName:     "test-instance-name",
+				Image:            ImageUnknown,
+				MachineType:      MachineTypeUnknown,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ts := mockMetadataServer(t, test.url)
+			defer ts.Close()
+			metadataServerURL = ts.URL
+
+			got := ReadCloudPropertiesWithRetry(testBackOffPolicy())
+			if d := cmp.Diff(test.want, got, protocmp.Transform()); d != "" {
+				t.Errorf("CloudProperties() mismatch (-want, +got):\n%s", d)
+			}
+		})
+	}
+}
+
 func TestDiskTypeWithRetry(t *testing.T) {
 	tests := []struct {
 		name string
@@ -322,10 +479,10 @@ func TestFetchCloudProperties(t *testing.T) {
 				MachineType: "projects/test-project/machineTypes/test-machine-type",
 			},
 		})}
-	want := &instancepb.CloudProperties{
-		ProjectId:        "test-project",
-		NumericProjectId: "1",
-		InstanceId:       "101",
+	want := &CloudProperties{
+		ProjectID:        "test-project",
+		NumericProjectID: "1",
+		InstanceID:       "101",
 		Zone:             "test-zone",
 		InstanceName:     "test-instance-name",
 		Image:            "test-image",

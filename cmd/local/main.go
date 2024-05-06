@@ -52,6 +52,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/version"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -115,10 +116,19 @@ func main() {
 		LogToCloud: true,
 	}
 
-	cloudProps := metadataserver.FetchCloudProperties()
-	if cloudProps != nil {
-		lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.GetProjectId())
+	cloudProps := &iipb.CloudProperties{}
+	if cp := metadataserver.FetchCloudProperties(); cp != nil {
+		cloudProps = &iipb.CloudProperties{
+			ProjectId:        cp.ProjectID,
+			InstanceId:       cp.InstanceID,
+			Zone:             cp.Zone,
+			InstanceName:     cp.InstanceName,
+			Image:            cp.Image,
+			NumericProjectId: cp.NumericProjectID,
+			MachineType:      cp.MachineType,
+		}
 	}
+	lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.GetProjectId())
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
 	if lp.CloudLoggingClient != nil {

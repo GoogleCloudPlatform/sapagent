@@ -59,28 +59,36 @@ const (
 	helpString = `For information on permissions needed to access metadata refer: https://cloud.google.com/compute/docs/metadata/querying-metadata#permissions. Restart the agent after adding necessary permissions.`
 )
 
-type metadataServerResponse struct {
-	Project  projectInfo  `json:"project"`
-	Instance instanceInfo `json:"instance"`
-}
+type (
+	metadataServerResponse struct {
+		Project  projectInfo  `json:"project"`
+		Instance instanceInfo `json:"instance"`
+	}
 
-type projectInfo struct {
-	ProjectID        string `json:"projectId"`
-	NumericProjectID int64  `json:"numericProjectId"`
-}
+	projectInfo struct {
+		ProjectID        string `json:"projectId"`
+		NumericProjectID int64  `json:"numericProjectId"`
+	}
 
-type instanceInfo struct {
-	ID          int64  `json:"id"`
-	Zone        string `json:"zone"`
-	Name        string `json:"name"`
-	Image       string `json:"image"`
-	MachineType string `json:"machineType"`
-}
+	instanceInfo struct {
+		ID          int64  `json:"id"`
+		Zone        string `json:"zone"`
+		Name        string `json:"name"`
+		Image       string `json:"image"`
+		MachineType string `json:"machineType"`
+	}
+
+	// CloudProperties contains the cloud properties of the instance.
+	CloudProperties struct {
+		ProjectID, NumericProjectID, InstanceID, Zone, InstanceName, Image, MachineType string
+	}
+)
 
 // CloudPropertiesWithRetry fetches information from the GCE metadata server with a retry mechanism.
 //
 // If there are any persistent errors in fetching this information, then the error will be logged
 // and the return value will be nil.
+// This API will be deprecated and replaced by ReadCloudPropertiesWithRetry once the consumers have been migrated.
 func CloudPropertiesWithRetry(bo backoff.BackOff) *instancepb.CloudProperties {
 	var (
 		attempt = 1
@@ -89,6 +97,30 @@ func CloudPropertiesWithRetry(bo backoff.BackOff) *instancepb.CloudProperties {
 	err := backoff.Retry(func() error {
 		var err error
 		cp, err = requestCloudProperties()
+		if err != nil {
+			log.Logger.Errorw("Error in requestCloudProperties", "attempt", attempt, "error", err)
+			attempt++
+		}
+		return err
+	}, bo)
+	if err != nil {
+		log.Logger.Errorw("CloudProperties request retry limit exceeded", log.Error(err))
+	}
+	return cp
+}
+
+// ReadCloudPropertiesWithRetry fetches information from the GCE metadata server with a retry mechanism.
+//
+// If there are any persistent errors in fetching this information, then the error will be logged
+// and the return value will be nil.
+func ReadCloudPropertiesWithRetry(bo backoff.BackOff) *CloudProperties {
+	var (
+		attempt = 1
+		cp      *CloudProperties
+	)
+	err := backoff.Retry(func() error {
+		var err error
+		cp, err = requestProperties()
 		if err != nil {
 			log.Logger.Errorw("Error in requestCloudProperties", "attempt", attempt, "error", err)
 			attempt++
@@ -155,6 +187,7 @@ func get(uri, queryString string) ([]byte, error) {
 }
 
 // requestCloudProperties attempts to fetch information from the GCE metadata server.
+// This function will be deprecated and replaced by requestProperties once the consumers have been migrated.
 func requestCloudProperties() (*instancepb.CloudProperties, error) {
 	body, err := get(cloudPropertiesURI, "recursive=true")
 	if err != nil {
@@ -200,6 +233,52 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 	}, nil
 }
 
+// requestProperties attempts to fetch information from the GCE metadata server.
+func requestProperties() (*CloudProperties, error) {
+	body, err := get(cloudPropertiesURI, "recursive=true")
+	if err != nil {
+		return nil, err
+	}
+	resBodyJSON := &metadataServerResponse{}
+	if err = json.Unmarshal(body, resBodyJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body from metadata server: %v", err)
+	}
+
+	project := resBodyJSON.Project
+	projectID := project.ProjectID
+	numericProjectID := strconv.FormatInt(int64(project.NumericProjectID), 10)
+	instance := resBodyJSON.Instance
+	instanceID := strconv.FormatInt(int64(instance.ID), 10)
+	zone := parseZone(instance.Zone)
+	machineType := parseMachineType(instance.MachineType)
+	instanceName := instance.Name
+	image := instance.Image
+
+	if image == "" {
+		image = ImageUnknown
+	}
+	if machineType == "" {
+		machineType = MachineTypeUnknown
+	}
+
+	log.Logger.Debugw("Default Cloud Properties from metadata server",
+		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image, "machinetype", machineType)
+
+	if projectID == "" || numericProjectID == "0" || instanceID == "0" || zone == "" || instanceName == "" {
+		return nil, fmt.Errorf("metadata server responded with incomplete information")
+	}
+
+	return &CloudProperties{
+		ProjectID:        projectID,
+		NumericProjectID: numericProjectID,
+		InstanceID:       instanceID,
+		Zone:             zone,
+		InstanceName:     instanceName,
+		Image:            image,
+		MachineType:      machineType,
+	}, nil
+}
+
 // requestDiskType attempts to fetch information from the GCE metadata server.
 func requestDiskType(disk string) (string, error) {
 	body, err := get(fmt.Sprintf("%s%s/type", diskType, disk), "recursive=true")
@@ -237,9 +316,9 @@ func parseMachineType(raw string) string {
 }
 
 // FetchCloudProperties retrieves the cloud properties using a backoff policy.
-func FetchCloudProperties() *instancepb.CloudProperties {
+func FetchCloudProperties() *CloudProperties {
 	exp := backoff.NewExponentialBackOff()
-	return CloudPropertiesWithRetry(backoff.WithMaxRetries(exp, 1)) // 1 retry (2 total attempts)
+	return ReadCloudPropertiesWithRetry(backoff.WithMaxRetries(exp, 1)) // 1 retry (2 total attempts)
 }
 
 // FetchGCEMaintenanceEvent retrieves information about pending host maintenance events.
