@@ -239,7 +239,7 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagSet, opts *options) []error {
 	errs := []error{}
 	// ConfigureInstance OTE subcommand needs to be run in every case.
-	exitStatus := d.runConfigureInstanceOTE(ctx, flagSet, opts.exec, opts.lp, opts.cp)
+	exitStatus := d.runConfigureInstanceOTE(ctx, flagSet, opts)
 	if exitStatus != subcommands.ExitSuccess {
 		errs = append(errs, fmt.Errorf("failure in executing ConfigureInstance OTE, failed with exist status %d", exitStatus))
 	}
@@ -303,19 +303,34 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) bo
 	return true
 }
 
-func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet, exec commandlineexecutor.Execute, lp log.Parameters, cp *ipb.CloudProperties) subcommands.ExitStatus {
+func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet, opts *options) subcommands.ExitStatus {
 	ciOTEParams := &onetime.InternallyInvokedOTE{
-		Lp:        lp,
-		Cp:        cp,
-		InvokedBy: d.Name(),
+		Lp:        opts.lp,
+		Cp:        opts.cp,
+		InvokedBy: "performance-diagnostics-configure-instance",
 	}
 	ci := &configureinstance.ConfigureInstance{
 		Check:          true,
-		ExecuteFunc:    exec,
+		ExecuteFunc:    opts.exec,
 		HyperThreading: d.hyperThreading,
 		IIOTEParams:    ciOTEParams,
 	}
-	return ci.Execute(ctx, f)
+	res := ci.Execute(ctx, f)
+	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
+	paths := []moveFiles{
+		{
+			oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-configure-instance.log",
+			newPath: path.Join(d.path, d.bundleName, "performance-diagnostics-configure-instance.log"),
+		},
+	}
+	if res != subcommands.ExitSuccess {
+		onetime.LogMessageToFileAndConsole("Error while executing ConfigureInstance OTE")
+	}
+	if err := addToBundle(ctx, paths, opts.fs); err != nil {
+		onetime.LogErrorToFileAndConsole("Error while adding ConfigureInstance OTE logs to bundle", err)
+		return subcommands.ExitFailure
+	}
+	return res
 }
 
 // listOperations returns a map of operations to be performed.

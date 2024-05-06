@@ -1248,3 +1248,52 @@ func TestUploadZip(t *testing.T) {
 		})
 	}
 }
+
+func TestRunConfigureInstanceOTE(t *testing.T) {
+	tests := []struct {
+		name       string
+		opts       *options
+		wantStatus subcommands.ExitStatus
+	}{
+		{
+			name: "ErrorWhileExecutingOTE",
+			opts: &options{
+				exec: fakeExecForErr,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+				},
+			},
+			wantStatus: subcommands.ExitUsageError,
+		},
+		{
+			name: "ErrorWhileAddingLogsToBundle",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenResp:   []*os.File{&os.File{}},
+					OpenErr:    []error{fmt.Errorf("error")},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{fmt.Errorf("error")},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{fmt.Errorf("error")},
+				},
+			},
+			wantStatus: subcommands.ExitFailure,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d := &Diagnose{hyperThreading: "default"}
+			if got := d.runConfigureInstanceOTE(context.Background(), &flag.FlagSet{}, test.opts); got != test.wantStatus {
+				t.Errorf("Execute(%v) returned status: %v, want status: %v", test.opts, got, test.wantStatus)
+			}
+		})
+	}
+
+}
