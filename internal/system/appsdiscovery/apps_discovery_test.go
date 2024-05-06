@@ -154,9 +154,10 @@ tmpfs                              48G  2.0M   48G   1% /dev/shm
 	operating system
 	Linux
 	`
-	defaultR3transOutput = `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
-unicode enabled version
-R3trans finished (0000).
+	defaultBatchConfigOutput = `
+	Listing the SCA versions:
+	SERVERCORE : 1000.7.50.25.5.20221121195400
+	Listing the versions of SDAs/EARs per SCA:
 	`
 	r3transDataExample = `Test R3trans output
 	4 ETW000 REP  CVERS                          *
@@ -168,6 +169,10 @@ R3trans finished (0000).
 	4 ETW000 ** 394 ** 73554900100900005134S4HANA ON PREMISE             2021                          sap.com                       SAP S/4HANA 2021                                                        +20231215105300
 	4 ETW000 ** 394 ** 73554900100900000414SAP NETWEAVER                 7.5                           sap.com                       SAP NETWEAVER 7.5                                                       +20220927121631
 	4 ETW000 ** 394 ** 73555000100900003452SAP FIORI FRONT-END SERVER    6.0                           sap.com                       SAP FIORI FRONT-END SERVER 6.0                                          +20220928054714
+	`
+	defaultR3transOutput = `This is R3trans version 6.26 (release 753 - 17.01.22 - 17:53:42 ).
+unicode enabled version
+R3trans finished (0000).
 	`
 	defaultPCSOutput = `Cluster Name: ascscluster_ascs
 	Corosync Nodes:
@@ -243,6 +248,9 @@ var (
 	defaultR3transResult = commandlineexecutor.Result{
 		StdOut: defaultR3transOutput,
 	}
+	defaultBatchConfigResult = commandlineexecutor.Result{
+		StdOut: defaultBatchConfigOutput,
+	}
 	defaultDiscoveryConfig = &cpb.DiscoveryConfiguration{
 		SystemDiscoveryUpdateFrequency: &dpb.Duration{Seconds: 30},
 		EnableDiscovery:                &wpb.BoolValue{Value: true},
@@ -285,6 +293,19 @@ var (
 			},
 		},
 	}
+	exampleJavaWorkloadProperties = &spb.SapDiscovery_WorkloadProperties{
+		ProductVersions: []*pv{
+			&pv{Name: "SAP Netweaver", Version: "7.50"},
+		},
+		SoftwareComponentVersions: []*scp{
+			&scp{
+				Name:       "SERVERCORE",
+				Version:    "7.50",
+				ExtVersion: "25",
+				Type:       "5",
+			},
+		},
+	}
 	defaultNetweaverInstanceListResult = commandlineexecutor.Result{
 		StdOut: defaultNetweaverInstanceListOutput,
 	}
@@ -293,6 +314,11 @@ var (
 	}
 	twoAppInstanceListResult = commandlineexecutor.Result{
 		StdOut: twoAppInstanceListOutput,
+	}
+	defaultErrorResult = commandlineexecutor.Result{
+		StdOut: "",
+		StdErr: "",
+		Error:  errors.New("default error"),
 	}
 )
 
@@ -977,10 +1003,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
-						Abap:            true,
 					}},
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
@@ -992,6 +1017,67 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: exampleWorkloadProperties,
+		},
+	}, {
+		name: "javaNetweaver",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				log.CtxLogger(ctx).Infof("important test!! - sudo: %v", params.Args)
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return defaultFailoverConfigResult
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultErrorResult
+				} else if slices.Contains(params.Args, "get.versions.of.deployed.units") {
+					log.CtxLogger(ctx).Infof("found it - important test!! - sudo: %v", params.Args)
+					return defaultBatchConfigResult
+				}
+			case "grep":
+				return defaultProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte(r3transDataExample)},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_JAVA,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid:     "abc",
+				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			},
+			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid:          "DEH",
+				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+			},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: exampleJavaWorkloadProperties,
 		},
 	}, {
 		name: "justNetweaverConnectedToScaleoutDB",
@@ -1035,10 +1121,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
-						Abap:            true,
 					}},
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
@@ -1093,10 +1178,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
-						Abap:            true,
 					}},
 				Sid: "abc",
 			},
@@ -1149,9 +1233,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
 						NfsUri:          "1.2.3.4",
-						Abap:            true,
 					}},
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
@@ -1201,9 +1284,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
 						AscsUri:         "some-test-ascs",
-						Abap:            true,
 					}},
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
@@ -1253,10 +1335,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
-						Abap:            true,
 					}},
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
@@ -1309,10 +1390,9 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppComponent: &spb.SapDiscovery_Component{
 				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
 					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
-						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
-						Abap:            true,
 					}},
 				Sid:     "abc",
 				HaHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
@@ -1370,7 +1450,6 @@ func TestDiscoverNetweaver(t *testing.T) {
 						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER,
 						AscsUri:         "some-test-ascs",
 						NfsUri:          "1.2.3.4",
-						Abap:            false,
 					}},
 				Sid: "abc",
 			},
@@ -1982,6 +2061,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // ABAP
 			}, {
+				Executable: "sudo", // Java
+			}, {
 				Executable: "sudo", // hdbuserstore
 			}, {
 				Executable: "sudo", // hdbuserstore
@@ -1993,6 +2074,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 			},
@@ -2075,6 +2157,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // ABAP
 			}, {
+				Executable: "sudo", // Java
+			}, {
 				Executable: "sudo", // hdbuserstore
 			}, {
 				Executable: "sudo", // hdbuserstore
@@ -2091,6 +2175,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // ABAP
 			}, {
+				Executable: "sudo", // Java
+			}, {
 				Executable: "sudo", // hdbuserstore
 			}, {
 				Executable: "sudo", // hdbuserstore
@@ -2102,6 +2188,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				defaultProfileResult,
@@ -2110,6 +2197,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 			},
@@ -2338,6 +2426,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/J11/j2ee/configtool/batchconfig.csh", "-task", "get.versions.of.deployed.units"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
 			}, {
 				Executable: "sudo",
@@ -2360,6 +2451,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				landscapeSingleNodeResult,
@@ -2480,6 +2572,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/J11/j2ee/configtool/batchconfig.csh", "-task", "get.versions.of.deployed.units"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
 			}, {
 				Executable: "sudo",
@@ -2495,6 +2590,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 			},
@@ -2592,6 +2688,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "abcadm", "R3trans", "-d", "-w", "/tmp/r3trans/tmp.log"},
 			}, {
 				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/J11/j2ee/configtool/batchconfig.csh", "-task", "get.versions.of.deployed.units"},
+			}, {
+				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
 			}, {
 				Executable: "sudo",
@@ -2614,6 +2713,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultFailoverConfigResult,
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
+				commandlineexecutor.Result{Error: errors.New("batchconfig error")},
 				defaultUserStoreResult,
 				defaultUserStoreResult,
 				landscapeSingleNodeResult,
@@ -3739,6 +3839,221 @@ func TestDiscoverNetweaverABAP(t *testing.T) {
 				t.Errorf("discoverNetweaverABAP(%v) = %v, want: %v", tc.app, gotBool, tc.wantBool)
 			} else if diff := cmp.Diff(gotData, tc.wantData, protocmp.Transform()); diff != "" {
 				t.Errorf("discoverNetweaverABAP(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
+			}
+		})
+	}
+}
+
+func TestParseBatchConfigOutput(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       string
+		want    *spb.SapDiscovery_WorkloadProperties
+		wantErr error
+	}{{
+		name: "realisticCase",
+		s: `
+		INFO: Loading tool launcher...
+		INFO: [OS: Linux] [VM vendor: SAP AG] [VM version: 1.8.0_351] [VM type: SAP Java Server VM]
+		INFO: Main class to start: "com.sap.engine.configtool.batch.BatchConfig"
+		INFO: Loading 21 JAR files: [./lib/jdbc.jar, ./lib/jvmx.jar, ./lib/sap.com~tc~bl~config~impl.jar, ./lib/sap.com~tc~bl~deploy~controller~offline_phase_asm.jar, ./lib/sap.com~tc~bl~gui~impl.jar, ./lib/sap.com~tc~bl~iqlib~impl.jar, ./lib/sap.com~tc~bl~jarsap~impl.jar, ./lib/sap.com~tc~bl~offline_launcher~impl.jar, ./lib/sap.com~tc~bl~opensql~implStandalone.jar, ./lib/sap.com~tc~bl~sl~utility~impl.jar, ./lib/sap.com~tc~exception~impl.jar, ./lib/sap.com~tc~je~cachegui.jar, ./lib/sap.com~tc~je~configtool.jar, ./lib/sap.com~tc~je~configuration~impl.jar, ./lib/sap.com~tc~je~offlineconfiguration~impl.jar, ./lib/sap.com~tc~je~offlinelicense_tool.jar, ./lib/sap.com~tc~je~opm.jar, ./lib/sap.com~tc~logging~java~impl.jar, ./lib/sap.com~tc~sapxmltoolkit~sapxmltoolkit.jar, ./lib/sap.com~tc~sec~likey.jar, ./lib/sap.com~tc~sec~secstorefs~java~core.jar]
+		INFO: Start
+ Listing the SCA versions:
+ AJAX-RUNTIME : 1000.7.50.25.4.20221122172500
+ BASETABLES : 1000.7.50.25.0.20220803150200
+ BI-WDALV : 1000.7.50.25.0.20220803152500
+ BI_UDI : 1000.7.50.25.0.20220803154900
+ CFG_ZA : 1000.7.50.25.0.20220803150200
+ CFG_ZA_CE : 1000.7.50.25.0.20220803150200
+ COMP_BUILDT : 1000.7.50.25.0.20220803154300
+ CORE-TOOLS : 1000.7.50.25.3.20221025194100
+ CU-BASE-JAVA : 1000.7.50.25.0.20220803155300
+ CU-BASE-WD : 1000.7.50.25.0.20220803153900
+ DATA-MAPPING : 1000.7.50.25.0.20220803155300
+ DI_CLIENTS : 1000.7.50.25.0.20220803150500
+ ECM-CORE : 1000.7.50.25.0.20220803145600
+ ENGFACADE : 1000.7.50.25.2.20221027184300
+ ENGINEAPI : 1000.7.50.25.0.20220803150200
+ EP-BASIS : 1000.7.50.25.5.20221208201400
+ EP-BASIS-API : 1000.7.50.25.1.20220921195800
+ ESCONF_BUILDT : 1000.7.50.25.0.20220803154300
+ ESI-UI : 1000.7.50.25.0.20220803160700
+ ESMP_BUILDT : 1000.7.50.25.0.20220803155300
+ ESP_FRAMEWORK : 1000.7.50.25.0.20220803154700
+ ESREG-BASIC : 1000.7.50.25.0.20220803154700
+ ESREG-SERVICES : 1000.7.50.25.0.20220803154700
+ FRAMEWORK : 1000.7.50.25.0.20220803150500
+ FRAMEWORK-EXT : 1000.7.50.25.1.20221208200600
+ J2EE-APPS : 1000.7.50.25.3.20221026224800
+ J2EE-FRMW : 1000.7.50.25.2.20221209202300
+ JSPM : 1000.7.50.25.0.20220803150200
+ KM-KW_JIKS : 1000.7.50.25.0.20220803154900
+ LM-CORE : 1000.7.50.25.2.20221006174500
+ LM-CTS : 1000.7.50.25.0.20220803152500
+ LM-CTS-UI : 1000.7.50.25.0.20220803150500
+ LM-MODEL-BASE : 1000.7.50.25.0.20220803152500
+ LM-MODEL-NW : 1000.7.50.25.0.20220803152500
+ LM-SLD : 1000.7.50.25.0.20220803152500
+ LM-TOOLS : 1000.7.50.25.0.20220803153900
+ LMCFG : 1000.7.50.25.0.20220803152500
+ LMCTC : 1000.7.50.25.0.20220803152500
+ LMNWABASICAPPS : 1000.7.50.25.2.20221017181000
+ LMNWABASICCOMP : 1000.7.50.25.0.20220803145600
+ LMNWABASICMBEAN : 1000.7.50.25.0.20220803145600
+ LMNWACDP : 1000.7.50.25.0.20220803152500
+ LMNWATOOLS : 1000.7.50.25.0.20220803153900
+ LMNWAUIFRMRK : 1000.7.50.25.1.20220914195200
+ MESSAGING : 1000.7.50.25.9.20221206194700
+ MMR_SERVER : 1000.7.50.25.0.20220803154900
+ MOIN_BUILDT : 1000.7.50.25.0.20220803150200
+ NWTEC : 1000.7.50.25.0.20220803152500
+ ODATA-CXF-EXT : 1000.7.50.25.0.20220803152500
+ SAP-XI3RDPARTY : 1000.7.50.22.0.20210810194900
+ SAP_BUILDT : 1000.7.50.25.0.20220803150200
+ SECURITY-EXT : 1000.7.50.25.0.20220803150200
+ SERVERCORE : 1000.7.50.25.5.20221121195400
+ SERVICE-COMP : 1000.7.50.25.0.20220803155300
+ SOAMONBASIC : 1000.7.50.25.1.20221018201200
+ SR-UI : 1000.7.50.25.0.20220803160700
+ SUPPORTTOOLS : 1000.7.50.25.0.20220803150200
+ SWLIFECYCL : 1000.7.50.25.0.20220803153900
+ UDDI : 1000.7.50.25.0.20220803154700
+ UISAPUI5_JAVA : 1000.7.50.25.3.20221201172400
+ UKMS_JAVA : 1000.7.50.25.0.20220803160700
+ UMEADMIN : 1000.7.50.25.1.20221014212600
+ WD-ADOBE : 1000.7.50.25.0.20220803145600
+ WD-APPS : 1000.7.50.25.0.20220803154200
+ WD-RUNTIME : 1000.7.50.25.0.20220803145600
+ WD-RUNTIME-EXT : 1000.7.50.25.0.20220803154200
+ WSRM : 1000.7.50.25.0.20220803154700
+ 
+ Listing the versions of SDAs/EARs per SCA:
+ AJAX-RUNTIME : 1000.7.50.25.4.20221122172500
+				 sap.com/com.sap.tc.useragent.interface : 7.5025.20221121070113.0000
+				 sap.com/com.sap.tc.useragent.service : 7.5025.20221121070113.0000
+				 sap.com/sc~ajax-runtime : 7.5025.20220520160029.0000
+				 sap.com/tc~ui~lightspeed : 7.5025.20221121070113.0000
+				 sap.com/tc~ui~lightspeed_services : 7.5025.20221121070113.0000
+ 
+ BASETABLES : 1000.7.50.25.0.20220803150200
+				 sap.com/com.sap.engine.cacheschema : 7.5025.20220627122548.0000
+				 sap.com/com.sap.engine.cpt.dbschema : 7.5025.20220523141013.0000
+				 sap.com/com.sap.engine.jddischema : 7.5025.20220607134755.0000
+				 sap.com/com.sap.engine.monitor.dbschema : 7.5025.20220627132548.0000
+				 sap.com/com.sap.security.dbschema : 7.5025.20220627152548.0000
+				 sap.com/component.info.db_schema : 7.5025.20220627112548.0000
+				 sap.com/jmsjddschema : 7.5025.20220627142548.0000
+				 sap.com/scheduler~jddschema : 7.5025.20220627142548.0000
+				 sap.com/sessionmgmt~DB : 7.5025.20220607124755.0000
+				 sap.com/synclog : 7.5025.20220607144755.0000
+				 sap.com/tc~SL~utiljddschema : 7.5025.20220523141013.0000
+				 sap.com/tc~TechSrv~XML_DAS_Schema : 7.5025.20220627142548.0000
+				 sap.com/textcontainer~jddschema : 7.5025.20220627112548.0000
+				 sap.com/tsdbschema : 7.5025.20220627122548.0000
+ 
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{&pv{Name: "SAP Netweaver", Version: "7.50"}},
+			SoftwareComponentVersions: []*scp{
+				&scp{Name: "AJAX-RUNTIME", Version: "7.50", ExtVersion: "25", Type: "4"},
+				&scp{Name: "BASETABLES", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "BI-WDALV", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "BI_UDI", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "CFG_ZA", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "CFG_ZA_CE", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "COMP_BUILDT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "CORE-TOOLS", Version: "7.50", ExtVersion: "25", Type: "3"},
+				&scp{Name: "CU-BASE-JAVA", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "CU-BASE-WD", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "DATA-MAPPING", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "DI_CLIENTS", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ECM-CORE", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ENGFACADE", Version: "7.50", ExtVersion: "25", Type: "2"},
+				&scp{Name: "ENGINEAPI", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "EP-BASIS", Version: "7.50", ExtVersion: "25", Type: "5"},
+				&scp{Name: "EP-BASIS-API", Version: "7.50", ExtVersion: "25", Type: "1"},
+				&scp{Name: "ESCONF_BUILDT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ESI-UI", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ESMP_BUILDT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ESP_FRAMEWORK", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ESREG-BASIC", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ESREG-SERVICES", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "FRAMEWORK", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "FRAMEWORK-EXT", Version: "7.50", ExtVersion: "25", Type: "1"},
+				&scp{Name: "J2EE-APPS", Version: "7.50", ExtVersion: "25", Type: "3"},
+				&scp{Name: "J2EE-FRMW", Version: "7.50", ExtVersion: "25", Type: "2"},
+				&scp{Name: "JSPM", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "KM-KW_JIKS", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LM-CORE", Version: "7.50", ExtVersion: "25", Type: "2"},
+				&scp{Name: "LM-CTS", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LM-CTS-UI", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LM-MODEL-BASE", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LM-MODEL-NW", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LM-SLD", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LM-TOOLS", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LMCFG", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LMCTC", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LMNWABASICAPPS", Version: "7.50", ExtVersion: "25", Type: "2"},
+				&scp{Name: "LMNWABASICCOMP", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LMNWABASICMBEAN", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LMNWACDP", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LMNWATOOLS", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "LMNWAUIFRMRK", Version: "7.50", ExtVersion: "25", Type: "1"},
+				&scp{Name: "MESSAGING", Version: "7.50", ExtVersion: "25", Type: "9"},
+				&scp{Name: "MMR_SERVER", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "MOIN_BUILDT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "NWTEC", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "ODATA-CXF-EXT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "SAP-XI3RDPARTY", Version: "7.50", ExtVersion: "22", Type: "0"},
+				&scp{Name: "SAP_BUILDT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "SECURITY-EXT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "SERVERCORE", Version: "7.50", ExtVersion: "25", Type: "5"},
+				&scp{Name: "SERVICE-COMP", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "SOAMONBASIC", Version: "7.50", ExtVersion: "25", Type: "1"},
+				&scp{Name: "SR-UI", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "SUPPORTTOOLS", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "SWLIFECYCL", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "UDDI", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "UISAPUI5_JAVA", Version: "7.50", ExtVersion: "25", Type: "3"},
+				&scp{Name: "UKMS_JAVA", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "UMEADMIN", Version: "7.50", ExtVersion: "25", Type: "1"},
+				&scp{Name: "WD-ADOBE", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "WD-APPS", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "WD-RUNTIME", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "WD-RUNTIME-EXT", Version: "7.50", ExtVersion: "25", Type: "0"},
+				&scp{Name: "WSRM", Version: "7.50", ExtVersion: "25", Type: "0"},
+			},
+		},
+	}, {
+		name: "servercoreOnly",
+		s: `
+ Listing the SCA versions:
+ SERVERCORE : 1000.7.50.25.5.20221121195400
+ Listing the versions of SDAs/EARs per SCA:
+		`,
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{&pv{Name: "SAP Netweaver", Version: "7.50"}},
+			SoftwareComponentVersions: []*scp{
+				&scp{Name: "SERVERCORE", Version: "7.50", ExtVersion: "25", Type: "5"},
+			},
+		},
+	}, {
+		name: "emptyCase",
+		s:    "",
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions:           []*pv{&pv{}},
+			SoftwareComponentVersions: []*scp{},
+		},
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseBatchConfigOutput(ctx, tc.s)
+
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("parseBatchConfigOutput(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
 			}
 		})
 	}

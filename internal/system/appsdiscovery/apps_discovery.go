@@ -309,8 +309,19 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		if err != nil {
 			log.CtxLogger(ctx).Infow("Encountered error during call to discoverNetweaverABAP.", "error", err)
 		}
+		if isABAP {
+			appProps.ApplicationType = spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP
+		} else {
+			isJava, javaProps, err := d.discoverNetweaverJava(ctx, app)
+			if err != nil {
+				log.CtxLogger(ctx).Infow("Encountered error during call to discoverNetweaverJava.", "error", err)
+			}
+			if isJava {
+				wlProps = javaProps
+				appProps.ApplicationType = spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_JAVA
+			}
+		}
 		details.WorkloadProperties = wlProps
-		details.AppComponent.Properties.(*spb.SapDiscovery_Component_ApplicationProperties_).ApplicationProperties.Abap = isABAP
 	}
 
 	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)
@@ -500,6 +511,91 @@ func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string
 	return dbHosts, nil
 }
 
+func (d *SapDiscovery) discoverNetweaverJava(ctx context.Context, app *sappb.SAPInstance) (bool, *spb.SapDiscovery_WorkloadProperties, error) {
+	sidLower := strings.ToLower(app.Sapsid)
+	sidUpper := strings.ToUpper(app.Sapsid)
+	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	cmdPath := fmt.Sprintf("/usr/sap/%s/J%s/j2ee/configtool/batchconfig.csh", sidUpper, app.InstanceNumber)
+	log.CtxLogger(ctx).Debugw("cmdPath", "cmdPath", cmdPath)
+	params := commandlineexecutor.Params{
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, cmdPath, "-task", "get.versions.of.deployed.units"},
+	}
+	result := d.Execute(ctx, params)
+	log.CtxLogger(ctx).Debugw("batchconfig.csh result", "result", result)
+	if result.Error != nil {
+		return false, nil, result.Error
+	}
+
+	return true, parseBatchConfigOutput(ctx, result.StdOut), nil
+}
+
+func parseBatchConfigOutput(ctx context.Context, s string) *spb.SapDiscovery_WorkloadProperties {
+	scvs := []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{}
+	pv := &spb.SapDiscovery_WorkloadProperties_ProductVersion{}
+	lines := strings.Split(s, "\n")
+	scaLines := false
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if strings.Contains(l, "Listing the SCA versions:") {
+			scaLines = true
+			continue
+		}
+		if scaLines && strings.Contains(l, "Listing the versions of SDAs/EARs per SCA:") {
+			break
+		}
+		if !scaLines || len(l) == 0 {
+			continue
+		}
+		// At this point we have actual SCA Lines to parse.
+		scv := parseSCALine(l)
+		scvs = append(scvs, scv)
+
+		if scv.GetName() == "SERVERCORE" {
+			// we can use this for the product version
+			pv = &spb.SapDiscovery_WorkloadProperties_ProductVersion{
+				Name:    "SAP Netweaver",
+				Version: scv.GetVersion(),
+			}
+		}
+	}
+	wlProps := &spb.SapDiscovery_WorkloadProperties{
+		ProductVersions:           []*spb.SapDiscovery_WorkloadProperties_ProductVersion{pv},
+		SoftwareComponentVersions: scvs,
+	}
+	log.CtxLogger(ctx).Debugw("NW Java Workload Properties", "wlProps", prototext.Format(wlProps))
+	return wlProps
+}
+
+func parseSCALine(l string) *spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties {
+	// Example SCA Line - "ESCONF_BUILDT : 1000.7.50.25.0.20220803154300"
+	words := strings.Split(l, " ")
+	name := words[0]
+	versions := strings.Split(words[len(words)-1], ".")
+	// Example Version - "1000.7.50.25.0.20220803154300"
+	// Format is - AAAA.B.CC.DD.E.FFFFFFFFFFFFF
+	// We utilize B, CC, DD, and E.
+	var version, extVersion, typeVal string
+	if len(versions) > 1 {
+		version = versions[1]
+	}
+	if len(versions) > 2 {
+		version += "." + versions[2]
+	}
+	if len(versions) > 3 {
+		extVersion = versions[3]
+	}
+	if len(versions) > 4 {
+		typeVal = versions[4]
+	}
+	return &spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+		Name:       name,
+		Version:    version,
+		ExtVersion: extVersion,
+		Type:       typeVal,
+	}
+}
+
 func (d *SapDiscovery) discoverNetweaverABAP(ctx context.Context, app *sappb.SAPInstance) (bool, *spb.SapDiscovery_WorkloadProperties, error) {
 	if err := d.FileSystem.MkdirAll(r3transTmpFolder, 0777); err != nil {
 		return false, nil, fmt.Errorf("error creating r3trans tmp folder: %v", err)
@@ -659,11 +755,10 @@ func parseR3transOutput(ctx context.Context, s string) (wlProps *spb.SapDiscover
 			}
 		}
 	}
-	wlProps = &spb.SapDiscovery_WorkloadProperties{
+	return &spb.SapDiscovery_WorkloadProperties{
 		ProductVersions:           prdversEntries,
 		SoftwareComponentVersions: cversEntries,
 	}
-	return wlProps
 }
 
 func parseDBHosts(s string) (dbHosts []string) {

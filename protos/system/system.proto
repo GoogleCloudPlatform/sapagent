@@ -172,6 +172,10 @@ message SapDiscovery {
         APPLICATION_TYPE_UNSPECIFIED = 0;
         // SAP Netweaver
         NETWEAVER = 1;
+        // SAP Netweaver ABAP
+        NETWEAVER_ABAP = 2;
+        // SAP Netweaver Java
+        NETWEAVER_JAVA = 3;
       }
       // Type of the application. Netweaver, etc.
       ApplicationType application_type = 1;
@@ -182,9 +186,8 @@ message SapDiscovery {
       string nfs_uri = 3;
       // Kernel version for Netweaver running in the system.
       string kernel_version = 4;
-      // Indicates whether this is a Java or ABAP Netweaver instance.
-      // true means it is ABAP, false means it is Java.
-      bool abap = 5;
+      // Deprecated: ApplicationType now tells you whether this is ABAP or Java.
+      bool abap = 5 [deprecated = true];
       // Instance number of the SAP application instance.
       string instance_number = 6;
       // Instance number of the ASCS instance.
