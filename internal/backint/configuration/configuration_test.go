@@ -579,7 +579,7 @@ func TestApplyDefaultMaxThreads(t *testing.T) {
 		OutputFile:            "/dev/stdout",
 		SendMonitoringMetrics: wpb.Bool(true),
 	}
-	params.applyDefaults(65)
+	params.ApplyDefaults(65)
 	got := params.Config
 	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
 		t.Errorf("%#v.applyDefaults(65) had unexpected diff (-want +got):\n%s", params, diff)

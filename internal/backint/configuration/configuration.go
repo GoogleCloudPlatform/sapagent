@@ -61,7 +61,7 @@ func (p *Parameters) ParseArgsAndValidateConfig(read ReadConfigFile) (*bpb.Backi
 		return p.Config, false
 	}
 
-	p.applyDefaults(int64(runtime.NumCPU()))
+	p.ApplyDefaults(int64(runtime.NumCPU()))
 	return p.Config, true
 }
 
@@ -174,9 +174,9 @@ func (p *Parameters) validateParameters() error {
 	return nil
 }
 
-// applyDefaults will apply the default configuration settings to the Backint configuration.
+// ApplyDefaults will apply the default configuration settings to the Backint configuration.
 // The defaults are set only if the values passed are undefined or invalid.
-func (p *Parameters) applyDefaults(numCPU int64) {
+func (p *Parameters) ApplyDefaults(numCPU int64) {
 	if p.Config.GetLogToCloud() == nil {
 		p.Config.LogToCloud = wpb.Bool(true)
 	}

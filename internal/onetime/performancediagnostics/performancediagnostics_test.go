@@ -17,9 +17,13 @@ limitations under the License.
 package performancediagnostics
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -34,9 +38,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	s "cloud.google.com/go/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -79,6 +85,24 @@ type fakeBucketHandle struct {
 	err   error
 }
 
+type mockedZipper struct {
+	fileInfoErr     error
+	createHeaderErr error
+}
+
+type mockedWriter struct {
+	err error
+}
+
+type mockedFileInfo struct {
+	FileName    string
+	FileSize    int64
+	FileMode    fs.FileMode
+	FileModTime time.Time
+	Dir         bool
+	System      any
+}
+
 func fakeExecForErr(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
 	return commandlineexecutor.Result{ExitCode: 2, StdErr: "failure", Error: cmpopts.AnyError}
 }
@@ -89,6 +113,70 @@ func fakeExecForSuccess(ctx context.Context, p commandlineexecutor.Params) comma
 
 func (f *fakeBucketHandle) Attrs(ctx context.Context) (*s.BucketAttrs, error) {
 	return f.attrs, f.err
+}
+
+func (w mockedWriter) Write([]byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+	return 10, nil
+}
+
+func (mz mockedZipper) NewWriter(w io.Writer) *zip.Writer {
+	return &zip.Writer{}
+}
+
+func (mz mockedZipper) FileInfoHeader(fi fs.FileInfo) (*zip.FileHeader, error) {
+	if mz.fileInfoErr != nil {
+		return nil, mz.fileInfoErr
+	}
+	return &zip.FileHeader{}, nil
+}
+
+func (mz mockedZipper) CreateHeader(w *zip.Writer, fh *zip.FileHeader) (io.Writer, error) {
+	if mz.createHeaderErr != nil {
+		return nil, mz.createHeaderErr
+	}
+	return mockedWriter{err: nil}, nil
+}
+
+func (mz mockedZipper) Close(w *zip.Writer) error {
+	if w == nil {
+		return cmpopts.AnyError
+	}
+	return nil
+}
+
+func (mfi mockedFileInfo) Name() string {
+	return mfi.FileName
+}
+
+func (mfi mockedFileInfo) Size() int64 {
+	return mfi.FileSize
+}
+
+func (mfi mockedFileInfo) Mode() fs.FileMode {
+	return mfi.FileMode
+}
+
+func (mfi mockedFileInfo) ModTime() time.Time {
+	return mfi.FileModTime
+}
+
+func (mfi mockedFileInfo) IsDir() bool {
+	return mfi.Dir
+}
+
+func (mfi mockedFileInfo) Sys() any {
+	return mfi.System
+}
+
+type fakeReadWriter struct {
+	err error
+}
+
+func (f *fakeReadWriter) Upload(ctx context.Context) (int64, error) {
+	return 0, f.err
 }
 
 func defaultParametersFile(t *testing.T) *os.File {
@@ -645,8 +733,19 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 		wantErr    error
 	}{
 		{
-			name: "ErrorRead",
+			name: "EmptyParamFile",
 			d:    &Diagnose{},
+			read: func(string) ([]byte, error) {
+				return []byte{}, nil
+			},
+			wantConfig: nil,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "ErrorRead",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
 			read: func(string) ([]byte, error) {
 				return nil, fmt.Errorf("error")
 			},
@@ -684,7 +783,18 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 				return []byte(fileContent), nil
 			},
 			wantConfig: &bpb.BackintConfiguration{
-				Bucket: "test_bucket",
+				Bucket:                "test_bucket",
+				BufferSizeMb:          100,
+				FileReadTimeoutMs:     60000,
+				InputFile:             "/dev/stdin",
+				LogToCloud:            &wpb.BoolValue{Value: true},
+				OutputFile:            "backup/backint-output.log",
+				ParallelStreams:       1,
+				Retries:               5,
+				SendMonitoringMetrics: &wpb.BoolValue{Value: true},
+				MaxDiagnoseSizeGb:     1,
+				StorageClass:          bpb.StorageClass_STANDARD,
+				Threads:               int64(runtime.NumCPU()),
 			},
 		},
 	}
@@ -897,6 +1007,243 @@ func TestExecAndWriteToFile(t *testing.T) {
 			gotErr := execAndWriteToFile(ctx, tc.opFile, tc.targetPath, tc.params, tc.opts)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("execAndWriteToFile(%q, %q, %v, %v) returned error: %v, want error: %v", tc.opFile, tc.targetPath, tc.params, tc.opts, gotErr, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestZipSource(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		target string
+		fu     filesystem.FileSystem
+		z      zipper.Zipper
+		want   error
+	}{
+		{
+			name:   "CreateError",
+			source: "sampleFile",
+			target: "failure",
+			fu: &fake.FileSystem{
+				CreateErr:  []error{fmt.Errorf("create error")},
+				CreateResp: []*os.File{nil},
+			},
+			z:    mockedZipper{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name:   "WalkAndZipError",
+			source: "failure",
+			target: "destFile",
+			fu: &fake.FileSystem{
+				CreateErr:     []error{nil},
+				CreateResp:    []*os.File{&os.File{}},
+				WalkAndZipErr: []error{fmt.Errorf("walk error")},
+			},
+			z:    mockedZipper{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name:   "CreateSuccess",
+			source: "sampleFile",
+			target: "dest",
+			fu: &fake.FileSystem{
+				CreateErr:     []error{nil},
+				CreateResp:    []*os.File{&os.File{}},
+				WalkAndZipErr: []error{nil},
+			},
+			z:    mockedZipper{},
+			want: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := zipSource(test.source, test.target, test.fu, test.z)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("zipSource(%q, %q) = %v, want %v", test.source, test.target, got, test.want)
+			}
+		})
+	}
+}
+
+func TestRemoveDestinationFolder(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		fu      filesystem.FileSystem
+		wantErr error
+	}{
+		{
+			name: "RemoveError",
+			path: "failure",
+			fu: &fake.FileSystem{
+				RemoveAllErr: []error{fmt.Errorf("remove error")},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "RemoveSuccess",
+			path: "sampleFile",
+			fu: &fake.FileSystem{
+				RemoveAllErr: []error{nil},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := removeDestinationFolder(tc.path, tc.fu)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("removeDestinationFolder(%q, %v) returned an unexpected diff (-want +got): %v", tc.path, tc.fu, diff)
+			}
+		})
+	}
+}
+
+func TestUploadZip(t *testing.T) {
+	tests := []struct {
+		name          string
+		d             *Diagnose
+		destFilesPath string
+		ctb           storage.BucketConnector
+		grw           getReaderWriter
+		opts          *options
+		wantErr       error
+	}{
+		{
+			name: "OpenFail",
+			d: &Diagnose{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "failure",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*s.BucketHandle, bool) {
+				return &s.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			opts: &options{
+				fs: &fake.FileSystem{
+					OpenErr:  []error{fmt.Errorf("error")},
+					OpenResp: []*os.File{nil},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "StatFail",
+			d: &Diagnose{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*s.BucketHandle, bool) {
+				return &s.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			opts: &options{
+				fs: &fake.FileSystem{
+					OpenErr:  []error{nil},
+					OpenResp: []*os.File{&os.File{}},
+					StatErr:  []error{fmt.Errorf("error")},
+					StatResp: []os.FileInfo{nil},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ConnectToBucketFail",
+			d: &Diagnose{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*s.BucketHandle, bool) {
+				return nil, false
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			opts: &options{
+				fs: &fake.FileSystem{
+					OpenErr:  []error{nil},
+					OpenResp: []*os.File{&os.File{}},
+					StatErr:  []error{nil},
+					StatResp: []os.FileInfo{
+						mockedFileInfo{FileName: "samplefile", FileMode: 0777},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UploadFail",
+			d: &Diagnose{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*s.BucketHandle, bool) {
+				return &s.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			opts: &options{
+				fs: &fake.FileSystem{
+					OpenErr:  []error{nil},
+					OpenResp: []*os.File{&os.File{}},
+					StatErr:  []error{nil},
+					StatResp: []os.FileInfo{
+						mockedFileInfo{FileName: "samplefile", FileMode: 0777},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UploadSuccess",
+			d: &Diagnose{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*s.BucketHandle, bool) {
+				return &s.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{}
+			},
+			opts: &options{
+				fs: &fake.FileSystem{
+					OpenErr:  []error{nil},
+					OpenResp: []*os.File{&os.File{}},
+					StatErr:  []error{nil},
+					StatResp: []os.FileInfo{
+						mockedFileInfo{FileName: "samplefile", FileMode: 0777},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.d.uploadZip(ctx, tc.destFilesPath, tc.ctb, tc.grw, tc.opts)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("uploadZip(%q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.ctb, tc.grw, diff)
 			}
 		})
 	}

@@ -54,6 +54,9 @@ type IOFileCopier func(dst io.Writer, src io.Reader) (written int64, err error)
 // Client abstracts creating a new storage client to connect to GCS.
 type Client func(ctx context.Context, opts ...option.ClientOption) (*storage.Client, error)
 
+// BucketConnector abstracts ConnectToBucket() for unit testing purposes.
+type BucketConnector func(ctx context.Context, p *ConnectParameters) (*storage.BucketHandle, bool)
+
 // ReadWriter wraps io.Reader and io.Writer to provide
 // progress updates when uploading or downloading files.
 type ReadWriter struct {

@@ -28,6 +28,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -74,9 +75,17 @@ type moveFiles struct {
 // connectToBucket abstracts storage.ConnectToBucket function for testability.
 type connectToBucket func(ctx context.Context, p *storage.ConnectParameters) (attributes, bool)
 
+// getReaderWriter is a function to get the reader writer for uploading the file.
+type getReaderWriter func(rw storage.ReadWriter) uploader
+
 // attributes interface provides abstraction for ease of testing.
 type attributes interface {
 	Attrs(ctx context.Context) (attrs *s.BucketAttrs, err error)
+}
+
+// uploader interface provides abstraction for ease of testing.
+type uploader interface {
+	Upload(ctx context.Context) (int64, error)
 }
 
 // options is a struct to store the parameters required for the OTE subcommand.
@@ -84,6 +93,7 @@ type options struct {
 	read   ReadConfigFile
 	fs     filesystem.FileSystem
 	exec   commandlineexecutor.Execute
+	client storage.Client
 	z      zipper.Zipper
 	lp     log.Parameters
 	cp     *ipb.CloudProperties
@@ -160,13 +170,15 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 	if !completed {
 		return exitStatus
 	}
+
 	opts := &options{
-		read: os.ReadFile,
-		fs:   filesystem.Helper{},
-		exec: commandlineexecutor.ExecuteCommand,
-		z:    zipperHelper{},
-		lp:   lp,
-		cp:   cp,
+		read:   os.ReadFile,
+		fs:     filesystem.Helper{},
+		client: s.NewClient,
+		exec:   commandlineexecutor.ExecuteCommand,
+		z:      zipperHelper{},
+		lp:     lp,
+		cp:     cp,
 	}
 	return d.diagnosticsHandler(ctx, fs, opts)
 }
@@ -176,12 +188,6 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 	if !d.validateParams(ctx, flagSet) {
 		return subcommands.ExitUsageError
 	}
-	config, err := d.unmarshalBackintConfig(ctx, os.ReadFile)
-	if err != nil {
-		onetime.LogErrorToFileAndConsole("error while unmarshalling backint config, failed with error %v", err)
-		return subcommands.ExitFailure
-	}
-	opts.config = config
 
 	destFilesPath := path.Join(d.path, d.bundleName)
 	if err := opts.fs.MkdirAll(destFilesPath, 0777); err != nil {
@@ -197,6 +203,26 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 	}
 	if err := addToBundle(ctx, []moveFiles{oteLog}, opts.fs); err != nil {
 		errs = append(errs, fmt.Errorf("failure in adding performance diagnostics OTE to bundle, failed with error %v", err))
+	}
+
+	zipFile := fmt.Sprintf("%s/%s.zip", d.path, d.bundleName)
+	if err := zipSource(destFilesPath, zipFile, opts.fs, opts.z); err != nil {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while zipping destination folder %s", destFilesPath), err)
+		errs = append(errs, err)
+	} else {
+		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", fmt.Sprintf("%s.zip", destFilesPath)))
+	}
+
+	if d.resultBucket != "" {
+		if err := d.uploadZip(ctx, zipFile, storage.ConnectToBucket, getReadWriter, opts); err != nil {
+			onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while uploading zip %s", zipFile), err)
+			errs = append(errs, fmt.Errorf("failure in uploading zip, failed with error %v", err))
+		} else {
+			if err := removeDestinationFolder(destFilesPath, opts.fs); err != nil {
+				onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while removing folder %s", destFilesPath), err)
+				errs = append(errs, fmt.Errorf("failure in removing folder %s, failed with error %v", destFilesPath, err))
+			}
+		}
 	}
 
 	if len(errs) > 0 {
@@ -316,6 +342,15 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 // backup performs the backup operation.
 func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 	var errs []error
+
+	config, err := d.unmarshalBackintConfig(ctx, os.ReadFile)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole("error while unmarshalling backint config, failed with error %v", err)
+		errs = append(errs, err)
+		return errs
+	}
+	opts.config = config
+
 	// Check for retention
 	if err := d.checkRetention(ctx, s.NewClient, getBucket, opts.config); err != nil {
 		errs = append(errs, err)
@@ -343,6 +378,10 @@ func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 // getBucket is an abstraction of storage.ConnectToBucket() for ease of testing.
 func getBucket(ctx context.Context, connectParams *storage.ConnectParameters) (attributes, bool) {
 	return storage.ConnectToBucket(ctx, connectParams)
+}
+
+func getReadWriter(rw storage.ReadWriter) uploader {
+	return &rw
 }
 
 func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ctb connectToBucket, config *bpb.BackintConfiguration) error {
@@ -396,7 +435,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 		Function:  "diagnose",
 		User:      "perf-diag-user",
 		ParamFile: d.paramFile,
-		OutFile:   path.Join(d.path, d.bundleName, "backint-output.log"),
+		OutFile:   path.Join(d.path, d.bundleName, "backup/backint-output.log"),
 		IIOTEParams: &onetime.InternallyInvokedOTE{
 			InvokedBy: "performance-diagnostics-backint",
 			Lp:        opts.lp,
@@ -413,11 +452,11 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 	paths := []moveFiles{
 		{
 			oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-backint.log",
-			newPath: path.Join(d.path, d.bundleName, "performance-diagnostics-backint.log"),
+			newPath: path.Join(d.path, d.bundleName, "backup/performance-diagnostics-backint.log"),
 		},
 		{
 			oldPath: d.paramFile,
-			newPath: path.Join(d.path, d.bundleName, d.getParamFileName()),
+			newPath: path.Join(d.path, d.bundleName, "backup", d.getParamFileName()),
 		},
 	}
 	if err := addToBundle(ctx, paths, opts.fs); err != nil {
@@ -448,10 +487,10 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 	}
 	cmd := "sudo"
 	args := []string{
-		fmt.Sprintf("gsutil perfdiag -s 100m -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_100m_12p.json %s", targetPath, targetBucket),
-		fmt.Sprintf("gsutil perfdiag -s 1G -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_1g_12p.json %s", targetPath, targetBucket),
-		fmt.Sprintf("gsutil perfdiag -s 100m -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_100m_12p_default.json %s", targetPath, targetBucket),
-		fmt.Sprintf("gsutil perfdiag -s 1G -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_1g_12p_default.json %s", targetPath, targetBucket),
+		fmt.Sprintf("gsutil perfdiag -s 100m -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_100m_12p.json gs://%s", targetPath, targetBucket),
+		fmt.Sprintf("gsutil perfdiag -s 1G -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_1g_12p.json gs://%s", targetPath, targetBucket),
+		fmt.Sprintf("gsutil perfdiag -s 100m -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_100m_12p_default.json gs://%s", targetPath, targetBucket),
+		fmt.Sprintf("gsutil perfdiag -s 1G -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_1g_12p_default.json gs://%s", targetPath, targetBucket),
 	}
 
 	for _, args := range args {
@@ -461,7 +500,7 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 			Timeout:     200,
 		})
 		if res.ExitCode != int(subcommands.ExitSuccess) {
-			errs = append(errs, fmt.Errorf("error while executing gsutil perfdiag command %v", res.Error))
+			errs = append(errs, fmt.Errorf("error while executing gsutil perfdiag command %v", res.StdErr))
 		}
 	}
 
@@ -574,6 +613,9 @@ func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSyste
 }
 
 func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
+	if d.paramFile == "" {
+		return nil, fmt.Errorf("param file is empty")
+	}
 	content, err := read(d.paramFile)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
@@ -590,7 +632,14 @@ func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFi
 		log.CtxLogger(ctx).Errorw("Error unmarshalling parameters file", "err", err)
 		return nil, err
 	}
-	return config, nil
+
+	bp := &configuration.Parameters{Config: config}
+	bp.ApplyDefaults(int64(runtime.NumCPU()))
+	if bp.Config.GetMaxDiagnoseSizeGb() == 0 {
+		bp.Config.MaxDiagnoseSizeGb = 1
+	}
+	bp.Config.OutputFile = path.Join(d.path, d.bundleName, "backup/backint-output.log")
+	return bp.Config, nil
 }
 
 // getParamFileName extracts the name of the parameter file from the path provided.
@@ -600,4 +649,79 @@ func (d *Diagnose) getParamFileName() string {
 	}
 	parts := strings.Split(d.paramFile, "/")
 	return parts[len(parts)-1]
+}
+
+// zipSource zips the source folder and saves it at the target location.
+func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper) error {
+	f, err := fs.Create(target)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	writer := z.NewWriter(f)
+	defer z.Close(writer)
+	return fs.WalkAndZip(source, z, writer)
+}
+
+// removeDestinationFolder removes the destination folder.
+func removeDestinationFolder(path string, fu filesystem.FileSystem) error {
+	if err := fu.RemoveAll(path); err != nil {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while removing folder %s", path), err)
+		return err
+	}
+	return nil
+}
+
+// uploadZip uploads the zip file to the bucket provided.
+func (d *Diagnose) uploadZip(ctx context.Context, destFilesPath string, ctb storage.BucketConnector, grw getReaderWriter, opts *options) error {
+	f, err := opts.fs.Open(destFilesPath)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error while opening file", "fileName", destFilesPath, "err", err)
+		return err
+	}
+	defer f.Close()
+
+	fileInfo, err := opts.fs.Stat(destFilesPath)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error while statting file", "fileName", destFilesPath, "err", err)
+		return err
+	}
+
+	connectParams := &storage.ConnectParameters{
+		StorageClient:    opts.client,
+		ServiceAccount:   opts.config.GetServiceAccountKey(),
+		BucketName:       d.resultBucket,
+		UserAgentSuffix:  "Performance Diagnostics",
+		VerifyConnection: true,
+		MaxRetries:       opts.config.GetRetries(),
+		Endpoint:         opts.config.GetClientEndpoint(),
+	}
+	bucketHandle, ok := ctb(ctx, connectParams)
+	if !ok {
+		err := errors.New("error establishing connection to bucket, please check the logs")
+		log.CtxLogger(ctx).Errorw("failed connecting to bucket", "err", err)
+		return err
+	}
+
+	objectName := fmt.Sprintf("%s/%s.zip", d.Name(), d.bundleName)
+	fileSize := fileInfo.Size()
+	readWriter := storage.ReadWriter{
+		Reader:       f,
+		Copier:       io.Copy,
+		BucketHandle: bucketHandle,
+		BucketName:   d.resultBucket,
+		ObjectName:   objectName,
+		TotalBytes:   fileSize,
+		VerifyUpload: true,
+	}
+
+	rw := grw(readWriter)
+	bytesWritten, err := rw.Upload(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.CtxLogger(ctx).Infow("File uploaded", "bucket", d.resultBucket, "bytesWritten", bytesWritten, "fileSize", fileSize)
+	fmt.Println(fmt.Sprintf("Bundle uploaded to bucket %s", d.resultBucket))
+	return nil
 }
