@@ -190,7 +190,8 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					Sid: "ABC",
 					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-							SharedNfsUri: "some-shared-nfs-uri",
+							SharedNfsUri:   "some-shared-nfs-uri",
+							InstanceNumber: "00",
 						},
 					},
 				},
@@ -245,7 +246,8 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				Sid: "ABC",
 				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
 					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						SharedNfsUri: "some-shared-nfs-uri",
+						SharedNfsUri:   "some-shared-nfs-uri",
+						InstanceNumber: "00",
 					},
 				},
 				Resources: []*spb.SapDiscovery_Resource{{

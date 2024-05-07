@@ -117,6 +117,9 @@ func mergeDBProperties(old, new *spb.SapDiscovery_Component_DatabaseProperties) 
 	if merged.DatabaseSid == "" {
 		merged.DatabaseSid = new.DatabaseSid
 	}
+	if merged.InstanceNumber == "" {
+		merged.InstanceNumber = new.InstanceNumber
+	}
 	return merged
 }
 
@@ -424,6 +427,7 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 		SharedNfsUri:    dbNFS,
 		DatabaseVersion: version,
 		DatabaseSid:     app.Sapsid,
+		InstanceNumber:  app.InstanceNumber,
 	}
 
 	dbSIDs, err := d.discoverHANATenantDBs(ctx, app, dbHosts[0])
