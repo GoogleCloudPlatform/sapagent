@@ -31,6 +31,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 
 	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
@@ -162,7 +163,7 @@ func TestCollectDBMetricsOnce(t *testing.T) {
 									IsPresent:         true,
 								}}},
 						},
-						AgentVersion: "3.2",
+						AgentVersion: configuration.AgentVersion,
 					},
 				}},
 				WriteInsightErrs: []error{nil},

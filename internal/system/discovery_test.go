@@ -31,6 +31,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
@@ -1732,7 +1733,7 @@ func TestRunDiscovery(t *testing.T) {
 								ProjectNumber: "12345",
 							},
 						},
-						AgentVersion: "3.2",
+						AgentVersion: configuration.AgentVersion,
 					},
 				}},
 				WriteInsightErrs: []error{nil},
@@ -1800,7 +1801,7 @@ func TestRunDiscovery(t *testing.T) {
 								ProjectNumber: "12345",
 							},
 						},
-						AgentVersion: "3.2",
+						AgentVersion: configuration.AgentVersion,
 					},
 				}, {
 					Project:  "test-project-id",
@@ -1819,7 +1820,7 @@ func TestRunDiscovery(t *testing.T) {
 								ProjectNumber: "12345",
 							},
 						},
-						AgentVersion: "3.2",
+						AgentVersion: configuration.AgentVersion,
 					},
 				}},
 				WriteInsightErrs: []error{nil, nil},

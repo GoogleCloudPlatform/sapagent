@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -306,7 +307,7 @@ func TestSendMetrics(t *testing.T) {
 									},
 								},
 							},
-							AgentVersion: "3.2",
+							AgentVersion: configuration.AgentVersion,
 						},
 					}},
 				WriteInsightErrs: []error{nil},
@@ -340,7 +341,7 @@ func TestSendMetrics(t *testing.T) {
 									},
 								},
 							},
-							AgentVersion: "3.2",
+							AgentVersion: configuration.AgentVersion,
 						},
 					},
 				},
@@ -377,7 +378,7 @@ func TestSendMetrics(t *testing.T) {
 									},
 								},
 							},
-							AgentVersion: "3.2",
+							AgentVersion: configuration.AgentVersion,
 						},
 					},
 				},
@@ -413,7 +414,7 @@ func TestSendMetrics(t *testing.T) {
 								},
 							},
 						},
-						AgentVersion: "3.2",
+						AgentVersion: configuration.AgentVersion,
 					},
 				}},
 				WriteInsightErrs: []error{cmpopts.AnyError},
@@ -713,7 +714,7 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 										},
 									},
 								}},
-							AgentVersion: "3.2",
+							AgentVersion: configuration.AgentVersion,
 						},
 					}},
 				},
