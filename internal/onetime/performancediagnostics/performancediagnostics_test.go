@@ -1297,3 +1297,88 @@ func TestRunConfigureInstanceOTE(t *testing.T) {
 	}
 
 }
+
+func TestPerformDiagnosticsOps(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       *Diagnose
+		flagSet *flag.FlagSet
+		opts    *options
+		wantCnt int
+	}{
+		{
+			name: "ErrorInConfigureInstanceWithScopeIO",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "io",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			wantCnt: 2,
+		},
+		{
+			name: "ErrorInConfigureInstanceWithScopeBackup",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "backup",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			wantCnt: 2,
+		},
+		{
+			name: "ErrorInConfigureInstanceWithScopeAll",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "all",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			wantCnt: 3,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := performDiagnosticsOps(ctx, tc.d, tc.flagSet, tc.opts)
+			if len(got) != tc.wantCnt {
+				t.Errorf("performDiagnosticsOps(%v, %v, %v) returned an unexpected (-want +got): %v, %v", tc.d, tc.flagSet, tc.opts, len(got), tc.wantCnt)
+			}
+		})
+	}
+}

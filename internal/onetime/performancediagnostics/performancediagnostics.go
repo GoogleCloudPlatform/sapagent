@@ -251,6 +251,9 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 			if err := d.backup(ctx, opts); len(err) > 0 {
 				errs = append(errs, err...)
 			}
+			if err := d.runFIOCommands(ctx, opts); len(err) > 0 {
+				errs = append(errs, err...)
+			}
 		} else if op == "backup" {
 			// Perform backup operation
 			if err := d.backup(ctx, opts); len(err) > 0 {
@@ -457,12 +460,12 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 			Cp:        opts.cp,
 		},
 	}
-	if res := backintParams.Execute(ctx, &flag.FlagSet{}); res != subcommands.ExitSuccess {
-		onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
-		onetime.LogMessageToFileAndConsole("Error while executing backint")
-		return fmt.Errorf("error while executing backint")
-	}
+
+	res := backintParams.Execute(ctx, &flag.FlagSet{})
 	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
+	if res != subcommands.ExitSuccess {
+		onetime.LogMessageToFileAndConsole("Error while executing backint")
+	}
 
 	paths := []moveFiles{
 		{
@@ -486,6 +489,9 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 			log.CtxLogger(ctx).Errorw("Error deleting temporary parameter file created for backint", "err", err)
 			return err
 		}
+	}
+	if res != subcommands.ExitSuccess {
+		return fmt.Errorf("error while executing backint command %v", res)
 	}
 
 	return nil
