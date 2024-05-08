@@ -169,6 +169,13 @@ func (mfu mockedfilesystem) WriteStringToFile(f *os.File, content string) (int, 
 	return 10, nil
 }
 
+func (mfu mockedfilesystem) Rename(old, new string) error {
+	if strings.Contains(old, "failure") {
+		return cmpopts.AnyError
+	}
+	return nil
+}
+
 func (mfu mockedfilesystem) Copy(w io.Writer, r io.Reader) (int64, error) {
 	if mfu.copyErr != nil {
 		return 0, mfu.copyErr

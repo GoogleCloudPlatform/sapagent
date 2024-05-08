@@ -58,6 +58,9 @@ type FileSystem struct {
 	WriteStringToFileErr       []error
 	writeStringToFileCallCount int
 
+	RenameErr       []error
+	renameCallCount int
+
 	CopyResp      []int64
 	CopyErr       []error
 	copyCallCount int
@@ -119,6 +122,12 @@ func (f *FileSystem) Create(string) (*os.File, error) {
 func (f *FileSystem) WriteStringToFile(*os.File, string) (int, error) {
 	defer func() { f.writeStringToFileCallCount++ }()
 	return f.WriteStringToFileResp[f.writeStringToFileCallCount], f.WriteStringToFileErr[f.writeStringToFileCallCount]
+}
+
+// Rename is a fake implementation for unit testing.
+func (f *FileSystem) Rename(string, string) error {
+	defer func() { f.renameCallCount++ }()
+	return f.RenameErr[f.renameCallCount]
 }
 
 // Copy is a fake implementation for unit testing.

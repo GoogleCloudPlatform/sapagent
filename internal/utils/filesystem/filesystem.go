@@ -40,6 +40,7 @@ type (
 		RemoveAll(string) error
 		Create(string) (*os.File, error)
 		WriteStringToFile(*os.File, string) (int, error)
+		Rename(string, string) error
 		Copy(io.Writer, io.Reader) (int64, error)
 		Chmod(string, os.FileMode) error
 		Stat(string) (os.FileInfo, error)
@@ -88,6 +89,11 @@ func (h Helper) Create(path string) (*os.File, error) {
 // WriteStringToFile provides testable implementation of os.WriteStringToFile method.
 func (h Helper) WriteStringToFile(file *os.File, content string) (int, error) {
 	return file.WriteString(content)
+}
+
+// Rename provides testable implementation of os.Rename method.
+func (h Helper) Rename(old, new string) error {
+	return os.Rename(old, new)
 }
 
 // Copy provides testable implementation of io.Copy method.

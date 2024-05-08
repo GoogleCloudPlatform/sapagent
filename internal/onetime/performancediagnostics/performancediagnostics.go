@@ -205,12 +205,12 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 		errs = append(errs, fmt.Errorf("failure in adding performance diagnostics OTE to bundle, failed with error %v", err))
 	}
 
-	zipFile := fmt.Sprintf("%s/%s.zip", d.path, d.bundleName)
+	zipFile := fmt.Sprintf("%s/%s.zip", destFilesPath, d.bundleName)
 	if err := zipSource(destFilesPath, zipFile, opts.fs, opts.z); err != nil {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while zipping destination folder %s", destFilesPath), err)
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while zipping destination folder %s", zipFile), err)
 		errs = append(errs, err)
 	} else {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", fmt.Sprintf("%s.zip", destFilesPath)))
+		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", zipFile))
 	}
 
 	if d.resultBucket != "" {
@@ -563,7 +563,7 @@ func execAndWriteToFile(ctx context.Context, opFile, targetPath string, params c
 	if res.ExitCode != 0 && res.StdErr != "" {
 		return fmt.Errorf("error while executing %s command %v", res.StdErr, res.ExitCode)
 	}
-	f, err := opts.fs.OpenFile(targetPath+opFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	f, err := opts.fs.OpenFile(path.Join(targetPath, opFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		return err
 	}
@@ -674,14 +674,22 @@ func (d *Diagnose) getParamFileName() string {
 
 // zipSource zips the source folder and saves it at the target location.
 func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper) error {
-	f, err := fs.Create(target)
+	// Creating zip at a temporary location to prevent a blank zip file from
+	// being created in the final bundle.
+	tempZip := "/tmp/temp-performance-diagnostics.zip"
+	f, err := fs.Create(tempZip)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 	writer := z.NewWriter(f)
 	defer z.Close(writer)
-	return fs.WalkAndZip(source, z, writer)
+
+	err = fs.WalkAndZip(source, z, writer)
+	if err != nil {
+		return err
+	}
+	return fs.Rename(tempZip, target)
 }
 
 // removeDestinationFolder removes the destination folder.
