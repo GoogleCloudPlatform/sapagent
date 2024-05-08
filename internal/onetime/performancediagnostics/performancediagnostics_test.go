@@ -78,6 +78,23 @@ var (
 		ProjectId:    "default-project",
 		InstanceName: "default-instance",
 	}
+
+	defaultBackintFileJSON = `{
+		"bucket": "test-bucket",
+		"retries": 5,
+		"parallel_streams": 2,
+		"buffer_size_mb": 100,
+		"encryption_key": "",
+		"compress": false,
+		"kms_key": "",
+		"service_account_key": "",
+		"rate_limit_mb": 0,
+		"file_read_timeout_ms": 1000,
+		"dump_data": false,
+		"log_level": "INFO",
+		"log_delay_sec": 3
+	}
+	`
 )
 
 type fakeBucketHandle struct {
@@ -171,6 +188,10 @@ func (mfi mockedFileInfo) Sys() any {
 	return mfi.System
 }
 
+func (mfi mockedFileInfo) Write([]byte) (int, error) {
+	return 0, nil
+}
+
 type fakeReadWriter struct {
 	err error
 }
@@ -185,21 +206,7 @@ func defaultParametersFile(t *testing.T) *os.File {
 	if err != nil {
 		t.Fatalf("os.Create(%v) failed: %v", filePath, err)
 	}
-	f.WriteString(`{
-		"bucket": "test-bucket",
-		"retries": 5,
-		"parallel_streams": 2,
-		"buffer_size_mb": 100,
-		"encryption_key": "",
-		"compress": false,
-		"kms_key": "",
-		"service_account_key": "",
-		"rate_limit_mb": 0,
-		"file_read_timeout_ms": 1000,
-		"dump_data": false,
-		"log_level": "INFO",
-		"log_delay_sec": 3
-	}`)
+	f.WriteString(defaultBackintFileJSON)
 	return f
 }
 
@@ -1392,6 +1399,232 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			got := performDiagnosticsOps(ctx, tc.d, tc.flagSet, tc.opts)
 			if len(got) != tc.wantCnt {
 				t.Errorf("performDiagnosticsOps(%v, %v, %v) returned an unexpected (-want +got): %v, %v", tc.d, tc.flagSet, tc.opts, len(got), tc.wantCnt)
+			}
+		})
+	}
+}
+
+func TestBackup(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    *options
+		d       *Diagnose
+		wantCnt int
+	}{
+		{
+			name: "ErrorWhileUnmarshallingBackintParamFile",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:      []error{nil},
+					OpenResp:     []*os.File{&os.File{}},
+					CopyResp:     []int64{0},
+					CopyErr:      []error{nil},
+					CreateResp:   []*os.File{&os.File{}},
+					CreateErr:    []error{nil},
+					ReadFileResp: [][]byte{[]byte("sample")},
+					ReadFileErr:  []error{fmt.Errorf("error")},
+				},
+			},
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "backup",
+				paramFile:      "sampleFile",
+			},
+			wantCnt: 1,
+		},
+		{
+			name: "MarshaledSuccessfully",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:      []error{nil},
+					OpenResp:     []*os.File{&os.File{}},
+					CopyResp:     []int64{0},
+					CopyErr:      []error{nil},
+					CreateResp:   []*os.File{&os.File{}},
+					CreateErr:    []error{nil},
+					ReadFileResp: [][]byte{[]byte(defaultBackintFileJSON)},
+					ReadFileErr:  []error{nil},
+				},
+			},
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "backup",
+				paramFile:      "sampleFile",
+			},
+			wantCnt: 1,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.d.backup(ctx, tc.opts)
+			if len(got) != tc.wantCnt {
+				t.Errorf("backup(%v) returned an unexpected number of files: %v, want: %v", tc.opts, len(got), tc.wantCnt)
+			}
+		})
+	}
+}
+
+func TestDiagnosticsHandler(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       *Diagnose
+		flagSet *flag.FlagSet
+		opts    *options
+		want    subcommands.ExitStatus
+	}{
+		{
+			name: "InvalidParams",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "backup,disk",
+				paramFile:      "sampleFile",
+			},
+			flagSet: &flag.FlagSet{
+				Usage: func() { return },
+			},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			want: subcommands.ExitUsageError,
+		},
+		{
+			name: "MkDirError",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "io",
+				paramFile:      "sampleFile",
+				testBucket:     "sample",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "LocalBundleCollection",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "io",
+				paramFile:      "sampleFile",
+				testBucket:     "sample",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:               []error{nil, nil, nil, nil},
+					OpenResp:              []*os.File{&os.File{}, &os.File{}, &os.File{}, &os.File{}},
+					OpenFileResp:          []*os.File{&os.File{}, &os.File{}, &os.File{}, &os.File{}},
+					OpenFileErr:           []error{nil, nil, nil, nil},
+					CopyResp:              []int64{0, 0, 0, 0},
+					CopyErr:               []error{nil, nil, nil, nil},
+					CreateResp:            []*os.File{&os.File{}, &os.File{}, &os.File{}, &os.File{}},
+					CreateErr:             []error{nil, nil, nil, nil},
+					MkDirErr:              []error{nil, nil},
+					WalkAndZipErr:         []error{fmt.Errorf("error")},
+					WriteStringToFileResp: []int{0, 0, 0, 0},
+					WriteStringToFileErr:  []error{nil, nil, nil, nil},
+				},
+				z: mockedZipper{},
+			},
+			want: subcommands.ExitFailure,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.d.diagnosticsHandler(ctx, tc.flagSet, tc.opts)
+			if got != tc.want {
+				t.Errorf("diagnosticsHandler(%v, %v) returned an unexpected exit status: %v, want: %v", tc.flagSet, tc.opts, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunBackint(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       *Diagnose
+		opts    *options
+		wantErr error
+	}{
+		{
+			name: "SetBucketError",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "backup",
+			},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "RunBackInt",
+			d: &Diagnose{
+				hyperThreading: "default",
+				scope:          "backup",
+				paramFile:      "sampleFile",
+				testBucket:     "sample",
+			},
+			opts: &options{
+				exec:   fakeExecForSuccess,
+				config: &bpb.BackintConfiguration{Bucket: "sample"},
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil, nil},
+					OpenResp:   []*os.File{&os.File{}, &os.File{}},
+					CopyResp:   []int64{0, 0},
+					CopyErr:    []error{nil, nil},
+					CreateResp: []*os.File{&os.File{}, &os.File{}},
+					CreateErr:  []error{nil, nil},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var d Diagnose
+			gotErr := d.runBackint(ctx, tc.opts)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("runBackint(%v) returned error: %v, want error: %v", tc.opts, gotErr, tc.wantErr)
 			}
 		})
 	}

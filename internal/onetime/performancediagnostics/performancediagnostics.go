@@ -90,7 +90,6 @@ type uploader interface {
 
 // options is a struct to store the parameters required for the OTE subcommand.
 type options struct {
-	read   ReadConfigFile
 	fs     filesystem.FileSystem
 	exec   commandlineexecutor.Execute
 	client storage.Client
@@ -172,7 +171,6 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 	}
 
 	opts := &options{
-		read:   os.ReadFile,
 		fs:     filesystem.Helper{},
 		client: s.NewClient,
 		exec:   commandlineexecutor.ExecuteCommand,
@@ -361,7 +359,7 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 	var errs []error
 
-	config, err := d.unmarshalBackintConfig(ctx, os.ReadFile)
+	config, err := d.unmarshalBackintConfig(ctx, opts.fs.ReadFile)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("error while unmarshalling backint config, failed with error %v", err)
 		errs = append(errs, err)
