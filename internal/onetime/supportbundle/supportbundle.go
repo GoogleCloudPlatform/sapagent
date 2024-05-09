@@ -42,13 +42,13 @@ import (
 type (
 	// SupportBundle has args for support bundle collection one time mode.
 	SupportBundle struct {
-		sid                    string
-		instanceNums           string
-		instanceNumsAfterSplit []string
-		hostname               string
-		pacemakerDiagnosis     bool
-		help, version          bool
-		logLevel               string
+		sid                               string
+		instanceNums                      string
+		instanceNumsAfterSplit            []string
+		hostname                          string
+		pacemakerDiagnosis, agentLogsOnly bool
+		help, version                     bool
+		logLevel                          string
 	}
 	zipperHelper struct{}
 )
@@ -98,17 +98,18 @@ func (*SupportBundle) Synopsis() string {
 
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
-	return `Usage: supportbundle -sid=<SAP System Identifier> -instance-numbers=<Instance numbers>
-	-hostname=<Hostname> [-h] [-v] [-loglevel=<debug|info|warn|error>]
+	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
+	[-hostname=<Hostname>] [agent-logs-only=true|false] [-h] [-v] [-loglevel=<debug|info|warn|error>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
 
 // SetFlags implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&s.sid, "sid", "", "SAP System Identifier")
-	fs.StringVar(&s.instanceNums, "instance-numbers", "", "Instance numbers")
-	fs.StringVar(&s.hostname, "hostname", "", "Hostname")
+	fs.StringVar(&s.sid, "sid", "", "SAP System Identifier - required for collecting HANA traces")
+	fs.StringVar(&s.instanceNums, "instance-numbers", "", "Instance numbers - required for collecting HANA traces")
+	fs.StringVar(&s.hostname, "hostname", "", "Hostname - required for collecting HANA traces")
 	fs.BoolVar(&s.pacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
+	fs.BoolVar(&s.agentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level for a log file")
@@ -152,15 +153,17 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	var hasErrors bool
-	hasErrors = extractSystemDBErrors(ctx, destFilesPath, s.hostname, hanaPaths, exec, fs)
-	hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fs) || hasErrors
-	hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fs) || hasErrors
-	hasErrors = extractJournalCTLLogs(ctx, destFilesPath, s.hostname, exec, fs) || hasErrors
-	hasErrors = extractHANAVersion(ctx, destFilesPath, s.sid, s.hostname, exec, fs) || hasErrors
-	reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
-	reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
-	reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
-	reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.sid, fs)...)
+	if !s.agentLogsOnly {
+		hasErrors = extractSystemDBErrors(ctx, destFilesPath, s.hostname, hanaPaths, exec, fs)
+		hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fs) || hasErrors
+		hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fs) || hasErrors
+		hasErrors = extractJournalCTLLogs(ctx, destFilesPath, s.hostname, exec, fs) || hasErrors
+		hasErrors = extractHANAVersion(ctx, destFilesPath, s.sid, s.hostname, exec, fs) || hasErrors
+		reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
+		reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
+		reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
+		reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.sid, fs)...)
+	}
 	reqFilePaths = append(reqFilePaths, agentLogFiles(linuxLogFilesPath, fs)...)
 	reqFilePaths = append(reqFilePaths, agentOTELogFiles(agentOnetimeFilesPath, fs)...)
 
@@ -589,6 +592,9 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 
 func (s *SupportBundle) validateParams() []string {
 	var errs []string
+	if s.agentLogsOnly {
+		return errs
+	}
 	if s.sid == "" {
 		errs = append(errs, "no value provided for sid")
 	}

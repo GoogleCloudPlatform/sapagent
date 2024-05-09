@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -400,12 +401,28 @@ func TestValidateParams(t *testing.T) {
 			sosrc: SupportBundle{sid: "DEH", instanceNums: "00 01", hostname: ""},
 			want:  []string{"no value provided for hostname"},
 		},
+		{
+			name: "AgentLogsOnly",
+			sosrc: SupportBundle{
+				agentLogsOnly: true,
+			},
+			want: []string{},
+		},
+		{
+			name: "AllLogsAndTraces",
+			sosrc: SupportBundle{
+				sid:          "DEH",
+				instanceNums: "00 11",
+				hostname:     "sample_host",
+			},
+			want: []string{},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := test.sosrc.validateParams()
-			if len(got) != len(test.want) || !cmp.Equal(got, test.want) {
+			if len(got) != len(test.want) || !slices.Equal(got, test.want) {
 				t.Errorf("validateParams() = %v, want %v", got, test.want)
 			}
 		})
