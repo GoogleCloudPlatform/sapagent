@@ -109,11 +109,6 @@ func TestSnapshotHandler(t *testing.T) {
 		want               subcommands.ExitStatus
 	}{
 		{
-			name:     "InvalidParams",
-			snapshot: Snapshot{},
-			want:     subcommands.ExitFailure,
-		},
-		{
 			name:       "GCEServiceCreationFailure",
 			snapshot:   defaultSnapshot,
 			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return nil, cmpopts.AnyError },
@@ -327,6 +322,16 @@ func TestExecuteSnapshot(t *testing.T) {
 				version: true,
 			},
 			want: subcommands.ExitSuccess,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name:     "InvalidParams",
+			snapshot: Snapshot{},
+			want:     subcommands.ExitFailure,
 			args: []any{
 				"test",
 				log.Parameters{},

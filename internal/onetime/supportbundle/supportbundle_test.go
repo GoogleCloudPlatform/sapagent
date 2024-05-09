@@ -375,6 +375,30 @@ func TestExecuteForSOSReport(t *testing.T) {
 	}
 }
 
+func TestCollectAgentSupport(t *testing.T) {
+	tests := []struct {
+		name string
+		sosr *SupportBundle
+		want subcommands.ExitStatus
+	}{
+		{
+			name: "Failure",
+			sosr: &SupportBundle{
+				agentLogsOnly: true,
+			},
+			want: subcommands.ExitFailure,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := CollectAgentSupport(context.Background(), &flag.FlagSet{Usage: func() { return }}, log.Parameters{}, nil, "")
+			if got != test.want {
+				t.Errorf("CollectAgentSupport(%v)=%v, want %v", test.sosr, got, test.want)
+			}
+		})
+	}
+}
+
 func TestValidateParams(t *testing.T) {
 	tests := []struct {
 		name  string

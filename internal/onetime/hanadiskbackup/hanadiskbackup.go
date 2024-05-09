@@ -34,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -155,7 +156,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Help and version will return before the args are parsed.
-	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
 		Name:     s.Name(),
 		Help:     s.help,
 		Version:  s.version,
@@ -167,22 +168,27 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return exitStatus
 	}
 
+	if err := s.validateParameters(runtime.GOOS, cp); err != nil {
+		log.Print(err.Error())
+		return subcommands.ExitFailure
+	}
+
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Failed to create Cloud Monitoring metric client", err)
 		return subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
-	return s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp)
+	if r := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp); r != subcommands.ExitSuccess {
+		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
+		return subcommands.ExitFailure
+	}
+	return subcommands.ExitSuccess
 }
 
 func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties) subcommands.ExitStatus {
 	var err error
 	s.status = false
-	if err = s.validateParameters(runtime.GOOS, cp); err != nil {
-		log.Print(err.Error())
-		return subcommands.ExitFailure
-	}
 
 	defer s.sendStatusToMonitoring(ctx, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 

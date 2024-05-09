@@ -36,7 +36,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 type (
@@ -49,6 +51,7 @@ type (
 		pacemakerDiagnosis, agentLogsOnly bool
 		help, version                     bool
 		logLevel                          string
+		IIOTEParams                       *onetime.InternallyInvokedOTE
 	}
 	zipperHelper struct{}
 )
@@ -123,12 +126,26 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 		Version:  s.version,
 		LogLevel: s.logLevel,
 		Fs:       f,
+		IIOTE:    s.IIOTEParams,
 	}, args...)
 	if !completed {
 		return exitStatus
 	}
 
 	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
+}
+
+// CollectAgentSupport collects the agent support bundle on the local machine.
+func CollectAgentSupport(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties, ote string) subcommands.ExitStatus {
+	s := &SupportBundle{
+		IIOTEParams: &onetime.InternallyInvokedOTE{
+			InvokedBy: ote,
+			Lp:        lp,
+			Cp:        cp,
+		},
+		agentLogsOnly: true,
+	}
+	return s.Execute(ctx, f, lp, cp)
 }
 
 func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {

@@ -31,6 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 
@@ -104,10 +105,10 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		return exitStatus
 	}
 
-	return b.backintHandler(ctx, lp, cloudProps, s.NewClient)
+	return b.backintHandler(ctx, f, lp, cloudProps, s.NewClient)
 }
 
-func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, cloudProps *ipb.CloudProperties, client storage.Client) subcommands.ExitStatus {
+func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cloudProps *ipb.CloudProperties, client storage.Client) subcommands.ExitStatus {
 	log.CtxLogger(ctx).Info("Backint starting")
 	p := configuration.Parameters{
 		User:        b.User,
@@ -141,6 +142,7 @@ func (b *Backint) backintHandler(ctx context.Context, lp log.Parameters, cloudPr
 
 	usagemetrics.Action(usagemetrics.BackintRunning)
 	if ok := run(ctx, config, connectParams, cloudProps); !ok {
+		supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Name())
 		return subcommands.ExitUsageError
 	}
 
