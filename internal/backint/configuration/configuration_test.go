@@ -267,6 +267,31 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantOk: false,
 		},
 		{
+			name:   "DefaultParallelStreamsForXMLMultipart",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:                "testUser",
+				Function:              bpb.Function_BACKUP,
+				ParamFile:             "testParamsFile.json",
+				Bucket:                "testBucket",
+				ParallelStreams:       16,
+				BufferSizeMb:          100,
+				FileReadTimeoutMs:     60000,
+				Retries:               5,
+				StorageClass:          bpb.StorageClass_STANDARD,
+				Threads:               defaultThreads(),
+				InputFile:             "/dev/stdin",
+				OutputFile:            "/dev/stdout",
+				LogToCloud:            wpb.Bool(true),
+				SendMonitoringMetrics: wpb.Bool(true),
+				XmlMultipartUpload:    true,
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "xml_multipart_upload": true}`), nil
+			},
+			wantOk: true,
+		},
+		{
 			name:   "SuccessfullyParseWithDefaultsApplied",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{

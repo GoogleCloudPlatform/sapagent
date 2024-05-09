@@ -187,6 +187,10 @@ func (p *Parameters) ApplyDefaults(numCPU int64) {
 		log.Logger.Warn("retries defaulted to 5")
 		p.Config.Retries = 5
 	}
+	if p.Config.GetParallelStreams() <= 0 && p.Config.GetXmlMultipartUpload() {
+		log.Logger.Warn("parallel_streams defaulted to 16 for XML multipart upload")
+		p.Config.ParallelStreams = 16
+	}
 	if p.Config.GetParallelStreams() <= 0 {
 		log.Logger.Warn("parallel_streams defaulted to 1")
 		p.Config.ParallelStreams = 1

@@ -30,6 +30,7 @@ import (
 	"time"
 
 	store "cloud.google.com/go/storage"
+	"golang.org/x/sys/unix"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/backup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/delete"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
@@ -137,6 +138,13 @@ func createFiles(ctx context.Context, dir, fileName1, fileName2 string, fileSize
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
+	var stat unix.Statfs_t
+	unix.Statfs(dir, &stat)
+	availableBytes := int64(stat.Bavail * uint64(stat.Bsize))
+	if availableBytes < fileSize1+fileSize2 {
+		return nil, fmt.Errorf("not enough space on disk to run diagnostics. Available bytes: %d, bytes needed: %d, dir: %s", availableBytes, fileSize1+fileSize2, dir)
+	}
+
 	file1, err := os.Create(fileName1)
 	if err != nil {
 		return nil, err
