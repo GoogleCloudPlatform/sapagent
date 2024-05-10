@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 5,
+    "version": 6,
     "validation_system": {
       "system_metrics": [
         {
@@ -553,6 +553,44 @@
             },
             "if_false": {
               "value_from_literal": "no"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "num_completion_queues"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "num_completion_queues"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "num_completion_queues = (\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": "1"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "num_submit_queues"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "num_submit_queues"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "num_submit_queues = (\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": "1"
             }
           }
         }

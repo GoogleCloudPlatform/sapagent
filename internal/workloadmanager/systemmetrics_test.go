@@ -52,7 +52,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "5"
+	collectionConfigVersion = "6"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {

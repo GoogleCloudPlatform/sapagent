@@ -171,6 +171,10 @@ var (
 }
 `
 	defaultHanaINI = `
+[fileio]
+num_completion_queues = 12
+num_submit_queues = 12
+
 [ha_dr_provider_SAPHanaSR]
 
 [persistance]
@@ -915,6 +919,8 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"disk_log_type":         "",
 				"fast_restart":          "disabled",
 				"ha_sr_hook_configured": "no",
+				"num_completion_queues": "1",
+				"num_submit_queues":     "1",
 				"numa_balancing":        "disabled",
 				"transparent_hugepages": "disabled",
 				"ha_in_same_zone":       "",
@@ -998,6 +1004,8 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"disk_log_type":         "default-disk-type",
 				"fast_restart":          "enabled",
 				"ha_sr_hook_configured": "yes",
+				"num_completion_queues": "12",
+				"num_submit_queues":     "12",
 				"numa_balancing":        "enabled",
 				"transparent_hugepages": "enabled",
 				"ha_in_same_zone":       "other-instance-1",
