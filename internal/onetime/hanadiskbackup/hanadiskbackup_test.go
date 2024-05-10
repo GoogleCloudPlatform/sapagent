@@ -32,6 +32,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -127,6 +128,133 @@ func TestSnapshotHandler(t *testing.T) {
 			got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCGPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		policies []string
+		want     string
+	}{
+		{
+			name:     "Success",
+			policies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+			want:     "my-region-my-cg",
+		},
+		{
+			name:     "Failure1",
+			policies: []string{"https://www.googleapis.com/compute/my-region/resourcePolicies/my-cg"},
+			want:     "",
+		},
+		{
+			name:     "Failure2",
+			policies: []string{"https://www.googleapis.com/invlaid/text/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my"},
+			want:     "",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := cgPath(test.policies)
+			if got != test.want {
+				t.Errorf("cgPath()=%v, want=%v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestReadConsistencyGroup(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		want     bool
+		wantCG   string
+	}{
+		{
+			name: "Success",
+			snapshot: Snapshot{
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr:     []error{nil},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+			},
+
+			want:   true,
+			wantCG: "my-region-my-cg",
+		},
+		{
+			name: "Failure",
+			snapshot: Snapshot{
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr:     []error{cmpopts.AnyError},
+					GetInstanceErr: []error{cmpopts.AnyError},
+				},
+			},
+			want: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, gotCG := test.snapshot.readConsistencyGroup(context.Background())
+			if got != test.want {
+				t.Errorf("readConsistencyGroup()=%v, want=%v", got, test.want)
+			}
+			if gotCG != test.wantCG {
+				t.Errorf("readConsistencyGroup()=%v, want=%v", gotCG, test.wantCG)
 			}
 		})
 	}
@@ -229,12 +357,31 @@ func TestParseLabels(t *testing.T) {
 			},
 			want: map[string]string{"label1": "value1", "label2": "value2"},
 		},
+		{
+			name: "GroupSnapshot",
+			s: Snapshot{
+				groupSnapshot: true,
+				cgPath:        "my-region-my-cg",
+				labels:        "label1=value1,label2=value2",
+				Disk:          "pd-1",
+			},
+			want: map[string]string{
+				"goog-sapagent-version":   configuration.AgentVersion,
+				"goog-sapagent-cgpath":    "my-region-my-cg",
+				"goog-sapagent-disk-name": "pd-1",
+				"label1":                  "value1",
+				"label2":                  "value2",
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := test.s.parseLabels()
-			if !cmp.Equal(got, test.want) {
+			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
+				return key == "goog-sapagent-timestamp"
+			})
+			if !cmp.Equal(got, test.want, opts) {
 				t.Errorf("parseLabels() = %v, want %v", got, test.want)
 			}
 		})

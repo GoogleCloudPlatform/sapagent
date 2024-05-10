@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
@@ -103,6 +105,8 @@ type Snapshot struct {
 	labels                            string
 	IIOTEParams                       *onetime.InternallyInvokedOTE
 	instanceProperties                *ipb.InstanceProperties
+	cgPath                            string
+	groupSnapshot                     bool
 }
 
 // Name implements the subcommand interface for hanadiskbackup.
@@ -210,6 +214,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 			return subcommands.ExitFailure
 		}
 		log.CtxLogger(ctx).Info("Successfully read disk mapping for /hana/data/", "disk", s.Disk, "diskZone", s.DiskZone)
+		s.groupSnapshot, s.cgPath = s.readConsistencyGroup(ctx)
 	}
 
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)
@@ -259,7 +264,6 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties) error {
 	var err error
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, s.gceService)
-
 	if _, s.instanceProperties, err = instanceInfoReader.ReadDiskMapping(ctx, &cpb.Configuration{CloudProperties: cp}); err != nil {
 		return err
 	}
@@ -529,7 +533,7 @@ func (s *Snapshot) createDiskSnapshot(ctx context.Context) (*compute.Operation, 
 }
 
 func (s *Snapshot) parseLabels() map[string]string {
-	labels := make(map[string]string)
+	labels := s.createGroupBackupLabels()
 	if s.labels != "" {
 		for _, label := range strings.Split(s.labels, ",") {
 			split := strings.Split(label, "=")
@@ -590,4 +594,43 @@ func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 		return false
 	}
 	return true
+}
+
+// readConsistencyGroup reads the consistency group (CG) from the resource policies of the disk.
+func (s *Snapshot) readConsistencyGroup(ctx context.Context) (bool, string) {
+	d, err := s.gceService.GetDisk(s.Project, s.DiskZone, s.Disk)
+	if err != nil {
+		return false, ""
+	}
+	if s.cgPath = cgPath(d.ResourcePolicies); s.cgPath != "" {
+		log.CtxLogger(ctx).Infow("Found disk to conistency group mapping", "disk", s.Disk, "cg", s.cgPath)
+		return true, s.cgPath
+	}
+	return false, ""
+}
+
+// cgPath returns the name of the compute group (CG) from the resource policies.
+func cgPath(policies []string) string {
+	// Example policy: https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg
+	for _, policyLink := range policies {
+		parts := strings.Split(policyLink, "/")
+		if len(parts) >= 10 && parts[9] == "resourcePolicies" {
+			return parts[8] + "-" + parts[10]
+		}
+	}
+	return ""
+}
+
+// createGroupBackupLabels returns the labels to be added for the group snapshot.
+func (s *Snapshot) createGroupBackupLabels() map[string]string {
+	if !s.groupSnapshot {
+		return map[string]string{}
+	}
+	return map[string]string{
+		"goog-sapagent-version":   configuration.AgentVersion,
+		"goog-sapagent-cgpath":    s.cgPath,
+		"goog-sapagent-disk-name": s.Disk,
+		"goog-sapagent-timestamp": strconv.FormatInt(time.Now().UTC().Unix(), 10),
+		// TODO: b/339829622 - Add the MD5 SUM of labels as a new label.
+	}
 }
