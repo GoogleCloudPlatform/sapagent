@@ -26,8 +26,10 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"flag"
+	"github.com/google/safetext/shsprintf"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -52,7 +54,7 @@ type Configure struct {
 	help, version                                                   bool
 	enable, disable, showall                                        bool
 	add, remove                                                     bool
-	restartAgent                                                    RestartAgent
+	RestartAgent                                                    RestartAgent
 }
 
 // RestartAgent abstracts restart functions(windows & linux) for testability.
@@ -154,8 +156,11 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 		return c.showFeatures(ctx)
 	}
 
-	if c.restartAgent == nil {
-		c.restartAgent = restartAgent
+	if c.RestartAgent == nil {
+		c.RestartAgent = DefaultRestartAgent
+		if runtime.GOOS == "windows" {
+			c.RestartAgent = WindowsRestartAgent
+		}
 	}
 
 	res := c.modifyConfig(ctx, fs, os.ReadFile)
@@ -221,15 +226,16 @@ func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
 		}
 	}
 
+	isWindows := runtime.GOOS == "windows"
 	for _, feature := range enabled {
-		out, err := showStatus(ctx, feature, featureStatus[feature])
+		out, err := showStatus(ctx, feature, featureStatus[feature], isWindows)
 		if err != nil {
 			return subcommands.ExitFailure
 		}
 		output += out
 	}
 	for _, feature := range disabled {
-		out, err := showStatus(ctx, feature, featureStatus[feature])
+		out, err := showStatus(ctx, feature, featureStatus[feature], isWindows)
 		if err != nil {
 			return subcommands.ExitFailure
 		}
@@ -247,6 +253,7 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 		onetime.LogMessageToFileAndConsole("Unable to read configuration.json")
 		return subcommands.ExitFailure
 	}
+	log.CtxLogger(ctx).Infow("Config before any changes", "config", config)
 
 	isCmdValid := false
 	if len(c.logLevel) > 0 {
@@ -296,7 +303,7 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 		log.CtxLogger(ctx).Errorw("Unable to write configuration.json", "error:", err)
 		return subcommands.ExitUsageError
 	}
-	return c.restartAgent(ctx)
+	return c.RestartAgent(ctx)
 }
 
 // modifyFeature takes user input and modifies fields related to a particular feature, which could simply
@@ -513,7 +520,7 @@ func writeFile(ctx context.Context, config *cpb.Configuration, path string) erro
 
 	var fileBuf bytes.Buffer
 	json.Indent(&fileBuf, file, "", "  ")
-	log.CtxLogger(ctx).Info("Config file before writing: ", fileBuf.String())
+	log.CtxLogger(ctx).Info("Config file data we're about to write: ", fileBuf.String())
 
 	err = os.WriteFile(path, fileBuf.Bytes(), 0644)
 	if err != nil {
@@ -540,24 +547,28 @@ func checkDiscoveryConfig(config *cpb.Configuration) *cpb.DiscoveryConfiguration
 	return &cpb.DiscoveryConfiguration{}
 }
 
-// TODO: Extend this function for Windows systems.
-func showStatus(ctx context.Context, feature string, enabled bool) (string, error) {
+func showStatus(ctx context.Context, feature string, enabled bool, isWindows bool) (string, error) {
 	var color, status string
 	if enabled {
-		color = "$`\\e[0;32m`"
+		color = "\\033[0;32m"
 		status = "ENABLED"
 	} else {
-		color = "$`\\e[0;31m`"
+		color = "\\033[0;31m"
 		status = "DISABLED"
 	}
-	NC := "$`\\e[0m`" // No colour
+	NC := "\\033[0m" // No color
+	executable := "echo"
+	args := fmt.Sprintf("-e %s %s[%s]%s", feature, color, status, NC)
 
-	args := `-c 'COLOR=` + color + `;NC=` + NC + `;echo "` + feature + ` ${COLOR}[` + status + `]${NC}"'`
-
+	if isWindows {
+		executable = "cmd"
+		args, _ = shsprintf.Sprintf("/C echo %s [%s]", feature, status)
+	}
 	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
+		Executable:  executable,
 		ArgsToSplit: args,
 	})
+
 	if result.ExitCode != 0 {
 		log.CtxLogger(ctx).Errorw("failed displaying feature status", "feature:", feature, "errorCode:", result.ExitCode, "error:", result.StdErr)
 		return "", result.Error
@@ -565,21 +576,24 @@ func showStatus(ctx context.Context, feature string, enabled bool) (string, erro
 	return result.StdOut, nil
 }
 
-// TODO: Extend this function for Windows systems.
-func restartAgent(ctx context.Context) subcommands.ExitStatus {
+// DefaultRestartAgent restarts the agent.
+func DefaultRestartAgent(ctx context.Context) subcommands.ExitStatus {
 	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: "-c 'sudo systemctl restart google-cloud-sap-agent'",
+		Executable:  "sudo",
+		ArgsToSplit: "systemctl restart google-cloud-sap-agent",
 	})
 	if result.ExitCode != 0 {
 		log.Print("Could not restart the agent")
 		log.CtxLogger(ctx).Errorw("failed restarting sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
 		return subcommands.ExitFailure
 	}
+	log.Print("Waiting 70 seconds for agent restart")
+	log.CtxLogger(ctx).Info("Waiting 70 seconds for agent restart")
+	time.Sleep(70 * time.Second)
 
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: "-c 'sudo systemctl status google-cloud-sap-agent'",
+		Executable:  "sudo",
+		ArgsToSplit: "systemctl status google-cloud-sap-agent",
 	})
 	if result.ExitCode != 0 {
 		log.Print("Could not restart the agent")
@@ -593,5 +607,39 @@ func restartAgent(ctx context.Context) subcommands.ExitStatus {
 	}
 	log.Print("Could not restart the agent")
 	log.CtxLogger(ctx).Error("Agent is not running")
+	return subcommands.ExitFailure
+}
+
+// WindowsRestartAgent restarts the agent on Windows OS.
+func WindowsRestartAgent(ctx context.Context) subcommands.ExitStatus {
+	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+		Executable:  "Powershell",
+		ArgsToSplit: "Restart-Service -Force -Name 'google-cloud-sap-agent'",
+	})
+	if result.ExitCode != 0 {
+		log.Print("Could not restart the agent on Windows OS")
+		log.CtxLogger(ctx).Errorw("failed restarting sap agent on Windows OS", "errorCode:", result.ExitCode, "error:", result.StdErr)
+		return subcommands.ExitFailure
+	}
+	log.Print("Waiting 70 seconds for agent restart on Windows OS")
+	log.CtxLogger(ctx).Info("Waiting 70 seconds for agent restart on Windows OS")
+	time.Sleep(70 * time.Second)
+
+	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+		Executable:  "Powershell",
+		ArgsToSplit: "$(Get-Service -Name 'google-cloud-sap-agent').Status",
+	})
+	if result.ExitCode != 0 {
+		log.Print("Could not restart the agent on Windows OS")
+		log.CtxLogger(ctx).Errorw("failed checking the status of sap agent on Windows OS", "errorCode:", result.ExitCode, "error:", result.StdErr)
+		return subcommands.ExitFailure
+	}
+
+	if strings.Contains(strings.ToLower(result.StdOut), "running") {
+		log.CtxLogger(ctx).Info("Restarted the agent on Windows OS")
+		return subcommands.ExitSuccess
+	}
+	log.Print("Could not restart the agent on Windows OS")
+	log.CtxLogger(ctx).Error("Agent is not running on Windows OS")
 	return subcommands.ExitFailure
 }
