@@ -370,7 +370,7 @@ func TestRun(t *testing.T) {
 				defer f.Close()
 			}
 
-			got := run(context.Background(), test.config, test.params, defaultCloudProperties)
+			got := run(context.Background(), test.config, test.params, &flag.FlagSet{}, log.Parameters{}, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("run(%#v) = %v, want %v", test.config, got, test.want)
 			}

@@ -20,6 +20,7 @@ package backint
 import (
 	"context"
 	"os"
+	"strings"
 
 	"flag"
 	s "cloud.google.com/go/storage"
@@ -141,7 +142,7 @@ func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Pa
 	}
 
 	usagemetrics.Action(usagemetrics.BackintRunning)
-	if ok := run(ctx, config, connectParams, cloudProps); !ok {
+	if ok := run(ctx, config, connectParams, f, lp, cloudProps); !ok {
 		supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Name())
 		return subcommands.ExitUsageError
 	}
@@ -152,7 +153,7 @@ func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Pa
 
 // run opens the input file and creates the output file then selects which Backint function
 // to execute based on the configuration. Issues with file operations or config will return false.
-func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, cloudProps *ipb.CloudProperties) bool {
+func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, f *flag.FlagSet, lp log.Parameters, cloudProps *ipb.CloudProperties) bool {
 	usagemetrics.Action(usagemetrics.BackintRunning)
 	log.CtxLogger(ctx).Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	inFile, err := os.Open(config.GetInputFile())
@@ -175,6 +176,18 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *s
 		log.CtxLogger(ctx).Errorw("Output file does not have writable permissions", "fileName", config.GetOutputFile(), "err", err)
 		return false
 	}
+
+	// If an error occurs during an operation, collect the support bundle.
+	defer func() {
+		if config.GetFunction() == bpb.Function_DIAGNOSE || config.GetOutputFile() == "/dev/stdout" {
+			return
+		}
+		outFileContents, _ := os.ReadFile(config.GetOutputFile())
+		if strings.Contains(string(outFileContents), "#ERROR") {
+			log.CtxLogger(ctx).Info("Collecting agent support bundle due to Backint error.")
+			supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, config.GetFunction().String())
+		}
+	}()
 
 	switch config.GetFunction() {
 	case bpb.Function_BACKUP:
