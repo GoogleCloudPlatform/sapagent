@@ -41,6 +41,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -193,6 +194,7 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 		return subcommands.ExitFailure
 	}
 	onetime.LogMessageToFileAndConsole("Collecting Performance Diagnostics Report for Agent for SAP...")
+	usagemetrics.Action(usagemetrics.PerformanceDiagnostics)
 	errs := performDiagnosticsOps(ctx, d, flagSet, opts)
 
 	oteLog := moveFiles{
@@ -222,8 +224,8 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 			}
 		}
 	}
-
 	if len(errs) > 0 {
+		usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFailure)
 		onetime.LogMessageToFileAndConsole("Performance Diagnostics Report collection ran into following errors\n")
 		for _, err := range errs {
 			onetime.LogErrorToFileAndConsole("Error: ", err)
@@ -247,19 +249,23 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 		if op == "all" {
 			// Perform all operations
 			if err := d.backup(ctx, opts); len(err) > 0 {
+				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsBackupFailure)
 				errs = append(errs, err...)
 			}
 			if err := d.runFIOCommands(ctx, opts); len(err) > 0 {
+				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsFIOFailure)
 				errs = append(errs, err...)
 			}
 		} else if op == "backup" {
 			// Perform backup operation
 			if err := d.backup(ctx, opts); len(err) > 0 {
+				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsBackupFailure)
 				errs = append(errs, err...)
 			}
 		} else if op == "io" {
 			// Perform IO Operation
 			if err := d.runFIOCommands(ctx, opts); len(err) > 0 {
+				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsFIOFailure)
 				errs = append(errs, err...)
 			}
 		}
@@ -316,6 +322,7 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 		HyperThreading: d.hyperThreading,
 		IIOTEParams:    ciOTEParams,
 	}
+	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsConfigureInstance)
 	res := ci.Execute(ctx, f)
 	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
 	paths := []moveFiles{
@@ -358,7 +365,7 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 // backup performs the backup operation.
 func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 	var errs []error
-
+	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsBackup)
 	config, err := d.unmarshalBackintConfig(ctx, opts.fs.ReadFile)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("error while unmarshalling backint config, failed with error %v", err)
@@ -529,6 +536,7 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 // runFIOCommands runs the FIO commands in order to simulate HANA IO operations.
 func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 	var errs []error
+	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFIO)
 	targetPath := path.Join(d.path, d.bundleName, "io")
 	if err := opts.fs.MkdirAll(targetPath, 0777); err != nil {
 		errs = append(errs, fmt.Errorf("error while making directory: %s, error %s", targetPath, err.Error()))

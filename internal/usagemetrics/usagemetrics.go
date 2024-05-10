@@ -105,6 +105,10 @@ const (
 	EncryptedDiskSnapshotFailure
 	EncryptedSnapshotRestoreFailure
 	GuestActionsFailure
+	PerformanceDiagnosticsFailure
+	PerformanceDiagnosticsConfigureInstanceFailure
+	PerformanceDiagnosticsBackupFailure
+	PerformanceDiagnosticsFIOFailure
 )
 
 // Agent wide action mappings.
@@ -144,6 +148,10 @@ const (
 	EncryptedDiskSnapshot
 	EncryptedSnapshotRestore
 	GuestActionsStarted
+	PerformanceDiagnostics
+	PerformanceDiagnosticsConfigureInstance
+	PerformanceDiagnosticsBackup
+	PerformanceDiagnosticsFIO
 )
 
 // projectNumbers contains known project numbers for test instances.
