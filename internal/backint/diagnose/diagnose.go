@@ -101,6 +101,10 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // attempting to clean up the temporary files locally and in the bucket.
 func diagnose(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, output io.Writer, cloudProps *ipb.CloudProperties) error {
 	dir := fmt.Sprintf("/tmp/backint-diagnose/%s/", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	if config.GetDiagnoseTmpDirectory() != "" {
+		dir = fmt.Sprintf("%s/%s/", config.GetDiagnoseTmpDirectory(), strconv.FormatInt(time.Now().UnixMilli(), 10))
+		log.Logger.Infof("Diagnose tmp directory overridden to %s", dir)
+	}
 	if config.GetMaxDiagnoseSizeGb() > 0 {
 		log.Logger.Infof("Max diagnose file size overridden to %d GB", config.GetMaxDiagnoseSizeGb())
 		largeFileSize = config.GetMaxDiagnoseSizeGb() * oneGB
