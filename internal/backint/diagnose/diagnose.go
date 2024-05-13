@@ -44,9 +44,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+const oneGB = int64(1024 * 1024 * 1024)
+
 var (
-	smallFileSize = int64(1024 * 1024 * 1024)
-	largeFileSize = 16 * smallFileSize
+	smallFileSize = oneGB
+	largeFileSize = 16 * oneGB
 	fileName1     = "backint-diagnose-file1.txt"
 	fileName2     = "backint-diagnose-file2.txt"
 	fileNotExists = "/tmp/backint-diagnose-file-not-exists.txt"
@@ -101,7 +103,7 @@ func diagnose(ctx context.Context, config *bpb.BackintConfiguration, connectPara
 	dir := fmt.Sprintf("/tmp/backint-diagnose/%s/", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	if config.GetMaxDiagnoseSizeGb() > 0 {
 		log.Logger.Infof("Max diagnose file size overridden to %d GB", config.GetMaxDiagnoseSizeGb())
-		largeFileSize = config.GetMaxDiagnoseSizeGb() * 1024 * 1024 * 1024
+		largeFileSize = config.GetMaxDiagnoseSizeGb() * oneGB
 	}
 	files, err := createFiles(ctx, dir, fileName1, fileName2, smallFileSize, largeFileSize)
 	if err != nil {
@@ -141,8 +143,10 @@ func createFiles(ctx context.Context, dir, fileName1, fileName2 string, fileSize
 	var stat unix.Statfs_t
 	unix.Statfs(dir, &stat)
 	availableBytes := int64(stat.Bavail * uint64(stat.Bsize))
-	if availableBytes < fileSize1+fileSize2 {
-		return nil, fmt.Errorf("not enough space on disk to run diagnostics. Available bytes: %d, bytes needed: %d, dir: %s", availableBytes, fileSize1+fileSize2, dir)
+	// Add a 1GB buffer to total 18GB needed for diagnostics.
+	needBytes := fileSize1 + fileSize2 + oneGB
+	if availableBytes < needBytes {
+		return nil, fmt.Errorf("not enough space on disk to run diagnostics. Available bytes: %d, bytes needed: %d, dir: %s", availableBytes, needBytes, dir)
 	}
 
 	file1, err := os.Create(fileName1)
