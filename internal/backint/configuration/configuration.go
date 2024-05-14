@@ -132,10 +132,10 @@ func (p *Parameters) readParametersFile(read ReadConfigFile) (int, error) {
 		if p.Config.GetRecoveryBucket() != "" {
 			p.Config.Bucket = p.Config.GetRecoveryBucket()
 			p.Config.FolderPrefix = p.Config.GetRecoveryFolderPrefix()
-			log.Logger.Warnw("bucket and folder_prefix overridden by recovery_bucket and recovery_folder_prefix for RESTORE operation", "bucket", p.Config.GetBucket(), "folder_prefix", p.Config.GetFolderPrefix())
+			log.Logger.Infow("bucket and folder_prefix overridden by recovery_bucket and recovery_folder_prefix for RESTORE operation", "bucket", p.Config.GetBucket(), "folder_prefix", p.Config.GetFolderPrefix())
 		} else if p.Config.GetRecoveryFolderPrefix() != "" {
 			p.Config.FolderPrefix = p.Config.GetRecoveryFolderPrefix()
-			log.Logger.Warnw("folder_prefix overridden by recovery_folder_prefix for RESTORE operation", "folder_prefix", p.Config.GetFolderPrefix())
+			log.Logger.Infow("folder_prefix overridden by recovery_folder_prefix for RESTORE operation", "folder_prefix", p.Config.GetFolderPrefix())
 		}
 	}
 	if err := p.validateParameters(); err != nil {
@@ -184,64 +184,64 @@ func (p *Parameters) ApplyDefaults(numCPU int64) {
 		p.Config.SendMonitoringMetrics = wpb.Bool(true)
 	}
 	if p.Config.GetRetries() <= 0 {
-		log.Logger.Warn("retries defaulted to 5")
+		log.Logger.Info("retries defaulted to 5")
 		p.Config.Retries = 5
 	}
 	if p.Config.GetParallelStreams() <= 0 && p.Config.GetXmlMultipartUpload() {
-		log.Logger.Warn("parallel_streams defaulted to 16 for XML multipart upload")
+		log.Logger.Info("parallel_streams defaulted to 16 for XML multipart upload")
 		p.Config.ParallelStreams = 16
 	}
 	if p.Config.GetParallelStreams() <= 0 {
-		log.Logger.Warn("parallel_streams defaulted to 1")
+		log.Logger.Info("parallel_streams defaulted to 1")
 		p.Config.ParallelStreams = 1
 	}
 	if p.Config.GetParallelStreams() > 32 {
-		log.Logger.Warn("parallel_streams capped to 32")
+		log.Logger.Info("parallel_streams capped to 32")
 		p.Config.ParallelStreams = 32
 	}
 	if p.Config.GetThreads() <= 0 {
 		if numCPU > 64 {
 			numCPU = 64
 		}
-		log.Logger.Warnf("threads defaulted to %d", numCPU)
+		log.Logger.Info("threads defaulted to %d", numCPU)
 		p.Config.Threads = numCPU
 	}
 	if p.Config.GetThreads() > 64 {
-		log.Logger.Warnf("threads capped to 64")
+		log.Logger.Info("threads capped to 64")
 		p.Config.Threads = 64
 	}
 	if p.Config.GetBufferSizeMb() <= 0 {
-		log.Logger.Warn("buffer_size_mb defaulted to 100")
+		log.Logger.Info("buffer_size_mb defaulted to 100")
 		p.Config.BufferSizeMb = 100
 	}
 	if p.Config.GetBufferSizeMb() > 250 {
-		log.Logger.Warn("buffer_size_mb capped to 250")
+		log.Logger.Info("buffer_size_mb capped to 250")
 		p.Config.BufferSizeMb = 250
 	}
 	if p.Config.GetRateLimitMb() <= 0 {
-		log.Logger.Warn("rate_limit_mb defaulted to 0")
+		log.Logger.Info("rate_limit_mb defaulted to 0")
 		p.Config.RateLimitMb = 0
 	}
 	if p.Config.FileReadTimeoutMs <= 0 {
-		log.Logger.Warn("file_read_timeout_ms defaulted to 60000")
+		log.Logger.Info("file_read_timeout_ms defaulted to 60000")
 		p.Config.FileReadTimeoutMs = 60000
 	}
 	if p.Config.GetInputFile() == "" {
-		log.Logger.Warn("input_file defaulted to /dev/stdin")
+		log.Logger.Info("input_file defaulted to /dev/stdin")
 		p.Config.InputFile = "/dev/stdin"
 	}
 	if p.Config.GetOutputFile() == "" {
-		log.Logger.Warn("output_file defaulted to /dev/stdout")
+		log.Logger.Info("output_file defaulted to /dev/stdout")
 		p.Config.OutputFile = "/dev/stdout"
 	}
 	if p.Config.GetFolderPrefix() != "" {
 		if !strings.HasSuffix(p.Config.GetFolderPrefix(), "/") {
 			p.Config.FolderPrefix += "/"
 		}
-		log.Logger.Warnf("folder_prefix is set. All objects in the GCS bucket will be prefixed with '%s'", p.Config.GetFolderPrefix())
+		log.Logger.Infof("folder_prefix is set. All objects in the GCS bucket will be prefixed with '%s'", p.Config.GetFolderPrefix())
 	}
 	if p.Config.GetStorageClass() == bpb.StorageClass_STORAGE_CLASS_UNSPECIFIED {
-		log.Logger.Warn("storage_class defaulted to STANDARD")
+		log.Logger.Info("storage_class defaulted to STANDARD")
 		p.Config.StorageClass = bpb.StorageClass_STANDARD
 	}
 }
@@ -314,7 +314,7 @@ func Unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration,
 				return nil, fmt.Errorf("failed to parse #THREADS as int64, err: %v", err)
 			}
 		case "#PARALLEL_PART_SIZE_MB":
-			log.Logger.Warnw("#PARALLEL_PART_SIZE_MB has been deprecated and can be removed from the configuration", "line", line)
+			log.Logger.Infow("#PARALLEL_PART_SIZE_MB has been deprecated and can be removed from the configuration", "line", line)
 		default:
 			log.Logger.Warnw("Unexpected line in parameters file", "line", line)
 		}
