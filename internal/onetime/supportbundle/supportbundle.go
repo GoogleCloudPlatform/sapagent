@@ -28,6 +28,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -200,6 +201,11 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 	// removing the destination directory after zip file is created.
 	if err := removeDestinationFolder(destFilesPath, fs); err != nil {
+		hasErrors = true
+	}
+
+	// Rotate out old support bundles so we don't fill the file system.
+	if err := rotateOldBundles(destFilePathPrefix, fs); err != nil {
 		hasErrors = true
 	}
 
@@ -635,6 +641,29 @@ func removeDestinationFolder(path string, fu filesystem.FileSystem) error {
 	if err := fu.RemoveAll(path); err != nil {
 		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while removing folder %s", path), err)
 		return err
+	}
+	return nil
+}
+
+func rotateOldBundles(dir string, fs filesystem.FileSystem) error {
+	fds, err := fs.ReadDir(dir)
+	if err != nil {
+		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while reading folder %s", dir), err)
+		return err
+	}
+	sort.Slice(fds, func(i, j int) bool { return fds[i].ModTime().After(fds[j].ModTime()) })
+	bundleCount := 0
+	for _, fd := range fds {
+		if strings.Contains(fd.Name(), "supportbundle") {
+			bundleCount++
+			if bundleCount > 5 {
+				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Removing old bundle %s", dir+fd.Name()))
+				if err := fs.RemoveAll(dir + fd.Name()); err != nil {
+					onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while removing old bundle %s", dir+fd.Name()), err)
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }

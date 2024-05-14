@@ -1240,6 +1240,50 @@ func TestRemoveDestinationFolder(t *testing.T) {
 	}
 }
 
+func TestRotateOldBundles(t *testing.T) {
+	tests := []struct {
+		name string
+		dir  string
+		fs   filesystem.FileSystem
+		want error
+	}{
+		{
+			name: "ErrorWhileReading",
+			dir:  "failure",
+			fs:   mockedfilesystem{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessNoFiles",
+			dir:  "success",
+			fs:   mockedfilesystem{},
+		},
+		{
+			name: "SuccessMultipleFiles",
+			dir:  "success",
+			fs: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{name: "supportbundle1"},
+					mockedFileInfo{name: "supportbundle2"},
+					mockedFileInfo{name: "supportbundle3"},
+					mockedFileInfo{name: "supportbundle4"},
+					mockedFileInfo{name: "supportbundle5"},
+					mockedFileInfo{name: "supportbundle6"},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := rotateOldBundles(test.dir, test.fs)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("rotateOldBundles(%q) = %v, want %v", test.dir, got, test.want)
+			}
+		})
+	}
+}
+
 func TestCollectPacemakerLogs(t *testing.T) {
 	tests := []struct {
 		name         string
