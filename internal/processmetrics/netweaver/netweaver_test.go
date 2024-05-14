@@ -31,6 +31,7 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
@@ -38,6 +39,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	mpb "google.golang.org/genproto/googleapis/api/metric"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -1293,9 +1296,261 @@ func TestCollectWithRetry(t *testing.T) {
 	p := &InstanceProperties{
 		SAPInstance:     defaultSAPInstance,
 		PMBackoffPolicy: defaultBOPolicy(c),
+		Config:          defaultConfig,
 	}
 	_, err := p.CollectWithRetry(c)
 	if err == nil {
 		t.Errorf("CollectWithRetry() unexpected success, want error.")
+	}
+}
+
+func TestCollectRoleMetrics(t *testing.T) {
+	tests := []struct {
+		name    string
+		p       *InstanceProperties
+		exec    commandlineexecutor.Execute
+		want    *mrpb.TimeSeries
+		wantErr error
+	}{{
+		name: "noRoles",
+		p: &InstanceProperties{
+			SAPInstance: &sapb.SAPInstance{
+				InstanceId: "ASCS11",
+			},
+		},
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "usr04, 000ddic, e, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, sap*, su01, e_usr04, false",
+			}
+		},
+	}, {
+		name: "commandError",
+		p: &InstanceProperties{
+			SAPInstance: &sapb.SAPInstance{
+				InstanceId: "ASCS11",
+			},
+		},
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				Error: cmpopts.AnyError,
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "justASCS",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enq.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13447 13436  0 Apr26 ?        00:01:10 ms.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ascs":        "true",
+					"app":         "false",
+					"ers":         "false",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "justERS",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ers":         "true",
+					"ascs":        "false",
+					"app":         "false",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "justAppJava",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 jstart.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":         "true",
+					"ascs":        "false",
+					"ers":         "false",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "justAppABAP",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 dw.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":         "true",
+					"ascs":        "false",
+					"ers":         "false",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "ascsAndERS",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enq.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 ms.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ers":         "true",
+					"ascs":        "true",
+					"app":         "false",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "ascsAndApp",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enq.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 dw.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 ms.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+	`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ascs":        "true",
+					"app":         "true",
+					"ers":         "false",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "ersAndApp",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 dw.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+	`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ers":         "true",
+					"app":         "true",
+					"ascs":        "false",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "allRoles",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 dw.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 ms.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enq.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+		`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ascs":        "true",
+					"app":         "true",
+					"ers":         "true",
+					"instance_nr": "00",
+					"sid":         "TST",
+				},
+			},
+		},
+	}, {
+		name: "msNoEnq",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 ms.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+		`,
+			}
+		},
+	}, {
+		name: "enqNoMs",
+		p:    defaultInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+ed1adm   13448 13436  0 Apr26 ?        00:10:50 enq.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
+		`,
+			}
+		},
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := collectRoleMetrics(ctx, tc.p, tc.exec)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectRoleMetrics(%v, %v) returned an unexpected error: %v", tc.p, tc.exec, err)
+			}
+
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), protocmp.IgnoreFields(&mrpb.TimeSeries{}, "metric_kind", "points", "resource")); diff != "" {
+				t.Errorf("collectRoleMetrics(%v, %v) returned an unexpected diff (-want +got): %v", tc.p, tc.exec, diff)
+			}
+		})
 	}
 }

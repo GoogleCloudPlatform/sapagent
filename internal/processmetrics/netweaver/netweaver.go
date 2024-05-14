@@ -75,6 +75,7 @@ const (
 	nwABAPSessionsPath         = "/sap/nw/abap/sessions"
 	nwABAPRFCPath              = "/sap/nw/abap/rfc"
 	nwEnqLocksPath             = "/sap/nw/enq/locks/usercountowner"
+	nwInstanceRolePath         = "/sap/nw/instance/role"
 )
 
 var (
@@ -167,6 +168,14 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 	}
 	if enqLockMetrics != nil {
 		metrics = append(metrics, enqLockMetrics...)
+	}
+
+	roleMetrics, err := collectRoleMetrics(ctx, p, commandlineexecutor.ExecuteCommand)
+	if err != nil {
+		metricsCollectionError = err
+	}
+	if roleMetrics != nil {
+		metrics = append(metrics, roleMetrics)
 	}
 
 	return metrics, metricsCollectionError
@@ -543,6 +552,62 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 
 	}
 	return metrics, nil
+}
+
+func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) (*mrpb.TimeSeries, error) {
+	params := commandlineexecutor.Params{
+		Executable: "ps",
+		Args:       []string{"-ef"},
+	}
+	result := exec(ctx, params)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	roles := map[string]string{
+		"ascs": "false",
+		"ers":  "false",
+		"app":  "false",
+	}
+	hasRole := false
+	hasEnq := false
+	hasMS := false
+	lines := strings.Split(result.StdOut, "\n")
+	for _, line := range lines {
+		cols := regexp.MustCompile("\\s+").Split(line, -1)
+		if len(cols) < 8 {
+			// Not enough columns on the line
+			continue
+		}
+		bin := cols[7]
+		if strings.HasPrefix(bin, "enqr") {
+			log.CtxLogger(ctx).Debugw("Found enqr", "bin", bin)
+			roles["ers"] = "true"
+			hasRole = true
+		}
+		if strings.HasPrefix(bin, "ms") {
+			log.CtxLogger(ctx).Debugw("Found ms", "bin", bin)
+			hasMS = true
+		}
+		if strings.HasPrefix(bin, "enq.") {
+			log.CtxLogger(ctx).Debugw("Found enq.", "bin", bin)
+			hasEnq = true
+		}
+		if strings.HasPrefix(bin, "dw") || strings.HasPrefix(bin, "jstart") {
+			log.CtxLogger(ctx).Debugw("Found dw or jstart", "bin", bin)
+			hasRole = true
+			roles["app"] = "true"
+		}
+	}
+	if hasMS && hasEnq {
+		log.CtxLogger(ctx).Debugw("Found both ms and enq.", "hasMS", hasMS, "hasEnq", hasEnq)
+		roles["ascs"] = "true"
+		hasRole = true
+	}
+	if !hasRole {
+		return nil, nil
+	}
+	return createMetrics(p, nwInstanceRolePath, roles, tspb.Now(), 1), nil
 }
 
 // createMetrics - create mrpb.TimeSeries object for the given metric.
