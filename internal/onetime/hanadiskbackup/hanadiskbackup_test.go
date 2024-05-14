@@ -19,6 +19,7 @@ package hanadiskbackup
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
@@ -99,6 +101,43 @@ var defaultCloudProperties = &ipb.CloudProperties{
 
 type fakeSnapshot interface {
 	isDiskAttachedToInstance(diskName string) (string, bool, error)
+}
+
+type mockDiskCreateSnapshot struct {
+	doErr     error
+	operation *compute.Operation
+}
+
+func (m *mockDiskCreateSnapshot) Context(ctx context.Context) *compute.DisksCreateSnapshotCall {
+	return &compute.DisksCreateSnapshotCall{}
+}
+
+func (m *mockDiskCreateSnapshot) Do(...googleapi.CallOption) (*compute.Operation, error) {
+	return &compute.Operation{}, m.doErr
+}
+
+func (m *mockDiskCreateSnapshot) Fields(...googleapi.Field) *compute.DisksCreateSnapshotCall {
+	return &compute.DisksCreateSnapshotCall{}
+}
+
+func (m *mockDiskCreateSnapshot) GuestFlush(bool) *compute.DisksCreateSnapshotCall {
+	return &compute.DisksCreateSnapshotCall{}
+}
+
+func (m *mockDiskCreateSnapshot) Header() http.Header {
+	return nil
+}
+
+func (m *mockDiskCreateSnapshot) RequestId(string) *compute.DisksCreateSnapshotCall {
+	return &compute.DisksCreateSnapshotCall{}
+}
+
+func createDiskSnapshotFail(*compute.Snapshot) fakeDiskCreateSnapshotCall {
+	return &mockDiskCreateSnapshot{doErr: cmpopts.AnyError}
+}
+
+func createDiskSnapshotSuccess(*compute.Snapshot) fakeDiskCreateSnapshotCall {
+	return &mockDiskCreateSnapshot{doErr: nil, operation: &compute.Operation{}}
 }
 
 func TestSnapshotHandler(t *testing.T) {
@@ -662,24 +701,27 @@ func TestPortValue(t *testing.T) {
 
 func TestRunWorkflow(t *testing.T) {
 	tests := []struct {
-		name     string
-		snapshot Snapshot
-		run      queryFunc
-		want     error
+		name           string
+		snapshot       Snapshot
+		run            queryFunc
+		createSnapshot diskSnapshotFunc
+		want           error
 	}{
 		{
 			name: "CheckValidDiskFailure",
 			snapshot: Snapshot{
 				gceService: &fake.TestGCE{DiskAttachedToInstanceErr: cmpopts.AnyError},
 			},
-			want: cmpopts.AnyError,
+			createSnapshot: createDiskSnapshotFail,
+			want:           cmpopts.AnyError,
 		},
 		{
 			name: "InvalidDisk",
 			snapshot: Snapshot{
 				gceService: &fake.TestGCE{IsDiskAttached: false},
 			},
-			want: cmpopts.AnyError,
+			createSnapshot: createDiskSnapshotFail,
+			want:           cmpopts.AnyError,
 		},
 		{
 			name: "AbandonSnapshotFailure",
@@ -687,6 +729,7 @@ func TestRunWorkflow(t *testing.T) {
 				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
+			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "", cmpopts.AnyError
 			},
@@ -698,6 +741,7 @@ func TestRunWorkflow(t *testing.T) {
 				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
+			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
 					return "", cmpopts.AnyError
@@ -712,6 +756,7 @@ func TestRunWorkflow(t *testing.T) {
 				AbandonPrepared: true,
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
+			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
@@ -724,16 +769,67 @@ func TestRunWorkflow(t *testing.T) {
 				DiskKeyFile:     "test.json",
 				gceService:      &fake.TestGCE{IsDiskAttached: true},
 			},
+			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
 			want: cmpopts.AnyError,
 		},
+		{
+			name: "ConfirmDataSnapshot",
+			snapshot: Snapshot{
+				AbandonPrepared:                true,
+				confirmDataSnapshotAfterCreate: true,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:      true,
+					UploadCompletionErr: cmpopts.AnyError,
+				},
+				computeService: &compute.Service{},
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "DoNotConfirmSnapshotAfterCreate",
+			snapshot: Snapshot{
+				AbandonPrepared:                true,
+				confirmDataSnapshotAfterCreate: false,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:      true,
+					UploadCompletionErr: cmpopts.AnyError,
+				},
+				computeService: &compute.Service{},
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "UploadSnapshotSuccess",
+			snapshot: Snapshot{
+				AbandonPrepared:                true,
+				confirmDataSnapshotAfterCreate: true,
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+				},
+				computeService: &compute.Service{},
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			want: nil,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.runWorkflow(context.Background(), test.run, defaultCloudProperties)
+			got := test.snapshot.runWorkflow(context.Background(), test.run, test.createSnapshot, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("runWorkflow()=%v, want=%v", got, test.want)
 			}
@@ -812,7 +908,7 @@ func TestSetFlagsForSnapshot(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"project", "host", "port", "sid", "hana-db-user", "password", "password-secret",
 		"hdbuserstore-key", "snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file",
-		"snapshot-description", "send-metrics-to-monitoring", "storage-location"}
+		"snapshot-description", "send-metrics-to-monitoring", "storage-location", "confirm-data-snapshot-after-create"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
