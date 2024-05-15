@@ -214,12 +214,13 @@ func backupFile(ctx context.Context, p parameters) string {
 	}
 	startTime := time.Now()
 	bytesWritten, err := rw.Upload(ctx)
-	metrics.SendToCloudMonitoring(ctx, "backup", p.fileName, bytesWritten, time.Since(startTime), p.config.GetSendMonitoringMetrics().GetValue(), err == nil, p.cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
+	uploadTime := time.Since(startTime)
+	metrics.SendToCloudMonitoring(ctx, "backup", p.fileName, bytesWritten, uploadTime, p.config.GetSendMonitoringMetrics().GetValue(), err == nil, p.cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error uploading file", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 		return fmt.Sprintf("#ERROR %s\n", p.fileName)
 	}
-	log.CtxLogger(ctx).Infow("File uploaded", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "bytesWritten", bytesWritten, "fileSize", p.fileSize, "fileType", p.fileType)
+	log.CtxLogger(ctx).Infow("File uploaded", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "bytesWritten", bytesWritten, "fileSize", p.fileSize, "fileType", p.fileType, "uploadTimeSec", uploadTime.Round(time.Millisecond))
 	return fmt.Sprintf("#SAVED %q %s %s\n", p.externalBackupID, p.fileName, strconv.FormatInt(bytesWritten, 10))
 }
 

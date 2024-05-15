@@ -192,12 +192,13 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	}
 	startTime := time.Now()
 	bytesWritten, err := rw.Download(ctx)
-	metrics.SendToCloudMonitoring(ctx, "restore", fileName, bytesWritten, time.Since(startTime), config.GetSendMonitoringMetrics().GetValue(), err == nil, cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
+	downloadTime := time.Since(startTime)
+	metrics.SendToCloudMonitoring(ctx, "restore", fileName, bytesWritten, downloadTime, config.GetSendMonitoringMetrics().GetValue(), err == nil, cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error downloading file", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "err", err)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))
 	}
-	log.CtxLogger(ctx).Infow("File restored", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "bytesWritten", bytesWritten)
+	log.CtxLogger(ctx).Infow("File restored", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "bytesWritten", bytesWritten, "downloadTimeSec", downloadTime.Round(time.Millisecond))
 	externalBackupID = strings.TrimSuffix(filepath.Base(object.Name), ".bak")
 	return []byte(fmt.Sprintf("#RESTORED %q %s\n", externalBackupID, fileName))
 }
