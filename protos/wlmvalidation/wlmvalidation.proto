@@ -130,6 +130,7 @@ message ValidationHANA {
   repeated HANADiskVolumeMetric hana_disk_volume_metrics = 2;
   repeated configurablemetrics.OSCommandMetric os_command_metrics = 3;
   repeated HANAHighAvailabilityMetric ha_metrics = 4;
+  repeated configurablemetrics.EvalMetric indexserver_ini_metrics = 5;
 }
 
 message HANADiskVolumeMetric {

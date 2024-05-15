@@ -810,6 +810,67 @@ func TestMerge(t *testing.T) {
 			},
 		},
 		{
+			name: "WorkloadValidation_ValidationHANA_IndexserverINIMetrics_Merge",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						IndexserverIniMetrics: []*cmpb.EvalMetric{
+							createEvalMetric("workload.googleapis.com/sap/validation/hana", "load_table_numa_aware", "load_table_numa_aware"),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						IndexserverIniMetrics: []*cmpb.EvalMetric{
+							createEvalMetric("workload.googleapis.com/sap/validation/hana2", "load_table_numa_aware", "load_table_numa_aware2"),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						IndexserverIniMetrics: []*cmpb.EvalMetric{
+							createEvalMetric("workload.googleapis.com/sap/validation/hana", "load_table_numa_aware", "load_table_numa_aware"),
+							createEvalMetric("workload.googleapis.com/sap/validation/hana2", "load_table_numa_aware", "load_table_numa_aware2"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "WorkloadValidation_ValidationHANA_IndexserverINIMetrics_Override",
+			primary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						IndexserverIniMetrics: []*cmpb.EvalMetric{
+							createEvalMetric("workload.googleapis.com/sap/validation/hana", "load_table_numa_aware", "load_table_numa_aware"),
+						},
+					},
+				},
+			},
+			secondary: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						IndexserverIniMetrics: []*cmpb.EvalMetric{
+							createEvalMetric("workload.googleapis.com/sap/validation/hana", "load_table_numa_aware", "load_table_numa_aware2"),
+						},
+					},
+				},
+			},
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						IndexserverIniMetrics: []*cmpb.EvalMetric{
+							createEvalMetric("workload.googleapis.com/sap/validation/hana", "load_table_numa_aware", "load_table_numa_aware"),
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "WorkloadValidation_ValidationHANA_OSCommandMetrics_Merge",
 			primary: &cdpb.CollectionDefinition{
 				WorkloadValidation: &wlmpb.WorkloadValidation{

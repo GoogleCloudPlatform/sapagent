@@ -65,28 +65,27 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	l := map[string]string{}
 	hanaVal := 0.0
 
-	globalINILocationVal := globalINIfromSAPsid(ctx, params)
-	if globalINILocationVal == "" {
+	hanaSystemConfigDir := hanaSystemConfigFromSAPSID(ctx, params)
+	if hanaSystemConfigDir == "" {
 		log.CtxLogger(ctx).Debug("Skipping HANA metrics collection, HANA not active on instance")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
-	if _, err := params.OSStatReader(globalINILocationVal); err != nil {
-		// Parse out the SID and global.ini location.
-		// example process output:
-		// /usr/sap/RKT/HDB90/exe/sapstartsrv
-		// pf=/usr/sap/RKT/SYS/profile/RKT_HDB90_sap-hana-vm-hma-rev53-rhel -D -u rktadm
 
-		// The global.ini will be in /usr/sap/[SID]/SYS/global/hdb/custom/config/global.ini
-
-		// If the process is not running then the hanaProcessOrGlobalIni will contain the global.ini
-		// location similar to: /usr/sap/HAR/SYS/global/hdb/custom/config/global.ini
-
-		log.CtxLogger(ctx).Debugw("Could not find global.ini file", "globalinilocation", globalINILocationVal)
+	globalINIFilePath := hanaSystemConfigDir + "/global.ini"
+	// Short-circuit HANA metrics collection if global.ini file is not found.
+	// In addition to the metrics contained in the file, global.ini also contains
+	// basepath information for the HANA data and log volumes.
+	if _, err := params.OSStatReader(globalINIFilePath); err != nil {
+		log.CtxLogger(ctx).Debugw("Skipping HANA metrics collection, could not find global.ini file", "location", globalINIFilePath)
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 
 	hana := params.WorkloadConfig.GetValidationHana()
-	for k, v := range configurablemetrics.CollectMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), globalINILocationVal, hana.GetGlobalIniMetrics()) {
+	for k, v := range configurablemetrics.CollectMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), globalINIFilePath, hana.GetGlobalIniMetrics()) {
+		l[k] = v
+	}
+	indexserverINIFilePath := hanaSystemConfigDir + "/indexserver.ini"
+	for k, v := range configurablemetrics.CollectMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), indexserverINIFilePath, hana.GetIndexserverIniMetrics()) {
 		l[k] = v
 	}
 	for _, m := range hana.GetOsCommandMetrics() {
@@ -96,7 +95,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		}
 	}
 	for _, volume := range hana.GetHanaDiskVolumeMetrics() {
-		diskInfo := diskInfo(ctx, volume.GetBasepathVolume(), globalINILocationVal, params.Execute, params.InstanceInfoReader)
+		diskInfo := diskInfo(ctx, volume.GetBasepathVolume(), globalINIFilePath, params.Execute, params.InstanceInfoReader)
 		for _, m := range volume.GetMetrics() {
 			k := m.GetMetricInfo().GetLabel()
 			switch m.GetValue() {
@@ -123,9 +122,11 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 }
 
-// globalINIfromSAPsid returns the path to the global.ini file using the
-// SAP sid from the discovered HANA instance.
-func globalINIfromSAPsid(ctx context.Context, params Parameters) string {
+// hanaSystemConfigFromSAPSID returns the path to the directory containing
+// SAP HANA configuration files.
+//
+// File path: /usr/sap/[SID]/SYS/global/hdb/custom/config
+func hanaSystemConfigFromSAPSID(ctx context.Context, params Parameters) string {
 	if params.Discovery == nil {
 		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
 		return ""
@@ -138,7 +139,7 @@ func globalINIfromSAPsid(ctx context.Context, params Parameters) string {
 	for _, instance := range sapInstances {
 		if instance.GetType() == sapb.InstanceType_HANA && instance.GetSapsid() != "" {
 			log.CtxLogger(ctx).Debugw("Found HANA instance", "sapsid", instance.GetSapsid())
-			return fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config/global.ini", instance.GetSapsid())
+			return fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config", instance.GetSapsid())
 		}
 	}
 	return ""
@@ -268,7 +269,7 @@ the input value must be a string encoded 64 bit integer which may or may not be 
 "\"42\"" -> 42
 "42" -> 42
 */
-func extractSize(ctx context.Context,msg []byte) int64 {
+func extractSize(ctx context.Context, msg []byte) int64 {
 	val := strings.Trim(string(msg), `"`)
 	size, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {

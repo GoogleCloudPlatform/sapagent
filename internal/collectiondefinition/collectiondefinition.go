@@ -305,6 +305,7 @@ func filterMetrics(cd *cdpb.CollectionDefinition) *cdpb.CollectionDefinition {
 	if cd.WorkloadValidation.GetValidationHana() != nil {
 		cd.WorkloadValidation.GetValidationHana().OsCommandMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetOsCommandMetrics())
 		cd.WorkloadValidation.GetValidationHana().GlobalIniMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetGlobalIniMetrics())
+		cd.WorkloadValidation.GetValidationHana().IndexserverIniMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetIndexserverIniMetrics())
 		cd.WorkloadValidation.GetValidationHana().HaMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetHaMetrics())
 		for _, m := range cd.WorkloadValidation.GetValidationHana().GetHanaDiskVolumeMetrics() {
 			if m != nil {
@@ -410,6 +411,7 @@ func mapWorkloadValidationMetrics(wlm *wlmpb.WorkloadValidation) metricsMap {
 
 	hana := wlm.GetValidationHana()
 	iterator(hana.GetGlobalIniMetrics(), mapper)
+	iterator(hana.GetIndexserverIniMetrics(), mapper)
 	hanaDiskVolumes := hana.GetHanaDiskVolumeMetrics()
 	for _, d := range hanaDiskVolumes {
 		iterator(d.GetMetrics(), mapper)
@@ -499,6 +501,11 @@ func mergeHanaValidations(primary, secondary *wlmpb.ValidationHANA, existing met
 	for _, m := range secondary.GetGlobalIniMetrics() {
 		if ok := shouldMerge(m, existing); ok {
 			merged.GlobalIniMetrics = append(merged.GetGlobalIniMetrics(), m)
+		}
+	}
+	for _, m := range secondary.GetIndexserverIniMetrics() {
+		if ok := shouldMerge(m, existing); ok {
+			merged.IndexserverIniMetrics = append(merged.GetIndexserverIniMetrics(), m)
 		}
 	}
 	for _, m := range secondary.GetOsCommandMetrics() {

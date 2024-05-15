@@ -550,6 +550,48 @@
           }
         }
       ],
+      "indexserver_ini_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "tables_preloaded_in_parallel",
+            "min_version": "3.3"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "tables_preloaded_in_parallel"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "tables_preloaded_in_parallel = (\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "load_table_numa_aware",
+            "min_version": "3.3"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_contains": "true"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        }
+      ],
       "hana_disk_volume_metrics": [
         {
           "basepath_volume": "basepath_datavolumes",

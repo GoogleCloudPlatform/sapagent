@@ -19,6 +19,7 @@ package workloadmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -181,6 +182,13 @@ num_submit_queues = 12
 basepath_datavolumes = /hana/data/ISC
 basepath_logvolumes = /hana/log/ISC
 basepath_persistent_memory_volumes = /hana/memory/ISC
+`
+	defaultIndexserverINI = `
+[global]
+load_table_numa_aware = true
+
+[parallel]
+tables_preloaded_in_parallel = 32
 `
 	dfTargetData = `
 Mounted on
@@ -909,21 +917,23 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			wantHanaExists: float64(1.0),
 			wantLabels: map[string]string{
-				"disk_data_mount":       "",
-				"disk_data_pd_size":     "",
-				"disk_data_size":        "",
-				"disk_data_type":        "",
-				"disk_log_mount":        "",
-				"disk_log_pd_size":      "",
-				"disk_log_size":         "",
-				"disk_log_type":         "",
-				"fast_restart":          "disabled",
-				"ha_sr_hook_configured": "no",
-				"num_completion_queues": "1",
-				"num_submit_queues":     "1",
-				"numa_balancing":        "disabled",
-				"transparent_hugepages": "disabled",
-				"ha_in_same_zone":       "",
+				"disk_data_mount":              "",
+				"disk_data_pd_size":            "",
+				"disk_data_size":               "",
+				"disk_data_type":               "",
+				"disk_log_mount":               "",
+				"disk_log_pd_size":             "",
+				"disk_log_size":                "",
+				"disk_log_type":                "",
+				"fast_restart":                 "disabled",
+				"ha_sr_hook_configured":        "no",
+				"num_completion_queues":        "1",
+				"num_submit_queues":            "1",
+				"tables_preloaded_in_parallel": "",
+				"load_table_numa_aware":        "false",
+				"numa_balancing":               "disabled",
+				"transparent_hugepages":        "disabled",
+				"ha_in_same_zone":              "",
 			},
 		},
 		{
@@ -972,7 +982,14 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			osStatReader: func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: ConfigFileReader(func(data string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader(defaultHanaINI)), nil
+				switch {
+				case strings.Contains(data, "global.ini"):
+					return io.NopCloser(strings.NewReader(defaultHanaINI)), nil
+				case strings.Contains(data, "indexserver.ini"):
+					return io.NopCloser(strings.NewReader(defaultIndexserverINI)), nil
+				default:
+					return nil, fmt.Errorf("Unexpected file name: %s", data)
+				}
 			}),
 			discovery: &fakeDiscoveryInterface{
 				instances: &sapb.SAPInstances{
@@ -994,21 +1011,23 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			wantHanaExists: float64(1.0),
 			wantLabels: map[string]string{
-				"disk_data_mount":       "/hana/data",
-				"disk_data_pd_size":     "4096",
-				"disk_data_size":        "2048",
-				"disk_data_type":        "default-disk-type",
-				"disk_log_mount":        "/hana/data",
-				"disk_log_pd_size":      "4096",
-				"disk_log_size":         "2048",
-				"disk_log_type":         "default-disk-type",
-				"fast_restart":          "enabled",
-				"ha_sr_hook_configured": "yes",
-				"num_completion_queues": "12",
-				"num_submit_queues":     "12",
-				"numa_balancing":        "enabled",
-				"transparent_hugepages": "enabled",
-				"ha_in_same_zone":       "other-instance-1",
+				"disk_data_mount":              "/hana/data",
+				"disk_data_pd_size":            "4096",
+				"disk_data_size":               "2048",
+				"disk_data_type":               "default-disk-type",
+				"disk_log_mount":               "/hana/data",
+				"disk_log_pd_size":             "4096",
+				"disk_log_size":                "2048",
+				"disk_log_type":                "default-disk-type",
+				"fast_restart":                 "enabled",
+				"ha_sr_hook_configured":        "yes",
+				"num_completion_queues":        "12",
+				"num_submit_queues":            "12",
+				"tables_preloaded_in_parallel": "32",
+				"load_table_numa_aware":        "true",
+				"numa_balancing":               "enabled",
+				"transparent_hugepages":        "enabled",
+				"ha_in_same_zone":              "other-instance-1",
 			},
 		},
 	}
