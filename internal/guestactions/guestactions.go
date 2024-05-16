@@ -20,7 +20,6 @@ package guestactions
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -44,25 +43,24 @@ type guestActionsOptions struct {
 	endpoint string
 }
 
-func handleShellCommand(ctx context.Context, command string) commandlineexecutor.Result {
-	executable, args, _ := strings.Cut(command, " ")
-	return commandlineexecutor.ExecuteCommand(
-		ctx,
-		commandlineexecutor.Params{Executable: executable, ArgsToSplit: args},
-	)
+var handleShellCommand = func(ctx context.Context, command *gpb.ShellCommand) commandlineexecutor.Result {
+	params := commandlineexecutor.Params{
+		Executable:  command.GetCommand(),
+		ArgsToSplit: command.GetArgs(),
+	}
+	if command.GetTimeoutSeconds() > 0 {
+		params.Timeout = int(command.GetTimeoutSeconds())
+	}
+	return commandlineexecutor.ExecuteCommand(ctx, params)
 }
 
-func getAnyResponse(ctx context.Context, results []string, errorMessage string) *anypb.Any {
+func getAnyResponse(ctx context.Context, results []*gpb.CommandResult, errorMessage string) *anypb.Any {
 	log.CtxLogger(ctx).Debugw("getAnyResponse() called on.", "results", results)
-	commandResults := []*gpb.CommandResult{}
-	for _, result := range results {
-		commandResults = append(commandResults, &gpb.CommandResult{
-			Output: result,
-		})
-	}
-	response := &gpb.Response{
-		CommandResults: commandResults,
-		ErrorMessage:   errorMessage,
+	response := &gpb.GuestActionResponse{
+		CommandResults: results,
+		Error: &gpb.GuestActionError{
+			ErrorMessage: errorMessage,
+		},
 	}
 	any, err := anypb.New(response)
 	if err != nil {
@@ -72,28 +70,35 @@ func getAnyResponse(ctx context.Context, results []string, errorMessage string) 
 }
 
 func messageHandler(ctx context.Context, message *anypb.Any) (*anypb.Any, error) {
-	commands := &gpb.GuestAction{}
-	if err := message.UnmarshalTo(commands); err != nil {
+	req := &gpb.GuestActionRequest{}
+	if err := message.UnmarshalTo(req); err != nil {
 		return nil, fmt.Errorf("messageHandler() failed to unmarshal message: %v", err)
 	}
-	results := []string{}
-	for _, command := range commands.GetCommands() {
-		// Version is handled the same as shell for now.
-		switch command.GetCommandType() {
-		case gpb.Command_SHELL, gpb.Command_VERSION:
-			result := handleShellCommand(ctx, command.GetParameters())
+	log.CtxLogger(ctx).Debugw("Processing commands for guest action", "action",req.GetWorkloadAction().GetSapWorkloadAction())
+	var results []*gpb.CommandResult
+	for _, command := range req.GetCommands() {
+		pr := command.ProtoReflect()
+		fd := pr.WhichOneof(pr.Descriptor().Oneofs().ByName("command_type"))
+		switch {
+		case fd == nil || fd.Name() == "agent_command":
+			error := fmt.Errorf("messageHandler() received unknown command: %s", prototext.Format(command))
+			response := getAnyResponse(ctx, results, error.Error())
+			return response, error
+		case fd.Name() == "shell_command":
+			result := handleShellCommand(ctx, command.GetShellCommand())
 			log.CtxLogger(ctx).Debugw("messageHandler() received result for shell command.",
 				"command", prototext.Format(command), "stdOut", result.StdOut,
 				"stdErr", result.StdErr, "error", result.Error, "exitCode", result.ExitCode)
-			results = append(results, result.StdOut)
+			results = append(results, &gpb.CommandResult{
+				Command:  command,
+				Stdout:   result.StdOut,
+				Stderr:   result.StdErr,
+				ExitCode: int32(result.ExitCode),
+			})
 			if result.Error != nil {
 				response := getAnyResponse(ctx, results, result.Error.Error())
 				return response, result.Error
 			}
-		default:
-			error := fmt.Errorf("messageHandler() received unknown command: %s", prototext.Format(command))
-			response := getAnyResponse(ctx, results, error.Error())
-			return response, error
 		}
 	}
 

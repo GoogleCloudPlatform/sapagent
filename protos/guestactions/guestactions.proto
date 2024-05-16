@@ -19,26 +19,89 @@ package sapagent.protos.guestactions;
 
 import "google/protobuf/wrappers.proto";
 
-message GuestAction {
-  repeated Command commands = 1;
+/**
+ * A GuestActionRequest is contained in the body of an UAP message that is sent
+ * to the agent by the WorkloadActions service.
+ */
+message GuestActionRequest {
+  WorkloadAction workload_action = 1;
+  repeated Command commands = 2;
 }
 
-message Command {
-  CommandType command_type = 1;
-  string parameters = 2;
+/**
+ * A GuestActionResponse is contained in the body of an Agent Communication
+ * message that is sent from the agent to the WorkloadActions service.
+ */
+message GuestActionResponse {
+  repeated CommandResult command_results = 1;
+  GuestActionError error = 2;
+}
 
-  enum CommandType {
-    COMMAND_TYPE_UNSPECIFIED = 0;
-    SHELL = 1;
-    VERSION = 2;
+/**
+ * A WorkloadAction encodes the intended purpose of a guest action request.
+ * It is intended to be used as metadata for informational purposes.
+ */
+message WorkloadAction {
+  oneof workload_type {
+    SapWorkloadAction sap_workload_action = 1;
   }
 }
 
-message Response {
-  repeated CommandResult command_results = 1;
-  string error_message = 2;
+/**
+ * SapWorkloadAction specifies the type of SAP workload action to perform.
+ */
+enum SapWorkloadAction {
+  SAP_WORKLOAD_ACTION_UNSPECIFIED = 0;
+  SAP_WLM_EVALUATION_FIX = 1;
 }
 
+/**
+ * Command specifies the type of command to execute.
+ */
+message Command {
+  oneof command_type {
+    AgentCommand agent_command = 1;
+    ShellCommand shell_command = 2;
+  }
+}
+
+/**
+ * An AgentCommand specifies a one-time executable program for the agen to run.
+ */
+message AgentCommand {
+  // command is the name of the agent one-time executable that will be invoked.
+  string command = 1;
+  // parameters is a map of key/value pairs that can be used to specify
+  // additional one-time executable settings.
+  map<string, string> parameters = 2;
+}
+
+/**
+ * A ShellCommand is invoked via the agent's command line executor
+ */
+message ShellCommand {
+  // command is the name of the command to be executed.
+  string command = 1;
+  // args is a string of arguments to be passed to the command.
+  string args = 2;
+  // Optional. If not specified, the default timeout is 60 seconds.
+  int32 timeout_seconds = 3;
+}
+
+/**
+ * CommandResult contains the result of a single command execution.
+ */
 message CommandResult {
-  string output = 1;
+  Command command = 1;
+  string stdout = 2;
+  string stderr = 3;
+  int32 exit_code = 4;
+}
+
+/**
+ * GuestActionError contains details about an error that occurred while
+ * processing a GuestActionRequest.
+ */
+message GuestActionError {
+  string error_message = 1;
 }
