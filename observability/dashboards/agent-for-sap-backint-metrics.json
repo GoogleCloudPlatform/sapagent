@@ -141,7 +141,7 @@
         "widget": {
           "title": "Backint Logs",
           "logsPanel": {
-            "filter": "logName=\"projects/core-connect-dev/logs/google-cloud-sap-agent-backint\"\n",
+            "filter": "logName=~\"/logs/google-cloud-sap-agent-backint\"\n",
             "resourceNames": []
           }
         }
