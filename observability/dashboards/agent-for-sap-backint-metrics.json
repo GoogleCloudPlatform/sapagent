@@ -5,6 +5,7 @@
     "columns": 48,
     "tiles": [
       {
+        "yPos": 8,
         "width": 24,
         "height": 16,
         "widget": {
@@ -36,7 +37,7 @@
         }
       },
       {
-        "xPos": 24,
+        "yPos": 24,
         "width": 24,
         "height": 16,
         "widget": {
@@ -68,7 +69,8 @@
         }
       },
       {
-        "yPos": 16,
+        "xPos": 24,
+        "yPos": 8,
         "width": 24,
         "height": 16,
         "widget": {
@@ -101,7 +103,7 @@
       },
       {
         "xPos": 24,
-        "yPos": 16,
+        "yPos": 24,
         "width": 24,
         "height": 16,
         "widget": {
@@ -133,7 +135,7 @@
         }
       },
       {
-        "yPos": 32,
+        "yPos": 40,
         "width": 48,
         "height": 32,
         "widget": {
@@ -141,6 +143,113 @@
           "logsPanel": {
             "filter": "logName=\"projects/core-connect-dev/logs/google-cloud-sap-agent-backint\"\n",
             "resourceNames": []
+          }
+        }
+      },
+      {
+        "width": 12,
+        "height": 8,
+        "widget": {
+          "title": "Backup Success Rate",
+          "scorecard": {
+            "thresholds": [
+              {
+                "color": "YELLOW",
+                "direction": "BELOW",
+                "label": "",
+                "value": 1
+              }
+            ],
+            "timeSeriesQuery": {
+              "outputFullDuration": true,
+              "timeSeriesFilter": {
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "crossSeriesReducer": "REDUCE_MEAN",
+                  "groupByFields": [],
+                  "perSeriesAligner": "ALIGN_FRACTION_TRUE"
+                },
+                "filter": "metric.type=\"workload.googleapis.com/sap/agent/backint/backup/status\" resource.type=\"gce_instance\""
+              }
+            }
+          }
+        }
+      },
+      {
+        "xPos": 24,
+        "width": 12,
+        "height": 8,
+        "widget": {
+          "title": "Restore Success Rate",
+          "scorecard": {
+            "thresholds": [
+              {
+                "color": "YELLOW",
+                "direction": "BELOW",
+                "label": "",
+                "value": 1
+              }
+            ],
+            "timeSeriesQuery": {
+              "outputFullDuration": true,
+              "timeSeriesFilter": {
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "crossSeriesReducer": "REDUCE_MEAN",
+                  "groupByFields": [],
+                  "perSeriesAligner": "ALIGN_FRACTION_TRUE"
+                },
+                "filter": "metric.type=\"workload.googleapis.com/sap/agent/backint/restore/status\" resource.type=\"gce_instance\""
+              }
+            }
+          }
+        }
+      },
+      {
+        "xPos": 12,
+        "width": 12,
+        "height": 8,
+        "widget": {
+          "title": "Backup Average Throughput MBps",
+          "scorecard": {
+            "blankView": {},
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "outputFullDuration": true,
+              "timeSeriesFilter": {
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "crossSeriesReducer": "REDUCE_MEAN",
+                  "groupByFields": [],
+                  "perSeriesAligner": "ALIGN_MEAN"
+                },
+                "filter": "metric.type=\"workload.googleapis.com/sap/agent/backint/backup/throughput\" resource.type=\"gce_instance\""
+              }
+            }
+          }
+        }
+      },
+      {
+        "xPos": 36,
+        "width": 12,
+        "height": 8,
+        "widget": {
+          "title": "Restore Average Throughput MBps",
+          "scorecard": {
+            "blankView": {},
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "outputFullDuration": true,
+              "timeSeriesFilter": {
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "crossSeriesReducer": "REDUCE_MEAN",
+                  "groupByFields": [],
+                  "perSeriesAligner": "ALIGN_MEAN"
+                },
+                "filter": "metric.type=\"workload.googleapis.com/sap/agent/backint/restore/throughput\" resource.type=\"gce_instance\""
+              }
+            }
           }
         }
       }
