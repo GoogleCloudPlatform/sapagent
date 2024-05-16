@@ -151,6 +151,14 @@ message HANAInstance {
   string host_name_in_certificate = 9;
   string tls_root_ca_file = 10;
   string hdbuserstore_key = 11;
+  QueriesToRun queries_to_run = 12;
+  bool is_local = 13;
+  string instance_num = 14;
+}
+
+message QueriesToRun {
+  bool run_all = 1;
+  repeated string query_names = 2;
 }
 
 message Query {
@@ -159,6 +167,14 @@ message Query {
   string sql = 3;
   int64 sample_interval_sec = 4;
   repeated Column columns = 5;
+  RunOn run_on = 6;
+}
+
+enum RunOn {
+  RUN_ON_UNSPECIFIED = 0;
+  PRIMARY = 1;
+  SECONDARY = 2;
+  ALL = 3;
 }
 
 message Column {
