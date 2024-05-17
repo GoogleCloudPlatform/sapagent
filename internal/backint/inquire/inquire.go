@@ -75,7 +75,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			prefix := parse.CreateObjectPath(config, parse.TrimAndClean(fileName), "", "")
 			wp.Submit(func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion, "", config.GetRetries())
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, "", backintVersion, "", config)
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -98,7 +98,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			}
 			wp.Submit(func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
-				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion, filter, config.GetRetries())
+				out := inquireFiles(ctx, bucketHandle, prefix, fileName, externalBackupID, backintVersion, filter, config)
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -116,10 +116,10 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 
 // inquireFiles queries the bucket with the specified prefix and returns all
 // objects found according to SAP HANA formatting specifications.
-func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion, filter string, retries int64) []byte {
+func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix, fileName, externalBackupID, backintVersion, filter string, config *bpb.BackintConfiguration) []byte {
 	var result []byte
 	log.CtxLogger(ctx).Infow("Listing objects", "fileName", fileName, "prefix", prefix, "externalBackupID", externalBackupID, "filter", filter)
-	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, filter, retries)
+	objects, err := storage.ListObjects(ctx, bucketHandle, prefix, filter, config.GetRetries())
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error listing objects", "fileName", fileName, "prefix", prefix, "err", err, "externalBackupID", externalBackupID, "filter", filter)
 		result = []byte("#ERROR")
@@ -139,7 +139,11 @@ func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix,
 	}
 
 	for _, object := range objects {
-		// The backup object name is in the format <userID>/<fileName>/<externalBackupID>.bak
+		// The backup object name is in the format <folder-prefix>/<userID>/<fileName>/<externalBackupID>.bak
+		if config.GetFolderPrefix() != "" {
+			log.CtxLogger(ctx).Infow("Trimming folder prefix", "objectName", object.Name, "folderPrefix", config.GetFolderPrefix())
+			object.Name = strings.TrimPrefix(object.Name, config.GetFolderPrefix())
+		}
 		externalBackupID := strings.TrimSuffix(filepath.Base(object.Name), ".bak")
 		dirs := strings.SplitN(filepath.Dir(object.Name), "/", 2)
 		if len(dirs) < 2 {

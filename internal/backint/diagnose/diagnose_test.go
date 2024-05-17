@@ -137,7 +137,7 @@ func TestExecute(t *testing.T) {
 		{
 			name:   "SuccessWithFolderPrefix",
 			params: defaultConnectParameters,
-			config: &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100, FolderPrefix: "test-prefix"},
+			config: &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100, FolderPrefix: "test-prefix/"},
 			want:   true,
 		},
 	}

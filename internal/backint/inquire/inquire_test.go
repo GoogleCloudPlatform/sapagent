@@ -68,6 +68,13 @@ var (
 			},
 			Content: []byte("test content"),
 		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket-folder-prefix",
+				Name:       `folder/prefix/test@TST/object.txt/12345.bak`,
+			},
+			Content: []byte("test content"),
+		},
 	})
 	defaultBucketHandle      = fakeServer.Client().Bucket("test-bucket")
 	defaultConnectParameters = &storage.ConnectParameters{
@@ -171,6 +178,7 @@ func TestInquireFiles(t *testing.T) {
 		externalBackupID string
 		backintVersion   string
 		filter           string
+		config           *bpb.BackintConfiguration
 		wantPrefix       string
 	}{
 		{
@@ -209,10 +217,21 @@ func TestInquireFiles(t *testing.T) {
 			backintVersion: "1.50",
 			wantPrefix:     "#BACKUP",
 		},
+		{
+			name:           "FolderPrefix",
+			bucket:         fakeServer.Client().Bucket("test-bucket-folder-prefix"),
+			prefix:         "folder/prefix/test@TST/object.txt/12345.bak",
+			backintVersion: "1.50",
+			wantPrefix:     "#BACKUP",
+			config: &bpb.BackintConfiguration{
+				UserId:       "test@TST",
+				FolderPrefix: "/folder/prefix",
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID, test.backintVersion, test.filter, 0)
+			got := inquireFiles(context.Background(), test.bucket, test.prefix, test.fileName, test.externalBackupID, test.backintVersion, test.filter, test.config)
 			if !strings.HasPrefix(string(got), test.wantPrefix) {
 				t.Errorf("inquireFiles(%s, %s, %s) = %s, wantPrefix: %s", test.prefix, test.fileName, test.externalBackupID, got, test.wantPrefix)
 			}
