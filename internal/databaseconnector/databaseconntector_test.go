@@ -18,6 +18,8 @@ package databaseconnector
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"reflect"
 	"testing"
@@ -351,6 +353,104 @@ func TestReadRow(t *testing.T) {
 				if !cmp.Equal(result, tc.wantDest[i]) {
 					t.Errorf("ReadRow() at index %d read values: %v, want: %v", i, result, tc.wantDest[i])
 				}
+			}
+		})
+	}
+}
+
+func TestNewGoDBHandleWithPing(t *testing.T) {
+	type ContextKey string
+	pingError := errors.New("ping error")
+	const curCount ContextKey = "CurrentCount"
+	alwaysFail := func(ctx context.Context, db *sql.DB) error {
+		return pingError
+	}
+	alwaysPass := func(ctx context.Context, db *sql.DB) error {
+		return nil
+	}
+	passAfterCount := func(count int) func(ctx context.Context, db *sql.DB) error {
+		return func(ctx context.Context, db *sql.DB) error {
+			curCount := ctx.Value(curCount).(int)
+			if curCount >= count {
+				return nil
+			}
+			return pingError
+		}
+	}
+	tests := []struct {
+		name            string
+		spec            *PingSpec
+		wantedPingCalls int
+		wantErr         error
+	}{
+		{
+			name:            "NoCallsWhenNoPingSpec",
+			spec:            nil,
+			wantedPingCalls: 0,
+			wantErr:         nil,
+		},
+		{
+			name: "NoRetriesWhenPingSucceeds",
+			spec: &PingSpec{
+				MaxRetries: 1,
+				pingImpl:   alwaysPass,
+			},
+			wantedPingCalls: 1,
+			wantErr:         nil,
+		},
+		{
+			name: "NoRetriesShouldCallPingOnce",
+			spec: &PingSpec{
+				MaxRetries: 0,
+				pingImpl:   alwaysFail,
+			},
+			wantedPingCalls: 1,
+			wantErr:         pingError,
+		},
+		{
+			name: "AtMostMaxRetriesWhenPingFails",
+			spec: &PingSpec{
+				MaxRetries: 1,
+				pingImpl:   passAfterCount(3),
+			},
+			wantedPingCalls: 2,
+			wantErr:         pingError,
+		},
+		{
+			name: "RetriesStopWhenPingSucceeds",
+			spec: &PingSpec{
+				MaxRetries: 1,
+				pingImpl:   passAfterCount(2),
+			},
+			wantedPingCalls: 2,
+			wantErr:         nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			numPingCalls := 0
+			params := Params{
+				Username: "foo",
+				Password: "bar",
+				Host:     "localhost",
+				Port:     "30015",
+			}
+			if tc.spec != nil {
+				params.PingSpec = &PingSpec{
+					MaxRetries: tc.spec.MaxRetries,
+					pingImpl: func(ctx context.Context, db *sql.DB) error {
+						numPingCalls++
+						ctx = context.WithValue(ctx, curCount, numPingCalls)
+						return tc.spec.pingImpl(ctx, db)
+					},
+				}
+			}
+			_, err := NewGoDBHandle(context.Background(), params)
+			if numPingCalls != tc.wantedPingCalls {
+				t.Errorf("NewGoDBHandle ping invocations = %d, want %d", numPingCalls, tc.wantedPingCalls)
+			}
+			if !cmp.Equal(tc.wantErr, err, cmpopts.EquateErrors()) {
+				t.Errorf("NewGoDBHandle() error = %v, want %v", err, tc.wantErr)
 			}
 		})
 	}

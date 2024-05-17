@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -48,6 +49,16 @@ type (
 		RootCAFile     string
 		GCEService     gceInterface
 		Project        string
+		PingSpec       *PingSpec // Allows for testing a connection to a database.
+	}
+
+	pingImpl func(ctx context.Context, db *sql.DB) error
+
+	// PingSpec is a struct which holds values for establishing an open connection to a database.
+	PingSpec struct {
+		MaxRetries int           // The total number of ping attempts will be MaxRetries + 1.
+		Timeout    time.Duration // In practice, a timeout of at least 2 minutes is required for a successful connection to a database that is coming online.
+		pingImpl   pingImpl
 	}
 
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
@@ -116,11 +127,33 @@ func NewGoDBHandle(ctx context.Context, p Params) (handle *DBHandle, err error) 
 	if err != nil {
 		return nil, err
 	}
-	log.CtxLogger(ctx).Debug("Database connection successful")
-	return &DBHandle{
-		useCMD:      false,
-		goHDBHandle: db,
-	}, nil
+
+	if p.PingSpec == nil {
+		log.CtxLogger(ctx).Debug("Database connection successful")
+		return &DBHandle{
+			useCMD:      false,
+			goHDBHandle: db,
+		}, nil
+	}
+
+	maxNumberOfPings := p.PingSpec.MaxRetries + 1
+	for i := 0; i < maxNumberOfPings; i++ {
+		pingFunc := db.PingContext
+		if p.PingSpec.pingImpl != nil {
+			pingFunc = func(ctx context.Context) error {
+				return p.PingSpec.pingImpl(ctx, db)
+			}
+		}
+		if err = pingFunc(ctx); err == nil { // If NO error.
+			log.CtxLogger(ctx).Debugw("Database connection established successfully", "attempts", i+1)
+			return &DBHandle{
+				useCMD:      false,
+				goHDBHandle: db,
+			}, nil
+		}
+		time.Sleep(p.PingSpec.Timeout)
+	}
+	return nil, err
 }
 
 // NewCMDDBHandle instantiates a command-line database handle.
