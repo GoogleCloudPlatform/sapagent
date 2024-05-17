@@ -197,7 +197,7 @@ func ConnectToBucket(ctx context.Context, p *ConnectParameters) (*storage.Bucket
 	if p.UserAgentSuffix != "" {
 		userAgent = fmt.Sprintf("%s %s)", strings.TrimSuffix(userAgent, ")"), p.UserAgentSuffix)
 	}
-	log.CtxLogger(ctx).Infow("Setting User-Agent header", "userAgent", userAgent)
+	log.CtxLogger(ctx).Debugw("Setting User-Agent header", "userAgent", userAgent)
 	opts = append(opts, option.WithUserAgent(userAgent))
 	if p.ServiceAccount != "" {
 		opts = append(opts, option.WithCredentialsFile(p.ServiceAccount))
@@ -217,7 +217,7 @@ func ConnectToBucket(ctx context.Context, p *ConnectParameters) (*storage.Bucket
 		log.CtxLogger(ctx).Infow("Created bucket but did not verify connection. Read/write calls may fail.", "bucket", p.BucketName)
 		return bucket, true
 	}
-	log.CtxLogger(ctx).Infow("Verifying connection to bucket", "bucket", p.BucketName)
+	log.CtxLogger(ctx).Debugw("Verifying connection to bucket", "bucket", p.BucketName)
 	rw := &ReadWriter{MaxRetries: p.MaxRetries}
 	it := bucket.Retryer(rw.retryOptions("Failed to verify bucket connection, retrying.")...).Objects(ctx, nil)
 	if _, err := it.Next(); err != nil && err != iterator.Done {
@@ -505,7 +505,7 @@ func (rw *ReadWriter) defaultArgs() *ReadWriter {
 // retryOptions uses an exponential backoff to retry all errors except 404.
 func (rw *ReadWriter) retryOptions(failureMessage string) []storage.RetryOption {
 	backoff := backoff(rw.RetryBackoffInitial, rw.RetryBackoffMax, rw.RetryBackoffMultiplier)
-	log.Logger.Infow("Using exponential backoff strategy for retries", "objectName", rw.ObjectName, "backoffInitial", backoff.Initial, "backoffMax", backoff.Max, "backoffMultiplier", backoff.Multiplier, "maxRetries", rw.MaxRetries)
+	log.Logger.Debugw("Using exponential backoff strategy for retries", "objectName", rw.ObjectName, "backoffInitial", backoff.Initial, "backoffMax", backoff.Max, "backoffMultiplier", backoff.Multiplier, "maxRetries", rw.MaxRetries)
 
 	return []storage.RetryOption{storage.WithErrorFunc(func(err error) bool {
 		var e *googleapi.Error
