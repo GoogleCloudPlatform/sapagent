@@ -56,7 +56,7 @@ message BackintConfiguration {
   StorageClass storage_class = 32;
   map<string, string> metadata = 33;
   int64 max_diagnose_size_gb = 34;
-  google.protobuf.BoolValue send_monitoring_metrics = 35;
+  google.protobuf.BoolValue send_metrics_to_monitoring = 35;
   bool shorten_folder_path = 36;
   string diagnose_tmp_directory = 37;
 }

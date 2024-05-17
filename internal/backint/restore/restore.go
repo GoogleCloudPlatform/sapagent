@@ -193,7 +193,7 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	startTime := time.Now()
 	bytesWritten, err := rw.Download(ctx)
 	downloadTime := time.Since(startTime)
-	metrics.SendToCloudMonitoring(ctx, "restore", fileName, bytesWritten, downloadTime, config.GetSendMonitoringMetrics().GetValue(), err == nil, cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
+	metrics.SendToCloudMonitoring(ctx, "restore", fileName, bytesWritten, downloadTime, config.GetSendMetricsToMonitoring().GetValue(), err == nil, cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error downloading file", "bucket", config.GetBucket(), "destName", destName, "obj", object.Name, "err", err)
 		return []byte(fmt.Sprintf("#ERROR %s\n", fileName))

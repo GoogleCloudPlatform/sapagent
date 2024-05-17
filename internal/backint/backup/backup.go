@@ -215,7 +215,7 @@ func backupFile(ctx context.Context, p parameters) string {
 	startTime := time.Now()
 	bytesWritten, err := rw.Upload(ctx)
 	uploadTime := time.Since(startTime)
-	metrics.SendToCloudMonitoring(ctx, "backup", p.fileName, bytesWritten, uploadTime, p.config.GetSendMonitoringMetrics().GetValue(), err == nil, p.cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
+	metrics.SendToCloudMonitoring(ctx, "backup", p.fileName, bytesWritten, uploadTime, p.config.GetSendMetricsToMonitoring().GetValue(), err == nil, p.cloudProps, cloudmonitoring.NewDefaultBackOffIntervals(), metrics.DefaultMetricClient)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error uploading file", "bucket", p.config.GetBucket(), "fileName", p.fileName, "obj", object, "fileType", p.fileType, "err", err)
 		return fmt.Sprintf("#ERROR %s\n", p.fileName)
