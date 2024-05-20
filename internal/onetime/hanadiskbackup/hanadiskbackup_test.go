@@ -208,7 +208,7 @@ func TestReadConsistencyGroup(t *testing.T) {
 	tests := []struct {
 		name     string
 		snapshot Snapshot
-		want     bool
+		wantErr  error
 		wantCG   string
 	}{
 		{
@@ -252,10 +252,10 @@ func TestReadConsistencyGroup(t *testing.T) {
 					},
 					ListDisksErr: []error{nil},
 				},
+				Disk: "disk-name",
 			},
-
-			want:   true,
-			wantCG: "my-region-my-cg",
+			wantErr: nil,
+			wantCG:  "my-region-my-cg",
 		},
 		{
 			name: "Failure",
@@ -282,18 +282,105 @@ func TestReadConsistencyGroup(t *testing.T) {
 					GetDiskErr:     []error{cmpopts.AnyError},
 					GetInstanceErr: []error{cmpopts.AnyError},
 				},
+				Disk: "disk-name",
 			},
-			want: false,
+			wantErr: cmpopts.AnyError,
 		},
 	}
+
+	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotCG := test.snapshot.readConsistencyGroup(context.Background())
-			if got != test.want {
-				t.Errorf("readConsistencyGroup()=%v, want=%v", got, test.want)
+			gotCG, gotErr := test.snapshot.readConsistencyGroup(ctx, test.snapshot.Disk)
+			if diff := cmp.Diff(gotErr, test.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("readConsistencyGroup()=%v, want=%v, diff=%v", gotErr, test.wantErr, diff)
 			}
 			if gotCG != test.wantCG {
 				t.Errorf("readConsistencyGroup()=%v, want=%v", gotCG, test.wantCG)
+			}
+		})
+	}
+}
+
+func TestValidateDisksBelongToCG(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		disks    []string
+		want     error
+	}{
+		{
+			name: "ReadDiskError",
+			snapshot: Snapshot{
+				disks: []string{"disk-name-1", "disk-name-2"},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:  []error{cmpopts.AnyError},
+				},
+			},
+			disks: []string{"disk-name"},
+			want:  cmpopts.AnyError,
+		},
+		{
+			name: "NoCG",
+			snapshot: Snapshot{
+				disks: []string{"disk-name-1", "disk-name-2"},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{}, &compute.Disk{},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+			},
+			disks: []string{"disk-name"},
+			want:  cmpopts.AnyError,
+		},
+		{
+			name: "DisksBelongToDifferentCGs",
+			snapshot: Snapshot{
+				disks: []string{"disk-name-1", "disk-name-2"},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg-1"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+			},
+			disks: []string{"disk-name"},
+			want:  cmpopts.AnyError,
+		},
+		{
+			name: "DisksBelongToSameCGs",
+			snapshot: Snapshot{
+				disks: []string{"disk-name-1", "disk-name-2"},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+			},
+			disks: []string{"disk-name"},
+			want:  nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.snapshot.validateDisksBelongToCG(ctx)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("validateDisksBelongToCG()=%v, want=%v", got, test.want)
 			}
 		})
 	}

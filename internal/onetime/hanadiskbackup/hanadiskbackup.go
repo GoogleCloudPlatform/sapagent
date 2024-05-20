@@ -106,6 +106,7 @@ type Snapshot struct {
 	AbandonPrepared, SendToMonitoring                bool
 	freezeFileSystem, confirmDataSnapshotAfterCreate bool
 
+	disks                             []string
 	db                                *databaseconnector.DBHandle
 	gceService                        gceInterface
 	computeService                    *compute.Service
@@ -231,8 +232,15 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 			onetime.LogErrorToFileAndConsole("ERROR: Failed to read disk mapping", err)
 			return subcommands.ExitFailure
 		}
-		log.CtxLogger(ctx).Info("Successfully read disk mapping for /hana/data/", "disk", s.Disk, "diskZone", s.DiskZone)
-		s.groupSnapshot, s.cgPath = s.readConsistencyGroup(ctx)
+
+		if len(s.disks) > 1 {
+			if err := s.validateDisksBelongToCG(ctx); err != nil {
+				onetime.LogErrorToFileAndConsole("ERROR: Failed to validate whether disks belong to consistency group", err)
+				return subcommands.ExitFailure
+			}
+			s.groupSnapshot = true
+		}
+		log.CtxLogger(ctx).Info("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgPath, "groupSnapshot", s.groupSnapshot)
 	}
 
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)
@@ -279,6 +287,24 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	return subcommands.ExitSuccess
 }
 
+func (s *Snapshot) validateDisksBelongToCG(ctx context.Context) error {
+	disksTraversed := []string{}
+	for _, d := range s.disks {
+		cg, err := s.readConsistencyGroup(ctx, d)
+		if err != nil {
+			return err
+		}
+
+		if s.cgPath != "" && cg != s.cgPath {
+			return fmt.Errorf("all disks should belong to the same consistency group, however disk %s belongs to %s, while other disks %s belong to %s", d, cg, disksTraversed, s.cgPath)
+		}
+		disksTraversed = append(disksTraversed, d)
+		s.cgPath = cg
+	}
+
+	return nil
+}
+
 func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties) error {
 	var err error
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, s.gceService)
@@ -292,6 +318,7 @@ func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", s.physicalDataPath, "diskName", d.GetDiskName())
 			s.Disk = d.GetDiskName()
 			s.DiskZone = cp.GetZone()
+			s.disks = append(s.disks, d.GetDiskName())
 		}
 	}
 	return nil
@@ -640,16 +667,16 @@ func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 }
 
 // readConsistencyGroup reads the consistency group (CG) from the resource policies of the disk.
-func (s *Snapshot) readConsistencyGroup(ctx context.Context) (bool, string) {
-	d, err := s.gceService.GetDisk(s.Project, s.DiskZone, s.Disk)
+func (s *Snapshot) readConsistencyGroup(ctx context.Context, disk string) (string, error) {
+	d, err := s.gceService.GetDisk(s.Project, s.DiskZone, disk)
 	if err != nil {
-		return false, ""
+		return "", err
 	}
-	if s.cgPath = cgPath(d.ResourcePolicies); s.cgPath != "" {
-		log.CtxLogger(ctx).Infow("Found disk to conistency group mapping", "disk", s.Disk, "cg", s.cgPath)
-		return true, s.cgPath
+	if cgPath := cgPath(d.ResourcePolicies); cgPath != "" {
+		log.CtxLogger(ctx).Infow("Found disk to conistency group mapping", "disk", s.Disk, "cg", cgPath)
+		return cgPath, nil
 	}
-	return false, ""
+	return "", fmt.Errorf("failed to find consistency group for disk %v", disk)
 }
 
 // cgPath returns the name of the compute group (CG) from the resource policies.
