@@ -322,6 +322,8 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 		HyperThreading: d.hyperThreading,
 		IIOTEParams:    ciOTEParams,
 	}
+	onetime.LogMessageToFileAndConsole("Executing ConfigureInstance")
+	defer onetime.LogMessageToFileAndConsole("Finished invoking ConfigureInstance")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsConfigureInstance)
 	res := ci.Execute(ctx, f)
 	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
@@ -465,7 +467,8 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 			Cp:        opts.cp,
 		},
 	}
-
+	onetime.LogMessageToFileAndConsole("Running backint...")
+	defer onetime.LogMessageToFileAndConsole("Finished running backint.")
 	res := backintParams.Execute(ctx, &flag.FlagSet{})
 	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
 	if res != subcommands.ExitSuccess {
@@ -506,6 +509,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 // provided.
 func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 	var errs []error
+	onetime.LogMessageToFileAndConsole("Running gsutil perfdiag...")
 	targetPath := path.Join(d.path, d.bundleName)
 	targetBucket := d.testBucket
 	if targetBucket == "" {
@@ -529,13 +533,14 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 			errs = append(errs, fmt.Errorf("error while executing gsutil perfdiag command %v", res.StdErr))
 		}
 	}
-
+	onetime.LogMessageToFileAndConsole("Finished running gsutil perfdiag.")
 	return errs
 }
 
 // runFIOCommands runs the FIO commands in order to simulate HANA IO operations.
 func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 	var errs []error
+	onetime.LogMessageToFileAndConsole("Running FIO commands...")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFIO)
 	targetPath := path.Join(d.path, d.bundleName, "io")
 	if err := opts.fs.MkdirAll(targetPath, 0777); err != nil {
@@ -560,6 +565,7 @@ func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 			errs = append(errs, err)
 		}
 	}
+	onetime.LogMessageToFileAndConsole("Finished running FIO commands.")
 	return errs
 }
 
