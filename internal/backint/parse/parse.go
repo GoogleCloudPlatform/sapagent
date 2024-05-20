@@ -97,7 +97,9 @@ func RestoreFilename(str string) string {
 // shorten the file name's long folder structure by taking the basepath and
 // the preceding sub folder (in HANA systems this will be the tenant db).
 func CreateObjectPath(config *bpb.BackintConfiguration, fileNameTrim, externalBackupID, extension string) string {
-	if config.GetShortenFolderPath() {
+	if config.GetShortenFolderPath() && !strings.HasPrefix(fileNameTrim, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/backint", config.GetUserId())) {
+		log.Logger.Infow("Unable to shorten folder path due to invalid file name prefix", "fileName", fileNameTrim, "want", fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/backint", config.GetUserId()))
+	} else if config.GetShortenFolderPath() {
 		split := strings.Split(fileNameTrim, "/")
 		if len(split) > 2 {
 			// '/usr/sap/DEH/SYS/global/hdb/backint/SYSTEMDB/log_backup_0_0_0_0'

@@ -75,6 +75,13 @@ var (
 			},
 			Content: []byte("test content"),
 		},
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: "test-bucket-shorten-path",
+				Name:       `test@TST/tenant_db/object.txt/12345.bak`,
+			},
+			Content: []byte("test content"),
+		},
 	})
 	defaultBucketHandle      = fakeServer.Client().Bucket("test-bucket")
 	defaultConnectParameters = &storage.ConnectParameters{
@@ -226,6 +233,19 @@ func TestInquireFiles(t *testing.T) {
 			config: &bpb.BackintConfiguration{
 				UserId:       "test@TST",
 				FolderPrefix: "/folder/prefix",
+			},
+		},
+		{
+			name:             "ShortenPath",
+			bucket:           fakeServer.Client().Bucket("test-bucket-shorten-path"),
+			prefix:           "test@TST/tenant_db/object.txt/12345.bak",
+			fileName:         "usr/sap/test@TST/SYS/global/hdb/backint/tenant_db/object.txt",
+			externalBackupID: "12345",
+			backintVersion:   "1.50",
+			wantPrefix:       `#BACKUP "12345" "/usr/sap/test@TST/SYS/global/hdb/backint/tenant_db/object.txt"`,
+			config: &bpb.BackintConfiguration{
+				UserId:            "test@TST",
+				ShortenFolderPath: true,
 			},
 		},
 	}

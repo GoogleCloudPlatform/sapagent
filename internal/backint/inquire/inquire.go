@@ -151,6 +151,12 @@ func inquireFiles(ctx context.Context, bucketHandle *store.BucketHandle, prefix,
 			result = append(result, fmt.Sprintf("#ERROR %q %q\n", externalBackupID, object.Name)...)
 			continue
 		}
+		// If the object name in the bucket does not match the fileName requested
+		// by HANA, lengthen the path to the original folder structure.
+		if config.GetShortenFolderPath() && parse.RestoreFilename(dirs[1]) != fileName && fileName != "" {
+			log.CtxLogger(ctx).Infow("Lengthening folder path", "objectName", object.Name, "SID", dirs[0], "shortenedPath", dirs[1], "fileName", fileName)
+			dirs[1] = fmt.Sprintf("usr/sap/%s/SYS/global/hdb/backint/%s", dirs[0], dirs[1])
+		}
 		fileName = parse.RestoreFilename(dirs[1])
 		log.CtxLogger(ctx).Infow("Found object", "name", object.Name, "externalBackupID", externalBackupID, "fileName", fileName)
 

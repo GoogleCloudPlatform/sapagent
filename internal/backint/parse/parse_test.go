@@ -198,7 +198,19 @@ func TestCreateObjectPath(t *testing.T) {
 			want:             "folder_prefix/user_id/this/is/a/long/file/path/12345.bak",
 		},
 		{
-			name: "ShortenFilePath",
+			name: "ShortenFilePathHANA",
+			config: &bpb.BackintConfiguration{
+				FolderPrefix:      "folder_prefix/",
+				UserId:            "user_id",
+				ShortenFolderPath: true,
+			},
+			fileNameTrim:     "/usr/sap/user_id/SYS/global/hdb/backint/tenant_db/basename",
+			externalBackupID: "12345",
+			extension:        ".bak",
+			want:             "folder_prefix/user_id/tenant_db/basename/12345.bak",
+		},
+		{
+			name: "ShortenFilePathNoHANA",
 			config: &bpb.BackintConfiguration{
 				FolderPrefix:      "folder_prefix/",
 				UserId:            "user_id",
@@ -207,7 +219,7 @@ func TestCreateObjectPath(t *testing.T) {
 			fileNameTrim:     "/this/is/a/long/file/path",
 			externalBackupID: "12345",
 			extension:        ".bak",
-			want:             "folder_prefix/user_id/file/path/12345.bak",
+			want:             "folder_prefix/user_id/this/is/a/long/file/path/12345.bak",
 		},
 	}
 
