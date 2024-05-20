@@ -125,7 +125,7 @@ func TestExecute(t *testing.T) {
 					return fakestorage.NewServer([]fakestorage.Object{}).Client(), nil
 				},
 			},
-			config: &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100, MaxDiagnoseSizeGb: 1},
+			config: &bpb.BackintConfiguration{UserId: "test@TST", FileReadTimeoutMs: 100, DiagnoseFileMaxSizeGb: 1},
 			want:   false,
 		},
 		{

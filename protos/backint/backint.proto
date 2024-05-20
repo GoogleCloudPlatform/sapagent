@@ -55,7 +55,7 @@ message BackintConfiguration {
   bool xml_multipart_upload = 31;
   StorageClass storage_class = 32;
   map<string, string> metadata = 33;
-  int64 max_diagnose_size_gb = 34;
+  int64 diagnose_file_max_size_gb = 34;
   google.protobuf.BoolValue send_metrics_to_monitoring = 35;
   bool shorten_folder_path = 36;
   string diagnose_tmp_directory = 37;

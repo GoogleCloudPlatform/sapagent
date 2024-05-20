@@ -668,8 +668,8 @@ func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFi
 
 	bp := &configuration.Parameters{Config: config}
 	bp.ApplyDefaults(int64(runtime.NumCPU()))
-	if bp.Config.GetMaxDiagnoseSizeGb() == 0 {
-		bp.Config.MaxDiagnoseSizeGb = 1
+	if bp.Config.GetDiagnoseFileMaxSizeGb() == 0 {
+		bp.Config.DiagnoseFileMaxSizeGb = 1
 	}
 	bp.Config.OutputFile = path.Join(d.path, d.bundleName, "backup/backint-output.log")
 	return bp.Config, nil

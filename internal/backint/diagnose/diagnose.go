@@ -105,9 +105,9 @@ func diagnose(ctx context.Context, config *bpb.BackintConfiguration, connectPara
 		dir = fmt.Sprintf("%s/%s/", config.GetDiagnoseTmpDirectory(), strconv.FormatInt(time.Now().UnixMilli(), 10))
 		log.Logger.Infof("Diagnose tmp directory overridden to %s", dir)
 	}
-	if config.GetMaxDiagnoseSizeGb() > 0 {
-		log.Logger.Infof("Max diagnose file size overridden to %d GB", config.GetMaxDiagnoseSizeGb())
-		largeFileSize = config.GetMaxDiagnoseSizeGb() * oneGB
+	if config.GetDiagnoseFileMaxSizeGb() > 0 {
+		log.Logger.Infof("Max diagnose file size overridden to %d GB", config.GetDiagnoseFileMaxSizeGb())
+		largeFileSize = config.GetDiagnoseFileMaxSizeGb() * oneGB
 	}
 	files, err := createFiles(ctx, dir, fileName1, fileName2, smallFileSize, largeFileSize)
 	if err != nil {

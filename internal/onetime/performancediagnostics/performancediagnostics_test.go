@@ -799,7 +799,7 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 				ParallelStreams:         1,
 				Retries:                 5,
 				SendMetricsToMonitoring: &wpb.BoolValue{Value: true},
-				MaxDiagnoseSizeGb:       1,
+				DiagnoseFileMaxSizeGb:   1,
 				StorageClass:            bpb.StorageClass_STANDARD,
 				Threads:                 int64(runtime.NumCPU()),
 			},
