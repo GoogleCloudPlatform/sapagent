@@ -368,7 +368,13 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 	var errs []error
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsBackup)
-	config, err := d.unmarshalBackintConfig(ctx, opts.fs.ReadFile)
+	backupPath := path.Join(d.path, d.bundleName, "backup")
+	if err := opts.fs.MkdirAll(backupPath, 0777); err != nil {
+		errs = append(errs, err)
+		return errs
+	}
+
+	config, err := d.setBackintConfig(ctx, opts.fs, opts.fs.ReadFile)
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("error while unmarshalling backint config, failed with error %v", err)
 		errs = append(errs, err)
@@ -378,11 +384,6 @@ func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 
 	// Check for retention
 	if err := d.checkRetention(ctx, s.NewClient, getBucket, opts.config); err != nil {
-		errs = append(errs, err)
-		return errs
-	}
-	backupPath := path.Join(d.path, d.bundleName, "backup")
-	if err := opts.fs.MkdirAll(backupPath, 0777); err != nil {
 		errs = append(errs, err)
 		return errs
 	}
@@ -452,10 +453,6 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 
 // runBackint runs the diagnose function of Backint OTE.
 func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
-	if err := d.setBucket(ctx, opts.fs, opts.config); err != nil {
-		return err
-	}
-
 	backintParams := &backint.Backint{
 		Function:  "diagnose",
 		User:      "perf-diag-user",
@@ -480,24 +477,11 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 			oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-backint.log",
 			newPath: path.Join(d.path, d.bundleName, "backup/performance-diagnostics-backint.log"),
 		},
-		{
-			oldPath: d.paramFile,
-			newPath: path.Join(d.path, d.bundleName, "backup", d.getParamFileName()),
-		},
 	}
 	if err := addToBundle(ctx, paths, opts.fs); err != nil {
 		return err
 	}
 
-	// If test-bucket is provided, temporary parameters file is created to perform
-	// backint operation without modifying original parameters file.
-	// Deleting this temporary file.
-	if d.testBucket != "" {
-		if err := opts.fs.RemoveAll(d.paramFile); err != nil {
-			log.CtxLogger(ctx).Errorw("Error deleting temporary parameter file created for backint", "err", err)
-			return err
-		}
-	}
 	if res != subcommands.ExitSuccess {
 		return fmt.Errorf("error while executing backint command %v", res)
 	}
@@ -586,32 +570,6 @@ func execAndWriteToFile(ctx context.Context, opFile, targetPath string, params c
 	return nil
 }
 
-// setBucket sets the bucket in the parameter file for backint operation.
-func (d *Diagnose) setBucket(ctx context.Context, fs filesystem.FileSystem, config *bpb.BackintConfiguration) error { // If testBucket is not empty, then it will overwrite the bucket provided in paramFile.
-	if d.testBucket != "" {
-		config.Bucket = d.testBucket
-
-		// Creating a temporary parameter file for backint config
-		content, err := protojson.Marshal(config)
-		if err != nil {
-			return err
-		}
-
-		d.paramFile = path.Join(d.path, d.getParamFileName())
-		f, err := fs.Create(d.paramFile)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if _, err := f.Write(content); err != nil {
-			return err
-		}
-		log.CtxLogger(ctx).Debugw("Created temporary parameter file", "paramFile", d.paramFile)
-	}
-
-	return nil
-}
-
 // addToBundle adds the files to performance diagnostics bundle.
 func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSystem) error {
 	var hasErrors bool
@@ -645,25 +603,23 @@ func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSyste
 	return nil
 }
 
-func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
-	if d.paramFile == "" {
-		return nil, fmt.Errorf("param file is empty")
-	}
-	content, err := read(d.paramFile)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
-		return nil, err
-	}
-	if content == nil {
-		err := errors.New("param file is empty")
-		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
-		return nil, err
+func (d *Diagnose) setBackintConfig(ctx context.Context, fs filesystem.FileSystem, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
+	if d.testBucket != "" {
+		if err := d.createTempParamFile(ctx, fs, read); err != nil {
+			return nil, err
+		}
+	} else {
+		if d.paramFile == "" {
+			return nil, errors.New("bucket is required for backup, but param file is empty and no test-bucket is provided")
+		}
 	}
 
-	config, err := configuration.Unmarshal(d.paramFile, content)
+	config, err := d.unmarshalBackintConfig(ctx, read)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error unmarshalling parameters file", "err", err)
 		return nil, err
+	}
+	if config == nil {
+		return nil, errors.New("no bucket provided in param file")
 	}
 
 	bp := &configuration.Parameters{Config: config}
@@ -673,6 +629,66 @@ func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFi
 	}
 	bp.Config.OutputFile = path.Join(d.path, d.bundleName, "backup/backint-output.log")
 	return bp.Config, nil
+}
+
+func (d *Diagnose) createTempParamFile(ctx context.Context, fs filesystem.FileSystem, read ReadConfigFile) (err error) {
+	config, err := d.unmarshalBackintConfig(ctx, read)
+	if err != nil {
+		return err
+	}
+	if config == nil {
+		config = &bpb.BackintConfiguration{}
+	}
+	config.Bucket = d.testBucket
+
+	// Creating a temporary parameter file for backint config
+	content, err := protojson.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	if d.paramFile != "" {
+		// In case the param file provided is a .txt file, we need a .json file
+		// to write the new config.
+		paramFile := strings.Split(d.getParamFileName(), ".")
+		d.paramFile = path.Join(d.path, d.bundleName, fmt.Sprintf("%s.json", paramFile[len(paramFile)-2]))
+	} else {
+		d.paramFile = path.Join(d.path, d.bundleName, "backup/backint-config.json")
+	}
+
+	f, err := fs.Create(d.paramFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write(content); err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Debugw("Created temporary parameter file", "paramFile", d.paramFile)
+	return nil
+}
+
+func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
+	if d.paramFile == "" {
+		return nil, nil
+	}
+
+	content, err := read(d.paramFile)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
+		return nil, err
+	}
+	if len(content) == 0 {
+		log.CtxLogger(ctx).Debug("Params file contents are empty")
+		return nil, nil
+	}
+
+	config, err := configuration.Unmarshal(d.paramFile, content)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error unmarshalling parameters file", "err", err)
+		return nil, err
+	}
+	return config, nil
 }
 
 // getParamFileName extracts the name of the parameter file from the path provided.

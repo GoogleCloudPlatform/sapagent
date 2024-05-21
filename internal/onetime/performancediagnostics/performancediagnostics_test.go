@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"runtime"
 	"testing"
 	"time"
@@ -34,7 +35,6 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
@@ -566,64 +566,6 @@ func TestCheckRetention(t *testing.T) {
 	}
 }
 
-func TestSetBucket(t *testing.T) {
-	tests := []struct {
-		name       string
-		d          *Diagnose
-		config     *bpb.BackintConfiguration
-		fs         filesystem.FileSystem
-		wantBucket string
-		wantErr    error
-	}{
-		{
-			name: "TestBucketEmpty",
-			d:    &Diagnose{},
-			config: &bpb.BackintConfiguration{
-				Bucket: "test_bucket",
-			},
-			wantErr: nil,
-		},
-		{
-			name: "TestBucketPresent",
-			d: &Diagnose{
-				testBucket: "test_bucket1",
-				path:       "/tmp/",
-				paramFile:  "/param_file.json",
-			},
-			config: &bpb.BackintConfiguration{
-				Bucket: "test_bucket",
-			},
-			fs:         filesystem.Helper{},
-			wantBucket: "test_bucket1",
-			wantErr:    nil,
-		},
-	}
-
-	ctx := context.Background()
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			gotErr := tc.d.setBucket(ctx, tc.fs, tc.config)
-			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("setBucket(%v, %v) returned error: %v, want error: %v", tc.fs, tc.config, gotErr, tc.wantErr)
-			}
-
-			if tc.wantBucket != "" {
-				content, err := os.ReadFile(tc.d.paramFile)
-				if err != nil {
-					t.Fatalf("os.ReadFile(%s) failed: %v", tc.d.paramFile, err)
-				}
-				config, err := configuration.Unmarshal(tc.d.paramFile, content)
-				if err != nil {
-					t.Fatalf("configuration.Unmarshal(%s) failed: %v", tc.d.paramFile, err)
-				}
-				if config.GetBucket() != tc.wantBucket {
-					t.Errorf("setBucket(%v, %v) = %v, want %v", tc.fs, tc.config, config.GetBucket(), tc.wantBucket)
-				}
-			}
-		})
-	}
-}
-
 func TestAddToBundle(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -731,7 +673,7 @@ func TestGetParamFileName(t *testing.T) {
 	}
 }
 
-func TestUnmarshalBackintConfig(t *testing.T) {
+func TestSetBackintConfig(t *testing.T) {
 	tests := []struct {
 		name       string
 		d          *Diagnose
@@ -740,7 +682,7 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 		wantErr    error
 	}{
 		{
-			name: "EmptyParamFile",
+			name: "NoTestBucketAndParamFileProvided",
 			d:    &Diagnose{},
 			read: func(string) ([]byte, error) {
 				return []byte{}, nil
@@ -749,25 +691,38 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 			wantErr:    cmpopts.AnyError,
 		},
 		{
-			name: "ErrorRead",
+			name: "TestBucketError",
 			d: &Diagnose{
-				paramFile: "/tmp/param_file.json",
+				testBucket: "test_bucket-2",
+				paramFile:  "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
-				return nil, fmt.Errorf("error")
+				return []byte{}, fmt.Errorf("error")
 			},
 			wantConfig: nil,
 			wantErr:    cmpopts.AnyError,
 		},
 		{
-			name: "EmptyParamFile",
+			name: "UnmarshalError",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				return []byte{}, fmt.Errorf("error")
+			},
+			wantConfig: nil,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "EmptyConfigWithNoTestBucket",
 			d: &Diagnose{
 				paramFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				return []byte{}, nil
 			},
-			wantErr: cmpopts.AnyError,
+			wantConfig: nil,
+			wantErr:    cmpopts.AnyError,
 		},
 		{
 			name: "MalformedConfig",
@@ -808,6 +763,198 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 
 	ctx := context.Background()
 
+	fs := &fake.FileSystem{}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.d.setBackintConfig(ctx, fs, tc.read)
+			if diff := cmp.Diff(tc.wantConfig, got, protocmp.Transform()); diff != "" {
+				t.Errorf("unmarshalBackintConfig(%v) returned an unexpected diff (-want +got): %v", tc.read, diff)
+			}
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("unmarshalBackintConfig(%v) returned an unexpected error: %v", tc.read, err)
+			}
+		})
+	}
+}
+
+func TestCreateTempParamFile(t *testing.T) {
+	tests := []struct {
+		name       string
+		d          *Diagnose
+		fs         filesystem.FileSystem
+		read       ReadConfigFile
+		wantConfig *bpb.BackintConfiguration
+		wantErr    error
+	}{
+		{
+			name: "unmarshalBackintError",
+			d: &Diagnose{
+				testBucket: "test_bucket-2",
+				paramFile:  "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				return nil, fmt.Errorf("error")
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "createError",
+			d: &Diagnose{
+				testBucket: "test_bucket-2",
+				paramFile:  "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				fileContent := `{"bucket": "test_bucket"}`
+				return []byte(fileContent), nil
+			},
+			fs: &fake.FileSystem{
+				CreateResp: []*os.File{nil},
+				CreateErr:  []error{fmt.Errorf("error")},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			d: &Diagnose{
+				testBucket: "test_bucket-2",
+				paramFile:  "/tmp/param_file.json",
+				path:       os.TempDir(),
+			},
+			read: func(string) ([]byte, error) {
+				fileContent := `{"bucket": "test_bucket"}`
+				return []byte(fileContent), nil
+			},
+			fs: filesystem.Helper{},
+			wantConfig: &bpb.BackintConfiguration{
+				Bucket: "test_bucket-2",
+			},
+			wantErr: nil,
+		},
+		{
+			name: "SuccessWithEmptyConfig",
+			d: &Diagnose{
+				testBucket: "test_bucket-2",
+				paramFile:  "/tmp/param_file.txt",
+				path:       os.TempDir(),
+			},
+			read: func(string) ([]byte, error) {
+				return []byte{}, nil
+			},
+			fs: filesystem.Helper{},
+			wantConfig: &bpb.BackintConfiguration{
+				Bucket: "test_bucket-2",
+			},
+			wantErr: nil,
+		},
+		{
+			name: "SuccessWithEmptyParamFile",
+			d: &Diagnose{
+				testBucket: "test_bucket-2",
+				path:       os.TempDir(),
+			},
+			read: func(string) ([]byte, error) {
+				return []byte{}, nil
+			},
+			fs: filesystem.Helper{},
+			wantConfig: &bpb.BackintConfiguration{
+				Bucket: "test_bucket-2",
+			},
+			wantErr: nil,
+		},
+	}
+
+	// Creating a backup directory for SuccessWithEmptyParamFile testcase.
+	if err := os.MkdirAll(path.Join(os.TempDir(), "backup"), 0777); err != nil {
+		t.Fatalf("os.MkdirAll(%v, 0777) returned an unexpected error: %v", os.TempDir(), err)
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.d.createTempParamFile(ctx, tc.fs, tc.read)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("createTempParamFile(%v, %v) returned an unexpected error: %v", tc.fs, tc.read, gotErr)
+			}
+
+			if tc.wantConfig != nil {
+				got, err := tc.d.unmarshalBackintConfig(ctx, os.ReadFile)
+				if err != nil {
+					t.Errorf("unmarshalBackintConfig(%v, %v) returned an unexpected error: %v", tc.fs, tc.read, err)
+				}
+				if diff := cmp.Diff(tc.wantConfig, got, protocmp.Transform()); diff != "" {
+					t.Errorf("unmarshalBackintConfig(%v, %v) returned an unexpected diff (-want +got): %v", tc.fs, tc.read, diff)
+				}
+			}
+		})
+	}
+}
+
+func TestUnmarshalBackintConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		d          *Diagnose
+		read       ReadConfigFile
+		wantConfig *bpb.BackintConfiguration
+		wantErr    error
+	}{
+		{
+			name: "NoParamFile",
+			d:    &Diagnose{},
+			read: func(string) ([]byte, error) {
+				return nil, nil
+			},
+			wantConfig: nil,
+		},
+		{
+			name: "ErrorRead",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				return nil, fmt.Errorf("error")
+			},
+			wantConfig: nil,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "EmptyParamFile",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				return []byte{}, nil
+			},
+			wantConfig: nil,
+			wantErr:    nil,
+		},
+		{
+			name: "ErrorUnmarshal",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				fileContent := `{"test_bucket": "test_bucket", "enc": "true"}`
+				return []byte(fileContent), nil
+			},
+			wantConfig: nil,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "ValidConfig",
+			d: &Diagnose{
+				paramFile: "/tmp/param_file.json",
+			},
+			read: func(string) ([]byte, error) {
+				fileContent := `{"bucket": "test_bucket"}`
+				return []byte(fileContent), nil
+			},
+			wantConfig: &bpb.BackintConfiguration{
+				Bucket: "test_bucket",
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.d.unmarshalBackintConfig(ctx, tc.read)
@@ -1385,7 +1532,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 					CopyErr:    []error{nil},
 					CreateResp: []*os.File{&os.File{}},
 					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
+					MkDirErr:   []error{fmt.Errorf("error"), fmt.Errorf("error")},
 				},
 			},
 			wantCnt: 3,
@@ -1424,6 +1571,7 @@ func TestBackup(t *testing.T) {
 					CreateErr:    []error{nil},
 					ReadFileResp: [][]byte{[]byte("sample")},
 					ReadFileErr:  []error{fmt.Errorf("error")},
+					MkDirErr:     []error{fmt.Errorf("error")},
 				},
 			},
 			d: &Diagnose{
@@ -1446,6 +1594,7 @@ func TestBackup(t *testing.T) {
 					CreateErr:    []error{nil},
 					ReadFileResp: [][]byte{[]byte(defaultBackintFileJSON)},
 					ReadFileErr:  []error{nil},
+					MkDirErr:     []error{fmt.Errorf("error")},
 				},
 			},
 			d: &Diagnose{
