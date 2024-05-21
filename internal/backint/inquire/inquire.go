@@ -88,7 +88,7 @@ func inquire(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			externalBackupID := parse.TrimAndClean(s[1])
 			// fileName is an optional parameter not present in Backint 1.00
 			fileName := ""
-			prefix := parse.CreateObjectPath(config, "", "", "")
+			prefix := config.GetFolderPrefix() + config.GetUserId() + "/"
 			filter := ""
 			if len(s) > 2 {
 				fileName = s[2]

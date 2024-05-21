@@ -496,7 +496,7 @@ func (rw *ReadWriter) defaultArgs() *ReadWriter {
 	rw.lastRateLimit = time.Nanosecond
 
 	if rw.LogDelay <= 0 {
-		log.Logger.Warnf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
+		log.Logger.Debugf("LogDelay defaulted to %.f seconds", DefaultLogDelay.Seconds())
 		rw.LogDelay = DefaultLogDelay
 	}
 	return rw
