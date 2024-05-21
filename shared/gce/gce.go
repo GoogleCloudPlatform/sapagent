@@ -33,6 +33,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+// ISG is a temporary interface representing the expected behavior of Instant Snapshot Groups.
+// It will be replaced by a concrete struct when the full implementation is available.
+type ISG any
+
 // GCE is a wrapper for Google Compute Engine services.
 type GCE struct {
 	service *compute.Service
@@ -374,4 +378,14 @@ func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, 
 		return fmt.Errorf("Disk %v is still attached to the instance", dataDiskName)
 	}
 	return nil
+}
+
+// CreateISG creates an Instant Snapshot Group of striped disks.
+func (g *GCE) CreateISG(ISG, string) error {
+	return nil
+}
+
+// DescribeISG describes the contents of an Instant Snapshot Group.
+func (g *GCE) DescribeISG(string) ([]*compute.InstantSnapshot, error) {
+	return nil, nil
 }

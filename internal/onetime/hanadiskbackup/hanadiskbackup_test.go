@@ -786,7 +786,224 @@ func TestPortValue(t *testing.T) {
 	}
 }
 
-func TestRunWorkflow(t *testing.T) {
+func TestIsDiskAttachedToInstance(t *testing.T) {
+	tests := []struct {
+		name    string
+		disk    string
+		s       *Snapshot
+		cp      *ipb.CloudProperties
+		wantErr error
+	}{
+		{
+			name: "AttachedDisk",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+				},
+			},
+			disk:    "pd-1",
+			cp:      defaultCloudProperties,
+			wantErr: nil,
+		},
+		{
+			name: "NotAttachedDisk",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					IsDiskAttached:                   false,
+					DiskAttachedToInstanceErr:        nil,
+				},
+			},
+			disk:    "pd-1",
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "AttachedDiskFailure",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					IsDiskAttached:                   false,
+					DiskAttachedToInstanceErr:        cmpopts.AnyError,
+				},
+			},
+			disk:    "pd-1",
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		gotErr := tc.s.isDiskAttachedToInstance(tc.disk, tc.cp)
+		if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+			t.Errorf("isDiskAttachedToInstance(%v, %v) returned diff (-want +got):\n%s", tc.disk, tc.cp, diff)
+		}
+	}
+}
+
+func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
+	tests := []struct {
+		name           string
+		s              *Snapshot
+		run            queryFunc
+		createSnapshot diskSnapshotFunc
+		cp             *ipb.CloudProperties
+		wantErr        error
+	}{
+		{
+			name: "CheckValidDiskFailure",
+			s: &Snapshot{
+				disks: []string{"pd-1", "pd-2"},
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					IsDiskAttached:                   false,
+					DiskAttachedToInstanceErr:        cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "InvalidDisk",
+			s: &Snapshot{
+				disks: []string{"pd-1", "pd-2"},
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					DiskAttachedToInstanceErr:        nil,
+					IsDiskAttached:                   false,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "AbandonSnapshotFailure",
+			s: &Snapshot{
+				AbandonPrepared: true,
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+			},
+			createSnapshot: createDiskSnapshotFail,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CreateHANASnapshotFailure",
+			s: &Snapshot{
+				AbandonPrepared: true,
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+			},
+			createSnapshot: createDiskSnapshotFail,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
+					return "", cmpopts.AnyError
+				}
+				return "", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CreateInstantSnapshotGroupFailure",
+			s: &Snapshot{
+				AbandonPrepared: true,
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+				cgPath:          "test-cg-failure",
+			},
+			createSnapshot: createDiskSnapshotFail,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FreezeFS",
+			s: &Snapshot{
+				freezeFileSystem: true,
+				AbandonPrepared:  true,
+				gceService:       &fake.TestGCE{IsDiskAttached: true},
+				cgPath:           "test-cg-success",
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ConvertISGToSSGFailure",
+			s: &Snapshot{
+				AbandonPrepared: true,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:          true,
+					DescribeISGSnapshots:    nil,
+					DescribeISGSnapshotsErr: cmpopts.AnyError,
+				},
+				cgPath: "test-cg-success",
+			},
+			createSnapshot: createDiskSnapshotFail,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "MarkSnapshotAsSuccessfulFailure",
+			s: &Snapshot{
+				AbandonPrepared: true,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:          true,
+					DescribeISGSnapshotsErr: nil,
+					DescribeISGSnapshots:    []*compute.InstantSnapshot{},
+				},
+				computeService: &compute.Service{},
+				cgPath:         "test-cg-success",
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID") {
+					return "", cmpopts.AnyError
+				}
+				return "", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "RunWorkflowForInstantSnapshotGroupsSuccess",
+			s: &Snapshot{
+				disks:           []string{"pd-1", "pd-2"},
+				AbandonPrepared: true,
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DescribeISGSnapshotsErr:          nil,
+					DescribeISGSnapshots:             []*compute.InstantSnapshot{},
+					CreationCompletionErr:            nil,
+				},
+				computeService: &compute.Service{},
+				cgPath:         "test-cg-success",
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.s.runWorkflowForInstantSnapshotGroups(ctx, tc.run, tc.createSnapshot, tc.cp)
+			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("runWorkflowForInstantSnapshotGroups(%v, %v, %v) returned diff (-want +got):\n%s", tc.run, tc.createSnapshot, tc.cp, diff)
+			}
+		})
+	}
+}
+
+func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 	tests := []struct {
 		name           string
 		snapshot       Snapshot
@@ -916,9 +1133,243 @@ func TestRunWorkflow(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.runWorkflow(context.Background(), test.run, test.createSnapshot, defaultCloudProperties)
+			got := test.snapshot.runWorkflowForDiskSnapshot(context.Background(), test.run, test.createSnapshot, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("runWorkflow()=%v, want=%v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCreateInstantGroupSnapshot(t *testing.T) {
+	tests := []struct {
+		name string
+		s    *Snapshot
+		want error
+	}{
+		{
+			name: "ReadDiskKeyFile",
+			s: &Snapshot{
+				isg:         &ISG{},
+				cgPath:      "test-snapshot-success",
+				DiskKeyFile: "/test/disk/key.json",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FreezeFS",
+			s: &Snapshot{
+				isg:              &ISG{},
+				cgPath:           "test-snapshot-success",
+				freezeFileSystem: true,
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "emptyGCEService",
+			s: &Snapshot{
+				cgPath: "test-snapshot-success",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "createISGFailure",
+			s: &Snapshot{
+				isg:        &ISG{},
+				cgPath:     "test-snapshot-failure",
+				gceService: &fake.TestGCE{},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "createISGSuccess",
+			s: &Snapshot{
+				isg: &ISG{
+					Disks: []*compute.AttachedDisk{},
+				},
+				cgPath:     "test-snapshot-success",
+				gceService: &fake.TestGCE{},
+			},
+			want: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.createInstantSnapshotGroup(context.Background())
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("createInstantGroupSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConvertISGtoSSG(t *testing.T) {
+	tests := []struct {
+		name           string
+		s              *Snapshot
+		cp             *ipb.CloudProperties
+		createSnapshot diskSnapshotFunc
+		wantErr        error
+	}{
+		{
+			name:    "emptyGCEService",
+			s:       &Snapshot{},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DescribeISGFailure",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					DescribeISGSnapshotsErr: cmpopts.AnyError,
+					DescribeISGSnapshots:    nil,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "createBackupError",
+			s: &Snapshot{
+				isg: &ISG{},
+				gceService: &fake.TestGCE{
+					DescribeISGSnapshots: []*compute.InstantSnapshot{
+						{
+							Name: "instant-snapshot-1",
+						},
+						{
+							Name: "instant-snapshot-2",
+						},
+					},
+					DescribeISGSnapshotsErr: nil,
+					CreationCompletionErr:   nil,
+				},
+			},
+			cp:             defaultCloudProperties,
+			createSnapshot: createDiskSnapshotFail,
+			wantErr:        cmpopts.AnyError,
+		},
+		{
+			name: "freezeFS",
+			s: &Snapshot{
+				freezeFileSystem: true,
+				isg:              &ISG{},
+				computeService:   &compute.Service{},
+				gceService: &fake.TestGCE{
+					DescribeISGSnapshots: []*compute.InstantSnapshot{
+						{
+							Name: "instant-snapshot-1",
+						},
+						{
+							Name: "instant-snapshot-2",
+						},
+					},
+					DescribeISGSnapshotsErr: nil,
+					CreationCompletionErr:   nil,
+				},
+			},
+			cp:             defaultCloudProperties,
+			createSnapshot: createDiskSnapshotSuccess,
+			wantErr:        cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &Snapshot{
+				isg:            &ISG{},
+				computeService: &compute.Service{},
+				gceService: &fake.TestGCE{
+					DescribeISGSnapshots: []*compute.InstantSnapshot{
+						{
+							Name: "instant-snapshot-1",
+						},
+						{
+							Name: "instant-snapshot-2",
+						},
+					},
+					DescribeISGSnapshotsErr: nil,
+					CreationCompletionErr:   nil,
+				},
+			},
+			cp:             defaultCloudProperties,
+			createSnapshot: createDiskSnapshotSuccess,
+			wantErr:        nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.s.convertISGtoSSG(ctx, tc.cp, tc.createSnapshot)
+			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("convertIS() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCreateBackup(t *testing.T) {
+	tests := []struct {
+		name           string
+		s              *Snapshot
+		snapshot       *compute.Snapshot
+		createSnapshot diskSnapshotFunc
+		wantOp         *compute.Operation
+		wantErr        error
+	}{
+		{
+			name: "DiskKeyFile",
+			s: &Snapshot{
+				DiskKeyFile: "/test/disk/key.json",
+			},
+			wantOp:  nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "EmptyComputeService",
+			s:       &Snapshot{},
+			wantOp:  nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FreezeFS",
+			s: &Snapshot{
+				computeService:   &compute.Service{},
+				freezeFileSystem: true,
+			},
+			wantOp:  nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CreateSnapshotFailure",
+			s: &Snapshot{
+				computeService: &compute.Service{},
+				gceService:     &fake.TestGCE{CreationCompletionErr: cmpopts.AnyError},
+			},
+			createSnapshot: createDiskSnapshotFail,
+			wantOp:         nil,
+			wantErr:        cmpopts.AnyError,
+		},
+		{
+			name: "CreateSnapshotSuccess",
+			s: &Snapshot{
+				computeService: &compute.Service{},
+				gceService:     &fake.TestGCE{CreationCompletionErr: nil},
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			wantOp:         &compute.Operation{},
+			wantErr:        nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.s.createBackup(ctx, tc.snapshot, tc.createSnapshot)
+			if diff := cmp.Diff(tc.wantOp, got, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("buildSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("buildSnapshot() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -1099,16 +1550,18 @@ func TestSendStatusToMonitoring(t *testing.T) {
 
 func TestSendDurationToCloudMonitoring(t *testing.T) {
 	tests := []struct {
-		name  string
-		mtype string
-		s     *Snapshot
-		dur   time.Duration
-		bo    *cloudmonitoring.BackOffIntervals
-		want  bool
+		name         string
+		mtype        string
+		snapshotName string
+		s            *Snapshot
+		dur          time.Duration
+		bo           *cloudmonitoring.BackOffIntervals
+		want         bool
 	}{
 		{
-			name:  "Success",
-			mtype: "Snapshot",
+			name:         "Success",
+			mtype:        "Snapshot",
+			snapshotName: "snapshot-name",
 			s: &Snapshot{
 				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
@@ -1118,8 +1571,9 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			want: true,
 		},
 		{
-			name:  "Failure",
-			mtype: "Snapshot",
+			name:         "Failure",
+			mtype:        "Snapshot",
+			snapshotName: "snapshot-name",
 			s: &Snapshot{
 				SendToMonitoring:  true,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{Err: cmpopts.AnyError},
@@ -1129,8 +1583,9 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			want: false,
 		},
 		{
-			name:  "sendStatusFalse",
-			mtype: "Snapshot",
+			name:         "sendStatusFalse",
+			mtype:        "Snapshot",
+			snapshotName: "snapshot-name",
 			s: &Snapshot{
 				SendToMonitoring:  false,
 				timeSeriesCreator: &cmFake.TimeSeriesCreator{},
@@ -1145,7 +1600,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo, defaultCloudProperties)
+			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.snapshotName, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
 			}
