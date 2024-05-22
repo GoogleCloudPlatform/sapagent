@@ -105,6 +105,7 @@ type (
 		Timeout     int // defaults to 60, so timeout will occur in 60 seconds
 		User        string
 		Env         []string
+		Stdin       string
 	}
 
 	// Result holds the stdout, stderr, exit code, and error from the execution.
@@ -152,6 +153,7 @@ func ExecuteCommand(ctx context.Context, params Params) Result {
 	}
 	exe := exec.CommandContext(tctx, params.Executable, args...)
 
+	exe.Stdin = strings.NewReader(params.Stdin)
 	exe.Stdout = stdout
 	exe.Stderr = stderr
 	var err error

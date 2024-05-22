@@ -392,3 +392,43 @@ func TestSplitParams(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteCommandWithStdin(t *testing.T) {
+	tests := []struct {
+		name    string
+		cmd     string
+		args    []string
+		input   string
+		wantOut string
+		wantErr string
+	}{
+		{
+			name:    "grep hello",
+			cmd:     "grep",
+			args:    []string{"hello"},
+			input:   "hello world\nhello Go\nbye world\n",
+			wantOut: "hello world\nhello Go\n",
+			wantErr: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setDefaults()
+			result := ExecuteCommand(context.Background(), Params{
+				Executable: test.cmd,
+				Args:       test.args,
+				Stdin:      test.input,
+			})
+			if result.Error != nil {
+				t.Fatal(result.Error)
+			}
+			if diff := cmp.Diff(test.wantOut, result.StdOut); diff != "" {
+				t.Fatalf("ExecuteCommand returned unexpected diff (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(test.wantErr, result.StdErr); diff != "" {
+				t.Fatalf("ExecuteCommand returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
