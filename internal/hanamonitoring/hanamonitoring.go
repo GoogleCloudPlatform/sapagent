@@ -244,12 +244,17 @@ func queryAndSend(ctx context.Context, opts queryOptions) (bool, error) {
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.
 func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, params Parameters, runningSum map[timeSeriesKey]prevVal) (sent, batchCount int, err error) {
+	queryStartTime := time.Now()
 	rows, cols, err := queryDatabase(ctx, db.queryFunc, query)
+	responseTime := time.Since(queryStartTime).Milliseconds()
 	if err != nil {
 		return 0, 0, err
 	}
-	log.CtxLogger(ctx).Infow("Successfuly executed: ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort())
+	log.CtxLogger(ctx).Infow("Successfuly executed: ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort(), "response time", responseTime)
 	var metrics []*mrpb.TimeSeries
+	if params.Config.GetHanaMonitoringConfiguration().GetSendQueryResponseTime() {
+		metrics = append(metrics, createQueryResponseTimeMetric(ctx, db.instance.GetName(), db.instance.GetSid(), query, params, responseTime, tspb.Now()))
+	}
 	for rows.Next() {
 		if err := rows.ReadRow(cols...); err != nil {
 			return 0, 0, err
@@ -329,6 +334,23 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 		databases = append(databases, &database{queryFunc: handle.Query, instance: i})
 	}
 	return databases
+}
+
+// createQueryResponseTimeMetric builds a cloud monitoring time series with an int point value for the time taken by query.
+func createQueryResponseTimeMetric(ctx context.Context, dbName, sid string, query *cpb.Query, params Parameters, timeTaken int64, timestamp *tspb.Timestamp) *mrpb.TimeSeries {
+	labels := map[string]string{
+		"instance_name": dbName,
+		"sid":           sid,
+	}
+	ts := timeseries.Params{
+		CloudProp:    params.Config.GetCloudProperties(),
+		MetricType:   metricURL + "/" + query.GetName() + "/time_taken_ms",
+		MetricLabels: labels,
+		Timestamp:    timestamp,
+		BareMetal:    params.Config.GetBareMetal(),
+		Int64Value:   timeTaken,
+	}
+	return timeseries.BuildInt(ts)
 }
 
 // createMetricsForRow will loop through each column in a query row result twice.

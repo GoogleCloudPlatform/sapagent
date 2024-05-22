@@ -137,6 +137,7 @@ message HANAMonitoringConfiguration {
   repeated HANAInstance hana_instances = 4;
   repeated Query queries = 5;
   bool enabled = 6;
+  bool send_query_response_time = 7;
 }
 
 message HANAInstance {

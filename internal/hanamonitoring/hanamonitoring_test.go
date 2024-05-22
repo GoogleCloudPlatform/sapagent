@@ -764,3 +764,16 @@ func TestPrepareTimeSeriesKey(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateQueryTimeTakenMetric(t *testing.T) {
+	dbName := "testDb"
+	sid := "testSID"
+	query := &configpb.Query{
+		Name: "testQuery",
+	}
+	timeTaken := 2
+	ts := tspb.Now()
+	ctx := context.Background()
+	createQueryResponseTimeMetric(ctx, dbName, sid, query, defaultParams, int64(timeTaken), ts)
+
+}
