@@ -505,7 +505,7 @@ func TestParseLabels(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := test.s.parseLabels()
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
-				return key == "goog-sapagent-timestamp"
+				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
 			})
 			if !cmp.Equal(got, test.want, opts) {
 				t.Errorf("parseLabels() = %v, want %v", got, test.want)
@@ -1603,6 +1603,87 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.snapshotName, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreateGroupBackupLabels(t *testing.T) {
+	tests := []struct {
+		name string
+		s    *Snapshot
+		want map[string]string
+	}{
+		{
+			name: "DiskSnapshot",
+			s: &Snapshot{
+				cgPath: "my-region-my-cg",
+				Disk:   "my-disk",
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "GroupSnapshot",
+			s: &Snapshot{
+				groupSnapshot: true,
+				cgPath:        "my-region-my-cg",
+				Disk:          "my-disk",
+			},
+			want: map[string]string{
+				"goog-sapagent-version":   configuration.AgentVersion,
+				"goog-sapagent-cgpath":    "my-region-my-cg",
+				"goog-sapagent-disk-name": "my-disk",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.createGroupBackupLabels()
+			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
+				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
+			})
+			if !cmp.Equal(got, tc.want, opts) {
+				t.Errorf("parseLabels() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGenerateSHA(t *testing.T) {
+	tests := []struct {
+		name   string
+		labels map[string]string
+		want   string
+	}{
+		{
+			name:   "Empty",
+			labels: map[string]string{},
+			want:   "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+		},
+		{
+			name: "SampleKeysWithoutGoogSapagent",
+			labels: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			want: "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+		},
+		{
+			name: "SampleKeysWithGoogSapagent",
+			labels: map[string]string{
+				"goog-sapagent-cgpath":    "value1",
+				"goog-sapagent-disk-path": "value2",
+			},
+			want: "1a9a2e346a5e7f18888bb9387e0ae3ddd2e4e7ffb2a1fe5cacb60e17",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := generateSHA(tc.labels)
+			if got != tc.want {
+				t.Errorf("generateSHA(%v) = %q, want: %q", tc.labels, got, tc.want)
 			}
 		})
 	}

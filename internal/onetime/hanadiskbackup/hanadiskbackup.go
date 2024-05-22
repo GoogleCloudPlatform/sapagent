@@ -19,10 +19,13 @@ package hanadiskbackup
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -851,11 +854,32 @@ func (s *Snapshot) createGroupBackupLabels() map[string]string {
 	if !s.groupSnapshot {
 		return map[string]string{}
 	}
-	return map[string]string{
+	labels := map[string]string{
 		"goog-sapagent-version":   configuration.AgentVersion,
 		"goog-sapagent-cgpath":    s.cgPath,
 		"goog-sapagent-disk-name": s.Disk,
 		"goog-sapagent-timestamp": strconv.FormatInt(time.Now().UTC().Unix(), 10),
-		// TODO: b/339829622 - Add the MD5 SUM of labels as a new label.
 	}
+
+	labels["goog-sapagent-sha224"] = generateSHA(labels)
+	return labels
+}
+
+// generateSHA generates a SHA-224 hash of labels starting with "goog-sapagent".
+func generateSHA(labels map[string]string) string {
+	keys := []string{}
+	for k := range labels {
+		if strings.HasPrefix(k, "goog-sapagent") {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+
+	var orderedString string
+	for _, k := range keys {
+		orderedString += k + labels[k]
+	}
+
+	hash := sha256.Sum224([]byte(orderedString))
+	return hex.EncodeToString(hash[:])
 }
