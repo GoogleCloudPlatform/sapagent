@@ -538,9 +538,8 @@ in the background and return control to the caller with return value = true.
 Return false if the config option is not enabled.
 */
 func Start(ctx context.Context, parameters Parameters) bool {
-	rm := startReliabilityMetrics(ctx, parameters)
-	pm := startProcessMetrics(ctx, parameters)
-	return rm || pm
+	// TODO: b/322177918 - Enable reliability metrics collection once the namespace is created and tested.
+	return startProcessMetrics(ctx, parameters)
 }
 
 /*
