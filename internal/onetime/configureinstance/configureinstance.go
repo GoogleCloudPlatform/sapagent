@@ -31,7 +31,6 @@ import (
 	"golang.org/x/exp/slices"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -142,7 +141,8 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 		} else {
 			fmt.Println(fmt.Sprintf("ConfigureInstance: FAILED, detailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))+" err: ", err)
 			log.CtxLogger(ctx).Errorw("ConfigureInstance failed", "err", err)
-			usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
+			// TODO: b/342113969 - Add usage metrics for configureinstance failures.
+			// usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
 		}
 	}
 	return exitStatus
@@ -152,7 +152,8 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 // depending on the machine type.
 func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subcommands.ExitStatus, error) {
 	LogToBoth(ctx, "ConfigureInstance starting")
-	usagemetrics.Action(usagemetrics.ConfigureInstanceStarted)
+	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
+	// usagemetrics.Action(usagemetrics.ConfigureInstanceStarted)
 	rebootRequired := false
 	var err error
 
@@ -166,7 +167,8 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 		return subcommands.ExitUsageError, fmt.Errorf("unsupported machine type: %s", c.machineType)
 	}
 
-	usagemetrics.Action(usagemetrics.ConfigureInstanceFinished)
+	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
+	// usagemetrics.Action(usagemetrics.ConfigureInstanceFinished)
 	exitStatus := subcommands.ExitSuccess
 	if c.Apply || (c.Check && !rebootRequired) {
 		LogToBoth(ctx, "ConfigureInstance: SUCCESS")
