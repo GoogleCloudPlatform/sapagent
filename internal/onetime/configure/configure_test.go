@@ -86,7 +86,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "SuccessForAgentVersion",
 			c: &Configure{
-				version: true,
+				Version: true,
 			},
 			args: []any{
 				"test",
@@ -98,7 +98,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "SuccessForHelp",
 			c: &Configure{
-				help: true,
+				Help: true,
 			},
 			args: []any{
 				"test",
@@ -109,7 +109,7 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "FailureForModifyConfig",
-			c:    &Configure{feature: "host_metrics"},
+			c:    &Configure{Feature: "host_metrics"},
 			want: subcommands.ExitFailure,
 			args: []any{
 				"test",
@@ -120,9 +120,9 @@ func TestExecute(t *testing.T) {
 		{
 			name: "SuccessForModifyConfig",
 			c: &Configure{
-				feature: "host_metrics",
-				enable:  true,
-				path:    path.Join(t.TempDir(), "/configuration.json"),
+				Feature: "host_metrics",
+				Enable:  true,
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus {
 					return subcommands.ExitSuccess
 				},
@@ -139,7 +139,7 @@ func TestExecute(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			if test.c != nil && test.c.path != "" {
+			if test.c != nil && test.c.Path != "" {
 				writeFile(ctx, &cpb.Configuration{
 					ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
 					LogLevel:                   1,
@@ -148,7 +148,7 @@ func TestExecute(t *testing.T) {
 						CollectProcessMetrics: true,
 					},
 					LogToCloud: &wpb.BoolValue{Value: true},
-				}, test.c.path)
+				}, test.c.Path)
 			}
 			got := test.c.Execute(ctx, &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if diff := cmp.Diff(test.want, got); diff != "" {
@@ -328,7 +328,7 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EmptyConfigFile",
 			c: &Configure{
-				path: path.Join(t.TempDir(), "/configuration.json"),
+				Path: path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{},
 			newConfig: &cpb.Configuration{},
@@ -338,8 +338,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfEnable|Disable1",
 			c: &Configure{
-				feature: "host_metrics",
-				path:    path.Join(t.TempDir(), "/configuration.json"),
+				Feature: "host_metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				ProvideSapHostAgentMetrics:  &wpb.BoolValue{Value: true},
@@ -359,8 +359,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfEnable|Disable2",
 			c: &Configure{
-				feature: "hana_monitoring",
-				path:    path.Join(t.TempDir(), "/configuration.json"),
+				Feature: "hana_monitoring",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				ProvideSapHostAgentMetrics:  &wpb.BoolValue{Value: true},
@@ -380,8 +380,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfEnable|Disable3",
 			c: &Configure{
-				setting:      "log_to_cloud",
-				path:         t.TempDir() + "/configuration.json",
+				Setting:      "log_to_cloud",
+				Path:         t.TempDir() + "/configuration.json",
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{},
@@ -392,8 +392,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfFeature|Setting",
 			c: &Configure{
-				enable:       true,
-				path:         t.TempDir() + "/configuration.json",
+				Enable:       true,
+				Path:         t.TempDir() + "/configuration.json",
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -414,8 +414,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfEnable|Disable2",
 			c: &Configure{
-				setting:      "log_to_cloud",
-				path:         t.TempDir() + "/configuration.json",
+				Setting:      "log_to_cloud",
+				Path:         t.TempDir() + "/configuration.json",
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{},
@@ -426,8 +426,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfFeature|Setting",
 			c: &Configure{
-				enable:       true,
-				path:         t.TempDir() + "/configuration.json",
+				Enable:       true,
+				Path:         t.TempDir() + "/configuration.json",
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{},
@@ -438,9 +438,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ErrorOpeningInputFile1",
 			c: &Configure{
-				feature: "host_metrics",
-				enable:  true,
-				path:    path.Join(t.TempDir(), "/configuration.json"),
+				Feature: "host_metrics",
+				Enable:  true,
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{},
 			newConfig: &cpb.Configuration{},
@@ -452,8 +452,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidLogConfig",
 			c: &Configure{
-				logLevel:     "warning",
-				path:         t.TempDir() + "/configuration.json",
+				LogLevel:     "warning",
+				Path:         t.TempDir() + "/configuration.json",
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -470,8 +470,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidLogConfig",
 			c: &Configure{
-				logLevel:     "warn",
-				path:         t.TempDir() + "/configuration.json",
+				LogLevel:     "warn",
+				Path:         t.TempDir() + "/configuration.json",
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -488,9 +488,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetting",
 			c: &Configure{
-				setting: "logToCloud",
-				enable:  true,
-				path:    t.TempDir() + "/configuration.json",
+				Setting: "logToCloud",
+				Enable:  true,
+				Path:    t.TempDir() + "/configuration.json",
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:   2,
@@ -506,9 +506,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetting",
 			c: &Configure{
-				setting: "log_to_cloud",
-				disable: true,
-				path:    t.TempDir() + "/configuration.json",
+				Setting: "log_to_cloud",
+				Disable: true,
+				Path:    t.TempDir() + "/configuration.json",
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus {
 					return subcommands.ExitSuccess
 				},
@@ -527,8 +527,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "Unknown Metric",
 			c: &Configure{
-				feature: "TCP_Metrics",
-				path:    path.Join(t.TempDir(), "/configuration.json"),
+				Feature: "TCP_Metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:   2,
@@ -544,9 +544,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableHostMetrics",
 			c: &Configure{
-				enable:       true,
-				feature:      "host_metrics",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Enable:       true,
+				Feature:      "host_metrics",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -565,9 +565,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableHostMetrics",
 			c: &Configure{
-				disable:      true,
-				feature:      "host_metrics",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Disable:      true,
+				Feature:      "host_metrics",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -586,9 +586,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableProcessMetrics",
 			c: &Configure{
-				enable:       true,
-				feature:      "process_metrics",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Enable:       true,
+				Feature:      "process_metrics",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -611,9 +611,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableProcessMetrics",
 			c: &Configure{
-				disable:      true,
-				feature:      "process_metrics",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Disable:      true,
+				Feature:      "process_metrics",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -636,10 +636,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetFreqProcessMetrics",
 			c: &Configure{
-				feature:              "process_metrics",
-				fastMetricsFrequency: 30,
-				slowMetricsFrequency: 50,
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
+				Feature:              "process_metrics",
+				FastMetricsFrequency: 30,
+				SlowMetricsFrequency: 50,
+				Path:                 path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -664,10 +664,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqProcessMetrics1",
 			c: &Configure{
-				feature:              "process_metrics",
-				fastMetricsFrequency: -30,
-				slowMetricsFrequency: 50,
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
+				Feature:              "process_metrics",
+				FastMetricsFrequency: -30,
+				SlowMetricsFrequency: 50,
+				Path:                 path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -690,12 +690,40 @@ func TestModifyConfig(t *testing.T) {
 			want:     subcommands.ExitUsageError,
 		},
 		{
+			name: "InvalidSetFreqProcessMetrics2",
+			c: &Configure{
+				Feature:              "process_metrics",
+				FastMetricsFrequency: 0,
+				SlowMetricsFrequency: 0,
+				Path:                 path.Join(t.TempDir(), "/configuration.json"),
+				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+			},
+			oldConfig: &cpb.Configuration{
+				LogLevel: 2,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       true,
+					SlowProcessMetricsFrequency: 10,
+				},
+				LogToCloud: &wpb.BoolValue{Value: true},
+			},
+			newConfig: &cpb.Configuration{
+				LogLevel: 2,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       true,
+					SlowProcessMetricsFrequency: 10,
+				},
+				LogToCloud: &wpb.BoolValue{Value: true},
+			},
+			readFunc: os.ReadFile,
+			want:     subcommands.ExitUsageError,
+		},
+		{
 			name: "InvalidSetFreqProcessMetrics3",
 			c: &Configure{
-				feature:              "process_metrics",
-				fastMetricsFrequency: 30,
-				slowMetricsFrequency: -50,
-				path:                 path.Join(t.TempDir(), "/configuration.json"),
+				Feature:              "process_metrics",
+				FastMetricsFrequency: 30,
+				SlowMetricsFrequency: -50,
+				Path:                 path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -720,10 +748,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AddSkipMetrics",
 			c: &Configure{
-				feature:      "process_metrics",
-				skipMetrics:  "/sap/networkstats/rtt, /sap/networkstats/rcv_rtt, /sap/hana/utilization",
-				add:          true,
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Feature:      "process_metrics",
+				SkipMetrics:  "/sap/networkstats/rtt, /sap/networkstats/rcv_rtt, /sap/hana/utilization",
+				Add:          true,
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -756,10 +784,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "RemoveSkipMetrics",
 			c: &Configure{
-				feature:      "process_metrics",
-				skipMetrics:  "/sap/networkstats/rtt",
-				remove:       true,
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Feature:      "process_metrics",
+				SkipMetrics:  "/sap/networkstats/rtt",
+				Remove:       true,
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -787,9 +815,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableWorkloadValidation",
 			c: &Configure{
-				enable:       true,
-				feature:      "workload_evaluation",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Enable:       true,
+				Feature:      "workload_evaluation",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -812,9 +840,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableWorkloadValidation",
 			c: &Configure{
-				disable:      true,
-				feature:      "workload_evaluation",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Disable:      true,
+				Feature:      "workload_evaluation",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -837,10 +865,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetFreqWorkloadValidation",
 			c: &Configure{
-				feature:                    "workload_evaluation",
-				validationMetricsFrequency: 30,
-				dbFrequency:                50,
-				path:                       path.Join(t.TempDir(), "/configuration.json"),
+				Feature:                    "workload_evaluation",
+				ValidationMetricsFrequency: 30,
+				DbFrequency:                50,
+				Path:                       path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -867,10 +895,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqWorkloadValidation1",
 			c: &Configure{
-				feature:                    "workload_evaluation",
-				validationMetricsFrequency: -30,
-				dbFrequency:                50,
-				path:                       path.Join(t.TempDir(), "/configuration.json"),
+				Feature:                    "workload_evaluation",
+				ValidationMetricsFrequency: -30,
+				DbFrequency:                50,
+				Path:                       path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -895,10 +923,38 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqWorkloadValidation2",
 			c: &Configure{
-				feature:                    "workload_evaluation",
-				validationMetricsFrequency: 30,
-				dbFrequency:                -50,
-				path:                       path.Join(t.TempDir(), "/configuration.json"),
+				Feature:                    "workload_evaluation",
+				ValidationMetricsFrequency: 30,
+				DbFrequency:                -50,
+				Path:                       path.Join(t.TempDir(), "/configuration.json"),
+				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+			},
+			oldConfig: &cpb.Configuration{
+				LogLevel: 2,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
+					WorkloadValidationDbMetricsFrequency: 50,
+				},
+				LogToCloud: &wpb.BoolValue{Value: true},
+			},
+			newConfig: &cpb.Configuration{
+				LogLevel: 2,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
+					WorkloadValidationDbMetricsFrequency: 50,
+				},
+				LogToCloud: &wpb.BoolValue{Value: true},
+			},
+			readFunc: os.ReadFile,
+			want:     subcommands.ExitUsageError,
+		},
+		{
+			name: "InvalidSetFreqWorkloadValidation3",
+			c: &Configure{
+				Feature:                    "workload_evaluation",
+				ValidationMetricsFrequency: 0,
+				DbFrequency:                0,
+				Path:                       path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -923,9 +979,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableSapDiscovery",
 			c: &Configure{
-				enable:       true,
-				feature:      "sap_discovery",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Enable:       true,
+				Feature:      "sap_discovery",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -948,9 +1004,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableSapDiscovery",
 			c: &Configure{
-				disable:      true,
-				feature:      "sap_discovery",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Disable:      true,
+				Feature:      "sap_discovery",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -973,9 +1029,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableAgentMetrics",
 			c: &Configure{
-				enable:       true,
-				feature:      "agent_metrics",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Enable:       true,
+				Feature:      "agent_metrics",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -998,9 +1054,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableAgentMetrics",
 			c: &Configure{
-				disable:      true,
-				feature:      "agent_metrics",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Disable:      true,
+				Feature:      "agent_metrics",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1023,11 +1079,11 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetFreqAgentMetrics",
 			c: &Configure{
-				feature:               "agent_metrics",
-				agentMetricsFrequency: 25,
-				agentHealthFrequency:  20,
-				heartbeatFrequency:    10,
-				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				Feature:               "agent_metrics",
+				AgentMetricsFrequency: 25,
+				AgentHealthFrequency:  20,
+				HeartbeatFrequency:    10,
+				Path:                  path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1056,11 +1112,11 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqAgentMetrics1",
 			c: &Configure{
-				feature:               "agent_metrics",
-				agentMetricsFrequency: -25,
-				agentHealthFrequency:  20,
-				heartbeatFrequency:    10,
-				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				Feature:               "agent_metrics",
+				AgentMetricsFrequency: -25,
+				AgentHealthFrequency:  20,
+				HeartbeatFrequency:    10,
+				Path:                  path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1085,11 +1141,11 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqAgentMetrics2",
 			c: &Configure{
-				feature:               "agent_metrics",
-				agentMetricsFrequency: 25,
-				agentHealthFrequency:  -20,
-				heartbeatFrequency:    10,
-				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				Feature:               "agent_metrics",
+				AgentMetricsFrequency: 25,
+				AgentHealthFrequency:  -20,
+				HeartbeatFrequency:    10,
+				Path:                  path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1114,11 +1170,40 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetFreqAgentMetrics3",
 			c: &Configure{
-				feature:               "agent_metrics",
-				agentMetricsFrequency: 25,
-				agentHealthFrequency:  20,
-				heartbeatFrequency:    -10,
-				path:                  path.Join(t.TempDir(), "/configuration.json"),
+				Feature:               "agent_metrics",
+				AgentMetricsFrequency: 25,
+				AgentHealthFrequency:  20,
+				HeartbeatFrequency:    -10,
+				Path:                  path.Join(t.TempDir(), "/configuration.json"),
+				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+			},
+			oldConfig: &cpb.Configuration{
+				LogLevel: 2,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectAgentMetrics: true,
+					HeartbeatFrequency:  2,
+				},
+				LogToCloud: &wpb.BoolValue{Value: true},
+			},
+			newConfig: &cpb.Configuration{
+				LogLevel: 2,
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectAgentMetrics: true,
+					HeartbeatFrequency:  2,
+				},
+				LogToCloud: &wpb.BoolValue{Value: true},
+			},
+			readFunc: os.ReadFile,
+			want:     subcommands.ExitUsageError,
+		},
+		{
+			name: "InvalidSetFreqAgentMetrics4",
+			c: &Configure{
+				Feature:               "agent_metrics",
+				AgentMetricsFrequency: 0,
+				AgentHealthFrequency:  0,
+				HeartbeatFrequency:    0,
+				Path:                  path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1143,9 +1228,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableHANAMonitoring",
 			c: &Configure{
-				enable:       true,
-				feature:      "hana_monitoring",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Enable:       true,
+				Feature:      "hana_monitoring",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1164,9 +1249,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableHANAMonitoring",
 			c: &Configure{
-				disable:      true,
-				feature:      "hana_monitoring",
-				path:         path.Join(t.TempDir(), "/configuration.json"),
+				Disable:      true,
+				Feature:      "hana_monitoring",
+				Path:         path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1185,10 +1270,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidSetHANAMonitoring",
 			c: &Configure{
-				feature:           "hana_monitoring",
-				sampleIntervalSec: 2,
-				queryTimeoutSec:   10,
-				path:              path.Join(t.TempDir(), "/configuration.json"),
+				Feature:           "hana_monitoring",
+				SampleIntervalSec: 2,
+				QueryTimeoutSec:   10,
+				Path:              path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:      func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1211,9 +1296,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetHANAMonitoring1",
 			c: &Configure{
-				feature:           "hana_monitoring",
-				sampleIntervalSec: -3,
-				path:              path.Join(t.TempDir(), "/configuration.json"),
+				Feature:           "hana_monitoring",
+				SampleIntervalSec: -3,
+				Path:              path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:      func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1238,9 +1323,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidSetHANAMonitoring2",
 			c: &Configure{
-				feature:         "hana_monitoring",
-				queryTimeoutSec: -10,
-				path:            path.Join(t.TempDir(), "/configuration.json"),
+				Feature:         "hana_monitoring",
+				QueryTimeoutSec: -10,
+				Path:            path.Join(t.TempDir(), "/configuration.json"),
 				RestartAgent:    func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
@@ -1267,17 +1352,17 @@ func TestModifyConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			writeFile(ctx, test.oldConfig, test.c.path)
-			got := test.c.modifyConfig(ctx, nil, test.readFunc)
+			writeFile(ctx, test.oldConfig, test.c.Path)
+			_, got := test.c.modifyConfig(ctx, nil, test.readFunc)
 			if got != test.want {
-				t.Errorf("modifyConfig(%v) returned unexpected ExitStatus.\ngot: %v\nwant %v", test.c.path, got, test.want)
+				t.Errorf("modifyConfig(%v) returned unexpected ExitStatus.\ngot: %v\nwant %v", test.c.Path, got, test.want)
 				return
 			}
 
-			gotConfig := configuration.Read(test.c.path, os.ReadFile)
+			gotConfig := configuration.Read(test.c.Path, os.ReadFile)
 			if diff := cmp.Diff(test.newConfig, gotConfig, protocmp.Transform(),
 				cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-				t.Errorf("modifyConfig(%v) returned an unexpected diff (-want +got): %v", test.c.path, diff)
+				t.Errorf("modifyConfig(%v) returned an unexpected diff (-want +got): %v", test.c.Path, diff)
 			}
 		})
 	}
@@ -1328,7 +1413,7 @@ func TestWriteFile(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotErr := writeFile(context.Background(), tc.config, tc.path)
+			_, gotErr := writeFile(context.Background(), tc.config, tc.path)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("writeFile(%v, %v) returned an unexpected diff (-want +got): %v", tc.config, tc.path, diff)
 			}
@@ -1417,7 +1502,7 @@ func TestShowFeatures(t *testing.T) {
 		{
 			name: "SampleShow",
 			c: &Configure{
-				path: path.Join(t.TempDir(), "/configuration.json"),
+				Path: path.Join(t.TempDir(), "/configuration.json"),
 			},
 			config: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
@@ -1437,12 +1522,12 @@ func TestShowFeatures(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.c != nil && len(tc.c.path) > 0 {
-				writeFile(context.Background(), tc.config, tc.c.path)
+			if tc.c != nil && len(tc.c.Path) > 0 {
+				writeFile(context.Background(), tc.config, tc.c.Path)
 			}
-			got := tc.c.showFeatures(ctx)
+			_, got := tc.c.showFeatures(ctx)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("showFeatures(%v) returned an unexpected diff (-want +got): %v", tc.c.path, diff)
+				t.Errorf("showFeatures(%v) returned an unexpected diff (-want +got): %v", tc.c.Path, diff)
 			}
 		})
 	}

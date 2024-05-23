@@ -26,7 +26,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 
 	"flag"
 	"github.com/google/safetext/shsprintf"
@@ -34,6 +33,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/restart"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -43,17 +43,17 @@ import (
 
 // Configure has args for backint subcommands.
 type Configure struct {
-	feature, logLevel                                               string
-	setting, path                                                   string
-	skipMetrics                                                     string
-	validationMetricsFrequency, dbFrequency                         int64
-	fastMetricsFrequency, slowMetricsFrequency                      int64
-	agentMetricsFrequency, agentHealthFrequency, heartbeatFrequency int64
-	reliabilityMetricsFrequency                                     int64
-	sampleIntervalSec, queryTimeoutSec                              int64
-	help, version                                                   bool
-	enable, disable, showall                                        bool
-	add, remove                                                     bool
+	Feature, LogLevel                                               string
+	Setting, Path                                                   string
+	SkipMetrics                                                     string
+	ValidationMetricsFrequency, DbFrequency                         int64
+	FastMetricsFrequency, SlowMetricsFrequency                      int64
+	AgentMetricsFrequency, AgentHealthFrequency, HeartbeatFrequency int64
+	ReliabilityMetricsFrequency                                     int64
+	SampleIntervalSec, QueryTimeoutSec                              int64
+	Help, Version                                                   bool
+	Enable, Disable, Showall                                        bool
+	Add, Remove                                                     bool
 	RestartAgent                                                    RestartAgent
 }
 
@@ -106,68 +106,74 @@ configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|
 
 // SetFlags implements the subcommand interface for features.
 func (c *Configure) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&c.feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
-	fs.StringVar(&c.feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
-	fs.StringVar(&c.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
-	fs.StringVar(&c.setting, "setting", "", "The requested setting. Valid values are: bare_metal, log_to_cloud")
-	fs.StringVar(&c.skipMetrics, "process_metrics_to_skip", "", "Add or remove the list of metrics to skip during process metrics collection")
-	fs.Int64Var(&c.validationMetricsFrequency, "workload_evaluation_metrics_frequency", 0, "Sets the frequency of workload validation metrics collection. Default value is 300(s)")
-	fs.Int64Var(&c.dbFrequency, "workload_evaluation_db_metrics_frequency", 0, "Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
-	fs.Int64Var(&c.fastMetricsFrequency, "process_metrics_frequency", 0, "Sets the frequency of fast moving process metrics collection. Default value is 5(s)")
-	fs.Int64Var(&c.slowMetricsFrequency, "slow_process_metrics_frequency", 0, "Sets the frequency of slow moving process metrics collection. Default value is 30(s)")
-	fs.Int64Var(&c.agentMetricsFrequency, "agent_metrics_frequency", 0, "Sets the agent metrics frequency. Default value is 60(s)")
-	fs.Int64Var(&c.agentHealthFrequency, "agent_health_frequency", 0, "Sets the agent health frequency. Default value is 60(s)")
-	fs.Int64Var(&c.heartbeatFrequency, "heartbeat_frequency", 0, "Sets the heartbeat frequency. Default value is 60(s)")
-	fs.Int64Var(&c.sampleIntervalSec, "sample_interval_sec", 0, "Sets the sample interval sec for HANA Monitoring. Default value is 300(s)")
-	fs.Int64Var(&c.queryTimeoutSec, "query_timeout_sec", 0, "Sets the query timeout for HANA Monitoring. Default value is 300(s)")
-	fs.Int64Var(&c.reliabilityMetricsFrequency, "reliability_metrics_frequency", 0, "Sets the reliability metric collection frequency. Default value is 60(s)")
-	fs.BoolVar(&c.help, "help", false, "Display help")
-	fs.BoolVar(&c.help, "h", false, "Display help")
-	fs.BoolVar(&c.version, "version", false, "Print the agent version")
-	fs.BoolVar(&c.version, "v", false, "Print the agent version")
-	fs.BoolVar(&c.showall, "showall", false, "Display the status of all features")
-	fs.BoolVar(&c.enable, "enable", false, "Enable the requested feature/setting")
-	fs.BoolVar(&c.disable, "disable", false, "Disable the requested feature/setting")
-	fs.BoolVar(&c.add, "add", false, "Add the requested list of process metrics to skip. process-metrics-to-skip should not be empty")
-	fs.BoolVar(&c.remove, "remove", false, "Remove the requested list of process metrics to skip. process-metrics-to-skip should not be empty")
+	fs.StringVar(&c.Feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
+	fs.StringVar(&c.Feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
+	fs.StringVar(&c.LogLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
+	fs.StringVar(&c.Setting, "setting", "", "The requested setting. Valid values are: bare_metal, log_to_cloud")
+	fs.StringVar(&c.SkipMetrics, "process_metrics_to_skip", "", "Add or remove the list of metrics to skip during process metrics collection")
+	fs.Int64Var(&c.ValidationMetricsFrequency, "workload_evaluation_metrics_frequency", 0, "Sets the frequency of workload validation metrics collection. Default value is 300(s)")
+	fs.Int64Var(&c.DbFrequency, "workload_evaluation_db_metrics_frequency", 0, "Sets the database frequency of workload validation metrics collection. Default value is 3600(s)")
+	fs.Int64Var(&c.FastMetricsFrequency, "process_metrics_frequency", 0, "Sets the frequency of fast moving process metrics collection. Default value is 5(s)")
+	fs.Int64Var(&c.SlowMetricsFrequency, "slow_process_metrics_frequency", 0, "Sets the frequency of slow moving process metrics collection. Default value is 30(s)")
+	fs.Int64Var(&c.AgentMetricsFrequency, "agent_metrics_frequency", 0, "Sets the agent metrics frequency. Default value is 60(s)")
+	fs.Int64Var(&c.AgentHealthFrequency, "agent_health_frequency", 0, "Sets the agent health frequency. Default value is 60(s)")
+	fs.Int64Var(&c.HeartbeatFrequency, "heartbeat_frequency", 0, "Sets the heartbeat frequency. Default value is 60(s)")
+	fs.Int64Var(&c.SampleIntervalSec, "sample_interval_sec", 0, "Sets the sample interval sec for HANA Monitoring. Default value is 300(s)")
+	fs.Int64Var(&c.QueryTimeoutSec, "query_timeout_sec", 0, "Sets the query timeout for HANA Monitoring. Default value is 300(s)")
+	fs.Int64Var(&c.ReliabilityMetricsFrequency, "reliability_metrics_frequency", 0, "Sets the reliability metric collection frequency. Default value is 60(s)")
+	fs.BoolVar(&c.Help, "help", false, "Display help")
+	fs.BoolVar(&c.Help, "h", false, "Display help")
+	fs.BoolVar(&c.Version, "version", false, "Print the agent version")
+	fs.BoolVar(&c.Version, "v", false, "Print the agent version")
+	fs.BoolVar(&c.Showall, "showall", false, "Display the status of all features")
+	fs.BoolVar(&c.Enable, "enable", false, "Enable the requested feature/setting")
+	fs.BoolVar(&c.Disable, "disable", false, "Disable the requested feature/setting")
+	fs.BoolVar(&c.Add, "add", false, "Add the requested list of process metrics to skip. process-metrics-to-skip should not be empty")
+	fs.BoolVar(&c.Remove, "remove", false, "Remove the requested list of process metrics to skip. process-metrics-to-skip should not be empty")
 }
 
 // Execute implements the subcommand interface for feature.
 func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
+	_, res := c.ExecuteAndGetMessage(ctx, fs, args...)
+	return res
+}
+
+// ExecuteAndGetMessage executes the command and returns a message string in addition to the status.
+func (c *Configure) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, args ...any) (string, subcommands.ExitStatus) {
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
 		Name:     c.Name(),
-		Help:     c.help,
-		Version:  c.version,
+		Help:     c.Help,
+		Version:  c.Version,
 		Fs:       fs,
-		LogLevel: c.logLevel,
+		LogLevel: c.LogLevel,
 	}, args...)
 	if !completed {
-		return exitStatus
+		return "Onetime init failed to complete", exitStatus
 	}
 
-	if c.path == "" {
-		c.path = configuration.LinuxConfigPath
+	if c.Path == "" {
+		c.Path = configuration.LinuxConfigPath
 		if runtime.GOOS == "windows" {
-			c.path = configuration.WindowsConfigPath
+			c.Path = configuration.WindowsConfigPath
 		}
 	}
 
-	if c.showall {
+	if c.Showall {
 		return c.showFeatures(ctx)
 	}
 
 	if c.RestartAgent == nil {
-		c.RestartAgent = DefaultRestartAgent
+		c.RestartAgent = restart.LinuxRestartAgent
 		if runtime.GOOS == "windows" {
-			c.RestartAgent = WindowsRestartAgent
+			c.RestartAgent = restart.WindowsRestartAgent
 		}
 	}
 
-	res := c.modifyConfig(ctx, fs, os.ReadFile)
+	newCfg, res := c.modifyConfig(ctx, fs, os.ReadFile)
 	if res == subcommands.ExitSuccess {
 		fmt.Println("Successfully modified configuration.json and restarted the agent.")
 	}
-	return res
+	return newCfg, res
 }
 
 // setStatus returns a map of feature name and its status.
@@ -207,11 +213,11 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 }
 
 // showFeatures displays the status of all features.
-func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
-	config := configuration.Read(c.path, os.ReadFile)
+func (c *Configure) showFeatures(ctx context.Context) (string, subcommands.ExitStatus) {
+	config := configuration.Read(c.Path, os.ReadFile)
 	if config == nil {
 		onetime.LogMessageToFileAndConsole("Unable to read configuration.json")
-		return subcommands.ExitFailure
+		return "Unable to read configuration.json", subcommands.ExitFailure
 	}
 
 	featureStatus := setStatus(ctx, config)
@@ -230,61 +236,61 @@ func (c *Configure) showFeatures(ctx context.Context) subcommands.ExitStatus {
 	for _, feature := range enabled {
 		out, err := showStatus(ctx, feature, featureStatus[feature], isWindows)
 		if err != nil {
-			return subcommands.ExitFailure
+			return err.Error(), subcommands.ExitFailure
 		}
 		output += out
 	}
 	for _, feature := range disabled {
 		out, err := showStatus(ctx, feature, featureStatus[feature], isWindows)
 		if err != nil {
-			return subcommands.ExitFailure
+			return err.Error(), subcommands.ExitFailure
 		}
 		output += out
 	}
 	fmt.Println(output)
-	return subcommands.ExitSuccess
+	return output, subcommands.ExitSuccess
 }
 
 // modifyConfig takes user input and enables/disables features in configuration.json and restarts the agent.
-func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read configuration.ReadConfigFile) subcommands.ExitStatus {
+func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read configuration.ReadConfigFile) (string, subcommands.ExitStatus) {
 	log.Logger.Infow("Beginning execution of features command")
-	config := configuration.Read(c.path, read)
+	config := configuration.Read(c.Path, read)
 	if config == nil {
 		onetime.LogMessageToFileAndConsole("Unable to read configuration.json")
-		return subcommands.ExitFailure
+		return "Unable to read configuration.json", subcommands.ExitFailure
 	}
 	log.CtxLogger(ctx).Infow("Config before any changes", "config", config)
 
 	isCmdValid := false
-	if len(c.logLevel) > 0 {
-		if _, ok := loglevels[c.logLevel]; !ok {
+	if len(c.LogLevel) > 0 {
+		if _, ok := loglevels[c.LogLevel]; !ok {
 			onetime.LogMessageToFileAndConsole("Invalid log level. Please use [debug, info, warn, error]")
-			return subcommands.ExitUsageError
+			return "Invalid log level. Please use [debug, info, warn, error]", subcommands.ExitUsageError
 		}
 		isCmdValid = true
-		config.LogLevel = loglevels[c.logLevel]
+		config.LogLevel = loglevels[c.LogLevel]
 	}
 
-	if len(c.feature) > 0 {
+	if len(c.Feature) > 0 {
 		if res := c.modifyFeature(ctx, fs, config); res != subcommands.ExitSuccess {
-			return res
+			return "Failed to modify feature", res
 		}
 		isCmdValid = true
-	} else if len(c.setting) > 0 {
-		if !c.enable && !c.disable {
+	} else if len(c.Setting) > 0 {
+		if !c.Enable && !c.Disable {
 			onetime.LogMessageToFileAndConsole("Please choose to enable or disable the given feature/setting\n")
-			return subcommands.ExitUsageError
+			return "Please choose to enable or disable the given feature/setting", subcommands.ExitUsageError
 		}
 
-		isEnabled := c.enable
-		switch c.setting {
+		isEnabled := c.Enable
+		switch c.Setting {
 		case "bare_metal":
 			config.BareMetal = isEnabled
 		case "log_to_cloud":
 			config.LogToCloud = &wpb.BoolValue{Value: isEnabled}
 		default:
 			onetime.LogMessageToFileAndConsole("Unsupported setting")
-			return subcommands.ExitUsageError
+			return "Unsupported setting", subcommands.ExitUsageError
 		}
 		isCmdValid = true
 	}
@@ -295,15 +301,16 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 		if fs != nil {
 			fs.Usage()
 		}
-		return subcommands.ExitUsageError
+		return "Insufficient flags. Please check usage", subcommands.ExitUsageError
 	}
 
-	if err := writeFile(ctx, config, c.path); err != nil {
+	newCfg, err := writeFile(ctx, config, c.Path)
+	if err != nil {
 		log.Print("Unable to write configuration.json")
 		log.CtxLogger(ctx).Errorw("Unable to write configuration.json", "error:", err)
-		return subcommands.ExitUsageError
+		return newCfg, subcommands.ExitUsageError
 	}
-	return c.RestartAgent(ctx)
+	return newCfg, c.RestartAgent(ctx)
 }
 
 // modifyFeature takes user input and modifies fields related to a particular feature, which could simply
@@ -311,12 +318,12 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config *cpb.Configuration) subcommands.ExitStatus {
 	// var isEnabled any
 	var isEnabled *bool
-	if c.enable || c.disable {
-		isEnabled = &c.enable
+	if c.Enable || c.Disable {
+		isEnabled = &c.Enable
 	}
 
 	isCmdValid := false
-	switch c.feature {
+	switch c.Feature {
 	case hostMetrics:
 		if isEnabled != nil {
 			isCmdValid = true
@@ -328,27 +335,27 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 			checkCollectionConfig(config).CollectProcessMetrics = *isEnabled
 		}
 
-		if c.fastMetricsFrequency != 0 {
-			if c.fastMetricsFrequency < 0 {
+		if c.FastMetricsFrequency != 0 {
+			if c.FastMetricsFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).ProcessMetricsFrequency = c.fastMetricsFrequency
+			checkCollectionConfig(config).ProcessMetricsFrequency = c.FastMetricsFrequency
 		}
 
-		if c.slowMetricsFrequency != 0 {
-			if c.slowMetricsFrequency < 0 {
+		if c.SlowMetricsFrequency != 0 {
+			if c.SlowMetricsFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("slow-metrics-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).SlowProcessMetricsFrequency = c.slowMetricsFrequency
+			checkCollectionConfig(config).SlowProcessMetricsFrequency = c.SlowMetricsFrequency
 		}
 
-		if len(c.skipMetrics) > 0 {
-			log.CtxLogger(ctx).Info("Skip Metrics: ", c.skipMetrics)
-			if !c.add && !c.remove {
+		if len(c.SkipMetrics) > 0 {
+			log.CtxLogger(ctx).Info("Skip Metrics: ", c.SkipMetrics)
+			if !c.Add && !c.Remove {
 				onetime.LogMessageToFileAndConsole("Please choose to add or remove given list of process metrics.")
 				return subcommands.ExitUsageError
 			}
@@ -367,21 +374,21 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 				config.HanaMonitoringConfiguration = &cpb.HANAMonitoringConfiguration{Enabled: *isEnabled}
 			}
 		}
-		if c.sampleIntervalSec != 0 {
-			if c.sampleIntervalSec < 0 {
+		if c.SampleIntervalSec != 0 {
+			if c.SampleIntervalSec < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("sample-interval-sec must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			config.HanaMonitoringConfiguration.SampleIntervalSec = c.sampleIntervalSec
+			config.HanaMonitoringConfiguration.SampleIntervalSec = c.SampleIntervalSec
 		}
-		if c.queryTimeoutSec != 0 {
-			if c.queryTimeoutSec < 0 {
+		if c.QueryTimeoutSec != 0 {
+			if c.QueryTimeoutSec < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("query-timeout-sec must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			config.HanaMonitoringConfiguration.QueryTimeoutSec = c.queryTimeoutSec
+			config.HanaMonitoringConfiguration.QueryTimeoutSec = c.QueryTimeoutSec
 		}
 	case sapDiscovery:
 		if isEnabled != nil {
@@ -393,63 +400,63 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 			isCmdValid = true
 			checkCollectionConfig(config).CollectAgentMetrics = *isEnabled
 		}
-		if c.agentMetricsFrequency != 0 {
-			if c.agentMetricsFrequency < 0 {
+		if c.AgentMetricsFrequency != 0 {
+			if c.AgentMetricsFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).AgentMetricsFrequency = c.agentMetricsFrequency
+			checkCollectionConfig(config).AgentMetricsFrequency = c.AgentMetricsFrequency
 		}
-		if c.agentHealthFrequency != 0 {
-			if c.agentHealthFrequency < 0 {
+		if c.AgentHealthFrequency != 0 {
+			if c.AgentHealthFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("agent-health-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).AgentHealthFrequency = c.agentHealthFrequency
+			checkCollectionConfig(config).AgentHealthFrequency = c.AgentHealthFrequency
 		}
-		if c.heartbeatFrequency != 0 {
-			if c.heartbeatFrequency < 0 {
+		if c.HeartbeatFrequency != 0 {
+			if c.HeartbeatFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("heartbeat-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).HeartbeatFrequency = c.heartbeatFrequency
+			checkCollectionConfig(config).HeartbeatFrequency = c.HeartbeatFrequency
 		}
 	case workloadValidation:
 		if isEnabled != nil {
 			isCmdValid = true
 			checkCollectionConfig(config).CollectWorkloadValidationMetrics = &wpb.BoolValue{Value: *isEnabled}
 		}
-		if c.validationMetricsFrequency != 0 {
-			if c.validationMetricsFrequency < 0 {
+		if c.ValidationMetricsFrequency != 0 {
+			if c.ValidationMetricsFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).WorkloadValidationMetricsFrequency = c.validationMetricsFrequency
+			checkCollectionConfig(config).WorkloadValidationMetricsFrequency = c.ValidationMetricsFrequency
 		}
-		if c.dbFrequency != 0 {
-			if c.dbFrequency < 0 {
+		if c.DbFrequency != 0 {
+			if c.DbFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("db-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).WorkloadValidationDbMetricsFrequency = c.dbFrequency
+			checkCollectionConfig(config).WorkloadValidationDbMetricsFrequency = c.DbFrequency
 		}
 	case reliabilityMetrics:
 		if isEnabled != nil {
 			isCmdValid = true
 			checkCollectionConfig(config).CollectReliabilityMetrics.Value = *isEnabled
 		}
-		if c.reliabilityMetricsFrequency != 0 {
-			if c.reliabilityMetricsFrequency < 0 {
+		if c.ReliabilityMetricsFrequency != 0 {
+			if c.ReliabilityMetricsFrequency < 0 {
 				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
-			checkCollectionConfig(config).ReliabilityMetricsFrequency = c.reliabilityMetricsFrequency
+			checkCollectionConfig(config).ReliabilityMetricsFrequency = c.ReliabilityMetricsFrequency
 		}
 	default:
 		onetime.LogMessageToFileAndConsole("Unsupported Metric")
@@ -469,11 +476,11 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 
 // modifyProcessMetricsToSkip modifies 'process_metrics_to_skip' field of the configuration file.
 func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcommands.ExitStatus {
-	str := spaces.ReplaceAllString(c.skipMetrics, "")
+	str := spaces.ReplaceAllString(c.SkipMetrics, "")
 	metricsSkipList := strings.Split(str, ",")
 	currList := checkCollectionConfig(config).GetProcessMetricsToSkip()
 
-	if c.add {
+	if c.Add {
 		metricsPresent := map[string]bool{}
 		for _, metric := range currList {
 			metricsPresent[metric] = true
@@ -487,7 +494,7 @@ func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcom
 			newList = append(newList, metric)
 		}
 		checkCollectionConfig(config).ProcessMetricsToSkip = newList
-	} else if c.remove {
+	} else if c.Remove {
 		metricsPresent := map[string]bool{}
 		for _, metric := range currList {
 			metricsPresent[metric] = true
@@ -511,11 +518,11 @@ func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcom
 }
 
 // writeFile writes the configuration to the given path.
-func writeFile(ctx context.Context, config *cpb.Configuration, path string) error {
+func writeFile(ctx context.Context, config *cpb.Configuration, path string) (string, error) {
 	file, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(config)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Unable to marshal configuration.json")
-		return err
+		return "Unable to marshal configuration.json", err
 	}
 
 	var fileBuf bytes.Buffer
@@ -526,9 +533,9 @@ func writeFile(ctx context.Context, config *cpb.Configuration, path string) erro
 	if err != nil {
 		fmt.Println("Unable to write configuration.json", "err: ", err)
 		log.CtxLogger(ctx).Errorw("Unable to write configuration.json")
-		return err
+		return "Unable to write configuration.json", err
 	}
-	return nil
+	return fileBuf.String(), nil
 }
 
 // checkCollectionConfig returns the collection configuration from the configuration file.
@@ -574,72 +581,4 @@ func showStatus(ctx context.Context, feature string, enabled bool, isWindows boo
 		return "", result.Error
 	}
 	return result.StdOut, nil
-}
-
-// DefaultRestartAgent restarts the agent.
-func DefaultRestartAgent(ctx context.Context) subcommands.ExitStatus {
-	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "sudo",
-		ArgsToSplit: "systemctl restart google-cloud-sap-agent",
-	})
-	if result.ExitCode != 0 {
-		log.Print("Could not restart the agent")
-		log.CtxLogger(ctx).Errorw("failed restarting sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
-		return subcommands.ExitFailure
-	}
-	log.Print("Waiting 70 seconds for agent restart")
-	log.CtxLogger(ctx).Info("Waiting 70 seconds for agent restart")
-	time.Sleep(70 * time.Second)
-
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "sudo",
-		ArgsToSplit: "systemctl status google-cloud-sap-agent",
-	})
-	if result.ExitCode != 0 {
-		log.Print("Could not restart the agent")
-		log.CtxLogger(ctx).Errorw("failed checking the status of sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
-		return subcommands.ExitFailure
-	}
-
-	if strings.Contains(result.StdOut, "running") {
-		log.CtxLogger(ctx).Info("Restarted the agent")
-		return subcommands.ExitSuccess
-	}
-	log.Print("Could not restart the agent")
-	log.CtxLogger(ctx).Error("Agent is not running")
-	return subcommands.ExitFailure
-}
-
-// WindowsRestartAgent restarts the agent on Windows OS.
-func WindowsRestartAgent(ctx context.Context) subcommands.ExitStatus {
-	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "Powershell",
-		ArgsToSplit: "Restart-Service -Force -Name 'google-cloud-sap-agent'",
-	})
-	if result.ExitCode != 0 {
-		log.Print("Could not restart the agent on Windows OS")
-		log.CtxLogger(ctx).Errorw("failed restarting sap agent on Windows OS", "errorCode:", result.ExitCode, "error:", result.StdErr)
-		return subcommands.ExitFailure
-	}
-	log.Print("Waiting 70 seconds for agent restart on Windows OS")
-	log.CtxLogger(ctx).Info("Waiting 70 seconds for agent restart on Windows OS")
-	time.Sleep(70 * time.Second)
-
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
-		Executable:  "Powershell",
-		ArgsToSplit: "$(Get-Service -Name 'google-cloud-sap-agent').Status",
-	})
-	if result.ExitCode != 0 {
-		log.Print("Could not restart the agent on Windows OS")
-		log.CtxLogger(ctx).Errorw("failed checking the status of sap agent on Windows OS", "errorCode:", result.ExitCode, "error:", result.StdErr)
-		return subcommands.ExitFailure
-	}
-
-	if strings.Contains(strings.ToLower(result.StdOut), "running") {
-		log.CtxLogger(ctx).Info("Restarted the agent on Windows OS")
-		return subcommands.ExitSuccess
-	}
-	log.Print("Could not restart the agent on Windows OS")
-	log.CtxLogger(ctx).Error("Agent is not running on Windows OS")
-	return subcommands.ExitFailure
 }

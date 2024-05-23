@@ -19,17 +19,31 @@ package uap
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	apb "google.golang.org/protobuf/types/known/anypb"
 	client "github.com/GoogleCloudPlatform/agentcommunication_client"
 	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/option"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/google/subcommands"
+	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 )
+
+func wrapAny(t *testing.T, m proto.Message) *anypb.Any {
+	t.Helper()
+	any, err := anypb.New(m)
+	if err != nil {
+		t.Fatalf("anypb.New(%v) returned an unexpected error: %v", m, err)
+	}
+	return any
+}
 
 func TestListenForMessages(t *testing.T) {
 	tests := []struct {
@@ -200,28 +214,19 @@ func TestEstablishConnection(t *testing.T) {
 			}
 		})
 	}
-
-	var want *client.Connection = nil
-	got := establishConnection(ctx, "", "")
-
-	if got != want {
-		t.Errorf("Logger.log() expected error mismatch. got: %v want: %v", got, want)
-	} else {
-		t.Logf("Logger.log() expected error MATCH. got: %v want: %v", got, want)
-	}
 }
 
 func TestCommunicateWithUAP(t *testing.T) {
 	tests := []struct {
 		name             string
-		want             error
+		want             string
 		createConnection func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error)
 		sendMessage      func(c *client.Connection, msg *acpb.MessageBody) error
 		receive          func(c *client.Connection) (*acpb.MessageBody, error)
 	}{
 		{
 			name: "typical",
-			want: nil,
+			want: "",
 			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
 				return &client.Connection{}, nil
 			},
@@ -231,23 +236,83 @@ func TestCommunicateWithUAP(t *testing.T) {
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
 					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
-					Body:   &apb.Any{},
+					Body: wrapAny(t, &gpb.GuestActionRequest{
+						Commands: []*gpb.Command{
+							{
+								CommandType: &gpb.Command_ShellCommand{
+									ShellCommand: &gpb.ShellCommand{Command: "echo", Args: "Hello World!"},
+								},
+							},
+						},
+					}),
 				}, nil
 			},
 		},
 		{
-			name: "error",
-			want: cmpopts.AnyError,
+			name: "parseBadRequest",
+			want: "failed to unmarshal message",
 			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
 				return &client.Connection{}, nil
 			},
 			sendMessage: func(c *client.Connection, msg *acpb.MessageBody) error {
-				return fmt.Errorf("test error")
+				return nil
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
 					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
-					Body:   &apb.Any{},
+					Body:   &apb.Any{Value: []byte("bad request")},
+				}, nil
+			},
+		},
+		{
+			name: "sendMessageError",
+			want: "sendMessage error",
+			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
+				return &client.Connection{}, nil
+			},
+			sendMessage: func(c *client.Connection, msg *acpb.MessageBody) error {
+				return fmt.Errorf("sendMessage error")
+			},
+			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				return &acpb.MessageBody{
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Body: wrapAny(t, &gpb.GuestActionRequest{
+						Commands: []*gpb.Command{
+							{
+								CommandType: &gpb.Command_ShellCommand{
+									ShellCommand: &gpb.ShellCommand{Command: "echo", Args: "Hello World!"},
+								},
+							},
+						},
+					}),
+				}, nil
+			},
+		},
+		{
+			name: "receiveError",
+			want: "nil labels in message from listenForMessages",
+			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
+				return &client.Connection{}, nil
+			},
+			sendMessage: func(c *client.Connection, msg *acpb.MessageBody) error {
+				return nil
+			},
+			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				return nil, fmt.Errorf("receive error")
+			},
+		},
+		{
+			name: "receiveMessageIdError",
+			want: "no message_id label",
+			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
+				return &client.Connection{}, nil
+			},
+			sendMessage: func(c *client.Connection, msg *acpb.MessageBody) error {
+				return nil
+			},
+			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				return &acpb.MessageBody{
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "state": succeeded},
 				}, nil
 			},
 		},
@@ -258,10 +323,28 @@ func TestCommunicateWithUAP(t *testing.T) {
 			createConnection = test.createConnection
 			sendMessage = test.sendMessage
 			receive = test.receive
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			cancel()
-			got := CommunicateWithUAP(ctx, "endpoint", "channel", func(context.Context, *apb.Any) (*apb.Any, error) { return nil, nil })
-			if diff := cmp.Diff(test.want, got, cmpopts.EquateErrors()); diff != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			got := CommunicateWithUAP(ctx, "endpoint", "channel", func(context.Context, *gpb.GuestActionRequest) (*gpb.GuestActionResponse, bool) { return nil, false }, func(context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess })
+			if got == nil {
+				if test.want != "" {
+					t.Errorf("CommunicateWithUAP() returned nil error, want error: %s", test.want)
+				}
+				return
+			}
+			if test.want == "" {
+				if got.Error() != "" {
+					t.Errorf("CommunicateWithUAP() returned error: %s, want nil error", got.Error())
+				}
+				return
+			}
+			gotStr := strings.ReplaceAll(got.Error(), "\u00a0", " ")
+			// Check if the desired error string is contained in the actual error string.
+			if strings.Contains(gotStr, test.want) {
+				return
+			}
+			// If the desired error substring is not present, give an error showing the diff.
+			if diff := cmp.Diff(test.want, gotStr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("CommunicateWithUAP() returned diff (-want +got):\n%s", diff)
 			}
 		})
