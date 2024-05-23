@@ -312,6 +312,8 @@ func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (
 func connectToDatabases(ctx context.Context, params Parameters) []*database {
 	var databases []*database
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
+		hanaMonitoringConfig := params.Config.GetHanaMonitoringConfiguration()
+
 		dbp := databaseconnector.Params{
 			Username:       i.GetUser(),
 			Host:           i.GetHost(),
@@ -326,6 +328,15 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 			GCEService:     params.GCEService,
 			Project:        params.Config.GetCloudProperties().GetProjectId(),
 		}
+
+		connectTimeout := hanaMonitoringConfig.GetConnectionTimeout()
+		if connectTimeout.GetSeconds() > 0 {
+			dbp.PingSpec = &databaseconnector.PingSpec{
+				Timeout:    time.Duration(connectTimeout.GetSeconds()) * time.Second,
+				MaxRetries: int(hanaMonitoringConfig.GetMaxConnectRetries().GetValue()),
+			}
+		}
+
 		handle, err := databaseconnector.CreateDBHandle(ctx, dbp)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())

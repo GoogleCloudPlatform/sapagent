@@ -138,6 +138,10 @@ message HANAMonitoringConfiguration {
   repeated Query queries = 5;
   bool enabled = 6;
   bool send_query_response_time = 7;
+  // If provided, a connection will try to be established to the HANA database
+  // before starting the queries.
+  google.protobuf.Duration connection_timeout = 8;
+  google.protobuf.Int32Value max_connect_retries = 9;
 }
 
 message HANAInstance {

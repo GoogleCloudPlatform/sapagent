@@ -120,6 +120,8 @@ func TestReadFromFile(t *testing.T) {
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
 					SampleIntervalSec: 300,
 					QueryTimeoutSec:   300,
+					ConnectionTimeout: &dpb.Duration{Seconds: 42},
+					MaxConnectRetries: &wpb.Int32Value{Value: 5},
 					HanaInstances: []*cpb.HANAInstance{
 						&cpb.HANAInstance{Name: "sample_instance1",
 							Host:      "127.0.0.1",
@@ -412,6 +414,8 @@ func TestApplyDefaults(t *testing.T) {
 							Sql:  "sample_sql",
 						},
 					},
+					ConnectionTimeout: &dpb.Duration{Seconds: 120},
+					MaxConnectRetries: &wpb.Int32Value{Value: 1},
 				},
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics:     &wpb.BoolValue{Value: true},
@@ -664,6 +668,8 @@ func TestPrepareHMConfig(t *testing.T) {
 			config: &cpb.HANAMonitoringConfiguration{
 				SampleIntervalSec: 300,
 				QueryTimeoutSec:   300,
+				ConnectionTimeout: &dpb.Duration{Seconds: 100},
+				MaxConnectRetries: &wpb.Int32Value{Value: 12},
 				HanaInstances: []*cpb.HANAInstance{
 					&cpb.HANAInstance{Name: "sample_instance1",
 						Host:      "127.0.0.1",
@@ -695,6 +701,8 @@ func TestPrepareHMConfig(t *testing.T) {
 			want: &cpb.HANAMonitoringConfiguration{
 				SampleIntervalSec: 300,
 				QueryTimeoutSec:   300,
+				ConnectionTimeout: &dpb.Duration{Seconds: 100},
+				MaxConnectRetries: &wpb.Int32Value{Value: 12},
 				HanaInstances: []*cpb.HANAInstance{
 					&cpb.HANAInstance{Name: "sample_instance1",
 						Host:      "127.0.0.1",

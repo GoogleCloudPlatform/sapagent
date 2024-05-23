@@ -245,6 +245,18 @@ func applyDefaultHMConfiguration(configFromFile *cpb.HANAMonitoringConfiguration
 	if hmConfig != nil && hmConfig.GetExecutionThreads() <= 0 {
 		hmConfig.ExecutionThreads = 10
 	}
+
+	if hmConfig != nil && hmConfig.GetConnectionTimeout() == nil {
+		hmConfig.ConnectionTimeout = dpb.New(time.Duration(2 * time.Minute))
+
+		// MaxConnectRetries only makes sense there is a connection timeout because the presence of a
+		// connection timeout means that we are going to attempt to connect to the database when the
+		// handle is created.
+		if hmConfig.GetMaxConnectRetries() == nil {
+			hmConfig.MaxConnectRetries = &wpb.Int32Value{Value: 1}
+		}
+	}
+
 	return hmConfig
 }
 
