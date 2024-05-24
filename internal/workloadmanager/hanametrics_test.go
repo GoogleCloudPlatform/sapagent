@@ -276,7 +276,34 @@ Mounted on
 		},
 		ListZoneOperationsErr: []error{nil},
 	}
-	defaultIIR = instanceinfo.New(defaultDiskMapper, defaultGCEService)
+	defaultIIR         = instanceinfo.New(defaultDiskMapper, defaultGCEService)
+	sapservicesGrepOut = `systemctl --no-ask-password start SAPSBX_00 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB00_tst-backup-test
+`
+	backupLogGrepCommandOut = `2024-05-14T17:55:39+00:00  P0013384      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T17:56:37+00:00  P0013384      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T17:13:23+00:00  P0013384      18f781834c9 INFO    BACKUP   command: backup data for sbx using backint ('FULL_20240514')
+2024-05-14T17:36:41+00:00  P0013384      18f782d8922 INFO    BACKUP   command: backup data incremental for sbx using backint ('INCR_20240514' )
+2024-05-14T17:37:06+00:00  P0013384      18f782deb71 INFO    BACKUP   command: backup data differential for sbx using backint ('DIFF_20240514')
+2024-05-14T17:55:39+00:00  P0013142      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T17:56:37+00:00  P0013142      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snapshot-srk-backup-test-data00001-20240514-175538'
+`
+	backupLogGrepCommandOutNoFull = `2024-05-14T17:36:41+00:00  P0013384      18f782d8922 INFO    BACKUP   command: backup data incremental for sbx using backint ('INCR_20240514' )
+2024-05-14T17:37:06+00:00  P0013384      18f782deb71 INFO    BACKUP   command: backup data differential for sbx using backint ('DIFF_20240514')
+`
+	backupLogGrepSuccessOut = `2024-05-14T17:55:39+00:00  P0013384      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T17:56:39+00:00  P0013384      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T17:13:49+00:00  P0013384      18f781834c9 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T17:36:46+00:00  P0013384      18f782d8922 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T17:37:11+00:00  P0013384      18f782deb71 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T17:55:00+00:00  P0013143      00000000001 INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T17:55:39+00:00  P0013142      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T17:56:39+00:00  P0013142      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+`
+	backupLogGrepSuccessOutNoFull = `2024-05-14T17:36:46+00:00  P0013384      18f782d8922 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T17:37:11+00:00  P0013384      18f782deb71 INFO    BACKUP   SAVE DATA finished successfully
+`
+	oldestBackedUpTenant = `tst-backup-test`
+	oldestLastBackupTime = `2024-05-14T17:56:39Z`
 )
 
 func GlobalINITest1Exec(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -917,29 +944,51 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			wantHanaExists: float64(1.0),
 			wantLabels: map[string]string{
-				"disk_data_mount":              "",
-				"disk_data_pd_size":            "",
-				"disk_data_size":               "",
-				"disk_data_type":               "",
-				"disk_log_mount":               "",
-				"disk_log_pd_size":             "",
-				"disk_log_size":                "",
-				"disk_log_type":                "",
-				"fast_restart":                 "disabled",
-				"ha_sr_hook_configured":        "no",
-				"num_completion_queues":        "1",
-				"num_submit_queues":            "1",
-				"tables_preloaded_in_parallel": "",
-				"load_table_numa_aware":        "false",
-				"numa_balancing":               "disabled",
-				"transparent_hugepages":        "disabled",
-				"ha_in_same_zone":              "",
+				"disk_data_mount":                  "",
+				"disk_data_pd_size":                "",
+				"disk_data_size":                   "",
+				"disk_data_type":                   "",
+				"disk_log_mount":                   "",
+				"disk_log_pd_size":                 "",
+				"disk_log_size":                    "",
+				"disk_log_type":                    "",
+				"fast_restart":                     "disabled",
+				"ha_sr_hook_configured":            "no",
+				"num_completion_queues":            "1",
+				"num_submit_queues":                "1",
+				"tables_preloaded_in_parallel":     "",
+				"load_table_numa_aware":            "false",
+				"numa_balancing":                   "disabled",
+				"oldest_backup_tenant_name":        "",
+				"oldest_last_backup_timestamp_utc": "",
+				"transparent_hugepages":            "disabled",
+				"ha_in_same_zone":                  "",
 			},
 		},
 		{
 			name: "TestHanaAllLabelsEnabled",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepSuccessOut,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepCommandOut,
+							StdErr: "",
+						}
+					}
+				}
 				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: sapservicesGrepOut,
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
 						StdOut: "basepath location /hana/data",
 						StdErr: "",
@@ -1011,23 +1060,25 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			},
 			wantHanaExists: float64(1.0),
 			wantLabels: map[string]string{
-				"disk_data_mount":              "/hana/data",
-				"disk_data_pd_size":            "4096",
-				"disk_data_size":               "2048",
-				"disk_data_type":               "default-disk-type",
-				"disk_log_mount":               "/hana/data",
-				"disk_log_pd_size":             "4096",
-				"disk_log_size":                "2048",
-				"disk_log_type":                "default-disk-type",
-				"fast_restart":                 "enabled",
-				"ha_sr_hook_configured":        "yes",
-				"num_completion_queues":        "12",
-				"num_submit_queues":            "12",
-				"tables_preloaded_in_parallel": "32",
-				"load_table_numa_aware":        "true",
-				"numa_balancing":               "enabled",
-				"transparent_hugepages":        "enabled",
-				"ha_in_same_zone":              "other-instance-1",
+				"disk_data_mount":                  "/hana/data",
+				"disk_data_pd_size":                "4096",
+				"disk_data_size":                   "2048",
+				"disk_data_type":                   "default-disk-type",
+				"disk_log_mount":                   "/hana/data",
+				"disk_log_pd_size":                 "4096",
+				"disk_log_size":                    "2048",
+				"disk_log_type":                    "default-disk-type",
+				"fast_restart":                     "enabled",
+				"ha_sr_hook_configured":            "yes",
+				"num_completion_queues":            "12",
+				"num_submit_queues":                "12",
+				"tables_preloaded_in_parallel":     "32",
+				"load_table_numa_aware":            "true",
+				"numa_balancing":                   "enabled",
+				"oldest_backup_tenant_name":        oldestBackedUpTenant,
+				"oldest_last_backup_timestamp_utc": oldestLastBackupTime,
+				"transparent_hugepages":            "enabled",
+				"ha_in_same_zone":                  "other-instance-1",
 			},
 		},
 	}
@@ -1058,6 +1109,302 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			got := CollectHANAMetricsFromConfig(context.Background(), p)
 			if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&cpb.TimeInterval{}, "start_time", "end_time")); diff != "" {
 				t.Errorf("CollectHANAMetricsFromConfig() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestOldestLastBackupTimestamp(t *testing.T) {
+	backupLogGrepCommandOutLater := `2024-05-14T19:55:39+00:00  P0013384      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T19:56:37+00:00  P0013384      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T19:13:23+00:00  P0013384      18f781834c9 INFO    BACKUP   command: backup data for sbx using backint ('FULL_20240514')
+2024-05-14T19:36:41+00:00  P0013384      18f782d8922 INFO    BACKUP   command: backup data incremental for sbx using backint ('INCR_20240514' )
+2024-05-14T19:37:06+00:00  P0013384      18f782deb71 INFO    BACKUP   command: backup data differential for sbx using backint ('DIFF_20240514')
+2024-05-14T19:37:06+00:00  P0013384      18f782deb71 INFO    BACKUP   command:
+2024-05-14T19:55:39+00:00  P0013142      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T19:55:50+00:00  P0013143      00000000000 INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T19:56:37+00:00  P0013142      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snapshot-srk-backup-test-data00001-20240514-175538'
+`
+	backupLogGrepSuccessOutLater := `2024-05-14T19:55:39+00:00  P0013384      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T19:56:39+00:00  P0013384      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T19:13:49+00:00  P0013384      18f781834c9 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T19:36:46+00:00  P0013384      18f782d8922 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T19:37:11+00:00  P0013384      18f782deb71 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T19:37:11+00:00  P0013384      18f782deb71 INFO    BACKUP   finished successfully
+2024-05-14T19:55:39+00:00  P0013142      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T19:55:39+00:00  P0013142      00000000001 INFO    BACKUP   SNAPSHOT finished successfully
+2024-05-14T19:56:39+00:00  P0013142      18f783ee5cd INFO    BACKUP   SNAPSHOT finished successfully
+`
+	sapservicesGrepOutMultiple := `systemctl --no-ask-password start SAPSBX_01 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB01_tst-backup1-test
+systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB02_tst-backup2-test
+#systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB02_tst-commented-test
+systemctl --no-ask-password start SAPSBX_10 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_ERS02_tst-erssystem-test
+systemctl --no-ask-password start SAPSBX_10 # sapstartsrv pf=/usr/sap/SBX/INCORRECTPATH/SBX_HDB02_tst-erssystem-test
+systemctl --no-ask-password start SAPSBX_00 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB00_tst-backup-test
+`
+	sapservicesGrepOutNoHDB := `systemctl --no-ask-password start SAPSBX_10 # sapstartsrv pf=/usr/sap/SBX/INCORRECTPATH/SBX_ERS02_tst-erssystem-test
+systemctl --no-ask-password start SAPSBX_00 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_ERS00_tst-backup-test
+#systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB02_tst-commented-test
+`
+	tests := []struct {
+		name           string
+		exec           func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		wantTenantName string
+		wantTimestamp  string
+	}{
+		{
+			name: "TestBackupSuccess",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: sapservicesGrepOut,
+							StdErr: "",
+						}
+					}
+				}
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepSuccessOut,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepCommandOut,
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "Invalid Command",
+				}
+			},
+			wantTenantName: oldestBackedUpTenant,
+			wantTimestamp:  oldestLastBackupTime,
+		},
+		{
+			name: "TestBackupNoFullSuccessful",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: sapservicesGrepOut,
+							StdErr: "",
+						}
+					}
+				}
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepSuccessOutNoFull,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepCommandOut,
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "Invalid Command",
+				}
+			},
+			wantTenantName: oldestBackedUpTenant,
+			wantTimestamp:  "0001-01-01T00:00:00Z",
+		},
+		{
+			name: "TestBackupNoFullExecuted",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: sapservicesGrepOut,
+							StdErr: "",
+						}
+					}
+				}
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepSuccessOutNoFull,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepCommandOutNoFull,
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "Invalid Command",
+				}
+			},
+			wantTenantName: oldestBackedUpTenant,
+			wantTimestamp:  "0001-01-01T00:00:00Z",
+		},
+		{
+			name: "TestBackupNoBackupsFound",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: sapservicesGrepOut,
+							StdErr: "",
+						}
+					}
+				}
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						return commandlineexecutor.Result{
+							StdOut: "",
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						return commandlineexecutor.Result{
+							StdOut: "",
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "Invalid Command",
+				}
+			},
+			wantTenantName: oldestBackedUpTenant,
+			wantTimestamp:  "0001-01-01T00:00:00Z",
+		},
+		{
+			name: "TestBackupNoTenantsFound",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: sapservicesGrepOutNoHDB,
+							StdErr: "",
+						}
+					}
+				}
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepSuccessOutNoFull,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepCommandOutNoFull,
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "Invalid Command",
+				}
+			},
+			wantTenantName: "",
+			wantTimestamp:  "",
+		},
+		{
+			name: "TestBackupErrorGettingTenants",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: "",
+							StdErr: "test error",
+							Error:  errors.New("test error"),
+						}
+					}
+				}
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepSuccessOutNoFull,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepCommandOutNoFull,
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "Invalid Command",
+				}
+			},
+			wantTenantName: "",
+			wantTimestamp:  "",
+		},
+		{
+			name: "TestBackupMultipleTenants",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					if strings.Contains(params.ArgsToSplit, "sapservices") {
+						return commandlineexecutor.Result{
+							StdOut: sapservicesGrepOutMultiple,
+							StdErr: "",
+						}
+					}
+				}
+				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
+					if strings.Contains(params.ArgsToSplit, "finished successfully") {
+						if strings.Contains(params.ArgsToSplit, "tst-backup-test") {
+							return commandlineexecutor.Result{
+								StdOut: backupLogGrepSuccessOut,
+								StdErr: "",
+							}
+						}
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepSuccessOutLater,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "command:") {
+						if strings.Contains(params.ArgsToSplit, "tst-backup-test") {
+							return commandlineexecutor.Result{
+								StdOut: backupLogGrepCommandOut,
+								StdErr: "",
+							}
+						}
+						return commandlineexecutor.Result{
+							StdOut: backupLogGrepCommandOutLater,
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "Invalid Command",
+				}
+			},
+			wantTenantName: oldestBackedUpTenant,
+			wantTimestamp:  oldestLastBackupTime,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotTenantName, gotTimestamp := oldestLastBackupTimestamp(context.Background(), test.exec)
+			if gotTenantName != test.wantTenantName {
+				t.Errorf("oldestLastBackupTimestamp() got TenantName %s, want %s", gotTenantName, test.wantTenantName)
+			}
+			if gotTimestamp != test.wantTimestamp {
+				t.Errorf("oldestLastBackupTimestamp() got Timestamp %s, want %s", gotTimestamp, test.wantTimestamp)
 			}
 		})
 	}

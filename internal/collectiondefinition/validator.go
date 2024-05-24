@@ -133,6 +133,12 @@ func (v *Validator) validateWorkloadValidation(wlm *wlmpb.WorkloadValidation) {
 			}
 		}
 	}
+	for _, m := range hana.GetHanaBackupMetrics() {
+		validateMetricInfo(v, m)
+		if m.GetValue() == wlmpb.HANABackupVariable_HANA_BACKUP_VARIABLE_UNSPECIFIED {
+			validationFailure(v, m, "HANABackupVariable metric has no value specified")
+		}
+	}
 	v.validateOSCommandMetrics(hana.GetOsCommandMetrics())
 
 	netweaver := wlm.GetValidationNetweaver()

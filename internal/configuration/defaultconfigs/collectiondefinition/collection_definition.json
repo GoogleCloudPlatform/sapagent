@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 6,
+    "version": 7,
     "validation_system": {
       "system_metrics": [
         {
@@ -713,6 +713,24 @@
             "min_version": "3.0"
           },
           "value": "HA_IN_SAME_ZONE"
+        }
+      ],
+      "hana_backup_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_backup_tenant_name",
+            "min_version": "3.3"
+          },
+          "value": "TENANT_NAME"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_last_backup_timestamp_utc",
+            "min_version": "3.3"
+          },
+          "value": "LAST_BACKUP_TIMESTAMP"
         }
       ],
       "os_command_metrics": [
