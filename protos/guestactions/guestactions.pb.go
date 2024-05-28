@@ -354,7 +354,7 @@ func (*Command_AgentCommand) isCommand_CommandType() {}
 func (*Command_ShellCommand) isCommand_CommandType() {}
 
 // *
-// An AgentCommand specifies a one-time executable program for the agen to run.
+// An AgentCommand specifies a one-time executable program for the agent to run.
 type AgentCommand struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

@@ -66,7 +66,7 @@ message Command {
 }
 
 /**
- * An AgentCommand specifies a one-time executable program for the agen to run.
+ * An AgentCommand specifies a one-time executable program for the agent to run.
  */
 message AgentCommand {
   // command is the name of the agent one-time executable that will be invoked.
