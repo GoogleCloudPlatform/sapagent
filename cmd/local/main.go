@@ -28,6 +28,7 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"go.uber.org/zap/zapcore"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configurebackint"
@@ -128,7 +129,8 @@ func main() {
 			MachineType:      cp.MachineType,
 		}
 	}
-	lp.CloudLoggingClient = log.CloudLoggingClient(ctx, cloudProps.GetProjectId())
+	ua := fmt.Sprintf("sap-core-eng/%s/%s.%s", configuration.AgentName, configuration.AgentVersion, configuration.AgentBuildChange)
+	lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, cloudProps.GetProjectId(), ua)
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
 	if lp.CloudLoggingClient != nil {

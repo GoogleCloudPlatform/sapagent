@@ -19,6 +19,7 @@ package startdaemon
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -165,7 +166,9 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 	d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 	d.lp.LogToCloud = d.config.GetLogToCloud().GetValue()
 	d.lp.Level = configuration.LogLevelToZapcore(d.config.GetLogLevel())
-	d.lp.CloudLoggingClient = log.CloudLoggingClient(ctx, d.config.GetCloudProperties().GetProjectId())
+
+	ua := fmt.Sprintf("sap-core-eng/%s/%s.%s", configuration.AgentName, configuration.AgentVersion, configuration.AgentBuildChange)
+	d.lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, d.config.GetCloudProperties().GetProjectId(), ua)
 	if d.lp.CloudLoggingClient != nil {
 		defer d.lp.CloudLoggingClient.Close()
 	}

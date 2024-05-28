@@ -22,6 +22,7 @@ import (
 	"time"
 
 	logging "cloud.google.com/go/logging"
+	"google.golang.org/api/option"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -44,7 +45,16 @@ var severityMapping = map[zapcore.Level]logging.Severity{
 
 // CloudLoggingClient create a logging.Client for writing logs to CloudLogging, will be nil if a ping fails.
 func CloudLoggingClient(ctx context.Context, projectID string) *logging.Client {
-client, err := CreateClient(ctx, projectID)
+	client, err := CreateClient(ctx, projectID)
+	if err != nil {
+		return nil
+	}
+	return client
+}
+
+// CloudLoggingClientWithUserAgent create a logging.Client for writing logs to CloudLogging, will be nil if a ping fails.
+func CloudLoggingClientWithUserAgent(ctx context.Context, projectID string, userAgent string) *logging.Client {
+	client, err := CreateClientWithUserAgent(ctx, projectID, userAgent)
 	if err != nil {
 		return nil
 	}
@@ -53,7 +63,17 @@ client, err := CreateClient(ctx, projectID)
 
 // CreateClient creates a logging.Client for writing logs to CloudLogging.
 func CreateClient(ctx context.Context, projectID string) (*logging.Client, error) {
-	client, err := logging.NewClient(ctx, projectID)
+	return CreateClientWithUserAgent(ctx, projectID, "")
+}
+
+// CreateClientWithUserAgent creates a logging.Client for writing logs to CloudLogging and overrides the user agent.
+func CreateClientWithUserAgent(ctx context.Context, projectID string, userAgent string) (*logging.Client, error) {
+	// ua := fmt.Sprintf("%s/%s/%s", "sap-core-eng", ap.Name, ap.Version)
+	clientOptions := make([]option.ClientOption, 0)
+	if userAgent != "" {
+		clientOptions = append(clientOptions, option.WithUserAgent(userAgent))
+	}
+	client, err := logging.NewClient(ctx, projectID, clientOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Cloud Logging client: %v", err)
 	}
@@ -63,6 +83,7 @@ func CreateClient(ctx context.Context, projectID string) (*logging.Client, error
 	}
 	return client, nil
 }
+
 // CloudCore that will be used as a zapcore.Core
 type CloudCore struct {
 	GoogleCloudLogger GoogleCloudLogger
