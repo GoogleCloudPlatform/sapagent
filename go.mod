@@ -21,6 +21,7 @@ require (
   github.com/go-yaml/yaml v2.1.0+incompatible
   github.com/golang/protobuf v1.5.3
   github.com/google/go-cmp v0.6.0
+  github.com/google/safetext v0.0.0-20240104143208-7a7d9b3d812f
   github.com/google/subcommands v1.2.0
   github.com/googleapis/gax-go/v2 v2.12.2
   github.com/jonboulle/clockwork v0.3.0
@@ -58,7 +59,6 @@ require (
   github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
   github.com/gorilla/handlers v1.5.1 // indirect
   github.com/gorilla/mux v1.8.0 // indirect
-  github.com/kr/pretty v0.3.1 // indirect
   github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
   github.com/pkg/xattr v0.4.9 // indirect
   github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
@@ -83,4 +83,5 @@ require (
   google.golang.org/genproto/googleapis/rpc v0.0.0-20240304161311-37d4d3c04a78 // indirect
   google.golang.org/grpc v1.62.0 // indirect
   gopkg.in/yaml.v2 v2.4.0 // indirect
+  mvdan.cc/sh/v3 v3.7.0 // indirect
 )
