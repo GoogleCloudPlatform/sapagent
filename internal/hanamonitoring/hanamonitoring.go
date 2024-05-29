@@ -167,6 +167,11 @@ func createWorkerPool(ctx context.Context, a any) {
 
 	cfg := args.params.Config.GetHanaMonitoringConfiguration()
 	wp := workerpool.New(int(cfg.GetExecutionThreads()))
+	queryNamesMap := queryMap(cfg.GetQueries())
+	var queryNames []string
+	for qn := range queryNamesMap {
+		queryNames = append(queryNames, qn)
+	}
 	for _, db := range args.databases {
 		if db.instance.GetSid() == "" {
 			ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -177,8 +182,21 @@ func createWorkerPool(ctx context.Context, a any) {
 			}
 			db.instance.Sid = sid
 		}
-		for _, query := range cfg.GetQueries() {
+		if db.instance.GetQueriesToRun() == nil {
+			db.instance.QueriesToRun = &cpb.QueriesToRun{
+				QueryNames: queryNames,
+				RunAll:     true,
+			}
+		} else if db.instance.GetQueriesToRun().GetRunAll() || len(db.instance.GetQueriesToRun().GetQueryNames()) == 0 {
+			db.instance.QueriesToRun.QueryNames = queryNames
+		}
+		for _, qn := range db.instance.GetQueriesToRun().GetQueryNames() {
 			sampleInterval := cfg.GetSampleIntervalSec()
+			query, ok := queryNamesMap[qn]
+			if !ok {
+				log.CtxLogger(ctx).Warnf("Query not found in config file", "queryName", qn)
+				continue
+			}
 			if query.GetSampleIntervalSec() >= 5 {
 				sampleInterval = query.GetSampleIntervalSec()
 			}
@@ -186,12 +204,12 @@ func createWorkerPool(ctx context.Context, a any) {
 			// task is executed in the workerpool. Create a copy of db and query outside
 			// of Submit() to ensure we copy the correct database and query into the call.
 			// Reference: https://go.dev/doc/faq#closures_and_goroutines
-			db := db
-			query := query
+			dbCopy := db
+			queryCopy := query
 			wp.Submit(func() {
 				queryAndSend(ctx, queryOptions{
-					db:             db,
-					query:          query,
+					db:             dbCopy,
+					query:          queryCopy,
 					timeout:        cfg.GetQueryTimeoutSec(),
 					sampleInterval: sampleInterval,
 					params:         args.params,
@@ -201,6 +219,15 @@ func createWorkerPool(ctx context.Context, a any) {
 			})
 		}
 	}
+}
+
+// queryMap prepares a queryName to *cpb.Query Map data structure.
+func queryMap(queries []*cpb.Query) map[string]*cpb.Query {
+	res := make(map[string]*cpb.Query)
+	for _, q := range queries {
+		res[q.GetName()] = q
+	}
+	return res
 }
 
 // queryAndSend perpetually queries databases and sends results to cloud monitoring.

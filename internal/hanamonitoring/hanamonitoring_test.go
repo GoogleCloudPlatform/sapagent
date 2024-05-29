@@ -223,6 +223,54 @@ func TestStart(t *testing.T) {
 				},
 			}, want: true,
 		},
+		{
+			name: "SuceedsWithQueriesToRunDefined_WithRunAllTrue",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*configpb.Query{
+							&configpb.Query{SampleIntervalSec: 5},
+						},
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{
+								Password: "fakePassword",
+								Sid:      "fakeSID",
+								QueriesToRun: &configpb.QueriesToRun{
+									RunAll: true,
+								},
+							},
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "SuceedsWithQueriesToRunDefined_WithRunAllFalse",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*configpb.Query{
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName"},
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName2"},
+						},
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{
+								Password: "fakePassword",
+								Sid:      "fakeSID",
+								QueriesToRun: &configpb.QueriesToRun{
+									RunAll: false,
+									QueryNames: []string{"fakeQueryName", "InvalidQueryName"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: true,
+		},
 	}
 
 	for _, test := range tests {
