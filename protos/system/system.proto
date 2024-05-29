@@ -252,6 +252,10 @@ message SapDiscovery {
     // A list of host URIs that are part of the HA configuration if present.
     // An empty list indicates the component is not configured for HA.
     repeated string ha_hosts = 7;
+
+    // A list of replication sites used in Disaster Recovery (DR)
+    // configurations.
+    repeated Component replication_sites = 8;
   }
 
   // A set of properties describing an SAP workload.
