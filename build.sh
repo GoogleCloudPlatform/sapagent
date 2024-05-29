@@ -30,7 +30,7 @@ go test ./...
 
 echo "**************  Building Linux binary"
 mkdir -p buildoutput
-env GOOS=linux GOARCH=amd64 go build -mod=readonly -v -o buildoutput/google_cloud_sap_agent cmd/local/main.go
+env GOOS=linux GOARCH=amd64 go build -mod=vendor -v -o buildoutput/google_cloud_sap_agent cmd/local/main.go
 
 echo "**************  Cleaning up"
 rm -f go1.21.0.linux-amd64.tar.gz*

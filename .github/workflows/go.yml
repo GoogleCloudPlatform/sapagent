@@ -25,7 +25,7 @@ jobs:
         go mod vendor
 
     - name: Build
-      run: go build -mod=readonly -v -o google_cloud_sap_agent cmd/local/main.go
+      run: go build -mod=vendor -v -o google_cloud_sap_agent cmd/local/main.go
 
     - name: Test
       run: go test -v ./...
