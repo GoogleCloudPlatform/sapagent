@@ -40,6 +40,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
@@ -407,6 +408,10 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
 		TimeSeriesCreator: mc,
 	})
+
+	// Start UAP Communication
+	guestActionsCtx := log.SetCtx(ctx, "context", "UAPCommunication")
+	guestactions.StartUAPCommunication(guestActionsCtx, d.config)
 
 	go usagemetrics.LogRunningDaily()
 	waitForShutdown(shutdownch, cancel)

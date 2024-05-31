@@ -134,12 +134,6 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for feature.
 func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, res := c.ExecuteAndGetMessage(ctx, fs, args...)
-	return res
-}
-
-// ExecuteAndGetMessage executes the command and returns a message string in addition to the status.
-func (c *Configure) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, args ...any) (string, subcommands.ExitStatus) {
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
 		Name:     c.Name(),
 		Help:     c.Help,
@@ -148,9 +142,14 @@ func (c *Configure) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, 
 		LogLevel: c.LogLevel,
 	}, args...)
 	if !completed {
-		return "Onetime init failed to complete", exitStatus
+		return exitStatus
 	}
+	_, res := c.ExecuteAndGetMessage(ctx, fs, args...)
+	return res
+}
 
+// ExecuteAndGetMessage executes the command and returns a message string in addition to the status.
+func (c *Configure) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, args ...any) (string, subcommands.ExitStatus) {
 	if c.Path == "" {
 		c.Path = configuration.LinuxConfigPath
 		if runtime.GOOS == "windows" {
