@@ -27,11 +27,14 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+// RestartAgent indicates that the agent should be restarted after the version guest action has been handled.
+const RestartAgent = false
+
 // VersionHandler is the handler for the version command.
-func VersionHandler(ctx context.Context, command *gpb.AgentCommand) (string, subcommands.ExitStatus) {
+func VersionHandler(ctx context.Context, command *gpb.AgentCommand) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Infow("VersionHandler was called. Command passed in is", "command", prototext.Format(command))
 	msg := onetime.GetAgentVersion()
 	exitStatus := subcommands.ExitSuccess
 	log.CtxLogger(ctx).Infow("VersionHandler was called. Version returned -", "msg", msg, "exitStatus", exitStatus)
-	return msg, exitStatus
+	return msg, exitStatus, RestartAgent
 }

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/prototext"
+	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -40,11 +41,16 @@ import (
 const (
 	defaultChannel  = "wlm-sap-channel"
 	defaultEndpoint = ""
-	configure       = "configure"
-	version         = "version"
 	agentCommand    = "agent_command"
 	shellCommand    = "shell_command"
 )
+
+type guestActionHandler func(context.Context, *gpb.AgentCommand) (string, subcommands.ExitStatus, bool)
+
+var guestActionsHandlers = map[string]guestActionHandler{
+	"configure": configurehandler.ConfigureHandler,
+	"version":   versionhandler.VersionHandler,
+}
 
 type guestActionsOptions struct {
 	channel  string
@@ -86,37 +92,27 @@ func handleShellCommand(ctx context.Context, command *gpb.Command, execute comma
 }
 
 func handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool) (*gpb.CommandResult, bool) {
-	result := &gpb.CommandResult{}
-	switch strings.ToLower(command.GetAgentCommand().GetCommand()) {
-	case configure:
-		requiresRestart = true
-		output, exitStatus := configurehandler.ConfigureHandler(ctx, command.GetAgentCommand())
-		log.CtxLogger(ctx).Debugw("received result for configure command.",
-			"command", prototext.Format(command), "output", output, "exitStatus", exitStatus)
-		result = &gpb.CommandResult{
-			Command:  command,
-			Stdout:   output,
-			Stderr:   "",
-			ExitCode: int32(exitStatus),
-		}
-	case version:
-		output, exitStatus := versionhandler.VersionHandler(ctx, command.GetAgentCommand())
-		log.CtxLogger(ctx).Debugw("received result for version command.",
-			"command", prototext.Format(command), "output", output, "exitStatus", exitStatus)
-		result = &gpb.CommandResult{
-			Command:  command,
-			Stdout:   output,
-			Stderr:   "",
-			ExitCode: int32(exitStatus),
-		}
-	default:
+	agentCommand := strings.ToLower(command.GetAgentCommand().GetCommand())
+	handler, ok := guestActionsHandlers[agentCommand]
+	if !ok {
 		errMsg := fmt.Sprintf("received unknown agent command: %s", prototext.Format(command))
-		result = &gpb.CommandResult{
+		result := &gpb.CommandResult{
 			Command:  command,
 			Stdout:   errMsg,
 			Stderr:   errMsg,
 			ExitCode: int32(1),
 		}
+		return result, requiresRestart
+	}
+	output, exitStatus, restart := handler(ctx, command.GetAgentCommand())
+	requiresRestart = requiresRestart || restart
+	log.CtxLogger(ctx).Debugw("received result for agent command",
+		"command", prototext.Format(command), "output", output, "exitStatus", exitStatus)
+	result := &gpb.CommandResult{
+		Command:  command,
+		Stdout:   output,
+		Stderr:   "",
+		ExitCode: int32(exitStatus),
 	}
 	return result, requiresRestart
 }

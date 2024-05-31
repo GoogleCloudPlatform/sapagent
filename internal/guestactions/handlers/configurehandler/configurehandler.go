@@ -27,6 +27,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+// RestartAgent indicates that the agent should be restarted after the configure guest action has been handled.
+const RestartAgent = true
+
 func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 	log.CtxLogger(ctx).Info("Delaying restart until after we respond to UAP.")
 	return subcommands.ExitSuccess
@@ -130,10 +133,10 @@ func buildConfigureFromMap(command *gpb.AgentCommand) configure.Configure {
 }
 
 // ConfigureHandler is the handler for the configure command.
-func ConfigureHandler(ctx context.Context, command *gpb.AgentCommand) (string, subcommands.ExitStatus) {
+func ConfigureHandler(ctx context.Context, command *gpb.AgentCommand) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	c := buildConfigureFromMap(command)
 	msg, exitStatus := c.ExecuteAndGetMessage(ctx, nil)
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
-	return msg, exitStatus
+	return msg, exitStatus, RestartAgent
 }

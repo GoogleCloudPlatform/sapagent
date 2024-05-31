@@ -19,9 +19,11 @@ package guestactions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
@@ -212,6 +214,41 @@ func TestMessageHandler(t *testing.T) {
 						Stdout:   "Google Cloud Agent for SAP version 3.3.0",
 						Stderr:   "",
 						ExitCode: 0,
+					},
+				},
+				Error: &gpb.GuestActionError{ErrorMessage: ""},
+			},
+		},
+		{
+			name: "UnknownAgentCommand",
+			message: &gpb.GuestActionRequest{
+				Commands: []*gpb.Command{
+					{
+						CommandType: &gpb.Command_AgentCommand{
+							AgentCommand: &gpb.AgentCommand{Command: "unknown_command"},
+						},
+					},
+				},
+			},
+			want: &gpb.GuestActionResponse{
+				CommandResults: []*gpb.CommandResult{
+					{
+						Command: &gpb.Command{
+							CommandType: &gpb.Command_AgentCommand{
+								AgentCommand: &gpb.AgentCommand{Command: "unknown_command"},
+							},
+						},
+						Stdout: fmt.Sprintf("received unknown agent command: %s", prototext.Format(&gpb.Command{
+							CommandType: &gpb.Command_AgentCommand{
+								AgentCommand: &gpb.AgentCommand{Command: "unknown_command"},
+							},
+						})),
+						Stderr: fmt.Sprintf("received unknown agent command: %s", prototext.Format(&gpb.Command{
+							CommandType: &gpb.Command_AgentCommand{
+								AgentCommand: &gpb.AgentCommand{Command: "unknown_command"},
+							},
+						})),
+						ExitCode: 1,
 					},
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
