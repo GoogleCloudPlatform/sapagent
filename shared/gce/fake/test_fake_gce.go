@@ -126,6 +126,8 @@ type TestGCE struct {
 
 	AttachDiskErr error
 	DetachDiskErr error
+
+	GroupSnapshotsService *gce.GroupSnapshotsService
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -374,4 +376,9 @@ func (g *TestGCE) CreateISG(isg gce.ISG, name string) error {
 // DescribeISG fakes calls to the cloud APIs to describe the contents of an Instant Snapshot Group.
 func (g *TestGCE) DescribeISG(string) ([]*compute.InstantSnapshot, error) {
 	return g.DescribeISGSnapshots, g.DescribeISGSnapshotsErr
+}
+
+// GetGroupSnapshotsService fakes calls to the cloud APIs to retrieve a GroupSnapshotsService.
+func (g *TestGCE) GetGroupSnapshotsService() *gce.GroupSnapshotsService {
+	return g.GroupSnapshotsService
 }

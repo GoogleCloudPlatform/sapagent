@@ -18,6 +18,7 @@ package hanadiskrestore
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -293,9 +294,12 @@ func TestRestoreHandler(t *testing.T) {
 		},
 	}
 
+	checkDir := func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+		return "", "", "", nil
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.restorer.restoreHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
+			got := test.restorer.restoreHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties, checkDir, checkDir)
 			if got != test.want {
 				t.Errorf("restoreHandler() = %v, want %v", got, test.want)
 			}
@@ -364,6 +368,211 @@ func TestExecute(t *testing.T) {
 			got := test.r.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.testArgs...)
 			if got != test.want {
 				t.Errorf("Execute() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCheckPreConditions(t *testing.T) {
+	tests := []struct {
+		name         string
+		r            *Restorer
+		cp           *ipb.CloudProperties
+		checkDataDir getDataPaths
+		checkLogDir  getLogPaths
+		wantErr      error
+	}{
+		{
+			name: "CheckDataDirErr",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				fmt.Println("here")
+				return "", "", "", cmpopts.AnyError
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CheckLogDirErr",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", cmpopts.AnyError
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DataAndLogOnSameDisk",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SingleSnapshotDiskAttachedErr",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				SourceSnapshot: "test-snapshot",
+				gceService:     &fake.TestGCE{DiskAttachedToInstanceErr: cmpopts.AnyError},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SingleSnapshotDiskAttachedFalse",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				SourceSnapshot: "test-snapshot",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotDiskAttachedErr",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				GroupSnapshot: "test-snapshot",
+				disks:         defaultRestorer.disks,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotDiskAttachedFalse",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				GroupSnapshot: "test-snapshot",
+				disks:         defaultRestorer.disks,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotAbsent",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				disks: defaultRestorer.disks,
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: nil,
+							DoErr:           cmpopts.AnyError,
+						},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "EmptyNewTypeGroupSnapshot",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "a", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				disks: []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: &gce.GroupSnapshot{},
+							DoErr:           nil,
+						},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NewTypePresent",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "a", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				NewDiskType: "hyperdisk-extreme",
+				disks:       []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: &gce.GroupSnapshot{},
+							DoErr:           nil,
+						},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.r.checkPreConditions(context.Background(), test.cp, test.checkDataDir, test.checkLogDir)
+			if diff := cmp.Diff(got, test.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("checkPreConditions() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
