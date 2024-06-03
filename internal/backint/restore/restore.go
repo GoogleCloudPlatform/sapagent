@@ -189,6 +189,8 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 		RetryBackoffInitial:    time.Duration(config.GetRetryBackoffInitial()) * time.Second,
 		RetryBackoffMax:        time.Duration(config.GetRetryBackoffMax()) * time.Second,
 		RetryBackoffMultiplier: float64(config.GetRetryBackoffMultiplier()),
+		// TODO: Disabled until feature complete
+		// ParallelDownloadWorkers: config.GetParallelStreams(),
 	}
 	startTime := time.Now()
 	bytesWritten, err := rw.Download(ctx)

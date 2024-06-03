@@ -159,6 +159,10 @@ type ReadWriter struct {
 	// making requests.
 	XMLMultipartEndpoint string
 
+	// ParallelDownloadWorkers defines the number of workers, or parts, used in the
+	// parallel reader download. If 0, the download will happen sequentially.
+	ParallelDownloadWorkers int64
+
 	numRetries                int64
 	bytesTransferred          int64
 	lastBytesTransferred      int64
@@ -340,8 +344,15 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		}
 		object = object.Key(decodedKey)
 	}
-	object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
-	reader, err := object.NewReader(ctx)
+	var reader io.ReadCloser
+	var err error
+	if rw.ParallelDownloadWorkers > 0 {
+		log.CtxLogger(ctx).Infow("Performing parallel restore")
+		reader, err = rw.NewParallelReader(ctx)
+	} else {
+		object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
+		reader, err = object.NewReader(ctx)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -351,7 +362,11 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	rw = rw.defaultArgs()
 	log.CtxLogger(ctx).Infow("Download starting", "bucket", rw.BucketName, "object", rw.ObjectName, "totalBytes", rw.TotalBytes)
 	var bytesWritten int64
-	if reader.Attrs.ContentType == compressedContentType {
+	attrs, err := object.Attrs(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if attrs.ContentType == compressedContentType {
 		log.CtxLogger(ctx).Infow("Compressed file detected, decompressing during download", "bucket", rw.BucketName, "object", rw.ObjectName)
 		gzipReader, err := gzip.NewReader(rw)
 		if err != nil {
