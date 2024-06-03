@@ -256,9 +256,14 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 		}
 	}
 	workflowStartTime = time.Now()
-	if err := r.restoreFromSnapshot(ctx, cp); err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
-		return subcommands.ExitFailure
+	if r.SourceSnapshot != "" {
+		if err := r.diskRestore(ctx, cp); err != nil {
+			return subcommands.ExitFailure
+		}
+	} else {
+		if err := r.groupRestore(ctx, cp); err != nil {
+			return subcommands.ExitFailure
+		}
 	}
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
@@ -330,11 +335,12 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 	return nil
 }
 
-// restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
-func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudProperties) error {
+// diskRestore creates a new data disk restored from a single snapshot and attaches it to the instance.
+func (r *Restorer) diskRestore(ctx context.Context, cp *ipb.CloudProperties) error {
 	snapShotKey := ""
 	if r.CSEKKeyFile != "" {
 		usagemetrics.Action(usagemetrics.EncryptedSnapshotRestore)
+
 		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.SourceSnapshot)
 		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
 		if err != nil {
@@ -343,12 +349,56 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 		}
 		snapShotKey = key
 	}
+
+	if err := r.restoreFromSnapshot(ctx, cp, snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
+		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
+		r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone)
+		hanabackup.RescanVolumeGroups(ctx)
+		return err
+	}
+
+	hanabackup.RescanVolumeGroups(ctx)
+	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
+	return nil
+}
+
+// groupRestore creates several new HANA data disks from snapshots belonging to given group snapshot and attaches them to the instance.
+func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) error {
+	snapShotKey := ""
+	if r.CSEKKeyFile != "" {
+		usagemetrics.Action(usagemetrics.EncryptedSnapshotRestore)
+
+		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.GroupSnapshot)
+		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
+		if err != nil {
+			usagemetrics.Error(usagemetrics.EncryptedSnapshotRestoreFailure)
+			return err
+		}
+		snapShotKey = key
+	}
+
+	if err := r.restoreFromGroupSnapshot(ctx, cp, snapShotKey); err != nil {
+		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from group snapshot failed,", err)
+		for _, d := range r.disks {
+			r.gceService.AttachDisk(ctx, d.DiskName, cp, r.Project, r.DataDiskZone)
+		}
+		hanabackup.RescanVolumeGroups(ctx)
+		return err
+	}
+
+	hanabackup.RescanVolumeGroups(ctx)
+	log.CtxLogger(ctx).Info("HANA restore from group snapshot succeeded.")
+	return nil
+}
+
+// restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
+func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudProperties, snapshotKey, newDiskName, sourceSnapshot string) error {
 	disk := &compute.Disk{
-		Name:                        r.NewdiskName,
+		Name:                        newDiskName,
 		Type:                        r.NewDiskType,
 		Zone:                        r.DataDiskZone,
-		SourceSnapshot:              fmt.Sprintf("projects/%s/global/snapshots/%s", r.Project, r.SourceSnapshot),
-		SourceSnapshotEncryptionKey: &compute.CustomerEncryptionKey{RsaEncryptedKey: snapShotKey},
+		SourceSnapshot:              fmt.Sprintf("projects/%s/global/snapshots/%s", r.Project, sourceSnapshot),
+		SourceSnapshotEncryptionKey: &compute.CustomerEncryptionKey{RsaEncryptedKey: snapshotKey},
 	}
 	if r.DiskSizeGb > 0 {
 		disk.SizeGb = r.DiskSizeGb
@@ -360,6 +410,10 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 		disk.ProvisionedThroughput = r.ProvisionedThroughput
 	}
 	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", r.NewdiskName, "sourceSnapshot", r.SourceSnapshot)
+
+	if r.computeService == nil {
+		return fmt.Errorf("compute service is nil")
+	}
 	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
@@ -384,9 +438,23 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 	}
 
 	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
+	return nil
+}
 
-	hanabackup.RescanVolumeGroups(ctx)
-	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
+// restoreFromGroupSnapshot creates several new HANA data disks from snapshots belonging
+// to given group snapshot and attaches them to the instance.
+func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, cp *ipb.CloudProperties, snapshotKey string) error {
+	groupSnapshot, err := r.gceService.GetGroupSnapshotsService().Get(r.Project, r.GroupSnapshot).Do()
+	if err != nil {
+		return fmt.Errorf("failed to get group snapshot: %v", err)
+	}
+
+	for _, snapshot := range groupSnapshot.Snapshots {
+		timestamp := time.Now().Unix()
+		if err := r.restoreFromSnapshot(ctx, cp, snapshotKey, fmt.Sprintf("%s-%d", snapshot.SourceDisk, timestamp), snapshot.Name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

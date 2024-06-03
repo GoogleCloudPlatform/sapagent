@@ -730,6 +730,183 @@ func TestReadDiskMapping(t *testing.T) {
 	}
 }
 
+func TestDiskRestore(t *testing.T) {
+	tests := []struct {
+		name string
+		r    *Restorer
+		want error
+	}{
+		{
+			name: "CSEKKeyFilePresent",
+			r: &Restorer{
+				CSEKKeyFile: "/path/to/csek-key-file",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SingleSnapshotRestoreError",
+			r: &Restorer{
+				SourceSnapshot: "test-snapshot",
+				NewdiskName:    "test-new-disk-name",
+				computeService: nil,
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "",
+					IsDiskAttached:                   false,
+					DiskAttachedToInstanceErr:        cmpopts.AnyError,
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.r.diskRestore(context.Background(), defaultCloudProperties)
+			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("diskRestore() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGroupRestore(t *testing.T) {
+	tests := []struct {
+		name string
+		r    *Restorer
+		want error
+	}{
+		{
+			name: "CSEKKeyFilePresent",
+			r: &Restorer{
+				CSEKKeyFile: "/path/to/csek-key-file",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotErr",
+			r: &Restorer{
+				GroupSnapshot: "test-group-snapshot",
+				gceService: &fake.TestGCE{
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: &gce.GroupSnapshot{
+								Snapshots: []*compute.Snapshot{
+									&compute.Snapshot{
+										Name:       "test-snapshot-name",
+										SourceDisk: "test-source-disk",
+									},
+								},
+							},
+							DoErr: cmpopts.AnyError,
+						},
+					},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				GroupSnapshot: "test-group-snapshot",
+				gceService: &fake.TestGCE{
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: &gce.GroupSnapshot{},
+							DoErr:           cmpopts.AnyError,
+						},
+					},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.r.groupRestore(context.Background(), defaultCloudProperties)
+			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("groupRestore() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRestoreFromGroupSnapshot(t *testing.T) {
+	tests := []struct {
+		name        string
+		r           *Restorer
+		cp          *ipb.CloudProperties
+		snapshotKey string
+		want        error
+	}{
+		{
+			name: "GetGroupSnapshotErr",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: &gce.GroupSnapshot{},
+							DoErr:           cmpopts.AnyError,
+						},
+					},
+				},
+			},
+			cp:          defaultCloudProperties,
+			snapshotKey: "test-snapshot-key",
+			want:        cmpopts.AnyError,
+		},
+		{
+			name: "RestoreFromSnapshotErr",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: &gce.GroupSnapshot{
+								Snapshots: []*compute.Snapshot{
+									&compute.Snapshot{
+										Name:       "test-snapshot-name",
+										SourceDisk: "test-source-disk",
+									},
+								},
+							},
+							DoErr: cmpopts.AnyError,
+						},
+					},
+				},
+			},
+			cp:          defaultCloudProperties,
+			snapshotKey: "test-snapshot-key",
+			want:        cmpopts.AnyError,
+		},
+		{
+			name: "RestoreFromSnapshotSuccess",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GroupSnapshotsService: &gce.GroupSnapshotsService{
+						GetCall: &gce.GroupSnapshotsGetCall{
+							DoGroupSnapshot: &gce.GroupSnapshot{},
+							DoErr:           nil,
+						},
+					},
+				},
+			},
+			cp:          defaultCloudProperties,
+			snapshotKey: "test-snapshot-key",
+			want:        nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.r.restoreFromGroupSnapshot(ctx, tc.cp, tc.snapshotKey)
+			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("restoreFromSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestSynopsisForRestorer(t *testing.T) {
 	want := "invoke HANA hanadiskrestore using workflow to restore from disk snapshot"
 	snapshot := Restorer{}
