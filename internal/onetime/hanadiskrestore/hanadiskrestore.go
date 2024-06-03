@@ -31,6 +31,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -40,10 +41,14 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 type (
+	// waitForIndexServerToStopWithRetry provides testable replacement for hanabackup.WaitForIndexServerToStopWithRetry
+	waitForIndexServerToStopWithRetry func(ctx context.Context, user string, exec commandlineexecutor.Execute) error
+
 	// gceServiceFunc provides testable replacement for gce.New API.
 	gceServiceFunc func(context.Context) (*gce.GCE, error)
 
@@ -52,6 +57,11 @@ type (
 
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
+		GetInstance(project, zone, instance string) (*compute.Instance, error)
+		ListZoneOperations(project, zone, filter string, maxResults int64) (*compute.OperationList, error)
+		GetDisk(project, zone, name string) (*compute.Disk, error)
+		ListDisks(project, zone, filter string) (*compute.DiskList, error)
+
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error
 		DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
@@ -70,7 +80,8 @@ var (
 // Restorer has args for hanadiskrestore subcommands
 type Restorer struct {
 	Project, Sid, HanaSidAdm, DataDiskName, DataDiskDeviceName string
-	DataDiskZone, SourceSnapshot, NewDiskType                  string
+	DataDiskZone, SourceSnapshot, GroupSnapshot, NewDiskType   string
+	disks                                                      []*ipb.Disk
 	gceService                                                 gceInterface
 	computeService                                             *compute.Service
 	baseDataPath, baseLogPath                                  string
@@ -114,7 +125,8 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.Sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&r.DataDiskName, "data-disk-name", "", "Current disk name. (required)")
 	fs.StringVar(&r.DataDiskZone, "data-disk-zone", "", "Current disk zone. (required)")
-	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (required)")
+	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
+	fs.StringVar(&r.GroupSnapshot, "backup-id", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
 	fs.StringVar(&r.NewdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
@@ -158,10 +170,20 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 		log.Logger.Debug("Skip DB Snapshot for Change Disk Type")
 		return nil
 	}
-	switch {
-	case os == "windows":
+	if os == "windows" {
 		return fmt.Errorf("disk snapshot restore is only supported on Linux systems")
-	case r.Sid == "" || r.DataDiskName == "" || r.DataDiskZone == "" || r.SourceSnapshot == "" || r.NewdiskName == "":
+	}
+
+	// Checking if sufficient arguments are passed for either group snapshot or single snapshot.
+	// Only SID is required for restoring from groupSnapshot.
+	// DataDiskName and NewdiskNames are fetched and respectively created
+	// from individual snapshots mapped to groupSnapshot.
+	restoreFromGroupSnapshot := (r.Sid == "" || r.GroupSnapshot == "")
+	restoreFromSingleSnapshot := (r.Sid == "" || r.DataDiskName == "" || r.DataDiskZone == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
+
+	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
+		return fmt.Errorf("either source-snapshot or backup-id must be provided, not both. Usage: %s", r.Usage())
+	} else if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
 	if len(r.NewdiskName) > 63 {
@@ -204,12 +226,19 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 		return subcommands.ExitFailure
 	}
 
+	if r.GroupSnapshot != "" {
+		if err := r.readDiskMapping(ctx, cp); err != nil {
+			onetime.LogErrorToFileAndConsole("ERROR: Failed to read disks backing /hana/data,", err)
+			return subcommands.ExitFailure
+		}
+	}
+
 	if err := r.checkPreConditions(ctx, cp); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: Pre-restore check failed,", err)
 		return subcommands.ExitFailure
 	}
 	if !r.SkipDBSnapshotForChangeDiskType {
-		if err := r.prepare(ctx, cp); err != nil {
+		if err := r.prepare(ctx, cp, hanabackup.WaitForIndexServerToStopWithRetry, commandlineexecutor.ExecuteCommand); err != nil {
 			onetime.LogErrorToFileAndConsole("ERROR: HANA restore prepare failed,", err)
 			return subcommands.ExitFailure
 		}
@@ -222,9 +251,6 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 	workflowStartTime = time.Now()
 	if err := r.restoreFromSnapshot(ctx, cp); err != nil {
 		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
-		// If restore fails, attach the old disk, rescan the volumes and delete the new disk.
-		r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone)
-		hanabackup.RescanVolumeGroups(ctx)
 		return subcommands.ExitFailure
 	}
 	workflowDur := time.Since(workflowStartTime)
@@ -234,26 +260,46 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 }
 
 // prepare stops HANA, unmounts data directory and detaches old data disk.
-func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties) error {
-	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, commandlineexecutor.ExecuteCommand)
+func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitForIndexServerStop waitForIndexServerToStopWithRetry, exec commandlineexecutor.Execute) error {
+	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, exec)
 	if err != nil {
 		return fmt.Errorf("failed to read data directory mount path: %v", err)
 	}
-	if err := hanabackup.StopHANA(ctx, r.ForceStopHANA, r.HanaSidAdm, r.Sid, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.StopHANA(ctx, r.ForceStopHANA, r.HanaSidAdm, r.Sid, exec); err != nil {
 		return fmt.Errorf("failed to stop HANA: %v", err)
 	}
-	if err := hanabackup.WaitForIndexServerToStopWithRetry(ctx, r.HanaSidAdm, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := waitForIndexServerStop(ctx, r.HanaSidAdm, exec); err != nil {
 		return fmt.Errorf("hdbindexserver process still running after HANA is stopped: %v", err)
 	}
 
-	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.Unmount(ctx, mountPath, exec); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
-	if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
-		// If detach fails, rescan the volume groups to ensure the directories are mounted.
-		hanabackup.RescanVolumeGroups(ctx)
-		return fmt.Errorf("failed to detach old data disk: %v", err)
+	if r.SourceSnapshot != "" {
+		if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
+			// If detach fails, rescan the volume groups to ensure the directories are mounted.
+			hanabackup.RescanVolumeGroups(ctx)
+			return fmt.Errorf("failed to detach old data disk: %v", err)
+		}
+	} else {
+		disksDetached := []*ipb.Disk{}
+		for _, d := range r.disks {
+			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
+				log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
+				// Reattaching detached disks.
+				for _, disk := range disksDetached {
+					if err := r.gceService.AttachDisk(ctx, disk.DiskName, cp, r.Project, r.DataDiskZone); err != nil {
+						return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
+					}
+				}
+
+				// If detach fails, rescan the volume groups to ensure the directories are mounted.
+				hanabackup.RescanVolumeGroups(ctx)
+				return fmt.Errorf("failed to detach old data disk: %v", err)
+			}
+			disksDetached = append(disksDetached, d)
+		}
 	}
 
 	log.CtxLogger(ctx).Info("HANA restore prepare succeeded.")
@@ -405,4 +451,24 @@ func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 		return false
 	}
 	return true
+}
+
+func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties) error {
+	var instanceProperties *ipb.InstanceProperties
+	var err error
+
+	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, r.gceService)
+	if _, instanceProperties, err = instanceInfoReader.ReadDiskMapping(ctx, &cpb.Configuration{CloudProperties: cp}); err != nil {
+		return err
+	}
+
+	log.CtxLogger(ctx).Debugw("Reading disk mapping", "ip", instanceProperties)
+	for _, d := range instanceProperties.GetDisks() {
+		if strings.Contains(r.physicalDataPath, d.GetMapping()) {
+			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", r.physicalDataPath, "diskName", d.GetDiskName())
+			r.disks = append(r.disks, d)
+			r.DataDiskZone = cp.GetZone()
+		}
+	}
+	return nil
 }

@@ -124,9 +124,8 @@ type TestGCE struct {
 	UploadCompletionErr   error
 	DiskOpErr             error
 
-	AttachDiskOperation *compute.Operation
-	AttachDiskErr       error
-	DetachDiskErr       error
+	AttachDiskErr error
+	DetachDiskErr error
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -350,8 +349,8 @@ func (g *TestGCE) WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, 
 }
 
 // AttachDisk fakes calls to the cloud APIs to attach a disk to an instance.
-func (g *TestGCE) AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) (*compute.Operation, error) {
-	return g.AttachDiskOperation, g.AttachDiskErr
+func (g *TestGCE) AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error {
+	return g.AttachDiskErr
 }
 
 // DetachDisk fakes calls to the cloud APIs to detach a disk from an instance.
