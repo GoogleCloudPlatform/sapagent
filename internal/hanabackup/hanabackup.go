@@ -40,6 +40,7 @@ func ParseBasePath(ctx context.Context, pattern string, exec commandlineexecutor
 	if result.Error != nil {
 		return "", fmt.Errorf("failure parsing base path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("ParseBasePath", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	basePath := strings.TrimSuffix(result.StdOut, "\n")
 	log.CtxLogger(ctx).Infow("Found HANA Base data directory", "hanaDataPath", basePath)
@@ -55,6 +56,8 @@ func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexec
 	if result.Error != nil {
 		return "", fmt.Errorf("failure parsing logical path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("ParseLogicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	logicalDevice := strings.TrimSuffix(result.StdOut, "\n")
 	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
 	return logicalDevice, nil
@@ -69,6 +72,8 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 	if result.Error != nil {
 		return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("ParsePhysicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	phyisicalDevice := strings.TrimSuffix(result.StdOut, "\n")
 	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", phyisicalDevice)
 	return phyisicalDevice, nil
@@ -91,6 +96,11 @@ func Unmount(ctx context.Context, path string, exec commandlineexecutor.Execute)
 		Please ensure these references are cleaned up for unmount to proceed and retry the command`
 		return fmt.Errorf(msg, path, result.StdErr, result.Error, r.StdOut, r.StdErr)
 	}
+	log.CtxLogger(ctx).Debugf("Unmount", "stdout", result.StdOut, "stderr", result.StdErr)
+
+	if result.ExitCode == 0 {
+		log.CtxLogger(ctx).Infow("Directory unmounted successfully", "directory", path)
+	}
 	return nil
 }
 
@@ -100,6 +110,8 @@ func FreezeXFS(ctx context.Context, hanaDataPath string, exec commandlineexecuto
 	if result.Error != nil {
 		return fmt.Errorf("failure freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("FreezeXFS", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	log.CtxLogger(ctx).Infow("Filesystem frozen successfully", "hanaDataPath", hanaDataPath)
 	return nil
 }
@@ -110,6 +122,8 @@ func UnFreezeXFS(ctx context.Context, hanaDataPath string, exec commandlineexecu
 	if result.Error != nil {
 		return fmt.Errorf("failure un freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("UnFreezeXFS", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	log.CtxLogger(ctx).Infow("Filesystem unfrozen successfully", "hanaDataPath", hanaDataPath)
 	return nil
 }
@@ -160,6 +174,8 @@ func CheckDataDeviceForStripes(ctx context.Context, logicalDataPath string, exec
 	if result.ExitCode == 0 {
 		return fmt.Errorf("backup of striped HANA data disks are not currently supported, exiting")
 	}
+	log.CtxLogger(ctx).Debugf("CheckDataDeviceForStripes", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	return nil
 }
 
@@ -172,6 +188,8 @@ func ReadDataDirMountPath(ctx context.Context, baseDataPath string, exec command
 	if result.Error != nil {
 		return "", fmt.Errorf("failure reading data directory mount path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("ReadDataDirMountPath", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	return strings.TrimSuffix(result.StdOut, "\n"), nil
 }
 
@@ -184,6 +202,8 @@ func RescanVolumeGroups(ctx context.Context) error {
 	if result.Error != nil {
 		return fmt.Errorf("failure removing device definitions from the Device Mapper driver, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/vgscan",
 		ArgsToSplit: "-v --mknodes",
@@ -191,6 +211,8 @@ func RescanVolumeGroups(ctx context.Context) error {
 	if result.Error != nil {
 		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/vgchange",
 		ArgsToSplit: "-ay",
@@ -198,12 +220,16 @@ func RescanVolumeGroups(ctx context.Context) error {
 	if result.Error != nil {
 		return fmt.Errorf("failure changing volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable: "/sbin/lvscan",
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	time.Sleep(5 * time.Second)
 	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
 		Executable:  "mount",
@@ -212,6 +238,8 @@ func RescanVolumeGroups(ctx context.Context) error {
 	if result.Error != nil {
 		return fmt.Errorf("failure mounting volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	return nil
 }
 
@@ -234,6 +262,8 @@ func StopHANA(ctx context.Context, force bool, user, sid string, exec commandlin
 	if result.Error != nil {
 		return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("StopHANA", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	log.CtxLogger(ctx).Infow("HANA stopped successfully", "sid", sid)
 	return nil
 }
@@ -249,6 +279,8 @@ func waitForIndexServerToStop(ctx context.Context, user string, exec commandline
 	if result.ExitCode == 0 {
 		return fmt.Errorf("failure waiting for index server to stop, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+	log.CtxLogger(ctx).Debugf("waitForIndexServerToStop", "stdout", result.StdOut, "stderr", result.StdErr)
+
 	return nil
 }
 
