@@ -739,6 +739,16 @@ func TestValidateParameters(t *testing.T) {
 				PasswordSecret: "secret",
 			},
 		},
+		{
+			name: "HDBUserstoreConfig",
+			snapshot: Snapshot{
+				Sid:             "HDB",
+				HDBUserstoreKey: "hdbuserstore-key",
+				Project:         "",
+				Disk:            "pd-1",
+				DiskZone:        "us-east1-a",
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

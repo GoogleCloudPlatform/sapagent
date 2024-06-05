@@ -167,7 +167,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Port, "port", "", "HANA port. (optional - Either port or instance-id must be provided)")
 	fs.StringVar(&s.Sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&s.InstanceID, "instance-id", "", "HANA instance ID. (optional - Either port or instance-id must be provided)")
-	fs.StringVar(&s.HanaDBUser, "hana-db-user", "", "HANA DB Username. (required)")
+	fs.StringVar(&s.HanaDBUser, "hana-db-user", "", "HANA DB Username. (optional) when hdbuserstore-key is passed, required for other modes of authentication")
 	fs.StringVar(&s.Password, "password", "", "HANA password. (discouraged - use password-secret or hdbuserstore-key instead)")
 	fs.StringVar(&s.PasswordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password. (optional - either password-secret or hdbuserstore-key must be provided)")
 	fs.StringVar(&s.HDBUserstoreKey, "hdbuserstore-key", "", "HANA userstore key specific to HANA instance.")
@@ -361,12 +361,17 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 	switch {
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
-	case s.Sid == "" || s.HanaDBUser == "":
-		return fmt.Errorf("required arguments not passed. Usage:" + s.Usage())
-	case s.HDBUserstoreKey == "" && s.Port == "" && s.InstanceID == "":
-		return fmt.Errorf("either -port, -instance-id or -hdbuserstore-key is required. Usage:" + s.Usage())
-	case s.HDBUserstoreKey == "" && s.Password == "" && s.PasswordSecret == "":
-		return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + s.Usage())
+	case s.Sid == "":
+		return fmt.Errorf("required argument -sid not passed. Usage:" + s.Usage())
+	case s.HDBUserstoreKey == "":
+		switch {
+		case s.HanaDBUser == "":
+			return fmt.Errorf("either -hana-db-user or -hdbuserstore-key is required. Usage:" + s.Usage())
+		case s.Port == "" && s.InstanceID == "":
+			return fmt.Errorf("either -port and -instance-id, or -hdbuserstore-key is required. Usage:" + s.Usage())
+		case s.Password == "" && s.PasswordSecret == "":
+			return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + s.Usage())
+		}
 	}
 	if s.Project == "" {
 		s.Project = cp.GetProjectId()
