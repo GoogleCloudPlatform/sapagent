@@ -285,7 +285,7 @@ func TestMigrationHandler(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.migrate.migrationHandler(test.fs, test.readFile, test.writeFile)
+			got := test.migrate.migrationHandler(context.Background(), test.fs, test.readFile, test.writeFile)
 			if got != test.wantExitStatus {
 				t.Errorf("migrationHandler(%v) = %v, want = %v", test.fs, got, test.wantExitStatus)
 			}
@@ -316,7 +316,7 @@ func TestParseOldConf(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := parseOldConf(test.read)
+			got := parseOldConf(context.Background(), test.read)
 			if cmp.Diff(got, test.want, protocmp.Transform()) != "" {
 				t.Errorf("parseOldConf(%v) = %v, want = %v", test.read, got, test.want)
 			}
@@ -347,7 +347,7 @@ func TestParseAgentConf(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := parseAgentConf(test.read); cmp.Diff(got, test.want, protocmp.Transform()) != "" {
+			if got := parseAgentConf(context.Background(), test.read); cmp.Diff(got, test.want, protocmp.Transform()) != "" {
 				t.Errorf("parseAgentConf(%v) = %v, want = %v", test.read, got, test.want)
 			}
 		})

@@ -227,7 +227,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 
 	r.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: Failed to create GCE service", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
 		return subcommands.ExitFailure
 	}
 
@@ -235,29 +235,29 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 	usagemetrics.Action(usagemetrics.HANADiskRestore)
 
 	if r.computeService, err = computeServiceCreator(ctx); err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: Failed to create compute service,", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create compute service,", err)
 		return subcommands.ExitFailure
 	}
 
 	if r.isGroupSnapshot {
 		if err := r.readDiskMapping(ctx, cp); err != nil {
-			onetime.LogErrorToFileAndConsole("ERROR: Failed to read disks backing /hana/data,", err)
+			onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to read disks backing /hana/data,", err)
 			return subcommands.ExitFailure
 		}
 	}
 
 	if err := r.checkPreConditions(ctx, cp, checkDataDir, checkLogDir); err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: Pre-restore check failed,", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Pre-restore check failed,", err)
 		return subcommands.ExitFailure
 	}
 	if !r.SkipDBSnapshotForChangeDiskType {
 		if err := r.prepare(ctx, cp, hanabackup.WaitForIndexServerToStopWithRetry, commandlineexecutor.ExecuteCommand); err != nil {
-			onetime.LogErrorToFileAndConsole("ERROR: HANA restore prepare failed,", err)
+			onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore prepare failed,", err)
 			return subcommands.ExitFailure
 		}
 	} else {
 		if err := r.prepareForHANAChangeDiskType(ctx, cp); err != nil {
-			onetime.LogErrorToFileAndConsole("ERROR: HANA restore prepare failed,", err)
+			onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore prepare failed,", err)
 			return subcommands.ExitFailure
 		}
 	}
@@ -273,8 +273,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 	}
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
-	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/disk-snapshot-backup-recovery#recover_to_specific_point-in-time for next steps.")
-
+	onetime.LogMessageToFileAndConsole(ctx, "SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/disk-snapshot-backup-recovery#recover_to_specific_point-in-time for next steps.")
 	if r.labelsOnDetachedDisk != "" {
 		if !r.isGroupSnapshot {
 			if err := r.appendLabelsToDetachedDisk(ctx, r.DataDiskName); err != nil {
@@ -371,7 +370,7 @@ func (r *Restorer) diskRestore(ctx context.Context, cp *ipb.CloudProperties) err
 	}
 
 	if err := r.restoreFromSnapshot(ctx, cp, snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone)
 		hanabackup.RescanVolumeGroups(ctx)
 		return err
@@ -398,7 +397,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 	}
 
 	if err := r.restoreFromGroupSnapshot(ctx, cp, snapShotKey); err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from group snapshot failed,", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 		for _, d := range r.disks {
 			r.gceService.AttachDisk(ctx, d.DiskName, cp, r.Project, r.DataDiskZone)
 		}
@@ -436,11 +435,11 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 	}
 	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: HANA restore from snapshot failed,", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		return fmt.Errorf("failed to insert new data disk: %v", err)
 	}
 	if err := r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
-		onetime.LogErrorToFileAndConsole("insert data disk failed", err)
+		onetime.LogErrorToFileAndConsole(ctx, "insert data disk failed", err)
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 

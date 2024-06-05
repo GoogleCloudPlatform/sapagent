@@ -173,7 +173,7 @@ func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.
 		LogLevel:                        c.logLevel,
 		SkipDBSnapshotForChangeDiskType: c.skipDBSnapshotForChangeDiskType,
 	}
-	onetime.LogMessageToFileAndConsole("Starting with Snapshot workflow")
+	onetime.LogMessageToFileAndConsole(ctx, "Starting with Snapshot workflow")
 	exitStatus := s.Execute(ctx, f)
 	if exitStatus != subcommands.ExitSuccess {
 		log.CtxLogger(ctx).Errorf("Failed to execute snapshot: %v", exitStatus)

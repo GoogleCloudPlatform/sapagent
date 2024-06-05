@@ -133,15 +133,15 @@ func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string)
 }
 
 // LogErrorToFileAndConsole prints out the error message to console and also to the log file.
-func LogErrorToFileAndConsole(msg string, err error) {
+func LogErrorToFileAndConsole(ctx context.Context, msg string, err error) {
 	log.Print(msg + " " + err.Error() + "\n" + "Refer to log file at:" + log.GetLogFile())
-	log.Logger.Errorw(msg, "error", err.Error())
+	log.CtxLogger(ctx).Errorw(msg, "error", err.Error())
 }
 
 // LogMessageToFileAndConsole prints out the console message and also to the log file.
-func LogMessageToFileAndConsole(msg string) {
+func LogMessageToFileAndConsole(ctx context.Context, msg string) {
 	fmt.Println(msg)
-	log.Logger.Info(msg)
+	log.CtxLogger(ctx).Info(msg)
 }
 
 // SetupOneTimeLogging creates logging config for the agent's one time execution.

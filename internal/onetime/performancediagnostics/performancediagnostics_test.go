@@ -1263,7 +1263,7 @@ func TestRemoveDestinationFolder(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotErr := removeDestinationFolder(tc.path, tc.fu)
+			gotErr := removeDestinationFolder(context.Background(), tc.path, tc.fu)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("removeDestinationFolder(%q, %v) returned an unexpected diff (-want +got): %v", tc.path, tc.fu, diff)
 			}

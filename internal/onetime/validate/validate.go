@@ -87,7 +87,7 @@ func (v *Validate) validateWorkloadCollectionHandler(ctx context.Context, read c
 	log.Logger.Infow("Beginning workload collection validation.", "path", path)
 	cd, err := collectiondefinition.FromJSONFile(ctx, read, path)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Failed to load workload collection definition file.", err)
+		onetime.LogErrorToFileAndConsole(ctx, "Failed to load workload collection definition file.", err)
 		return subcommands.ExitFailure
 	}
 
@@ -95,7 +95,7 @@ func (v *Validate) validateWorkloadCollectionHandler(ctx context.Context, read c
 	validator.Validate()
 	if !validator.Valid() {
 		err := collectiondefinition.ValidationError{FailureCount: validator.FailureCount()}
-		onetime.LogErrorToFileAndConsole("Workload collection definition validation Result: FAILURE", err)
+		onetime.LogErrorToFileAndConsole(ctx, "Workload collection definition validation Result: FAILURE", err)
 	} else {
 		fmt.Println("Workload collection definition validation Result: SUCCESS")
 		log.Logger.Info("Workload collection definition validation Result: SUCCESS")

@@ -846,7 +846,7 @@ func TestIsDiskAttachedToInstance(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		gotErr := tc.s.isDiskAttachedToInstance(tc.disk, tc.cp)
+		gotErr := tc.s.isDiskAttachedToInstance(context.Background(), tc.disk, tc.cp)
 		if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("isDiskAttachedToInstance(%v, %v) returned diff (-want +got):\n%s", tc.disk, tc.cp, diff)
 		}

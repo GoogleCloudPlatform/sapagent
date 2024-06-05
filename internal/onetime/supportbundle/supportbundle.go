@@ -152,16 +152,16 @@ func CollectAgentSupport(ctx context.Context, f *flag.FlagSet, lp log.Parameters
 func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
-		onetime.LogErrorToFileAndConsole("Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
+		onetime.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
 		return subcommands.ExitUsageError
 	}
 	s.sid = strings.ToUpper(s.sid)
 	destFilesPath := fmt.Sprintf("%ssupportbundle-%s-%s", destFilePathPrefix, s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
-		onetime.LogErrorToFileAndConsole("Error while making directory: "+destFilesPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while making directory: "+destFilesPath, err)
 		return subcommands.ExitFailure
 	}
-	onetime.LogMessageToFileAndConsole("Collecting Support Bundle Report for Agent for SAP...")
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting Support Bundle Report for Agent for SAP...")
 	reqFilePaths := []string{linuxConfigFilePath}
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.sid)
 
@@ -182,30 +182,30 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
 		reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.sid, fs)...)
 	}
-	reqFilePaths = append(reqFilePaths, agentLogFiles(linuxLogFilesPath, fs)...)
-	reqFilePaths = append(reqFilePaths, agentOTELogFiles(agentOnetimeFilesPath, fs)...)
+	reqFilePaths = append(reqFilePaths, agentLogFiles(ctx, linuxLogFilesPath, fs)...)
+	reqFilePaths = append(reqFilePaths, agentOTELogFiles(ctx, agentOnetimeFilesPath, fs)...)
 
 	for _, path := range reqFilePaths {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Copying file %s ...", path))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", path))
 		if err := copyFile(path, destFilesPath+path, fs); err != nil {
-			onetime.LogErrorToFileAndConsole("Error while copying file: "+path, err)
+			onetime.LogErrorToFileAndConsole(ctx, "Error while copying file: "+path, err)
 			hasErrors = true
 		}
 	}
 	if err := zipSource(destFilesPath, destFilesPath+".zip", fs, z); err != nil {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while zipping destination folder %s", destFilesPath), err)
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while zipping destination folder %s", destFilesPath), err)
 		hasErrors = true
 	} else {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath)))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath)))
 	}
 
 	// removing the destination directory after zip file is created.
-	if err := removeDestinationFolder(destFilesPath, fs); err != nil {
+	if err := removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
 		hasErrors = true
 	}
 
 	// Rotate out old support bundles so we don't fill the file system.
-	if err := rotateOldBundles(destFilePathPrefix, fs); err != nil {
+	if err := rotateOldBundles(ctx, destFilePathPrefix, fs); err != nil {
 		hasErrors = true
 	}
 
@@ -216,10 +216,10 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, ":", "-")
 		err := pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
 		if err != nil {
-			onetime.LogErrorToFileAndConsole("Error while collecting pacemaker logs: "+err.Error(), err)
+			onetime.LogErrorToFileAndConsole(ctx, "Error while collecting pacemaker logs: "+err.Error(), err)
 			hasErrors = true
 		} else {
-			onetime.LogMessageToFileAndConsole(fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir))
+			onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir))
 		}
 	}
 
@@ -275,7 +275,7 @@ func backintParameterFiles(ctx context.Context, globalPath string, sid string, f
 
 	content, err := fs.ReadFile(globalPath + globalINIFile)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Error while reading file: "+globalPath+globalINIFile, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while reading file: "+globalPath+globalINIFile, err)
 		return nil
 	}
 	contentData := string(content)
@@ -283,11 +283,11 @@ func backintParameterFiles(ctx context.Context, globalPath string, sid string, f
 	for _, path := range op {
 		pathSplit := strings.Split(path, "=")
 		if len(pathSplit) != 2 {
-			onetime.LogMessageToFileAndConsole("Unexpected output from global.ini content")
+			onetime.LogMessageToFileAndConsole(ctx, "Unexpected output from global.ini content")
 			continue
 		}
 		rfp := strings.TrimSpace(strings.Split(path, "=")[1])
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", rfp))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", rfp))
 		res = append(res, rfp)
 	}
 	return res
@@ -298,7 +298,7 @@ func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid 
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
 		if err != nil {
-			onetime.LogErrorToFileAndConsole("Error while reading directory: "+hanaPath+"/trace", err)
+			onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
 			return nil
 		}
 		for _, fd := range fds {
@@ -306,7 +306,7 @@ func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid 
 				continue
 			}
 			if matchNameServerTraceAndBackup(fd.Name()) {
-				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
+				onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
 				res = append(res, path.Join(hanaPath+"/trace/", fd.Name()))
 			}
 		}
@@ -319,7 +319,7 @@ func tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []stri
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid))
 		if err != nil {
-			onetime.LogErrorToFileAndConsole("Error while reading directory: "+hanaPath+"/trace", err)
+			onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
 			return nil
 		}
 		for _, fd := range fds {
@@ -327,7 +327,7 @@ func tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []stri
 				continue
 			}
 			if matchNameServerTraceAndBackup(fd.Name()) {
-				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Adding file %s to collection.", path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name())))
+				onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name())))
 				res = append(res, path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name()))
 			}
 		}
@@ -355,7 +355,7 @@ func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.File
 	res := []string{}
 	fds, err := fs.ReadDir(globalPath + backintGCSPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Error while reading directory: "+globalPath+backintGCSPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+globalPath+backintGCSPath, err)
 		return nil
 	}
 	for _, fd := range fds {
@@ -371,11 +371,11 @@ func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.File
 }
 
 // agentOTELogFiles returns the list of agent OTE log files to be collected.
-func agentOTELogFiles(agentOTEFilesPath string, fu filesystem.FileSystem) []string {
+func agentOTELogFiles(ctx context.Context, agentOTEFilesPath string, fu filesystem.FileSystem) []string {
 	res := []string{}
 	fds, err := fu.ReadDir(agentOTEFilesPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Error while reading directory: "+agentOTEFilesPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+agentOTEFilesPath, err)
 		return res
 	}
 	for _, fd := range fds {
@@ -384,11 +384,11 @@ func agentOTELogFiles(agentOTEFilesPath string, fu filesystem.FileSystem) []stri
 	return res
 }
 
-func agentLogFiles(linuxLogFilesPath string, fu filesystem.FileSystem) []string {
+func agentLogFiles(ctx context.Context, linuxLogFilesPath string, fu filesystem.FileSystem) []string {
 	res := []string{}
 	fds, err := fu.ReadDir(linuxLogFilesPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Error while reading directory: "+linuxLogFilesPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+linuxLogFilesPath, err)
 		return res
 	}
 	for _, fd := range fds {
@@ -404,14 +404,14 @@ func agentLogFiles(linuxLogFilesPath string, fu filesystem.FileSystem) []string 
 
 // extractJournalCTLLogs extracts the journalctl logs for google-cloud-sap-agent.
 func extractJournalCTLLogs(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole("Extracting journal CTL logs...")
+	onetime.LogMessageToFileAndConsole(ctx, "Extracting journal CTL logs...")
 	var hasErrors bool
 	p := commandlineexecutor.Params{
 		Executable:  "bash",
 		ArgsToSplit: "-c 'journalctl | grep google-cloud-sap-agent'",
 	}
 	if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, journalCTLLogs, fu); err != nil {
-		onetime.LogErrorToFileAndConsole("Error while executing command: journalctl | grep google-cloud-sap-agent", err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while executing command: journalctl | grep google-cloud-sap-agent", err)
 		hasErrors = true
 	}
 	return hasErrors
@@ -419,14 +419,14 @@ func extractJournalCTLLogs(ctx context.Context, destFilesPath, hostname string, 
 
 // extractSystemDBErrors extracts the errors from system DB backup logs.
 func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole("Extracting errors from System DB files...")
+	onetime.LogMessageToFileAndConsole(ctx, "Extracting errors from System DB files...")
 	var hasErrors bool
 	for _, hanaPath := range hanaPaths {
 		p := commandlineexecutor.Params{
 			Executable:  "grep",
 			ArgsToSplit: fmt.Sprintf("-w ERROR %s/trace/backup.log", hanaPath),
 		}
-		onetime.LogMessageToFileAndConsole("Executing command: grep -w ERROR" + hanaPath + "/trace/backup.log")
+		onetime.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+hanaPath+"/trace/backup.log")
 		if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, systemDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
 			hasErrors = true
 		}
@@ -436,7 +436,7 @@ func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, 
 
 // extractTenantDBErrors extracts the errors from tenant DB backup logs.
 func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole("Extracting errors from TenantDB files...")
+	onetime.LogMessageToFileAndConsole(ctx, "Extracting errors from TenantDB files...")
 	var hasErrors bool
 	for _, hanaPath := range hanaPaths {
 		filePath := fmt.Sprintf("%s/trace/DB_%s/backup.log", hanaPath, sid)
@@ -444,7 +444,7 @@ func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname str
 			Executable:  "grep",
 			ArgsToSplit: "-w ERROR " + filePath,
 		}
-		onetime.LogMessageToFileAndConsole("Executing command: grep -w ERROR" + filePath)
+		onetime.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+filePath)
 		if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, tenantDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
 			hasErrors = true
 		}
@@ -454,7 +454,7 @@ func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname str
 
 // extractBackintErrors extracts the errors from backint logs.
 func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole("Extracting errors from Backint logs...")
+	onetime.LogMessageToFileAndConsole(ctx, "Extracting errors from Backint logs...")
 	fds, err := fu.ReadDir(globalPath + backintGCSPath + "/logs")
 	if err != nil {
 		return true
@@ -466,7 +466,7 @@ func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostna
 			Executable:  "grep",
 			ArgsToSplit: "-w SEVERE " + logFilePath,
 		}
-		onetime.LogMessageToFileAndConsole("Executing command: grep -w SEVERE" + logFilePath)
+		onetime.LogMessageToFileAndConsole(ctx, "Executing command: grep -w SEVERE"+logFilePath)
 		if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, backintErrorsFile, fu); err != nil {
 			hasErrors = true
 		}
@@ -482,7 +482,7 @@ func extractHANAVersion(ctx context.Context, destFilesPath, sid, hostname string
 		Executable:  "bash",
 		ArgsToSplit: cmd,
 	}
-	onetime.LogMessageToFileAndConsole("Executing command: bash -c 'HDB version'")
+	onetime.LogMessageToFileAndConsole(ctx, "Executing command: bash -c 'HDB version'")
 	err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, params, hanaVersionFile, fu)
 	if err != nil {
 		return true
@@ -494,17 +494,17 @@ func extractHANAVersion(ctx context.Context, destFilesPath, sid, hostname string
 func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, params commandlineexecutor.Params, opFile string, fu filesystem.FileSystem) error {
 	res := exec(ctx, params)
 	if res.ExitCode != 0 && res.StdErr != "" {
-		onetime.LogErrorToFileAndConsole("Error while executing command", errors.New(res.StdErr))
+		onetime.LogErrorToFileAndConsole(ctx, "Error while executing command", errors.New(res.StdErr))
 		return errors.New(res.StdErr)
 	}
 	f, err := fu.OpenFile(destFilesPath+"/"+hostname+opFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Error while opening the file", err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while opening the file", err)
 		return err
 	}
 	defer f.Close()
 	if _, err := fu.WriteStringToFile(f, res.StdOut); err != nil {
-		onetime.LogErrorToFileAndConsole("Error while writing to the file", err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while writing to the file", err)
 		return err
 	}
 	return nil
@@ -539,7 +539,7 @@ func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineex
 func checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, p commandlineexecutor.Params) bool {
 	res := exec(ctx, p)
 	if res.ExitCode != 0 || res.StdErr != "" {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), errors.New(res.StdErr))
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), errors.New(res.StdErr))
 		return false
 	}
 	return true
@@ -554,14 +554,14 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	if err := fu.MkdirAll(destFilesPath, 0777); err != nil {
 		return err
 	}
-	onetime.LogMessageToFileAndConsole("Collecting hb_report...")
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting hb_report...")
 	res := exec(ctx, commandlineexecutor.Params{
 		Executable:  "hb_report",
 		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
 		Timeout:     3600,
 	})
 	if res.ExitCode != 0 {
-		onetime.LogMessageToFileAndConsole("Collecting crm_report...")
+		onetime.LogMessageToFileAndConsole(ctx, "Collecting crm_report...")
 		res := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
 			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
@@ -571,7 +571,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 			return errors.New(res.StdErr)
 		}
 	}
-	onetime.LogMessageToFileAndConsole("Collecting supportconfig...")
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting supportconfig...")
 	res = exec(ctx, commandlineexecutor.Params{
 		Executable:  "supportconfig",
 		ArgsToSplit: fmt.Sprintf("-bl -R %s", destFilesPath),
@@ -585,7 +585,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 
 // rhelPacemakerLogs collects the pacemaker logs for RHEL OS type.
 func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
-	onetime.LogMessageToFileAndConsole("Collecting sosreport...")
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting sosreport...")
 	p := commandlineexecutor.Params{
 		Executable:  "sosreport",
 		ArgsToSplit: fmt.Sprintf("--batch --tmp-dir %s", destFilesPath),
@@ -596,11 +596,11 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	}
 	res := exec(ctx, p)
 	if res.ExitCode != 0 && res.StdErr != "" {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while executing command %s", p.Executable), errors.New(res.StdErr))
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while executing command %s", p.Executable), errors.New(res.StdErr))
 		// if sosreport is unsuccessful in collecting pacemaker data, we will fallback to crm_report
 		from := time.Now().UTC().AddDate(0, 0, -3).String()[:16]
 		to := time.Now().UTC().String()[:16]
-		onetime.LogMessageToFileAndConsole("Collecting crm_report...")
+		onetime.LogMessageToFileAndConsole(ctx, "Collecting crm_report...")
 		crmRes := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
 			ArgsToSplit: fmt.Sprintf("-S -f '%s' -t '%s' --dest %s", from, to, destFilesPath+"/report"),
@@ -637,18 +637,18 @@ func (s *SupportBundle) validateParams() []string {
 	return errs
 }
 
-func removeDestinationFolder(path string, fu filesystem.FileSystem) error {
+func removeDestinationFolder(ctx context.Context, path string, fu filesystem.FileSystem) error {
 	if err := fu.RemoveAll(path); err != nil {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while removing folder %s", path), err)
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing folder %s", path), err)
 		return err
 	}
 	return nil
 }
 
-func rotateOldBundles(dir string, fs filesystem.FileSystem) error {
+func rotateOldBundles(ctx context.Context, dir string, fs filesystem.FileSystem) error {
 	fds, err := fs.ReadDir(dir)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while reading folder %s", dir), err)
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while reading folder %s", dir), err)
 		return err
 	}
 	sort.Slice(fds, func(i, j int) bool { return fds[i].ModTime().After(fds[j].ModTime()) })
@@ -657,9 +657,9 @@ func rotateOldBundles(dir string, fs filesystem.FileSystem) error {
 		if strings.Contains(fd.Name(), "supportbundle") {
 			bundleCount++
 			if bundleCount > 5 {
-				onetime.LogMessageToFileAndConsole(fmt.Sprintf("Removing old bundle %s", dir+fd.Name()))
+				onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Removing old bundle %s", dir+fd.Name()))
 				if err := fs.RemoveAll(dir + fd.Name()); err != nil {
-					onetime.LogErrorToFileAndConsole(fmt.Sprintf("Error while removing old bundle %s", dir+fd.Name()), err)
+					onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing old bundle %s", dir+fd.Name()), err)
 					return err
 				}
 			}

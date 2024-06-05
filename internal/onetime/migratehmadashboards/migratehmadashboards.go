@@ -107,12 +107,12 @@ func (m *MigrateHMADashboards) Execute(ctx context.Context, f *flag.FlagSet, arg
 func (m *MigrateHMADashboards) migrateHMADashboardHandler(ctx context.Context, fs *flag.FlagSet, dc dashboardsAPICaller) subcommands.ExitStatus {
 	dashboards := fetchDashboards(ctx, dc, m.project)
 	res := migrateHMADashboards(ctx, dc, dashboards, m.project)
-	onetime.LogMessageToFileAndConsole(fmt.Sprintf("HANA Monitoring Agent Dashboard Migration Results.\nDashboard-Name | New Dashboard-Name | Migration Result"))
+	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("HANA Monitoring Agent Dashboard Migration Results.\nDashboard-Name | New Dashboard-Name | Migration Result"))
 	for _, s := range res.successfulUpdates {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("%s | %s | successful", oldDashboardName(s), s))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("%s | %s | successful", oldDashboardName(s), s))
 	}
 	for _, s := range res.failedUpdates {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("%s | %s | failed", oldDashboardName(s), s))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("%s | %s | failed", oldDashboardName(s), s))
 	}
 	return subcommands.ExitSuccess
 }

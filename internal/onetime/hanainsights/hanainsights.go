@@ -122,7 +122,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 
 	h.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: Failed to create GCE service", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
 		return subcommands.ExitFailure
 	}
 
@@ -138,7 +138,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		SID:            h.sid,
 	}
 	if h.db, err = databaseconnector.CreateDBHandle(ctx, dbp); err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: Failed to connect to database", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to connect to database", err)
 		return subcommands.ExitFailure
 	}
 
@@ -150,7 +150,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 
 	insights, err := ruleengine.Run(ctx, h.db, rules)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("ERROR: Failure in rule engine", err)
+		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failure in rule engine", err)
 		return subcommands.ExitFailure
 	}
 	log.CtxLogger(ctx).Infow("Generating HANA insights", insights)

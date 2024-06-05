@@ -1081,7 +1081,7 @@ func TestAgentLogsFiles(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := agentLogFiles(test.path, test.fu)
+			got := agentLogFiles(context.Background(), test.path, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("agentLogFiles(%q) = %v, want %v", test.path, got, test.want)
 			}
@@ -1232,7 +1232,7 @@ func TestRemoveDestinationFolder(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := removeDestinationFolder(test.path, test.fu)
+			got := removeDestinationFolder(context.Background(), test.path, test.fu)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("removeDestinationFolder(%q) = %v, want %v", test.path, got, test.want)
 			}
@@ -1276,7 +1276,7 @@ func TestRotateOldBundles(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := rotateOldBundles(test.dir, test.fs)
+			got := rotateOldBundles(context.Background(), test.dir, test.fs)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("rotateOldBundles(%q) = %v, want %v", test.dir, got, test.want)
 			}

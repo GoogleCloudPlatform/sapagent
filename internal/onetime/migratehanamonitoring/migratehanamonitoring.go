@@ -80,7 +80,7 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 		return exitStatus
 	}
 
-	return m.migrationHandler(f, os.ReadFile, os.WriteFile)
+	return m.migrationHandler(ctx, f, os.ReadFile, os.WriteFile)
 }
 
 // migrateHandler is responsible for reading the old configuration.yaml file, converting the old proto to
@@ -89,12 +89,12 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 // Successful Migration - subcommands.ExitSuccess
 // Parsing / Reading / Writing Errors - subcommands.ExitFailure
 // SSL Mode on / Malformed Queries - subcommands.ExitUsageError
-func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configuration.ReadConfigFile, write configuration.WriteConfigFile) subcommands.ExitStatus {
-	hmMigrationConf := parseOldConf(read)
+func (m *MigrateHANAMonitoring) migrationHandler(ctx context.Context, f *flag.FlagSet, read configuration.ReadConfigFile, write configuration.WriteConfigFile) subcommands.ExitStatus {
+	hmMigrationConf := parseOldConf(ctx, read)
 	if hmMigrationConf == nil {
 		return subcommands.ExitFailure
 	}
-	config := parseAgentConf(read)
+	config := parseAgentConf(ctx, read)
 	if config == nil {
 		return subcommands.ExitFailure
 	}
@@ -102,7 +102,7 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 	hmConfig := prepareConfig(hmMigrationConf, sslEnabled)
 	config.HanaMonitoringConfiguration = hmConfig
 	if !configuration.ValidateQueries(config.GetHanaMonitoringConfiguration().GetQueries()) {
-		onetime.LogMessageToFileAndConsole("Queries formed using Old HANA Monitoring Agent Config are not valid. File" + oldConfigPath)
+		onetime.LogMessageToFileAndConsole(ctx, "Queries formed using Old HANA Monitoring Agent Config are not valid. File"+oldConfigPath)
 		return subcommands.ExitUsageError
 	}
 	content, err := protojson.MarshalOptions{Multiline: true}.Marshal(config)
@@ -111,7 +111,7 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 	}
 	err = write(configuration.LinuxConfigPath, content, 0777)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Could not write Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Could not write Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
 		return subcommands.ExitFailure
 	}
 	if sslEnabled {
@@ -123,10 +123,10 @@ func (m *MigrateHANAMonitoring) migrationHandler(f *flag.FlagSet, read configura
 		the config file ` + configuration.LinuxConfigPath + `and restart the agent
 		to start HANA monitoring functionality in the Agent for SAP.
 		`
-		onetime.LogMessageToFileAndConsole(msg)
+		onetime.LogMessageToFileAndConsole(ctx, msg)
 		return subcommands.ExitUsageError
 	}
-	onetime.LogMessageToFileAndConsole("Migrated HANA Monitoring Agent Config successfully")
+	onetime.LogMessageToFileAndConsole(ctx, "Migrated HANA Monitoring Agent Config successfully")
 	return subcommands.ExitSuccess
 }
 
@@ -143,31 +143,31 @@ func prepareConfig(hmMigrationConf *hmmpb.HANAMonitoringConfiguration, ssl bool)
 	return hmConfig
 }
 
-func parseOldConf(read configuration.ReadConfigFile) *hmmpb.HANAMonitoringConfiguration {
+func parseOldConf(ctx context.Context, read configuration.ReadConfigFile) *hmmpb.HANAMonitoringConfiguration {
 	content, err := read(oldConfigPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Could not read old config file"+oldConfigPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Could not read old config file"+oldConfigPath, err)
 		return nil
 	}
 	hmConfigOld := &hmmpb.HANAMonitoringConfiguration{}
 	err = yamlpb.UnmarshalString(string(content), hmConfigOld)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Could not parse to HANA Monitoring migration proto from old config, file"+oldConfigPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Could not parse to HANA Monitoring migration proto from old config, file"+oldConfigPath, err)
 		return nil
 	}
 	return hmConfigOld
 }
 
-func parseAgentConf(read configuration.ReadConfigFile) *cpb.Configuration {
+func parseAgentConf(ctx context.Context, read configuration.ReadConfigFile) *cpb.Configuration {
 	configContent, err := read(configuration.LinuxConfigPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Could not read Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Could not read Agent for SAP Configuration file"+configuration.LinuxConfigPath, err)
 		return nil
 	}
 	config := &cpb.Configuration{}
 	err = protojson.Unmarshal(configContent, config)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("Could not parse Agent for SAP Configuration, file"+configuration.LinuxConfigPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "Could not parse Agent for SAP Configuration, file"+configuration.LinuxConfigPath, err)
 		return nil
 	}
 	return config

@@ -215,7 +215,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 func (c *Configure) showFeatures(ctx context.Context) (string, subcommands.ExitStatus) {
 	config := configuration.Read(c.Path, os.ReadFile)
 	if config == nil {
-		onetime.LogMessageToFileAndConsole("Unable to read configuration.json")
+		onetime.LogMessageToFileAndConsole(ctx, "Unable to read configuration.json")
 		return "Unable to read configuration.json", subcommands.ExitFailure
 	}
 
@@ -255,7 +255,7 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 	log.Logger.Infow("Beginning execution of features command")
 	config := configuration.Read(c.Path, read)
 	if config == nil {
-		onetime.LogMessageToFileAndConsole("Unable to read configuration.json")
+		onetime.LogMessageToFileAndConsole(ctx, "Unable to read configuration.json")
 		return "Unable to read configuration.json", subcommands.ExitFailure
 	}
 	log.CtxLogger(ctx).Infow("Config before any changes", "config", config)
@@ -263,7 +263,7 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 	isCmdValid := false
 	if len(c.LogLevel) > 0 {
 		if _, ok := loglevels[c.LogLevel]; !ok {
-			onetime.LogMessageToFileAndConsole("Invalid log level. Please use [debug, info, warn, error]")
+			onetime.LogMessageToFileAndConsole(ctx, "Invalid log level. Please use [debug, info, warn, error]")
 			return "Invalid log level. Please use [debug, info, warn, error]", subcommands.ExitUsageError
 		}
 		isCmdValid = true
@@ -277,7 +277,7 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 		isCmdValid = true
 	} else if len(c.Setting) > 0 {
 		if !c.Enable && !c.Disable {
-			onetime.LogMessageToFileAndConsole("Please choose to enable or disable the given feature/setting\n")
+			onetime.LogMessageToFileAndConsole(ctx, "Please choose to enable or disable the given feature/setting\n")
 			return "Please choose to enable or disable the given feature/setting", subcommands.ExitUsageError
 		}
 
@@ -288,14 +288,14 @@ func (c *Configure) modifyConfig(ctx context.Context, fs *flag.FlagSet, read con
 		case "log_to_cloud":
 			config.LogToCloud = &wpb.BoolValue{Value: isEnabled}
 		default:
-			onetime.LogMessageToFileAndConsole("Unsupported setting")
+			onetime.LogMessageToFileAndConsole(ctx, "Unsupported setting")
 			return "Unsupported setting", subcommands.ExitUsageError
 		}
 		isCmdValid = true
 	}
 
 	if !isCmdValid {
-		onetime.LogMessageToFileAndConsole("Insufficient flags. Please check usage:\n")
+		onetime.LogMessageToFileAndConsole(ctx, "Insufficient flags. Please check usage:\n")
 		// Checking for nil for testing purposes
 		if fs != nil {
 			fs.Usage()
@@ -336,7 +336,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 
 		if c.FastMetricsFrequency != 0 {
 			if c.FastMetricsFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -345,7 +345,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 
 		if c.SlowMetricsFrequency != 0 {
 			if c.SlowMetricsFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("slow-metrics-frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("slow-metrics-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -355,12 +355,12 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		if len(c.SkipMetrics) > 0 {
 			log.CtxLogger(ctx).Info("Skip Metrics: ", c.SkipMetrics)
 			if !c.Add && !c.Remove {
-				onetime.LogMessageToFileAndConsole("Please choose to add or remove given list of process metrics.")
+				onetime.LogMessageToFileAndConsole(ctx, "Please choose to add or remove given list of process metrics.")
 				return subcommands.ExitUsageError
 			}
 
 			isCmdValid = true
-			if res := c.modifyProcessMetricsToSkip(config); res != subcommands.ExitSuccess {
+			if res := c.modifyProcessMetricsToSkip(ctx, config); res != subcommands.ExitSuccess {
 				return res
 			}
 		}
@@ -375,7 +375,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.SampleIntervalSec != 0 {
 			if c.SampleIntervalSec < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("sample-interval-sec must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("sample-interval-sec must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -383,7 +383,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.QueryTimeoutSec != 0 {
 			if c.QueryTimeoutSec < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("query-timeout-sec must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("query-timeout-sec must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -401,7 +401,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.AgentMetricsFrequency != 0 {
 			if c.AgentMetricsFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -409,7 +409,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.AgentHealthFrequency != 0 {
 			if c.AgentHealthFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("agent-health-frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("agent-health-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -417,7 +417,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.HeartbeatFrequency != 0 {
 			if c.HeartbeatFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("heartbeat-frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("heartbeat-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -430,7 +430,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.ValidationMetricsFrequency != 0 {
 			if c.ValidationMetricsFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -438,7 +438,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.DbFrequency != 0 {
 			if c.DbFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("db-frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("db-frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
@@ -451,19 +451,19 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 		}
 		if c.ReliabilityMetricsFrequency != 0 {
 			if c.ReliabilityMetricsFrequency < 0 {
-				onetime.LogErrorToFileAndConsole("Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
+				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
 				return subcommands.ExitUsageError
 			}
 			isCmdValid = true
 			checkCollectionConfig(config).ReliabilityMetricsFrequency = c.ReliabilityMetricsFrequency
 		}
 	default:
-		onetime.LogMessageToFileAndConsole("Unsupported Metric")
+		onetime.LogMessageToFileAndConsole(ctx, "Unsupported Metric")
 		return subcommands.ExitUsageError
 	}
 
 	if !isCmdValid {
-		onetime.LogMessageToFileAndConsole("Insufficient flags. Please check usage:\n")
+		onetime.LogMessageToFileAndConsole(ctx, "Insufficient flags. Please check usage:\n")
 		// Checking for nil for testing purposes
 		if fs != nil {
 			fs.Usage()
@@ -474,7 +474,7 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 }
 
 // modifyProcessMetricsToSkip modifies 'process_metrics_to_skip' field of the configuration file.
-func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcommands.ExitStatus {
+func (c *Configure) modifyProcessMetricsToSkip(ctx context.Context, config *cpb.Configuration) subcommands.ExitStatus {
 	str := spaces.ReplaceAllString(c.SkipMetrics, "")
 	metricsSkipList := strings.Split(str, ",")
 	currList := checkCollectionConfig(config).GetProcessMetricsToSkip()
@@ -510,7 +510,7 @@ func (c *Configure) modifyProcessMetricsToSkip(config *cpb.Configuration) subcom
 		}
 		checkCollectionConfig(config).ProcessMetricsToSkip = newList
 	} else {
-		onetime.LogErrorToFileAndConsole("Error: ", fmt.Errorf("no -add or -remove flag with -process-metrics-to-skip"))
+		onetime.LogErrorToFileAndConsole(ctx, "Error: ", fmt.Errorf("no -add or -remove flag with -process-metrics-to-skip"))
 		return subcommands.ExitUsageError
 	}
 	return subcommands.ExitSuccess

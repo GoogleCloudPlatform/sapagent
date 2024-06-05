@@ -190,10 +190,10 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 
 	destFilesPath := path.Join(d.path, d.bundleName)
 	if err := opts.fs.MkdirAll(destFilesPath, 0777); err != nil {
-		onetime.LogErrorToFileAndConsole("error while making directory: "+destFilesPath, err)
+		onetime.LogErrorToFileAndConsole(ctx, "error while making directory: "+destFilesPath, err)
 		return subcommands.ExitFailure
 	}
-	onetime.LogMessageToFileAndConsole("Collecting Performance Diagnostics Report for Agent for SAP...")
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting Performance Diagnostics Report for Agent for SAP...")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnostics)
 	errs := performDiagnosticsOps(ctx, d, flagSet, opts)
 
@@ -207,28 +207,28 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 
 	zipFile := fmt.Sprintf("%s/%s.zip", destFilesPath, d.bundleName)
 	if err := zipSource(destFilesPath, zipFile, opts.fs, opts.z); err != nil {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while zipping destination folder %s", zipFile), err)
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while zipping destination folder %s", zipFile), err)
 		errs = append(errs, err)
 	} else {
-		onetime.LogMessageToFileAndConsole(fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", zipFile))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", zipFile))
 	}
 
 	if d.resultBucket != "" {
 		if err := d.uploadZip(ctx, zipFile, storage.ConnectToBucket, getReadWriter, opts); err != nil {
-			onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while uploading zip %s", zipFile), err)
+			onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while uploading zip %s", zipFile), err)
 			errs = append(errs, fmt.Errorf("failure in uploading zip, failed with error %v", err))
 		} else {
-			if err := removeDestinationFolder(destFilesPath, opts.fs); err != nil {
-				onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while removing folder %s", destFilesPath), err)
+			if err := removeDestinationFolder(ctx, destFilesPath, opts.fs); err != nil {
+				onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while removing folder %s", destFilesPath), err)
 				errs = append(errs, fmt.Errorf("failure in removing folder %s, failed with error %v", destFilesPath, err))
 			}
 		}
 	}
 	if len(errs) > 0 {
 		usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFailure)
-		onetime.LogMessageToFileAndConsole("Performance Diagnostics Report collection ran into following errors\n")
+		onetime.LogMessageToFileAndConsole(ctx, "Performance Diagnostics Report collection ran into following errors\n")
 		for _, err := range errs {
-			onetime.LogErrorToFileAndConsole("Error: ", err)
+			onetime.LogErrorToFileAndConsole(ctx, "Error: ", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -285,7 +285,7 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) bo
 	for _, scope := range scopes {
 		scope = strings.TrimSpace(scope)
 		if _, ok := scopeValues[scope]; !ok {
-			onetime.LogMessageToFileAndConsole("Invalid flag usage, incorrect value of scope. Please check usage.")
+			onetime.LogMessageToFileAndConsole(ctx, "Invalid flag usage, incorrect value of scope. Please check usage.")
 			flagSet.Usage()
 			return false
 		}
@@ -294,7 +294,7 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) bo
 
 	if scopeValues["backup"] || scopeValues["all"] {
 		if d.paramFile == "" && d.testBucket == "" {
-			onetime.LogErrorToFileAndConsole("invalid flag usage", errors.New("test bucket cannot be empty to perform backup operation"))
+			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", errors.New("test bucket cannot be empty to perform backup operation"))
 			return false
 		}
 	}
@@ -322,8 +322,8 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 		HyperThreading: d.hyperThreading,
 		IIOTEParams:    ciOTEParams,
 	}
-	onetime.LogMessageToFileAndConsole("Executing ConfigureInstance")
-	defer onetime.LogMessageToFileAndConsole("Finished invoking ConfigureInstance")
+	onetime.LogMessageToFileAndConsole(ctx, "Executing ConfigureInstance")
+	defer onetime.LogMessageToFileAndConsole(ctx, "Finished invoking ConfigureInstance")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsConfigureInstance)
 	res := ci.Execute(ctx, f)
 	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
@@ -334,10 +334,10 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 		},
 	}
 	if res != subcommands.ExitSuccess {
-		onetime.LogMessageToFileAndConsole("Error while executing ConfigureInstance OTE")
+		onetime.LogMessageToFileAndConsole(ctx, "Error while executing ConfigureInstance OTE")
 	}
 	if err := addToBundle(ctx, paths, opts.fs); err != nil {
-		onetime.LogErrorToFileAndConsole("Error while adding ConfigureInstance OTE logs to bundle", err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error while adding ConfigureInstance OTE logs to bundle", err)
 		return subcommands.ExitFailure
 	}
 	return res
@@ -376,7 +376,7 @@ func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 
 	config, err := d.setBackintConfig(ctx, opts.fs, opts.fs.ReadFile)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole("error while unmarshalling backint config, failed with error %v", err)
+		onetime.LogErrorToFileAndConsole(ctx, "error while unmarshalling backint config, failed with error %v", err)
 		errs = append(errs, err)
 		return errs
 	}
@@ -416,7 +416,7 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 		bucket = d.testBucket
 	}
 	if bucket == "" {
-		onetime.LogErrorToFileAndConsole("error determining bucket", fmt.Errorf("no bucket provided, either in param-file or as test-bucket"))
+		onetime.LogErrorToFileAndConsole(ctx, "error determining bucket", fmt.Errorf("no bucket provided, either in param-file or as test-bucket"))
 		return fmt.Errorf("no bucket provided, either in param-file or as test-bucket")
 	}
 
@@ -434,7 +434,7 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 	var ok bool
 	if bucketHandle, ok = ctb(ctx, connectParams); !ok {
 		err := errors.New("error establishing connection to bucket, please check the logs")
-		onetime.LogErrorToFileAndConsole("failed connecting to bucket", err)
+		onetime.LogErrorToFileAndConsole(ctx, "failed connecting to bucket", err)
 		return err
 	}
 
@@ -445,7 +445,7 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 	}
 	if attrs.RetentionPolicy != nil {
 		err := errors.New("retention policy is set, backup operation will fail; please provide a bucket without retention policy")
-		onetime.LogErrorToFileAndConsole("Error performing backup operation", err)
+		onetime.LogErrorToFileAndConsole(ctx, "Error performing backup operation", err)
 		return err
 	}
 	return nil
@@ -464,12 +464,12 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 			Cp:        opts.cp,
 		},
 	}
-	onetime.LogMessageToFileAndConsole("Running backint...")
-	defer onetime.LogMessageToFileAndConsole("Finished running backint.")
+	onetime.LogMessageToFileAndConsole(ctx, "Running backint...")
+	defer onetime.LogMessageToFileAndConsole(ctx, "Finished running backint.")
 	res := backintParams.Execute(ctx, &flag.FlagSet{})
 	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
 	if res != subcommands.ExitSuccess {
-		onetime.LogMessageToFileAndConsole("Error while executing backint")
+		onetime.LogMessageToFileAndConsole(ctx, "Error while executing backint")
 	}
 
 	paths := []moveFiles{
@@ -493,7 +493,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 // provided.
 func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 	var errs []error
-	onetime.LogMessageToFileAndConsole("Running gsutil perfdiag...")
+	onetime.LogMessageToFileAndConsole(ctx, "Running gsutil perfdiag...")
 	targetPath := path.Join(d.path, d.bundleName)
 	targetBucket := d.testBucket
 	if targetBucket == "" {
@@ -517,14 +517,14 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 			errs = append(errs, fmt.Errorf("error while executing gsutil perfdiag command %v", res.StdErr))
 		}
 	}
-	onetime.LogMessageToFileAndConsole("Finished running gsutil perfdiag.")
+	onetime.LogMessageToFileAndConsole(ctx, "Finished running gsutil perfdiag.")
 	return errs
 }
 
 // runFIOCommands runs the FIO commands in order to simulate HANA IO operations.
 func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 	var errs []error
-	onetime.LogMessageToFileAndConsole("Running FIO commands...")
+	onetime.LogMessageToFileAndConsole(ctx, "Running FIO commands...")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFIO)
 	targetPath := path.Join(d.path, d.bundleName, "io")
 	if err := opts.fs.MkdirAll(targetPath, 0777); err != nil {
@@ -549,7 +549,7 @@ func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 			errs = append(errs, err)
 		}
 	}
-	onetime.LogMessageToFileAndConsole("Finished running FIO commands.")
+	onetime.LogMessageToFileAndConsole(ctx, "Finished running FIO commands.")
 	return errs
 }
 
@@ -592,7 +592,7 @@ func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSyste
 		defer dstFD.Close()
 
 		if _, err := fs.Copy(dstFD, srcFD); err != nil {
-			onetime.LogErrorToFileAndConsole("error while renaming file: %v", err)
+			onetime.LogErrorToFileAndConsole(ctx, "error while renaming file: %v", err)
 			hasErrors = true
 		}
 	}
@@ -721,9 +721,9 @@ func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper)
 }
 
 // removeDestinationFolder removes the destination folder.
-func removeDestinationFolder(path string, fu filesystem.FileSystem) error {
+func removeDestinationFolder(ctx context.Context, path string, fu filesystem.FileSystem) error {
 	if err := fu.RemoveAll(path); err != nil {
-		onetime.LogErrorToFileAndConsole(fmt.Sprintf("error while removing folder %s", path), err)
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while removing folder %s", path), err)
 		return err
 	}
 	return nil
