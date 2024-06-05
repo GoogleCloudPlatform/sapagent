@@ -204,7 +204,7 @@ func (r *Reader) ReadDiskMapping(ctx context.Context, config *configpb.Configura
 		})
 	}
 
-	log.CtxLogger(ctx).Infow("Instance properties:", "instanceProperties", r.instanceProperties)
+	log.CtxLogger(ctx).Debugw("Instance properties:", "instanceProperties", instance)
 	return instance, &builder, nil
 }
 
