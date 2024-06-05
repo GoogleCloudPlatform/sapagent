@@ -429,8 +429,9 @@ func TestCheckPreConditions(t *testing.T) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
-				SourceSnapshot: "test-snapshot",
-				gceService:     &fake.TestGCE{DiskAttachedToInstanceErr: cmpopts.AnyError},
+				SourceSnapshot:  "test-snapshot",
+				gceService:      &fake.TestGCE{DiskAttachedToInstanceErr: cmpopts.AnyError},
+				isGroupSnapshot: false,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -449,6 +450,7 @@ func TestCheckPreConditions(t *testing.T) {
 					IsDiskAttached:            false,
 					DiskAttachedToInstanceErr: cmpopts.AnyError,
 				},
+				isGroupSnapshot: false,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -468,6 +470,7 @@ func TestCheckPreConditions(t *testing.T) {
 					IsDiskAttached:            false,
 					DiskAttachedToInstanceErr: cmpopts.AnyError,
 				},
+				isGroupSnapshot: true,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -487,6 +490,7 @@ func TestCheckPreConditions(t *testing.T) {
 					IsDiskAttached:            false,
 					DiskAttachedToInstanceErr: cmpopts.AnyError,
 				},
+				isGroupSnapshot: true,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -512,6 +516,7 @@ func TestCheckPreConditions(t *testing.T) {
 						},
 					},
 				},
+				isGroupSnapshot: true,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -537,6 +542,7 @@ func TestCheckPreConditions(t *testing.T) {
 						},
 					},
 				},
+				isGroupSnapshot: true,
 			},
 			wantErr: nil,
 		},
@@ -563,6 +569,7 @@ func TestCheckPreConditions(t *testing.T) {
 						},
 					},
 				},
+				isGroupSnapshot: true,
 			},
 			wantErr: nil,
 		},
@@ -609,7 +616,8 @@ func TestPrepare(t *testing.T) {
 		{
 			name: "GroupSnapshotDetachDiskErr",
 			r: &Restorer{
-				disks: []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				isGroupSnapshot: true,
+				disks:           []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
 				gceService: &fake.TestGCE{
 					DetachDiskErr: cmpopts.AnyError,
 				},
@@ -980,6 +988,51 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			got := tc.r.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAppendLabels(t *testing.T) {
+	tests := []struct {
+		name       string
+		r          *Restorer
+		labels     map[string]string
+		wantLabels map[string]string
+		wantErr    error
+	}{
+		{
+			name: "Failure",
+			r: &Restorer{
+				labelsOnDetachedDisk: "key1, key2=value2",
+			},
+			labels:     map[string]string{"test-key": "test-value"},
+			wantLabels: nil,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				labelsOnDetachedDisk: "key1=value1, key2=value2",
+			},
+			labels: map[string]string{"test-key": "test-value"},
+			wantLabels: map[string]string{
+				"test-key": "test-value",
+				"key1":     "value1",
+				"key2":     "value2",
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.r.appendLabels(tc.labels)
+			if diff := cmp.Diff(got, tc.wantLabels, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("appendLabels() returned diff (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("appendLabels() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -94,6 +94,7 @@ type Restorer struct {
 	baseDataPath, baseLogPath                                  string
 	logicalDataPath, logicalLogPath                            string
 	physicalDataPath, physicalLogPath                          string
+	labelsOnDetachedDisk                                       string
 	timeSeriesCreator                                          cloudmonitoring.TimeSeriesCreator
 	help, version                                              bool
 	SendToMonitoring                                           bool
@@ -101,6 +102,7 @@ type Restorer struct {
 	HANAChangeDiskTypeOTEName                                  string
 	LogLevel                                                   string
 	ForceStopHANA                                              bool
+	isGroupSnapshot                                            bool
 	NewdiskName                                                string
 	CSEKKeyFile                                                string
 	ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
@@ -138,6 +140,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.StringVar(&r.HanaSidAdm, "hana-sidadm", "", "HANA sidadm username. (optional) Default: <sid>adm")
+	fs.StringVar(&r.labelsOnDetachedDisk, "labels-on-detached-disk", "", "Labels to be appended to detached disks. (optional) Default: empty. Accepts comma separated key-value pairs, like \"key1=value1,key2=value2\"")
 	fs.BoolVar(&r.ForceStopHANA, "force-stop-hana", false, "Forcefully stop HANA using `HDB kill` before attempting restore.(optional) Default: false.")
 	fs.Int64Var(&r.DiskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
 	fs.Int64Var(&r.ProvisionedIops, "provisioned-iops", 0, "Number of I/O operations per second that the disk can handle. (optional)")
@@ -200,9 +203,12 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	if r.Project == "" {
 		r.Project = cp.GetProjectId()
 	}
-
 	if r.HanaSidAdm == "" {
 		r.HanaSidAdm = strings.ToLower(r.Sid) + "adm"
+	}
+
+	if restoreFromGroupSnapshot {
+		r.isGroupSnapshot = true
 	}
 
 	log.Logger.Debug("Parameter validation successful.")
@@ -233,7 +239,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 		return subcommands.ExitFailure
 	}
 
-	if r.GroupSnapshot != "" {
+	if r.isGroupSnapshot {
 		if err := r.readDiskMapping(ctx, cp); err != nil {
 			onetime.LogErrorToFileAndConsole("ERROR: Failed to read disks backing /hana/data,", err)
 			return subcommands.ExitFailure
@@ -256,7 +262,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 		}
 	}
 	workflowStartTime = time.Now()
-	if r.SourceSnapshot != "" {
+	if !r.isGroupSnapshot {
 		if err := r.diskRestore(ctx, cp); err != nil {
 			return subcommands.ExitFailure
 		}
@@ -268,6 +274,20 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	onetime.LogMessageToFileAndConsole("SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/disk-snapshot-backup-recovery#recover_to_specific_point-in-time for next steps.")
+
+	if r.labelsOnDetachedDisk != "" {
+		if !r.isGroupSnapshot {
+			if err := r.appendLabelsToDetachedDisk(ctx, r.DataDiskName); err != nil {
+				return subcommands.ExitFailure
+			}
+		} else {
+			for _, d := range r.disks {
+				if err := r.appendLabelsToDetachedDisk(ctx, d.DiskName); err != nil {
+					return subcommands.ExitFailure
+				}
+			}
+		}
+	}
 	return subcommands.ExitSuccess
 }
 
@@ -288,7 +308,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
-	if r.SourceSnapshot != "" {
+	if !r.isGroupSnapshot {
 		if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
 			hanabackup.RescanVolumeGroups(ctx)
@@ -477,7 +497,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 	}
 
 	// Verify the disk is attached to the instance.
-	if r.SourceSnapshot != "" {
+	if !r.isGroupSnapshot {
 		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.DataDiskName)
 		if err != nil {
 			return fmt.Errorf("failed to verify if disk %v is attached to the instance", r.DataDiskName)
@@ -499,7 +519,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 	}
 
 	// Verify the snapshot is present.
-	if r.SourceSnapshot != "" {
+	if !r.isGroupSnapshot {
 		if _, err = r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do(); err != nil {
 			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
 		}
@@ -510,7 +530,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 	}
 
 	if r.NewDiskType == "" {
-		if r.SourceSnapshot != "" {
+		if !r.isGroupSnapshot {
 			d, err := r.computeService.Disks.Get(r.Project, r.DataDiskZone, r.DataDiskName).Do()
 			if err != nil {
 				return fmt.Errorf("failed to read data disk type: %v", err)
@@ -569,4 +589,47 @@ func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 		}
 	}
 	return nil
+}
+
+// appendLabelsToDetachedDisk appends and sets labels to the detached disk.
+func (r *Restorer) appendLabelsToDetachedDisk(ctx context.Context, diskName string) (err error) {
+	var disk *compute.Disk
+	if disk, err = r.computeService.Disks.Get(r.Project, r.DataDiskZone, diskName).Do(); err != nil {
+		return fmt.Errorf("failed to get disk: %v", err)
+	}
+	labelFingerprint := disk.LabelFingerprint
+	labels, err := r.appendLabels(disk.Labels)
+	if err != nil {
+		return err
+	}
+
+	setLabelRequest := &compute.ZoneSetLabelsRequest{
+		LabelFingerprint: labelFingerprint,
+		Labels:           labels,
+	}
+
+	op, err := r.computeService.Disks.SetLabels(r.Project, r.DataDiskZone, diskName, setLabelRequest).Do()
+	if err != nil {
+		return fmt.Errorf("failed to append labels on detached disk: %v", err)
+	}
+	if err = r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
+		return fmt.Errorf("failed to append labels on detached disk: %v", err)
+	}
+	return nil
+}
+
+func (r *Restorer) appendLabels(labels map[string]string) (map[string]string, error) {
+	pairs := strings.Split(strings.ReplaceAll(r.labelsOnDetachedDisk, " ", ""), ",")
+
+	for _, pair := range pairs {
+		parts := strings.Split(pair, "=")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("failed to parse labels on detached disk: %v", pair)
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		labels[key] = value
+	}
+
+	return labels, nil
 }
