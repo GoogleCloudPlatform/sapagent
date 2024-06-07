@@ -19,6 +19,7 @@ package supportbundle
 import (
 	"archive/zip"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -30,9 +31,12 @@ import (
 	"time"
 
 	"flag"
+	st "cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -64,6 +68,10 @@ type (
 		modTime time.Time
 		isDir   bool
 		sys     any
+	}
+
+	fakeReadWriter struct {
+		err error
 	}
 
 	mockedWriter struct {
@@ -232,6 +240,10 @@ func (mz mockedZipper) Close(w *zip.Writer) error {
 		return cmpopts.AnyError
 	}
 	return nil
+}
+
+func (f *fakeReadWriter) Upload(ctx context.Context) (int64, error) {
+	return 0, f.err
 }
 
 func fakeExec(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
@@ -1176,9 +1188,9 @@ func TestZipSource(t *testing.T) {
 	}{
 		{
 			name:   "CreateError",
-			source: "sampleFile",
+			source: "failure",
 			target: "failure",
-			fu:     mockedfilesystem{},
+			fu:     mockedfilesystem{reqErr: cmpopts.AnyError},
 			z:      mockedZipper{},
 			want:   cmpopts.AnyError,
 		},
@@ -1189,14 +1201,6 @@ func TestZipSource(t *testing.T) {
 			fu:     mockedfilesystem{},
 			z:      mockedZipper{},
 			want:   cmpopts.AnyError,
-		},
-		{
-			name:   "CreateError",
-			source: "sampleFile",
-			target: "dest",
-			fu:     mockedfilesystem{},
-			z:      mockedZipper{},
-			want:   nil,
 		},
 	}
 
@@ -1497,6 +1501,142 @@ func TestCollectSLESPacemakerLogs(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if got := slesPacemakerLogs(test.ctx, test.exec, test.destFilesPath, test.fs); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("collectSLESPacemakerLogs(%q) = %v, want %v", test.destFilesPath, got, test.want)
+			}
+		})
+	}
+}
+
+func TestUploadZip(t *testing.T) {
+	tests := []struct {
+		name          string
+		sb            *SupportBundle
+		destFilesPath string
+		ctb           storage.BucketConnector
+		grw           getReaderWriter
+		fs            filesystem.FileSystem
+		wantErr       error
+	}{
+		{
+			name: "OpenFail",
+			sb: &SupportBundle{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "failure",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
+				return &st.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			fs: &fake.FileSystem{
+				OpenErr:  []error{fmt.Errorf("error")},
+				OpenResp: []*os.File{nil},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "StatFail",
+			sb: &SupportBundle{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
+				return &st.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			fs: &fake.FileSystem{
+				OpenErr:  []error{nil},
+				OpenResp: []*os.File{&os.File{}},
+				StatErr:  []error{fmt.Errorf("error")},
+				StatResp: []os.FileInfo{nil},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ConnectToBucketFail",
+			sb: &SupportBundle{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
+				return nil, false
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			fs: &fake.FileSystem{
+				OpenErr:  []error{nil},
+				OpenResp: []*os.File{&os.File{}},
+				StatErr:  []error{nil},
+				StatResp: []os.FileInfo{
+					mockedFileInfo{name: "samplefile", mode: 0777},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UploadFail",
+			sb: &SupportBundle{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
+				return &st.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{
+					err: fmt.Errorf("error"),
+				}
+			},
+			fs: &fake.FileSystem{
+				OpenErr:  []error{nil},
+				OpenResp: []*os.File{&os.File{}},
+				StatErr:  []error{nil},
+				StatResp: []os.FileInfo{
+					mockedFileInfo{name: "samplefile", mode: 0777},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UploadSuccess",
+			sb: &SupportBundle{
+				resultBucket: "test_bucket",
+			},
+			destFilesPath: "sampleFile",
+			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
+				return &st.BucketHandle{}, true
+			},
+			grw: func(rw storage.ReadWriter) uploader {
+				return &fakeReadWriter{}
+			},
+			fs: &fake.FileSystem{
+				OpenErr:  []error{nil},
+				OpenResp: []*os.File{&os.File{}},
+				StatErr:  []error{nil},
+				StatResp: []os.FileInfo{
+					mockedFileInfo{name: "samplefile", mode: 0777},
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.sb.uploadZip(ctx, tc.destFilesPath, "bundle", tc.ctb, tc.grw, tc.fs, st.NewClient)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("uploadZip(%q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.ctb, tc.grw, diff)
 			}
 		})
 	}

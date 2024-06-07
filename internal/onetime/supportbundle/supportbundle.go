@@ -33,8 +33,10 @@ import (
 	"time"
 
 	"flag"
+	st "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -52,9 +54,18 @@ type (
 		pacemakerDiagnosis, agentLogsOnly bool
 		help, version                     bool
 		logLevel                          string
+		resultBucket                      string
 		IIOTEParams                       *onetime.InternallyInvokedOTE
 	}
 	zipperHelper struct{}
+
+	// uploader interface provides abstraction for ease of testing.
+	uploader interface {
+		Upload(ctx context.Context) (int64, error)
+	}
+
+	// getReaderWriter is a function to get the reader writer for uploading the file.
+	getReaderWriter func(rw storage.ReadWriter) uploader
 )
 
 // NewWriter is testable version of zip.NewWriter method.
@@ -104,6 +115,7 @@ func (*SupportBundle) Synopsis() string {
 func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
 	[-hostname=<Hostname>] [agent-logs-only=true|false] [-h] [-v] [-loglevel=<debug|info|warn|error>]
+	[-result-bucket=<name of the result bucket where bundle zip is uploaded>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
 
@@ -117,6 +129,11 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&s.resultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
+}
+
+func getReadWriter(rw storage.ReadWriter) uploader {
+	return &rw
 }
 
 // Execute implements the subcommand interface for support bundle report collection.
@@ -156,7 +173,8 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		return subcommands.ExitUsageError
 	}
 	s.sid = strings.ToUpper(s.sid)
-	destFilesPath := fmt.Sprintf("%ssupportbundle-%s-%s", destFilePathPrefix, s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
+	bundlename := fmt.Sprintf("supportbundle-%s-%s", s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
+	destFilesPath := fmt.Sprintf("%s%s", destFilePathPrefix, bundlename)
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, "Error while making directory: "+destFilesPath, err)
 		return subcommands.ExitFailure
@@ -192,16 +210,26 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 			hasErrors = true
 		}
 	}
-	if err := zipSource(destFilesPath, destFilesPath+".zip", fs, z); err != nil {
+
+	zipfile := fmt.Sprintf("%s/%s.zip", destFilesPath, bundlename)
+	if err := zipSource(destFilesPath, zipfile, fs, z); err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while zipping destination folder %s", destFilesPath), err)
 		hasErrors = true
 	} else {
 		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath)))
 	}
 
-	// removing the destination directory after zip file is created.
-	if err := removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
-		hasErrors = true
+	if s.resultBucket != "" {
+		if err := s.uploadZip(ctx, zipfile, bundlename, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
+			fmt.Println(fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.resultBucket), " Error: ", err)
+			hasErrors = true
+		} else {
+			// removing the destination directory after zip file is created.
+			if err := removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
+				fmt.Println(fmt.Sprintf("Error while removing destination folder %s", destFilesPath), " Error: ", err)
+				hasErrors = true
+			}
+		}
 	}
 
 	// Rotate out old support bundles so we don't fill the file system.
@@ -227,6 +255,54 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
+}
+
+// uploadZip uploads the zip file to the bucket provided.
+func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName string, ctb storage.BucketConnector, grw getReaderWriter, fs filesystem.FileSystem, client storage.Client) error {
+	fmt.Println(fmt.Sprintf("Uploading bundle %s to bucket %s", destFilesPath, s.resultBucket))
+	f, err := fs.Open(destFilesPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fileInfo, err := fs.Stat(destFilesPath)
+	if err != nil {
+		return err
+	}
+
+	connectParams := &storage.ConnectParameters{
+		StorageClient:    client,
+		BucketName:       s.resultBucket,
+		UserAgentSuffix:  "Support Bundle",
+		VerifyConnection: true,
+	}
+	bucketHandle, ok := ctb(ctx, connectParams)
+	if !ok {
+		err := errors.New("error establishing connection to bucket, please check the logs")
+		return err
+	}
+
+	objectName := fmt.Sprintf("%s/%s.zip", s.Name(), bundleName)
+	fileSize := fileInfo.Size()
+	readWriter := storage.ReadWriter{
+		Reader:       f,
+		Copier:       io.Copy,
+		BucketHandle: bucketHandle,
+		BucketName:   s.resultBucket,
+		ObjectName:   objectName,
+		TotalBytes:   fileSize,
+		VerifyUpload: true,
+	}
+
+	rw := grw(readWriter)
+	var bytesWritten int64
+	if bytesWritten, err = rw.Upload(ctx); err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Infow("File uploaded", "bucket", s.resultBucket, "bytesWritten", bytesWritten, "fileSize", fileSize)
+	fmt.Println(fmt.Sprintf("Bundle uploaded to bucket %s", s.resultBucket))
+	return nil
 }
 
 func copyFile(src, dst string, fs filesystem.FileSystem) error {
@@ -259,14 +335,22 @@ func copyFile(src, dst string, fs filesystem.FileSystem) error {
 }
 
 func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper) error {
-	f, err := fs.Create(target)
+	// Creating zip at a temporary location to prevent a blank zip file from
+	// being created in the final bundle.
+	tempZip := "/tmp/tmp-support-bundle.zip"
+	f, err := fs.Create(tempZip)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
 	writer := z.NewWriter(f)
 	defer z.Close(writer)
-	return fs.WalkAndZip(source, z, writer)
+
+	if err := fs.WalkAndZip(source, z, writer); err != nil {
+		return err
+	}
+	return fs.Rename(tempZip, target)
 }
 
 func backintParameterFiles(ctx context.Context, globalPath string, sid string, fs filesystem.FileSystem) []string {
