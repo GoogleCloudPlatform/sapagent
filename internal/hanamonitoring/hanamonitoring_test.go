@@ -321,12 +321,13 @@ func TestStart(t *testing.T) {
 
 func TestQueryAndSend(t *testing.T) {
 	// We test that the queryAndSend() workflow returns an error and retries or cancels
-	// the query based on the failCount.
+	// the query based on the if the query results in an authentication error.
 	tests := []struct {
-		name    string
-		opts    queryOptions
-		want    bool
-		wantErr error
+		name        string
+		opts        queryOptions
+		isCancelled bool
+		want        bool
+		wantErr     error
 	}{
 		{
 			name: "queryRetried",
@@ -355,13 +356,41 @@ func TestQueryAndSend(t *testing.T) {
 		{
 			name: "queryCancelled",
 			opts: queryOptions{
-				db:        defaultDb,
-				query:     defaultQuery,
-				params:    defaultParams,
-				wp:        workerpool.New(1),
-				failCount: maxQueryFailures,
+				db:     defaultDb,
+				query:  defaultQuery,
+				params: defaultParams,
+				wp:     workerpool.New(1),
+			},
+			isCancelled: true,
+			want:        false,
+			wantErr:     cmpopts.AnyError,
+		},
+		{
+			name: "authFailure",
+			opts: queryOptions{
+				db:     defaultDb,
+				query:  defaultQuery,
+				params: defaultParams,
+				wp:     workerpool.New(1),
+				isAuthErrorFunc: func(err error) bool {
+					return true
+				},
 			},
 			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "nonAuthFailure",
+			opts: queryOptions{
+				db:     defaultDb,
+				query:  defaultQuery,
+				params: defaultParams,
+				wp:     workerpool.New(1),
+				isAuthErrorFunc: func(err error) bool {
+					return false
+				},
+			},
+			want:    true,
 			wantErr: cmpopts.AnyError,
 		},
 	}
@@ -370,6 +399,10 @@ func TestQueryAndSend(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
+
+			if test.isCancelled {
+				cancel()
+			}
 
 			got, gotErr := queryAndSend(ctx, test.opts)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {

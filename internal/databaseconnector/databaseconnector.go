@@ -20,6 +20,7 @@ package databaseconnector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -27,11 +28,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SAP/go-hdb/driver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+)
 
-	// Register hdb driver.
-	_ "github.com/SAP/go-hdb/driver"
+var (
+	// authErrorCodes is a list of error codes that are related to authentication according to the
+	// SAP documentation found here: https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-sql-reference-guide/sql-error-codes
+	authErrorCodes = []int{10, 332, 414, 415, 416}
 )
 
 type (
@@ -330,4 +335,34 @@ func parseIntoValues(resultRow string, dest ...any) error {
 		}
 	}
 	return nil
+}
+
+// IsAuthError returns true if the error is related to authentication, and false otherwise.
+func IsAuthError(err error) bool {
+	if hdbError := asHdbError(err); hdbError != nil {
+		return isHdbErrorAuthRelated(*hdbError)
+	}
+	return false
+}
+
+// asHdbError returns the HDB error from the given error if it is an HDB error, and nil otherwise.
+func asHdbError(err error) *driver.DBError {
+	var hdbError driver.DBError
+	isHdbError := err != nil && errors.As(err, &hdbError)
+	if !isHdbError {
+		return nil
+	}
+	return &hdbError
+}
+
+// isHdbErrorAuthRelated returns true if the HDB error is related to authentication, and false
+// otherwise.
+func isHdbErrorAuthRelated(err driver.DBError) bool {
+	code := err.Code()
+	for _, authCode := range authErrorCodes {
+		if authCode == code {
+			return true
+		}
+	}
+	return false
 }

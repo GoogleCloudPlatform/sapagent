@@ -455,3 +455,57 @@ func TestNewGoDBHandleWithPing(t *testing.T) {
 		})
 	}
 }
+
+type mockHdbError struct {
+	mockString string
+	mockInt    int
+}
+
+func (e *mockHdbError) Error() string   { return e.mockString }
+func (e *mockHdbError) StmtNo() int     { return e.mockInt }
+func (e *mockHdbError) Code() int       { return e.mockInt }
+func (e *mockHdbError) Position() int   { return e.mockInt }
+func (e *mockHdbError) Level() int      { return e.mockInt }
+func (e *mockHdbError) Text() string    { return e.mockString }
+func (e *mockHdbError) IsWarning() bool { return false }
+func (e *mockHdbError) IsError() bool   { return true }
+func (e *mockHdbError) IsFatal() bool   { return false }
+
+func TestIsAuthError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "NilCase",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "NonHdbError",
+			err:  errors.New("non-hdb error"),
+			want: false,
+		},
+		{
+			name: "NonAuthHdbError",
+			err:  &mockHdbError{mockString: "non-auth hdb error", mockInt: 1},
+			want: false,
+		},
+		{
+			name: "AuthHdbError",
+			// This is a real error message as it appears in our logs.
+			err:  &mockHdbError{mockString: "SQL Error 10 - authentication failed (statement no: 0)", mockInt: 10},
+			want: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := IsAuthError(tc.err)
+			if got != tc.want {
+				t.Errorf("isAuthError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

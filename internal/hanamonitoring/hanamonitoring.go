@@ -43,10 +43,6 @@ import (
 
 const (
 	metricURL = "workload.googleapis.com/sap/hanamonitoring"
-
-	// HANA DB locks the user out after 3 failed authentication attempts, so we
-	// will have only two max fail counts.
-	maxQueryFailures = 2
 )
 
 type (
@@ -70,6 +66,9 @@ type (
 		startTime *tspb.Timestamp
 	}
 
+	// isAuthErrorFunc determines if an error is an authentication error.
+	isAuthErrorFunc func(err error) bool
+
 	// queryFunc provides an easily testable translation to the SQL API.
 	queryFunc func(ctx context.Context, query string, exec commandlineexecutor.Execute) (*databaseconnector.QueryResults, error)
 
@@ -89,14 +88,15 @@ type (
 
 	// queryOptions holds parameters for the queryAndSend workflows.
 	queryOptions struct {
-		db             *database
-		query          *cpb.Query
-		timeout        int64
-		sampleInterval int64
-		failCount      int64
-		params         Parameters
-		wp             *workerpool.WorkerPool
-		runningSum     map[timeSeriesKey]prevVal
+		db              *database
+		query           *cpb.Query
+		timeout         int64
+		sampleInterval  int64
+		failCount       int64
+		params          Parameters
+		wp              *workerpool.WorkerPool
+		runningSum      map[timeSeriesKey]prevVal
+		isAuthErrorFunc isAuthErrorFunc
 	}
 
 	// database holds the relevant information for querying and debugging the database.
@@ -242,6 +242,9 @@ func queryMap(queries []*cpb.Query) map[string]*cpb.Query {
 func queryAndSend(ctx context.Context, opts queryOptions) (bool, error) {
 	user, host, port, queryName := opts.db.instance.GetUser(), opts.db.instance.GetHost(), opts.db.instance.GetPort(), opts.query.GetName()
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*time.Duration(opts.timeout))
+	if opts.isAuthErrorFunc == nil {
+		opts.isAuthErrorFunc = databaseconnector.IsAuthError
+	}
 	select {
 	case <-ctx.Done():
 		log.CtxLogger(ctx).Debugw("Context cancelled, stopping queryAndSend worker", "err", ctx.Err())
@@ -259,10 +262,11 @@ func queryAndSend(ctx context.Context, opts queryOptions) (bool, error) {
 			log.CtxLogger(ctx).Debugw("Sent metrics from queryAndSend.", "user", user, "host", host, "port", port, "query", queryName, "sent", sent, "batches", batchCount, "sleeping", opts.sampleInterval)
 		}
 
-		if opts.failCount >= maxQueryFailures {
-			log.CtxLogger(ctx).Errorw("Query reached max failure count, not restarting.", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount)
+		if opts.isAuthErrorFunc(err) {
+			log.CtxLogger(ctx).Errorw("Query resulted in authentication error, not restarting to prevent user lockout", "user", user, "host", host, "port", port, "query", queryName, "failCount", opts.failCount)
 			return false, err
 		}
+
 		// Schedule to insert this query back into the task queue after the sampleInterval.
 		// Also release this worker back to the pool since AfterFunc() is non-blocking.
 		time.AfterFunc(time.Duration(opts.sampleInterval)*time.Second, func() {
