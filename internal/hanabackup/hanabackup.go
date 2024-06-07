@@ -74,9 +74,12 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 	}
 	log.CtxLogger(ctx).Debugf("ParsePhysicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	phyisicalDevice := strings.TrimSuffix(result.StdOut, "\n")
-	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", phyisicalDevice)
-	return phyisicalDevice, nil
+	physicalDevice := strings.TrimSuffix(result.StdOut, "\n")
+	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", physicalDevice)
+	if physicalDevice == "" {
+		return "", fmt.Errorf("physical device is empty")
+	}
+	return physicalDevice, nil
 }
 
 // Unmount unmounts the given directory.
