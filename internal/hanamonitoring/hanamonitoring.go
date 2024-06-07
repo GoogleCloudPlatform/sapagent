@@ -315,8 +315,7 @@ func matchQueryAndInstanceType(ctx context.Context, opts queryOptions) bool {
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.
 func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, params Parameters, runningSum map[timeSeriesKey]prevVal) (sent, batchCount int, err error) {
-	expMetrics := params.Config.GetCollectionConfiguration().GetCollectExperimentalMetrics()
-	if expMetrics && !matchQueryAndInstanceType(ctx, queryOptions{db: db, query: query, params: params}) {
+	if collectExpiementalMetrics(ctx, params) && !matchQueryAndInstanceType(ctx, queryOptions{db: db, query: query, params: params}) {
 		log.CtxLogger(ctx).Infow("Query should not run on this instance type in this cycle ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort())
 		return 0, 0, nil
 	}
@@ -599,4 +598,13 @@ func prepareKey(mtype, mkind string, labels map[string]string) timeSeriesKey {
 	sort.Strings(metricLabels)
 	tsk.MetricLabels = strings.Join(metricLabels, ",")
 	return tsk
+}
+
+func collectExpiementalMetrics(ctx context.Context, params Parameters) bool {
+	cc := params.Config.GetCollectionConfiguration()
+	if cc == nil {
+		log.CtxLogger(ctx).Error("No collection configuration specified")
+		return false
+	}
+	return cc.GetCollectExperimentalMetrics()
 }

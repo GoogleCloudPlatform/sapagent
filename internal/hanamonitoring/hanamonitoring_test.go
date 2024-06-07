@@ -1028,3 +1028,33 @@ func TestMatchQyeryAndInstanceType(t *testing.T) {
 		})
 	}
 }
+
+func TestCollectExpiementalMetrics(t *testing.T) {
+	tests := []struct {
+		name   string
+		params Parameters
+		want   bool
+	}{
+		{
+			name:   "CollectExpiementalMetrics",
+			params: defaultParamsWithExpMetrics,
+			want:   true,
+		},
+		{
+			name:   "NoExpMetrics",
+			params: defaultParams,
+			want:   false,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := collectExpiementalMetrics(ctx, tc.params)
+			if got != tc.want {
+				t.Errorf("collectExpiementalMetrics(%v) = %v, want: %v", tc.params, got, tc.want)
+			}
+		})
+	}
+}
