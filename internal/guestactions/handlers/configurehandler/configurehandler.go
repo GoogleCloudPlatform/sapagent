@@ -35,6 +35,7 @@ func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 	return subcommands.ExitSuccess
 }
 
+// TODO - Consider defining constants for the command parameters.
 // TODO - Investigate marshalling the command parameters into JSON and then unmarshalling into configure.Configure struct.
 func buildConfigureFromMap(command *gpb.AgentCommand) configure.Configure {
 	fields := command.GetParameters()
@@ -45,7 +46,7 @@ func buildConfigureFromMap(command *gpb.AgentCommand) configure.Configure {
 	if ok {
 		c.Feature = feature
 	}
-	logLevel, ok := fields["log_level"]
+	logLevel, ok := fields["loglevel"]
 	if ok {
 		c.LogLevel = logLevel
 	}
@@ -57,23 +58,23 @@ func buildConfigureFromMap(command *gpb.AgentCommand) configure.Configure {
 	if ok {
 		c.Path = path
 	}
-	skipMetrics, ok := fields["skip_metrics"]
+	skipMetrics, ok := fields["process_metrics_to_skip"]
 	if ok {
 		c.SkipMetrics = skipMetrics
 	}
-	validationMetricsFrequency, ok := fields["validation_metrics_frequency"]
+	validationMetricsFrequency, ok := fields["workload_evaluation_metrics_frequency"]
 	if ok {
 		c.ValidationMetricsFrequency, _ = strconv.ParseInt(validationMetricsFrequency, 10, 64)
 	}
-	dbFrequency, ok := fields["db_frequency"]
+	dbFrequency, ok := fields["workload_evaluation_db_metrics_frequency"]
 	if ok {
 		c.DbFrequency, _ = strconv.ParseInt(dbFrequency, 10, 64)
 	}
-	fastMetricsFrequency, ok := fields["fast_metrics_frequency"]
+	fastMetricsFrequency, ok := fields["process_metrics_frequency"]
 	if ok {
 		c.FastMetricsFrequency, _ = strconv.ParseInt(fastMetricsFrequency, 10, 64)
 	}
-	slowMetricsFrequency, ok := fields["slow_metrics_frequency"]
+	slowMetricsFrequency, ok := fields["slow_process_metrics_frequency"]
 	if ok {
 		c.SlowMetricsFrequency, _ = strconv.ParseInt(slowMetricsFrequency, 10, 64)
 	}
