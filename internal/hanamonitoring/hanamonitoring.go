@@ -315,7 +315,8 @@ func matchQueryAndInstanceType(ctx context.Context, opts queryOptions) bool {
 
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.
 func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, params Parameters, runningSum map[timeSeriesKey]prevVal) (sent, batchCount int, err error) {
-	if !matchQueryAndInstanceType(ctx, queryOptions{db: db, query: query, params: params}) {
+	expMetrics := params.Config.GetCollectionConfiguration().GetCollectExperimentalMetrics()
+	if expMetrics && !matchQueryAndInstanceType(ctx, queryOptions{db: db, query: query, params: params}) {
 		log.CtxLogger(ctx).Infow("Query should not run on this instance type in this cycle ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort())
 		return 0, 0, nil
 	}

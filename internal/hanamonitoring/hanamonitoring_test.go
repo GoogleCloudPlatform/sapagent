@@ -66,6 +66,24 @@ var (
 		},
 		BackOffs: cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
 	}
+	defaultParamsWithExpMetrics = Parameters{
+		Config: &configpb.Configuration{
+			CloudProperties: &ipb.CloudProperties{
+				ProjectId:  "test-project",
+				Zone:       "test-zone",
+				InstanceId: "123456",
+			},
+			CollectionConfiguration: &configpb.CollectionConfiguration{
+				CollectExperimentalMetrics: true,
+			},
+			HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+				Enabled: true,
+				Queries: []*configpb.Query{
+					&configpb.Query{SampleIntervalSec: 5},
+				},
+			},
+		},
+	}
 	defaultTimestamp = &tspb.Timestamp{Seconds: 123}
 	defaultDb        = &database{
 		queryFunc: fakeQueryFuncError,
@@ -316,6 +334,18 @@ func TestQueryAndSend(t *testing.T) {
 				db:        defaultDb,
 				query:     defaultQuery,
 				params:    defaultParams,
+				wp:        workerpool.New(1),
+				failCount: 0,
+			},
+			want:    true,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "queryRetriedWithExperimentalMetrics",
+			opts: queryOptions{
+				db:        defaultDb,
+				query:     defaultQuery,
+				params:    defaultParamsWithExpMetrics,
 				wp:        workerpool.New(1),
 				failCount: 0,
 			},
