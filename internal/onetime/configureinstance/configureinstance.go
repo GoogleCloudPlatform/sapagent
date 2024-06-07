@@ -169,6 +169,12 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 
 	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
 	// usagemetrics.Action(usagemetrics.ConfigureInstanceFinished)
+	// if c.Check {
+	// 	usagemetrics.Action(usagemetrics.ConfigureInstanceCheckFinished)
+	// }
+	// if c.Apply {
+	// 	usagemetrics.Action(usagemetrics.ConfigureInstanceApplyFinished)
+	// }
 	exitStatus := subcommands.ExitSuccess
 	if c.Apply || (c.Check && !rebootRequired) {
 		LogToBoth(ctx, "ConfigureInstance: SUCCESS")

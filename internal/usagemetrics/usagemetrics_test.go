@@ -355,4 +355,10 @@ func TestActionConstants(t *testing.T) {
 	if PerformanceDiagnosticsFIO != 37 {
 		t.Errorf("PerformanceDiagnosticsFIO = %v, want 37", PerformanceDiagnosticsFIO)
 	}
+	if ConfigureInstanceCheckFinished != 38 {
+		t.Errorf("ConfigureInstanceCheckFinished = %v, want 38", ConfigureInstanceCheckFinished)
+	}
+	if ConfigureInstanceApplyFinished != 39 {
+		t.Errorf("ConfigureInstanceApplyFinished = %v, want 39", ConfigureInstanceApplyFinished)
+	}
 }

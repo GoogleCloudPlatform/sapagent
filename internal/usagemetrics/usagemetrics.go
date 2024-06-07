@@ -155,6 +155,8 @@ const (
 	PerformanceDiagnosticsConfigureInstance = 35 //	PerformanceDiagnosticsConfigureInstance
 	PerformanceDiagnosticsBackup            = 36 //	PerformanceDiagnosticsBackup
 	PerformanceDiagnosticsFIO               = 37 //	PerformanceDiagnosticsFIO
+	ConfigureInstanceCheckFinished          = 38 //	ConfigureInstanceCheckFinished
+	ConfigureInstanceApplyFinished          = 39 //	ConfigureInstanceApplyFinished
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")
