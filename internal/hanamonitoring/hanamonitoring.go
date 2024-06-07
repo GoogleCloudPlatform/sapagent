@@ -20,6 +20,7 @@ package hanamonitoring
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -72,6 +73,9 @@ type (
 	// queryFunc provides an easily testable translation to the SQL API.
 	queryFunc func(ctx context.Context, query string, exec commandlineexecutor.Execute) (*databaseconnector.QueryResults, error)
 
+	// hanaReplicationConfig provides an easily testable translation to invoking the sapdiscovery package function HANAReplicationConfig.
+	hanaReplicationConfig func(ctx context.Context, user, sid, instID string) (int, []string, int64, error)
+
 	// Parameters hold the parameters necessary to invoke Start().
 	Parameters struct {
 		Config                  *cpb.Configuration
@@ -80,6 +84,7 @@ type (
 		TimeSeriesCreator       cloudmonitoring.TimeSeriesCreator
 		dailyMetricsRoutine     *recovery.RecoverableRoutine
 		createWorkerPoolRoutine *recovery.RecoverableRoutine
+		HRC                     hanaReplicationConfig
 	}
 
 	// queryOptions holds parameters for the queryAndSend workflows.
@@ -269,8 +274,51 @@ func queryAndSend(ctx context.Context, opts queryOptions) (bool, error) {
 	}
 }
 
+// matchQueryAndInstanceType checks if the query should be run on the current instance by matching
+// the runOn field in Query and Instance Type
+// There are queries which should only run on either Primary or Secondary instances and since
+// this is dynamic we need to check if a query should run or not.
+func matchQueryAndInstanceType(ctx context.Context, opts queryOptions) bool {
+	instance := opts.db.instance
+	if !instance.IsLocal {
+		log.CtxLogger(ctx).Debugw("Instance not marked local in the config, cannot refresh system replication config", "instance", instance.Name)
+		return true
+	}
+	if instance.InstanceNum == "" {
+		log.CtxLogger(ctx).Debugw("Instance number information not specified in the config, executing the query", "instance", instance.Name)
+		return true
+	}
+	if opts.query.RunOn == cpb.RunOn_RUN_ON_UNSPECIFIED {
+		log.CtxLogger(ctx).Debugw("runOn information not specified in the config", "query", opts.query.GetName(), "host", instance.GetHost(), "user", instance.GetUser(), "port", instance.GetPort())
+		return true
+	}
+	if opts.query.RunOn == cpb.RunOn_ALL {
+		log.CtxLogger(ctx).Debugw("Query configured to run on all instances", "query", opts.query.GetName(), "host", instance.GetHost(), "user", instance.GetUser(), "port", instance.GetPort())
+		return true
+	}
+	sidUser := fmt.Sprintf("%sadm", strings.ToLower(instance.Sid))
+	site, _, _, err := opts.params.HRC(ctx, sidUser, instance.Sid, instance.InstanceNum)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error getting HANA replication config", "sidUser", sidUser, "instanceNum", instance.InstanceNum, "error", err)
+		return false
+	}
+	log.CtxLogger(ctx).Debugw("Site for the instance: ", "site", site, "instance", instance.Name)
+	switch site {
+	case 0: // stand alone mode
+		return true
+	case int(opts.query.RunOn.Number()):
+		return true
+	default:
+		return false
+	}
+}
+
 // queryAndSendOnce queries the database, packages the results into time series, and sends those results as metrics to cloud monitoring.
 func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, params Parameters, runningSum map[timeSeriesKey]prevVal) (sent, batchCount int, err error) {
+	if !matchQueryAndInstanceType(ctx, queryOptions{db: db, query: query, params: params}) {
+		log.CtxLogger(ctx).Infow("Query should not run on this instance type in this cycle ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort())
+		return 0, 0, nil
+	}
 	queryStartTime := time.Now()
 	rows, cols, err := queryDatabase(ctx, db.queryFunc, query)
 	responseTime := time.Since(queryStartTime).Milliseconds()

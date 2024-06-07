@@ -407,6 +407,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		GCEService:        gceService,
 		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
 		TimeSeriesCreator: mc,
+		HRC:               sapdiscovery.HANAReplicationConfig,
 	})
 
 	// Start UAP Communication

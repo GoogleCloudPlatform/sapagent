@@ -101,6 +101,22 @@ func newDefaultCumulativeMetric(st, et int64) *mrpb.TimeSeries {
 	}
 }
 
+func fakeHRCSucessPrimary(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
+	return 1, []string{"random"}, 1, nil
+}
+
+func fakeHRCSucessSecondary(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
+	return 2, []string{"random"}, 2, nil
+}
+
+func fakeHRCSucessError(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
+	return 0, []string{"random"}, 0, errors.New("fake error")
+}
+
+func fakeHRCSuccessForStandAlone(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
+	return 0, []string{"random"}, 1, nil
+}
+
 func newTimeSeriesKey(metricType, metricLabels string) timeSeriesKey {
 	tsk := timeSeriesKey{
 		MetricKind:   mpb.MetricDescriptor_CUMULATIVE.String(),
@@ -261,7 +277,7 @@ func TestStart(t *testing.T) {
 								Password: "fakePassword",
 								Sid:      "fakeSID",
 								QueriesToRun: &configpb.QueriesToRun{
-									RunAll: false,
+									RunAll:     false,
 									QueryNames: []string{"fakeQueryName", "InvalidQueryName"},
 								},
 							},
@@ -823,5 +839,162 @@ func TestCreateQueryTimeTakenMetric(t *testing.T) {
 	ts := tspb.Now()
 	ctx := context.Background()
 	createQueryResponseTimeMetric(ctx, dbName, sid, query, defaultParams, int64(timeTaken), ts)
+}
 
+func TestMatchQyeryAndInstanceType(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    queryOptions
+		testHRC hanaReplicationConfig
+		want    bool
+	}{
+		{
+			name: "InstanceNotMarkedLocal",
+			opts: queryOptions{
+				db: defaultDb,
+			},
+			want: true,
+		},
+		{
+			name: "InstanceNumberMissing",
+			opts: queryOptions{
+				db: &database{instance: &configpb.HANAInstance{IsLocal: true}},
+			},
+			want: true,
+		},
+		{
+			name: "QueryRunOnUnspecified",
+			opts: queryOptions{
+				db: &database{
+					instance: &configpb.HANAInstance{
+						IsLocal:     true,
+						InstanceNum: "00",
+					},
+				},
+				query: &configpb.Query{
+					Name:  "testQuery",
+					RunOn: configpb.RunOn_RUN_ON_UNSPECIFIED,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "QuerySpecifiedRunOnAll",
+			opts: queryOptions{
+				db: &database{
+					instance: &configpb.HANAInstance{
+						IsLocal:     true,
+						InstanceNum: "00",
+					},
+				},
+				query: &configpb.Query{
+					Name:  "testQuery",
+					RunOn: configpb.RunOn_ALL,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "ErrorInGettingInstanceRole",
+			opts: queryOptions{
+				db: &database{
+					instance: &configpb.HANAInstance{
+						IsLocal:     true,
+						InstanceNum: "00",
+					},
+				},
+				query: &configpb.Query{
+					Name:  "testQuery",
+					RunOn: configpb.RunOn_PRIMARY,
+				},
+				params: Parameters{HRC: fakeHRCSucessError},
+			},
+			want: false,
+		},
+		{
+			name: "QueryRunOnPrimary",
+			opts: queryOptions{
+				db: &database{
+					instance: &configpb.HANAInstance{
+						IsLocal:     true,
+						InstanceNum: "00",
+					},
+				},
+				query: &configpb.Query{
+					Name:  "testQuery",
+					RunOn: configpb.RunOn_PRIMARY,
+				},
+				params: Parameters{HRC: fakeHRCSucessPrimary},
+			},
+			want: true,
+		},
+		{
+			name: "QueryRunOnSecondary",
+			opts: queryOptions{
+				db: &database{
+					instance: &configpb.HANAInstance{
+						IsLocal:     true,
+						InstanceNum: "00",
+					},
+				},
+				query: &configpb.Query{
+					Name:  "testQuery",
+					RunOn: configpb.RunOn_SECONDARY,
+				},
+				params: Parameters{
+					HRC: fakeHRCSucessSecondary,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "QueryMisMatchedOnInstanceType",
+			opts: queryOptions{
+				db: &database{
+					instance: &configpb.HANAInstance{
+						IsLocal:     true,
+						InstanceNum: "00",
+					},
+				},
+				query: &configpb.Query{
+					Name:  "testQuery",
+					RunOn: configpb.RunOn_PRIMARY,
+				},
+				params: Parameters{
+					HRC: fakeHRCSucessSecondary,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "StandAloneInstance",
+			opts: queryOptions{
+				db: &database{
+					instance: &configpb.HANAInstance{
+						IsLocal:     true,
+						InstanceNum: "00",
+					},
+				},
+				query: &configpb.Query{
+					Name:  "testQuery",
+					RunOn: configpb.RunOn_PRIMARY,
+				},
+				params: Parameters{
+					HRC: fakeHRCSuccessForStandAlone,
+				},
+			},
+			want: true,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := matchQueryAndInstanceType(ctx, tc.opts)
+			if got != tc.want {
+				t.Errorf("matchQyeryAndInstanceType(%v) = %v, want: %v", tc.opts, got, tc.want)
+			}
+		})
+	}
 }
