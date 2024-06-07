@@ -22,10 +22,10 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/shirou/gopsutil/v3/process"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )

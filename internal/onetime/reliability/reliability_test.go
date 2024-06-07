@@ -32,11 +32,11 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

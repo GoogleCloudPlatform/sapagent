@@ -31,11 +31,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"

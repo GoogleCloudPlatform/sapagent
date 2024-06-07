@@ -29,13 +29,13 @@ import (
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/shirou/gopsutil/v3/process"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
-	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
+	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 )
 
 const (

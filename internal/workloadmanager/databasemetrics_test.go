@@ -30,9 +30,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
 
 	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"

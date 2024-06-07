@@ -23,11 +23,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/shirou/gopsutil/v3/process"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
@@ -119,14 +119,14 @@ func TestCollectForNetweaver(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testNetweaverInstanceProperties := &NetweaverInstanceProperties{
-				Config:                  test.config,
-				Client:                  &fake.TimeSeriesCreator{},
-				Executor:                test.executor,
-				SAPInstance:             defaultSAPInstanceNetWeaver,
-				LastValue:               test.lastValue,
-				NewProcHelper:           newProcessWithContextHelperTest,
-				SkippedMetrics:          test.skippedMetrics,
-				SAPControlClient:        test.fakeClient,
+				Config:           test.config,
+				Client:           &fake.TimeSeriesCreator{},
+				Executor:         test.executor,
+				SAPInstance:      defaultSAPInstanceNetWeaver,
+				LastValue:        test.lastValue,
+				NewProcHelper:    newProcessWithContextHelperTest,
+				SkippedMetrics:   test.skippedMetrics,
+				SAPControlClient: test.fakeClient,
 			}
 
 			got, err := testNetweaverInstanceProperties.Collect(context.Background())

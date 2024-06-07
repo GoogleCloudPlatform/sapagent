@@ -32,11 +32,11 @@ import (
 	compute "google.golang.org/api/compute/v0.beta"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta/fakegcebeta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

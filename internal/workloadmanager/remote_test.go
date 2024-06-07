@@ -27,8 +27,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"

@@ -30,9 +30,9 @@ import (
 	"google.golang.org/api/iterator"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"

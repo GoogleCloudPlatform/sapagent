@@ -22,11 +22,11 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/shirou/gopsutil/v3/process"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -43,15 +43,15 @@ type (
 	// It also implements the InstanceProperiesInterface for abstraction as defined in the
 	// computreresources.go file.
 	HanaInstanceProperties struct {
-		Config            *cnfpb.Configuration
-		Client            cloudmonitoring.TimeSeriesCreator
-		Executor          commandlineexecutor.Execute
-		SAPInstance       *sapb.SAPInstance
-		LastValue         map[string]*process.IOCountersStat
-		NewProcHelper     newProcessWithContextHelper
-		SAPControlClient  sapcontrol.ClientInterface
-		SkippedMetrics    map[string]bool
-		PMBackoffPolicy   backoff.BackOffContext
+		Config           *cnfpb.Configuration
+		Client           cloudmonitoring.TimeSeriesCreator
+		Executor         commandlineexecutor.Execute
+		SAPInstance      *sapb.SAPInstance
+		LastValue        map[string]*process.IOCountersStat
+		NewProcHelper    newProcessWithContextHelper
+		SAPControlClient sapcontrol.ClientInterface
+		SkippedMetrics   map[string]bool
+		PMBackoffPolicy  backoff.BackOffContext
 	}
 )
 

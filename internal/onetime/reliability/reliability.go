@@ -32,11 +32,11 @@ import (
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"

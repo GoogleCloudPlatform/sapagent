@@ -27,11 +27,11 @@ import (
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	backoff "github.com/cenkalti/backoff/v4"
 	compute "google.golang.org/api/compute/v0.beta"
-	"github.com/GoogleCloudPlatform/sapagent/internal/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/internal/timeseries"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 )
 
 // GCEBetaInterface provides a testable interface to gcebeta.
