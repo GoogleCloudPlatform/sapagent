@@ -47,13 +47,13 @@ import (
 type (
 	// SupportBundle has args for support bundle collection one time mode.
 	SupportBundle struct {
-		sid                               string
-		instanceNums                      string
+		Sid                               string
+		InstanceNums                      string
 		instanceNumsAfterSplit            []string
-		hostname                          string
-		pacemakerDiagnosis, agentLogsOnly bool
-		help, version                     bool
-		logLevel                          string
+		Hostname                          string
+		PacemakerDiagnosis, AgentLogsOnly bool
+		Help, Version                     bool
+		LogLevel                          string
 		resultBucket                      string
 		IIOTEParams                       *onetime.InternallyInvokedOTE
 	}
@@ -121,14 +121,14 @@ func (*SupportBundle) Usage() string {
 
 // SetFlags implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&s.sid, "sid", "", "SAP System Identifier - required for collecting HANA traces")
-	fs.StringVar(&s.instanceNums, "instance-numbers", "", "Instance numbers - required for collecting HANA traces")
-	fs.StringVar(&s.hostname, "hostname", "", "Hostname - required for collecting HANA traces")
-	fs.BoolVar(&s.pacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
-	fs.BoolVar(&s.agentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
-	fs.BoolVar(&s.help, "h", false, "Displays help")
-	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
-	fs.StringVar(&s.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&s.Sid, "sid", "", "SAP System Identifier - required for collecting HANA traces")
+	fs.StringVar(&s.InstanceNums, "instance-numbers", "", "Instance numbers - required for collecting HANA traces")
+	fs.StringVar(&s.Hostname, "hostname", "", "Hostname - required for collecting HANA traces")
+	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
+	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
+	fs.BoolVar(&s.Help, "h", false, "Displays help")
+	fs.BoolVar(&s.Version, "v", false, "Displays the current version of the agent")
+	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&s.resultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
 }
 
@@ -140,9 +140,9 @@ func getReadWriter(rw storage.ReadWriter) uploader {
 func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
 		Name:     s.Name(),
-		Help:     s.help,
-		Version:  s.version,
-		LogLevel: s.logLevel,
+		Help:     s.Help,
+		Version:  s.Version,
+		LogLevel: s.LogLevel,
 		Fs:       f,
 		IIOTE:    s.IIOTEParams,
 	}, args...)
@@ -150,6 +150,12 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 		return exitStatus
 	}
 
+	_, exitStatus = s.ExecuteAndGetMessage(ctx, f, args...)
+	return exitStatus
+}
+
+// ExecuteAndGetMessage executes the command and returns the message and exit status.
+func (s *SupportBundle) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, args ...any) (string, subcommands.ExitStatus) {
 	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
 }
 
@@ -161,44 +167,55 @@ func CollectAgentSupport(ctx context.Context, f *flag.FlagSet, lp log.Parameters
 			Lp:        lp,
 			Cp:        cp,
 		},
-		agentLogsOnly: true,
+		AgentLogsOnly: true,
 	}
 	return s.Execute(ctx, f, lp, cp)
 }
 
-func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) subcommands.ExitStatus {
+func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) (string, subcommands.ExitStatus) {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
 		onetime.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
-		return subcommands.ExitUsageError
+		return fmt.Sprintf("Invalid params for collecting support bundle Report for Agent for SAP: %s", errMessage), subcommands.ExitUsageError
 	}
-	s.sid = strings.ToUpper(s.sid)
-	bundlename := fmt.Sprintf("supportbundle-%s-%s", s.hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
+	s.Sid = strings.ToUpper(s.Sid)
+	bundlename := fmt.Sprintf("supportbundle-%s-%s", s.Hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
 	destFilesPath := fmt.Sprintf("%s%s", destFilePathPrefix, bundlename)
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while making directory: "+destFilesPath, err)
-		return subcommands.ExitFailure
+		errMessage := "Error while making directory: " + destFilesPath
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 	onetime.LogMessageToFileAndConsole(ctx, "Collecting Support Bundle Report for Agent for SAP...")
 	reqFilePaths := []string{linuxConfigFilePath}
-	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.sid)
+	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.Sid)
 
 	hanaPaths := []string{}
 	for _, inr := range s.instanceNumsAfterSplit {
-		hanaPaths = append(hanaPaths, fmt.Sprintf(`/usr/sap/%s/HDB%s/%s`, s.sid, inr, s.hostname))
+		hanaPaths = append(hanaPaths, fmt.Sprintf(`/usr/sap/%s/HDB%s/%s`, s.Sid, inr, s.Hostname))
 	}
 
-	var hasErrors bool
-	if !s.agentLogsOnly {
-		hasErrors = extractSystemDBErrors(ctx, destFilesPath, s.hostname, hanaPaths, exec, fs)
-		hasErrors = extractTenantDBErrors(ctx, destFilesPath, s.sid, s.hostname, hanaPaths, exec, fs) || hasErrors
-		hasErrors = extractBackintErrors(ctx, destFilesPath, globalPath, s.hostname, exec, fs) || hasErrors
-		hasErrors = extractJournalCTLLogs(ctx, destFilesPath, s.hostname, exec, fs) || hasErrors
-		hasErrors = extractHANAVersion(ctx, destFilesPath, s.sid, s.hostname, exec, fs) || hasErrors
-		reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
-		reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.sid, fs)...)
-		reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.sid, fs)...)
-		reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.sid, fs)...)
+	var failureMsgs []string
+	if !s.AgentLogsOnly {
+		if isError := extractSystemDBErrors(ctx, destFilesPath, s.Hostname, hanaPaths, exec, fs); isError {
+			failureMsgs = append(failureMsgs, "Error while extracting system DB errors")
+		}
+		if isError := extractTenantDBErrors(ctx, destFilesPath, s.Sid, s.Hostname, hanaPaths, exec, fs); isError {
+			failureMsgs = append(failureMsgs, "Error while extracting tenant DB errors")
+		}
+		if isError := extractBackintErrors(ctx, destFilesPath, globalPath, s.Hostname, exec, fs); isError {
+			failureMsgs = append(failureMsgs, "Error while extracting backint errors")
+		}
+		if isError := extractJournalCTLLogs(ctx, destFilesPath, s.Hostname, exec, fs); isError {
+			failureMsgs = append(failureMsgs, "Error while extracting journalctl logs")
+		}
+		if isError := extractHANAVersion(ctx, destFilesPath, s.Sid, s.Hostname, exec, fs); isError {
+			failureMsgs = append(failureMsgs, "Error while extracting HANA version")
+		}
+		reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.Sid, fs)...)
 	}
 	reqFilePaths = append(reqFilePaths, agentLogFiles(ctx, linuxLogFilesPath, fs)...)
 	reqFilePaths = append(reqFilePaths, agentOTELogFiles(ctx, agentOnetimeFilesPath, fs)...)
@@ -206,55 +223,67 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	for _, path := range reqFilePaths {
 		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", path))
 		if err := copyFile(path, destFilesPath+path, fs); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Error while copying file: "+path, err)
-			hasErrors = true
+			errMessage := "Error while copying file: " + path
+			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			failureMsgs = append(failureMsgs, errMessage)
 		}
 	}
 
+	var successMsgs []string
+
 	zipfile := fmt.Sprintf("%s/%s.zip", destFilesPath, bundlename)
 	if err := zipSource(destFilesPath, zipfile, fs, z); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while zipping destination folder %s", destFilesPath), err)
-		hasErrors = true
+		errMessage := fmt.Sprintf("Error while zipping destination folder %s", destFilesPath)
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		failureMsgs = append(failureMsgs, errMessage)
 	} else {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath)))
+		msg := fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath))
+		onetime.LogMessageToFileAndConsole(ctx, msg)
+		successMsgs = append(successMsgs, msg)
 	}
 
 	if s.resultBucket != "" {
 		if err := s.uploadZip(ctx, zipfile, bundlename, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
-			fmt.Println(fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.resultBucket), " Error: ", err)
-			hasErrors = true
+			errMessage := fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.resultBucket)
+			fmt.Println(errMessage, " Error: ", err)
+			failureMsgs = append(failureMsgs, errMessage)
 		} else {
 			// removing the destination directory after zip file is created.
 			if err := removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
-				fmt.Println(fmt.Sprintf("Error while removing destination folder %s", destFilesPath), " Error: ", err)
-				hasErrors = true
+				errMessage := fmt.Sprintf("Error while removing destination folder %s", destFilesPath)
+				fmt.Println(errMessage, " Error: ", err)
+				failureMsgs = append(failureMsgs, errMessage)
 			}
 		}
 	}
 
 	// Rotate out old support bundles so we don't fill the file system.
 	if err := rotateOldBundles(ctx, destFilePathPrefix, fs); err != nil {
-		hasErrors = true
+		errMessage := fmt.Sprintf("Error while rotating old support bundles: %s", err.Error())
+		failureMsgs = append(failureMsgs, errMessage)
 	}
 
-	if s.pacemakerDiagnosis {
+	if s.PacemakerDiagnosis {
 		// collect pacemaker reports using OS Specific commands
 		pacemakerFilesDir := fmt.Sprintf("%spacemaker-%s", destFilePathPrefix, time.Now().UTC().String()[:16])
 		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, " ", "-")
 		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, ":", "-")
 		err := pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
 		if err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Error while collecting pacemaker logs: "+err.Error(), err)
-			hasErrors = true
+			errMessage := "Error while collecting pacemaker logs"
+			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			failureMsgs = append(failureMsgs, errMessage)
 		} else {
-			onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir))
+			msg := fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir)
+			onetime.LogMessageToFileAndConsole(ctx, msg)
+			successMsgs = append(successMsgs, msg)
 		}
 	}
 
-	if hasErrors {
-		return subcommands.ExitFailure
+	if len(failureMsgs) > 0 {
+		return strings.Join(failureMsgs, ", "), subcommands.ExitFailure
 	}
-	return subcommands.ExitSuccess
+	return strings.Join(successMsgs, ", "), subcommands.ExitSuccess
 }
 
 // uploadZip uploads the zip file to the bucket provided.
@@ -699,23 +728,23 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 
 func (s *SupportBundle) validateParams() []string {
 	var errs []string
-	if s.agentLogsOnly {
+	if s.AgentLogsOnly {
 		return errs
 	}
-	if s.sid == "" {
+	if s.Sid == "" {
 		errs = append(errs, "no value provided for sid")
 	}
-	if s.instanceNums == "" {
+	if s.InstanceNums == "" {
 		errs = append(errs, "no value provided for instance-numbers")
 	} else {
-		s.instanceNumsAfterSplit = strings.Split(s.instanceNums, " ")
+		s.instanceNumsAfterSplit = strings.Split(s.InstanceNums, " ")
 		for _, nos := range s.instanceNumsAfterSplit {
 			if len(nos) != 2 {
 				errs = append(errs, fmt.Sprintf("invalid instance number %s", nos))
 			}
 		}
 	}
-	if s.hostname == "" {
+	if s.Hostname == "" {
 		errs = append(errs, "no value provided for hostname")
 	}
 	return errs

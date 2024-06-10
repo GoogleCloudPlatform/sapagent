@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/restart"
@@ -48,8 +49,9 @@ const (
 type guestActionHandler func(context.Context, *gpb.AgentCommand) (string, subcommands.ExitStatus, bool)
 
 var guestActionsHandlers = map[string]guestActionHandler{
-	"configure": configurehandler.ConfigureHandler,
-	"version":   versionhandler.VersionHandler,
+	"configure":     configurehandler.ConfigureHandler,
+	"version":       versionhandler.VersionHandler,
+	"supportbundle": supportbundlehandler.SupportBundleHandler,
 }
 
 type guestActionsOptions struct {

@@ -41,6 +41,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func TestMain(t *testing.M) {
@@ -357,7 +359,7 @@ func TestExecuteForSOSReport(t *testing.T) {
 		{
 			name: "SuccessForAgentVersion",
 			sosr: &SupportBundle{
-				version: true,
+				Version: true,
 			},
 			want: subcommands.ExitSuccess,
 			args: []any{
@@ -368,7 +370,7 @@ func TestExecuteForSOSReport(t *testing.T) {
 		{
 			name: "SuccessForHelp",
 			sosr: &SupportBundle{
-				help: true,
+				Help: true,
 			},
 			want: subcommands.ExitSuccess,
 			args: []any{
@@ -387,6 +389,53 @@ func TestExecuteForSOSReport(t *testing.T) {
 	}
 }
 
+func TestExecuteAndGetMessage(t *testing.T) {
+	tests := []struct {
+		name           string
+		sosr           *SupportBundle
+		args           []any
+		wantExitStatus subcommands.ExitStatus
+	}{
+		{
+			name:           "FailLengthArgs",
+			sosr:           &SupportBundle{},
+			args:           []any{},
+			wantExitStatus: subcommands.ExitUsageError,
+		},
+		{
+			name: "FailAssertArgs",
+			sosr: &SupportBundle{},
+			args: []any{
+				"test",
+				"test2",
+			},
+			wantExitStatus: subcommands.ExitUsageError,
+		},
+		{
+			name: "InvalidParams",
+			sosr: &SupportBundle{
+				Sid:          "DEH",
+				InstanceNums: "",
+				Hostname:     "sample_host",
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&iipb.CloudProperties{},
+			},
+			wantExitStatus: subcommands.ExitUsageError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, exitStatus := test.sosr.ExecuteAndGetMessage(context.Background(), &flag.FlagSet{Usage: func() {}}, test.args...)
+			if exitStatus != test.wantExitStatus {
+				t.Errorf("ExecuteAndGetMessage(%v, %v) = %v; want: %v", test.sosr, test.args, exitStatus, test.wantExitStatus)
+			}
+		})
+	}
+}
+
 func TestCollectAgentSupport(t *testing.T) {
 	tests := []struct {
 		name string
@@ -396,7 +445,7 @@ func TestCollectAgentSupport(t *testing.T) {
 		{
 			name: "Failure",
 			sosr: &SupportBundle{
-				agentLogsOnly: true,
+				AgentLogsOnly: true,
 			},
 			want: subcommands.ExitFailure,
 		},
@@ -419,37 +468,37 @@ func TestValidateParams(t *testing.T) {
 	}{
 		{
 			name:  "NoValueForSID",
-			sosrc: SupportBundle{instanceNums: "00 01", hostname: "sample_host"},
+			sosrc: SupportBundle{InstanceNums: "00 01", Hostname: "sample_host"},
 			want:  []string{"no value provided for sid"},
 		},
 		{
 			name:  "NoValueForInstance",
-			sosrc: SupportBundle{sid: "DEH", instanceNums: "", hostname: "sample_host"},
+			sosrc: SupportBundle{Sid: "DEH", InstanceNums: "", Hostname: "sample_host"},
 			want:  []string{"no value provided for instance-numbers"},
 		},
 		{
 			name:  "InvalidValueForinstanceNums",
-			sosrc: SupportBundle{sid: "DEH", instanceNums: "00 011", hostname: "sample_host"},
+			sosrc: SupportBundle{Sid: "DEH", InstanceNums: "00 011", Hostname: "sample_host"},
 			want:  []string{"invalid instance number 011"},
 		},
 		{
 			name:  "NoValueForHostName",
-			sosrc: SupportBundle{sid: "DEH", instanceNums: "00 01", hostname: ""},
+			sosrc: SupportBundle{Sid: "DEH", InstanceNums: "00 01", Hostname: ""},
 			want:  []string{"no value provided for hostname"},
 		},
 		{
 			name: "AgentLogsOnly",
 			sosrc: SupportBundle{
-				agentLogsOnly: true,
+				AgentLogsOnly: true,
 			},
 			want: []string{},
 		},
 		{
 			name: "AllLogsAndTraces",
 			sosrc: SupportBundle{
-				sid:          "DEH",
-				instanceNums: "00 11",
-				hostname:     "sample_host",
+				Sid:          "DEH",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
 			},
 			want: []string{},
 		},
@@ -474,55 +523,58 @@ func TestSOSReportHandler(t *testing.T) {
 		exec           commandlineexecutor.Execute
 		fs             filesystem.FileSystem
 		z              zipper.Zipper
-		want           subcommands.ExitStatus
+		wantMessage    string
+		wantExitStatus subcommands.ExitStatus
 	}{
 		{
 			name: "InvalidParams",
-			sosr: &SupportBundle{sid: "DEH",
-				instanceNums: "",
-				hostname:     "sample_host",
+			sosr: &SupportBundle{Sid: "DEH",
+				InstanceNums: "",
+				Hostname:     "sample_host",
 			},
-			ctx:  context.Background(),
-			exec: fakeExec,
-			fs:   mockedfilesystem{},
-			z:    mockedZipper{},
-			want: subcommands.ExitUsageError,
+			ctx:            context.Background(),
+			exec:           fakeExec,
+			fs:             mockedfilesystem{},
+			z:              mockedZipper{},
+			wantMessage:    "Invalid params for collecting support bundle Report for Agent for SAP: no value provided for instance-numbers",
+			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
 			name: "MkdirError",
 			sosr: &SupportBundle{
-				sid:          "DEH",
-				instanceNums: "00 11",
-				hostname:     "sample_host",
+				Sid:          "DEH",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
 			},
 			destFilePrefix: "failure",
 			ctx:            context.Background(),
 			exec:           fakeExec,
 			fs:             mockedfilesystem{},
 			z:              mockedZipper{},
-			want:           subcommands.ExitFailure,
+			wantMessage:    "Error while making directory",
+			wantExitStatus: subcommands.ExitFailure,
 		},
 		{
 			name: "FaultInExtractingErrors",
 			sosr: &SupportBundle{
-				sid:          "DEH",
-				instanceNums: "00 11",
-				hostname:     "sample_host",
+				Sid:          "DEH",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
 			},
 			destFilePrefix: "samplefile",
 			ctx:            context.Background(),
 			exec:           fakeExec,
 			fs:             mockedfilesystem{reqErr: os.ErrInvalid},
 			z:              mockedZipper{},
-			want:           subcommands.ExitFailure,
+			wantMessage:    "Error while extracting system DB errors, Error while extracting tenant DB errors, Error while extracting journalctl logs, Error while extracting HANA version, Error while copying file: /etc/google-cloud-sap-agent/configuration.json, Error while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
+			wantExitStatus: subcommands.ExitFailure,
 		},
 		{
 			name: "Success",
 			sosr: &SupportBundle{
-				sid:                "DEH",
-				instanceNums:       "00 11",
-				hostname:           "sample_host",
-				pacemakerDiagnosis: true,
+				Sid:          "DEH",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
 			},
 			destFilePrefix: "samplefile",
 			ctx:            context.Background(),
@@ -535,16 +587,40 @@ func TestSOSReportHandler(t *testing.T) {
 					},
 				},
 			},
-			z:    mockedZipper{},
-			want: subcommands.ExitSuccess,
+			z:              mockedZipper{},
+			wantMessage:    "Zipped destination support bundle file HANA/Backint",
+			wantExitStatus: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessForPacemakerDiagnosis",
+			sosr: &SupportBundle{
+				Sid:                "DEH",
+				InstanceNums:       "00 11",
+				Hostname:           "sample_host",
+				PacemakerDiagnosis: true,
+			},
+			destFilePrefix: "samplefile",
+			ctx:            context.Background(),
+			exec:           fakeExec,
+			fs: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{
+						name: "samplefile",
+						mode: 0777,
+					},
+				},
+			},
+			z:              mockedZipper{},
+			wantMessage:    "Pacemaker logs are collected and sent to directory",
+			wantExitStatus: subcommands.ExitSuccess,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.sosr.supportBundleHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z)
-			if got != test.want {
-				t.Errorf("sosReportHandler() = %v, want %v", got, test.want)
+			message, exitStatus := test.sosr.supportBundleHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z)
+			if !strings.Contains(message, test.wantMessage) || exitStatus != test.wantExitStatus {
+				t.Errorf("sosReportHandler() = %v, %v; want %v, %v", message, exitStatus, test.wantMessage, test.wantExitStatus)
 			}
 		})
 	}
