@@ -188,8 +188,9 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	// Only SID is required for restoring from groupSnapshot.
 	// DataDiskName and NewdiskNames are fetched and respectively created
 	// from individual snapshots mapped to groupSnapshot.
-	restoreFromGroupSnapshot := (r.Sid == "" || r.GroupSnapshot == "")
-	restoreFromSingleSnapshot := (r.Sid == "" || r.DataDiskName == "" || r.DataDiskZone == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
+	restoreFromGroupSnapshot := !(r.Sid == "" || r.GroupSnapshot == "")
+	// TODO: Enable auto discovery for restore
+	restoreFromSingleSnapshot := !(r.Sid == "" || r.DataDiskName == "" || r.DataDiskZone == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
 		return fmt.Errorf("either source-snapshot or backup-id must be provided, not both. Usage: %s", r.Usage())
