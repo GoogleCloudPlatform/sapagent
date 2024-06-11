@@ -40,8 +40,10 @@ import (
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"golang.org/x/exp/slices"
+	"google.golang.org/api/option"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/gammazero/workerpool"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/cluster"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
@@ -102,7 +104,7 @@ type (
 	}
 
 	// CreateMetricClient provides an easily testable translation to the cloud monitoring API.
-	CreateMetricClient func(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error)
+	CreateMetricClient func(ctx context.Context, opts ...option.ClientOption) (cloudmonitoring.TimeSeriesCreator, error)
 
 	// Parameters has parameters necessary to invoke Start().
 	Parameters struct {
@@ -174,7 +176,9 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		return false
 	}
 
-	mc, err := parameters.MetricClient(ctx)
+	ua := fmt.Sprintf("sap-core-eng/%s/%s.%s/processmetrics", configuration.AgentName, configuration.AgentVersion, configuration.AgentBuildChange)
+	clientOptions := []option.ClientOption{option.WithUserAgent(ua)}
+	mc, err := parameters.MetricClient(ctx, clientOptions...)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring client", "error", err)
 		usagemetrics.Error(usagemetrics.ProcessMetricsMetricClientCreateFailure) // Failed to create Cloud Monitoring client
@@ -235,8 +239,8 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 }
 
 // NewMetricClient is the production version that calls cloud monitoring API.
-func NewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error) {
-	return monitoring.NewMetricClient(ctx)
+func NewMetricClient(ctx context.Context, opts ...option.ClientOption) (cloudmonitoring.TimeSeriesCreator, error) {
+	return monitoring.NewMetricClient(ctx, opts...)
 }
 
 // createProcessCollectors sets up the processmetrics properties and metric collectors for SAP Instances.

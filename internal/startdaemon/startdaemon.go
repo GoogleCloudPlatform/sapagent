@@ -32,6 +32,7 @@ import (
 	"flag"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/option"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/google/subcommands"
@@ -319,9 +320,11 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	}
 	ppr := &instanceinfo.PhysicalPathReader{OS: goos}
 	instanceInfoReader := instanceinfo.New(ppr, gceService)
-	mc, err := monitoring.NewMetricClient(ctx)
+	ua := fmt.Sprintf("sap-core-eng/%s/%s.%s/wlmevaluation", configuration.AgentName, configuration.AgentVersion, configuration.AgentBuildChange)
+	clientOptions := []option.ClientOption{option.WithUserAgent(ua)}
+	wlmMetricClient, err := monitoring.NewMetricClient(ctx, clientOptions...)
 	if err != nil {
-		log.Logger.Errorw("Failed to create Cloud Monitoring metric client", "error", err)
+		log.Logger.Errorw("Failed to create Cloud Monitoring metric client for workload manager evalution metrics", "error", err)
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
 		return
 	}
@@ -336,7 +339,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		WorkloadConfig:    cd.GetWorkloadValidation(),
 		WorkloadConfigCh:  chWLM,
 		Remote:            false,
-		TimeSeriesCreator: mc,
+		TimeSeriesCreator: wlmMetricClient,
 		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
 		Execute:           execute,
 		Exists:            exists,
@@ -402,11 +405,19 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 
 	// Start HANA Monitoring
 	hanaCtx := log.SetCtx(ctx, "context", "HANAMonitoring")
+	ua = fmt.Sprintf("sap-core-eng/%s/%s.%s/hanamonitoring", configuration.AgentName, configuration.AgentVersion, configuration.AgentBuildChange)
+	clientOptions = []option.ClientOption{option.WithUserAgent(ua)}
+	hanaMonitoringMetricClient, err := monitoring.NewMetricClient(ctx, clientOptions...)
+	if err != nil {
+		log.Logger.Errorw("Failed to create Cloud Monitoring metric client for HANA Monitoring metrics", "error", err)
+		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		return
+	}
 	hanamonitoring.Start(hanaCtx, hanamonitoring.Parameters{
 		Config:            d.config,
 		GCEService:        gceService,
 		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
-		TimeSeriesCreator: mc,
+		TimeSeriesCreator: hanaMonitoringMetricClient,
 		HRC:               sapdiscovery.HANAReplicationConfig,
 	})
 

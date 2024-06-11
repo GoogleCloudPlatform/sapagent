@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -170,11 +171,11 @@ func fakeCollectors(count, timeSerisCountPerCollector int) []Collector {
 	return collectors
 }
 
-func fakeNewMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error) {
+func fakeNewMetricClient(ctx context.Context, opts ...option.ClientOption) (cloudmonitoring.TimeSeriesCreator, error) {
 	return &fake.TimeSeriesCreatorThreadSafe{}, nil
 }
 
-func fakeNewMetricClientFailure(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error) {
+func fakeNewMetricClientFailure(ctx context.Context, opts ...option.ClientOption) (cloudmonitoring.TimeSeriesCreator, error) {
 	return nil, cmpopts.AnyError
 }
 
