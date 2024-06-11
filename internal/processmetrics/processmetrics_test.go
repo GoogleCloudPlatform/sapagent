@@ -434,7 +434,7 @@ func createFakeMetrics(count int) []*mrpb.TimeSeries {
 	return metrics
 }
 
-func TestCollectAndSend(t *testing.T) {
+func TestCollectAndSendFastMovingMetrics(t *testing.T) {
 	tests := []struct {
 		name       string
 		properties *Properties
@@ -442,32 +442,23 @@ func TestCollectAndSend(t *testing.T) {
 		want       error
 	}{
 		{
-			name: "TenCollectorsRunForTenSeconds",
+			name: "TenCollectorsRunForFiveSeconds",
 			properties: &Properties{
-				Client:     &fake.TimeSeriesCreatorThreadSafe{},
-				Collectors: fakeCollectors(10, 1),
-				Config:     quickTestConfig,
+				Client:               &fake.TimeSeriesCreatorThreadSafe{},
+				FastMovingCollectors: fakeCollectors(10, 1),
+				Config:               quickTestConfig,
 			},
-			runtime: 10 * time.Second,
+			runtime: 5 * time.Second,
 		},
 		{
 			name: "ZeroCollectors",
 			properties: &Properties{
-				Client:     &fake.TimeSeriesCreatorThreadSafe{},
-				Collectors: nil,
-				Config:     quickTestConfig,
+				Client:               &fake.TimeSeriesCreatorThreadSafe{},
+				FastMovingCollectors: nil,
+				Config:               quickTestConfig,
 			},
 			runtime: 2 * time.Second,
 			want:    cmpopts.AnyError,
-		},
-		{
-			name: "SlowCollectorsForThirtySeconds",
-			properties: &Properties{
-				Client:     &fake.TimeSeriesCreatorThreadSafe{},
-				Collectors: fakeCollectors(9, 1),
-				Config:     quickTestConfig,
-			},
-			runtime: 30 * time.Second,
 		},
 	}
 	for _, test := range tests {

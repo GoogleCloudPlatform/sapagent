@@ -474,8 +474,8 @@ the workflow or nil if no error occurred.
 */
 func (p *Properties) collectAndSendFastMovingMetrics(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) error {
 
-	if len(p.Collectors) == 0 {
-		return fmt.Errorf("expected non-zero collectors, got: %d", len(p.Collectors))
+	if len(p.FastMovingCollectors) == 0 {
+		return fmt.Errorf("expected non-zero fast moving collectors, got: %d", len(p.FastMovingCollectors))
 	}
 
 	cf := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
