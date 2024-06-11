@@ -126,6 +126,22 @@ const (
 )
 
 /*
+Start starts the collection of relevant metrics based on whether the
+collect_reliability_metrics or collect_process_metrics is enabled in the
+configuration. The function is a NO-OP if both config options are disabled".
+
+If the config option is enabled, start the metric collector jobs
+in the background and return control to the caller with return value = true.
+
+Return false if the config option is not enabled.
+*/
+func Start(ctx context.Context, parameters Parameters) bool {
+	rm := startReliabilityMetrics(ctx, parameters)
+	pm := startProcessMetrics(ctx, parameters)
+	return rm || pm
+}
+
+/*
 startProcessMetrics starts collection if collect_process_metrics config option is enabled
 in the configuration. The function is a NO-OP if the config option is not enabled.
 
@@ -528,21 +544,6 @@ func (p *Properties) collectAndSendFastMovingMetricsOnce(ctx context.Context, bo
 }
 
 /*
-Start starts the collection of relevant metrics based on whether the
-collect_reliability_metrics or collect_process_metrics is enabled in the
-configuration. The function is a NO-OP if both config options are disabled".
-
-If the config option is enabled, start the metric collector jobs
-in the background and return control to the caller with return value = true.
-
-Return false if the config option is not enabled.
-*/
-func Start(ctx context.Context, parameters Parameters) bool {
-	// TODO: b/322177918 - Enable reliability metrics collection once the namespace is created and tested.
-	return startProcessMetrics(ctx, parameters)
-}
-
-/*
 startReliabilityMetrics starts collection if collect_reliability_metrics config option is enabled
 in the configuration. The function is a NO-OP if the config option is not enabled.
 
@@ -552,27 +553,6 @@ in the background and return control to the caller with return value = true.
 Return false if the config option is not enabled.
 */
 func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
-	crm := parameters.Config.GetCollectionConfiguration().GetCollectReliabilityMetrics().GetValue()
-	cf := parameters.Config.GetCollectionConfiguration().GetReliabilityMetricsFrequency()
-
-	log.CtxLogger(ctx).Debugw("Configuration option for collect_reliability_metrics", "collectreliabilitymetrics", crm)
-	switch {
-	case !crm:
-		log.CtxLogger(ctx).Info("Not collecting Reliability Metrics.")
-		return false
-	case cf < minimumFrequencyForReliability:
-		log.CtxLogger(ctx).Infow("Reliability metrics frequency is smaller than minimum supported value.", "frequency", cf, "minimumfrequency", minimumFrequencyForReliability)
-		log.CtxLogger(ctx).Infow("Setting reliability metrics collection frequency to default value.", "frequency", minimumFrequencyForReliability)
-		parameters.Config.CollectionConfiguration.ReliabilityMetricsFrequency = minimumFrequencyForReliability
-	}
-
-	mc, err := parameters.MetricClient(ctx)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring client", "error", err)
-		usagemetrics.Error(usagemetrics.ProcessMetricsMetricClientCreateFailure) // Failed to create Cloud Monitoring client
-		return false
-	}
-
 	sapInstances := instancesWithCredentials(ctx, &parameters)
 	if len(sapInstances.GetInstances()) == 0 {
 		log.CtxLogger(ctx).Error("No SAP Instances found. Cannot start reliability metrics collection.")
@@ -589,7 +569,7 @@ func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
 	}
 	dailyMetricsRoutine.StartRoutine(ctx)
 
-	p := createReliabilityCollectors(ctx, parameters, mc, sapInstances)
+	p := createReliabilityCollectors(ctx, parameters, sapInstances)
 
 	log.CtxLogger(ctx).Info("Starting reliability metrics collection in background.")
 	collectAndSendReliabilityMetricsRoutine = &recovery.RecoverableRoutine{
@@ -608,10 +588,9 @@ func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
 }
 
 // createReliabilityCollectors sets up the processmetrics properties and metric collectors for SAP Instances.
-func createReliabilityCollectors(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, sapInstances *sapb.SAPInstances) *Properties {
+func createReliabilityCollectors(ctx context.Context, params Parameters, sapInstances *sapb.SAPInstances) *Properties {
 	p := &Properties{
 		Config:        params.Config,
-		Client:        client,
 		HeartbeatSpec: params.HeartbeatSpec,
 	}
 
@@ -620,8 +599,6 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, client 
 	// Attempt - 2 Failure: wait for 60 seconds
 	// Attempt - 3 Failure: wait for 120 seconds
 
-	rmFreq := p.Config.GetCollectionConfiguration().GetReliabilityMetricsFrequency()
-
 	for _, instance := range sapInstances.GetInstances() {
 		if instance.GetType() == sapb.InstanceType_HANA {
 			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for HANA", "instance", instance)
@@ -629,7 +606,7 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, client 
 				SAPInstance:       instance,
 				Config:            p.Config,
 				Client:            p.Client,
-				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(rmFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(minimumFrequencyForReliability)*time.Second, 3, time.Minute, 35*time.Second),
 				ReliabilityMetric: true,
 			}
 			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
@@ -640,7 +617,7 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, client 
 				SAPInstance:       instance,
 				Config:            p.Config,
 				Client:            p.Client,
-				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(rmFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(minimumFrequencyForReliability)*time.Second, 3, time.Minute, 35*time.Second),
 				ReliabilityMetric: true,
 			}
 			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
@@ -652,13 +629,11 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, client 
 }
 
 func (p *Properties) collectAndSendReliabilityMetrics(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) error {
-
 	if len(p.ReliabilityCollectors) == 0 {
 		return fmt.Errorf("expected non-zero collectors, got: %d", len(p.Collectors))
 	}
 
-	rmf := p.Config.GetCollectionConfiguration().GetReliabilityMetricsFrequency()
-	reliabilityCollectTicker := time.NewTicker(time.Duration(rmf) * time.Second)
+	reliabilityCollectTicker := time.NewTicker(time.Duration(minimumFrequencyForReliability) * time.Second)
 	defer reliabilityCollectTicker.Stop()
 
 	heartbeatTicker := p.HeartbeatSpec.CreateTicker()
@@ -674,12 +649,8 @@ func (p *Properties) collectAndSendReliabilityMetrics(ctx context.Context, bo *c
 			p.HeartbeatSpec.Beat()
 		case <-reliabilityCollectTicker.C:
 			p.HeartbeatSpec.Beat()
-			sent, batchCount, err := p.collectAndSendReliabilityMetricsOnce(ctx, bo)
-			if err != nil {
-				log.CtxLogger(ctx).Errorw("Error sending reliability metrics", "error", err)
-				lastErr = err
-			}
-			log.CtxLogger(ctx).Infow("Sent reliability metrics from collectAndSend.", "sent", sent, "batches", batchCount, "sleeping", rmf)
+			p.collectAndSendReliabilityMetricsOnce(ctx, bo)
+			log.CtxLogger(ctx).Debugw("Sent reliability metrics from collectAndSend.", "sleeping", minimumFrequencyForReliability)
 		}
 	}
 }
@@ -690,10 +661,8 @@ type collectReliabilityMetricsRoutineArgs struct {
 }
 
 // collectAndSendReliabilityMetricsOnce collects and sends metrics from reliability collectors.
-func (p *Properties) collectAndSendReliabilityMetricsOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) (sent, batchCount int, err error) {
+func (p *Properties) collectAndSendReliabilityMetricsOnce(ctx context.Context, bo *cloudmonitoring.BackOffIntervals) {
 	var wg sync.WaitGroup
-	msgs := make([][]*mrpb.TimeSeries, len(p.ReliabilityCollectors))
-	defer (func() { msgs = nil })() // free up reference in memory.
 	log.CtxLogger(ctx).Debugw("Starting collectors in parallel.", "numberOfCollectors", len(p.ReliabilityCollectors))
 
 	var routines []*recovery.RecoverableRoutine
@@ -703,12 +672,9 @@ func (p *Properties) collectAndSendReliabilityMetricsOnce(ctx context.Context, b
 			Routine: func(ctx context.Context, a any) {
 				defer wg.Done()
 				if args, ok := a.(collectReliabilityMetricsRoutineArgs); ok {
-					var err error
-					msgs[args.slot], err = args.c.CollectWithRetry(ctx) // Each collector writes to its own slot.
-					if err != nil {
+					if _, err := args.c.CollectWithRetry(ctx); err != nil {
 						log.CtxLogger(ctx).Debugw("Error collecting reliability metrics", "error", err)
 					}
-					log.CtxLogger(ctx).Debugw("Collected relaibility metrics", "numberofmetrics", len(msgs[args.slot]))
 				}
 			},
 			RoutineArg:          collectReliabilityMetricsRoutineArgs{c: collector, slot: i},
@@ -721,7 +687,6 @@ func (p *Properties) collectAndSendReliabilityMetricsOnce(ctx context.Context, b
 	}
 	log.CtxLogger(ctx).Debug("Waiting for reliability collectors to finish.", "numberOfCollectors", len(routines))
 	wg.Wait()
-	return cloudmonitoring.SendTimeSeries(ctx, flatten(msgs), p.Client, bo, p.Config.GetCloudProperties().GetProjectId())
 }
 
 func createWorkerPoolForSlowMetrics(ctx context.Context, p *Properties, bo *cloudmonitoring.BackOffIntervals) {

@@ -157,6 +157,12 @@ const (
 	PerformanceDiagnosticsFIO               = 37 //	PerformanceDiagnosticsFIO
 	ConfigureInstanceCheckFinished          = 38 //	ConfigureInstanceCheckFinished
 	ConfigureInstanceApplyFinished          = 39 //	ConfigureInstanceApplyFinished
+	ReliabilityHANAAvailable                = 40 //	ReliabilityHANAAvailable
+	ReliabilityHANANotAvailable             = 41 //	ReliabilityHANANotAvailable
+	ReliabilityHANAHAAvailable              = 42 //	ReliabilityHANAHAAvailable
+	ReliabilityHANAHANotAvailable           = 43 //	ReliabilityHANAHANotAvailable
+	ReliabilitySAPNWAvailable               = 44 //	ReliabilityHANANWAvailable
+	ReliabilitySAPNWNotAvailable            = 45 //	ReliabilitySAPNWNotAvailable
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")

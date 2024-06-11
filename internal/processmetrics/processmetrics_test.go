@@ -70,7 +70,6 @@ var (
 			CollectProcessMetrics:       true,
 			ProcessMetricsFrequency:     5,
 			SlowProcessMetricsFrequency: 30,
-			ReliabilityMetricsFrequency: 1,
 		},
 		CloudProperties: defaultCloudProperties,
 	}
@@ -80,7 +79,6 @@ var (
 			CollectProcessMetrics:       true,
 			ProcessMetricsFrequency:     1, // Use small value for quick unit tests.
 			SlowProcessMetricsFrequency: 6,
-			ReliabilityMetricsFrequency: 1,
 		},
 		CloudProperties: defaultCloudProperties,
 	}
@@ -90,7 +88,6 @@ var (
 			CollectProcessMetrics:       true,
 			ProcessMetricsFrequency:     5,
 			SlowProcessMetricsFrequency: 1,
-			ReliabilityMetricsFrequency: 1,
 		},
 		CloudProperties: defaultCloudProperties,
 	}

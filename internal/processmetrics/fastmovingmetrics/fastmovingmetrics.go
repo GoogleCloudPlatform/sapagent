@@ -28,6 +28,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -91,12 +92,6 @@ const (
 	pmHAReplicationPath    = "/sap/hana/ha/replication"
 	pmHAAvailabilityPath   = "/sap/hana/ha/availability"
 	pmNWAvailabilityPath   = "/sap/nw/availability"
-
-	// These paths are for internal reliability metrics.
-	reliabilityMetricURL   = "workloadmanager.googleapis.com"
-	rmHANAAvailabilityPath = "/internal/sap"
-	rmHAAvailabilityPath   = "/internal/sap"
-	rmNWAvailabilityPath   = "/internal/sap"
 )
 
 // Collect is an implementation of Collector interface from processmetrics.go for fast moving
@@ -142,9 +137,6 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
-		// this is a special case in which fast moving metrics should return the HANA HA Availability
-		// and HA Replication metrics even after errors following retries because Smoke detector systems
-		// rely on these metrics.
 		if p.SAPInstance.GetType() == sapb.InstanceType_NETWEAVER {
 			return nil, err
 		}
@@ -152,6 +144,9 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 			return nil, err
 		}
 
+		// This is a special case in which fast moving metrics should return the HANA HA Availability
+		// and HA Replication metrics even after errors following retries because Smoke detector systems
+		// rely on these metrics.
 		extraLabels := map[string]string{
 			"ha_members": strings.Join(p.SAPInstance.GetHanaHaMembers(), ","),
 		}
@@ -183,9 +178,14 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		availabilityValue = hanaAvailability(ip, processes)
 		mPath := pmHANAAvailabilityPath
 		if ip.ReliabilityMetric {
-			mPath = rmHANAAvailabilityPath
+			if availabilityValue == 0 {
+				usagemetrics.Action(usagemetrics.ReliabilityHANANotAvailable)
+			} else {
+				usagemetrics.Action(usagemetrics.ReliabilityHANAAvailable)
+			}
+		} else {
+			metrics = append(metrics, createMetrics(ip, mPath, nil, now, availabilityValue))
 		}
-		metrics = append(metrics, createMetrics(ip, mPath, nil, now, availabilityValue))
 	}
 
 	skipHAAvailability := ip.SkippedMetrics[pmHAAvailabilityPath]
@@ -205,7 +205,11 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 			"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
 		}
 		if ip.ReliabilityMetric {
-			metrics = append(metrics, createMetrics(ip, rmHAAvailabilityPath, nil, now, haAvailabilityValue))
+			if haAvailabilityValue == 0 {
+				usagemetrics.Action(usagemetrics.ReliabilityHANAHANotAvailable)
+			} else {
+				usagemetrics.Action(usagemetrics.ReliabilityHANAHAAvailable)
+			}
 		} else {
 			metrics = append(metrics, createMetrics(ip, pmHAReplicationPath, extraLabels, now, haReplicationValue))
 			metrics = append(metrics, createMetrics(ip, pmHAAvailabilityPath, nil, now, haAvailabilityValue))
@@ -302,9 +306,14 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	availabilityValue := collectNWAvailability(p, procs)
 	mPath := pmNWAvailabilityPath
 	if p.ReliabilityMetric {
-		mPath = rmNWAvailabilityPath
+		if availabilityValue == 0 {
+			usagemetrics.Action(usagemetrics.ReliabilitySAPNWNotAvailable)
+		} else {
+			usagemetrics.Action(usagemetrics.ReliabilitySAPNWAvailable)
+		}
+	} else {
+		metrics = append(metrics, createMetrics(p, mPath, nil, now, availabilityValue))
 	}
-	metrics = append(metrics, createMetrics(p, mPath, nil, now, availabilityValue))
 	return metrics, nil
 }
 
@@ -325,13 +334,9 @@ func collectNWAvailability(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 // createMetrics - create mrpb.TimeSeries object for the given metric.
 func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	mLabels := appendLabels(p, extraLabels)
-	metricType := metricURL + mPath
-	if p.ReliabilityMetric {
-		metricType = reliabilityMetricURL + mPath
-	}
 	params := timeseries.Params{
 		CloudProp:    p.Config.CloudProperties,
-		MetricType:   metricType,
+		MetricType:   metricURL + mPath,
 		MetricLabels: mLabels,
 		Timestamp:    now,
 		Int64Value:   val,

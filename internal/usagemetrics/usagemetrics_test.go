@@ -361,4 +361,22 @@ func TestActionConstants(t *testing.T) {
 	if ConfigureInstanceApplyFinished != 39 {
 		t.Errorf("ConfigureInstanceApplyFinished = %v, want 39", ConfigureInstanceApplyFinished)
 	}
+	if ReliabilityHANAAvailable != 40 {
+		t.Errorf("ReliabilityHANAAvailable = %v, want 40", ReliabilityHANAAvailable)
+	}
+	if ReliabilityHANANotAvailable != 41 {
+		t.Errorf("ReliabilityHANANotAvailable = %v, want 41", ReliabilityHANANotAvailable)
+	}
+	if ReliabilityHANAHAAvailable != 42 {
+		t.Errorf("ReliabilityHANAHAAvailable = %v, want 42", ReliabilityHANAHAAvailable)
+	}
+	if ReliabilityHANAHANotAvailable != 43 {
+		t.Errorf("ReliabilityHANAHANotAvailable = %v, want 43", ReliabilityHANAHANotAvailable)
+	}
+	if ReliabilitySAPNWAvailable != 44 {
+		t.Errorf("ReliabilitySAPNWAvailable = %v, want 44", ReliabilitySAPNWAvailable)
+	}
+	if ReliabilitySAPNWNotAvailable != 45 {
+		t.Errorf("ReliabilitySAPNWNotAvailable = %v, want 45", ReliabilitySAPNWNotAvailable)
+	}
 }

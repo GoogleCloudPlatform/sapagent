@@ -670,7 +670,6 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
 				sapcontrolclient.OSProcess{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 111},
 			}},
-			wantCount: 1,
 		},
 	}
 
