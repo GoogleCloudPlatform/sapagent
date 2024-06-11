@@ -54,12 +54,12 @@ func TestListenForMessages(t *testing.T) {
 		{
 			name: "typical",
 			want: &acpb.MessageBody{
-				Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+				Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 				Body:   &apb.Any{Value: []byte("typical test body")},
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
-					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body:   &apb.Any{Value: []byte("typical test body")},
 				}, nil
 			},
@@ -67,12 +67,12 @@ func TestListenForMessages(t *testing.T) {
 		{
 			name: "emptyBody",
 			want: &acpb.MessageBody{
-				Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+				Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 				Body:   &apb.Any{},
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
-					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body:   &apb.Any{},
 				}, nil
 			},
@@ -80,12 +80,12 @@ func TestListenForMessages(t *testing.T) {
 		{
 			name: "noBody",
 			want: &acpb.MessageBody{
-				Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+				Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 				Body:   nil,
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
-					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body:   nil,
 				}, nil
 			},
@@ -174,7 +174,7 @@ func TestSendStatusMessage(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			sendMessage = test.sendMessage
-			got := sendStatusMessage(ctx, "msgID", &apb.Any{Value: []byte("test status body")}, "status", conn)
+			got := sendStatusMessage(ctx, "operationID", &apb.Any{Value: []byte("test status body")}, "status", conn)
 			if diff := cmp.Diff(test.want, got, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("sendStatusMessage() returned diff (-want +got):\n%s", diff)
 			}
@@ -235,7 +235,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
-					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body: wrapAny(t, &gpb.GuestActionRequest{
 						Commands: []*gpb.Command{
 							{
@@ -259,7 +259,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
-					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body:   &apb.Any{Value: []byte("bad request")},
 				}, nil
 			},
@@ -275,7 +275,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
 				return &acpb.MessageBody{
-					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": "test message_id", "state": succeeded},
+					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body: wrapAny(t, &gpb.GuestActionRequest{
 						Commands: []*gpb.Command{
 							{
@@ -302,8 +302,8 @@ func TestCommunicateWithUAP(t *testing.T) {
 			},
 		},
 		{
-			name: "receiveMessageIdError",
-			want: "no message_id label",
+			name: "receiveOperationIdError",
+			want: "no operation_id label",
 			createConnection: func(ctx context.Context, channel string, regional bool, opts ...option.ClientOption) (*client.Connection, error) {
 				return &client.Connection{}, nil
 			},

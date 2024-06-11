@@ -51,8 +51,12 @@ var createConnection = func(ctx context.Context, channel string, regional bool, 
 	return client.CreateConnection(ctx, channel, regional, opts...)
 }
 
-func sendStatusMessage(ctx context.Context, msgID string, body *anypb.Any, status string, conn *client.Connection) error {
-	labels := map[string]string{"uap_message_type": "OPERATION_STATUS", "message_id": msgID, "state": status}
+func sendStatusMessage(ctx context.Context, operationID string, body *anypb.Any, status string, conn *client.Connection) error {
+	labels := map[string]string{
+		"operation_id": operationID,
+		"state":        status,
+		"lro_state":    "done",
+	}
 	messageToSend := &acpb.MessageBody{Labels: labels, Body: body}
 	log.CtxLogger(ctx).Debugw("Sending status message to UAP.", "messageToSend", messageToSend)
 	if err := sendMessage(conn, messageToSend); err != nil {
@@ -165,17 +169,17 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 			lastErr = fmt.Errorf("nil labels in message from listenForMessages")
 			continue
 		}
-		msgID, ok := msg.GetLabels()["message_id"]
+		operationID, ok := msg.GetLabels()["operation_id"]
 		if !ok {
-			logMsg := fmt.Sprintf("No message_id label in message. Will backoff and retry.")
+			logMsg := fmt.Sprintf("No operation_id label in message. Will backoff and retry.")
 			logAndBackoff(ctx, eBackoff, logMsg)
-			lastErr = fmt.Errorf("no message_id label in message")
+			lastErr = fmt.Errorf("no operation_id label in message")
 			continue
 		}
 		// Reset backoff if we successfully parsed the message.
 		eBackoff.Reset()
 
-		log.CtxLogger(ctx).Debugw("Parsed id of message from label.", "msgID", msgID)
+		log.CtxLogger(ctx).Debugw("Parsed operation_id from label.", "operation_id", operationID)
 
 		gaReq, err := parseRequest(ctx, msg.GetBody())
 		if err != nil {
@@ -194,7 +198,7 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 		log.CtxLogger(ctx).Debugw("Message handling complete.", "responseMsg", prototext.Format(gaRes), "statusMsg", statusMsg)
 		anyGar := anyResponse(ctx, gaRes)
 		// Send operation status message.
-		err = sendStatusMessage(ctx, msgID, anyGar, statusMsg, conn)
+		err = sendStatusMessage(ctx, operationID, anyGar, statusMsg, conn)
 		if err != nil {
 			log.CtxLogger(ctx).Warnw("Encountered error during sendStatusMessage.", "err", err)
 			lastErr = err
