@@ -27,12 +27,14 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/hanadiskbackuphandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/restart"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
@@ -46,17 +48,19 @@ const (
 	shellCommand    = "shell_command"
 )
 
-type guestActionHandler func(context.Context, *gpb.AgentCommand) (string, subcommands.ExitStatus, bool)
+type guestActionHandler func(context.Context, *gpb.AgentCommand, *ipb.CloudProperties) (string, subcommands.ExitStatus, bool)
 
 var guestActionsHandlers = map[string]guestActionHandler{
-	"configure":     configurehandler.ConfigureHandler,
-	"version":       versionhandler.VersionHandler,
-	"supportbundle": supportbundlehandler.SupportBundleHandler,
+	"configure":      configurehandler.ConfigureHandler,
+	"hanadiskbackup": hanadiskbackuphandler.HANADiskBackupHandler,
+	"supportbundle":  supportbundlehandler.SupportBundleHandler,
+	"version":        versionhandler.VersionHandler,
 }
 
 type guestActionsOptions struct {
-	channel  string
-	endpoint string
+	channel         string
+	endpoint        string
+	cloudProperties *ipb.CloudProperties
 }
 
 func guestActionResponse(ctx context.Context, results []*gpb.CommandResult, errorMessage string) *gpb.GuestActionResponse {
@@ -93,7 +97,7 @@ func handleShellCommand(ctx context.Context, command *gpb.Command, execute comma
 	}
 }
 
-func handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool) (*gpb.CommandResult, bool) {
+func handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool, cloudProperties *ipb.CloudProperties) (*gpb.CommandResult, bool) {
 	agentCommand := strings.ToLower(command.GetAgentCommand().GetCommand())
 	handler, ok := guestActionsHandlers[agentCommand]
 	if !ok {
@@ -106,7 +110,7 @@ func handleAgentCommand(ctx context.Context, command *gpb.Command, requiresResta
 		}
 		return result, requiresRestart
 	}
-	output, exitStatus, restart := handler(ctx, command.GetAgentCommand())
+	output, exitStatus, restart := handler(ctx, command.GetAgentCommand(), cloudProperties)
 	requiresRestart = requiresRestart || restart
 	log.CtxLogger(ctx).Debugw("received result for agent command",
 		"command", prototext.Format(command), "output", output, "exitStatus", exitStatus)
@@ -128,7 +132,7 @@ func errorResult(errMsg string) *gpb.CommandResult {
 	}
 }
 
-func messageHandler(ctx context.Context, gar *gpb.GuestActionRequest) (*gpb.GuestActionResponse, bool) {
+func messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudProperties *ipb.CloudProperties) (*gpb.GuestActionResponse, bool) {
 	requiresRestart := false
 	var results []*gpb.CommandResult
 	log.CtxLogger(ctx).Debugw("received GuestActionReqest to handle", "gar", prototext.Format(gar))
@@ -146,7 +150,7 @@ func messageHandler(ctx context.Context, gar *gpb.GuestActionRequest) (*gpb.Gues
 			result = handleShellCommand(ctx, command, commandlineexecutor.ExecuteCommand)
 			results = append(results, result)
 		case fd.Name() == agentCommand:
-			result, requiresRestart = handleAgentCommand(ctx, command, requiresRestart)
+			result, requiresRestart = handleAgentCommand(ctx, command, requiresRestart, cloudProperties)
 			results = append(results, result)
 		default:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
@@ -172,7 +176,7 @@ func start(ctx context.Context, a any) {
 	if runtime.GOOS == "windows" {
 		restartHandler = restart.WindowsRestartAgent
 	}
-	uap.CommunicateWithUAP(ctx, args.endpoint, args.channel, messageHandler, restartHandler)
+	uap.CommunicateWithUAP(ctx, args.endpoint, args.channel, messageHandler, restartHandler, args.cloudProperties)
 }
 
 // StartUAPCommunication establishes communication with UAP Highway.
@@ -193,7 +197,7 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 
 	communicateRoutine := &recovery.RecoverableRoutine{
 		Routine:             start,
-		RoutineArg:          guestActionsOptions{channel: defaultChannel, endpoint: defaultEndpoint},
+		RoutineArg:          guestActionsOptions{channel: defaultChannel, endpoint: defaultEndpoint, cloudProperties: config.CloudProperties},
 		ErrorCode:           usagemetrics.GuestActionsFailure,
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,

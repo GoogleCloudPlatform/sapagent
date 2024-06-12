@@ -32,11 +32,20 @@ import (
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 const (
 	succeeded = "SUCCEEDED"
 	failed    = "FAILED"
+)
+
+type (
+	// MessageHandlerFunc is the function that the agent will use to handle incoming messages.
+	MessageHandlerFunc func(context.Context, *gpb.GuestActionRequest, *ipb.CloudProperties) (*gpb.GuestActionResponse, bool)
+
+	// RestartHandlerFunc is the function that restarts the agent.
+	RestartHandlerFunc func(context.Context) subcommands.ExitStatus
 )
 
 var sendMessage = func(c *client.Connection, msg *acpb.MessageBody) error {
@@ -131,7 +140,7 @@ func parseRequest(ctx context.Context, msg *anypb.Any) (*gpb.GuestActionRequest,
 // "channel" is the registered channel name to be used for communication
 // between the agent and the service provider.
 // "messageHandler" is the function that the agent will use to handle incoming messages.
-func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, messageHandler func(context.Context, *gpb.GuestActionRequest) (*gpb.GuestActionResponse, bool), restartHandler func(context.Context) subcommands.ExitStatus) error {
+func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, messageHandler MessageHandlerFunc, restartHandler RestartHandlerFunc, cloudProperties *ipb.CloudProperties) error {
 	eBackoff := setupBackoff()
 	conn := establishConnection(ctx, endpoint, channel)
 	for conn == nil {
@@ -189,7 +198,7 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 			continue
 		}
 		// handle the message
-		gaRes, requiresRestart := messageHandler(ctx, gaReq)
+		gaRes, requiresRestart := messageHandler(ctx, gaReq, cloudProperties)
 		statusMsg := succeeded
 		if gaRes.GetError().GetErrorMessage() != "" {
 			log.CtxLogger(ctx).Warnw("Encountered error during UAP message handling.", "err", gaRes.GetError().GetErrorMessage())

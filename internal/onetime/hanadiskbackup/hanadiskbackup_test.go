@@ -164,7 +164,7 @@ func TestSnapshotHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
+			_, got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
 			}
@@ -472,14 +472,14 @@ func TestParseLabels(t *testing.T) {
 		{
 			name: "Invalidlabel",
 			s: Snapshot{
-				labels: "label1,label2",
+				Labels: "label1,label2",
 			},
 			want: map[string]string{},
 		},
 		{
 			name: "Success",
 			s: Snapshot{
-				labels: "label1=value1,label2=value2",
+				Labels: "label1=value1,label2=value2",
 			},
 			want: map[string]string{"label1": "value1", "label2": "value2"},
 		},
@@ -488,7 +488,7 @@ func TestParseLabels(t *testing.T) {
 			s: Snapshot{
 				groupSnapshot: true,
 				cgPath:        "my-region-my-cg",
-				labels:        "label1=value1,label2=value2",
+				Labels:        "label1=value1,label2=value2",
 				Disk:          "pd-1",
 			},
 			want: map[string]string{
@@ -929,7 +929,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 		{
 			name: "FreezeFS",
 			s: &Snapshot{
-				freezeFileSystem: true,
+				FreezeFileSystem: true,
 				AbandonPrepared:  true,
 				gceService:       &fake.TestGCE{IsDiskAttached: true},
 				cgPath:           "test-cg-success",
@@ -1093,7 +1093,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 			name: "ConfirmDataSnapshot",
 			snapshot: Snapshot{
 				AbandonPrepared:                true,
-				confirmDataSnapshotAfterCreate: true,
+				ConfirmDataSnapshotAfterCreate: true,
 				gceService: &fake.TestGCE{
 					IsDiskAttached:      true,
 					UploadCompletionErr: cmpopts.AnyError,
@@ -1110,7 +1110,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 			name: "DoNotConfirmSnapshotAfterCreate",
 			snapshot: Snapshot{
 				AbandonPrepared:                true,
-				confirmDataSnapshotAfterCreate: false,
+				ConfirmDataSnapshotAfterCreate: false,
 				gceService: &fake.TestGCE{
 					IsDiskAttached:      true,
 					UploadCompletionErr: cmpopts.AnyError,
@@ -1127,7 +1127,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 			name: "UploadSnapshotSuccess",
 			snapshot: Snapshot{
 				AbandonPrepared:                true,
-				confirmDataSnapshotAfterCreate: true,
+				ConfirmDataSnapshotAfterCreate: true,
 				gceService: &fake.TestGCE{
 					IsDiskAttached: true,
 				},
@@ -1171,7 +1171,7 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 			s: &Snapshot{
 				isg:              &ISG{},
 				cgPath:           "test-snapshot-success",
-				freezeFileSystem: true,
+				FreezeFileSystem: true,
 			},
 			want: cmpopts.AnyError,
 		},
@@ -1261,7 +1261,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 		{
 			name: "freezeFS",
 			s: &Snapshot{
-				freezeFileSystem: true,
+				FreezeFileSystem: true,
 				isg:              &ISG{},
 				computeService:   &compute.Service{},
 				gceService: &fake.TestGCE{
@@ -1343,7 +1343,7 @@ func TestCreateBackup(t *testing.T) {
 			name: "FreezeFS",
 			s: &Snapshot{
 				computeService:   &compute.Service{},
-				freezeFileSystem: true,
+				FreezeFileSystem: true,
 			},
 			wantOp:  nil,
 			wantErr: cmpopts.AnyError,

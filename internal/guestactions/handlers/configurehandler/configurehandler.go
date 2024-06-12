@@ -24,6 +24,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -134,7 +135,7 @@ func buildConfigureFromMap(command *gpb.AgentCommand) configure.Configure {
 }
 
 // ConfigureHandler is the handler for the configure command.
-func ConfigureHandler(ctx context.Context, command *gpb.AgentCommand) (string, subcommands.ExitStatus, bool) {
+func ConfigureHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	c := buildConfigureFromMap(command)
 	msg, exitStatus := c.ExecuteAndGetMessage(ctx, nil)

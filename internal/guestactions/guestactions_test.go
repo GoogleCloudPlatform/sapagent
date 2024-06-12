@@ -313,7 +313,7 @@ func TestMessageHandler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			got, _ := messageHandler(ctx, test.message)
+			got, _ := messageHandler(ctx, test.message, nil)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&gpb.GuestActionError{}, "error_message")); diff != "" {
 				t.Errorf("messageHandler(%v) returned diff (-want +got):\n%s", test.message, diff)
 			}

@@ -24,6 +24,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -31,7 +32,7 @@ import (
 const RestartAgent = false
 
 // VersionHandler is the handler for the version command.
-func VersionHandler(ctx context.Context, command *gpb.AgentCommand) (string, subcommands.ExitStatus, bool) {
+func VersionHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Infow("VersionHandler was called. Command passed in is", "command", prototext.Format(command))
 	msg := onetime.GetAgentVersion()
 	exitStatus := subcommands.ExitSuccess

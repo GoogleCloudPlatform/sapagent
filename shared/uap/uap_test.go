@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	anypb "google.golang.org/protobuf/types/known/anypb"
 	apb "google.golang.org/protobuf/types/known/anypb"
 	client "github.com/GoogleCloudPlatform/agentcommunication_client"
 	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb"
@@ -34,11 +33,12 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-func wrapAny(t *testing.T, m proto.Message) *anypb.Any {
+func wrapAny(t *testing.T, m proto.Message) *apb.Any {
 	t.Helper()
-	any, err := anypb.New(m)
+	any, err := apb.New(m)
 	if err != nil {
 		t.Fatalf("anypb.New(%v) returned an unexpected error: %v", m, err)
 	}
@@ -325,7 +325,9 @@ func TestCommunicateWithUAP(t *testing.T) {
 			receive = test.receive
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			got := CommunicateWithUAP(ctx, "endpoint", "channel", func(context.Context, *gpb.GuestActionRequest) (*gpb.GuestActionResponse, bool) { return nil, false }, func(context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess })
+			got := CommunicateWithUAP(ctx, "endpoint", "channel", func(context.Context, *gpb.GuestActionRequest, *ipb.CloudProperties) (*gpb.GuestActionResponse, bool) {
+				return nil, false
+			}, func(context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess }, nil)
 			if got == nil {
 				if test.want != "" {
 					t.Errorf("CommunicateWithUAP() returned nil error, want error: %s", test.want)

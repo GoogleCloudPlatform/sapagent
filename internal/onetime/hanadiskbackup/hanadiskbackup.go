@@ -117,7 +117,7 @@ type Snapshot struct {
 	DiskKeyFile, StorageLocation                     string
 	SnapshotName, SnapshotType, Description          string
 	AbandonPrepared, SendToMonitoring                bool
-	freezeFileSystem, confirmDataSnapshotAfterCreate bool
+	FreezeFileSystem, ConfirmDataSnapshotAfterCreate bool
 
 	isg                               *ISG
 	groupSnapshotName                 string
@@ -134,7 +134,7 @@ type Snapshot struct {
 	LogLevel                          string
 	hanaDataPath                      string
 	logicalDataPath, physicalDataPath string
-	labels                            string
+	Labels                            string
 	IIOTEParams                       *onetime.InternallyInvokedOTE
 	instanceProperties                *ipb.InstanceProperties
 	cgPath                            string
@@ -173,12 +173,12 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.HDBUserstoreKey, "hdbuserstore-key", "", "HANA userstore key specific to HANA instance.")
 	fs.StringVar(&s.Disk, "source-disk", "", "name of the disk from which you want to create a snapshot (optional). Default: disk used to store /hana/data/")
 	fs.StringVar(&s.DiskZone, "source-disk-zone", "", "zone of the disk from which you want to create a snapshot. (optional) Default: Same zone as current instance")
-	fs.BoolVar(&s.freezeFileSystem, "freeze-file-system", false, "Freeze file system. (optional) Default: false")
+	fs.BoolVar(&s.FreezeFileSystem, "freeze-file-system", false, "Freeze file system. (optional) Default: false")
 	fs.StringVar(&s.Host, "host", "localhost", "HANA host. (optional)")
 	fs.StringVar(&s.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.BoolVar(&s.AbandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
 	fs.BoolVar(&s.SkipDBSnapshotForChangeDiskType, "skip-db-snapshot-for-change-disk-type", false, "Skip DB snapshot for change disk type, (optional) Default: false")
-	fs.BoolVar(&s.confirmDataSnapshotAfterCreate, "confirm-data-snapshot-after-create", true, "Confirm HANA data snapshot after disk snapshot create and then wait for upload. (optional) Default: true")
+	fs.BoolVar(&s.ConfirmDataSnapshotAfterCreate, "confirm-data-snapshot-after-create", true, "Confirm HANA data snapshot after disk snapshot create and then wait for upload. (optional) Default: true")
 	fs.StringVar(&s.SnapshotName, "snapshot-name", "", "Snapshot name override.(Optional - deafaults to 'snapshot-diskname-yyyymmdd-hhmmss'.)")
 	fs.StringVar(&s.SnapshotType, "snapshot-type", "STANDARD", "Snapshot type override.(Optional - defaults to 'STANDARD', use 'ARCHIVE' for archive snapshots.)")
 	fs.StringVar(&s.DiskKeyFile, "source-disk-key-file", "", `Path to the customer-supplied encryption key of the source disk. (optional)\n (required if the source disk is protected by a customer-supplied encryption key.)`)
@@ -188,7 +188,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level")
-	fs.StringVar(&s.labels, "labels", "", "Labels to be added to the disk snapshot")
+	fs.StringVar(&s.Labels, "labels", "", "Labels to be added to the disk snapshot")
 }
 
 // Execute implements the subcommand interface for hanadiskbackup.
@@ -206,26 +206,35 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return exitStatus
 	}
 
+	_, status := s.ExecuteAndGetMessage(ctx, f, lp, cp)
+	return status
+}
+
+// ExecuteAndGetMessage executes the command and returns the message and exit status.
+func (s *Snapshot) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
 	if err := s.validateParameters(runtime.GOOS, cp); err != nil {
-		log.Print(err.Error())
-		return subcommands.ExitFailure
+		errMessage := err.Error()
+		log.Print(errMessage)
+		return errMessage, subcommands.ExitFailure
 	}
 
 	s.isg = &ISG{}
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create Cloud Monitoring metric client", err)
-		return subcommands.ExitFailure
+		errMessage := "ERROR: Failed to create Cloud Monitoring metric client"
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
-	if r := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp); r != subcommands.ExitSuccess {
+	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp)
+	if exitStatus != subcommands.ExitSuccess {
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
-		return subcommands.ExitFailure
+		return message, subcommands.ExitFailure
 	}
-	return subcommands.ExitSuccess
+	return message, subcommands.ExitSuccess
 }
 
-func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties) subcommands.ExitStatus {
+func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
 	var err error
 	s.status = false
 
@@ -233,26 +242,30 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 
 	s.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
-		return subcommands.ExitFailure
+		errMessage := "ERROR: Failed to create GCE service"
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 
 	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = hanabackup.CheckDataDir(ctx, commandlineexecutor.ExecuteCommand); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to check preconditions", err)
-		return subcommands.ExitFailure
+		errMessage := "ERROR: Failed to check preconditions"
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 
 	if s.Disk == "" {
 		log.CtxLogger(ctx).Info("Reading disk mapping for /hana/data/")
 		if err := s.readDiskMapping(ctx, cp); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to read disk mapping", err)
-			return subcommands.ExitFailure
+			errMessage := "ERROR: Failed to read disk mapping"
+			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
 		}
 
 		if len(s.disks) > 1 {
 			if err := s.validateDisksBelongToCG(ctx); err != nil {
-				onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to validate whether disks belong to consistency group", err)
-				return subcommands.ExitFailure
+				errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
+				onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
 			}
 			s.groupSnapshot = true
 		}
@@ -275,31 +288,36 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 	if s.SkipDBSnapshotForChangeDiskType {
 		onetime.LogMessageToFileAndConsole(ctx, "Skipping connecting to HANA Database in case of changedisktype workflow.")
 	} else if s.db, err = databaseconnector.CreateDBHandle(ctx, dbp); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to connect to database", err)
-		return subcommands.ExitFailure
+		errMessage := "ERROR: Failed to connect to database"
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 
 	s.computeService, err = computeServiceCreator(ctx)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create compute service", err)
-		return subcommands.ExitFailure
+		errMessage := "ERROR: Failed to create compute service"
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 
 	workflowStartTime := time.Now()
 	if s.SkipDBSnapshotForChangeDiskType {
 		err := s.runWorkflowForChangeDiskType(ctx, s.createSnapshot, cp)
 		if err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Error: Failed to run HANA disk snapshot workflow", err)
-			return subcommands.ExitFailure
+			errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
+			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
 		}
 	} else if s.groupSnapshot {
 		if err := s.runWorkflowForInstantSnapshotGroups(ctx, runQuery, s.createSnapshot, cp); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Error: Failed to run HANA disk snapshot workflow", err)
-			return subcommands.ExitFailure
+			errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
+			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
 		}
 	} else if err = s.runWorkflowForDiskSnapshot(ctx, runQuery, s.createSnapshot, cp); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error: Failed to run HANA disk snapshot workflow", err)
-		return subcommands.ExitFailure
+		errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 	workflowDur := time.Since(workflowStartTime)
 
@@ -308,11 +326,12 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		snapshotName = s.groupSnapshotName
 		log.Print(fmt.Sprintf("SUCCESS: HANA backup and group disk snapshot creation successful. Group Backup Name: %s", snapshotName))
 	}
-	log.Print(fmt.Sprintf("SUCCESS: HANA backup and disk snapshot creation successful. Snapshot Name: %s", snapshotName))
+	successMessage := fmt.Sprintf("SUCCESS: HANA backup and disk snapshot creation successful. Snapshot Name: %s", snapshotName)
+	log.Print(successMessage)
 
 	s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", snapshotName, workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	s.status = true
-	return subcommands.ExitSuccess
+	return successMessage, subcommands.ExitSuccess
 }
 
 func (s *Snapshot) validateDisksBelongToCG(ctx context.Context) error {
@@ -440,7 +459,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 	}
 
 	err = s.createInstantSnapshotGroup(ctx)
-	if s.freezeFileSystem {
+	if s.FreezeFileSystem {
 		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 			onetime.LogErrorToFileAndConsole(ctx, "error unfreezing XFS", err)
 			return err
@@ -486,7 +505,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 	}
 
 	op, err := s.createDiskSnapshot(ctx, createSnapshot)
-	if s.freezeFileSystem {
+	if s.FreezeFileSystem {
 		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 			onetime.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
 			return err
@@ -501,7 +520,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 		return err
 	}
 
-	if s.confirmDataSnapshotAfterCreate {
+	if s.ConfirmDataSnapshotAfterCreate {
 		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk snapshot is created but not yet uploaded.")
 		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
 			return err
@@ -510,7 +529,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 	onetime.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshot to complete uploading.")
 	if err := s.gceService.WaitForSnapshotUploadCompletionWithRetry(ctx, op, s.Project, s.DiskZone, s.SnapshotName); err != nil {
 		log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
-		if s.confirmDataSnapshotAfterCreate {
+		if s.ConfirmDataSnapshotAfterCreate {
 			onetime.LogErrorToFileAndConsole(
 				ctx, fmt.Sprintf("Error uploading disk snapshot, HANA snapshot %s is not successful", snapshotID), err,
 			)
@@ -520,7 +539,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 	}
 
 	log.CtxLogger(ctx).Info("Disk snapshot created, marking HANA snapshot as successful.")
-	if !s.confirmDataSnapshotAfterCreate {
+	if !s.ConfirmDataSnapshotAfterCreate {
 		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
 			return err
 		}
@@ -564,7 +583,7 @@ func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnaps
 		return fmt.Errorf("source-disk=%v is not attached to the instance", s.Disk)
 	}
 	op, err := s.createDiskSnapshot(ctx, createSnapshot)
-	if s.freezeFileSystem {
+	if s.FreezeFileSystem {
 		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 			onetime.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
 			return err
@@ -667,7 +686,7 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	}
 
 	dbFreezeStartTime = time.Now()
-	if s.freezeFileSystem {
+	if s.FreezeFileSystem {
 		if err := hanabackup.FreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 			return err
 		}
@@ -705,7 +724,7 @@ func (s *Snapshot) convertISGtoSSG(ctx context.Context, cp *ipb.CloudProperties,
 		if _, err := s.createBackup(ctx, snapshot, createSnapshot); err != nil {
 			return err
 		}
-		if s.freezeFileSystem {
+		if s.FreezeFileSystem {
 			if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 				onetime.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
 				return err
@@ -753,7 +772,7 @@ func (s *Snapshot) createBackup(ctx context.Context, snapshot *compute.Snapshot,
 		return nil, fmt.Errorf("computeService needed to proceed")
 	}
 	dbFreezeStartTime = time.Now()
-	if s.freezeFileSystem {
+	if s.FreezeFileSystem {
 		if err := hanabackup.FreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 			return nil, err
 		}
@@ -769,8 +788,8 @@ func (s *Snapshot) createBackup(ctx context.Context, snapshot *compute.Snapshot,
 
 func (s *Snapshot) parseLabels() map[string]string {
 	labels := s.createGroupBackupLabels()
-	if s.labels != "" {
-		for _, label := range strings.Split(s.labels, ",") {
+	if s.Labels != "" {
+		for _, label := range strings.Split(s.Labels, ",") {
 			split := strings.Split(label, "=")
 			if len(split) == 2 {
 				labels[split[0]] = split[1]

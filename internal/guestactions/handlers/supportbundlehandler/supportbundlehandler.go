@@ -27,6 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // RestartAgent indicates that the agent should be restarted after the supportbundle guest action has been handled.
@@ -65,7 +66,7 @@ func buildSupportBundleCommand(command *gpb.AgentCommand) supportbundle.SupportB
 }
 
 // SupportBundleHandler is the handler for support bundle command.
-func SupportBundleHandler(ctx context.Context, command *gpb.AgentCommand) (string, subcommands.ExitStatus, bool) {
+func SupportBundleHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
 	sb := buildSupportBundleCommand(command)
 	msg, exitStatus := sb.ExecuteAndGetMessage(ctx, nil)
