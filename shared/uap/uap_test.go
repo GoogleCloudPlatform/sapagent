@@ -234,6 +234,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 				return nil
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				time.Sleep(5 * time.Second)
 				return &acpb.MessageBody{
 					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body: wrapAny(t, &gpb.GuestActionRequest{
@@ -258,6 +259,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 				return nil
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				time.Sleep(5 * time.Second)
 				return &acpb.MessageBody{
 					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body:   &apb.Any{Value: []byte("bad request")},
@@ -274,6 +276,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 				return fmt.Errorf("sendMessage error")
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				time.Sleep(5 * time.Second)
 				return &acpb.MessageBody{
 					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "operation_id": "test operation_id", "state": succeeded},
 					Body: wrapAny(t, &gpb.GuestActionRequest{
@@ -298,6 +301,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 				return nil
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				time.Sleep(5 * time.Second)
 				return nil, fmt.Errorf("receive error")
 			},
 		},
@@ -311,6 +315,7 @@ func TestCommunicateWithUAP(t *testing.T) {
 				return nil
 			},
 			receive: func(c *client.Connection) (*acpb.MessageBody, error) {
+				time.Sleep(5 * time.Second)
 				return &acpb.MessageBody{
 					Labels: map[string]string{"uap_message_type": "OPERATION_STATUS", "state": succeeded},
 				}, nil
