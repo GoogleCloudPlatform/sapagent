@@ -1627,10 +1627,15 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 		{
 			name: "DiskSnapshot",
 			s: &Snapshot{
-				cgPath: "my-region-my-cg",
-				Disk:   "my-disk",
+				cgPath:                "my-region-my-cg",
+				Disk:                  "my-disk",
+				provisionedIops:       10000,
+				provisionedThroughput: 1000000000,
 			},
-			want: map[string]string{},
+			want: map[string]string{
+				"goog-sapagent-provisioned-iops":       "10000",
+				"goog-sapagent-provisioned-throughput": "1000000000",
+			},
 		},
 		{
 			name: "GroupSnapshot",

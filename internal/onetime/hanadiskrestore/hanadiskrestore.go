@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -413,6 +414,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
 func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudProperties, snapshotKey, newDiskName, sourceSnapshot string) error {
+
 	disk := &compute.Disk{
 		Name:                        newDiskName,
 		Type:                        r.NewDiskType,
@@ -520,9 +522,11 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 
 	// Verify the snapshot is present.
 	if !r.isGroupSnapshot {
-		if _, err = r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do(); err != nil {
+		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
+		if err != nil {
 			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
 		}
+		r.extractLabels(ctx, snapshot)
 	} else {
 		if _, err = r.gceService.GetGroupSnapshotsService().Get(r.Project, r.GroupSnapshot).Do(); err != nil {
 			return fmt.Errorf("failed to check if group-snapshot=%v is present: %v", r.GroupSnapshot, err)
@@ -545,6 +549,29 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		r.NewDiskType = fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.Project, r.DataDiskZone, r.NewDiskType)
 	}
 	return nil
+}
+
+func (r *Restorer) extractLabels(ctx context.Context, snapshot *compute.Snapshot) {
+	for key, value := range snapshot.Labels {
+		switch key {
+		case "goog-sapagent-provisioned-iops":
+			iops, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				log.CtxLogger(ctx).Errorw("failed to parse provisioned-iops=%v: %v from snapshot label", value, err)
+			}
+			if r.ProvisionedIops == 0 {
+				r.ProvisionedIops = iops
+			}
+		case "goog-sapagent-provisioned-throughput":
+			tpt, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				log.CtxLogger(ctx).Errorw("failed to parse provisioned-throughput from snapshot label=%v: %v", value, err)
+			}
+			if r.ProvisionedThroughput == 0 {
+				r.ProvisionedThroughput = tpt
+			}
+		}
+	}
 }
 
 func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype string, dur time.Duration, bo *cloudmonitoring.BackOffIntervals, cp *ipb.CloudProperties) bool {

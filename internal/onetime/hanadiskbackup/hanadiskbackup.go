@@ -119,26 +119,27 @@ type Snapshot struct {
 	AbandonPrepared, SendToMonitoring                bool
 	FreezeFileSystem, ConfirmDataSnapshotAfterCreate bool
 
-	isg                               *ISG
-	groupSnapshotName                 string
-	disks                             []string
-	db                                *databaseconnector.DBHandle
-	gceService                        gceInterface
-	computeService                    *compute.Service
-	status                            bool
-	timeSeriesCreator                 cloudmonitoring.TimeSeriesCreator
-	help, version                     bool
-	SkipDBSnapshotForChangeDiskType   bool
-	HANAChangeDiskTypeOTEName         string
-	ForceStopHANA                     bool
-	LogLevel                          string
-	hanaDataPath                      string
-	logicalDataPath, physicalDataPath string
-	Labels                            string
-	IIOTEParams                       *onetime.InternallyInvokedOTE
-	instanceProperties                *ipb.InstanceProperties
-	cgPath                            string
-	groupSnapshot                     bool
+	isg                                    *ISG
+	groupSnapshotName                      string
+	disks                                  []string
+	db                                     *databaseconnector.DBHandle
+	gceService                             gceInterface
+	computeService                         *compute.Service
+	status                                 bool
+	timeSeriesCreator                      cloudmonitoring.TimeSeriesCreator
+	help, version                          bool
+	SkipDBSnapshotForChangeDiskType        bool
+	HANAChangeDiskTypeOTEName              string
+	ForceStopHANA                          bool
+	LogLevel                               string
+	hanaDataPath                           string
+	logicalDataPath, physicalDataPath      string
+	Labels                                 string
+	IIOTEParams                            *onetime.InternallyInvokedOTE
+	instanceProperties                     *ipb.InstanceProperties
+	cgPath                                 string
+	groupSnapshot                          bool
+	provisionedIops, provisionedThroughput int64
 }
 
 // Name implements the subcommand interface for hanadiskbackup.
@@ -369,6 +370,8 @@ func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 			s.DiskZone = cp.GetZone()
 			s.disks = append(s.disks, d.GetDiskName())
 			s.isg.Disks = instance.Disks
+			s.provisionedIops = d.GetProvisionedIops()
+			s.provisionedThroughput = d.GetProvisionedThroughput()
 		}
 	}
 	return nil
@@ -877,16 +880,20 @@ func cgPath(policies []string) string {
 
 // createGroupBackupLabels returns the labels to be added for the group snapshot.
 func (s *Snapshot) createGroupBackupLabels() map[string]string {
+	labels := map[string]string{}
 	if !s.groupSnapshot {
-		return map[string]string{}
+		if s.provisionedIops != 0 {
+			labels["goog-sapagent-provisioned-iops"] = strconv.FormatInt(s.provisionedIops, 10)
+		}
+		if s.provisionedThroughput != 0 {
+			labels["goog-sapagent-provisioned-throughput"] = strconv.FormatInt(s.provisionedThroughput, 10)
+		}
+		return labels
 	}
-	labels := map[string]string{
-		"goog-sapagent-version":   configuration.AgentVersion,
-		"goog-sapagent-cgpath":    s.cgPath,
-		"goog-sapagent-disk-name": s.Disk,
-		"goog-sapagent-timestamp": strconv.FormatInt(time.Now().UTC().Unix(), 10),
-	}
-
+	labels["goog-sapagent-version"] = configuration.AgentVersion
+	labels["goog-sapagent-cgpath"] = s.cgPath
+	labels["goog-sapagent-disk-name"] = s.Disk
+	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)
 	return labels
 }

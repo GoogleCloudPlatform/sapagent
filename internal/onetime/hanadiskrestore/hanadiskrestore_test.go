@@ -239,6 +239,66 @@ func TestValidateParameters(t *testing.T) {
 	}
 }
 
+func TestExtractLabels(t *testing.T) {
+	tests := []struct {
+		name           string
+		r              *Restorer
+		snapshot       *compute.Snapshot
+		wantIOPS       int64
+		wantThroughput int64
+	}{
+		{
+			name: "Success",
+			r:    &Restorer{},
+			snapshot: &compute.Snapshot{
+				Labels: map[string]string{
+					"goog-sapagent-provisioned-iops":       "100",
+					"goog-sapagent-provisioned-throughput": "1000",
+				},
+			},
+			wantIOPS:       100,
+			wantThroughput: 1000,
+		},
+		{
+			name: "InvalidLabels",
+			r:    &Restorer{},
+			snapshot: &compute.Snapshot{
+				Labels: map[string]string{
+					"goog-sapagent-provisioned-iops":       "B00",
+					"goog-sapagent-provisioned-throughput": "XRT000",
+				},
+			},
+		},
+		{
+			name: "ParamOverride",
+			r: &Restorer{
+				ProvisionedIops:       999,
+				ProvisionedThroughput: 9999,
+			},
+			snapshot: &compute.Snapshot{
+				Labels: map[string]string{
+					"goog-sapagent-provisioned-iops":       "100",
+					"goog-sapagent-provisioned-throughput": "1000",
+				},
+			},
+			wantIOPS:       999,
+			wantThroughput: 9999,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.r.extractLabels(context.Background(), test.snapshot)
+			if test.r.ProvisionedIops != test.wantIOPS {
+				t.Errorf("extractLabels()=%v, want=%v", test.r.ProvisionedIops, test.wantIOPS)
+			}
+			if test.r.ProvisionedThroughput != test.wantThroughput {
+				t.Errorf("extractLabels()=%v, want=%v", test.r.ProvisionedThroughput, test.wantThroughput)
+			}
+		})
+	}
+}
+
 func TestDefaultValues(t *testing.T) {
 	r := Restorer{
 		Sid:            "hdb",
