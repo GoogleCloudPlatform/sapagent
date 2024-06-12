@@ -258,6 +258,7 @@ func TestConfigureInstanceHandler(t *testing.T) {
 				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
 				writeFile:   defaultWriteFile(5),
 				Check:       true,
+				PrintDiff:   true,
 			},
 			want:    subcommands.ExitFailure,
 			wantErr: nil,
@@ -310,15 +311,16 @@ func TestRemoveLines(t *testing.T) {
 				Apply:     true,
 			},
 			removeLines:     []string{"key="},
-			wantRegenerated: true,
+			wantRegenerated: false,
 			wantErr:         nil,
 		},
 		{
 			name: "MultiValueForKey",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile: verifyWrite(""),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				writeFile:   verifyWrite(`#key="val test=1"`),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key="},
 			wantRegenerated: true,
@@ -327,9 +329,10 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "MultipleKeysRemoveBoth",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
-				writeFile: verifyWrite("\n"),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
+				writeFile:   verifyWrite("#key1=value1\n#key2=value2"),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key1=", "key2="},
 			wantRegenerated: true,
@@ -338,9 +341,10 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "MultipleKeysRemoveOne",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
-				writeFile: verifyWrite("\nkey2=value2"),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
+				writeFile:   verifyWrite("#key1=value1\nkey2=value2"),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key1="},
 			wantRegenerated: true,
@@ -360,9 +364,22 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "FailedToWrite",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile: defaultWriteFile(0),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				writeFile:   defaultWriteFile(0),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
+			},
+			removeLines:     []string{"key"},
+			wantRegenerated: false,
+			wantErr:         cmpopts.AnyError,
+		},
+		{
+			name: "FailedToBackup",
+			c: ConfigureInstance{
+				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				writeFile:   verifyWrite(`key="val test=1"`),
+				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key"},
 			wantRegenerated: false,
@@ -412,9 +429,10 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "CommentedOutKey",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"#key=value"}),
-				writeFile: verifyWrite("#key="),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
+				writeFile:   verifyWrite("#key="),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key=value"},
 			wantRegenerated: true,
@@ -423,9 +441,10 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "MultiValueForKey",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key="value test=1"`}),
-				writeFile: verifyWrite(`key="value"`),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{`key="value test=1"`}),
+				writeFile:   verifyWrite(`key="value"`),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key=test=1"},
 			wantRegenerated: true,
@@ -434,9 +453,10 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "MultipleKeys",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
-				writeFile: verifyWrite("key1=value1\nkey2="),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
+				writeFile:   verifyWrite("key1=value1\nkey2="),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key2=value2"},
 			wantRegenerated: true,
@@ -456,9 +476,10 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "FailedToWrite",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key=value`}),
-				writeFile: defaultWriteFile(0),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{`key=value`}),
+				writeFile:   defaultWriteFile(0),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			removeLines:     []string{"key=value"},
 			wantRegenerated: false,
@@ -496,8 +517,9 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "OutOfDateFileWithCheck",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
-				Check:    true,
+				readFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Check:       true,
 			},
 			wantRegenerated: true,
 			wantErr:         nil,
@@ -505,9 +527,10 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "OutOfDateFileWithApplyFailedToWrite",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
-				writeFile: defaultWriteFile(0),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
+				writeFile:   defaultWriteFile(0),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			wantRegenerated: false,
 			wantErr:         cmpopts.AnyError,
@@ -515,9 +538,10 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "OutOfDateFileWithApplySuccessfulWrite",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
-				writeFile: verifyWrite("key=value"),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
+				writeFile:   verifyWrite("key=value"),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			wantRegenerated: true,
 			wantErr:         nil,
@@ -564,9 +588,10 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "CommentedOutKey",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"#key=value"}),
-				writeFile: verifyWrite("key=value"),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
+				writeFile:   verifyWrite("key=value"),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			wantLines:       []string{"key=value"},
 			wantRegenerated: true,
@@ -575,9 +600,10 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "NewValueForKey",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"key=1"}),
-				writeFile: verifyWrite("key=2"),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{"key=1"}),
+				writeFile:   verifyWrite("key=2"),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			wantLines:       []string{"key=2"},
 			wantRegenerated: true,
@@ -596,9 +622,10 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "MultiValueForKey",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile: verifyWrite(`key="val test=2 new=3"`),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				writeFile:   verifyWrite(`key="val test=2 new=3"`),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			wantLines:       []string{`key="test=2 new=3"`},
 			wantRegenerated: true,
@@ -607,9 +634,10 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "KeyNotFound",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile: verifyWrite(`key="val test=1"` + "\n" + `another_key=value` + "\n"),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				writeFile:   verifyWrite(`key="val test=1"` + "\n" + `another_key=value` + "\n"),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			wantLines:       []string{`another_key=value`},
 			wantRegenerated: true,
@@ -618,9 +646,10 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "FailedToWrite",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile: defaultWriteFile(0),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				writeFile:   defaultWriteFile(0),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			wantLines:       []string{`another_key=value`},
 			wantRegenerated: false,

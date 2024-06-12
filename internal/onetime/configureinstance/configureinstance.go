@@ -21,11 +21,13 @@ package configureinstance
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"flag"
 	"golang.org/x/exp/slices"
@@ -47,19 +49,37 @@ const (
 	hyperThreadingDefault = "default"
 	hyperThreadingOn      = "on"
 	hyperThreadingOff     = "off"
+
+	dateTimeFormat = "2006-01-02T15:04:05Z"
+
+	operationRegenerateFile   = "REGENERATE_FILE"
+	operationRegenerateKeyVal = "REGENERATE_KEY_VALUE"
+	operationMissingKeyVal    = "MISSING_KEY_VALUE"
+	operationRemoveLine       = "REMOVE_LINE"
+	operationRemoveValue      = "REMOVE_VALUE"
+	operationLogMessage       = "LOG_MESSAGE"
 )
+
+type diff struct {
+	Filename  string `json:"filename"`
+	Operation string `json:"operation"`
+	Got       string `json:"got"`
+	Want      string `json:"want"`
+}
 
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
 	Check, Apply   bool
 	machineType    string
 	HyperThreading string
+	PrintDiff      bool
 	help, version  bool
 
 	writeFile   writeFileFunc
 	readFile    readFileFunc
 	ExecuteFunc commandlineexecutor.Execute
 	IIOTEParams *onetime.InternallyInvokedOTE
+	diffs       []diff
 }
 
 // Name implements the subcommand interface for configureinstance.
@@ -82,6 +102,7 @@ func (*ConfigureInstance) Usage() string {
     [-overrideType="type"]	Override the machine type (by default this is retrieved from metadata)
     [-hyperThreading="default"]	Sets hyper threading settings for X4 machines
                               	Possible values: ["default", "on", "off"]
+    [-printDiff=false]		If true, prints all configuration diffs and log messages to stdout as JSON
 
   Global options:
     [-h] [-v]` + "\n"
@@ -91,6 +112,7 @@ func (*ConfigureInstance) Usage() string {
 func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.Check, "check", false, "Check settings and print errors, but do not apply any changes")
 	fs.BoolVar(&c.Apply, "apply", false, "Apply changes as necessary to the settings")
+	fs.BoolVar(&c.PrintDiff, "printDiff", false, "Prints all configuration diffs and log messages to stdout as JSON")
 	fs.StringVar(&c.machineType, "overrideType", "", "Bypass the metadata machine type lookup")
 	fs.StringVar(&c.HyperThreading, "hyperThreading", "default", "Sets hyper threading settings for X4 machines")
 	fs.BoolVar(&c.help, "h", false, "Displays help")
@@ -151,7 +173,7 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 // configureInstanceHandler checks and applies OS settings
 // depending on the machine type.
 func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subcommands.ExitStatus, error) {
-	LogToBoth(ctx, "ConfigureInstance starting")
+	c.LogToBoth(ctx, "ConfigureInstance starting")
 	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
 	// usagemetrics.Action(usagemetrics.ConfigureInstanceStarted)
 	rebootRequired := false
@@ -177,29 +199,52 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	// }
 	exitStatus := subcommands.ExitSuccess
 	if c.Apply || (c.Check && !rebootRequired) {
-		LogToBoth(ctx, "ConfigureInstance: SUCCESS")
+		c.LogToBoth(ctx, "ConfigureInstance: SUCCESS")
 	}
 	if c.Apply && rebootRequired {
-		LogToBoth(ctx, "\nPlease note that a reboot is required for the changes to take effect.")
+		c.LogToBoth(ctx, "\nPlease note that a reboot is required for the changes to take effect.")
 	}
 	if c.Check && rebootRequired {
-		LogToBoth(ctx, "ConfigureInstance: Your system configuration doesn't match best practice for your instance type. Please run 'configureinstance -apply' to fix.")
+		c.LogToBoth(ctx, "ConfigureInstance: Your system configuration doesn't match best practice for your instance type. Please run 'configureinstance -apply' to fix.")
 		exitStatus = subcommands.ExitFailure
 	}
-	LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at /var/log/google-cloud-sap-agent/%s", onetime.LogFilePath(c.Name(), c.IIOTEParams)))
+	c.LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at /var/log/google-cloud-sap-agent/%s", onetime.LogFilePath(c.Name(), c.IIOTEParams)))
+
+	if c.PrintDiff {
+		if jsonDiffs, err := json.MarshalIndent(c.diffs, "", "  "); err != nil {
+			c.LogToBoth(ctx, "ConfigureInstance failed to marshal diffs")
+		} else {
+			fmt.Println(string(jsonDiffs))
+		}
+	}
 	return exitStatus, nil
 }
 
 // LogToBoth prints to the console and writes an INFO msg to the log file.
-func LogToBoth(ctx context.Context, msg string) {
-	fmt.Println(msg)
+func (c *ConfigureInstance) LogToBoth(ctx context.Context, msg string) {
+	if c.PrintDiff {
+		c.diffs = append(c.diffs, diff{Filename: "", Got: msg, Want: "", Operation: operationLogMessage})
+	} else {
+		fmt.Println(msg)
+	}
 	log.CtxLogger(ctx).Info(msg)
 }
 
-// removeLines verifies lines of filePath and removes any lines containing
+// backupAndWriteFile stores a backup of the file with a timestamp and writes
+// the new contents to the file.
+func (c *ConfigureInstance) backupAndWriteFile(ctx context.Context, filePath string, data []byte, perm os.FileMode) error {
+	backup := fmt.Sprintf("%s-old-%s", filePath, time.Now().Format(dateTimeFormat))
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "cp", ArgsToSplit: fmt.Sprintf("%s %s", filePath, backup)}); res.ExitCode != 0 {
+		return fmt.Errorf("'cp %s %s' failed, code: %d, stderr: %s", filePath, backup, res.ExitCode, res.StdErr)
+	}
+	return c.writeFile(filePath, data, perm)
+}
+
+// removeLines verifies lines of filePath and comments out any lines containing
 // the substrings present in removeLines. Returns true if any line is removed.
 // removeLines should be formatted with the longest substring key to be
-// removed to avoid removing other lines.
+// removed to avoid removing other lines. If the line is already commented out,
+// it is not removed.
 func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, removeLines []string) (bool, error) {
 	fileLines, err := c.readFile(filePath)
 	if err != nil {
@@ -209,10 +254,11 @@ func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, re
 	gotLines := strings.Split(string(fileLines), "\n")
 	for _, remove := range removeLines {
 		for i, got := range gotLines {
-			if strings.Contains(got, remove) {
-				log.CtxLogger(ctx).Infof("%s is out of date. Line: '%s' should be removed", filePath, got)
-				gotLines[i] = ""
+			if strings.Contains(got, remove) && !strings.HasPrefix(got, "#") {
+				log.CtxLogger(ctx).Infof("%s is out of date. Line: '%s' should be commented out", filePath, got)
+				gotLines[i] = "#" + got
 				regenerate = true
+				c.diffs = append(c.diffs, diff{Filename: filePath, Got: got, Want: gotLines[i], Operation: operationRemoveLine})
 			}
 		}
 	}
@@ -222,7 +268,8 @@ func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, re
 			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
 		} else {
 			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)
-			if err := c.writeFile(filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
+
+			if err := c.backupAndWriteFile(ctx, filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
 				return false, err
 			}
 		}
@@ -258,6 +305,7 @@ func (c *ConfigureInstance) removeValues(ctx context.Context, filePath string, r
 				gotLines[i] = strings.ReplaceAll(gotLines[i], " "+value, "")
 				gotLines[i] = strings.ReplaceAll(gotLines[i], "="+value, "=")
 				regenerate = true
+				c.diffs = append(c.diffs, diff{Filename: filePath, Got: got, Want: gotLines[i], Operation: operationRemoveValue})
 			}
 		}
 	}
@@ -267,7 +315,7 @@ func (c *ConfigureInstance) removeValues(ctx context.Context, filePath string, r
 			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
 		} else {
 			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)
-			if err := c.writeFile(filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
+			if err := c.backupAndWriteFile(ctx, filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
 				return false, err
 			}
 		}
@@ -287,11 +335,12 @@ func (c *ConfigureInstance) checkAndRegenerateFile(ctx context.Context, filePath
 	}
 	if errors.Is(err, os.ErrNotExist) || !bytes.Equal(got, want) {
 		log.CtxLogger(ctx).Infow("File is out of date.", "filePath", filePath, "got", string(got), "want", string(want))
+		c.diffs = append(c.diffs, diff{Filename: filePath, Got: string(got), Want: string(want), Operation: operationRegenerateFile})
 		if c.Check {
 			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
 		} else {
 			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)
-			if err := c.writeFile(filePath, want, 0644); err != nil {
+			if err := c.backupAndWriteFile(ctx, filePath, want, 0644); err != nil {
 				return false, err
 			}
 		}
@@ -325,6 +374,7 @@ func (c *ConfigureInstance) checkAndRegenerateLines(ctx context.Context, filePat
 					if updated, gotLines[i] = regenerateLine(ctx, got, want); updated == true {
 						log.CtxLogger(ctx).Infof("%s is out of date. Got: '%s', want: '%s'", filePath, got, gotLines[i])
 						regenerate = true
+						c.diffs = append(c.diffs, diff{Filename: filePath, Got: got, Want: gotLines[i], Operation: operationRegenerateKeyVal})
 					}
 				}
 			}
@@ -334,6 +384,7 @@ func (c *ConfigureInstance) checkAndRegenerateLines(ctx context.Context, filePat
 			log.CtxLogger(ctx).Infof("%s is out of date. Missing line: '%s'", filePath, want)
 			gotLines = append(gotLines, want+"\n")
 			regenerate = true
+			c.diffs = append(c.diffs, diff{Filename: filePath, Got: "", Want: want, Operation: operationMissingKeyVal})
 		}
 	}
 
@@ -342,7 +393,7 @@ func (c *ConfigureInstance) checkAndRegenerateLines(ctx context.Context, filePat
 			log.CtxLogger(ctx).Infof("To regenerate %s, run 'configureinstance -apply'.", filePath)
 		} else {
 			log.CtxLogger(ctx).Infof("Regenerating %s.", filePath)
-			if err := c.writeFile(filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
+			if err := c.backupAndWriteFile(ctx, filePath, []byte(strings.Join(gotLines, "\n")), 0644); err != nil {
 				return false, err
 			}
 		}

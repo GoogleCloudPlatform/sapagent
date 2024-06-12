@@ -44,9 +44,10 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateSystemConf",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", ""}),
-				writeFile: defaultWriteFile(1),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", ""}),
+				writeFile:   defaultWriteFile(1),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -54,9 +55,10 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateLoginConf",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", ""}),
-				writeFile: defaultWriteFile(2),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", ""}),
+				writeFile:   defaultWriteFile(2),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -64,9 +66,10 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateModprobe",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
-				writeFile: defaultWriteFile(3),
-				Apply:     true,
+				readFile:    defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
+				writeFile:   defaultWriteFile(3),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				Apply:       true,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,

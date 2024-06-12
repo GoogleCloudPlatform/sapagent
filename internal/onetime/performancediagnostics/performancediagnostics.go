@@ -60,6 +60,7 @@ const (
 type Diagnose struct {
 	logLevel, path                      string
 	hyperThreading                      string
+	printDiff                           bool
 	paramFile, testBucket, resultBucket string
 	scope, bundleName                   string
 	help, version                       bool
@@ -147,6 +148,7 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&d.bundleName, "bundle-name", "", "Sets the name for generated bundle. (optional) Default: performance-diagnostics-<current_timestamp>")
 	fs.StringVar(&d.path, "path", "", "Sets the path to save the bundle. (optional) Default: /tmp/google-cloud-sap-agent/")
 	fs.StringVar(&d.hyperThreading, "hyper-threading", "default", "Sets hyper threading settings for X4 machines")
+	fs.BoolVar(&d.printDiff, "print-diff", false, "Prints all configuration diffs and log messages for configureinstance to stdout as JSON")
 	fs.StringVar(&d.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
 	fs.BoolVar(&d.help, "help", false, "Display help.")
 	fs.BoolVar(&d.help, "h", false, "Display help.")
@@ -320,6 +322,7 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 		Check:          true,
 		ExecuteFunc:    opts.exec,
 		HyperThreading: d.hyperThreading,
+		PrintDiff:      d.printDiff,
 		IIOTEParams:    ciOTEParams,
 	}
 	onetime.LogMessageToFileAndConsole(ctx, "Executing ConfigureInstance")
