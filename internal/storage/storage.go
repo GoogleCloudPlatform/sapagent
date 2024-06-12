@@ -347,8 +347,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	var reader io.ReadCloser
 	var err error
 	if rw.ParallelDownloadWorkers > 0 {
-		log.CtxLogger(ctx).Infow("Performing parallel restore")
-		reader, err = rw.NewParallelReader(ctx)
+		reader, err = rw.NewParallelReader(ctx, object)
 	} else {
 		object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
 		reader, err = object.NewReader(ctx)

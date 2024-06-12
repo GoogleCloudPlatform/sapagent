@@ -18,26 +18,63 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	"cloud.google.com/go/storage"
+	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 // ParallelReader is a reader capable of downloading from GCS in parallel.
 type ParallelReader struct {
-	bucket *storage.BucketHandle
+	reader     io.Reader
+	bucket     *storage.BucketHandle
+	offset     int64
+	objectSize int64
 }
 
 // NewParallelReader creates a reader and workers for parallel download.
-func (rw *ReadWriter) NewParallelReader(ctx context.Context) (*ParallelReader, error) {
+func (rw *ReadWriter) NewParallelReader(ctx context.Context, object *storage.ObjectHandle) (*ParallelReader, error) {
+	if object == nil {
+		return nil, errors.New("no object defined")
+	}
+
 	r := &ParallelReader{
-		bucket: rw.BucketHandle,
+		bucket:     rw.BucketHandle,
+		objectSize: rw.TotalBytes,
+	}
+
+	log.Logger.Infow("Peforming parallel restore", "objectName", rw.ObjectName, "parallelWorkers", rw.ParallelDownloadWorkers)
+	var err error
+	r.reader, err = object.NewRangeReader(ctx, 0, -1)
+	if err != nil {
+		log.Logger.Errorw("Failed to create range reader", "err", err)
+		return r, err
 	}
 	return r, nil
 }
 
 // Read asynchronously downloads data and returns the properly ordered bytes.
 func (r *ParallelReader) Read(p []byte) (int, error) {
-	return len(p), nil
+	if r == nil {
+		return 0, errors.New("no parallel reader defined")
+	}
+	if r.reader == nil {
+		return 0, errors.New("no reader defined")
+	}
+
+	length := min(int64(len(p)), r.objectSize-r.offset)
+	n, err := r.reader.Read(p[:length])
+	if n == 0 && (err == nil || err == io.EOF) {
+		return 0, io.EOF
+	}
+
+	if err != nil {
+		log.Logger.Errorw("Failed to read from range reader", "err", err)
+		return 0, err
+	}
+	r.offset += int64(n)
+	return n, nil
 }
 
 // Close cancels any in progress transfers and performs any necessary clean up.
