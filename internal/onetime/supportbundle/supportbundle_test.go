@@ -1595,7 +1595,7 @@ func TestUploadZip(t *testing.T) {
 		{
 			name: "OpenFail",
 			sb: &SupportBundle{
-				resultBucket: "test_bucket",
+				ResultBucket: "test_bucket",
 			},
 			destFilesPath: "failure",
 			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
@@ -1615,7 +1615,7 @@ func TestUploadZip(t *testing.T) {
 		{
 			name: "StatFail",
 			sb: &SupportBundle{
-				resultBucket: "test_bucket",
+				ResultBucket: "test_bucket",
 			},
 			destFilesPath: "sampleFile",
 			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
@@ -1637,7 +1637,7 @@ func TestUploadZip(t *testing.T) {
 		{
 			name: "ConnectToBucketFail",
 			sb: &SupportBundle{
-				resultBucket: "test_bucket",
+				ResultBucket: "test_bucket",
 			},
 			destFilesPath: "sampleFile",
 			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
@@ -1661,7 +1661,7 @@ func TestUploadZip(t *testing.T) {
 		{
 			name: "UploadFail",
 			sb: &SupportBundle{
-				resultBucket: "test_bucket",
+				ResultBucket: "test_bucket",
 			},
 			destFilesPath: "sampleFile",
 			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {
@@ -1685,7 +1685,7 @@ func TestUploadZip(t *testing.T) {
 		{
 			name: "UploadSuccess",
 			sb: &SupportBundle{
-				resultBucket: "test_bucket",
+				ResultBucket: "test_bucket",
 			},
 			destFilesPath: "sampleFile",
 			ctb: func(ctx context.Context, p *storage.ConnectParameters) (*st.BucketHandle, bool) {

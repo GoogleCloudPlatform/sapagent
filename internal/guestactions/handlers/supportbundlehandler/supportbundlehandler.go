@@ -49,6 +49,9 @@ func buildSupportBundleCommand(command *gpb.AgentCommand) supportbundle.SupportB
 	if logLevel, ok := params["loglevel"]; ok {
 		sb.LogLevel = logLevel
 	}
+	if resultBucket, ok := params["result-bucket"]; ok {
+		sb.ResultBucket = resultBucket
+	}
 	if pacemakerDiagnosis, ok := params["pacemaker-diagnosis"]; ok {
 		// If parsing fails, default to false.
 		sb.PacemakerDiagnosis, _ = strconv.ParseBool(pacemakerDiagnosis)

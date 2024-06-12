@@ -54,7 +54,7 @@ type (
 		PacemakerDiagnosis, AgentLogsOnly bool
 		Help, Version                     bool
 		LogLevel                          string
-		resultBucket                      string
+		ResultBucket                      string
 		IIOTEParams                       *onetime.InternallyInvokedOTE
 	}
 	zipperHelper struct{}
@@ -129,7 +129,7 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.Help, "h", false, "Displays help")
 	fs.BoolVar(&s.Version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
-	fs.StringVar(&s.resultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
+	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
 }
 
 func getReadWriter(rw storage.ReadWriter) uploader {
@@ -242,12 +242,14 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		successMsgs = append(successMsgs, msg)
 	}
 
-	if s.resultBucket != "" {
+	if s.ResultBucket != "" {
 		if err := s.uploadZip(ctx, zipfile, bundlename, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
-			errMessage := fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.resultBucket)
+			errMessage := fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.ResultBucket)
 			fmt.Println(errMessage, " Error: ", err)
 			failureMsgs = append(failureMsgs, errMessage)
 		} else {
+			msg := fmt.Sprintf("Bundle uploaded to bucket %s", s.ResultBucket)
+			successMsgs = append(successMsgs, msg)
 			// removing the destination directory after zip file is created.
 			if err := removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
 				errMessage := fmt.Sprintf("Error while removing destination folder %s", destFilesPath)
@@ -288,7 +290,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 // uploadZip uploads the zip file to the bucket provided.
 func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName string, ctb storage.BucketConnector, grw getReaderWriter, fs filesystem.FileSystem, client storage.Client) error {
-	fmt.Println(fmt.Sprintf("Uploading bundle %s to bucket %s", destFilesPath, s.resultBucket))
+	fmt.Println(fmt.Sprintf("Uploading bundle %s to bucket %s", destFilesPath, s.ResultBucket))
 	f, err := fs.Open(destFilesPath)
 	if err != nil {
 		return err
@@ -302,7 +304,7 @@ func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName
 
 	connectParams := &storage.ConnectParameters{
 		StorageClient:    client,
-		BucketName:       s.resultBucket,
+		BucketName:       s.ResultBucket,
 		UserAgentSuffix:  "Support Bundle",
 		VerifyConnection: true,
 	}
@@ -318,7 +320,7 @@ func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName
 		Reader:       f,
 		Copier:       io.Copy,
 		BucketHandle: bucketHandle,
-		BucketName:   s.resultBucket,
+		BucketName:   s.ResultBucket,
 		ObjectName:   objectName,
 		TotalBytes:   fileSize,
 		VerifyUpload: true,
@@ -329,8 +331,8 @@ func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName
 	if bytesWritten, err = rw.Upload(ctx); err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Infow("File uploaded", "bucket", s.resultBucket, "bytesWritten", bytesWritten, "fileSize", fileSize)
-	fmt.Println(fmt.Sprintf("Bundle uploaded to bucket %s", s.resultBucket))
+	log.CtxLogger(ctx).Infow("File uploaded", "bucket", s.ResultBucket, "bytesWritten", bytesWritten, "fileSize", fileSize)
+	fmt.Println(fmt.Sprintf("Bundle uploaded to bucket %s", s.ResultBucket))
 	return nil
 }
 
