@@ -58,11 +58,11 @@ const (
 
 // Diagnose has args for performance diagnostics OTE subcommands.
 type Diagnose struct {
-	logLevel, path                      string
-	hyperThreading, overrideVersion     string
+	LogLevel, Path                      string
+	HyperThreading, overrideVersion     string
 	printDiff                           bool
-	paramFile, testBucket, resultBucket string
-	scope, bundleName                   string
+	ParamFile, TestBucket, ResultBucket string
+	Scope, BundleName                   string
 	help, version                       bool
 }
 
@@ -141,16 +141,16 @@ func (*Diagnose) Usage() string {
 
 // SetFlags implements the subcommand interface for features.
 func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&d.scope, "scope", "all", "Sets the scope for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all>. Default: all")
-	fs.StringVar(&d.testBucket, "test-bucket", "", "Sets the bucket name used to run backup operation. (optional)")
-	fs.StringVar(&d.paramFile, "param-file", "", "Sets the path to backint parameters file. Must be present if scope includes backup operation. (optional)")
-	fs.StringVar(&d.resultBucket, "result-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")
-	fs.StringVar(&d.bundleName, "bundle-name", "", "Sets the name for generated bundle. (optional) Default: performance-diagnostics-<current_timestamp>")
-	fs.StringVar(&d.path, "path", "", "Sets the path to save the bundle. (optional) Default: /tmp/google-cloud-sap-agent/")
-	fs.StringVar(&d.hyperThreading, "hyper-threading", "default", "Sets hyper threading settings for X4 machines")
+	fs.StringVar(&d.Scope, "scope", "all", "Sets the scope for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all>. Default: all")
+	fs.StringVar(&d.TestBucket, "test-bucket", "", "Sets the bucket name used to run backup operation. (optional)")
+	fs.StringVar(&d.ParamFile, "param-file", "", "Sets the path to backint parameters file. Must be present if scope includes backup operation. (optional)")
+	fs.StringVar(&d.ResultBucket, "result-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")
+	fs.StringVar(&d.BundleName, "bundle-name", "", "Sets the name for generated bundle. (optional) Default: performance-diagnostics-<current_timestamp>")
+	fs.StringVar(&d.Path, "path", "", "Sets the path to save the bundle. (optional) Default: /tmp/google-cloud-sap-agent/")
+	fs.StringVar(&d.HyperThreading, "hyper-threading", "default", "Sets hyper threading settings for X4 machines")
 	fs.StringVar(&d.overrideVersion, "override-version", "latest", "If specified, runs a specific version of configureinstance")
 	fs.BoolVar(&d.printDiff, "print-diff", false, "Prints all configuration diffs and log messages for configureinstance to stdout as JSON")
-	fs.StringVar(&d.logLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
+	fs.StringVar(&d.LogLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
 	fs.BoolVar(&d.help, "help", false, "Display help.")
 	fs.BoolVar(&d.help, "h", false, "Display help.")
 	fs.BoolVar(&d.version, "version", false, "Print the agent version.")
@@ -165,7 +165,7 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 			Name:     d.Name(),
 			Help:     d.help,
 			Version:  d.version,
-			LogLevel: d.logLevel,
+			LogLevel: d.LogLevel,
 			Fs:       fs,
 		},
 		args...,
@@ -174,6 +174,12 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 		return exitStatus
 	}
 
+	_, exitStatus = d.ExecuteAndGetMessage(ctx, fs, lp, cp)
+	return exitStatus
+}
+
+// ExecuteAndGetMessage executes the OTE and returns message and exit status.
+func (d *Diagnose) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
 	opts := &options{
 		fs:     filesystem.Helper{},
 		client: s.NewClient,
@@ -186,15 +192,16 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 }
 
 // diagnosticsHandler is the main handler for the performance diagnostics OTE subcommand.
-func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet, opts *options) subcommands.ExitStatus {
-	if !d.validateParams(ctx, flagSet) {
-		return subcommands.ExitUsageError
+func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet, opts *options) (string, subcommands.ExitStatus) {
+	if err := d.validateParams(ctx, flagSet); err != nil {
+		return err.Error(), subcommands.ExitUsageError
 	}
 
-	destFilesPath := path.Join(d.path, d.bundleName)
+	destFilesPath := path.Join(d.Path, d.BundleName)
 	if err := opts.fs.MkdirAll(destFilesPath, 0777); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "error while making directory: "+destFilesPath, err)
-		return subcommands.ExitFailure
+		errMessage := fmt.Sprintf("error while making directory: %s", destFilesPath)
+		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
 	}
 	onetime.LogMessageToFileAndConsole(ctx, "Collecting Performance Diagnostics Report for Agent for SAP...")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnostics)
@@ -202,13 +209,13 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 
 	oteLog := moveFiles{
 		oldPath: fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", d.Name()),
-		newPath: path.Join(d.path, d.bundleName, fmt.Sprintf("%s.log", d.Name())),
+		newPath: path.Join(d.Path, d.BundleName, fmt.Sprintf("%s.log", d.Name())),
 	}
 	if err := addToBundle(ctx, []moveFiles{oteLog}, opts.fs); err != nil {
 		errs = append(errs, fmt.Errorf("failure in adding performance diagnostics OTE to bundle, failed with error %v", err))
 	}
 
-	zipFile := fmt.Sprintf("%s/%s.zip", destFilesPath, d.bundleName)
+	zipFile := fmt.Sprintf("%s/%s.zip", destFilesPath, d.BundleName)
 	if err := zipSource(destFilesPath, zipFile, opts.fs, opts.z); err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while zipping destination folder %s", zipFile), err)
 		errs = append(errs, err)
@@ -216,7 +223,7 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", zipFile))
 	}
 
-	if d.resultBucket != "" {
+	if d.ResultBucket != "" {
 		if err := d.uploadZip(ctx, zipFile, storage.ConnectToBucket, getReadWriter, opts); err != nil {
 			onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while uploading zip %s", zipFile), err)
 			errs = append(errs, fmt.Errorf("failure in uploading zip, failed with error %v", err))
@@ -230,12 +237,15 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 	if len(errs) > 0 {
 		usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFailure)
 		onetime.LogMessageToFileAndConsole(ctx, "Performance Diagnostics Report collection ran into following errors\n")
+		var errMessages []string
 		for _, err := range errs {
+			errMessages = append(errMessages, err.Error())
 			onetime.LogErrorToFileAndConsole(ctx, "Error: ", err)
 		}
-		return subcommands.ExitFailure
+		message := strings.Join(errMessages, ", ")
+		return message, subcommands.ExitFailure
 	}
-	return subcommands.ExitSuccess
+	return "Performance Diagnostics Report collection completed successfully", subcommands.ExitSuccess
 }
 
 // performDiagnosticsOps performs the operations requested by the user.
@@ -247,7 +257,7 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 		errs = append(errs, fmt.Errorf("failure in executing ConfigureInstance OTE, failed with exist status %d", exitStatus))
 	}
 	// Performance diagnostics operations.
-	ops := listOperations(ctx, strings.Split(d.scope, ","))
+	ops := listOperations(ctx, strings.Split(d.Scope, ","))
 	for op := range ops {
 		if op == "all" {
 			// Perform all operations
@@ -277,40 +287,42 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 }
 
 // validateParams checks if the parameters provided to the OTE subcommand are valid.
-func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) bool {
+func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) error {
 	scopeValues := map[string]bool{
 		"all":    false,
 		"backup": false,
 		"io":     false,
 	}
 
-	scopes := strings.Split(d.scope, ",")
+	scopes := strings.Split(d.Scope, ",")
 	for _, scope := range scopes {
 		scope = strings.TrimSpace(scope)
 		if _, ok := scopeValues[scope]; !ok {
-			onetime.LogMessageToFileAndConsole(ctx, "Invalid flag usage, incorrect value of scope. Please check usage.")
+			err := fmt.Errorf("invalid flag usage, incorrect value of scope. Please check usage")
+			onetime.LogMessageToFileAndConsole(ctx, err.Error())
 			flagSet.Usage()
-			return false
+			return err
 		}
 		scopeValues[scope] = true
 	}
 
 	if scopeValues["backup"] || scopeValues["all"] {
-		if d.paramFile == "" && d.testBucket == "" {
-			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", errors.New("test bucket cannot be empty to perform backup operation"))
-			return false
+		if d.ParamFile == "" && d.TestBucket == "" {
+			err := fmt.Errorf("test bucket cannot be empty to perform backup operation")
+			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
+			return err
 		}
 	}
-	if d.path == "" {
+	if d.Path == "" {
 		log.CtxLogger(ctx).Debugw("No path for bundle provided. Setting bundle path to default", "path", bundlePath)
-		d.path = bundlePath
+		d.Path = bundlePath
 	}
-	if d.bundleName == "" {
+	if d.BundleName == "" {
 		timestamp := time.Now().Unix()
-		d.bundleName = "performance-diagnostics-" + strconv.FormatInt(timestamp, 10)
+		d.BundleName = "performance-diagnostics-" + strconv.FormatInt(timestamp, 10)
 		log.CtxLogger(ctx).Debugw("No name for bundle provided. Setting bundle name using timestamp", "bundle_name", timestamp)
 	}
-	return true
+	return nil
 }
 
 func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet, opts *options) subcommands.ExitStatus {
@@ -322,7 +334,7 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 	ci := &configureinstance.ConfigureInstance{
 		Check:           true,
 		ExecuteFunc:     opts.exec,
-		HyperThreading:  d.hyperThreading,
+		HyperThreading:  d.HyperThreading,
 		OverrideVersion: d.overrideVersion,
 		PrintDiff:       d.printDiff,
 		IIOTEParams:     ciOTEParams,
@@ -331,11 +343,11 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 	defer onetime.LogMessageToFileAndConsole(ctx, "Finished invoking ConfigureInstance")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsConfigureInstance)
 	res := ci.Execute(ctx, f)
-	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
+	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.LogLevel))
 	paths := []moveFiles{
 		{
 			oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-configure-instance.log",
-			newPath: path.Join(d.path, d.bundleName, "performance-diagnostics-configure-instance.log"),
+			newPath: path.Join(d.Path, d.BundleName, "performance-diagnostics-configure-instance.log"),
 		},
 	}
 	if res != subcommands.ExitSuccess {
@@ -373,7 +385,7 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 	var errs []error
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsBackup)
-	backupPath := path.Join(d.path, d.bundleName, "backup")
+	backupPath := path.Join(d.Path, d.BundleName, "backup")
 	if err := opts.fs.MkdirAll(backupPath, 0777); err != nil {
 		errs = append(errs, err)
 		return errs
@@ -417,8 +429,8 @@ func getReadWriter(rw storage.ReadWriter) uploader {
 
 func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ctb connectToBucket, config *bpb.BackintConfiguration) error {
 	bucket := config.GetBucket()
-	if d.testBucket != "" {
-		bucket = d.testBucket
+	if d.TestBucket != "" {
+		bucket = d.TestBucket
 	}
 	if bucket == "" {
 		onetime.LogErrorToFileAndConsole(ctx, "error determining bucket", fmt.Errorf("no bucket provided, either in param-file or as test-bucket"))
@@ -461,8 +473,8 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 	backintParams := &backint.Backint{
 		Function:  "diagnose",
 		User:      "perf-diag-user",
-		ParamFile: d.paramFile,
-		OutFile:   path.Join(d.path, d.bundleName, "backup/backint-output.log"),
+		ParamFile: d.ParamFile,
+		OutFile:   path.Join(d.Path, d.BundleName, "backup/backint-output.log"),
 		IIOTEParams: &onetime.InternallyInvokedOTE{
 			InvokedBy: "performance-diagnostics-backint",
 			Lp:        opts.lp,
@@ -472,7 +484,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 	onetime.LogMessageToFileAndConsole(ctx, "Running backint...")
 	defer onetime.LogMessageToFileAndConsole(ctx, "Finished running backint.")
 	res := backintParams.Execute(ctx, &flag.FlagSet{})
-	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.logLevel))
+	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.LogLevel))
 	if res != subcommands.ExitSuccess {
 		onetime.LogMessageToFileAndConsole(ctx, "Error while executing backint")
 	}
@@ -480,7 +492,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 	paths := []moveFiles{
 		{
 			oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-backint.log",
-			newPath: path.Join(d.path, d.bundleName, "backup/performance-diagnostics-backint.log"),
+			newPath: path.Join(d.Path, d.BundleName, "backup/performance-diagnostics-backint.log"),
 		},
 	}
 	if err := addToBundle(ctx, paths, opts.fs); err != nil {
@@ -499,8 +511,8 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 	var errs []error
 	onetime.LogMessageToFileAndConsole(ctx, "Running gsutil perfdiag...")
-	targetPath := path.Join(d.path, d.bundleName)
-	targetBucket := d.testBucket
+	targetPath := path.Join(d.Path, d.BundleName)
+	targetBucket := d.TestBucket
 	if targetBucket == "" {
 		targetBucket = opts.config.GetBucket()
 	}
@@ -531,7 +543,7 @@ func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 	var errs []error
 	onetime.LogMessageToFileAndConsole(ctx, "Running FIO commands...")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFIO)
-	targetPath := path.Join(d.path, d.bundleName, "io")
+	targetPath := path.Join(d.Path, d.BundleName, "io")
 	if err := opts.fs.MkdirAll(targetPath, 0777); err != nil {
 		errs = append(errs, fmt.Errorf("error while making directory: %s, error %s", targetPath, err.Error()))
 		return errs
@@ -609,12 +621,12 @@ func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSyste
 }
 
 func (d *Diagnose) setBackintConfig(ctx context.Context, fs filesystem.FileSystem, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
-	if d.testBucket != "" {
+	if d.TestBucket != "" {
 		if err := d.createTempParamFile(ctx, fs, read); err != nil {
 			return nil, err
 		}
 	} else {
-		if d.paramFile == "" {
+		if d.ParamFile == "" {
 			return nil, errors.New("bucket is required for backup, but param file is empty and no test-bucket is provided")
 		}
 	}
@@ -632,7 +644,7 @@ func (d *Diagnose) setBackintConfig(ctx context.Context, fs filesystem.FileSyste
 	if bp.Config.GetDiagnoseFileMaxSizeGb() == 0 {
 		bp.Config.DiagnoseFileMaxSizeGb = 1
 	}
-	bp.Config.OutputFile = path.Join(d.path, d.bundleName, "backup/backint-output.log")
+	bp.Config.OutputFile = path.Join(d.Path, d.BundleName, "backup/backint-output.log")
 	return bp.Config, nil
 }
 
@@ -644,7 +656,7 @@ func (d *Diagnose) createTempParamFile(ctx context.Context, fs filesystem.FileSy
 	if config == nil {
 		config = &bpb.BackintConfiguration{}
 	}
-	config.Bucket = d.testBucket
+	config.Bucket = d.TestBucket
 
 	// Creating a temporary parameter file for backint config
 	content, err := protojson.Marshal(config)
@@ -652,16 +664,16 @@ func (d *Diagnose) createTempParamFile(ctx context.Context, fs filesystem.FileSy
 		return err
 	}
 
-	if d.paramFile != "" {
+	if d.ParamFile != "" {
 		// In case the param file provided is a .txt file, we need a .json file
 		// to write the new config.
 		paramFile := strings.Split(d.getParamFileName(), ".")
-		d.paramFile = path.Join(d.path, d.bundleName, fmt.Sprintf("%s.json", paramFile[len(paramFile)-2]))
+		d.ParamFile = path.Join(d.Path, d.BundleName, fmt.Sprintf("%s.json", paramFile[len(paramFile)-2]))
 	} else {
-		d.paramFile = path.Join(d.path, d.bundleName, "backup/backint-config.json")
+		d.ParamFile = path.Join(d.Path, d.BundleName, "backup/backint-config.json")
 	}
 
-	f, err := fs.Create(d.paramFile)
+	f, err := fs.Create(d.ParamFile)
 	if err != nil {
 		return err
 	}
@@ -669,16 +681,16 @@ func (d *Diagnose) createTempParamFile(ctx context.Context, fs filesystem.FileSy
 	if _, err := f.Write(content); err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Debugw("Created temporary parameter file", "paramFile", d.paramFile)
+	log.CtxLogger(ctx).Debugw("Created temporary parameter file", "paramFile", d.ParamFile)
 	return nil
 }
 
 func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
-	if d.paramFile == "" {
+	if d.ParamFile == "" {
 		return nil, nil
 	}
 
-	content, err := read(d.paramFile)
+	content, err := read(d.ParamFile)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
 		return nil, err
@@ -688,7 +700,7 @@ func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFi
 		return nil, nil
 	}
 
-	config, err := configuration.Unmarshal(d.paramFile, content)
+	config, err := configuration.Unmarshal(d.ParamFile, content)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error unmarshalling parameters file", "err", err)
 		return nil, err
@@ -698,10 +710,10 @@ func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFi
 
 // getParamFileName extracts the name of the parameter file from the path provided.
 func (d *Diagnose) getParamFileName() string {
-	if d.paramFile == "" {
+	if d.ParamFile == "" {
 		return ""
 	}
-	parts := strings.Split(d.paramFile, "/")
+	parts := strings.Split(d.ParamFile, "/")
 	return parts[len(parts)-1]
 }
 
@@ -752,7 +764,7 @@ func (d *Diagnose) uploadZip(ctx context.Context, destFilesPath string, ctb stor
 	connectParams := &storage.ConnectParameters{
 		StorageClient:    opts.client,
 		ServiceAccount:   opts.config.GetServiceAccountKey(),
-		BucketName:       d.resultBucket,
+		BucketName:       d.ResultBucket,
 		UserAgentSuffix:  "Performance Diagnostics",
 		VerifyConnection: true,
 		MaxRetries:       opts.config.GetRetries(),
@@ -765,13 +777,13 @@ func (d *Diagnose) uploadZip(ctx context.Context, destFilesPath string, ctb stor
 		return err
 	}
 
-	objectName := fmt.Sprintf("%s/%s.zip", d.Name(), d.bundleName)
+	objectName := fmt.Sprintf("%s/%s.zip", d.Name(), d.BundleName)
 	fileSize := fileInfo.Size()
 	readWriter := storage.ReadWriter{
 		Reader:       f,
 		Copier:       io.Copy,
 		BucketHandle: bucketHandle,
-		BucketName:   d.resultBucket,
+		BucketName:   d.ResultBucket,
 		ObjectName:   objectName,
 		TotalBytes:   fileSize,
 		VerifyUpload: true,
@@ -783,7 +795,7 @@ func (d *Diagnose) uploadZip(ctx context.Context, destFilesPath string, ctb stor
 		return err
 	}
 
-	log.CtxLogger(ctx).Infow("File uploaded", "bucket", d.resultBucket, "bytesWritten", bytesWritten, "fileSize", fileSize)
-	fmt.Println(fmt.Sprintf("Bundle uploaded to bucket %s", d.resultBucket))
+	log.CtxLogger(ctx).Infow("File uploaded", "bucket", d.ResultBucket, "bytesWritten", bytesWritten, "fileSize", fileSize)
+	fmt.Println(fmt.Sprintf("Bundle uploaded to bucket %s", d.ResultBucket))
 	return nil
 }

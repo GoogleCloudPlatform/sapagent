@@ -29,6 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/hanadiskbackuphandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/performancediagnosticshandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/restart"
@@ -53,8 +54,9 @@ type guestActionHandler func(context.Context, *gpb.AgentCommand, *ipb.CloudPrope
 var guestActionsHandlers = map[string]guestActionHandler{
 	"configure":      configurehandler.ConfigureHandler,
 	"hanadiskbackup": hanadiskbackuphandler.HANADiskBackupHandler,
-	"supportbundle":  supportbundlehandler.SupportBundleHandler,
-	"version":        versionhandler.VersionHandler,
+	"performancediagnostics": performancediagnosticshandler.PerformanceDiagnosticsHandler,
+	"supportbundle": supportbundlehandler.SupportBundleHandler,
+	"version":            versionhandler.VersionHandler,
 }
 
 type guestActionsOptions struct {
