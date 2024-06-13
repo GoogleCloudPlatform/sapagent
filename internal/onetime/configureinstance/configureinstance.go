@@ -50,6 +50,9 @@ const (
 	hyperThreadingOn      = "on"
 	hyperThreadingOff     = "off"
 
+	overrideVersionLatest = "latest"
+	overrideVersion34     = "3.4"
+
 	dateTimeFormat = "2006-01-02T15:04:05Z"
 
 	operationRegenerateFile   = "REGENERATE_FILE"
@@ -69,11 +72,12 @@ type diff struct {
 
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
-	Check, Apply   bool
-	machineType    string
-	HyperThreading string
-	PrintDiff      bool
-	help, version  bool
+	Check, Apply    bool
+	machineType     string
+	HyperThreading  string
+	OverrideVersion string
+	PrintDiff       bool
+	help, version   bool
 
 	writeFile   writeFileFunc
 	readFile    readFileFunc
@@ -103,6 +107,8 @@ func (*ConfigureInstance) Usage() string {
     [-hyperThreading="default"]	Sets hyper threading settings for X4 machines
                               	Possible values: ["default", "on", "off"]
     [-printDiff=false]		If true, prints all configuration diffs and log messages to stdout as JSON
+    [-overrideVersion="latest"]	If specified, runs a specific version of configureinstance.
+                               	Possible values: ["3.4", "latest"]
 
   Global options:
     [-h] [-v]` + "\n"
@@ -115,6 +121,7 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.PrintDiff, "printDiff", false, "Prints all configuration diffs and log messages to stdout as JSON")
 	fs.StringVar(&c.machineType, "overrideType", "", "Bypass the metadata machine type lookup")
 	fs.StringVar(&c.HyperThreading, "hyperThreading", "default", "Sets hyper threading settings for X4 machines")
+	fs.StringVar(&c.OverrideVersion, "overrideVersion", "latest", "If specified, runs a specific version of configureinstance")
 	fs.BoolVar(&c.help, "h", false, "Displays help")
 	fs.BoolVar(&c.version, "v", false, "Displays the current version of the agent")
 }
@@ -158,8 +165,8 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	exitStatus, err := c.configureInstanceHandler(ctx)
 	if err != nil {
 		if exitStatus == subcommands.ExitUsageError {
-			fmt.Println(fmt.Sprintf("ConfigureInstance: This machine type (%s) is not currently supported for automatic configuration, detailed logs are at %s", c.machineType, onetime.LogFilePath(c.Name(), c.IIOTEParams)))
-			log.CtxLogger(ctx).Infow("ConfigureInstance: This machine type is not currently supported for automatic configuration", "machineType", c.machineType)
+			fmt.Println(fmt.Sprintf("ConfigureInstance: %s, detailed logs are at %s, see help for more information", err, onetime.LogFilePath(c.Name(), c.IIOTEParams)))
+			log.CtxLogger(ctx).Infow("ConfigureInstance: Usage Error", "machineType", c.machineType, "err", err)
 		} else {
 			fmt.Println(fmt.Sprintf("ConfigureInstance: FAILED, detailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))+" err: ", err)
 			log.CtxLogger(ctx).Errorw("ConfigureInstance failed", "err", err)
@@ -182,11 +189,22 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	log.CtxLogger(ctx).Infof("Using machine type: %s", c.machineType)
 	switch {
 	case strings.HasPrefix(c.machineType, "x4"):
-		if rebootRequired, err = c.configureX4(ctx); err != nil {
-			return subcommands.ExitFailure, err
+		// NOTE: Any changes in configureinstance requires a copy of configurex4,
+		// renamed functions and global vars, and add to this switch statement.
+		switch c.OverrideVersion {
+		case overrideVersionLatest:
+			if rebootRequired, err = c.configureX4(ctx); err != nil {
+				return subcommands.ExitFailure, err
+			}
+		case overrideVersion34:
+			if rebootRequired, err = c.configureX43_4(ctx); err != nil {
+				return subcommands.ExitFailure, err
+			}
+		default:
+			return subcommands.ExitUsageError, fmt.Errorf("this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.machineType)
 		}
 	default:
-		return subcommands.ExitUsageError, fmt.Errorf("unsupported machine type: %s", c.machineType)
+		return subcommands.ExitUsageError, fmt.Errorf("this machine type (%s) is not currently supported for automatic configuration", c.machineType)
 	}
 
 	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
