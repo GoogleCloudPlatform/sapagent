@@ -90,6 +90,7 @@ type Restorer struct {
 	Project, Sid, HanaSidAdm, DataDiskName, DataDiskDeviceName string
 	DataDiskZone, SourceSnapshot, GroupSnapshot, NewDiskType   string
 	disks                                                      []*ipb.Disk
+	DataDiskVG                                                 string
 	gceService                                                 gceInterface
 	computeService                                             *compute.Service
 	baseDataPath, baseLogPath                                  string
@@ -263,9 +264,13 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 			return subcommands.ExitFailure
 		}
 	}
+	// Rescanning to prevent any volume group naming conflicts
+	// with restored disk's volume group.
+	hanabackup.RescanVolumeGroups(ctx)
+
 	workflowStartTime = time.Now()
 	if !r.isGroupSnapshot {
-		if err := r.diskRestore(ctx, cp); err != nil {
+		if err := r.diskRestore(ctx, commandlineexecutor.ExecuteCommand, cp); err != nil {
 			return subcommands.ExitFailure
 		}
 	} else {
@@ -292,6 +297,30 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 	return subcommands.ExitSuccess
 }
 
+func (r *Restorer) fetchVG(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute, physicalDataPath string) (string, error) {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/sbin/pvs",
+		ArgsToSplit: physicalDataPath,
+	})
+	if result.Error != nil {
+		return "", fmt.Errorf("failure fetching VG, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+
+	// A physical volume can only be a part of one volume group at a time.
+	// A valid output looks like this:
+	// PV         VG    Fmt  Attr PSize   PFree
+	// /dev/sdd   my_vg lvm2 a--  500.00g 300.00g
+	lines := strings.Split(result.StdOut, "\n")
+	if len(lines) < 2 {
+		return "", fmt.Errorf("failure fetching VG, disk does not belong to any vg")
+	}
+	fields := strings.Fields(lines[1])
+	if len(fields) < 6 {
+		return "", fmt.Errorf("failure fetching VG, disk does not belong to any vg")
+	}
+	return fields[1], nil
+}
+
 // prepare stops HANA, unmounts data directory and detaches old data disk.
 func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitForIndexServerStop waitForIndexServerToStopWithRetry, exec commandlineexecutor.Execute) error {
 	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, exec)
@@ -310,6 +339,13 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 	}
 
 	if !r.isGroupSnapshot {
+		vg, err := r.fetchVG(ctx, cp, exec, r.physicalDataPath)
+		if err != nil {
+			return err
+		}
+		r.DataDiskVG = vg
+
+		log.CtxLogger(ctx).Info("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
 		if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
 			hanabackup.RescanVolumeGroups(ctx)
@@ -357,7 +393,7 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 }
 
 // diskRestore creates a new data disk restored from a single snapshot and attaches it to the instance.
-func (r *Restorer) diskRestore(ctx context.Context, cp *ipb.CloudProperties) error {
+func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) error {
 	snapShotKey := ""
 	if r.CSEKKeyFile != "" {
 		usagemetrics.Action(usagemetrics.EncryptedSnapshotRestore)
@@ -371,7 +407,7 @@ func (r *Restorer) diskRestore(ctx context.Context, cp *ipb.CloudProperties) err
 		snapShotKey = key
 	}
 
-	if err := r.restoreFromSnapshot(ctx, cp, snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
+	if err := r.restoreFromSnapshot(ctx, exec, cp, snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone)
 		hanabackup.RescanVolumeGroups(ctx)
@@ -398,7 +434,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 		snapShotKey = key
 	}
 
-	if err := r.restoreFromGroupSnapshot(ctx, cp, snapShotKey); err != nil {
+	if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 		for _, d := range r.disks {
 			r.gceService.AttachDisk(ctx, d.DiskName, cp, r.Project, r.DataDiskZone)
@@ -413,7 +449,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 }
 
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
-func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudProperties, snapshotKey, newDiskName, sourceSnapshot string) error {
+func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey, newDiskName, sourceSnapshot string) error {
 
 	disk := &compute.Disk{
 		Name:                        newDiskName,
@@ -431,7 +467,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 	if r.ProvisionedThroughput > 0 {
 		disk.ProvisionedThroughput = r.ProvisionedThroughput
 	}
-	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", r.NewdiskName, "sourceSnapshot", r.SourceSnapshot)
+	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", r.SourceSnapshot)
 
 	if r.computeService == nil {
 		return fmt.Errorf("compute service is nil")
@@ -446,26 +482,75 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, cp *ipb.CloudPropert
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
-	log.Logger.Infow("Attaching new HANA disk", "diskName", r.NewdiskName)
-	if err := r.gceService.AttachDisk(ctx, r.NewdiskName, cp, r.Project, r.DataDiskZone); err != nil {
+	if err := r.gceService.AttachDisk(ctx, newDiskName, cp, r.Project, r.DataDiskZone); err != nil {
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
 
-	_, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewdiskName)
+	dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
 	if err != nil {
-		return fmt.Errorf("failed to check if new disk %v is attached to the instance", r.NewdiskName)
+		return fmt.Errorf("failed to check if new disk %v is attached to the instance", newDiskName)
 	}
 	if !ok {
-		return fmt.Errorf("newly created disk %v is not attached to the instance", r.NewdiskName)
+		return fmt.Errorf("newly created disk %v is not attached to the instance", newDiskName)
 	}
 
+	if r.DataDiskVG != "" {
+		if err := r.renameLVM(ctx, exec, cp, dev, newDiskName); err != nil {
+			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
+			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
+			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, newDiskName, dev); err != nil {
+				log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", err)
+				return err
+			}
+			return err
+		}
+	}
 	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
+	return nil
+}
+
+// renameLVM renames the LVM volume group of the newly restored disk to
+// that of the target disk.
+func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, deviceName string, diskName string) error {
+	var err error
+	var instanceProperties *ipb.InstanceProperties
+	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, r.gceService)
+	if _, instanceProperties, err = instanceInfoReader.ReadDiskMapping(ctx, &cpb.Configuration{CloudProperties: cp}); err != nil {
+		return err
+	}
+
+	log.CtxLogger(ctx).Infow("Reading disk mapping to fetch physical mapping of newly attached disk", "ip", instanceProperties)
+	var restoredDiskPV string
+	for _, d := range instanceProperties.GetDisks() {
+		if d.GetDeviceName() == deviceName {
+			restoredDiskPV = fmt.Sprintf("/dev/%s", d.GetMapping())
+		}
+	}
+
+	restoredDiskVG, err := r.fetchVG(ctx, cp, exec, restoredDiskPV)
+	log.CtxLogger(ctx).Infow("Fetching vg", "restoredDiskVG", restoredDiskVG, "err", err)
+	if err != nil {
+		return err
+	}
+
+	if restoredDiskVG != r.DataDiskVG {
+		result := exec(ctx, commandlineexecutor.Params{
+			Executable:  "/sbin/vgrename",
+			ArgsToSplit: fmt.Sprintf("%s %s", restoredDiskVG, r.DataDiskVG),
+		})
+		if result.Error != nil {
+			log.CtxLogger(ctx).Errorw("Failed to rename volume group of restored disk", "err", result.StdErr)
+			return fmt.Errorf("failed to rename volume group of restored disk '%s' from %s to %s: %v", restoredDiskPV, restoredDiskVG, r.DataDiskVG, result.StdErr)
+		}
+		log.CtxLogger(ctx).Infow("Renaming volume group of restored disk", "Name of TargetDisk VG", r.DataDiskVG, "Name of RestoredDisk VG", restoredDiskVG)
+	}
+
 	return nil
 }
 
 // restoreFromGroupSnapshot creates several new HANA data disks from snapshots belonging
 // to given group snapshot and attaches them to the instance.
-func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, cp *ipb.CloudProperties, snapshotKey string) error {
+func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
 	groupSnapshot, err := r.gceService.GetGroupSnapshotsService().Get(r.Project, r.GroupSnapshot).Do()
 	if err != nil {
 		return fmt.Errorf("failed to get group snapshot: %v", err)
@@ -473,7 +558,7 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, cp *ipb.CloudPr
 
 	for _, snapshot := range groupSnapshot.Snapshots {
 		timestamp := time.Now().Unix()
-		if err := r.restoreFromSnapshot(ctx, cp, snapshotKey, fmt.Sprintf("%s-%d", snapshot.SourceDisk, timestamp), snapshot.Name); err != nil {
+		if err := r.restoreFromSnapshot(ctx, exec, cp, snapshotKey, fmt.Sprintf("%s-%d", snapshot.SourceDisk, timestamp), snapshot.Name); err != nil {
 			return err
 		}
 	}

@@ -655,6 +655,23 @@ func TestPrepare(t *testing.T) {
 		want                   error
 	}{
 		{
+			name: "SingleSnapshotFetchVGErr",
+			r: &Restorer{
+				isGroupSnapshot: false,
+			},
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd   lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "SingleSnapshotDetachDiskErr",
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",
@@ -668,10 +685,34 @@ func TestPrepare(t *testing.T) {
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					ExitCode: 0, StdErr: "success", Error: nil,
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd lvm2 a--  500.00g 300.00g",
 				}
 			},
 			want: cmpopts.AnyError,
+		},
+		{
+			name: "SingleSnapshotSuccess",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				gceService: &fake.TestGCE{
+					DetachDiskErr: nil,
+				},
+				DataDiskVG: "temp_vg",
+			},
+			cp: defaultCloudProperties,
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: nil,
 		},
 		{
 			name: "GroupSnapshotDetachDiskErr",
@@ -798,16 +839,99 @@ func TestReadDiskMapping(t *testing.T) {
 	}
 }
 
+func TestFetchVG(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		cp      *ipb.CloudProperties
+		exec    commandlineexecutor.Execute
+		wantVG  string
+		wantErr error
+	}{
+		{
+			name: "Fail",
+			cp:   defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0, StdErr: "fail", Error: cmpopts.AnyError,
+				}
+			},
+			wantVG:  "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoVG1",
+			cp:   defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd   lvm2 a--  500.00g 300.00g",
+				}
+			},
+			wantVG:  "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoVG2",
+			cp:   defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree",
+				}
+			},
+			wantVG:  "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			cp:   defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			wantVG:  "my_vg",
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotVG, err := tc.r.fetchVG(ctx, tc.cp, tc.exec, "")
+			if gotVG != tc.wantVG {
+				t.Errorf("fetchVG() = %v, want %v", gotVG, tc.wantVG)
+			}
+			if cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()) != "" {
+				t.Errorf("fetchVG() returned diff (-want +got):\n%s", cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()))
+			}
+		})
+	}
+}
+
 func TestDiskRestore(t *testing.T) {
 	tests := []struct {
 		name string
 		r    *Restorer
+		exec commandlineexecutor.Execute
 		want error
 	}{
 		{
 			name: "CSEKKeyFilePresent",
 			r: &Restorer{
 				CSEKKeyFile: "/path/to/csek-key-file",
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 5,
+					Error:    cmpopts.AnyError,
+				}
 			},
 			want: cmpopts.AnyError,
 		},
@@ -823,13 +947,19 @@ func TestDiskRestore(t *testing.T) {
 					DiskAttachedToInstanceErr:        cmpopts.AnyError,
 				},
 			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
 			want: cmpopts.AnyError,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.r.diskRestore(context.Background(), defaultCloudProperties)
+			got := tc.r.diskRestore(context.Background(), tc.exec, defaultCloudProperties)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("diskRestore() returned diff (-want +got):\n%s", diff)
 			}
@@ -903,6 +1033,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 	tests := []struct {
 		name        string
 		r           *Restorer
+		exec        commandlineexecutor.Execute
 		cp          *ipb.CloudProperties
 		snapshotKey string
 		want        error
@@ -918,6 +1049,12 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 						},
 					},
 				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
 			},
 			cp:          defaultCloudProperties,
 			snapshotKey: "test-snapshot-key",
@@ -942,6 +1079,12 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 					},
 				},
 			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
 			cp:          defaultCloudProperties,
 			snapshotKey: "test-snapshot-key",
 			want:        cmpopts.AnyError,
@@ -958,6 +1101,12 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 					},
 				},
 			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
 			cp:          defaultCloudProperties,
 			snapshotKey: "test-snapshot-key",
 			want:        nil,
@@ -967,9 +1116,228 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.r.restoreFromGroupSnapshot(ctx, tc.cp, tc.snapshotKey)
+			got := tc.r.restoreFromGroupSnapshot(ctx, tc.exec, tc.cp, tc.snapshotKey)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("restoreFromSnapshot() returned diff (-want +got):\n%s", diff)
+				t.Errorf("restoreFromGroupSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRenameLVM(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        *Restorer
+		exec     commandlineexecutor.Execute
+		cp       *ipb.CloudProperties
+		diskName string
+		wantErr  error
+	}{
+		{
+			name: "InstanceReadError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{cmpopts.AnyError},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{cmpopts.AnyError},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
+			cp:       defaultCloudProperties,
+			diskName: "test-disk-name",
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "FetchVGFail",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
+			cp:       defaultCloudProperties,
+			diskName: "test-disk-name",
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "SameVG",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+				DataDiskVG: "my_vg",
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			cp:       defaultCloudProperties,
+			diskName: "test-disk-name",
+			wantErr:  nil,
+		},
+		{
+			name: "RenameVG",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+				DataDiskVG: "vg_1",
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			cp:       defaultCloudProperties,
+			diskName: "test-disk-name",
+			wantErr:  nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.r.renameLVM(ctx, tc.exec, tc.cp, "disk-device-name", tc.diskName)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("renameLVM() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
