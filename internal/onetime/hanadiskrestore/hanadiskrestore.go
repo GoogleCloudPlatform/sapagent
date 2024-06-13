@@ -134,8 +134,8 @@ func (*Restorer) Usage() string {
 // SetFlags implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.Sid, "sid", "", "HANA sid. (required)")
-	fs.StringVar(&r.DataDiskName, "data-disk-name", "", "Current disk name. (required)")
-	fs.StringVar(&r.DataDiskZone, "data-disk-zone", "", "Current disk zone. (required)")
+	fs.StringVar(&r.DataDiskName, "data-disk-name", "", "Current disk name. (optional) Default: Disk backing up /hana/data")
+	fs.StringVar(&r.DataDiskZone, "data-disk-zone", "", "Current disk zone. (optional) Default: Same zone as current instance")
 	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
 	fs.StringVar(&r.GroupSnapshot, "backup-id", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
 	fs.StringVar(&r.NewdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
@@ -157,11 +157,12 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Help and version will return before the args are parsed.
 	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
-		Name:    r.Name(),
-		Help:    r.help,
-		Version: r.version,
-		Fs:      f,
-		IIOTE:   r.IIOTEParams,
+		Name:     r.Name(),
+		Help:     r.help,
+		Version:  r.version,
+		Fs:       f,
+		IIOTE:    r.IIOTEParams,
+		LogLevel: r.LogLevel,
 	}, args...)
 	if !completed {
 		return exitStatus
@@ -191,8 +192,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	// DataDiskName and NewdiskNames are fetched and respectively created
 	// from individual snapshots mapped to groupSnapshot.
 	restoreFromGroupSnapshot := !(r.Sid == "" || r.GroupSnapshot == "")
-	// TODO: Enable auto discovery for restore
-	restoreFromSingleSnapshot := !(r.Sid == "" || r.DataDiskName == "" || r.DataDiskZone == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
+	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
 		return fmt.Errorf("either source-snapshot or backup-id must be provided, not both. Usage: %s", r.Usage())
@@ -240,13 +240,6 @@ func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServ
 	if r.computeService, err = computeServiceCreator(ctx); err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create compute service,", err)
 		return subcommands.ExitFailure
-	}
-
-	if r.isGroupSnapshot {
-		if err := r.readDiskMapping(ctx, cp); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to read disks backing /hana/data,", err)
-			return subcommands.ExitFailure
-		}
 	}
 
 	if err := r.checkPreConditions(ctx, cp, checkDataDir, checkLogDir); err != nil {
@@ -583,6 +576,12 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		return fmt.Errorf("unsupported: HANA data and HANA log are on the same physical disk - %s", r.physicalDataPath)
 	}
 
+	if r.DataDiskName == "" || r.DataDiskZone == "" || r.isGroupSnapshot {
+		if err := r.readDiskMapping(ctx, cp, &instanceinfo.PhysicalPathReader{OS: runtime.GOOS}); err != nil {
+			return fmt.Errorf("failed to read disks backing /hana/data: %v", err)
+		}
+	}
+
 	// Verify the disk is attached to the instance.
 	if !r.isGroupSnapshot {
 		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.DataDiskName)
@@ -683,11 +682,11 @@ func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 	return true
 }
 
-func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties) error {
+func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties, diskMapper instanceinfo.DiskMapper) error {
 	var instanceProperties *ipb.InstanceProperties
 	var err error
 
-	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, r.gceService)
+	instanceInfoReader := instanceinfo.New(diskMapper, r.gceService)
 	if _, instanceProperties, err = instanceInfoReader.ReadDiskMapping(ctx, &cpb.Configuration{CloudProperties: cp}); err != nil {
 		return err
 	}
@@ -696,8 +695,17 @@ func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 	for _, d := range instanceProperties.GetDisks() {
 		if strings.Contains(r.physicalDataPath, d.GetMapping()) {
 			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", r.physicalDataPath, "diskName", d.GetDiskName())
-			r.disks = append(r.disks, d)
-			r.DataDiskZone = cp.GetZone()
+			if r.isGroupSnapshot {
+				r.disks = append(r.disks, d)
+				r.DataDiskZone = cp.GetZone()
+			} else {
+				if r.DataDiskName != "" && r.DataDiskName != d.GetDiskName() {
+					log.CtxLogger(ctx).Debugw("Disk name does not match provided disk's name, skipping", "DataDiskName", r.DataDiskName, "disk", d.GetDiskName())
+					continue
+				}
+				r.DataDiskName = d.GetDiskName()
+				r.DataDiskZone = cp.GetZone()
+			}
 		}
 	}
 	return nil
