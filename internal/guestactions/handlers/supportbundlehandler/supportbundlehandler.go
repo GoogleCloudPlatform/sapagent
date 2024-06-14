@@ -19,7 +19,7 @@ package supportbundlehandler
 
 import (
 	"context"
-	"strconv"
+	"encoding/json"
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
@@ -33,37 +33,16 @@ import (
 // RestartAgent indicates that the agent should be restarted after the supportbundle guest action has been handled.
 const RestartAgent = false
 
-func buildSupportBundleCommand(command *gpb.AgentCommand) supportbundle.SupportBundle {
+func buildSupportBundleCommand(ctx context.Context, command *gpb.AgentCommand) supportbundle.SupportBundle {
 	sb := supportbundle.SupportBundle{}
-
 	params := command.GetParameters()
-	if sid, ok := params["sid"]; ok {
-		sb.Sid = sid
+	paramsJSON, err := json.Marshal(params)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Failed to marshal all command parameters to JSON", "error", err)
+		return sb
 	}
-	if instanceNums, ok := params["instance-numbers"]; ok {
-		sb.InstanceNums = instanceNums
-	}
-	if hostname, ok := params["hostname"]; ok {
-		sb.Hostname = hostname
-	}
-	if logLevel, ok := params["loglevel"]; ok {
-		sb.LogLevel = logLevel
-	}
-	if resultBucket, ok := params["result-bucket"]; ok {
-		sb.ResultBucket = resultBucket
-	}
-	if pacemakerDiagnosis, ok := params["pacemaker-diagnosis"]; ok {
-		// If parsing fails, default to false.
-		sb.PacemakerDiagnosis, _ = strconv.ParseBool(pacemakerDiagnosis)
-	}
-	if agentLogsOnly, ok := params["agent-logs-only"]; ok {
-		sb.AgentLogsOnly, _ = strconv.ParseBool(agentLogsOnly)
-	}
-	if help, ok := params["help"]; ok {
-		sb.Help, _ = strconv.ParseBool(help)
-	}
-	if version, ok := params["version"]; ok {
-		sb.Version, _ = strconv.ParseBool(version)
+	if err = json.Unmarshal(paramsJSON, &sb); err != nil {
+		log.CtxLogger(ctx).Debugw("Failed to unmarshal all command parameters into SupportBundle struct", "error", err)
 	}
 	return sb
 }
@@ -71,7 +50,7 @@ func buildSupportBundleCommand(command *gpb.AgentCommand) supportbundle.SupportB
 // SupportBundleHandler is the handler for support bundle command.
 func SupportBundleHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
-	sb := buildSupportBundleCommand(command)
+	sb := buildSupportBundleCommand(ctx, command)
 	msg, exitStatus := sb.ExecuteAndGetMessage(ctx, nil)
 	return msg, exitStatus, RestartAgent
 }

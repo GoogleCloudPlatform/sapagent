@@ -17,6 +17,7 @@ limitations under the License.
 package supportbundlehandler
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -103,7 +104,7 @@ func TestBuildSupportBundleCommand(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildSupportBundleCommand(tc.command)
+			got := buildSupportBundleCommand(context.Background(), tc.command)
 			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(supportbundle.SupportBundle{})); diff != "" {
 				t.Errorf("buildSupportBundleCommand(%v) returned an unexpected diff (-want +got):\n%v", tc.command, diff)
 			}

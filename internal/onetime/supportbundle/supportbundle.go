@@ -47,15 +47,17 @@ import (
 type (
 	// SupportBundle has args for support bundle collection one time mode.
 	SupportBundle struct {
-		Sid                               string
-		InstanceNums                      string
-		instanceNumsAfterSplit            []string
-		Hostname                          string
-		PacemakerDiagnosis, AgentLogsOnly bool
-		Help, Version                     bool
-		LogLevel                          string
-		ResultBucket                      string
-		IIOTEParams                       *onetime.InternallyInvokedOTE
+		Sid                    string                        `json:"sid"`
+		InstanceNums           string                        `json:"instance-numbers"`
+		instanceNumsAfterSplit []string                      `json:"-"`
+		Hostname               string                        `json:"hostname"`
+		PacemakerDiagnosis     bool                          `json:"pacemaker-diagnosis,string"`
+		AgentLogsOnly          bool                          `json:"agent-logs-only,string"`
+		Help                   bool                          `json:"help,string"`
+		Version                bool                          `json:"version,string"`
+		LogLevel               string                        `json:"loglevel"`
+		ResultBucket           string                        `json:"result-bucket"`
+		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 	}
 	zipperHelper struct{}
 
