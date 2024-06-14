@@ -352,7 +352,7 @@ func TestCreateProcessCollectors(t *testing.T) {
 		{
 			name:                   "HANAStandaloneInstance",
 			sapInstances:           fakeSAPInstances("HANA"),
-			wantCollectorCount:     8,
+			wantCollectorCount:     9,
 			wantFastCollectorCount: 1,
 			params: Parameters{
 				Config: defaultConfig,

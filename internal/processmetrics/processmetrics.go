@@ -331,7 +331,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 	clusterCollectorCreated := false
 	for _, instance := range sapInstances.GetInstances() {
 		sids[instance.GetSapsid()] = true
-		if sapInstances.GetLinuxClusterMember() && clusterCollectorCreated == false {
+		if clusterCollectorCreated == false {
 			log.CtxLogger(ctx).Infow("Creating cluster collector for instance", "instance", instance)
 			clusterCollector := &cluster.InstanceProperties{
 				SAPInstance:     instance,
