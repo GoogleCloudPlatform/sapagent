@@ -274,7 +274,7 @@ func TestRestoreFileBackupTypePipe(t *testing.T) {
 				defer f.Close()
 			}
 
-			got := restoreFile(context.Background(), defaultConfig, test.bucket, test.copier, test.fileName, test.destName, test.externalBackupID, defaultCloudProperties)
+			got := restoreFile(context.Background(), defaultConfig, defaultConnectParameters, test.bucket, test.copier, test.fileName, test.destName, test.externalBackupID, defaultCloudProperties)
 			if !strings.HasPrefix(string(got), test.wantPrefix) {
 				t.Errorf("restoreFile(%s, %s) = %s, wantPrefix: %s", test.fileName, test.externalBackupID, got, test.wantPrefix)
 			}
@@ -289,7 +289,7 @@ func TestRestoreFileBackupTypeFile(t *testing.T) {
 	destName := t.TempDir() + "/file-object.txt"
 	wantPrefix := "#RESTORED"
 
-	got := restoreFile(context.Background(), defaultConfig, defaultBucketHandle, io.Copy, fileName, destName, externalBackupID, defaultCloudProperties)
+	got := restoreFile(context.Background(), defaultConfig, defaultConnectParameters, defaultBucketHandle, io.Copy, fileName, destName, externalBackupID, defaultCloudProperties)
 	if !strings.HasPrefix(string(got), wantPrefix) {
 		t.Errorf("restoreFile(%s, %s) = %s, wantPrefix: %s", fileName, externalBackupID, got, wantPrefix)
 	}

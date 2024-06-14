@@ -81,7 +81,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			}
 			restoreFunc := func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
-				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, "", cloudProps)
+				out := restoreFile(ctx, config, connectParams, bucketHandle, io.Copy, fileName, destName, "", cloudProps)
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -106,7 +106,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			}
 			restoreFunc := func() {
 				bucketHandle, _ := storage.ConnectToBucket(ctx, connectParams)
-				out := restoreFile(ctx, config, bucketHandle, io.Copy, fileName, destName, externalBackupID, cloudProps)
+				out := restoreFile(ctx, config, connectParams, bucketHandle, io.Copy, fileName, destName, externalBackupID, cloudProps)
 				mu.Lock()
 				defer mu.Unlock()
 				output.Write(out)
@@ -131,7 +131,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // restoreFile queries the bucket to see if the backup exists.
 // If externalBackupID is not specified, the latest backup for fileName is used.
 // If found, the file is downloaded and saved to destName.
-func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHandle *store.BucketHandle, copier storage.IOFileCopier, fileName, destName, externalBackupID string, cloudProps *ipb.CloudProperties) []byte {
+func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, bucketHandle *store.BucketHandle, copier storage.IOFileCopier, fileName, destName, externalBackupID string, cloudProps *ipb.CloudProperties) []byte {
 	prefix := parse.CreateObjectPath(config, parse.TrimAndClean(fileName), "", "")
 	if externalBackupID != "" {
 		prefix += fmt.Sprintf("%s.bak", externalBackupID)
@@ -175,22 +175,22 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, bucketHa
 	}
 
 	rw := storage.ReadWriter{
-		Writer:                 destFile,
-		Copier:                 copier,
-		BucketHandle:           bucketHandle,
-		BucketName:             config.GetBucket(),
-		ObjectName:             object.Name,
-		TotalBytes:             object.Size,
-		LogDelay:               time.Duration(config.GetLogDelaySec()) * time.Second,
-		RateLimitBytes:         config.GetRateLimitMb() * 1024 * 1024,
-		EncryptionKey:          config.GetEncryptionKey(),
-		KMSKey:                 config.GetKmsKey(),
-		MaxRetries:             config.GetRetries(),
-		RetryBackoffInitial:    time.Duration(config.GetRetryBackoffInitial()) * time.Second,
-		RetryBackoffMax:        time.Duration(config.GetRetryBackoffMax()) * time.Second,
-		RetryBackoffMultiplier: float64(config.GetRetryBackoffMultiplier()),
-		// TODO: Disabled until feature complete
-		// ParallelDownloadWorkers: config.GetParallelStreams(),
+		Writer:                         destFile,
+		Copier:                         copier,
+		BucketHandle:                   bucketHandle,
+		BucketName:                     config.GetBucket(),
+		ObjectName:                     object.Name,
+		TotalBytes:                     object.Size,
+		LogDelay:                       time.Duration(config.GetLogDelaySec()) * time.Second,
+		RateLimitBytes:                 config.GetRateLimitMb() * 1024 * 1024,
+		EncryptionKey:                  config.GetEncryptionKey(),
+		KMSKey:                         config.GetKmsKey(),
+		MaxRetries:                     config.GetRetries(),
+		RetryBackoffInitial:            time.Duration(config.GetRetryBackoffInitial()) * time.Second,
+		RetryBackoffMax:                time.Duration(config.GetRetryBackoffMax()) * time.Second,
+		RetryBackoffMultiplier:         float64(config.GetRetryBackoffMultiplier()),
+		ParallelDownloadWorkers:        config.GetParallelStreams(),
+		ParallelDownloadConnectParams: 	connectParams,
 	}
 	startTime := time.Now()
 	bytesWritten, err := rw.Download(ctx)

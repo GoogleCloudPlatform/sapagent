@@ -163,6 +163,10 @@ type ReadWriter struct {
 	// parallel reader download. If 0, the download will happen sequentially.
 	ParallelDownloadWorkers int64
 
+	// ParallelDownloadConnectParams provides parameters for bucket connection for
+	// downloading in parallel restore.
+	ParallelDownloadConnectParams *ConnectParameters
+
 	numRetries                int64
 	bytesTransferred          int64
 	lastBytesTransferred      int64
@@ -344,9 +348,13 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		}
 		object = object.Key(decodedKey)
 	}
+
+	// TODO: Disabled until feature complete
+	parallelRestore := false
+	// global flag to check if parallel restore is enabled
 	var reader io.ReadCloser
 	var err error
-	if rw.ParallelDownloadWorkers > 0 {
+	if parallelRestore && rw.ParallelDownloadWorkers > 0 {
 		reader, err = rw.NewParallelReader(ctx, object)
 	} else {
 		object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
