@@ -18,6 +18,8 @@ package system
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -36,6 +38,8 @@ import (
 	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
 	hostdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
+
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -129,6 +133,16 @@ func appInstanceLess(a, b *spb.SapDiscovery_Resource_InstanceProperties_AppInsta
 	return a.Name < b.Name
 }
 
+type MockFileInfo struct {
+}
+
+func (mfi MockFileInfo) Name() string       { return "name" }
+func (mfi MockFileInfo) Size() int64        { return int64(8) }
+func (mfi MockFileInfo) Mode() os.FileMode  { return os.ModePerm }
+func (mfi MockFileInfo) ModTime() time.Time { return time.Now() }
+func (mfi MockFileInfo) IsDir() bool        { return false }
+func (mfi MockFileInfo) Sys() any           { return nil }
+
 func TestStartSAPSystemDiscovery(t *testing.T) {
 	config := &cpb.Configuration{
 		CloudProperties: defaultCloudProperties,
@@ -151,6 +165,7 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 		},
 		AppsDiscovery:     func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
 		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
+		OSStatReader:      func(string) (os.FileInfo, error) { return nil, nil },
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -168,6 +183,8 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		testSapDiscovery   *appsdiscoveryfake.SapDiscovery
 		testCloudDiscovery *clouddiscoveryfake.CloudDiscovery
 		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
+		testOSStatReader   workloadmanager.OSStatReader
+		testFileReader     workloadmanager.ConfigFileReader
 		want               []*spb.SapDiscovery
 	}{{
 		name:   "noDiscovery",
@@ -1498,6 +1515,52 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				},
 			},
 		}},
+	}, {
+		name: "usesOverrideFile",
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   nil,
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		testOSStatReader: func(string) (os.FileInfo, error) {
+			return MockFileInfo{}, nil
+		},
+		testFileReader: func(string) (io.ReadCloser, error) {
+			return fakeReadCloser{
+				fileContents: `{
+					"databaseLayer": {
+						"hostProject": "12345",
+						"sid": "DEF"
+					},
+					"applicationLayer": {
+						"hostProject": "12345",
+						"sid": "ABC"
+					},
+					"projectNumber": "12345"
+				}`,
+			}, nil
+		},
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "ABC",
+				HostProject: "12345",
+			},
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1505,6 +1568,15 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				SapDiscoveryInterface:   test.testSapDiscovery,
 				CloudDiscoveryInterface: test.testCloudDiscovery,
 				HostDiscoveryInterface:  test.testHostDiscovery,
+				OSStatReader: func(string) (os.FileInfo, error) {
+					return nil, errors.New("No file")
+				},
+			}
+			if test.testOSStatReader != nil {
+				d.OSStatReader = test.testOSStatReader
+			}
+			if test.testFileReader != nil {
+				d.FileReader = test.testFileReader
 			}
 			got := d.discoverSAPSystems(context.Background(), defaultCloudProperties, test.config)
 			t.Logf("Got systems: %+v ", got)
@@ -1611,6 +1683,9 @@ func TestUpdateSAPInstances(t *testing.T) {
 						discoverCalls++
 					}()
 					return test.discoverResponses[discoverCalls]
+				},
+				OSStatReader: func(string) (os.FileInfo, error) {
+					return nil, errors.New("No file")
 				},
 			}
 			ctx, cancel := context.WithCancel(context.Background())
@@ -1858,6 +1933,9 @@ func TestRunDiscovery(t *testing.T) {
 				SapDiscoveryInterface:   test.testSapDiscovery,
 				CloudDiscoveryInterface: test.testCloudDiscovery,
 				HostDiscoveryInterface:  test.testHostDiscovery,
+				OSStatReader: func(string) (os.FileInfo, error) {
+					return nil, errors.New("No file")
+				},
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			go runDiscovery(ctx, runDiscoveryArgs{config: test.config, d: d})
@@ -1881,6 +1959,206 @@ func TestRunDiscovery(t *testing.T) {
 				}
 			}
 			cancel()
+		})
+	}
+}
+
+type fakeReadCloser struct {
+	fileContents string
+	readError    error
+	bytesRead    int
+}
+
+func (f fakeReadCloser) Read(p []byte) (n int, err error) {
+	if f.readError != nil {
+		return 0, f.readError
+	}
+	log.Logger.Infof("Reading from string %s", f.fileContents)
+	bytesLeft := len(f.fileContents) - f.bytesRead
+	log.Logger.Infof("bytesLeft: %d", bytesLeft)
+	bytesToRead := min(len(p), bytesLeft)
+	log.Logger.Infof("bytesToRead: %d", bytesToRead)
+	copy(p, []byte(f.fileContents[f.bytesRead:f.bytesRead+bytesToRead]))
+	log.Logger.Infof("p: %s", string(p))
+	f.bytesRead += bytesToRead
+	log.Logger.Infof("f.bytesRead: %d", f.bytesRead)
+	if f.bytesRead == len(f.fileContents) {
+		return bytesToRead, io.EOF
+	}
+	return bytesToRead, nil
+}
+func (f fakeReadCloser) Close() error {
+	return nil
+}
+
+func TestDiscoverOverrideSystem(t *testing.T) {
+	tests := []struct {
+		name          string
+		fileContents  string
+		fileOpenErr   error
+		fileReadError error
+		instance      *spb.SapDiscovery_Resource
+		want          []*spb.SapDiscovery
+	}{{
+		name: "success",
+		fileContents: `{
+			"databaseLayer": {
+				"hostProject": "12345",
+				"sid": "DEF"
+			},
+			"applicationLayer": {
+				"hostProject": "12345",
+				"sid": "ABC"
+			},
+			"projectNumber": "12345"
+		}`,
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "ABC",
+				HostProject: "12345",
+			},
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:        "readerError",
+		fileOpenErr: errors.New("some error"),
+		want:        nil,
+	}, {
+		name: "readAllError",
+		fileContents: `{
+			"databaseLayer": {
+				"hostProject": "12345",
+				"sid": "DEF"
+			},
+			"applicationLayer": {
+				"hostProject": "12345",
+				"sid": "ABC"
+			},
+			"projectNumber": "12345"
+		}`,
+		fileReadError: errors.New("some error"),
+		want:          nil,
+	}, {
+		name:         "jsonError",
+		fileContents: "not json",
+		want:         nil,
+	}, {
+		name: "overwritesDatabaseInstance",
+		fileContents: `{
+			"databaseLayer": {
+				"resources": [{
+					"resourceType": "RESOURCE_TYPE_COMPUTE",
+					"resourceKind": "RESOURCE_KIND_INSTANCE"
+				}],
+				"hostProject": "12345",
+				"sid": "DEF"
+			},
+			"projectNumber": "12345"
+		}`,
+		instance: defaultInstanceResource,
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				HostProject: "12345",
+				Resources:   []*spb.SapDiscovery_Resource{defaultInstanceResource},
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name: "overwritesApplicationInstance",
+		fileContents: `{
+			"applicationLayer": {
+				"resources": [{
+					"resourceType": "RESOURCE_TYPE_COMPUTE",
+					"resourceKind": "RESOURCE_KIND_INSTANCE"
+				}],
+				"hostProject": "12345",
+				"sid": "DEF"
+			},
+			"projectNumber": "12345"
+		}`,
+		instance: defaultInstanceResource,
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				HostProject: "12345",
+				Resources:   []*spb.SapDiscovery_Resource{defaultInstanceResource},
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name: "doesntOverwiteDatabaseInstanceWithURI",
+		fileContents: `{
+			"databaseLayer": {
+				"resources": [{
+					"resourceType": "RESOURCE_TYPE_COMPUTE",
+					"resourceKind": "RESOURCE_KIND_INSTANCE",
+					"resourceUri": "some-uri"
+				}],
+				"hostProject": "12345",
+				"sid": "DEF"
+			},
+			"projectNumber": "12345"
+		}`,
+		instance: defaultInstanceResource,
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				HostProject: "12345",
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-uri",
+				}},
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name: "doesntOverwiteApplicationInstanceWithURI",
+		fileContents: `{
+			"applicationLayer": {
+				"resources": [{
+					"resourceType": "RESOURCE_TYPE_COMPUTE",
+					"resourceKind": "RESOURCE_KIND_INSTANCE",
+					"resourceUri": "some-uri"
+				}],
+				"hostProject": "12345",
+				"sid": "DEF"
+			},
+			"projectNumber": "12345"
+		}`,
+		instance: defaultInstanceResource,
+		want: []*spb.SapDiscovery{{
+			ApplicationLayer: &spb.SapDiscovery_Component{
+				Sid:         "DEF",
+				HostProject: "12345",
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "some-uri",
+				}},
+			},
+			ProjectNumber: "12345",
+		}},
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &Discovery{
+				FileReader: func(string) (io.ReadCloser, error) {
+					return fakeReadCloser{fileContents: tc.fileContents, readError: tc.fileReadError}, tc.fileOpenErr
+				},
+			}
+			got := d.discoverOverrideSystem(ctx, "overrideFile", tc.instance)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("discoverOverrideSystem() returned an unexpected diff (-want +got): %v", diff)
+			}
 		})
 	}
 }

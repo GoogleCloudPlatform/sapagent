@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
@@ -44,6 +46,8 @@ import (
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
+const systemDiscoveryOverride = "/etc/google-cloud-sap-agent/system.json"
+
 // Discovery is a type used to perform SAP System discovery operations.
 type Discovery struct {
 	WlmService              wlmInterface
@@ -52,6 +56,8 @@ type Discovery struct {
 	HostDiscoveryInterface  hostDiscoveryInterface
 	SapDiscoveryInterface   sapDiscoveryInterface
 	AppsDiscovery           func(context.Context) *sappb.SAPInstances
+	OSStatReader            workloadmanager.OSStatReader
+	FileReader              workloadmanager.ConfigFileReader
 	systems                 []*spb.SapDiscovery
 	systemMu                sync.Mutex
 	sapInstances            *sappb.SAPInstances
@@ -200,6 +206,10 @@ func updateSAPInstances(ctx context.Context, a any) {
 		return
 	}
 
+	if fileInfo, err := args.d.OSStatReader(systemDiscoveryOverride); fileInfo != nil && err == nil {
+		args.d.sapInstances = &sappb.SAPInstances{}
+		return
+	}
 	log.CtxLogger(ctx).Info("Starting SAP Instances update")
 	updateTicker := time.NewTicker(args.config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration())
 	for {
@@ -236,6 +246,7 @@ func runDiscovery(ctx context.Context, a any) {
 	updateTicker := time.NewTicker(args.config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().AsDuration())
 	for {
 		sapSystems := args.d.discoverSAPSystems(ctx, cp, args.config)
+		log.CtxLogger(ctx).Debugw("Discovered SAP Systems", "systems", sapSystems)
 
 		locationParts := strings.Split(cp.GetZone(), "-")
 		region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
@@ -244,6 +255,9 @@ func runDiscovery(ctx context.Context, a any) {
 		if args.config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
 			log.CtxLogger(ctx).Info("Sending systems to WLM API")
 			for _, sys := range sapSystems {
+				sys.ProjectNumber = cp.GetNumericProjectId()
+				sys.UpdateTime = timestamppb.Now()
+				log.CtxLogger(ctx).Debugw("System to send to WLM", "system", sys)
 				// Send System to DW API
 				insightRequest := &dwpb.WriteInsightRequest{
 					Insight: &dwpb.Insight{
@@ -284,13 +298,44 @@ func runDiscovery(ctx context.Context, a any) {
 	}
 }
 
-func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudProperties, config *cpb.Configuration) []*spb.SapDiscovery {
-	sapSystems := []*spb.SapDiscovery{}
+func (d *Discovery) discoverOverrideSystem(ctx context.Context, overrideFile string, instanceResource *spb.SapDiscovery_Resource) []*spb.SapDiscovery {
+	file, err := d.FileReader(overrideFile)
+	if err != nil {
+		log.CtxLogger(ctx).Warnf("Failed to open override file: %v", err)
+		return nil
+	}
+	defer file.Close()
+	var fileBytes []byte
+	if fileBytes, err = ioutil.ReadAll(file); err != nil {
+		log.CtxLogger(ctx).Warnf("Failed to read override file: %v", err)
+		return nil
+	}
+	log.CtxLogger(ctx).Debugf("File bytes: %s", fileBytes)
+	var system spb.SapDiscovery
+	if err := protojson.Unmarshal(fileBytes, &system); err != nil {
+		log.CtxLogger(ctx).Warnf("Failed to decode override file: %v", err)
+		return nil
+	}
+	// Make the instances without URI refer to this one.
+	for _, r := range system.GetApplicationLayer().GetResources() {
+		if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE &&
+			r.GetResourceUri() == "" {
+			r.ResourceUri = instanceResource.GetResourceUri()
+			r.InstanceProperties = instanceResource.InstanceProperties
+		}
+	}
+	for _, r := range system.GetDatabaseLayer().GetResources() {
+		if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE &&
+			r.GetResourceUri() == "" {
+			r.ResourceUri = instanceResource.GetResourceUri()
+			r.InstanceProperties = instanceResource.InstanceProperties
+		}
+	}
+	return []*spb.SapDiscovery{&system}
+}
 
+func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudProperties, config *cpb.Configuration) []*spb.SapDiscovery {
 	instanceURI := fmt.Sprintf("projects/%s/zones/%s/instances/%s", cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
-	log.CtxLogger(ctx).Info("Starting SAP Discovery")
-	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances(), config.GetDiscoveryConfiguration())
-	log.CtxLogger(ctx).Debugw("SAP Details", "details", sapDetails)
 	log.CtxLogger(ctx).Info("Starting host discovery")
 	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)
 	log.CtxLogger(ctx).Debugw("Host Resource Names", "names", hostResourceNames)
@@ -306,6 +351,15 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			break
 		}
 	}
+	if fileInfo, err := d.OSStatReader(systemDiscoveryOverride); fileInfo != nil && err == nil {
+		log.CtxLogger(ctx).Info("Discovering system from override file")
+		return d.discoverOverrideSystem(ctx, systemDiscoveryOverride, instanceResource)
+	}
+	sapSystems := []*spb.SapDiscovery{}
+
+	log.CtxLogger(ctx).Info("Starting SAP Discovery")
+	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances(), config.GetDiscoveryConfiguration())
+	log.CtxLogger(ctx).Debugw("SAP Details", "details", sapDetails)
 	if instanceResource == nil {
 		log.CtxLogger(ctx).Debug("No instance resource found")
 	}

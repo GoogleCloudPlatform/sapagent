@@ -295,6 +295,8 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 			Execute:    commandlineexecutor.ExecuteCommand,
 			FileSystem: filesystem.Helper{},
 		},
+		OSStatReader: osStatReader,
+		FileReader:   configFileReader,
 	}
 	if d.lp.CloudLoggingClient != nil {
 		systemDiscovery.CloudLogInterface = d.lp.CloudLoggingClient.Logger("google-cloud-sap-agent")
