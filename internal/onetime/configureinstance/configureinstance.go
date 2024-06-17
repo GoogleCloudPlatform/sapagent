@@ -226,7 +226,7 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 		c.LogToBoth(ctx, "ConfigureInstance: Your system configuration doesn't match best practice for your instance type. Please run 'configureinstance -apply' to fix.")
 		exitStatus = subcommands.ExitFailure
 	}
-	c.LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at /var/log/google-cloud-sap-agent/%s", onetime.LogFilePath(c.Name(), c.IIOTEParams)))
+	c.LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams)))
 
 	if c.PrintDiff {
 		if jsonDiffs, err := json.MarshalIndent(c.diffs, "", "  "); err != nil {
