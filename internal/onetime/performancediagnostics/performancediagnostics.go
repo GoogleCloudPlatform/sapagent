@@ -58,12 +58,12 @@ const (
 
 // Diagnose has args for performance diagnostics OTE subcommands.
 type Diagnose struct {
-	LogLevel, Path                      string
-	HyperThreading, overrideVersion     string
-	printDiff                           bool
-	ParamFile, TestBucket, ResultBucket string
-	Scope, BundleName                   string
-	help, version                       bool
+	LogLevel, Path                             string
+	HyperThreading, overrideVersion            string
+	printDiff                                  bool
+	BackintParamFile, TestBucket, ResultBucket string
+	Type, BundleName                           string
+	help, version                              bool
 }
 
 // ReadConfigFile abstracts os.ReadFile function for testability.
@@ -134,16 +134,16 @@ func (*Diagnose) Synopsis() string {
 
 // Usage implements the subcommand interface for features.
 func (*Diagnose) Usage() string {
-	return `Usage: performancediagnostics [-scope=<all|backup|io>] [-test-bucket=<name of bucket used to run backup]
-	[-param-file=<path to backint parameters file>]	[-result-bucket=<name of bucket to upload the report] [-bundle_name=<diagnostics bundle name>]
+	return `Usage: performancediagnostics [-type=<all|backup|io>] [-test-bucket=<name of bucket used to run backup]
+	[-backint-param-file=<path to backint parameters file>]	[-result-bucket=<name of bucket to upload the report] [-bundle_name=<diagnostics bundle name>]
 	[-path=<path to save bundle>] [-h] [-v] [-loglevel=<debug|info|warn|error]>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for features.
 func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&d.Scope, "scope", "all", "Sets the scope for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all>. Default: all")
+	fs.StringVar(&d.Type, "type", "all", "Sets the type for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all>. Default: all")
 	fs.StringVar(&d.TestBucket, "test-bucket", "", "Sets the bucket name used to run backup operation. (optional)")
-	fs.StringVar(&d.ParamFile, "param-file", "", "Sets the path to backint parameters file. Must be present if scope includes backup operation. (optional)")
+	fs.StringVar(&d.BackintParamFile, "backint-param-file", "", "Sets the path to backint parameters file. Must be present if type includes backup operation. (optional)")
 	fs.StringVar(&d.ResultBucket, "result-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")
 	fs.StringVar(&d.BundleName, "bundle-name", "", "Sets the name for generated bundle. (optional) Default: performance-diagnostics-<current_timestamp>")
 	fs.StringVar(&d.Path, "path", "", "Sets the path to save the bundle. (optional) Default: /tmp/google-cloud-sap-agent/")
@@ -257,7 +257,7 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 		errs = append(errs, fmt.Errorf("failure in executing ConfigureInstance OTE, failed with exist status %d", exitStatus))
 	}
 	// Performance diagnostics operations.
-	ops := listOperations(ctx, strings.Split(d.Scope, ","))
+	ops := listOperations(ctx, strings.Split(d.Type, ","))
 	for op := range ops {
 		if op == "all" {
 			// Perform all operations
@@ -288,26 +288,26 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 
 // validateParams checks if the parameters provided to the OTE subcommand are valid.
 func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) error {
-	scopeValues := map[string]bool{
+	typeValues := map[string]bool{
 		"all":    false,
 		"backup": false,
 		"io":     false,
 	}
 
-	scopes := strings.Split(d.Scope, ",")
-	for _, scope := range scopes {
-		scope = strings.TrimSpace(scope)
-		if _, ok := scopeValues[scope]; !ok {
-			err := fmt.Errorf("invalid flag usage, incorrect value of scope. Please check usage")
+	types := strings.Split(d.Type, ",")
+	for _, tp := range types {
+		tp = strings.TrimSpace(tp)
+		if _, ok := typeValues[tp]; !ok {
+			err := fmt.Errorf("invalid flag usage, incorrect value of type. Please check usage")
 			onetime.LogMessageToFileAndConsole(ctx, err.Error())
 			flagSet.Usage()
 			return err
 		}
-		scopeValues[scope] = true
+		typeValues[tp] = true
 	}
 
-	if scopeValues["backup"] || scopeValues["all"] {
-		if d.ParamFile == "" && d.TestBucket == "" {
+	if typeValues["backup"] || typeValues["all"] {
+		if d.BackintParamFile == "" && d.TestBucket == "" {
 			err := fmt.Errorf("test bucket cannot be empty to perform backup operation")
 			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
 			return err
@@ -473,7 +473,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 	backintParams := &backint.Backint{
 		Function:  "diagnose",
 		User:      "perf-diag-user",
-		ParamFile: d.ParamFile,
+		ParamFile: d.BackintParamFile,
 		OutFile:   path.Join(d.Path, d.BundleName, "backup/backint-output.log"),
 		IIOTEParams: &onetime.InternallyInvokedOTE{
 			InvokedBy: "performance-diagnostics-backint",
@@ -626,7 +626,7 @@ func (d *Diagnose) setBackintConfig(ctx context.Context, fs filesystem.FileSyste
 			return nil, err
 		}
 	} else {
-		if d.ParamFile == "" {
+		if d.BackintParamFile == "" {
 			return nil, errors.New("bucket is required for backup, but param file is empty and no test-bucket is provided")
 		}
 	}
@@ -664,16 +664,16 @@ func (d *Diagnose) createTempParamFile(ctx context.Context, fs filesystem.FileSy
 		return err
 	}
 
-	if d.ParamFile != "" {
+	if d.BackintParamFile != "" {
 		// In case the param file provided is a .txt file, we need a .json file
 		// to write the new config.
 		paramFile := strings.Split(d.getParamFileName(), ".")
-		d.ParamFile = path.Join(d.Path, d.BundleName, fmt.Sprintf("%s.json", paramFile[len(paramFile)-2]))
+		d.BackintParamFile = path.Join(d.Path, d.BundleName, fmt.Sprintf("%s.json", paramFile[len(paramFile)-2]))
 	} else {
-		d.ParamFile = path.Join(d.Path, d.BundleName, "backup/backint-config.json")
+		d.BackintParamFile = path.Join(d.Path, d.BundleName, "backup/backint-config.json")
 	}
 
-	f, err := fs.Create(d.ParamFile)
+	f, err := fs.Create(d.BackintParamFile)
 	if err != nil {
 		return err
 	}
@@ -681,16 +681,16 @@ func (d *Diagnose) createTempParamFile(ctx context.Context, fs filesystem.FileSy
 	if _, err := f.Write(content); err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Debugw("Created temporary parameter file", "paramFile", d.ParamFile)
+	log.CtxLogger(ctx).Debugw("Created temporary parameter file", "paramFile", d.BackintParamFile)
 	return nil
 }
 
 func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFile) (*bpb.BackintConfiguration, error) {
-	if d.ParamFile == "" {
+	if d.BackintParamFile == "" {
 		return nil, nil
 	}
 
-	content, err := read(d.ParamFile)
+	content, err := read(d.BackintParamFile)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error reading parameters file", "err", err)
 		return nil, err
@@ -700,7 +700,7 @@ func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFi
 		return nil, nil
 	}
 
-	config, err := configuration.Unmarshal(d.ParamFile, content)
+	config, err := configuration.Unmarshal(d.BackintParamFile, content)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error unmarshalling parameters file", "err", err)
 		return nil, err
@@ -710,10 +710,10 @@ func (d *Diagnose) unmarshalBackintConfig(ctx context.Context, read ReadConfigFi
 
 // getParamFileName extracts the name of the parameter file from the path provided.
 func (d *Diagnose) getParamFileName() string {
-	if d.ParamFile == "" {
+	if d.BackintParamFile == "" {
 		return ""
 	}
-	parts := strings.Split(d.ParamFile, "/")
+	parts := strings.Split(d.BackintParamFile, "/")
 	return parts[len(parts)-1]
 }
 

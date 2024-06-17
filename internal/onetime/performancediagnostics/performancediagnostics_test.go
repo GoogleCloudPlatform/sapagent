@@ -286,7 +286,7 @@ func TestSetFlags(t *testing.T) {
 	c.SetFlags(fs)
 
 	flags := []string{
-		"scope", "test-bucket", "param-file", "result-bucket", "bundle-name",
+		"type", "test-bucket", "backint-param-file", "result-bucket", "bundle-name",
 		"hyper-threading", "path", "loglevel", "help", "h", "version", "v",
 	}
 	for _, flag := range flags {
@@ -304,38 +304,38 @@ func TestValidateParams(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "InvalidScope",
+			name: "InvalidType",
 			d: &Diagnose{
-				Scope: "nw",
+				Type: "nw",
 			},
 			wantErr: true,
 		},
 		{
 			name: "NoParamFileAndTestBucket1",
 			d: &Diagnose{
-				Scope: "all",
+				Type: "all",
 			},
 			wantErr: true,
 		},
 		{
 			name: "NoParamFileAndTestBucket2",
 			d: &Diagnose{
-				Scope: "backup",
+				Type: "backup",
 			},
 			wantErr: true,
 		},
 		{
 			name: "ParamFilePresent",
 			d: &Diagnose{
-				Scope:     "all",
-				ParamFile: "/tmp/param_file.txt",
+				Type:             "all",
+				BackintParamFile: "/tmp/param_file.txt",
 			},
 			wantErr: false,
 		},
 		{
 			name: "TestBucketPresent",
 			d: &Diagnose{
-				Scope:      "all",
+				Type:       "all",
 				TestBucket: "test_bucket",
 			},
 			wantErr: false,
@@ -343,7 +343,7 @@ func TestValidateParams(t *testing.T) {
 		{
 			name: "Valid1",
 			d: &Diagnose{
-				Scope:      "io",
+				Type:       "io",
 				Path:       "/tmp/path.txt",
 				BundleName: "test_bundle",
 			},
@@ -352,7 +352,7 @@ func TestValidateParams(t *testing.T) {
 		{
 			name: "Valid2",
 			d: &Diagnose{
-				Scope:      "backup, io",
+				Type:       "backup, io",
 				TestBucket: "test_bucket",
 				Path:       "/tmp/path.txt",
 				BundleName: "test_bundle",
@@ -519,7 +519,7 @@ func TestCheckRetention(t *testing.T) {
 		{
 			name: "NoRetention1",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			config: &bpb.BackintConfiguration{
 				Bucket: "test-bucket",
@@ -537,8 +537,8 @@ func TestCheckRetention(t *testing.T) {
 		{
 			name: "NoRetention2",
 			d: &Diagnose{
-				ParamFile:  "/tmp/param_file.json",
-				TestBucket: "test-bucket-1",
+				BackintParamFile: "/tmp/param_file.json",
+				TestBucket:       "test-bucket-1",
 			},
 			config: &bpb.BackintConfiguration{
 				Bucket: "test-bucket",
@@ -651,14 +651,14 @@ func TestGetParamFileName(t *testing.T) {
 		{
 			name: "SampleParamFile1",
 			d: &Diagnose{
-				ParamFile: "/tmp/sample_param_file.txt",
+				BackintParamFile: "/tmp/sample_param_file.txt",
 			},
 			want: "sample_param_file.txt",
 		},
 		{
 			name: "SampleParamFile2",
 			d: &Diagnose{
-				ParamFile: "sample_param_file.txt",
+				BackintParamFile: "sample_param_file.txt",
 			},
 			want: "sample_param_file.txt",
 		},
@@ -694,8 +694,8 @@ func TestSetBackintConfig(t *testing.T) {
 		{
 			name: "TestBucketError",
 			d: &Diagnose{
-				TestBucket: "test_bucket-2",
-				ParamFile:  "/tmp/param_file.json",
+				TestBucket:       "test_bucket-2",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				return []byte{}, fmt.Errorf("error")
@@ -706,7 +706,7 @@ func TestSetBackintConfig(t *testing.T) {
 		{
 			name: "UnmarshalError",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				return []byte{}, fmt.Errorf("error")
@@ -717,7 +717,7 @@ func TestSetBackintConfig(t *testing.T) {
 		{
 			name: "EmptyConfigWithNoTestBucket",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				return []byte{}, nil
@@ -728,7 +728,7 @@ func TestSetBackintConfig(t *testing.T) {
 		{
 			name: "MalformedConfig",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				fileContent := `{"test_bucket": "test_bucket", "enc": "true"}`
@@ -739,7 +739,7 @@ func TestSetBackintConfig(t *testing.T) {
 		{
 			name: "ValidConfig",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				fileContent := `{"bucket": "test_bucket"}`
@@ -790,8 +790,8 @@ func TestCreateTempParamFile(t *testing.T) {
 		{
 			name: "unmarshalBackintError",
 			d: &Diagnose{
-				TestBucket: "test_bucket-2",
-				ParamFile:  "/tmp/param_file.json",
+				TestBucket:       "test_bucket-2",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				return nil, fmt.Errorf("error")
@@ -801,8 +801,8 @@ func TestCreateTempParamFile(t *testing.T) {
 		{
 			name: "createError",
 			d: &Diagnose{
-				TestBucket: "test_bucket-2",
-				ParamFile:  "/tmp/param_file.json",
+				TestBucket:       "test_bucket-2",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				fileContent := `{"bucket": "test_bucket"}`
@@ -817,9 +817,9 @@ func TestCreateTempParamFile(t *testing.T) {
 		{
 			name: "Success",
 			d: &Diagnose{
-				TestBucket: "test_bucket-2",
-				ParamFile:  "/tmp/param_file.json",
-				Path:       os.TempDir(),
+				TestBucket:       "test_bucket-2",
+				BackintParamFile: "/tmp/param_file.json",
+				Path:             os.TempDir(),
 			},
 			read: func(string) ([]byte, error) {
 				fileContent := `{"bucket": "test_bucket"}`
@@ -834,9 +834,9 @@ func TestCreateTempParamFile(t *testing.T) {
 		{
 			name: "SuccessWithEmptyConfig",
 			d: &Diagnose{
-				TestBucket: "test_bucket-2",
-				ParamFile:  "/tmp/param_file.txt",
-				Path:       os.TempDir(),
+				TestBucket:       "test_bucket-2",
+				BackintParamFile: "/tmp/param_file.txt",
+				Path:             os.TempDir(),
 			},
 			read: func(string) ([]byte, error) {
 				return []byte{}, nil
@@ -908,7 +908,7 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 		{
 			name: "ErrorRead",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				return nil, fmt.Errorf("error")
@@ -919,7 +919,7 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 		{
 			name: "EmptyParamFile",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				return []byte{}, nil
@@ -930,7 +930,7 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 		{
 			name: "ErrorUnmarshal",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				fileContent := `{"test_bucket": "test_bucket", "enc": "true"}`
@@ -942,7 +942,7 @@ func TestUnmarshalBackintConfig(t *testing.T) {
 		{
 			name: "ValidConfig",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
 				fileContent := `{"bucket": "test_bucket"}`
@@ -989,7 +989,7 @@ func TestRunPerfDiag(t *testing.T) {
 		{
 			name: "TestBucketFromParamFile",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			opts: &options{
 				config: &bpb.BackintConfiguration{
@@ -1002,7 +1002,7 @@ func TestRunPerfDiag(t *testing.T) {
 		{
 			name: "ErrorInCommandExecution",
 			d: &Diagnose{
-				ParamFile: "/tmp/param_file.json",
+				BackintParamFile: "/tmp/param_file.json",
 			},
 			opts: &options{
 				config: &bpb.BackintConfiguration{
@@ -1476,10 +1476,10 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 		wantCnt int
 	}{
 		{
-			name: "ErrorInConfigureInstanceWithScopeIO",
+			name: "ErrorInConfigureInstanceWithTypeIO",
 			d: &Diagnose{
 				HyperThreading: "default",
-				Scope:          "io",
+				Type:           "io",
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
@@ -1497,10 +1497,10 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			wantCnt: 2,
 		},
 		{
-			name: "ErrorInConfigureInstanceWithScopeBackup",
+			name: "ErrorInConfigureInstanceWithTypeBackup",
 			d: &Diagnose{
 				HyperThreading: "default",
-				Scope:          "backup",
+				Type:           "backup",
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
@@ -1518,10 +1518,10 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			wantCnt: 2,
 		},
 		{
-			name: "ErrorInConfigureInstanceWithScopeAll",
+			name: "ErrorInConfigureInstanceWithTypeAll",
 			d: &Diagnose{
 				HyperThreading: "default",
-				Scope:          "all",
+				Type:           "all",
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
@@ -1576,9 +1576,9 @@ func TestBackup(t *testing.T) {
 				},
 			},
 			d: &Diagnose{
-				HyperThreading: "default",
-				Scope:          "backup",
-				ParamFile:      "sampleFile",
+				HyperThreading:   "default",
+				Type:             "backup",
+				BackintParamFile: "sampleFile",
 			},
 			wantCnt: 1,
 		},
@@ -1599,9 +1599,9 @@ func TestBackup(t *testing.T) {
 				},
 			},
 			d: &Diagnose{
-				HyperThreading: "default",
-				Scope:          "backup",
-				ParamFile:      "sampleFile",
+				HyperThreading:   "default",
+				Type:             "backup",
+				BackintParamFile: "sampleFile",
 			},
 			wantCnt: 1,
 		},
@@ -1630,9 +1630,9 @@ func TestDiagnosticsHandler(t *testing.T) {
 		{
 			name: "InvalidParams",
 			d: &Diagnose{
-				HyperThreading: "default",
-				Scope:          "backup,disk",
-				ParamFile:      "sampleFile",
+				HyperThreading:   "default",
+				Type:             "backup,disk",
+				BackintParamFile: "sampleFile",
 			},
 			flagSet: &flag.FlagSet{
 				Usage: func() { return },
@@ -1654,10 +1654,10 @@ func TestDiagnosticsHandler(t *testing.T) {
 		{
 			name: "MkDirError",
 			d: &Diagnose{
-				HyperThreading: "default",
-				Scope:          "io",
-				ParamFile:      "sampleFile",
-				TestBucket:     "sample",
+				HyperThreading:   "default",
+				Type:             "io",
+				BackintParamFile: "sampleFile",
+				TestBucket:       "sample",
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
@@ -1676,10 +1676,10 @@ func TestDiagnosticsHandler(t *testing.T) {
 		{
 			name: "LocalBundleCollection",
 			d: &Diagnose{
-				HyperThreading: "default",
-				Scope:          "io",
-				ParamFile:      "sampleFile",
-				TestBucket:     "sample",
+				HyperThreading:   "default",
+				Type:             "io",
+				BackintParamFile: "sampleFile",
+				TestBucket:       "sample",
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
@@ -1727,7 +1727,7 @@ func TestRunBackint(t *testing.T) {
 			name: "SetBucketError",
 			d: &Diagnose{
 				HyperThreading: "default",
-				Scope:          "backup",
+				Type:           "backup",
 			},
 			opts: &options{
 				exec: fakeExecForSuccess,
@@ -1746,10 +1746,10 @@ func TestRunBackint(t *testing.T) {
 		{
 			name: "RunBackInt",
 			d: &Diagnose{
-				HyperThreading: "default",
-				Scope:          "backup",
-				ParamFile:      "sampleFile",
-				TestBucket:     "sample",
+				HyperThreading:   "default",
+				Type:             "backup",
+				BackintParamFile: "sampleFile",
+				TestBucket:       "sample",
 			},
 			opts: &options{
 				exec:   fakeExecForSuccess,

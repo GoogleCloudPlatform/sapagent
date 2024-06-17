@@ -36,14 +36,14 @@ func buildPerformanceDiagnosticsCommand(command *gpb.AgentCommand) performancedi
 	d := performancediagnostics.Diagnose{}
 
 	params := command.GetParameters()
-	if scope, ok := params["scope"]; ok {
-		d.Scope = scope
+	if scope, ok := params["type"]; ok {
+		d.Type = scope
 	}
 	if testBucket, ok := params["test-bucket"]; ok {
 		d.TestBucket = testBucket
 	}
-	if paramFile, ok := params["param-file"]; ok {
-		d.ParamFile = paramFile
+	if paramFile, ok := params["backint-param-file"]; ok {
+		d.BackintParamFile = paramFile
 	}
 	if resultBucket, ok := params["result-bucket"]; ok {
 		d.ResultBucket = resultBucket
