@@ -51,6 +51,7 @@ const (
 	hyperThreadingOff     = "off"
 
 	overrideVersionLatest = "latest"
+	overrideVersion33     = "3.3"
 	overrideVersion34     = "3.4"
 
 	dateTimeFormat = "2006-01-02T15:04:05Z"
@@ -108,7 +109,7 @@ func (*ConfigureInstance) Usage() string {
                               	Possible values: ["default", "on", "off"]
     [-printDiff=false]		If true, prints all configuration diffs and log messages to stdout as JSON
     [-overrideVersion="latest"]	If specified, runs a specific version of configureinstance.
-                               	Possible values: ["3.4", "latest"]
+                               	Possible values: ["3.3", "3.4", "latest"]
 
   Global options:
     [-h] [-v]` + "\n"
@@ -189,11 +190,16 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	log.CtxLogger(ctx).Infof("Using machine type: %s", c.machineType)
 	switch {
 	case strings.HasPrefix(c.machineType, "x4"):
-		// NOTE: Any changes in configureinstance requires a copy of configurex4,
-		// renamed functions and global vars, and add to this switch statement.
+		// NOTE: Any changes in configureinstance requires a copy of configurex4
+		// and google-x4.conf, renamed functions and global vars, and add to this
+		// switch statement and the help subcommand output.
 		switch c.OverrideVersion {
 		case overrideVersionLatest:
 			if rebootRequired, err = c.configureX4(ctx); err != nil {
+				return subcommands.ExitFailure, err
+			}
+		case overrideVersion33:
+			if rebootRequired, err = c.configureX43_3(ctx); err != nil {
 				return subcommands.ExitFailure, err
 			}
 		case overrideVersion34:

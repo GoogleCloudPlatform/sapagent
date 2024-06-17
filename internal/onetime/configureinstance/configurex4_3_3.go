@@ -28,33 +28,35 @@ import (
 )
 
 var (
-	//go:embed google-x4_3_4.conf
-	googleX4Conf3_4 []byte
+	//go:embed google-x4_3_3.conf
+	googleX4Conf3_3 []byte
 
-	systemConf3_4       = []string{"DefaultTimeoutStartSec=300s", "DefaultTimeoutStopSec=300s", "DefaultTasksMax=infinity"}
-	logindConf3_4       = []string{"UserTasksMax="}
-	modprobeConf3_4     = []byte("blacklist idxd\nblacklist hpilo\nblacklist acpi_cpufreq\nblacklist qat_4xxx\nblacklist intel_qat\n")
-	grubLinuxDefault3_4 = `GRUB_CMDLINE_LINUX_DEFAULT="tsc=nowatchdog add_efi_memmap udev.children-max=512 nmi_watchdog=0 watchdog_thresh=60 mce=2 console=ttyS0,115200 earlyprintk=ttyS0,115200 uv_nmi.action=kdump bau=0 pci=nobar transparent_hugepage=never numa_balancing=disable clocksource=tsc"`
+	systemConf3_3       = []string{"DefaultTimeoutStartSec=300s", "DefaultTimeoutStopSec=300s", "DefaultTasksMax=infinity"}
+	logindConf3_3       = []string{"UserTasksMax="}
+	modprobeConf3_3     = []byte("blacklist idxd\nblacklist hpilo\nblacklist acpi_cpufreq\nblacklist qat_4xxx\nblacklist intel_qat\n")
+	grubLinuxDefault3_3 = `GRUB_CMDLINE_LINUX_DEFAULT="tsc=nowatchdog add_efi_memmap udev.children-max=512 nmi_watchdog=0 watchdog_thresh=60 mce=2 console=ttyS0,115200 earlyprintk=ttyS0,115200 uv_nmi.action=kdump bau=0 pci=nobar transparent_hugepage=never numa_balancing=disable"`
+	grubLinuxLabel3_3   = "GRUB_ENABLE_LINUX_LABEL=true"
+	grubDevice3_3       = `GRUB_DEVICE="LABEL=ROOT"`
 )
 
 // configureX4 checks and applies OS settings on X4.
 // Returns true if a reboot is required.
-func (c *ConfigureInstance) configureX43_4(ctx context.Context) (bool, error) {
-	rebootSLES, err := c.configureX4SLES3_4(ctx)
+func (c *ConfigureInstance) configureX43_3(ctx context.Context) (bool, error) {
+	rebootSLES, err := c.configureX4SLES3_3(ctx)
 	if err != nil {
 		return false, err
 	}
 
 	log.CtxLogger(ctx).Info("Continuing with general X4 configurations.")
-	rebootSystemdSystem, err := c.checkAndRegenerateLines(ctx, "/etc/systemd/system.conf", systemConf3_4)
+	rebootSystemdSystem, err := c.checkAndRegenerateLines(ctx, "/etc/systemd/system.conf", systemConf3_3)
 	if err != nil {
 		return false, err
 	}
-	rebootSystemdLogin, err := c.removeLines(ctx, "/etc/systemd/logind.conf", logindConf3_4)
+	rebootSystemdLogin, err := c.removeLines(ctx, "/etc/systemd/logind.conf", logindConf3_3)
 	if err != nil {
 		return false, err
 	}
-	rebootModprobe, err := c.checkAndRegenerateFile(ctx, "/etc/modprobe.d/google-x4.conf", modprobeConf3_4)
+	rebootModprobe, err := c.checkAndRegenerateFile(ctx, "/etc/modprobe.d/google-x4.conf", modprobeConf3_3)
 	if err != nil {
 		return false, err
 	}
@@ -66,9 +68,9 @@ func (c *ConfigureInstance) configureX43_4(ctx context.Context) (bool, error) {
 	}
 	if c.HyperThreading == hyperThreadingOff || (c.machineType == "x4-megamem-1920" && c.HyperThreading == hyperThreadingDefault) {
 		log.CtxLogger(ctx).Infow("Hyper threading disabled, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.machineType, "hyperThreading", c.HyperThreading)
-		grubLinuxDefault3_4 = strings.TrimSuffix(grubLinuxDefault3_4, `"`) + ` nosmt"`
+		grubLinuxDefault3_3 = strings.TrimSuffix(grubLinuxDefault3_3, `"`) + ` nosmt"`
 	}
-	rebootGrub, err := c.checkAndRegenerateLines(ctx, "/etc/default/grub", []string{grubLinuxDefault3_4})
+	rebootGrub, err := c.checkAndRegenerateLines(ctx, "/etc/default/grub", []string{grubLinuxDefault3_3, grubLinuxLabel3_3, grubDevice3_3})
 	if err != nil {
 		return false, err
 	}
@@ -97,7 +99,7 @@ func (c *ConfigureInstance) configureX43_4(ctx context.Context) (bool, error) {
 
 // configureX4SLES checks and applies OS settings for X4 running on SLES.
 // Returns true if SAPTune re-apply needed to be run.
-func (c *ConfigureInstance) configureX4SLES3_4(ctx context.Context) (bool, error) {
+func (c *ConfigureInstance) configureX4SLES3_3(ctx context.Context) (bool, error) {
 	osRelease, err := c.readFile("/etc/os-release")
 	if err != nil {
 		return false, err
@@ -108,17 +110,17 @@ func (c *ConfigureInstance) configureX4SLES3_4(ctx context.Context) (bool, error
 	}
 	log.CtxLogger(ctx).Info("SLES OS detected, continuing with specific configurations.")
 
-	if err := c.saptuneService3_4(ctx); err != nil {
+	if err := c.saptuneService3_3(ctx); err != nil {
 		return false, err
 	}
-	sapTuneReapply, err := c.checkAndRegenerateFile(ctx, "/etc/saptune/extra/google-x4.conf", googleX4Conf3_4)
+	sapTuneReapply, err := c.checkAndRegenerateFile(ctx, "/etc/saptune/extra/google-x4.conf", googleX4Conf3_3)
 	if err != nil {
 		return false, err
 	}
-	if c.saptuneSolutions3_4(ctx) {
+	if c.saptuneSolutions3_3(ctx) {
 		sapTuneReapply = true
 	}
-	if err := c.saptuneReapply3_4(ctx, sapTuneReapply); err != nil {
+	if err := c.saptuneReapply3_3(ctx, sapTuneReapply); err != nil {
 		return false, err
 	}
 
@@ -128,7 +130,7 @@ func (c *ConfigureInstance) configureX4SLES3_4(ctx context.Context) (bool, error
 
 // saptuneService checks if saptune service is running. If it is not running,
 // it will attempt to enable and start it through systemctl.
-func (c *ConfigureInstance) saptuneService3_4(ctx context.Context) error {
+func (c *ConfigureInstance) saptuneService3_3(ctx context.Context) error {
 	// sapconf must be disabled and stopped before saptune can run.
 	sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf"})
 	if sapconfStatus.ExitCode != 4 {
@@ -164,7 +166,7 @@ func (c *ConfigureInstance) saptuneService3_4(ctx context.Context) error {
 
 // saptuneSolutions checks if SAPTune solutions and notes are correct.
 // Returns true if saptune reapply is required.
-func (c *ConfigureInstance) saptuneSolutions3_4(ctx context.Context) bool {
+func (c *ConfigureInstance) saptuneSolutions3_3(ctx context.Context) bool {
 	sapTuneReapply := false
 	saptuneSolutions := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status"})
 	if match, _ := regexp.MatchString(`enabled Solution:\s*HANA`, saptuneSolutions.StdOut); !match {
@@ -180,7 +182,7 @@ func (c *ConfigureInstance) saptuneSolutions3_4(ctx context.Context) bool {
 
 // saptuneReapply executes SAPTune re-apply by applying the
 // HANA solution and the google-x4 note.
-func (c *ConfigureInstance) saptuneReapply3_4(ctx context.Context, sapTuneReapply bool) error {
+func (c *ConfigureInstance) saptuneReapply3_3(ctx context.Context, sapTuneReapply bool) error {
 	if !sapTuneReapply {
 		log.CtxLogger(ctx).Info("SAPTune re-apply is not required.")
 		return nil
