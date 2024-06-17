@@ -159,6 +159,9 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	if c.machineType == "" {
 		c.machineType = cloudProps.GetMachineType()
 	}
+	if c.OverrideVersion != overrideVersionLatest {
+		log.CtxLogger(ctx).Warnf(`overrideVersion set to %s. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes.`, c.OverrideVersion)
+	}
 
 	c.writeFile = os.WriteFile
 	c.readFile = os.ReadFile
