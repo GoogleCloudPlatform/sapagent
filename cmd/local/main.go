@@ -49,6 +49,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/reliability"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/systemdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/version"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
@@ -89,6 +90,7 @@ func registerSubCommands() {
 		&migratehmadashboards.MigrateHMADashboards{},
 		&hanachangedisktype.HanaChangeDiskType{},
 		&reliability.Reliability{},
+		&systemdiscovery.SystemDiscovery{},
 		&gcbdr.Discovery{FSH: filesystem.Helper{}},
 		subcommands.HelpCommand(), // Implement "help"
 	}
