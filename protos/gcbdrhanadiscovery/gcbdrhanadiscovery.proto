@@ -17,6 +17,10 @@ syntax = "proto3";
 
 package sapagent.protos.gcbdrhanadiscovery;
 
+message ApplicationsList {
+  repeated Application apps = 1;
+}
+
 message Application {
   string name = 1;
   string dbsid = 2;

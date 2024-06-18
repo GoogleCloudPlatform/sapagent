@@ -105,7 +105,7 @@ var (
 	}
 )
 
-func successfulProtoMessage(xmlString string) []*hdpb.Application {
+func successfulProtoMessage(xmlString string) *hdpb.ApplicationsList {
 	appStruct := &Applications{}
 	xml.Unmarshal([]byte(xmlString), appStruct)
 	return constructApplicationsProto(appStruct)
@@ -267,7 +267,7 @@ func TestGetHANADiscoveryApplications(t *testing.T) {
 		fs      *flag.FlagSet
 		exec    commandlineexecutor.Execute
 		fsh     filesystem.FileSystem
-		want    []*hdpb.Application
+		want    *hdpb.ApplicationsList
 		wantErr error
 	}{
 		{

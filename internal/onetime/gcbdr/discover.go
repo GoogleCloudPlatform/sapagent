@@ -208,7 +208,7 @@ func (d *Discovery) discoveryHandler(ctx context.Context, fs *flag.FlagSet, exec
 }
 
 // GetHANADiscoveryApplications returns the list of HANA discovery applications.
-func (d *Discovery) GetHANADiscoveryApplications(ctx context.Context, fs *flag.FlagSet, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) ([]*hdpb.Application, error) {
+func (d *Discovery) GetHANADiscoveryApplications(ctx context.Context, fs *flag.FlagSet, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*hdpb.ApplicationsList, error) {
 	apps, exitStatus := d.discoveryHandler(ctx, fs, exec, fsh)
 	if exitStatus != subcommands.ExitSuccess {
 		log.CtxLogger(ctx).Errorf("Failed to get HANA discovery applications: %v", exitStatus)
@@ -218,11 +218,11 @@ func (d *Discovery) GetHANADiscoveryApplications(ctx context.Context, fs *flag.F
 	return result, nil
 }
 
-func constructApplicationsProto(apps *Applications) []*hdpb.Application {
+func constructApplicationsProto(apps *Applications) *hdpb.ApplicationsList {
 	if len(apps.Application) == 0 {
 		return nil
 	}
-	result := []*hdpb.Application{}
+	result := &hdpb.ApplicationsList{}
 	for _, app := range apps.Application {
 		protoApp := hdpb.Application{
 			Name:              app.Name,
@@ -242,7 +242,7 @@ func constructApplicationsProto(apps *Applications) []*hdpb.Application {
 			DbNames:           app.Dbnames,
 		}
 		setPDVolumes(&protoApp, app.Volumes)
-		result = append(result, &protoApp)
+		result.Apps = append(result.Apps, &protoApp)
 	}
 	return result
 }
