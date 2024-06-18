@@ -42,17 +42,17 @@ func buildPerformanceDiagnosticsCommand(command *gpb.AgentCommand) performancedi
 	if testBucket, ok := params["test-bucket"]; ok {
 		d.TestBucket = testBucket
 	}
-	if paramFile, ok := params["backint-param-file"]; ok {
-		d.BackintParamFile = paramFile
+	if configFile, ok := params["backint-config-file"]; ok {
+		d.BackintConfigFile = configFile
 	}
-	if resultBucket, ok := params["result-bucket"]; ok {
-		d.ResultBucket = resultBucket
+	if outputBucket, ok := params["output-bucket"]; ok {
+		d.OutputBucket = outputBucket
 	}
-	if bundleName, ok := params["bundle-name"]; ok {
-		d.BundleName = bundleName
+	if outputFileName, ok := params["output-file-name"]; ok {
+		d.OutputFileName = outputFileName
 	}
-	if path, ok := params["path"]; ok {
-		d.Path = path
+	if path, ok := params["output-file-path"]; ok {
+		d.OutputFilePath = path
 	}
 	if hyperThreading, ok := params["hyper-threading"]; ok {
 		d.HyperThreading = hyperThreading
