@@ -489,6 +489,7 @@ func (pmp ProcessMetricsParams) startCollection(ctx context.Context) {
 		GCEBetaService: pmp.gceBetaService,
 		Discovery:      pmp.discovery,
 		PCMParams:      pmp.pcmparams,
+		OSStatReader:   osStatReader,
 	}); success != true {
 		log.Logger.Info("Process metrics collection not started")
 	}

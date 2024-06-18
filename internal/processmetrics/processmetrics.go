@@ -31,10 +31,14 @@ limitations under the License.
 package processmetrics
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,8 +67,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
+	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 	pcm "github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -76,6 +82,7 @@ var (
 	collectAndSendFastMetricsRoutine        *recovery.RecoverableRoutine
 	collectAndSendReliabilityMetricsRoutine *recovery.RecoverableRoutine
 	slowMetricsRoutine                      *recovery.RecoverableRoutine
+	demoMetricsRoutine                      *recovery.RecoverableRoutine
 )
 
 type (
@@ -117,6 +124,37 @@ type (
 		GCEBetaService infra.GCEBetaInterface
 		Discovery      discoveryInterface
 		PCMParams      pcm.Parameters
+		OSStatReader   func(string) (os.FileInfo, error)
+	}
+
+	// DemoMetricsReader provides a way to read demo metrics.
+	DemoMetricsReader func(string) (io.ReadCloser, error)
+
+	// OSStatReader is a testable version of os.Stat.
+	OSStatReader func(string) (os.FileInfo, error)
+
+	demoInstanceProperties struct {
+		config         *cpb.Configuration
+		reader         DemoMetricsReader
+		demoMetricPath string
+	}
+	// metricEmitter is a container for constructing metrics from
+	// an override configuration file.
+	metricEmitter struct {
+		scanner       *bufio.Scanner
+		tmpMetricName string
+	}
+
+	// demoMetricData stores the metric values and labels read from
+	// the override configuration file.
+	demoMetricData struct {
+		name         string
+		int64Value   int64
+		float64Value float64
+		boolValue    bool
+		labels       map[string]string
+		isFloat      bool
+		isBool       bool
 	}
 )
 
@@ -125,7 +163,15 @@ const (
 	minimumFrequency               = 5
 	minimumFrequencyForSlowMoving  = 30
 	minimumFrequencyForReliability = 60
+	metricOverridePath             = "/etc/google-cloud-sap-agent/processmetrics-override.yaml"
+	pmMetricTypePrefix             = "workload.googleapis.com/sap/"
 )
+
+var demoMetricsReader = DemoMetricsReader(func(path string) (io.ReadCloser, error) {
+	file, err := os.Open(path)
+	var f io.ReadCloser = file
+	return f, err
+})
 
 /*
 Start starts the collection of relevant metrics based on whether the
@@ -183,6 +229,24 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring client", "error", err)
 		usagemetrics.Error(usagemetrics.ProcessMetricsMetricClientCreateFailure) // Failed to create Cloud Monitoring client
 		return false
+	}
+
+	if fileInfo, err := parameters.OSStatReader(metricOverridePath); fileInfo != nil && err == nil {
+		log.CtxLogger(ctx).Info("Using override process metrics from yaml file", "file", metricOverridePath)
+		p := createDemoCollectors(ctx, parameters, mc, demoMetricsReader)
+		demoMetricsRoutine = &recovery.RecoverableRoutine{
+			Routine: func(ctx context.Context, a any) {
+				if pm, ok := a.(Parameters); ok {
+					createWorkerPoolForSlowMetrics(ctx, p, pm.BackOffs)
+				}
+			},
+			RoutineArg:          parameters,
+			ErrorCode:           usagemetrics.SlowMetricsCollectionFailure,
+			UsageLogger:         *usagemetrics.Logger,
+			ExpectedMinDuration: time.Minute,
+		}
+		demoMetricsRoutine.StartRoutine(ctx)
+		return true
 	}
 
 	sapInstances := instancesWithCredentials(ctx, &parameters)
@@ -792,4 +856,135 @@ func skipMetricsForNetweaverKernel(ctx context.Context, discovery discoveryInter
 			break
 		}
 	}
+}
+
+// createDemoCollectors sets up the demo metric collection from the metric override file.
+func createDemoCollectors(ctx context.Context, params Parameters, client cloudmonitoring.TimeSeriesCreator, demoMetricsReader DemoMetricsReader) *Properties {
+	p := &Properties{
+		Config:        params.Config,
+		Client:        client,
+		HeartbeatSpec: params.HeartbeatSpec,
+	}
+	p.Collectors = append(p.Collectors, &demoInstanceProperties{
+		config:         params.Config,
+		demoMetricPath: metricOverridePath,
+		reader:         demoMetricsReader,
+	})
+	return p
+}
+
+// CollectWithRetry implements the Collector interface for demo metric
+// collection. We don't need to retry for demo metrics so it simply calls
+// Collect().
+func (ip *demoInstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	return ip.Collect(ctx)
+}
+
+// Collect implements the Collector interface for demo metric collection.
+func (ip *demoInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+	var metrics []*mrpb.TimeSeries
+	file, err := ip.reader(ip.demoMetricPath)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Could not read the metric override file", "error", err)
+		return metrics, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	metricEmitter := metricEmitter{scanner, ""}
+	for {
+		metricData, last := metricEmitter.getMetric(ctx)
+		if metricData.name != "" {
+			metrics = append(metrics, metricData.createTimeSeries(ip, pmMetricTypePrefix)...)
+		}
+		if last {
+			break
+		}
+	}
+	return metrics, nil
+}
+
+// getMetric parses all labels for a metric type in the override file.
+// Returns true if done with parsing the file, false otherwise.
+func (e *metricEmitter) getMetric(ctx context.Context) (*demoMetricData, bool) {
+	metricName := e.tmpMetricName
+	metricIntValue := int64(0)
+	metricFloatValue := float64(0.0)
+	metricBoolValue := false
+	isFloat := false
+	isBool := false
+	labels := make(map[string]string)
+	var err error
+
+	for e.scanner.Scan() {
+		key, value, found := parseScannedText(ctx, e.scanner.Text())
+		if !found {
+			continue
+		}
+
+		switch key {
+		case "metric":
+			if metricName != "" {
+				e.tmpMetricName = value
+				return &demoMetricData{metricName, metricIntValue, metricFloatValue, metricBoolValue, labels, isFloat, isBool}, false
+			}
+			metricName = value
+		case "metric_value":
+			if metricIntValue, err = strconv.ParseInt(value, 10, 64); err == nil {
+				isFloat = false
+				isBool = false
+			} else if metricFloatValue, err = strconv.ParseFloat(value, 64); err == nil {
+				isFloat = true
+				isBool = false
+			} else if metricBoolValue, err = strconv.ParseBool(value); err == nil {
+				isFloat = false
+				isBool = true
+			} else {
+				log.CtxLogger(ctx).Warnw("Could not parse metric value as int or float", "value", value, "error", err)
+			}
+		default:
+			labels[key] = strings.TrimSpace(value)
+		}
+	}
+
+	if err = e.scanner.Err(); err != nil {
+		log.CtxLogger(ctx).Warnw("Could not read from the override metrics file", "error", err)
+	}
+	return &demoMetricData{metricName, metricIntValue, metricFloatValue, metricBoolValue, labels, isFloat, isBool}, true
+}
+
+// parseScannedText extracts a key and value pair from a scanned line of text.
+// The expected format for the text string is: '<key>: <value>'.
+func parseScannedText(ctx context.Context, text string) (key, value string, found bool) {
+	// Ignore empty lines and comments.
+	if text == "" || strings.HasPrefix(text, "#") {
+		return "", "", false
+	}
+
+	key, value, found = strings.Cut(text, ":")
+	if !found {
+		log.CtxLogger(ctx).Warnw("Could not parse key, value pair. Expected format: '<key>: <value>'", "text", text)
+	}
+	return strings.TrimSpace(key), strings.TrimSpace(value), found
+}
+
+// createTimeSeries creates a time series for the demo metric data.
+func (metricData *demoMetricData) createTimeSeries(ip *demoInstanceProperties, metricTypePrefix string) []*mrpb.TimeSeries {
+	tsParams := timeseries.Params{
+		CloudProp:    ip.config.CloudProperties,
+		MetricType:   metricTypePrefix + metricData.name,
+		MetricLabels: metricData.labels,
+		Timestamp:    tpb.Now(),
+		Int64Value:   metricData.int64Value,
+		Float64Value: metricData.float64Value,
+		BoolValue:    metricData.boolValue,
+		BareMetal:    ip.config.BareMetal,
+	}
+	if metricData.isFloat {
+		return []*mrpb.TimeSeries{timeseries.BuildFloat64(tsParams)}
+	}
+	if metricData.isBool {
+		return []*mrpb.TimeSeries{timeseries.BuildBool(tsParams)}
+	}
+	return []*mrpb.TimeSeries{timeseries.BuildInt(tsParams)}
 }

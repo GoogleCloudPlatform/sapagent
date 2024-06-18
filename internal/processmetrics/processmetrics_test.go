@@ -17,7 +17,10 @@ limitations under the License.
 package processmetrics
 
 import (
+	"bytes"
 	"context"
+	"embed"
+	"io"
 	"os"
 	"sync"
 	"testing"
@@ -94,7 +97,23 @@ var (
 	}
 
 	defaultBackOffIntervals = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
+
+	//go:embed test_data/processmetrics-fake.yaml
+	testFS embed.FS
 )
+
+const testDemoMetricYaml = `metric: cluster/failcounts
+	metric_value: 1
+# Test Comment
+metric: cluster/testmetric
+	metric_value: 1.1
+	test_label: "test_value"
+#metric: cluster/testcommentedmetric
+#	metric_value: 1.5
+metric: cluster/testboolmetric
+	metric_value: TRUE
+	test_label: "test_value2"
+`
 
 type (
 	fakeProperties struct {
@@ -246,6 +265,7 @@ func TestStartProcessMetrics(t *testing.T) {
 				Discovery: &fakeDiscoveryInterface{
 					instances: fakeSAPInstances("HANA"),
 				},
+				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
 			},
 			want: true,
 		},
@@ -263,15 +283,17 @@ func TestStartProcessMetrics(t *testing.T) {
 				Discovery: &fakeDiscoveryInterface{
 					instances: fakeSAPInstances("HANA"),
 				},
+				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
 			},
 			want: false,
 		},
 		{
 			name: "FailsForWindowsOS",
 			parameters: Parameters{
-				Config:   defaultConfig,
-				OSType:   "windows",
-				BackOffs: defaultBackOffIntervals,
+				Config:       defaultConfig,
+				OSType:       "windows",
+				BackOffs:     defaultBackOffIntervals,
+				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
 			},
 			want: false,
 		},
@@ -285,6 +307,7 @@ func TestStartProcessMetrics(t *testing.T) {
 				Discovery: &fakeDiscoveryInterface{
 					instances: fakeSAPInstances("HANA"),
 				},
+				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
 			},
 			want: false,
 		},
@@ -298,6 +321,7 @@ func TestStartProcessMetrics(t *testing.T) {
 				Discovery: &fakeDiscoveryInterface{
 					instances: fakeSAPInstances("HANA"),
 				},
+				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
 			},
 			want: false,
 		},
@@ -311,6 +335,7 @@ func TestStartProcessMetrics(t *testing.T) {
 				Discovery: &fakeDiscoveryInterface{
 					instances: fakeSAPInstances("HANA"),
 				},
+				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
 			},
 			want: false,
 		},
@@ -324,8 +349,26 @@ func TestStartProcessMetrics(t *testing.T) {
 				Discovery: &fakeDiscoveryInterface{
 					instances: fakeSAPInstances("NOSAP"),
 				},
+				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
 			},
 			want: false,
+		},
+		{
+			name: "DemoCollectionMode",
+			parameters: Parameters{
+				Config:       defaultConfig,
+				OSType:       "linux",
+				MetricClient: fakeNewMetricClient,
+				BackOffs:     defaultBackOffIntervals,
+				OSStatReader: func(data string) (os.FileInfo, error) {
+					f, err := testFS.Open("test_data/processmetrics-fake.yaml")
+					if err != nil {
+						return nil, err
+					}
+					return f.Stat()
+				},
+			},
+			want: true,
 		},
 	}
 
@@ -1102,5 +1145,45 @@ func TestExtractKernelVersionAndPatch(t *testing.T) {
 		if gotPatch != tc.wantPatch {
 			t.Errorf("extractKernelVersionAndPatch(%v) = %v, want: %v", tc.kernelVersion, gotPatch, tc.wantPatch)
 		}
+	}
+}
+
+func TestCollectDemoMetrics(t *testing.T) {
+	tests := []struct {
+		name            string
+		inputYAML       string
+		wantMetricCount int
+		wantErr         error
+	}{
+		{
+			name:            "ValidYAML",
+			inputYAML:       testDemoMetricYaml,
+			wantMetricCount: 3,
+		},
+		{
+			name:            "EmptyYAML",
+			inputYAML:       "",
+			wantMetricCount: 0, // No metrics should be created
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			reader := DemoMetricsReader(func(string) (io.ReadCloser, error) {
+				return io.NopCloser(bytes.NewReader([]byte(tt.inputYAML))), nil
+			})
+			ip := &demoInstanceProperties{
+				config: defaultConfig,
+				reader: reader,
+			}
+			got, err := ip.CollectWithRetry(context.Background())
+			if !cmp.Equal(err, tt.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("Collect() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(got) != tt.wantMetricCount {
+				t.Errorf("Collect() = %v, wantMetricCount %v", got, tt.wantMetricCount)
+			}
+		})
 	}
 }
