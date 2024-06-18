@@ -443,7 +443,26 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
 func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey, newDiskName, sourceSnapshot string) error {
-
+	if !r.isGroupSnapshot {
+		if r.computeService == nil {
+			return fmt.Errorf("compute service is nil")
+		}
+		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
+		if err != nil {
+			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
+		}
+		if r.DiskSizeGb == 0 {
+			r.DiskSizeGb = snapshot.DiskSizeGb
+		}
+	} else {
+		snapshot, err := r.gceService.GetGroupSnapshotsService().Get(r.Project, r.GroupSnapshot).Do()
+		if err != nil {
+			return fmt.Errorf("failed to check if group-snapshot=%v is present: %v", r.GroupSnapshot, err)
+		}
+		if r.DiskSizeGb == 0 {
+			r.DiskSizeGb = snapshot.Snapshots[0].DiskSizeGb
+		}
+	}
 	disk := &compute.Disk{
 		Name:                        newDiskName,
 		Type:                        r.NewDiskType,
@@ -462,9 +481,6 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	}
 	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", r.SourceSnapshot)
 
-	if r.computeService == nil {
-		return fmt.Errorf("compute service is nil")
-	}
 	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
