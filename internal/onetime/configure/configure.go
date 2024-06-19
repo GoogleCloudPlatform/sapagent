@@ -43,18 +43,29 @@ import (
 
 // Configure has args for backint subcommands.
 type Configure struct {
-	Feature, LogLevel                                               string
-	Setting, Path                                                   string
-	SkipMetrics                                                     string
-	ValidationMetricsFrequency, DbFrequency                         int64
-	FastMetricsFrequency, SlowMetricsFrequency                      int64
-	AgentMetricsFrequency, AgentHealthFrequency, HeartbeatFrequency int64
-	ReliabilityMetricsFrequency                                     int64
-	SampleIntervalSec, QueryTimeoutSec                              int64
-	Help, Version                                                   bool
-	Enable, Disable, Showall                                        bool
-	Add, Remove                                                     bool
-	RestartAgent                                                    RestartAgent
+	Feature                     string       `json:"feature"`
+	LogLevel                    string       `json:"loglevel"`
+	Setting                     string       `json:"setting"`
+	Path                        string       `json:"path"`
+	SkipMetrics                 string       `json:"process_metrics_to_skip"`
+	ValidationMetricsFrequency  int64        `json:"workload_evaluation_metrics_frequency,string"`
+	DbFrequency                 int64        `json:"workload_evaluation_db_metrics_frequency,string"`
+	FastMetricsFrequency        int64        `json:"process_metrics_frequency,string"`
+	SlowMetricsFrequency        int64        `json:"slow_process_metrics_frequency,string"`
+	AgentMetricsFrequency       int64        `json:"agent_metrics_frequency,string"`
+	AgentHealthFrequency        int64        `json:"agent_health_frequency,string"`
+	HeartbeatFrequency          int64        `json:"heartbeat_frequency,string"`
+	ReliabilityMetricsFrequency int64        `json:"reliability_metrics_frequency,string"`
+	SampleIntervalSec           int64        `json:"sample_interval_sec,string"`
+	QueryTimeoutSec             int64        `json:"query_timeout_sec,string"`
+	Help                        bool         `json:"help,string"`
+	Version                     bool         `json:"version,string"`
+	Enable                      bool         `json:"enable,string"`
+	Disable                     bool         `json:"disable,string"`
+	Showall                     bool         `json:"showall,string"`
+	Add                         bool         `json:"add,string"`
+	Remove                      bool         `json:"remove,string"`
+	RestartAgent                RestartAgent `json:"-"`
 }
 
 // RestartAgent abstracts restart functions(windows & linux) for testability.

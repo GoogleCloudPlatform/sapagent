@@ -17,6 +17,7 @@ limitations under the License.
 package configurehandler
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -117,7 +118,7 @@ func TestBuildConfigureFromMap(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := buildConfigureFromMap(test.command)
+			got := buildConfigureFromMap(context.Background(), test.command)
 			if diff := cmp.Diff(test.want, got, cmpopts.IgnoreFields(configure.Configure{}, "RestartAgent")); diff != "" {
 				t.Errorf("buildConfigureFromMap(%v) returned diff (-want +got):\n%s", test.command, diff)
 			}

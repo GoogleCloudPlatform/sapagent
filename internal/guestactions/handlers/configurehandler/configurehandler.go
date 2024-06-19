@@ -19,7 +19,7 @@ package configurehandler
 
 import (
 	"context"
-	"strconv"
+	"encoding/json"
 
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
@@ -36,100 +36,18 @@ func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 	return subcommands.ExitSuccess
 }
 
-// TODO - Consider defining constants for the command parameters.
-// TODO - Investigate marshalling the command parameters into JSON and then unmarshalling into configure.Configure struct.
-func buildConfigureFromMap(command *gpb.AgentCommand) configure.Configure {
-	fields := command.GetParameters()
+func buildConfigureFromMap(ctx context.Context, command *gpb.AgentCommand) configure.Configure {
 	c := configure.Configure{
 		RestartAgent: noOpRestart,
 	}
-	feature, ok := fields["feature"]
-	if ok {
-		c.Feature = feature
+	fields := command.GetParameters()
+	fieldsJSON, err := json.Marshal(fields)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Failed to marshal all command parameters to JSON", "err", err)
+		return c
 	}
-	logLevel, ok := fields["loglevel"]
-	if ok {
-		c.LogLevel = logLevel
-	}
-	setting, ok := fields["setting"]
-	if ok {
-		c.Setting = setting
-	}
-	path, ok := fields["path"]
-	if ok {
-		c.Path = path
-	}
-	skipMetrics, ok := fields["process_metrics_to_skip"]
-	if ok {
-		c.SkipMetrics = skipMetrics
-	}
-	validationMetricsFrequency, ok := fields["workload_evaluation_metrics_frequency"]
-	if ok {
-		c.ValidationMetricsFrequency, _ = strconv.ParseInt(validationMetricsFrequency, 10, 64)
-	}
-	dbFrequency, ok := fields["workload_evaluation_db_metrics_frequency"]
-	if ok {
-		c.DbFrequency, _ = strconv.ParseInt(dbFrequency, 10, 64)
-	}
-	fastMetricsFrequency, ok := fields["process_metrics_frequency"]
-	if ok {
-		c.FastMetricsFrequency, _ = strconv.ParseInt(fastMetricsFrequency, 10, 64)
-	}
-	slowMetricsFrequency, ok := fields["slow_process_metrics_frequency"]
-	if ok {
-		c.SlowMetricsFrequency, _ = strconv.ParseInt(slowMetricsFrequency, 10, 64)
-	}
-	agentMetricsFrequency, ok := fields["agent_metrics_frequency"]
-	if ok {
-		c.AgentMetricsFrequency, _ = strconv.ParseInt(agentMetricsFrequency, 10, 64)
-	}
-	agentHealthFrequency, ok := fields["agent_health_frequency"]
-	if ok {
-		c.AgentHealthFrequency, _ = strconv.ParseInt(agentHealthFrequency, 10, 64)
-	}
-	heartbeatFrequency, ok := fields["heartbeat_frequency"]
-	if ok {
-		c.HeartbeatFrequency, _ = strconv.ParseInt(heartbeatFrequency, 10, 64)
-	}
-	reliabilityMetricsFrequency, ok := fields["reliability_metrics_frequency"]
-	if ok {
-		c.ReliabilityMetricsFrequency, _ = strconv.ParseInt(reliabilityMetricsFrequency, 10, 64)
-	}
-	sampleIntervalSec, ok := fields["sample_interval_sec"]
-	if ok {
-		c.SampleIntervalSec, _ = strconv.ParseInt(sampleIntervalSec, 10, 64)
-	}
-	queryTimeoutSec, ok := fields["query_timeout_sec"]
-	if ok {
-		c.QueryTimeoutSec, _ = strconv.ParseInt(queryTimeoutSec, 10, 64)
-	}
-	help, ok := fields["help"]
-	if ok {
-		c.Help, _ = strconv.ParseBool(help)
-	}
-	version, ok := fields["version"]
-	if ok {
-		c.Version, _ = strconv.ParseBool(version)
-	}
-	enable, ok := fields["enable"]
-	if ok {
-		c.Enable, _ = strconv.ParseBool(enable)
-	}
-	disable, ok := fields["disable"]
-	if ok {
-		c.Disable, _ = strconv.ParseBool(disable)
-	}
-	showall, ok := fields["showall"]
-	if ok {
-		c.Showall, _ = strconv.ParseBool(showall)
-	}
-	add, ok := fields["add"]
-	if ok {
-		c.Add, _ = strconv.ParseBool(add)
-	}
-	remove, ok := fields["remove"]
-	if ok {
-		c.Remove, _ = strconv.ParseBool(remove)
+	if err := json.Unmarshal(fieldsJSON, &c); err != nil {
+		log.CtxLogger(ctx).Debugw("Failed to unmarshal all command parameters into Configure struct", "err", err)
 	}
 	return c
 }
@@ -137,7 +55,7 @@ func buildConfigureFromMap(command *gpb.AgentCommand) configure.Configure {
 // ConfigureHandler is the handler for the configure command.
 func ConfigureHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
-	c := buildConfigureFromMap(command)
+	c := buildConfigureFromMap(ctx, command)
 	msg, exitStatus := c.ExecuteAndGetMessage(ctx, nil)
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
 	return msg, exitStatus, RestartAgent
