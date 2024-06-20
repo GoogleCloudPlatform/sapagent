@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
@@ -211,7 +212,7 @@ func TestMessageHandler(t *testing.T) {
 								AgentCommand: &gpb.AgentCommand{Command: "version"},
 							},
 						},
-						Stdout:   "Google Cloud Agent for SAP version 3.3.0",
+						Stdout:   fmt.Sprintf("Google Cloud Agent for SAP version %s.%s", configuration.AgentVersion, configuration.AgentBuildChange),
 						Stderr:   "",
 						ExitCode: 0,
 					},
