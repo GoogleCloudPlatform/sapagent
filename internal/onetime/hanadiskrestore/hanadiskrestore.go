@@ -161,7 +161,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Help and version will return before the args are parsed.
-	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     r.Name(),
 		Help:     r.help,
 		Version:  r.version,

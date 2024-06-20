@@ -52,7 +52,7 @@ func (v *Version) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for version.
 func (v *Version) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     v.Name(),
 		Help:     v.help,
 		Version:  v.version,

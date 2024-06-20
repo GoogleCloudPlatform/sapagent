@@ -85,7 +85,7 @@ func (h *HANAInsights) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanainsights.
 func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     h.Name(),
 		Help:     h.help,
 		Version:  h.version,

@@ -161,7 +161,7 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	lp, cp, exitStatus, completed := onetime.Init(
 		ctx,
-		onetime.Options{
+		onetime.InitOptions{
 			Name:     d.Name(),
 			Help:     d.help,
 			Version:  d.version,

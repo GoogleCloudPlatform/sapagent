@@ -119,7 +119,7 @@ func TestExecuteConfigureInstance(t *testing.T) {
 		{
 			name: "SuccessForAgentVersion",
 			c: ConfigureInstance{
-				version: true,
+				Version: true,
 			},
 			want: subcommands.ExitSuccess,
 			args: []any{
@@ -131,7 +131,7 @@ func TestExecuteConfigureInstance(t *testing.T) {
 		{
 			name: "SuccessForHelp",
 			c: ConfigureInstance{
-				help: true,
+				Help: true,
 			},
 			want: subcommands.ExitSuccess,
 			args: []any{
@@ -181,8 +181,26 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			want: subcommands.ExitUsageError,
 			c: ConfigureInstance{
 				Apply:          true,
-				machineType:    "",
+				MachineType:    "",
 				HyperThreading: hyperThreadingDefault,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "Success",
+			want: subcommands.ExitSuccess,
+			c: ConfigureInstance{
+				Apply:           true,
+				MachineType:     "x4-megamem-1920",
+				HyperThreading:  hyperThreadingDefault,
+				OverrideVersion: overrideVersionLatest,
+				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				WriteFile:       defaultWriteFile(5),
 			},
 			args: []any{
 				"test",
@@ -233,7 +251,7 @@ func TestConfigureInstanceHandler(t *testing.T) {
 		{
 			name: "UnsupportedMachineType",
 			c: ConfigureInstance{
-				machineType: "",
+				MachineType: "",
 			},
 			want:    subcommands.ExitUsageError,
 			wantErr: cmpopts.AnyError,
@@ -241,11 +259,11 @@ func TestConfigureInstanceHandler(t *testing.T) {
 		{
 			name: "x4SuccessApply",
 			c: ConfigureInstance{
-				machineType:     "x4-megamem-1920",
+				MachineType:     "x4-megamem-1920",
 				OverrideVersion: overrideVersionLatest,
-				readFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
 				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
-				writeFile:       defaultWriteFile(5),
+				WriteFile:       defaultWriteFile(5),
 				Apply:           true,
 			},
 			want:    subcommands.ExitSuccess,
@@ -254,11 +272,11 @@ func TestConfigureInstanceHandler(t *testing.T) {
 		{
 			name: "x4SuccessCheck",
 			c: ConfigureInstance{
-				machineType:     "x4-megamem-1920",
+				MachineType:     "x4-megamem-1920",
 				OverrideVersion: overrideVersionLatest,
-				readFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
 				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
-				writeFile:       defaultWriteFile(5),
+				WriteFile:       defaultWriteFile(5),
 				Check:           true,
 				PrintDiff:       true,
 			},
@@ -268,9 +286,9 @@ func TestConfigureInstanceHandler(t *testing.T) {
 		{
 			name: "X4Fail",
 			c: ConfigureInstance{
-				machineType:     "x4-megamem-1920",
+				MachineType:     "x4-megamem-1920",
 				OverrideVersion: overrideVersionLatest,
-				readFile:        defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				ReadFile:        defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
 			},
 			want:    subcommands.ExitFailure,
 			wantErr: cmpopts.AnyError,
@@ -300,7 +318,7 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "ReadFileFailure",
 			c: ConfigureInstance{
-				readFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
+				ReadFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
 			},
 			removeLines:     []string{""},
 			wantRegenerated: false,
@@ -309,8 +327,8 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "CommentedOutKey",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{"#key=value"}),
-				writeFile: verifyWrite(""),
+				ReadFile:  defaultReadFile([]error{nil}, []string{"#key=value"}),
+				WriteFile: verifyWrite(""),
 				Apply:     true,
 			},
 			removeLines:     []string{"key="},
@@ -320,8 +338,8 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "MultiValueForKey",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile:   verifyWrite(`#key="val test=1"`),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				WriteFile:   verifyWrite(`#key="val test=1"`),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -332,8 +350,8 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "MultipleKeysRemoveBoth",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
-				writeFile:   verifyWrite("#key1=value1\n#key2=value2"),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
+				WriteFile:   verifyWrite("#key1=value1\n#key2=value2"),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -344,8 +362,8 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "MultipleKeysRemoveOne",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
-				writeFile:   verifyWrite("#key1=value1\nkey2=value2"),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
+				WriteFile:   verifyWrite("#key1=value1\nkey2=value2"),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -356,8 +374,8 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "KeyNotFound",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile: verifyWrite(`key="val test=1"`),
+				ReadFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				WriteFile: verifyWrite(`key="val test=1"`),
 				Apply:     true,
 			},
 			removeLines:     []string{"another_key"},
@@ -367,8 +385,8 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "FailedToWrite",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile:   defaultWriteFile(0),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				WriteFile:   defaultWriteFile(0),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -379,8 +397,8 @@ func TestRemoveLines(t *testing.T) {
 		{
 			name: "FailedToBackup",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile:   verifyWrite(`key="val test=1"`),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				WriteFile:   verifyWrite(`key="val test=1"`),
 				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
 				Apply:       true,
 			},
@@ -413,7 +431,7 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "ReadFileFailure",
 			c: ConfigureInstance{
-				readFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
+				ReadFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
 			},
 			removeLines:     []string{""},
 			wantRegenerated: false,
@@ -422,7 +440,7 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "InvalidInputFormat",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil}, []string{"key=value"}),
+				ReadFile: defaultReadFile([]error{nil}, []string{"key=value"}),
 				Apply:    true,
 			},
 			removeLines:     []string{"value"},
@@ -432,8 +450,8 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "CommentedOutKey",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
-				writeFile:   verifyWrite("#key="),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
+				WriteFile:   verifyWrite("#key="),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -444,8 +462,8 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "MultiValueForKey",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key="value test=1"`}),
-				writeFile:   verifyWrite(`key="value"`),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key="value test=1"`}),
+				WriteFile:   verifyWrite(`key="value"`),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -456,8 +474,8 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "MultipleKeys",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
-				writeFile:   verifyWrite("key1=value1\nkey2="),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
+				WriteFile:   verifyWrite("key1=value1\nkey2="),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -468,8 +486,8 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "KeyNotFound",
 			c: ConfigureInstance{
-				readFile:  defaultReadFile([]error{nil}, []string{`key=value`}),
-				writeFile: verifyWrite(`key=value`),
+				ReadFile:  defaultReadFile([]error{nil}, []string{`key=value`}),
+				WriteFile: verifyWrite(`key=value`),
 				Apply:     true,
 			},
 			removeLines:     []string{"another_key=another_value"},
@@ -479,8 +497,8 @@ func TestRemoveValues(t *testing.T) {
 		{
 			name: "FailedToWrite",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key=value`}),
-				writeFile:   defaultWriteFile(0),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key=value`}),
+				WriteFile:   defaultWriteFile(0),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -512,7 +530,7 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "FailedToRead",
 			c: ConfigureInstance{
-				readFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
+				ReadFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
 			},
 			wantRegenerated: false,
 			wantErr:         cmpopts.AnyError,
@@ -520,7 +538,7 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "OutOfDateFileWithCheck",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Check:       true,
 			},
@@ -530,8 +548,8 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "OutOfDateFileWithApplyFailedToWrite",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
-				writeFile:   defaultWriteFile(0),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
+				WriteFile:   defaultWriteFile(0),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -541,8 +559,8 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "OutOfDateFileWithApplySuccessfulWrite",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
-				writeFile:   verifyWrite("key=value"),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
+				WriteFile:   verifyWrite("key=value"),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -552,7 +570,7 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 		{
 			name: "NoUpdatesNeeded",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil}, []string{"key=value"}),
+				ReadFile: defaultReadFile([]error{nil}, []string{"key=value"}),
 			},
 			wantRegenerated: false,
 			wantErr:         nil,
@@ -582,7 +600,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "ReadFileFailure",
 			c: ConfigureInstance{
-				readFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
+				ReadFile: func(string) ([]byte, error) { return nil, fmt.Errorf("failed to read file") },
 			},
 			wantLines:       []string{""},
 			wantRegenerated: false,
@@ -591,8 +609,8 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "CommentedOutKey",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
-				writeFile:   verifyWrite("key=value"),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
+				WriteFile:   verifyWrite("key=value"),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -603,8 +621,8 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "NewValueForKey",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"key=1"}),
-				writeFile:   verifyWrite("key=2"),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"key=1"}),
+				WriteFile:   verifyWrite("key=2"),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -615,7 +633,7 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "NoUpdatesNeeded",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil}, []string{"key=1"}),
+				ReadFile: defaultReadFile([]error{nil}, []string{"key=1"}),
 				Apply:    true,
 			},
 			wantLines:       []string{"key=1"},
@@ -625,8 +643,8 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "MultiValueForKey",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile:   verifyWrite(`key="val test=2 new=3"`),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				WriteFile:   verifyWrite(`key="val test=2 new=3"`),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -637,8 +655,8 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "KeyNotFound",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile:   verifyWrite(`key="val test=1"` + "\n" + `another_key=value` + "\n"),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				WriteFile:   verifyWrite(`key="val test=1"` + "\n" + `another_key=value` + "\n"),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -649,8 +667,8 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 		{
 			name: "FailedToWrite",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				writeFile:   defaultWriteFile(0),
+				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
+				WriteFile:   defaultWriteFile(0),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},

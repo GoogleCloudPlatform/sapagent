@@ -313,7 +313,7 @@ func TestIsEnabled(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			data, _ := data(context.Background(), test.fakeExec)
-			got := Enabled(data)
+			got := Enabled(context.Background(), data)
 			if got != test.want {
 				t.Fatalf("Failure in Enabled(), got: %v, want: %v.", got, test.want)
 			}

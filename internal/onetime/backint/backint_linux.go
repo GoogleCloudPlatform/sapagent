@@ -94,7 +94,7 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for backint.
 func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	lp, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     b.Name(),
 		Help:     b.help,
 		Version:  b.version,

@@ -35,8 +35,8 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "Megamem1920FailedToReadReleaseFile",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
-				machineType: "x4-megamem-1920",
+				ReadFile:    defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				MachineType: "x4-megamem-1920",
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -44,8 +44,8 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "FailRegenerateSystemConf",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", ""}),
-				writeFile:   defaultWriteFile(1),
+				ReadFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", ""}),
+				WriteFile:   defaultWriteFile(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -55,8 +55,8 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "FailRegenerateLoginConf",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", ""}),
-				writeFile:   defaultWriteFile(2),
+				ReadFile:    defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", ""}),
+				WriteFile:   defaultWriteFile(2),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -66,8 +66,8 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "FailRegenerateModprobe",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
-				writeFile:   defaultWriteFile(3),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
+				WriteFile:   defaultWriteFile(3),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -77,9 +77,9 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "FailRunDracut",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil, nil, nil}, []string{"Name=RHEL", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil}, []string{"Name=RHEL", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
-				writeFile:   defaultWriteFile(4),
+				WriteFile:   defaultWriteFile(4),
 				Apply:       true,
 			},
 			want:    false,
@@ -88,11 +88,11 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "FailRegenerateGrub",
 			c: ConfigureInstance{
-				readFile:       defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
+				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
 				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
-				writeFile:      defaultWriteFile(5),
+				WriteFile:      defaultWriteFile(5),
 				Apply:          true,
-				machineType:    "x4-megamem-1920",
+				MachineType:    "x4-megamem-1920",
 				HyperThreading: hyperThreadingDefault,
 			},
 			want:    false,
@@ -101,9 +101,9 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "FailRemoveNosmt",
 			c: ConfigureInstance{
-				readFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", ""}),
+				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", ""}),
 				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
-				writeFile:      defaultWriteFile(5),
+				WriteFile:      defaultWriteFile(5),
 				Apply:          true,
 				HyperThreading: hyperThreadingOn,
 			},
@@ -113,9 +113,9 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "FailGrub2Mkconfig",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
-				writeFile:   defaultWriteFile(5),
+				WriteFile:   defaultWriteFile(5),
 				Apply:       true,
 			},
 			want:    false,
@@ -124,9 +124,9 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "Success",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
-				writeFile:   defaultWriteFile(5),
+				WriteFile:   defaultWriteFile(5),
 				Check:       true,
 			},
 			want:    true,
@@ -156,7 +156,7 @@ func TestConfigureX4SLES3_4(t *testing.T) {
 		{
 			name: "FailedToReadReleaseFile",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				ReadFile: defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
@@ -164,7 +164,7 @@ func TestConfigureX4SLES3_4(t *testing.T) {
 		{
 			name: "NotSLESMachine",
 			c: ConfigureInstance{
-				readFile: defaultReadFile([]error{nil}, []string{"RHEL"}),
+				ReadFile: defaultReadFile([]error{nil}, []string{"RHEL"}),
 			},
 			want:    false,
 			wantErr: nil,
@@ -172,7 +172,7 @@ func TestConfigureX4SLES3_4(t *testing.T) {
 		{
 			name: "FailedSaptuneService",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil}, []string{"Name=SLES"}),
+				ReadFile:    defaultReadFile([]error{nil}, []string{"Name=SLES"}),
 				ExecuteFunc: defaultExecute([]int{4, 4}, []string{"", ""}),
 			},
 			want:    false,
@@ -181,7 +181,7 @@ func TestConfigureX4SLES3_4(t *testing.T) {
 		{
 			name: "FailedToWriteX4Conf",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", ""}),
+				ReadFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=SLES", ""}),
 				ExecuteFunc: defaultExecute([]int{4, 0}, []string{"", ""}),
 			},
 			want:    false,
@@ -190,7 +190,7 @@ func TestConfigureX4SLES3_4(t *testing.T) {
 		{
 			name: "FailedSaptuneReapply",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
 				ExecuteFunc: defaultExecute([]int{4, 0, 0, 4}, []string{"", "", "", ""}),
 			},
 			want:    false,
@@ -199,7 +199,7 @@ func TestConfigureX4SLES3_4(t *testing.T) {
 		{
 			name: "Success",
 			c: ConfigureInstance{
-				readFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
 				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", ""}),
 			},
 			want:    true,

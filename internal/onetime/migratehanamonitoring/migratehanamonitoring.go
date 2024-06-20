@@ -69,7 +69,7 @@ func (m *MigrateHANAMonitoring) SetFlags(f *flag.FlagSet) {
 
 // Execute implements the subcommand interface for Migrating HANA Monitoring Agent.
 func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     m.Name(),
 		Help:     m.help,
 		Version:  m.version,

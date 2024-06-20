@@ -140,7 +140,7 @@ func getReadWriter(rw storage.ReadWriter) uploader {
 
 // Execute implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     s.Name(),
 		Help:     s.Help,
 		Version:  s.Version,

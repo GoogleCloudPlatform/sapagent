@@ -59,6 +59,7 @@ var (
 			InstanceId:   "test-instance-id",
 			Zone:         "test-region-zone",
 			ProjectId:    "test-project-id",
+			MachineType:  "test-machine-type",
 		},
 		AgentProperties: &cfgpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 		CollectionConfiguration: &cfgpb.CollectionConfiguration{

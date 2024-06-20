@@ -52,7 +52,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "7"
+	collectionConfigVersion = "8"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -143,11 +143,6 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 							StdErr: "",
 						}
 					}
-					if params.Executable == "/usr/bin/google_cloud_sap_agent" {
-						return commandlineexecutor.Result{
-							ExitCode: 1,
-						}
-					}
 					return commandlineexecutor.Result{
 						StdOut: "",
 						StdErr: "",
@@ -163,7 +158,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"gcloud":                    "true",
 				"gsutil":                    "true",
 				"agent_state":               "running",
-				"os_settings":               "fail",
+				"os_settings":               "",
 				"collection_config_version": collectionConfigVersion,
 			},
 		},

@@ -124,7 +124,7 @@ func instances(ctx context.Context, hrc replicationConfig, list listInstances, e
 
 	return &sapb.SAPInstances{
 		Instances:          sapInstances,
-		LinuxClusterMember: pacemaker.Enabled(crmdata),
+		LinuxClusterMember: pacemaker.Enabled(ctx, crmdata),
 	}
 }
 

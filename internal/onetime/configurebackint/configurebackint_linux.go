@@ -129,7 +129,7 @@ func (c *ConfigureBackint) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for configurebackint.
 func (c *ConfigureBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
 		Help:     c.help,
 		Version:  c.version,

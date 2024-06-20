@@ -61,7 +61,7 @@ func (v *Validate) SetFlags(fs *flag.FlagSet) {
 
 // Execute executes the command and returns an ExitStatus.
 func (v *Validate) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     v.Name(),
 		Help:     v.help,
 		Version:  v.version,

@@ -133,9 +133,9 @@ func parseCRMMon(byteVal []byte) (*CRMMon, error) {
 
 // Enabled checks if the current instance is part of a Linux pacemaker cluster.
 // Returns a bool indicating whether pacemaker cluster is enabled.
-func Enabled(crm *CRMMon) bool {
+func Enabled(ctx context.Context, crm *CRMMon) bool {
 	if crm != nil && len(crm.Nodes) > 0 {
-		log.Logger.Info("Pacemaker cluster is configured on current machine.")
+		log.CtxLogger(ctx).Info("Pacemaker cluster is configured on current machine.")
 		return true
 	}
 	return false

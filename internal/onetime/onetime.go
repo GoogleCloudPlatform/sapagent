@@ -57,12 +57,17 @@ type (
 		Cp        *iipb.CloudProperties
 	}
 
-	// Options is a struct which contains necessary context for Init function to initialise the OTEs.
-	Options struct {
+	// InitOptions is a struct which contains necessary context for Init function to initialise the OTEs.
+	InitOptions struct {
 		Help, Version  bool
 		Name, LogLevel string
 		Fs             *flag.FlagSet
 		IIOTE          *InternallyInvokedOTE
+	}
+	
+	// RunOptions is a struct which contains necessary context for the Run function.
+	RunOptions struct {
+		CloudProperties *iipb.CloudProperties
 	}
 )
 
@@ -70,7 +75,7 @@ type (
 // Args are verified, usage metrics configured, and logging is set up.
 // If name is empty, file logging and usage metrics will not occur.
 // Returns the parsed args, and a bool indicating if initialization completed.
-func Init(ctx context.Context, opt Options, args ...any) (log.Parameters, *iipb.CloudProperties, subcommands.ExitStatus, bool) {
+func Init(ctx context.Context, opt InitOptions, args ...any) (log.Parameters, *iipb.CloudProperties, subcommands.ExitStatus, bool) {
 	if opt.IIOTE != nil {
 		// OTE is invoked internally, no need to run the below assertions, setting up one time logging
 		// and usage metrics is enough.

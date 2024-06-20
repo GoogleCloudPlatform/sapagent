@@ -195,7 +195,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Help and version will return before the args are parsed.
-	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     s.Name(),
 		Help:     s.help,
 		Version:  s.version,

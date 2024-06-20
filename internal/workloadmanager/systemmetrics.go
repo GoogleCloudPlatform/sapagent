@@ -20,9 +20,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
+	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
@@ -74,10 +78,39 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 		return params.Config.GetAgentProperties().GetVersion()
 	case wlmpb.SystemVariable_NETWORK_IPS:
 		return networkIPAddrs(ctx, params)
+	case wlmpb.SystemVariable_OS_SETTINGS:
+		return osSettings(ctx, params)
 	case wlmpb.SystemVariable_COLLECTION_CONFIG_VERSION:
 		return fmt.Sprint(params.WorkloadConfig.GetVersion())
 	default:
 		log.CtxLogger(ctx).Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
+		return ""
+	}
+}
+
+// osSettings runs the configureinstance command to check if OS settings are configured correctly.
+func osSettings(ctx context.Context, params Parameters) string {
+	ci := &configureinstance.ConfigureInstance{
+		Check:           true,
+		HyperThreading:  "default",
+		OverrideVersion: "latest",
+		ReadFile:        os.ReadFile,
+		WriteFile:       os.WriteFile,
+		ExecuteFunc:     params.Execute,
+	}
+	// Short-circuit OTE execution for unsupported machine types.
+	if !ci.IsSupportedMachineType() {
+		return ""
+	}
+	status, msg := ci.Run(ctx, onetime.RunOptions{CloudProperties: params.Config.GetCloudProperties()})
+	switch status {
+	case subcommands.ExitSuccess:
+		return "pass"
+	case subcommands.ExitFailure:
+		log.CtxLogger(ctx).Debugw("Failure detected in checking os_settings via configureinstance", "error", msg)
+		return "fail"
+	default:
+		log.CtxLogger(ctx).Debugw("Unexpected exit status detected in checking os_settings via configureinstance", "exitStatus", status, "error", msg)
 		return ""
 	}
 }

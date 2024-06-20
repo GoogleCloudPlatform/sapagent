@@ -33,16 +33,17 @@ import (
 	"golang.org/x/exp/slices"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 type (
-	// writeFileFunc provides a testable replacement for os.WriteFile.
-	writeFileFunc func(string, []byte, os.FileMode) error
+	// WriteFileFunc provides a testable replacement for os.WriteFile.
+	WriteFileFunc func(string, []byte, os.FileMode) error
 
-	// readFileFunc provides a testable replacement for os.ReadFile.
-	readFileFunc func(string) ([]byte, error)
+	// ReadFileFunc provides a testable replacement for os.ReadFile.
+	ReadFileFunc func(string) ([]byte, error)
 )
 
 const (
@@ -73,15 +74,17 @@ type diff struct {
 
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
-	Check, Apply    bool
-	machineType     string
-	HyperThreading  string
-	OverrideVersion string
-	PrintDiff       bool
-	help, version   bool
+	Apply           bool   `json:"apply"`
+	Check           bool   `json:"check"`
+	MachineType     string `json:"overrideType"`
+	HyperThreading  string `json:"hyperThreading"`
+	OverrideVersion string `json:"overrideVersion"`
+	PrintDiff       bool   `json:"printDiff"`
+	Help            bool   `json:"help"`
+	Version         bool   `json:"version"`
 
-	writeFile   writeFileFunc
-	readFile    readFileFunc
+	WriteFile   WriteFileFunc
+	ReadFile    ReadFileFunc
 	ExecuteFunc commandlineexecutor.Execute
 	IIOTEParams *onetime.InternallyInvokedOTE
 	diffs       []diff
@@ -120,19 +123,19 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.Check, "check", false, "Check settings and print errors, but do not apply any changes")
 	fs.BoolVar(&c.Apply, "apply", false, "Apply changes as necessary to the settings")
 	fs.BoolVar(&c.PrintDiff, "printDiff", false, "Prints all configuration diffs and log messages to stdout as JSON")
-	fs.StringVar(&c.machineType, "overrideType", "", "Bypass the metadata machine type lookup")
+	fs.StringVar(&c.MachineType, "overrideType", "", "Bypass the metadata machine type lookup")
 	fs.StringVar(&c.HyperThreading, "hyperThreading", "default", "Sets hyper threading settings for X4 machines")
 	fs.StringVar(&c.OverrideVersion, "overrideVersion", "latest", "If specified, runs a specific version of configureinstance")
-	fs.BoolVar(&c.help, "h", false, "Displays help")
-	fs.BoolVar(&c.version, "v", false, "Displays the current version of the agent")
+	fs.BoolVar(&c.Help, "h", false, "Displays help")
+	fs.BoolVar(&c.Version, "v", false, "Displays the current version of the agent")
 }
 
 // Execute implements the subcommand interface for configureinstance.
 func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
-		Help:     c.help,
-		Version:  c.version,
+		Help:     c.Help,
+		Version:  c.Version,
 		Fs:       f,
 		LogLevel: "info",
 		IIOTE:    c.IIOTEParams,
@@ -140,45 +143,60 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	if !completed {
 		return exitStatus
 	}
+	if c.WriteFile == nil {
+		c.WriteFile = os.WriteFile
+	}
+	if c.ReadFile == nil {
+		c.ReadFile = os.ReadFile
+	}
+	if c.ExecuteFunc == nil {
+		c.ExecuteFunc = commandlineexecutor.ExecuteCommand
+	}
+	status, msg := c.Run(ctx, onetime.RunOptions{CloudProperties: cloudProps})
+	switch {
+	case status == subcommands.ExitUsageError:
+		onetime.LogErrorToFileAndConsole(ctx, "ConfigureInstance Usage Error:", errors.New(msg))
+	case status == subcommands.ExitFailure:
+		onetime.LogErrorToFileAndConsole(ctx, "ConfigureInstance Failure:", errors.New(msg))
+		usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
+	}
+	return status
+}
 
+// IsSupportedMachineType checks if the configureinstance subcommand provides support for the machine type.
+func (c *ConfigureInstance) IsSupportedMachineType() bool {
+	if strings.HasPrefix(c.MachineType, "x4") {
+		return true
+	}
+	return false
+}
+
+// Run performs the functionality specified by the configureinstance subcommand.
+//
+// Return values:
+//   - subcommands.ExitStatus: The exit status of the subcommand.
+//   - string: A message providing additional details about the exit status.
+func (c *ConfigureInstance) Run(ctx context.Context, opts onetime.RunOptions) (subcommands.ExitStatus, string) {
 	if !c.Check && !c.Apply {
-		fmt.Printf("-check or -apply must be specified.\n%s\n", c.Usage())
-		log.CtxLogger(ctx).Errorf("-check or -apply must be specified")
-		return subcommands.ExitUsageError
+		return subcommands.ExitUsageError, "-check or -apply must be specified"
 	}
 	if c.Check && c.Apply {
-		fmt.Printf("Only one of -check or -apply must be specified.\n%s\n", c.Usage())
-		log.CtxLogger(ctx).Errorf("Only one of -check or -apply must be specified")
-		return subcommands.ExitUsageError
+		return subcommands.ExitUsageError, "only one of -check or -apply must be specified"
 	}
 	if !slices.Contains([]string{hyperThreadingDefault, hyperThreadingOn, hyperThreadingOff}, c.HyperThreading) {
-		fmt.Printf(`hyperThreading must be one of: ["default", "on", "off"]`+"\n%s\n", c.Usage())
-		log.CtxLogger(ctx).Errorw(`hyperThreading must be one of: ["default", "on", "off"]`, "hyperThreading", c.HyperThreading)
-		return subcommands.ExitUsageError
+		return subcommands.ExitUsageError, `hyperThreading must be one of ["default", "on", "off"]`
 	}
-	if c.machineType == "" {
-		c.machineType = cloudProps.GetMachineType()
+	if c.MachineType == "" {
+		c.MachineType = opts.CloudProperties.GetMachineType()
 	}
 	if c.OverrideVersion != overrideVersionLatest {
-		log.CtxLogger(ctx).Warnf(`overrideVersion set to %s. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes.`, c.OverrideVersion)
+		return subcommands.ExitUsageError, fmt.Sprintf(`overrideVersion set to %q. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes`, c.OverrideVersion)
 	}
-
-	c.writeFile = os.WriteFile
-	c.readFile = os.ReadFile
-	c.ExecuteFunc = commandlineexecutor.ExecuteCommand
-	exitStatus, err := c.configureInstanceHandler(ctx)
+	status, err := c.configureInstanceHandler(ctx)
 	if err != nil {
-		if exitStatus == subcommands.ExitUsageError {
-			fmt.Println(fmt.Sprintf("ConfigureInstance: %s, detailed logs are at %s, see help for more information", err, onetime.LogFilePath(c.Name(), c.IIOTEParams)))
-			log.CtxLogger(ctx).Infow("ConfigureInstance: Usage Error", "machineType", c.machineType, "err", err)
-		} else {
-			fmt.Println(fmt.Sprintf("ConfigureInstance: FAILED, detailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))+" err: ", err)
-			log.CtxLogger(ctx).Errorw("ConfigureInstance failed", "err", err)
-			// TODO: b/342113969 - Add usage metrics for configureinstance failures.
-			// usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
-		}
+		return status, err.Error()
 	}
-	return exitStatus
+	return status, ""
 }
 
 // configureInstanceHandler checks and applies OS settings
@@ -190,9 +208,9 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	rebootRequired := false
 	var err error
 
-	log.CtxLogger(ctx).Infof("Using machine type: %s", c.machineType)
+	log.CtxLogger(ctx).Infof("Using machine type: %s", c.MachineType)
 	switch {
-	case strings.HasPrefix(c.machineType, "x4"):
+	case c.IsSupportedMachineType():
 		// NOTE: Any changes in configureinstance requires a copy of configurex4
 		// and google-x4.conf, renamed functions and global vars, and add to this
 		// switch statement and the help subcommand output.
@@ -210,10 +228,10 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 				return subcommands.ExitFailure, err
 			}
 		default:
-			return subcommands.ExitUsageError, fmt.Errorf("this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.machineType)
+			return subcommands.ExitUsageError, fmt.Errorf("this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.MachineType)
 		}
 	default:
-		return subcommands.ExitUsageError, fmt.Errorf("this machine type (%s) is not currently supported for automatic configuration", c.machineType)
+		return subcommands.ExitUsageError, fmt.Errorf("this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
 	}
 
 	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
@@ -264,7 +282,7 @@ func (c *ConfigureInstance) backupAndWriteFile(ctx context.Context, filePath str
 	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "cp", ArgsToSplit: fmt.Sprintf("%s %s", filePath, backup)}); res.ExitCode != 0 {
 		return fmt.Errorf("'cp %s %s' failed, code: %d, stderr: %s", filePath, backup, res.ExitCode, res.StdErr)
 	}
-	return c.writeFile(filePath, data, perm)
+	return c.WriteFile(filePath, data, perm)
 }
 
 // removeLines verifies lines of filePath and comments out any lines containing
@@ -273,7 +291,7 @@ func (c *ConfigureInstance) backupAndWriteFile(ctx context.Context, filePath str
 // removed to avoid removing other lines. If the line is already commented out,
 // it is not removed.
 func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, removeLines []string) (bool, error) {
-	fileLines, err := c.readFile(filePath)
+	fileLines, err := c.ReadFile(filePath)
 	if err != nil {
 		return false, err
 	}
@@ -312,7 +330,7 @@ func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, re
 // removeLines should be formatted as a single key/value: 'key=value',
 // where the value will be removed from the key.
 func (c *ConfigureInstance) removeValues(ctx context.Context, filePath string, removeLines []string) (bool, error) {
-	fileLines, err := c.readFile(filePath)
+	fileLines, err := c.ReadFile(filePath)
 	if err != nil {
 		return false, err
 	}
@@ -356,7 +374,7 @@ func (c *ConfigureInstance) removeValues(ctx context.Context, filePath string, r
 // checkAndRegenerateFile verifies the contents of filePath and regenerates the
 // entire file if it is out of date. Returns true if the file is regenerated.
 func (c *ConfigureInstance) checkAndRegenerateFile(ctx context.Context, filePath string, want []byte) (bool, error) {
-	got, err := c.readFile(filePath)
+	got, err := c.ReadFile(filePath)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
@@ -382,7 +400,7 @@ func (c *ConfigureInstance) checkAndRegenerateFile(ctx context.Context, filePath
 // wantLines should be formatted as either a single key/value: 'key=value',
 // or multiple values for one key: 'key="value1 value2 value3"'.
 func (c *ConfigureInstance) checkAndRegenerateLines(ctx context.Context, filePath string, wantLines []string) (bool, error) {
-	fileLines, err := c.readFile(filePath)
+	fileLines, err := c.ReadFile(filePath)
 	if err != nil {
 		return false, err
 	}

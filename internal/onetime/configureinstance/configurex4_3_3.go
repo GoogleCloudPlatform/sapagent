@@ -66,16 +66,16 @@ func (c *ConfigureInstance) configureX43_3(ctx context.Context) (bool, error) {
 			return false, fmt.Errorf("'usr/bin/dracut --force' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 		}
 	}
-	if c.HyperThreading == hyperThreadingOff || (c.machineType == "x4-megamem-1920" && c.HyperThreading == hyperThreadingDefault) {
-		log.CtxLogger(ctx).Infow("Hyper threading disabled, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.machineType, "hyperThreading", c.HyperThreading)
+	if c.HyperThreading == hyperThreadingOff || (c.MachineType == "x4-megamem-1920" && c.HyperThreading == hyperThreadingDefault) {
+		log.CtxLogger(ctx).Infow("Hyper threading disabled, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.MachineType, "hyperThreading", c.HyperThreading)
 		grubLinuxDefault3_3 = strings.TrimSuffix(grubLinuxDefault3_3, `"`) + ` nosmt"`
 	}
 	rebootGrub, err := c.checkAndRegenerateLines(ctx, "/etc/default/grub", []string{grubLinuxDefault3_3, grubLinuxLabel3_3, grubDevice3_3})
 	if err != nil {
 		return false, err
 	}
-	if c.HyperThreading == hyperThreadingOn || (c.machineType != "x4-megamem-1920" && c.HyperThreading == hyperThreadingDefault) {
-		log.CtxLogger(ctx).Infow("Hyper threading enabled, ensuring 'nosmt' is removed from 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.machineType, "hyperThreading", c.HyperThreading)
+	if c.HyperThreading == hyperThreadingOn || (c.MachineType != "x4-megamem-1920" && c.HyperThreading == hyperThreadingDefault) {
+		log.CtxLogger(ctx).Infow("Hyper threading enabled, ensuring 'nosmt' is removed from 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.MachineType, "hyperThreading", c.HyperThreading)
 		removeNosmt, err := c.removeValues(ctx, "/etc/default/grub", []string{"GRUB_CMDLINE_LINUX_DEFAULT=nosmt"})
 		if err != nil {
 			return false, err
@@ -100,7 +100,7 @@ func (c *ConfigureInstance) configureX43_3(ctx context.Context) (bool, error) {
 // configureX4SLES checks and applies OS settings for X4 running on SLES.
 // Returns true if SAPTune re-apply needed to be run.
 func (c *ConfigureInstance) configureX4SLES3_3(ctx context.Context) (bool, error) {
-	osRelease, err := c.readFile("/etc/os-release")
+	osRelease, err := c.ReadFile("/etc/os-release")
 	if err != nil {
 		return false, err
 	}

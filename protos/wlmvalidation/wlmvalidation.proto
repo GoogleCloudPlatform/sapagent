@@ -39,6 +39,7 @@ enum SystemVariable {
   AGENT_VERSION = 4;
   NETWORK_IPS = 5;
   COLLECTION_CONFIG_VERSION = 6;
+  OS_SETTINGS = 7;
 }
 
 enum DiskVariable {

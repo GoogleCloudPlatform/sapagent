@@ -103,7 +103,7 @@ func (c *HanaChangeDiskType) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for hanadiskbackup.
 func (c *HanaChangeDiskType) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
 		Help:     c.help,
 		Version:  c.version,

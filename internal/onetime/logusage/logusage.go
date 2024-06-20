@@ -76,7 +76,7 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 // Execute implements the subcommand interface for logusage.
 func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Do not call SetupOnetimeLogging so file logging does not happen for this OTE.
-	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.Options{
+	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     "",
 		Help:     l.help,
 		Version:  l.version,
