@@ -27,30 +27,49 @@ import (
 
 // ParallelReader is a reader capable of downloading from GCS in parallel.
 type ParallelReader struct {
-	reader     io.Reader
-	bucket     *storage.BucketHandle
-	offset     int64
-	objectSize int64
+	ctx           context.Context
+	object        *storage.ObjectHandle
+	objectSize    int64
+	objectOffset  int64
+	partSizeBytes int64
+	workers       []*downloadWorker
 }
 
-// NewParallelReader creates a reader and workers for parallel download.
+// downloadWorker will buffer and try downloading a single part.
+type downloadWorker struct {
+	bucket       *storage.BucketHandle
+	reader       io.Reader
+	buffer       []byte
+	chunkSize    int64
+	bufferOffset int64
+	BytesRemain  int64
+}
+
+// NewParallelReader creates workers with readers for parallel download.
 func (rw *ReadWriter) NewParallelReader(ctx context.Context, object *storage.ObjectHandle) (*ParallelReader, error) {
 	if object == nil {
 		return nil, errors.New("no object defined")
 	}
+	// temporary addition, currently supports only 1 worker
+	// TODO: add support for multiple workers
+	rw.ParallelDownloadWorkers = 1
 
 	r := &ParallelReader{
-		bucket:     rw.BucketHandle,
-		objectSize: rw.TotalBytes,
+		ctx:           ctx,
+		object:        object,
+		objectSize:    rw.TotalBytes,
+		partSizeBytes: rw.ChunkSizeMb * 1024 * 1024,
+		workers:       make([]*downloadWorker, rw.ParallelDownloadWorkers),
 	}
 
-	log.Logger.Infow("Peforming parallel restore", "objectName", rw.ObjectName, "parallelWorkers", rw.ParallelDownloadWorkers)
-	var err error
-	r.reader, err = object.NewRangeReader(ctx, 0, -1)
-	if err != nil {
-		log.Logger.Errorw("Failed to create range reader", "err", err)
-		return r, err
+	for i := int64(0); i < rw.ParallelDownloadWorkers; i++ {
+		r.workers[i] = &downloadWorker{
+			buffer: make([]byte, r.partSizeBytes),
+		}
+		// creating a new bucket handle for each worker to support parallel downloads
+		r.workers[i].bucket, _ = ConnectToBucket(ctx, rw.ParallelDownloadConnectParams)
 	}
+	log.Logger.Infow("Peforming parallel restore", "objectName", rw.ObjectName, "parallelWorkers", rw.ParallelDownloadWorkers)
 	return r, nil
 }
 
@@ -59,22 +78,66 @@ func (r *ParallelReader) Read(p []byte) (int, error) {
 	if r == nil {
 		return 0, errors.New("no parallel reader defined")
 	}
-	if r.reader == nil {
-		return 0, errors.New("no reader defined")
-	}
-
-	length := min(int64(len(p)), r.objectSize-r.offset)
-	n, err := r.reader.Read(p[:length])
-	if n == 0 && (err == nil || err == io.EOF) {
+	if r.objectOffset >= r.objectSize {
 		return 0, io.EOF
 	}
 
-	if err != nil {
-		log.Logger.Errorw("Failed to read from range reader", "err", err)
-		return 0, err
+	// if the worker's buffer is empty, fill it with data from GCS
+	if r.workers[0].BytesRemain == 0 {
+		if err := fillWorkerBuffer(r, r.workers[0]); err != nil {
+			return 0, err
+		}
 	}
-	r.offset += int64(n)
+
+	// copying data from the worker's buffer to the provided buffer
+	bufOffset := r.workers[0].bufferOffset
+
+	// Copy valid data, avoiding issues with buffer overruns
+	dataToCopy := r.workers[0].buffer[bufOffset:r.workers[0].chunkSize]
+	n := copy(p, dataToCopy)
+
+	r.objectOffset += int64(n)
+	r.workers[0].bufferOffset += int64(n)
+	r.workers[0].BytesRemain -= int64(n)
+
+	// Reset worker only if the entire buffer has been consumed
+	if r.workers[0].BytesRemain == 0 {
+		r.workers[0].reader = nil
+		r.workers[0].bufferOffset = 0
+	}
 	return n, nil
+}
+
+// fillWorkerBuffer fills the worker's buffer with data from GCS.
+func fillWorkerBuffer(r *ParallelReader, worker *downloadWorker) error {
+	if worker == nil {
+		return errors.New("no worker defined")
+	}
+
+	var err error
+	if worker.reader, err = r.object.NewRangeReader(r.ctx, r.objectOffset, r.partSizeBytes); err != nil {
+		log.Logger.Errorw("Failed to create range reader", "err", err)
+		return err
+	}
+
+	// reading data into the worker's buffer until the whole length is read
+	bytesRead := int64(0)
+	//	to make sure we always enter the loop at least once
+	for {
+		var n int
+		if n, err = worker.reader.Read(worker.buffer[bytesRead:]); err != nil && err != io.EOF {
+			log.Logger.Errorw("Failed to read from range reader", "err", err)
+			return err
+		}
+		if n == 0 || err == io.EOF {
+			// all bytes are	read, we must exit the loop
+			break
+		}
+		bytesRead += int64(n)
+	}
+	worker.BytesRemain = bytesRead
+	r.workers[0].chunkSize = bytesRead
+	return nil
 }
 
 // Close cancels any in progress transfers and performs any necessary clean up.
