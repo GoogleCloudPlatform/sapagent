@@ -29,6 +29,7 @@ import (
 	"flag"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
@@ -55,6 +56,9 @@ type (
 
 	// waitForIndexServerToStopWithRetry provides testable replacement for hanabackup.WaitForIndexServerToStopWithRetry
 	waitForIndexServerToStopWithRetry func(ctx context.Context, user string, exec commandlineexecutor.Execute) error
+
+	// metricClientCreator provides testable replacement for monitoring.NewMetricClient API.
+	metricClientCreator func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error)
 
 	// gceServiceFunc provides testable replacement for gce.New API.
 	gceServiceFunc func(context.Context) (*gce.GCE, error)
@@ -147,6 +151,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&r.DiskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
 	fs.Int64Var(&r.ProvisionedIops, "provisioned-iops", 0, "Number of I/O operations per second that the disk can handle. (optional)")
 	fs.Int64Var(&r.ProvisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
+	fs.BoolVar(&r.SendToMonitoring, "send-metrics-to-monitoring", true, "Send restore related metrics to cloud monitoring. (optional) Default: true")
 	fs.StringVar(&r.CSEKKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file for the source snapshot. (required if source snapshot is encrypted)`)
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
@@ -168,13 +173,7 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return exitStatus
 	}
 
-	mc, err := monitoring.NewMetricClient(ctx)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)
-		return subcommands.ExitFailure
-	}
-	r.timeSeriesCreator = mc
-	return r.restoreHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
+	return r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, cp, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
 }
 
 // validateParameters validates the parameters passed to the restore subcommand.
@@ -221,10 +220,16 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 }
 
 // restoreHandler is the main handler for the restore subcommand.
-func (r *Restorer) restoreHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
+func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
 	var err error
 	if err = r.validateParameters(runtime.GOOS, cp); err != nil {
 		log.Print(err.Error())
+		return subcommands.ExitUsageError
+	}
+
+	r.timeSeriesCreator, err = mcc(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)
 		return subcommands.ExitFailure
 	}
 

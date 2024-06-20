@@ -547,7 +547,7 @@ func TestExecuteSnapshot(t *testing.T) {
 		{
 			name:     "SuccessfullyParseArgs",
 			snapshot: Snapshot{},
-			want:     subcommands.ExitFailure,
+			want:     subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -563,7 +563,7 @@ func TestExecuteSnapshot(t *testing.T) {
 					InvokedBy: "test",
 				},
 			},
-			want: subcommands.ExitFailure,
+			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "SuccessForAgentVersion",
@@ -604,7 +604,7 @@ func TestExecuteSnapshot(t *testing.T) {
 		{
 			name:     "InvalidParams",
 			snapshot: Snapshot{},
-			want:     subcommands.ExitFailure,
+			want:     subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				log.Parameters{},

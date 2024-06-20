@@ -216,7 +216,7 @@ func (s *Snapshot) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, lp
 	if err := s.validateParameters(runtime.GOOS, cp); err != nil {
 		errMessage := err.Error()
 		log.Print(errMessage)
-		return errMessage, subcommands.ExitFailure
+		return errMessage, subcommands.ExitUsageError
 	}
 
 	s.isg = &ISG{}

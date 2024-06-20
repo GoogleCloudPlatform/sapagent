@@ -24,9 +24,11 @@ import (
 	"time"
 
 	"flag"
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -62,6 +64,7 @@ var (
 		DataDiskZone:   "data-zone",
 		NewDiskType:    "pd-ssd",
 		SourceSnapshot: "my-snapshot",
+		NewdiskName:    "new-data-disk",
 		disks:          []*ipb.Disk{&ipb.Disk{}},
 	}
 	defaultCloudProperties = &ipb.CloudProperties{ProjectId: "default-project"}
@@ -335,6 +338,7 @@ func TestRestoreHandler(t *testing.T) {
 	tests := []struct {
 		name               string
 		restorer           Restorer
+		fakeMetricClient   metricClientCreator
 		fakeNewGCE         gceServiceFunc
 		fakeComputeService computeServiceFunc
 		want               subcommands.ExitStatus
@@ -342,23 +346,42 @@ func TestRestoreHandler(t *testing.T) {
 		{
 			name:     "InvalidParameters",
 			restorer: Restorer{},
-			want:     subcommands.ExitFailure,
+			want:     subcommands.ExitUsageError,
 		},
 		{
-			name:       "GCEServiceCreationFailure",
-			restorer:   defaultRestorer,
+			name:     "MetricClientCreationFailure",
+			restorer: defaultRestorer,
+			fakeMetricClient: func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error) {
+				return nil, cmpopts.AnyError
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name:     "GCEServiceCreationFailure",
+			restorer: defaultRestorer,
+			fakeMetricClient: func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error) {
+				return &monitoring.MetricClient{}, nil
+			},
 			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return nil, cmpopts.AnyError },
 			want:       subcommands.ExitFailure,
 		},
 		{
-			name:               "ComputeServiceCreateFailure",
-			restorer:           defaultRestorer,
+			name:     "ComputeServiceCreateFailure",
+			restorer: defaultRestorer,
+			fakeMetricClient: func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error) {
+				return &monitoring.MetricClient{}, nil
+			},
+			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return nil, cmpopts.AnyError },
 			want:               subcommands.ExitFailure,
 		},
 		{
-			name:               "checkPreconditionFailure",
-			restorer:           defaultRestorer,
+			name:     "checkPreconditionFailure",
+			restorer: defaultRestorer,
+			fakeMetricClient: func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error) {
+				return &monitoring.MetricClient{}, nil
+			},
+			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
 			want:               subcommands.ExitFailure,
 		},
@@ -369,7 +392,7 @@ func TestRestoreHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.restorer.restoreHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties, checkDir, checkDir)
+			got := test.restorer.restoreHandler(context.Background(), test.fakeMetricClient, test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties, checkDir, checkDir)
 			if got != test.want {
 				t.Errorf("restoreHandler() = %v, want %v", got, test.want)
 			}
@@ -417,7 +440,7 @@ func TestExecute(t *testing.T) {
 					Cp:        defaultCloudProperties,
 				},
 			},
-			want: subcommands.ExitFailure,
+			want: subcommands.ExitUsageError,
 		},
 		{
 			name:     "Version",

@@ -117,7 +117,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 	var err error
 	if err = h.validateParameters(runtime.GOOS); err != nil {
 		log.Print(err.Error())
-		return subcommands.ExitFailure
+		return subcommands.ExitUsageError
 	}
 
 	h.gceService, err = gceServiceCreator(ctx)

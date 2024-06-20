@@ -74,7 +74,7 @@ func TestExecuteHANAInsights(t *testing.T) {
 		{
 			name:         "SuccessfullyParseArgs",
 			hanainsights: HANAInsights{},
-			want:         subcommands.ExitFailure,
+			want:         subcommands.ExitUsageError,
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -190,7 +190,7 @@ func TestHANAInsightsHandler(t *testing.T) {
 		{
 			name:         "InvalidParams",
 			hanainsights: HANAInsights{},
-			want:         subcommands.ExitFailure,
+			want:         subcommands.ExitUsageError,
 		},
 		{
 			name:         "GCEServiceCreationFailure",
