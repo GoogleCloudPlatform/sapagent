@@ -121,12 +121,12 @@ func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Pa
 		BackupLevel: b.backupLevel,
 		Count:       b.count,
 	}
-	config, ok := p.ParseArgsAndValidateConfig(os.ReadFile)
+	config, ok := p.ParseArgsAndValidateConfig(os.ReadFile, os.ReadFile)
 	if !ok {
 		return subcommands.ExitUsageError
 	}
 	lp.LogToCloud = config.GetLogToCloud().GetValue()
-	log.CtxLogger(ctx).Infow("Args parsed and config validated", "config", config)
+	log.CtxLogger(ctx).Infow("Args parsed and config validated", "config", configuration.ConfigToPrint(config))
 
 	connectParams := &storage.ConnectParameters{
 		StorageClient:    client,

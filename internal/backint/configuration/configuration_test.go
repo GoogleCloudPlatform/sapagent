@@ -73,11 +73,12 @@ var (
 
 func TestParseArgsAndValidateConfig(t *testing.T) {
 	tests := []struct {
-		name   string
-		params *Parameters
-		read   ReadConfigFile
-		want   *bpb.BackintConfiguration
-		wantOk bool
+		name              string
+		params            *Parameters
+		read              ReadConfigFile
+		readEncryptionKey ReadConfigFile
+		want              *bpb.BackintConfiguration
+		wantOk            bool
 	}{
 		{
 			name: "NoUser",
@@ -423,7 +424,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read)
+			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read, test.readEncryptionKey)
 			if gotOk != test.wantOk {
 				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotOk, test.wantOk)
 			}
@@ -434,13 +435,97 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 	}
 }
 
+func TestConfigToPrint(t *testing.T) {
+	tests := []struct {
+		name  string
+		input *bpb.BackintConfiguration
+		want  *bpb.BackintConfiguration
+	}{
+		{
+			name: "EmptyConfig",
+		},
+		{
+			name: "AllFields",
+			input: &bpb.BackintConfiguration{
+				UserId:                  "testUser",
+				Function:                bpb.Function_BACKUP,
+				ParamFile:               "testParamsFile.json",
+				Bucket:                  "testBucket",
+				RecoveryBucket:          "recoveryBucket",
+				BackupId:                "123",
+				DatabaseObjectCount:     1,
+				BackupLevel:             "FULL",
+				ParallelStreams:         1,
+				BufferSizeMb:            100,
+				FileReadTimeoutMs:       60000,
+				Retries:                 5,
+				StorageClass:            bpb.StorageClass_STANDARD,
+				Compress:                true,
+				DumpData:                true,
+				EncryptionKey:           "testKey",
+				KmsKey:                  "testKey",
+				LogLevel:                bpb.LogLevel_DEBUG,
+				ServiceAccountKey:       "testAccount",
+				Threads:                 32,
+				RateLimitMb:             0,
+				InputFile:               "/dev/stdin",
+				OutputFile:              "/dev/stdout",
+				LogToCloud:              wpb.Bool(true),
+				FolderPrefix:            "test/1/2/3/",
+				RecoveryFolderPrefix:    "test/1/2/3/",
+				SendMetricsToMonitoring: wpb.Bool(true),
+			},
+			// want: `user_id: testUser, function: BACKUP, input_file: /dev/stdin, output_file: /dev/stdout, param_file: testParamsFile.json, backup_id: 123, database_object_count: 1, backup_level: FULL, bucket: testBucket, folder_prefix: test/1/2/3/, storage_class: STANDARD, compress: true, log_to_cloud: true, send_metrics_to_monitoring: true, log_level: DEBUG, retries: 5, parallel_streams: 1, threads: 32, buffer_size_mb: 100, file_read_timeout_ms: 60000, recovery_bucket: recoveryBucket, recovery_folder_prefix: test/1/2/3/`,
+			want: &bpb.BackintConfiguration{
+				UserId:                  "testUser",
+				Function:                bpb.Function_BACKUP,
+				ParamFile:               "testParamsFile.json",
+				Bucket:                  "testBucket",
+				RecoveryBucket:          "recoveryBucket",
+				BackupId:                "123",
+				DatabaseObjectCount:     1,
+				BackupLevel:             "FULL",
+				ParallelStreams:         1,
+				BufferSizeMb:            100,
+				FileReadTimeoutMs:       60000,
+				Retries:                 5,
+				StorageClass:            bpb.StorageClass_STANDARD,
+				Compress:                true,
+				DumpData:                true,
+				EncryptionKey:           "***",
+				KmsKey:                  "***",
+				LogLevel:                bpb.LogLevel_DEBUG,
+				ServiceAccountKey:       "***",
+				Threads:                 32,
+				RateLimitMb:             0,
+				InputFile:               "/dev/stdin",
+				OutputFile:              "/dev/stdout",
+				LogToCloud:              wpb.Bool(true),
+				FolderPrefix:            "test/1/2/3/",
+				RecoveryFolderPrefix:    "test/1/2/3/",
+				SendMetricsToMonitoring: wpb.Bool(true),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := ConfigToPrint(test.input)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("ConfigToPrint(%v) had unexpected diff (-want +got):\n%s", test.input, diff)
+			}
+		})
+	}
+}
+
 func TestLegacyParameters(t *testing.T) {
 	tests := []struct {
-		name   string
-		params *Parameters
-		read   ReadConfigFile
-		want   *bpb.BackintConfiguration
-		wantOk bool
+		name              string
+		params            *Parameters
+		read              ReadConfigFile
+		readEncryptionKey ReadConfigFile
+		want              *bpb.BackintConfiguration
+		wantOk            bool
 	}{
 		{
 			name:   "EmptyValueForParameter",
@@ -548,7 +633,7 @@ func TestLegacyParameters(t *testing.T) {
 				RateLimitMb:             200,
 				Compress:                false,
 				DumpData:                true,
-				EncryptionKey:           "testKey",
+				EncryptionKey:           "base64EncodedTestKey",
 				InputFile:               "/input.txt",
 				OutputFile:              "/output.txt",
 				LogToCloud:              wpb.Bool(false),
@@ -572,14 +657,18 @@ func TestLegacyParameters(t *testing.T) {
 #THREADS 64
 #PARALLEL_PART_SIZE_MB 150
 #FAKE_PARAMETER 123
+#ENCRYPTION_KEY /tmp/testKey.txt
 `), nil
+			},
+			readEncryptionKey: func(p string) ([]byte, error) {
+				return []byte("base64EncodedTestKey"), nil
 			},
 			wantOk: true,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read)
+			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read, test.readEncryptionKey)
 			if gotOk != test.wantOk {
 				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotOk, test.wantOk)
 			}

@@ -48,20 +48,26 @@ type Parameters struct {
 
 // ParseArgsAndValidateConfig reads the backint args and params and validates them.
 // If valid, the proto will be populated and defaults will be applied.
-func (p *Parameters) ParseArgsAndValidateConfig(read ReadConfigFile) (*bpb.BackintConfiguration, bool) {
+func (p *Parameters) ParseArgsAndValidateConfig(readConfig ReadConfigFile, readEncryptionKey ReadConfigFile) (*bpb.BackintConfiguration, bool) {
 	if err := p.parseCommandLineArgs(); err != nil {
 		log.Logger.Errorw("Incorrect command line arguments", "error", err)
 		usagemetrics.Error(usagemetrics.BackintIncorrectArguments)
 		return p.Config, false
 	}
 
-	if code, err := p.readParametersFile(read); err != nil {
+	if code, err := p.readParametersFile(readConfig); err != nil {
 		log.Logger.Errorf("Parameters file at '%s' has error: %v. Please fix the error and restart backint", p.ParamFile, err)
 		usagemetrics.Error(code)
 		return p.Config, false
 	}
 
 	p.ApplyDefaults(int64(runtime.NumCPU()))
+
+	if p.Config.GetEncryptionKey() != "" {
+		if err := p.readEncryptionKeyFromFile(readEncryptionKey); err != nil {
+			return p.Config, false
+		}
+	}
 	return p.Config, true
 }
 
@@ -246,6 +252,18 @@ func (p *Parameters) ApplyDefaults(numCPU int64) {
 	}
 }
 
+func (p *Parameters) readEncryptionKeyFromFile(read ReadConfigFile) error {
+	keyFileName := p.Config.GetEncryptionKey()
+	data, err := read(keyFileName)
+	if err != nil {
+		log.Logger.Errorw("Unable to read encryption_key file", "keyFileName", keyFileName, "err", err)
+		return err
+	}
+	p.Config.EncryptionKey = strings.TrimSuffix(string(data), "\n")
+	log.Logger.Debugw("Successfully read encryption_key file", "keyFileName", keyFileName)
+	return nil
+}
+
 // Unmarshal reads the content into a BackintConfiguration proto.
 // If a .json file is supplied, protojson handles the unmarshaling.
 // If a .txt file is provided, a custom parse is used.
@@ -338,4 +356,20 @@ func marshalLegacyParameters(parameterFile string, config *bpb.BackintConfigurat
 		log.Logger.Errorw("Unable to change permissions on JSON parameters file", "configPath", configPath, "err", err)
 	}
 	log.Logger.Infow("Successfully translated text parameters file to JSON", "parameterFileText", parameterFile, "parameterFileJSON", configPath)
+}
+
+// ConfigToPrint returns a string representation of the configuration for logging.
+// It ensures we do not log the encryption key, kms key and service account key.
+func ConfigToPrint(config *bpb.BackintConfiguration) *bpb.BackintConfiguration {
+	maskedconfig := proto.Clone(config).(*bpb.BackintConfiguration)
+	if maskedconfig.GetEncryptionKey() != "" {
+		maskedconfig.EncryptionKey = "***"
+	}
+	if maskedconfig.GetKmsKey() != "" {
+		maskedconfig.KmsKey = "***"
+	}
+	if maskedconfig.GetServiceAccountKey() != "" {
+		maskedconfig.ServiceAccountKey = "***"
+	}
+	return maskedconfig
 }
