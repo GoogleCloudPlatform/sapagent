@@ -381,6 +381,7 @@ func TestBuildUserAgent(t *testing.T) {
 		agentProps *AgentProperties
 		image      string
 		status     string
+		instanceID string
 		want       string
 	}{
 		{
@@ -388,13 +389,14 @@ func TestBuildUserAgent(t *testing.T) {
 			agentProps: defaultAgentProps,
 			image:      testImage,
 			status:     "RUNNING",
-			want:       fmt.Sprintf("sap-core-eng/AgentName/1.0/%s/RUNNING", testImage),
+			instanceID: "123",
+			want:       fmt.Sprintf("sap-core-eng/AgentName/1.0/%s-123/RUNNING", testImage),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := buildUserAgent(test.agentProps, test.image, test.status); got != test.want {
+			if got := buildUserAgent(test.agentProps, test.image, test.status, test.instanceID); got != test.want {
 				t.Errorf("buildUserAgent() got=%s want %s", got, test.want)
 			}
 		})

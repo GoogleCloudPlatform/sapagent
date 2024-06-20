@@ -100,6 +100,7 @@ type CloudProperties struct {
 	InstanceName  string
 	ProjectNumber string
 	Image         string
+	InstanceID    string
 }
 
 // A Logger is used to report the status of the agent to an internal metadata server.
@@ -193,7 +194,7 @@ func (l *Logger) log(s string) error {
 		log.Logger.Warnw("Unable to send agent status without properly set zone in cloud properties", "l.cloudProps", l.cloudProps)
 		return errors.New("unable to send agent status without properly set zone in cloud properties")
 	}
-	err := l.requestComputeAPIWithUserAgent(buildComputeURL(l.cloudProps), buildUserAgent(l.agentProps, l.image, s))
+	err := l.requestComputeAPIWithUserAgent(buildComputeURL(l.cloudProps), buildUserAgent(l.agentProps, l.image, s, l.cloudProps.InstanceID))
 	if err != nil {
 		log.Logger.Warnw("failed to send agent status", "error", err)
 		return err
@@ -279,9 +280,9 @@ func buildComputeURL(cp *CloudProperties) string {
 
 // buildUserAgent returns a User-Agent string that will be submitted to the compute API.
 //
-// User-Agent is of the form "logPrefix/AgentName/Version/image-os-version/logged-status".
-func buildUserAgent(ap *AgentProperties, image, status string) string {
-	ua := fmt.Sprintf("%s/%s/%s/%s/%s", ap.LogPrefix, ap.Name, ap.Version, image, status)
+// User-Agent is of the form "logPrefix/AgentName/Version/image_os_version-instance_id/logged_status".
+func buildUserAgent(ap *AgentProperties, image, status, instanceID string) string {
+	ua := fmt.Sprintf("%s/%s/%s/%s-%s/%s", ap.LogPrefix, ap.Name, ap.Version, image, instanceID, status)
 	ua = strings.ReplaceAll(strings.ReplaceAll(ua, " ", ""), "\n", "")
 	return ua
 }

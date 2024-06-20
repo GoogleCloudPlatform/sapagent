@@ -49,6 +49,7 @@ func SetCloudProperties(cp *iipb.CloudProperties) {
 		InstanceName:  cp.InstanceName,
 		ProjectNumber: cp.GetNumericProjectId(),
 		Image:         cp.Image,
+		InstanceID:    cp.InstanceId,
 	})
 }
 
