@@ -238,6 +238,9 @@ func TestErrorConstants(t *testing.T) {
 	if PerformanceDiagnosticsFIOFailure != 72 {
 		t.Errorf("PerformanceDiagnosticsFIOFailure = %v, want 72", PerformanceDiagnosticsFIOFailure)
 	}
+	if BalanceIRQFailure != 73 {
+		t.Errorf("BalanceIRQFailure = %v, want 73", BalanceIRQFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -378,5 +381,17 @@ func TestActionConstants(t *testing.T) {
 	}
 	if ReliabilitySAPNWNotAvailable != 45 {
 		t.Errorf("ReliabilitySAPNWNotAvailable = %v, want 45", ReliabilitySAPNWNotAvailable)
+	}
+	if BalanceIRQStarted != 46 {
+		t.Errorf("BalanceIRQStarted = %v, want 46", BalanceIRQStarted)
+	}
+	if BalanceIRQFinished != 47 {
+		t.Errorf("BalanceIRQFinished = %v, want 47", BalanceIRQFinished)
+	}
+	if BalanceIRQInstallStarted != 48 {
+		t.Errorf("BalanceIRQInstallStarted = %v, want 48", BalanceIRQInstallStarted)
+	}
+	if BalanceIRQInstallFinished != 49 {
+		t.Errorf("BalanceIRQInstallFinished = %v, want 49", BalanceIRQInstallFinished)
 	}
 }

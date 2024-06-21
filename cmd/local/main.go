@@ -30,6 +30,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/balanceirq"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configurebackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
@@ -86,6 +87,7 @@ func registerSubCommands() {
 		&performancediagnostics.Diagnose{},
 		&configurebackint.ConfigureBackint{},
 		&configureinstance.ConfigureInstance{},
+		&balanceirq.BalanceIRQ{},
 		&version.Version{},
 		&migratehmadashboards.MigrateHMADashboards{},
 		&hanachangedisktype.HanaChangeDiskType{},

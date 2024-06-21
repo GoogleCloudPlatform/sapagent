@@ -111,6 +111,7 @@ const (
 	PerformanceDiagnosticsConfigureInstanceFailure = 70 //	PerformanceDiagnosticsConfigureInstanceFailure
 	PerformanceDiagnosticsBackupFailure            = 71 //	PerformanceDiagnosticsBackupFailure
 	PerformanceDiagnosticsFIOFailure               = 72 //	PerformanceDiagnosticsFIOFailure
+	BalanceIRQFailure                              = 73 //	BalanceIRQFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -163,6 +164,10 @@ const (
 	ReliabilityHANAHANotAvailable           = 43 //	ReliabilityHANAHANotAvailable
 	ReliabilitySAPNWAvailable               = 44 //	ReliabilityHANANWAvailable
 	ReliabilitySAPNWNotAvailable            = 45 //	ReliabilitySAPNWNotAvailable
+	BalanceIRQStarted                       = 46 //	BalanceIRQStarted
+	BalanceIRQFinished                      = 47 //	BalanceIRQFinished
+	BalanceIRQInstallStarted                = 48 //	BalanceIRQInstallStarted
+	BalanceIRQInstallFinished               = 49 //	BalanceIRQInstallFinished
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")
