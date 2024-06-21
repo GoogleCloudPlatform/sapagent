@@ -50,11 +50,11 @@ const systemDiscoveryOverride = "/etc/google-cloud-sap-agent/system.json"
 
 // Discovery is a type used to perform SAP System discovery operations.
 type Discovery struct {
-	WlmService              wlmInterface
-	CloudLogInterface       cloudLogInterface
-	CloudDiscoveryInterface cloudDiscoveryInterface
-	HostDiscoveryInterface  hostDiscoveryInterface
-	SapDiscoveryInterface   sapDiscoveryInterface
+	WlmService              WlmInterface
+	CloudLogInterface       CloudLogInterface
+	CloudDiscoveryInterface CloudDiscoveryInterface
+	HostDiscoveryInterface  HostDiscoveryInterface
+	SapDiscoveryInterface   SapDiscoveryInterface
 	AppsDiscovery           func(context.Context) *sappb.SAPInstances
 	OSStatReader            workloadmanager.OSStatReader
 	FileReader              workloadmanager.ConfigFileReader
@@ -121,24 +121,29 @@ func StartSAPSystemDiscovery(ctx context.Context, config *cpb.Configuration, d *
 	return true
 }
 
-type cloudLogInterface interface {
+// CloudLogInterface is exported to be used by the system discovery OTE.
+type CloudLogInterface interface {
 	Log(e logging.Entry)
 	Flush() error
 }
 
-type wlmInterface interface {
+// WlmInterface is exported to be used by the system discovery OTE.
+type WlmInterface interface {
 	WriteInsight(project, location string, writeInsightRequest *dwpb.WriteInsightRequest) error
 }
 
-type cloudDiscoveryInterface interface {
+// CloudDiscoveryInterface is exported to be used by the system discovery OTE.
+type CloudDiscoveryInterface interface {
 	DiscoverComputeResources(context.Context, *spb.SapDiscovery_Resource, []string, *ipb.CloudProperties) []*spb.SapDiscovery_Resource
 }
 
-type hostDiscoveryInterface interface {
+// HostDiscoveryInterface is exported to be used by the system discovery OTE.
+type HostDiscoveryInterface interface {
 	DiscoverCurrentHost(context.Context) []string
 }
 
-type sapDiscoveryInterface interface {
+// SapDiscoveryInterface is exported to be used by the system discovery OTE.
+type SapDiscoveryInterface interface {
 	DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances, conf *cpb.DiscoveryConfiguration) []appsdiscovery.SapSystemDetails
 }
 
