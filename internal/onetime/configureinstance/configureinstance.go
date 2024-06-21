@@ -108,8 +108,8 @@ func (*ConfigureInstance) Usage() string {
 
   Args (optional):
     [-overrideType="type"]	Override the machine type (by default this is retrieved from metadata)
-    [-hyperThreading="default"]	Sets hyper threading settings for X4 machines
-                              	Possible values: ["default", "on", "off"]
+    [-hyperThreading="on"]	Sets hyper threading settings for X4 machines
+                              	Possible values: ["on", "off"]
     [-printDiff=false]		If true, prints all configuration diffs and log messages to stdout as JSON
     [-overrideVersion="latest"]	If specified, runs a specific version of configureinstance.
                                	Possible values: ["3.3", "3.4", "latest"]
@@ -124,7 +124,7 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.Apply, "apply", false, "Apply changes as necessary to the settings")
 	fs.BoolVar(&c.PrintDiff, "printDiff", false, "Prints all configuration diffs and log messages to stdout as JSON")
 	fs.StringVar(&c.MachineType, "overrideType", "", "Bypass the metadata machine type lookup")
-	fs.StringVar(&c.HyperThreading, "hyperThreading", "default", "Sets hyper threading settings for X4 machines")
+	fs.StringVar(&c.HyperThreading, "hyperThreading", "on", "Sets hyper threading settings for X4 machines")
 	fs.StringVar(&c.OverrideVersion, "overrideVersion", "latest", "If specified, runs a specific version of configureinstance")
 	fs.BoolVar(&c.Help, "h", false, "Displays help")
 	fs.BoolVar(&c.Version, "v", false, "Displays the current version of the agent")
@@ -184,7 +184,7 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts onetime.RunOptions) (s
 		return subcommands.ExitUsageError, "only one of -check or -apply must be specified"
 	}
 	if !slices.Contains([]string{hyperThreadingDefault, hyperThreadingOn, hyperThreadingOff}, c.HyperThreading) {
-		return subcommands.ExitUsageError, `hyperThreading must be one of ["default", "on", "off"]`
+		return subcommands.ExitUsageError, `hyperThreading must be one of ["on", "off"]`
 	}
 	if c.MachineType == "" {
 		c.MachineType = opts.CloudProperties.GetMachineType()

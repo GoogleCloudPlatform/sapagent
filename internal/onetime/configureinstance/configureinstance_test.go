@@ -182,7 +182,7 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			c: ConfigureInstance{
 				Apply:          true,
 				MachineType:    "",
-				HyperThreading: hyperThreadingDefault,
+				HyperThreading: hyperThreadingOn,
 			},
 			args: []any{
 				"test",
@@ -196,7 +196,7 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			c: ConfigureInstance{
 				Apply:           true,
 				MachineType:     "x4-megamem-1920",
-				HyperThreading:  hyperThreadingDefault,
+				HyperThreading:  hyperThreadingOn,
 				OverrideVersion: overrideVersionLatest,
 				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
 				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),

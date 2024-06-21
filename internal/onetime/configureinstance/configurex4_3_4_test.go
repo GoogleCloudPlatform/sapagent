@@ -93,7 +93,7 @@ func TestConfigureX43_4(t *testing.T) {
 				WriteFile:      defaultWriteFile(5),
 				Apply:          true,
 				MachineType:    "x4-megamem-1920",
-				HyperThreading: hyperThreadingDefault,
+				HyperThreading: hyperThreadingOn,
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
