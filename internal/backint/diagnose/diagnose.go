@@ -219,7 +219,7 @@ func diagnoseBackup(ctx context.Context, opts diagnoseOptions) error {
 	if len(opts.files) == 0 {
 		return fmt.Errorf("no files to backup")
 	}
-	opts.output.Write([]byte("BACKUP:\n"))
+	opts.output.Write([]byte("Testing BACKUP...\n"))
 	for _, file := range opts.files {
 		opts.input = fmt.Sprintf("#FILE %q %d", file.fileName, file.fileSize)
 		opts.want = "#SAVED <external_backup_id> <file_name> <size>"
@@ -245,7 +245,7 @@ func diagnoseInquire(ctx context.Context, opts diagnoseOptions) error {
 	if len(opts.files) == 0 {
 		return fmt.Errorf("no files to inquire")
 	}
-	opts.output.Write([]byte("\nINQUIRE:\n"))
+	opts.output.Write([]byte("Testing INQUIRE...\n"))
 	for _, file := range opts.files {
 		// No version supplied, the default is to leave out creation_timestamp.
 		opts.input = fmt.Sprintf("#EBID %q %q", file.externalBackupID, file.fileName)
@@ -293,7 +293,7 @@ func diagnoseRestore(ctx context.Context, opts diagnoseOptions) error {
 	if len(opts.files) == 0 {
 		return fmt.Errorf("no files to restore")
 	}
-	opts.output.Write([]byte("\nRESTORE:\n"))
+	opts.output.Write([]byte("Testing RESTORE...\n"))
 	for _, file := range opts.files {
 		opts.input = fmt.Sprintf("#EBID %q %q", file.externalBackupID, file.fileName)
 		opts.want = "#RESTORED <external_backup_id> <file_name>"
@@ -333,7 +333,7 @@ func diagnoseDelete(ctx context.Context, opts diagnoseOptions) error {
 	if len(opts.files) == 0 {
 		return fmt.Errorf("no files to delete")
 	}
-	opts.output.Write([]byte("\nDELETE:\n"))
+	opts.output.Write([]byte("Testing DELETE...\n"))
 	for _, file := range opts.files {
 		opts.input = fmt.Sprintf("#EBID %q %q", file.externalBackupID, file.fileName)
 		opts.want = "#DELETED <external_backup_id> <file_name>"
@@ -371,7 +371,7 @@ func performDiagnostic(ctx context.Context, opts diagnoseOptions) ([][]string, e
 	if ok := opts.execute(ctx, opts.config, opts.connectParams, in, out, opts.cloudProps); !ok {
 		return nil, fmt.Errorf("failed to execute: %s", opts.input)
 	}
-	opts.output.Write(out.Bytes())
+	log.CtxLogger(ctx).Infof("Output: %s", out.Bytes())
 
 	// Remove the final newline before splitting the lines on newlines.
 	outTrim := strings.Trim(out.String(), "\n")
