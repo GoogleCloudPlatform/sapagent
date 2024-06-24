@@ -155,7 +155,7 @@ func (b *BalanceIRQ) balanceIRQHandler(ctx context.Context) (subcommands.ExitSta
 		if err := b.writeFile(fmt.Sprintf("/proc/irq/%s/smp_affinity", interrupt), []byte(socket.cores), 0644); err != nil {
 			return subcommands.ExitFailure, err
 		}
-		log.CtxLogger(ctx).Infof("Socket %s, cores %s assigned to interrupt %s", socket.socket, socket.cores, interrupt)
+		log.CtxLogger(ctx).Infof("Interrupt %s assigned to socket %s, cores %s", interrupt, socket.socket, socket.cores)
 	}
 
 	exitStatus := subcommands.ExitSuccess
