@@ -22,6 +22,7 @@ import (
 	"runtime"
 
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -32,40 +33,10 @@ import (
 // RestartAgent indicates that the agent should be restarted after the performance diagnostics guest action has been handled.
 const RestartAgent = false
 
-func buildPerformanceDiagnosticsCommand(command *gpb.AgentCommand) performancediagnostics.Diagnose {
-	d := performancediagnostics.Diagnose{}
-
-	params := command.GetParameters()
-	if scope, ok := params["type"]; ok {
-		d.Type = scope
-	}
-	if testBucket, ok := params["test-bucket"]; ok {
-		d.TestBucket = testBucket
-	}
-	if configFile, ok := params["backint-config-file"]; ok {
-		d.BackintConfigFile = configFile
-	}
-	if outputBucket, ok := params["output-bucket"]; ok {
-		d.OutputBucket = outputBucket
-	}
-	if outputFileName, ok := params["output-file-name"]; ok {
-		d.OutputFileName = outputFileName
-	}
-	if path, ok := params["output-file-path"]; ok {
-		d.OutputFilePath = path
-	}
-	if hyperThreading, ok := params["hyper-threading"]; ok {
-		d.HyperThreading = hyperThreading
-	}
-	if logLevel, ok := params["loglevel"]; ok {
-		d.LogLevel = logLevel
-	}
-	return d
-}
-
 // PerformanceDiagnosticsHandler is the handler for the performance diagnostics command.
 func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
-	d := buildPerformanceDiagnosticsCommand(command)
+	d := &performancediagnostics.Diagnose{}
+	handlers.ParseAgentCommandParameters(ctx, command, d)
 	lp := log.Parameters{OSType: runtime.GOOS}
 	message, exitStatus := d.ExecuteAndGetMessage(ctx, nil, lp, cp)
 	return message, exitStatus, RestartAgent

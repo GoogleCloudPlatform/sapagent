@@ -19,10 +19,10 @@ package supportbundlehandler
 
 import (
 	"context"
-	"encoding/json"
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -33,24 +33,11 @@ import (
 // RestartAgent indicates that the agent should be restarted after the supportbundle guest action has been handled.
 const RestartAgent = false
 
-func buildSupportBundleCommand(ctx context.Context, command *gpb.AgentCommand) supportbundle.SupportBundle {
-	sb := supportbundle.SupportBundle{}
-	params := command.GetParameters()
-	paramsJSON, err := json.Marshal(params)
-	if err != nil {
-		log.CtxLogger(ctx).Debugw("Failed to marshal all command parameters to JSON", "error", err)
-		return sb
-	}
-	if err = json.Unmarshal(paramsJSON, &sb); err != nil {
-		log.CtxLogger(ctx).Debugw("Failed to unmarshal all command parameters into SupportBundle struct", "error", err)
-	}
-	return sb
-}
-
 // SupportBundleHandler is the handler for support bundle command.
 func SupportBundleHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
-	sb := buildSupportBundleCommand(ctx, command)
+	sb := &supportbundle.SupportBundle{}
+	handlers.ParseAgentCommandParameters(ctx, command, sb)
 	msg, exitStatus := sb.ExecuteAndGetMessage(ctx, nil)
 	return msg, exitStatus, RestartAgent
 }

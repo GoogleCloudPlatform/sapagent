@@ -20,93 +20,34 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
+	"github.com/google/subcommands"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 )
 
-func TestBuildSupportBundleCommand(t *testing.T) {
+func TestSupportBundleHandler(t *testing.T) {
 	tests := []struct {
-		name    string
-		command *gpb.AgentCommand
-		want    supportbundle.SupportBundle
+		name           string
+		command        *gpb.AgentCommand
+		wantExitStatus subcommands.ExitStatus
 	}{
 		{
-			name: "TrueValues",
+			name: "FailureCollectingErrors",
 			command: &gpb.AgentCommand{
 				Parameters: map[string]string{
-					"sid":                 "testsid",
-					"instance-numbers":    "testinstance",
-					"hostname":            "testhostname",
-					"loglevel":            "debug",
-					"result-bucket":       "testbucket",
-					"pacemaker-diagnosis": "true",
-					"agent-logs-only":     "true",
-					"help":                "true",
-					"version":             "true",
+					"sid":              "test-sid",
+					"hostname":         "test-hostname",
+					"instance-numbers": "00",
 				},
 			},
-			want: supportbundle.SupportBundle{
-				Sid:                "testsid",
-				InstanceNums:       "testinstance",
-				Hostname:           "testhostname",
-				LogLevel:           "debug",
-				ResultBucket:       "testbucket",
-				PacemakerDiagnosis: true,
-				AgentLogsOnly:      true,
-				Help:               true,
-				Version:            true,
-			},
-		},
-		{
-			name: "FalseValues",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"sid":                 "testsid",
-					"instance-numbers":    "testinstance",
-					"hostname":            "testhostname",
-					"loglevel":            "debug",
-					"result-bucket":       "testbucket",
-					"pacemaker-diagnosis": "false",
-					"agent-logs-only":     "false",
-					"help":                "false",
-					"version":             "false",
-				},
-			},
-			want: supportbundle.SupportBundle{
-				Sid:          "testsid",
-				InstanceNums: "testinstance",
-				Hostname:     "testhostname",
-				LogLevel:     "debug",
-				ResultBucket: "testbucket",
-			},
-		},
-		{
-			name: "InvalidValues",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"sid":                 "",
-					"instance-numbers":    "",
-					"hostname":            "",
-					"loglevel":            "",
-					"result-bucket":       "",
-					"pacemaker-diagnosis": "invalid",
-					"agent-logs-only":     "2334",
-					"help":                "12",
-					"version":             "test_invalid",
-				},
-			},
-			want: supportbundle.SupportBundle{},
+			wantExitStatus: subcommands.ExitFailure,
 		},
 	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildSupportBundleCommand(context.Background(), tc.command)
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(supportbundle.SupportBundle{})); diff != "" {
-				t.Errorf("buildSupportBundleCommand(%v) returned an unexpected diff (-want +got):\n%v", tc.command, diff)
+			_, exitStatus, _ := SupportBundleHandler(context.Background(), tc.command, nil)
+			if exitStatus != tc.wantExitStatus {
+				t.Errorf("SupportBundleHandler(%v) = %q, want: %q", tc.command, exitStatus, tc.wantExitStatus)
 			}
 		})
 	}

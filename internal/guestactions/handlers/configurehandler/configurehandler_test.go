@@ -18,109 +18,71 @@ package configurehandler
 
 import (
 	"context"
+	"os"
+	"path"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
+	"github.com/google/subcommands"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 )
 
-func TestBuildConfigureFromMap(t *testing.T) {
+func TestConfigureHandler(t *testing.T) {
 	tests := []struct {
-		name    string
-		command *gpb.AgentCommand
-		want    configure.Configure
+		name           string
+		command        *gpb.AgentCommand
+		createConfig   bool
+		wantExitStatus subcommands.ExitStatus
 	}{
 		{
-			name: "FullyPopulated",
+			name: "FailureForNoConfigurationJSON",
 			command: &gpb.AgentCommand{
 				Parameters: map[string]string{
-					"feature":                               "test_feature",
-					"loglevel":                              "debug",
-					"setting":                               "test_setting",
-					"path":                                  "test_path",
-					"process_metrics_to_skip":               "test_skip_metrics",
-					"workload_evaluation_metrics_frequency": "30",
-					"workload_evaluation_db_metrics_frequency": "25",
-					"process_metrics_frequency":                "5",
-					"slow_process_metrics_frequency":           "10",
-					"agent_metrics_frequency":                  "15",
-					"agent_health_frequency":                   "20",
-					"heartbeat_frequency":                      "12",
-					"reliability_metrics_frequency":            "35",
-					"sample_interval_sec":                      "40",
-					"query_timeout_sec":                        "45",
-					"help":                                     "true",
-					"version":                                  "false",
-					"enable":                                   "true",
-					"disable":                                  "false",
-					"showall":                                  "true",
-					"add":                                      "false",
-					"remove":                                   "true",
+					"loglevel": "debug",
 				},
 			},
-			want: configure.Configure{
-				Feature:                     "test_feature",
-				LogLevel:                    "debug",
-				Setting:                     "test_setting",
-				Path:                        "test_path",
-				SkipMetrics:                 "test_skip_metrics",
-				ValidationMetricsFrequency:  30,
-				DbFrequency:                 25,
-				FastMetricsFrequency:        5,
-				SlowMetricsFrequency:        10,
-				AgentMetricsFrequency:       15,
-				AgentHealthFrequency:        20,
-				HeartbeatFrequency:          12,
-				ReliabilityMetricsFrequency: 35,
-				SampleIntervalSec:           40,
-				QueryTimeoutSec:             45,
-				Help:                        true,
-				Version:                     false,
-				Enable:                      true,
-				Disable:                     false,
-				Showall:                     true,
-				Add:                         false,
-				Remove:                      true,
-				RestartAgent:                noOpRestart,
-			},
+			createConfig:   false,
+			wantExitStatus: subcommands.ExitFailure,
 		},
 		{
-			name: "Empty",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{},
-			},
-			want: configure.Configure{
-				RestartAgent: noOpRestart,
-			},
-		},
-		{
-			name: "IgnoreBadFormattedData",
+			name: "UsageFailureForInvalidLogLevel",
 			command: &gpb.AgentCommand{
 				Parameters: map[string]string{
-					"path":                                     "test_path",
-					"process_metrics_to_skip":                  "test_skip_metrics",
-					"workload_evaluation_metrics_frequency":    "not a number",
-					"workload_evaluation_db_metrics_frequency": "test bad data",
-					"Enable": "not a boolean",
-					"Help":   "test bad data",
+					"loglevel": "invalid-loglevel",
 				},
 			},
-			want: configure.Configure{
-				Path:         "test_path",
-				SkipMetrics:  "test_skip_metrics",
-				RestartAgent: noOpRestart,
+			createConfig:   true,
+			wantExitStatus: subcommands.ExitUsageError,
+		},
+		{
+			name: "SuccessForValidLogLevel",
+			command: &gpb.AgentCommand{
+				Parameters: map[string]string{
+					"loglevel": "debug",
+				},
 			},
+			createConfig:   true,
+			wantExitStatus: subcommands.ExitSuccess,
 		},
 	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := buildConfigureFromMap(context.Background(), test.command)
-			if diff := cmp.Diff(test.want, got, cmpopts.IgnoreFields(configure.Configure{}, "RestartAgent")); diff != "" {
-				t.Errorf("buildConfigureFromMap(%v) returned diff (-want +got):\n%s", test.command, diff)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.createConfig {
+				dir := t.TempDir()
+				filePath := path.Join(dir, "/configuration.json")
+				tc.command.Parameters["path"] = filePath
+				f, err := os.Create(filePath)
+				if err != nil {
+					t.Fatalf("Failed to create configuration file: %v", err)
+				}
+				if err = os.WriteFile(filePath, []byte("{}"), os.ModePerm); err != nil {
+					t.Fatalf("Failed to write to configuration file: %v", err)
+				}
+				defer os.Remove(f.Name())
+			}
+			_, exitStatus, _ := ConfigureHandler(context.Background(), tc.command, nil)
+			if exitStatus != tc.wantExitStatus {
+				t.Errorf("ConfigureHandler(%v) = %q, want: %q", tc.command, exitStatus, tc.wantExitStatus)
 			}
 		})
 	}

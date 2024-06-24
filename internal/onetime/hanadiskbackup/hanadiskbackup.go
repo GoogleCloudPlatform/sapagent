@@ -110,15 +110,27 @@ type ISG struct {
 
 // Snapshot has args for snapshot subcommands.
 type Snapshot struct {
-	Project, Host, Port, Sid, HanaSidAdm, InstanceID      string
-	HanaDBUser, Password, PasswordSecret, HDBUserstoreKey string
-	Disk, DiskZone                                        string
-
-	DiskKeyFile, StorageLocation                     string
-	SnapshotName, SnapshotType, Description          string
-	AbandonPrepared, SendToMonitoring                bool
-	FreezeFileSystem, ConfirmDataSnapshotAfterCreate bool
-
+	Project                                string `json:"project"`
+	Host                                   string `json:"host"`
+	Port                                   string `json:"port"`
+	Sid                                    string `json:"sid"`
+	HanaSidAdm                             string `json:"-"`
+	InstanceID                             string `json:"instance-id"`
+	HanaDBUser                             string `json:"hana-db-user"`
+	Password                               string `json:"password"`
+	PasswordSecret                         string `json:"password-secret"`
+	HDBUserstoreKey                        string `json:"hdbuserstore-key"`
+	Disk                                   string `json:"source-disk"`
+	DiskZone                               string `json:"source-disk-zone"`
+	DiskKeyFile                            string `json:"source-disk-key-file"`
+	StorageLocation                        string `json:"storage-location"`
+	SnapshotName                           string `json:"snapshot-name"`
+	SnapshotType                           string `json:"snapshot-type"`
+	Description                            string `json:"snapshot-description"`
+	AbandonPrepared                        bool   `json:"abandon-prepared,string"`
+	SendToMonitoring                       bool   `json:"send-metrics-to-monitoring,string"`
+	FreezeFileSystem                       bool   `json:"freeze-file-system,string"`
+	ConfirmDataSnapshotAfterCreate         bool   `json:"confirm-data-snapshot-after-create,string"`
 	isg                                    *ISG
 	groupSnapshotName                      string
 	disks                                  []string
@@ -128,14 +140,14 @@ type Snapshot struct {
 	status                                 bool
 	timeSeriesCreator                      cloudmonitoring.TimeSeriesCreator
 	help, version                          bool
-	SkipDBSnapshotForChangeDiskType        bool
-	HANAChangeDiskTypeOTEName              string
-	ForceStopHANA                          bool
-	LogLevel                               string
+	SkipDBSnapshotForChangeDiskType        bool   `json:"skip-db-snapshot-for-change-disk-type,string"`
+	HANAChangeDiskTypeOTEName              string `json:"-"`
+	ForceStopHANA                          bool   `json:"-"`
+	LogLevel                               string `json:"loglevel"`
 	hanaDataPath                           string
 	logicalDataPath, physicalDataPath      string
-	Labels                                 string
-	IIOTEParams                            *onetime.InternallyInvokedOTE
+	Labels                                 string                        `json:"labels"`
+	IIOTEParams                            *onetime.InternallyInvokedOTE `json:"-"`
 	instanceProperties                     *ipb.InstanceProperties
 	cgPath                                 string
 	groupSnapshot                          bool

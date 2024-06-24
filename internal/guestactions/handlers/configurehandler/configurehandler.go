@@ -19,9 +19,9 @@ package configurehandler
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -36,26 +36,13 @@ func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 	return subcommands.ExitSuccess
 }
 
-func buildConfigureFromMap(ctx context.Context, command *gpb.AgentCommand) configure.Configure {
-	c := configure.Configure{
-		RestartAgent: noOpRestart,
-	}
-	fields := command.GetParameters()
-	fieldsJSON, err := json.Marshal(fields)
-	if err != nil {
-		log.CtxLogger(ctx).Debugw("Failed to marshal all command parameters to JSON", "err", err)
-		return c
-	}
-	if err := json.Unmarshal(fieldsJSON, &c); err != nil {
-		log.CtxLogger(ctx).Debugw("Failed to unmarshal all command parameters into Configure struct", "err", err)
-	}
-	return c
-}
-
 // ConfigureHandler is the handler for the configure command.
 func ConfigureHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
-	c := buildConfigureFromMap(ctx, command)
+	c := &configure.Configure{
+		RestartAgent: noOpRestart,
+	}
+	handlers.ParseAgentCommandParameters(ctx, command, c)
 	msg, exitStatus := c.ExecuteAndGetMessage(ctx, nil)
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
 	return msg, exitStatus, RestartAgent

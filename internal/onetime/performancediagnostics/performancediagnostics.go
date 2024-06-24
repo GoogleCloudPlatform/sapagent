@@ -58,12 +58,17 @@ const (
 
 // Diagnose has args for performance diagnostics OTE subcommands.
 type Diagnose struct {
-	LogLevel, OutputFilePath                    string
-	HyperThreading, overrideVersion             string
-	printDiff                                   bool
-	BackintConfigFile, TestBucket, OutputBucket string
-	Type, OutputFileName                        string
-	help, version                               bool
+	LogLevel          string `json:"loglevel"`
+	OutputFilePath    string `json:"output-file-path"`
+	HyperThreading    string `json:"hyper-threading"`
+	OverrideVersion   string `json:"override-version"`
+	PrintDiff         bool   `json:"print-diff,string"`
+	BackintConfigFile string `json:"backint-config-file"`
+	TestBucket        string `json:"test-bucket"`
+	OutputBucket      string `json:"output-bucket"`
+	Type              string `json:"type"`
+	OutputFileName    string `json:"output-file-name"`
+	help, version     bool
 }
 
 // ReadConfigFile abstracts os.ReadFile function for testability.
@@ -148,8 +153,8 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&d.OutputFileName, "output-file-name", "", "Sets the name for generated output file. (optional) Default: performance-diagnostics-<current_timestamp>")
 	fs.StringVar(&d.OutputFilePath, "output-file-path", "", "Sets the path to save the output file. (optional) Default: /tmp/google-cloud-sap-agent/")
 	fs.StringVar(&d.HyperThreading, "hyper-threading", "default", "Sets hyper threading settings for X4 machines")
-	fs.StringVar(&d.overrideVersion, "override-version", "latest", "If specified, runs a specific version of configureinstance")
-	fs.BoolVar(&d.printDiff, "print-diff", false, "Prints all configuration diffs and log messages for configureinstance to stdout as JSON")
+	fs.StringVar(&d.OverrideVersion, "override-version", "latest", "If specified, runs a specific version of configureinstance")
+	fs.BoolVar(&d.PrintDiff, "print-diff", false, "Prints all configuration diffs and log messages for configureinstance to stdout as JSON")
 	fs.StringVar(&d.LogLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
 	fs.BoolVar(&d.help, "help", false, "Display help.")
 	fs.BoolVar(&d.help, "h", false, "Display help.")
@@ -335,8 +340,8 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 		Check:           true,
 		ExecuteFunc:     opts.exec,
 		HyperThreading:  d.HyperThreading,
-		OverrideVersion: d.overrideVersion,
-		PrintDiff:       d.printDiff,
+		OverrideVersion: d.OverrideVersion,
+		PrintDiff:       d.PrintDiff,
 		IIOTEParams:     ciOTEParams,
 	}
 	onetime.LogMessageToFileAndConsole(ctx, "Executing ConfigureInstance")

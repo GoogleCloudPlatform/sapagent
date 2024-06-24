@@ -17,68 +17,36 @@ limitations under the License.
 package performancediagnosticshandler
 
 import (
+	"context"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
+	"github.com/google/subcommands"
+
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 )
 
-func TestBuildPerformanceDiagnosticsCommand(t *testing.T) {
+func TestPerformanceDiagnosticsHandler(t *testing.T) {
 	tests := []struct {
-		name    string
-		command *gpb.AgentCommand
-		want    performancediagnostics.Diagnose
+		name           string
+		command        *gpb.AgentCommand
+		wantExitStatus subcommands.ExitStatus
 	}{
 		{
-			name: "FullyPopulated",
+			name: "FailureForBackup",
 			command: &gpb.AgentCommand{
 				Parameters: map[string]string{
-					"type":                "test-type",
-					"test-bucket":         "test-test-bucket",
-					"backint-config-file": "test-backint-param-file",
-					"output-bucket":       "test-result-bucket",
-					"output-file-name":    "test-bundle-name",
-					"output-file-path":    "test-path",
-					"hyper-threading":     "test-hyper-threading",
-					"loglevel":            "debug",
+					"type":        "backup",
+					"test-bucket": "test-bucket",
 				},
 			},
-			want: performancediagnostics.Diagnose{
-				Type:              "test-type",
-				TestBucket:        "test-test-bucket",
-				BackintConfigFile: "test-backint-param-file",
-				OutputBucket:      "test-result-bucket",
-				OutputFileName:    "test-bundle-name",
-				OutputFilePath:    "test-path",
-				HyperThreading:    "test-hyper-threading",
-				LogLevel:          "debug",
-			},
-		},
-		{
-			name: "EmptyValues",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"scope":           "",
-					"test-bucket":     "",
-					"param-file":      "",
-					"result-bucket":   "",
-					"bundle-name":     "",
-					"path":            "",
-					"hyper-threading": "",
-					"loglevel":        "",
-				},
-			},
-			want: performancediagnostics.Diagnose{},
+			wantExitStatus: subcommands.ExitFailure,
 		},
 	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildPerformanceDiagnosticsCommand(tc.command)
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(performancediagnostics.Diagnose{})); diff != "" {
-				t.Errorf("buildPerformanceDiagnosticsCommand(%v) returned an unexpected diff (-want +got):\n%v", tc.command, diff)
+			_, exitStatus, _ := PerformanceDiagnosticsHandler(context.Background(), tc.command, nil)
+			if exitStatus != tc.wantExitStatus {
+				t.Errorf("PerformanceDiagnosticsHandler(%v) = %q, want: %q", tc.command, exitStatus, tc.wantExitStatus)
 			}
 		})
 	}
