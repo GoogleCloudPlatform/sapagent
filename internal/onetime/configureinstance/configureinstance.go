@@ -190,7 +190,7 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts onetime.RunOptions) (s
 		c.MachineType = opts.CloudProperties.GetMachineType()
 	}
 	if c.OverrideVersion != overrideVersionLatest {
-		return subcommands.ExitUsageError, fmt.Sprintf(`overrideVersion set to %q. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes`, c.OverrideVersion)
+		log.CtxLogger(ctx).Warnf(`overrideVersion set to %q. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes.`, c.OverrideVersion)
 	}
 	status, err := c.configureInstanceHandler(ctx)
 	if err != nil {
