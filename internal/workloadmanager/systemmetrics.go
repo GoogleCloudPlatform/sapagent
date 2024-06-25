@@ -97,6 +97,7 @@ func osSettings(ctx context.Context, params Parameters) string {
 		ReadFile:        os.ReadFile,
 		WriteFile:       os.WriteFile,
 		ExecuteFunc:     params.Execute,
+		MachineType:     params.Config.GetCloudProperties().GetMachineType(),
 	}
 	// Short-circuit OTE execution for unsupported machine types.
 	if !ci.IsSupportedMachineType() {

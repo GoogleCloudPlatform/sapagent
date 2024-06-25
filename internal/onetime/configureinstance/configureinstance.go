@@ -165,10 +165,7 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 
 // IsSupportedMachineType checks if the configureinstance subcommand provides support for the machine type.
 func (c *ConfigureInstance) IsSupportedMachineType() bool {
-	if strings.HasPrefix(c.MachineType, "x4") {
-		return true
-	}
-	return false
+	return strings.HasPrefix(c.MachineType, "x4")
 }
 
 // Run performs the functionality specified by the configureinstance subcommand.
