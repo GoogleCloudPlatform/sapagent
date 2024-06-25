@@ -103,17 +103,17 @@ var (
 	testingLargeContent         = []byte("Testing when Read() is called multiple times") //	objSize = 44
 	testingContentwEOL          = []byte("abc\n")                                        // content with explicit end of line, objSize = 4
 
-	defaultParallelReader = func(objName string, content []byte) *ParallelReader {
+	defaultParallelReader = func(objName string, content []byte, parallelworkers int) *ParallelReader {
 		r := &ParallelReader{
-			ctx:           context.Background(),
-			object:        defaultBucketHandleParallel.Object(objName),
-			objectSize:    int64(len(content)),
-			partSizeBytes: int64(deafultPartSize),
-			workers:       make([]*downloadWorker, 1),
+			ctx:            context.Background(),
+			objectSize:     int64(len(content)),
+			partSizeBytes:  int64(deafultPartSize),
+			workers:        make([]*downloadWorker, parallelworkers),
+			idleWorkersIDs: make(chan int, parallelworkers),
 		}
 		for i := 0; i < len(r.workers); i++ {
 			r.workers[i] = &downloadWorker{
-				bucket: defaultBucketHandleParallel,
+				object: defaultBucketHandleParallel.Object(objName),
 				buffer: make([]byte, r.partSizeBytes),
 			}
 		}
@@ -124,18 +124,11 @@ var (
 func TestNewParallelReader(t *testing.T) {
 	tests := []struct {
 		name    string
-		object  *storage.ObjectHandle
 		rw      ReadWriter
 		wantErr error
 	}{
 		{
-			name:    "NoObjectFailure",
-			rw:      defaultReadWriter,
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name:   "NewParallelReaderSuccess",
-			object: defaultBucketHandleParallel.Object("object1.txt"),
+			name: "NewParallelReaderSuccess",
 			rw: ReadWriter{
 				TotalBytes:              int64(len(testingContent1)),
 				ChunkSizeMb:             DefaultChunkSizeMb,
@@ -145,13 +138,29 @@ func TestNewParallelReader(t *testing.T) {
 					BucketName:       bucketNameParallel,
 					VerifyConnection: true,
 				},
+				ObjectName: "object1.txt",
+			},
+			wantErr: nil,
+		},
+		{
+			name: "MultipleWorkersSuccess",
+			rw: ReadWriter{
+				TotalBytes:              int64(len(testingContent1)),
+				ChunkSizeMb:             DefaultChunkSizeMb,
+				ParallelDownloadWorkers: 16,
+				ParallelDownloadConnectParams: &ConnectParameters{
+					StorageClient:    defaultStorageClient,
+					BucketName:       bucketNameParallel,
+					VerifyConnection: true,
+				},
+				ObjectName: "object1.txt",
 			},
 			wantErr: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, gotErr := test.rw.NewParallelReader(context.Background(), test.object)
+			_, gotErr := test.rw.NewParallelReader(context.Background())
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("NewParallelReader() = %v, want %v", gotErr, test.wantErr)
 			}
@@ -178,7 +187,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:       "NoObjectFailure",
-			r:          defaultParallelReader("", nil),
+			r:          defaultParallelReader("", nil, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  0,
 			wantErr:    cmpopts.AnyError,
@@ -186,7 +195,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:       "ReadSuccess",
-			r:          defaultParallelReader("object1.txt", testingContent1),
+			r:          defaultParallelReader("object1.txt", testingContent1, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  (len(testingContent1)),
 			wantErr:    nil,
@@ -194,7 +203,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:       "ReadEmptySuccess",
-			r:          defaultParallelReader("emptyObject.txt", emptyContent),
+			r:          defaultParallelReader("emptyObject.txt", emptyContent, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  (len(emptyContent)),
 			wantErr:    io.EOF,
@@ -202,7 +211,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:       "ReadMoreThanPBufferSizeSuccess",
-			r:          defaultParallelReader("object2.txt", testingContent2),
+			r:          defaultParallelReader("object2.txt", testingContent2, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  defaultPBufferSize,
 			wantErr:    nil,
@@ -210,7 +219,15 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:       "ReadLargeContentSuccess",
-			r:          defaultParallelReader("largeObject.txt", testingLargeContent),
+			r:          defaultParallelReader("largeObject.txt", testingLargeContent, 1),
+			p:          make([]byte, defaultPBufferSize),
+			wantBytes:  defaultPBufferSize,
+			wantErr:    nil,
+			wantBuffer: testingLargeContent[:defaultPBufferSize],
+		},
+		{
+			name:       "ReadLargeMutlipleWorkersSuccess",
+			r:          defaultParallelReader("largeObject.txt", testingLargeContent, 4),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  defaultPBufferSize,
 			wantErr:    nil,
@@ -218,7 +235,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:       "ReadContentwEOLSuccess",
-			r:          defaultParallelReader("contentwEOL.txt", testingContentwEOL),
+			r:          defaultParallelReader("contentwEOL.txt", testingContentwEOL, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  defaultPBufferSize,
 			wantErr:    nil,
@@ -254,7 +271,7 @@ func TestReadMultiple(t *testing.T) {
 	}{
 		{
 			name:       "ReadSuccess",
-			r:          defaultParallelReader("object1.txt", testingContent1),
+			r:          defaultParallelReader("object1.txt", testingContent1, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  (len(testingContent1)),
 			wantErr:    io.EOF,
@@ -262,7 +279,7 @@ func TestReadMultiple(t *testing.T) {
 		},
 		{
 			name:       "ReadEmptySuccess",
-			r:          defaultParallelReader("emptyObject.txt", emptyContent),
+			r:          defaultParallelReader("emptyObject.txt", emptyContent, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  (len(emptyContent)),
 			wantErr:    io.EOF,
@@ -270,7 +287,7 @@ func TestReadMultiple(t *testing.T) {
 		},
 		{
 			name:       "ReadMoreThanPBufferSizeSuccess",
-			r:          defaultParallelReader("object2.txt", testingContent2),
+			r:          defaultParallelReader("object2.txt", testingContent2, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  len(testingContent2),
 			wantErr:    io.EOF,
@@ -278,7 +295,7 @@ func TestReadMultiple(t *testing.T) {
 		},
 		{
 			name:       "ReadLessThanOneChunkSuccess",
-			r:          defaultParallelReader("object3.txt", testingContent3),
+			r:          defaultParallelReader("object3.txt", testingContent3, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  len(testingContent3),
 			wantErr:    io.EOF,
@@ -286,7 +303,7 @@ func TestReadMultiple(t *testing.T) {
 		},
 		{
 			name:       "ReadOneChunkSuccess",
-			r:          defaultParallelReader("object4.txt", testingContent4),
+			r:          defaultParallelReader("object4.txt", testingContent4, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  len(testingContent4),
 			wantErr:    io.EOF,
@@ -294,7 +311,15 @@ func TestReadMultiple(t *testing.T) {
 		},
 		{
 			name:       "ReadLargeContentSuccess",
-			r:          defaultParallelReader("largeObject.txt", testingLargeContent),
+			r:          defaultParallelReader("largeObject.txt", testingLargeContent, 1),
+			p:          make([]byte, defaultPBufferSize),
+			wantBytes:  len(testingLargeContent),
+			wantErr:    io.EOF,
+			wantBuffer: testingLargeContent,
+		},
+		{
+			name:       "ReadLargeMultipleWorkersSuccess",
+			r:          defaultParallelReader("largeObject.txt", testingLargeContent, 4),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  len(testingLargeContent),
 			wantErr:    io.EOF,
@@ -302,7 +327,7 @@ func TestReadMultiple(t *testing.T) {
 		},
 		{
 			name:       "ReadContentwEOLSuccess",
-			r:          defaultParallelReader("contentwEOL.txt", testingContentwEOL),
+			r:          defaultParallelReader("contentwEOL.txt", testingContentwEOL, 1),
 			p:          make([]byte, defaultPBufferSize),
 			wantBytes:  defaultPBufferSize,
 			wantErr:    io.EOF,
@@ -336,22 +361,33 @@ func TestReadMultiple(t *testing.T) {
 
 func TestFillWorkerBuffer(t *testing.T) {
 	tests := []struct {
-		name    string
-		r       *ParallelReader
-		worker  *downloadWorker
-		wantErr error
+		name      string
+		r         *ParallelReader
+		worker    *downloadWorker
+		startByte int64
+		wantErr   error
 	}{
 		{
 			name:    "NoWorkerFailure",
-			r:       defaultParallelReader("object1.txt", testingContent1),
+			r:       defaultParallelReader("object1.txt", testingContent1, 1),
 			worker:  nil,
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "FillDataSuccess",
-			r:    defaultParallelReader("object1.txt", testingContent1),
+			name: "RangeReaderCreateFailure",
+			r:    defaultParallelReader("object1.txt", testingContent1, 1),
 			worker: &downloadWorker{
-				bucket: defaultBucketHandleParallel,
+				object: defaultBucketHandleParallel.Object("object1.txt"),
+				buffer: make([]byte, deafultPartSize),
+			},
+			startByte: 10, //	startByte is larger than the object size
+			wantErr:   cmpopts.AnyError,
+		},
+		{
+			name: "FillDataSuccess",
+			r:    defaultParallelReader("object1.txt", testingContent1, 1),
+			worker: &downloadWorker{
+				object: defaultBucketHandleParallel.Object("object1.txt"),
 				buffer: make([]byte, deafultPartSize),
 			},
 			wantErr: nil,
@@ -359,7 +395,7 @@ func TestFillWorkerBuffer(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotErr := fillWorkerBuffer(test.r, test.worker)
+			gotErr := fillWorkerBuffer(test.r, test.worker, test.startByte)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("fillWorkerBuffer() = %v, want %v", gotErr, test.wantErr)
 			}
@@ -376,25 +412,31 @@ func TestReaderClose(t *testing.T) {
 	}{
 		{
 			name:    "EmptyDataSuccess",
-			r:       defaultParallelReader("emptyObject.txt", emptyContent),
+			r:       defaultParallelReader("emptyObject.txt", emptyContent, 1),
 			p:       make([]byte, defaultPBufferSize),
 			wantErr: nil,
 		},
 		{
 			name:    "ReadAndCloseSuccess",
-			r:       defaultParallelReader("object1.txt", testingContent1),
+			r:       defaultParallelReader("object1.txt", testingContent1, 1),
 			p:       make([]byte, defaultPBufferSize),
 			wantErr: nil,
 		},
 		{
 			name:    "ReadAndCloseLargeContentSuccess",
-			r:       defaultParallelReader("largeObject.txt", testingLargeContent),
+			r:       defaultParallelReader("largeObject.txt", testingLargeContent, 1),
+			p:       make([]byte, defaultPBufferSize),
+			wantErr: nil,
+		},
+		{
+			name:    "ReadAndCloseLargeMultipleWorkersSuccess",
+			r:       defaultParallelReader("largeObject.txt", testingLargeContent, 4),
 			p:       make([]byte, defaultPBufferSize),
 			wantErr: nil,
 		},
 		{
 			name:    "ReadAndCloseContentwEOLSuccess",
-			r:       defaultParallelReader("contentwEOL.txt", testingContentwEOL),
+			r:       defaultParallelReader("contentwEOL.txt", testingContentwEOL, 1),
 			p:       make([]byte, defaultPBufferSize),
 			wantErr: nil,
 		},
