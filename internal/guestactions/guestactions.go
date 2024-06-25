@@ -28,8 +28,8 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/hanadiskbackuphandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/performancediagnosticshandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/restart"
@@ -43,7 +43,8 @@ import (
 )
 
 const (
-	defaultChannel  = "wlm-sap-channel"
+	defaultChannel  = "workloadmanager.googleapis.com/wlm-sap-channel"
+	testChannel     = "wlm-sap-test-channel"
 	defaultEndpoint = ""
 	agentCommand    = "agent_command"
 	shellCommand    = "shell_command"
@@ -52,11 +53,11 @@ const (
 type guestActionHandler func(context.Context, *gpb.AgentCommand, *ipb.CloudProperties) (string, subcommands.ExitStatus, bool)
 
 var guestActionsHandlers = map[string]guestActionHandler{
-	"configure":      configurehandler.ConfigureHandler,
-	"hanadiskbackup": hanadiskbackuphandler.HANADiskBackupHandler,
+	"configure":              configurehandler.ConfigureHandler,
+	"hanadiskbackup":         hanadiskbackuphandler.HANADiskBackupHandler,
 	"performancediagnostics": performancediagnosticshandler.PerformanceDiagnosticsHandler,
-	"supportbundle": supportbundlehandler.SupportBundleHandler,
-	"version":            versionhandler.VersionHandler,
+	"supportbundle":          supportbundlehandler.SupportBundleHandler,
+	"version":                versionhandler.VersionHandler,
 }
 
 type guestActionsOptions struct {
@@ -206,5 +207,17 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 	}
 	log.CtxLogger(ctx).Info("Starting UAP communication routine")
 	communicateRoutine.StartRoutine(ctx)
+
+	if config.GetUapConfiguration().GetTestChannelEnabled().GetValue() {
+		testRoutine := &recovery.RecoverableRoutine{
+			Routine:             start,
+			RoutineArg:          guestActionsOptions{channel: testChannel, endpoint: defaultEndpoint, cloudProperties: config.CloudProperties},
+			ErrorCode:           usagemetrics.GuestActionsFailure,
+			UsageLogger:         *usagemetrics.Logger,
+			ExpectedMinDuration: 10 * time.Second,
+		}
+		log.CtxLogger(ctx).Info("Starting UAP communication routine for test channel")
+		testRoutine.StartRoutine(ctx)
+	}
 	return true
 }

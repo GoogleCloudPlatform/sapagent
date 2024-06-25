@@ -228,4 +228,5 @@ message SupportConfiguration {
 
 message UAPConfiguration {
   google.protobuf.BoolValue enabled = 1;
+  google.protobuf.BoolValue test_channel_enabled = 2;
 }
