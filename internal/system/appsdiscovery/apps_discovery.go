@@ -77,6 +77,8 @@ type SapSystemDetails struct {
 	AppOnHost, DBOnHost bool
 	WorkloadProperties  *spb.SapDiscovery_WorkloadProperties
 	InstanceProperties  []*spb.SapDiscovery_Resource_InstanceProperties
+	AppInstance         *sappb.SAPInstance
+	DBInstance          *sappb.SAPInstance
 }
 
 func removeDuplicates[T comparable](s []T) []T {
@@ -266,6 +268,12 @@ func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	merged.DBHosts = removeDuplicates(append(old.DBHosts, new.DBHosts...))
 	merged.WorkloadProperties = mergeWorkloadProperties(old.WorkloadProperties, new.WorkloadProperties)
 	merged.InstanceProperties = mergeInstanceProperties(old.InstanceProperties, new.InstanceProperties)
+	if new.AppInstance == nil {
+		merged.AppInstance = old.AppInstance
+	}
+	if new.DBInstance == nil {
+		merged.DBInstance = old.DBInstance
+	}
 
 	log.Logger.Debugf("Merged System Details. %s", merged)
 	return merged
@@ -410,6 +418,7 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		},
 		AppHosts:           haNodes,
 		InstanceProperties: iProps,
+		AppInstance:        app,
 	}
 
 	log.CtxLogger(ctx).Debugw("Checking config", "config", conf)
@@ -514,13 +523,14 @@ func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Compone
 			HaHosts:      app.HanaHaMembers,
 			TopologyType: t,
 		},
-		DBHosts: removeDuplicates(append(dbHosts, app.HanaHaMembers...)),
+		DBHosts: dbHosts,
 		WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
 			ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
 				Name:    "SAP HANA",
 				Version: dbProductVersion,
 			}},
 		},
+		DBInstance: app,
 	}
 }
 
@@ -549,6 +559,7 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 	for _, s := range dbSIDs {
 		systems = append(systems, hanaSystemDetails(app, dbProps, dbHosts, s, dbProductVersion))
 	}
+
 	return systems
 }
 

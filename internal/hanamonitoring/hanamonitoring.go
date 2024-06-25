@@ -75,7 +75,7 @@ type (
 	queryFunc func(ctx context.Context, query string, exec commandlineexecutor.Execute) (*databaseconnector.QueryResults, error)
 
 	// hanaReplicationConfig provides an easily testable translation to invoking the sapdiscovery package function HANAReplicationConfig.
-	hanaReplicationConfig func(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error)
+	hanaReplicationConfig func(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error)
 
 	// Parameters hold the parameters necessary to invoke Start().
 	Parameters struct {
@@ -374,7 +374,7 @@ func matchQueryAndInstanceType(ctx context.Context, opts queryOptions) bool {
 		return true
 	}
 	sidUser := fmt.Sprintf("%sadm", strings.ToLower(instance.Sid))
-	site, _, _, _, err := opts.params.HRC(ctx, sidUser, instance.Sid, instance.InstanceNum)
+	site, _, _, err := opts.params.HRC(ctx, sidUser, instance.Sid, instance.InstanceNum)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error getting HANA replication config", "sidUser", sidUser, "instanceNum", instance.InstanceNum, "error", err)
 		return false

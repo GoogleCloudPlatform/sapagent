@@ -120,20 +120,20 @@ func newDefaultCumulativeMetric(st, et int64) *mrpb.TimeSeries {
 	}
 }
 
-func fakeHRCSucessPrimary(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-	return 1, []string{"random"}, 1, nil, nil
+func fakeHRCSucessPrimary(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+	return 1, 1, nil, nil
 }
 
-func fakeHRCSucessSecondary(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-	return 2, []string{"random"}, 2, nil, nil
+func fakeHRCSucessSecondary(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+	return 2, 2, nil, nil
 }
 
-func fakeHRCSucessError(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-	return 0, []string{"random"}, 0, nil, errors.New("fake error")
+func fakeHRCSucessError(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+	return 0, 0, nil, errors.New("fake error")
 }
 
-func fakeHRCSuccessForStandAlone(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-	return 0, []string{"random"}, 1, nil, nil
+func fakeHRCSuccessForStandAlone(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+	return 0, 1, nil, nil
 }
 
 func newTimeSeriesKey(metricType, metricLabels string) timeSeriesKey {
