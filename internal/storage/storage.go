@@ -93,6 +93,9 @@ type ReadWriter struct {
 	// Metadata is an optional parameter to add metadata to uploads.
 	Metadata map[string]string
 
+	// CustomTime is an optional parameter to set the custom time for uploads.
+	CustomTime time.Time
+
 	// If TotalBytes is not set, percent completion cannot be calculated when logging progress.
 	TotalBytes int64
 
@@ -270,6 +273,9 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		objectWriter.KMSKeyName = rw.KMSKey
 		objectWriter.ChunkSize = int(rw.ChunkSizeMb) * 1024 * 1024
 		objectWriter.Metadata = rw.Metadata
+		if !rw.CustomTime.IsZero() {
+			objectWriter.CustomTime = rw.CustomTime
+		}
 		if rw.Compress {
 			objectWriter.ObjectAttrs.ContentType = compressedContentType
 		}

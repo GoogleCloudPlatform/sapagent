@@ -186,6 +186,16 @@ func backupFile(ctx context.Context, p parameters) string {
 		p.reader = f
 	}
 
+	var customTime time.Time
+	var err error
+	if p.config.GetCustomTime() != "" {
+		customTime, err = time.Parse(time.RFC3339, p.config.GetCustomTime())
+		if err != nil {
+			log.CtxLogger(ctx).Warnw("Error parsing custom_time field. CustomTime feild will not be set.", "err", err, "customTime", p.config.GetCustomTime(), "Expected Format", time.RFC3339)
+		}
+	}
+
+
 	rw := storage.ReadWriter{
 		Reader:                     p.reader,
 		Copier:                     p.copier,
@@ -211,6 +221,7 @@ func backupFile(ctx context.Context, p parameters) string {
 		XMLMultipartWorkers:        p.config.GetParallelStreams(),
 		XMLMultipartServiceAccount: p.config.GetServiceAccountKey(),
 		XMLMultipartEndpoint:       p.config.GetClientEndpoint(),
+		CustomTime:                 customTime,
 	}
 	startTime := time.Now()
 	bytesWritten, err := rw.Upload(ctx)
