@@ -182,7 +182,7 @@ func TestSetStatus(t *testing.T) {
 				"host_metrics":        true,
 				"agent_metrics":       false,
 				"sap_discovery":       true,
-				"reliability_metrics": false,
+				"workload_discovery":  false,
 			},
 		},
 		{
@@ -194,10 +194,10 @@ func TestSetStatus(t *testing.T) {
 					CollectAgentMetrics:              true,
 					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
 					CollectProcessMetrics:            true,
-					CollectReliabilityMetrics:        &wpb.BoolValue{Value: true},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-					EnableDiscovery: &wpb.BoolValue{Value: true},
+					EnableDiscovery:         &wpb.BoolValue{Value: true},
+					EnableWorkloadDiscovery: &wpb.BoolValue{Value: true},
 				},
 				LogToCloud: &wpb.BoolValue{Value: true},
 			},
@@ -207,8 +207,8 @@ func TestSetStatus(t *testing.T) {
 				"host_metrics":        true,
 				"process_metrics":     true,
 				"workload_evaluation": true,
-				"reliability_metrics": true,
 				"hana_monitoring":     false,
+				"workload_discovery":  true,
 			},
 		},
 		{
@@ -219,10 +219,10 @@ func TestSetStatus(t *testing.T) {
 					CollectAgentMetrics:              true,
 					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
 					CollectProcessMetrics:            true,
-					CollectReliabilityMetrics:        &wpb.BoolValue{Value: true},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-					EnableDiscovery: &wpb.BoolValue{Value: true},
+					EnableDiscovery:         &wpb.BoolValue{Value: true},
+					EnableWorkloadDiscovery: &wpb.BoolValue{Value: true},
 				},
 				LogToCloud:                  &wpb.BoolValue{Value: true},
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{Enabled: true},
@@ -234,7 +234,7 @@ func TestSetStatus(t *testing.T) {
 				"process_metrics":     true,
 				"workload_evaluation": true,
 				"hana_monitoring":     true,
-				"reliability_metrics": true,
+				"workload_discovery":  true,
 			},
 		},
 		{
@@ -246,7 +246,6 @@ func TestSetStatus(t *testing.T) {
 					CollectAgentMetrics:              true,
 					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
 					CollectProcessMetrics:            true,
-					CollectReliabilityMetrics:        &wpb.BoolValue{Value: false},
 				},
 				LogToCloud:                  &wpb.BoolValue{Value: true},
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{Enabled: true},
@@ -258,7 +257,7 @@ func TestSetStatus(t *testing.T) {
 				"workload_evaluation": true,
 				"hana_monitoring":     true,
 				"sap_discovery":       false,
-				"reliability_metrics": false,
+				"workload_discovery":  false,
 			},
 		},
 		{
@@ -270,10 +269,10 @@ func TestSetStatus(t *testing.T) {
 					CollectAgentMetrics:              true,
 					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
 					CollectProcessMetrics:            true,
-					CollectReliabilityMetrics:        &wpb.BoolValue{Value: true},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-					EnableDiscovery: &wpb.BoolValue{Value: true},
+					EnableDiscovery:         &wpb.BoolValue{Value: true},
+					EnableWorkloadDiscovery: &wpb.BoolValue{Value: true},
 				},
 				LogToCloud:                  &wpb.BoolValue{Value: true},
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{Enabled: true},
@@ -285,7 +284,7 @@ func TestSetStatus(t *testing.T) {
 				"hana_monitoring":     true,
 				"process_metrics":     true,
 				"workload_evaluation": true,
-				"reliability_metrics": true,
+				"workload_discovery":  true,
 			},
 		},
 		{
@@ -301,7 +300,7 @@ func TestSetStatus(t *testing.T) {
 				"process_metrics":     false,
 				"workload_evaluation": true,
 				"hana_monitoring":     false,
-				"reliability_metrics": false,
+				"workload_discovery":  false,
 			},
 		},
 	}
@@ -1477,7 +1476,7 @@ func TestSetFlags(t *testing.T) {
 		"enable", "disable", "showall", "add", "remove", "process_metrics_frequency", "workload_evaluation_db_metrics_frequency",
 		"sample_interval_sec", "query_timeout_sec", "process_metrics_to_skip", "slow_process_metrics_frequency",
 		"heartbeat_frequency", "agent_health_frequency", "agent_metrics_frequency",
-		"workload_evaluation_metrics_frequency", "reliability_metrics_frequency",
+		"workload_evaluation_metrics_frequency",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -1511,6 +1510,10 @@ func TestShowFeatures(t *testing.T) {
 					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
 					CollectAgentMetrics:              true,
 					CollectProcessMetrics:            false,
+				},
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery:         &wpb.BoolValue{Value: true},
+					EnableWorkloadDiscovery: &wpb.BoolValue{Value: true},
 				},
 				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{Enabled: true},
 			},
@@ -1570,5 +1573,22 @@ func TestShowStatus(t *testing.T) {
 				t.Errorf("showStatus(%v, %v), got: %v, want: %v", tc.feature, tc.enabled, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestUsage(t *testing.T) {
+	want := `Usage:
+configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_evaluation|workload_discovery> | -setting=<bare_metal|log_to_cloud>]
+[-enable|-disable] [-showall] [-v] [-h]
+[process_metrics_frequency=<int>] [slow_process_metrics_frequency=<int>]
+[process_metrics_to_skip=<"comma-separated-metrics">] [-add|-remove]
+[workload_evaluation_metrics_frequency=<int>] [workload_evaluation_db_metrics_frequency=<int>]
+[-agent_metrics_frequency=<int>] [agent_health_frequency=<int>]
+[heartbeat_frequency=<int>] [sample_interval_sec=<int>] [query_timeout_sec=<int>]
+`
+	c := &Configure{}
+	got := c.Usage()
+	if got != want {
+		t.Errorf("Usage(), got: %v, want: %v", got, want)
 	}
 }

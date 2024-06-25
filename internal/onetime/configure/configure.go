@@ -43,29 +43,28 @@ import (
 
 // Configure has args for backint subcommands.
 type Configure struct {
-	Feature                     string       `json:"feature"`
-	LogLevel                    string       `json:"loglevel"`
-	Setting                     string       `json:"setting"`
-	Path                        string       `json:"path"`
-	SkipMetrics                 string       `json:"process_metrics_to_skip"`
-	ValidationMetricsFrequency  int64        `json:"workload_evaluation_metrics_frequency,string"`
-	DbFrequency                 int64        `json:"workload_evaluation_db_metrics_frequency,string"`
-	FastMetricsFrequency        int64        `json:"process_metrics_frequency,string"`
-	SlowMetricsFrequency        int64        `json:"slow_process_metrics_frequency,string"`
-	AgentMetricsFrequency       int64        `json:"agent_metrics_frequency,string"`
-	AgentHealthFrequency        int64        `json:"agent_health_frequency,string"`
-	HeartbeatFrequency          int64        `json:"heartbeat_frequency,string"`
-	ReliabilityMetricsFrequency int64        `json:"reliability_metrics_frequency,string"`
-	SampleIntervalSec           int64        `json:"sample_interval_sec,string"`
-	QueryTimeoutSec             int64        `json:"query_timeout_sec,string"`
-	Help                        bool         `json:"help,string"`
-	Version                     bool         `json:"version,string"`
-	Enable                      bool         `json:"enable,string"`
-	Disable                     bool         `json:"disable,string"`
-	Showall                     bool         `json:"showall,string"`
-	Add                         bool         `json:"add,string"`
-	Remove                      bool         `json:"remove,string"`
-	RestartAgent                RestartAgent `json:"-"`
+	Feature                    string       `json:"feature"`
+	LogLevel                   string       `json:"loglevel"`
+	Setting                    string       `json:"setting"`
+	Path                       string       `json:"path"`
+	SkipMetrics                string       `json:"process_metrics_to_skip"`
+	ValidationMetricsFrequency int64        `json:"workload_evaluation_metrics_frequency,string"`
+	DbFrequency                int64        `json:"workload_evaluation_db_metrics_frequency,string"`
+	FastMetricsFrequency       int64        `json:"process_metrics_frequency,string"`
+	SlowMetricsFrequency       int64        `json:"slow_process_metrics_frequency,string"`
+	AgentMetricsFrequency      int64        `json:"agent_metrics_frequency,string"`
+	AgentHealthFrequency       int64        `json:"agent_health_frequency,string"`
+	HeartbeatFrequency         int64        `json:"heartbeat_frequency,string"`
+	SampleIntervalSec          int64        `json:"sample_interval_sec,string"`
+	QueryTimeoutSec            int64        `json:"query_timeout_sec,string"`
+	Help                       bool         `json:"help,string"`
+	Version                    bool         `json:"version,string"`
+	Enable                     bool         `json:"enable,string"`
+	Disable                    bool         `json:"disable,string"`
+	Showall                    bool         `json:"showall,string"`
+	Add                        bool         `json:"add,string"`
+	Remove                     bool         `json:"remove,string"`
+	RestartAgent               RestartAgent `json:"-"`
 }
 
 // RestartAgent abstracts restart functions(windows & linux) for testability.
@@ -78,7 +77,7 @@ const (
 	sapDiscovery       = "sap_discovery"
 	agentMetrics       = "agent_metrics"
 	workloadValidation = "workload_evaluation"
-	reliabilityMetrics = "reliability_metrics"
+	workloadDiscovery  = "workload_discovery"
 )
 
 var (
@@ -104,21 +103,20 @@ func (*Configure) Synopsis() string {
 // Usage implements the subcommand interface for features.
 func (*Configure) Usage() string {
 	return `Usage:
-configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_evaluation|reliability_metrics> | -setting=<bare_metal|log_to_cloud>]
+configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_evaluation|workload_discovery> | -setting=<bare_metal|log_to_cloud>]
 [-enable|-disable] [-showall] [-v] [-h]
 [process_metrics_frequency=<int>] [slow_process_metrics_frequency=<int>]
 [process_metrics_to_skip=<"comma-separated-metrics">] [-add|-remove]
 [workload_evaluation_metrics_frequency=<int>] [workload_evaluation_db_metrics_frequency=<int>]
 [-agent_metrics_frequency=<int>] [agent_health_frequency=<int>]
-[heartbeat_frequency=<int>] [reliability_metrics_frequency=<int>]
-[sample_interval_sec=<int>] [query_timeout_sec=<int>]
+[heartbeat_frequency=<int>] [sample_interval_sec=<int>] [query_timeout_sec=<int>]
 `
 }
 
 // SetFlags implements the subcommand interface for features.
 func (c *Configure) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&c.Feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
-	fs.StringVar(&c.Feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, reliability_metrics")
+	fs.StringVar(&c.Feature, "feature", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, workload_discovery")
+	fs.StringVar(&c.Feature, "f", "", "The requested feature. Valid values are: host_metrics, process_metrics, hana_monitoring, sap_discovery, agent_metrics, workload_evaluation, workload_discovery")
 	fs.StringVar(&c.LogLevel, "loglevel", "", "Sets the logging level for the agent configuration file")
 	fs.StringVar(&c.Setting, "setting", "", "The requested setting. Valid values are: bare_metal, log_to_cloud")
 	fs.StringVar(&c.SkipMetrics, "process_metrics_to_skip", "", "Add or remove the list of metrics to skip during process metrics collection")
@@ -131,7 +129,6 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&c.HeartbeatFrequency, "heartbeat_frequency", 0, "Sets the heartbeat frequency. Default value is 60(s)")
 	fs.Int64Var(&c.SampleIntervalSec, "sample_interval_sec", 0, "Sets the sample interval sec for HANA Monitoring. Default value is 300(s)")
 	fs.Int64Var(&c.QueryTimeoutSec, "query_timeout_sec", 0, "Sets the query timeout for HANA Monitoring. Default value is 300(s)")
-	fs.Int64Var(&c.ReliabilityMetricsFrequency, "reliability_metrics_frequency", 0, "Sets the reliability metric collection frequency. Default value is 60(s)")
 	fs.BoolVar(&c.Help, "help", false, "Display help")
 	fs.BoolVar(&c.Help, "h", false, "Display help")
 	fs.BoolVar(&c.Version, "version", false, "Print the agent version")
@@ -194,8 +191,8 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 		agentMetrics:       false,
 		workloadValidation: true,
 		processMetrics:     false,
-		reliabilityMetrics: false,
 		sapDiscovery:       false,
+		workloadDiscovery:  false,
 	}
 
 	if hm := config.GetProvideSapHostAgentMetrics(); hm != nil {
@@ -211,11 +208,14 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 			featureStatus[workloadValidation] = wlm.GetValue()
 		}
 		featureStatus[processMetrics] = cc.GetCollectProcessMetrics()
-		featureStatus[reliabilityMetrics] = cc.GetCollectReliabilityMetrics().GetValue()
 	}
 
 	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
 		featureStatus[sapDiscovery] = true
+	}
+
+	if config.GetDiscoveryConfiguration().GetEnableWorkloadDiscovery().GetValue() {
+		featureStatus[workloadDiscovery] = true
 	}
 
 	log.CtxLogger(ctx).Info("Feature status: ", featureStatus)
@@ -455,18 +455,10 @@ func (c *Configure) modifyFeature(ctx context.Context, fs *flag.FlagSet, config 
 			isCmdValid = true
 			checkCollectionConfig(config).WorkloadValidationDbMetricsFrequency = c.DbFrequency
 		}
-	case reliabilityMetrics:
+	case workloadDiscovery:
 		if isEnabled != nil {
 			isCmdValid = true
-			checkCollectionConfig(config).CollectReliabilityMetrics.Value = *isEnabled
-		}
-		if c.ReliabilityMetricsFrequency != 0 {
-			if c.ReliabilityMetricsFrequency < 0 {
-				onetime.LogErrorToFileAndConsole(ctx, "Inappropriate flag values:", fmt.Errorf("frequency must be non-negative"))
-				return subcommands.ExitUsageError
-			}
-			isCmdValid = true
-			checkCollectionConfig(config).ReliabilityMetricsFrequency = c.ReliabilityMetricsFrequency
+			checkDiscoveryConfig(config).EnableWorkloadDiscovery = &wpb.BoolValue{Value: *isEnabled}
 		}
 	default:
 		onetime.LogMessageToFileAndConsole(ctx, "Unsupported Metric")
