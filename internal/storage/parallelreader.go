@@ -59,6 +59,7 @@ func (rw *ReadWriter) NewParallelReader(ctx context.Context) (*ParallelReader, e
 		idleWorkersIDs: make(chan int, rw.ParallelDownloadWorkers),
 	}
 
+	log.Logger.Infow("Performing parallel restore", "objectName", rw.ObjectName, "parallelWorkers", rw.ParallelDownloadWorkers)
 	for i := 0; i < int(rw.ParallelDownloadWorkers); i++ {
 		r.workers[i] = &downloadWorker{
 			buffer: make([]byte, r.partSizeBytes),
@@ -68,7 +69,6 @@ func (rw *ReadWriter) NewParallelReader(ctx context.Context) (*ParallelReader, e
 		r.workers[i].object = bucket.Object(rw.ObjectName)
 		// TODO: need to check if encryption is enabled
 	}
-	log.Logger.Infow("Peforming parallel restore", "objectName", rw.ObjectName, "parallelWorkers", rw.ParallelDownloadWorkers)
 	return r, nil
 }
 
@@ -83,7 +83,7 @@ func (r *ParallelReader) Read(p []byte) (int, error) {
 
 	// In the first Read() call, kickoff all the workers to download their respective first chunk in parallel.
 	if r.objectOffset == 0 {
-		log.Logger.Infow("Wrokers started", "parallelWorkers", len(r.workers), "offset", r.objectOffset)
+		log.Logger.Infow("Workers started", "parallelWorkers", len(r.workers), "offset", r.objectOffset)
 		for i := 0; i < len(r.workers); i++ {
 			if startByte := r.partSizeBytes * int64(i); startByte < r.objectSize {
 				assignWorkersChunk(r, startByte, i)

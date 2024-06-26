@@ -65,6 +65,7 @@ message BackintConfiguration {
            //   YYYY-MM-DD'T'HH:MM:SS'Z'.
            // Reference:
            // https://cloud.google.com/storage/docs/metadata#custom-time
+  int64 parallel_recovery_streams = 39;
 }
 
 enum LogLevel {

@@ -205,6 +205,10 @@ func (p *Parameters) ApplyDefaults(numCPU int64) {
 		log.Logger.Info("parallel_streams capped to 32")
 		p.Config.ParallelStreams = 32
 	}
+	if p.Config.GetParallelRecoveryStreams() > 32 {
+		log.Logger.Info("parallel_recovery_streams capped to 32")
+		p.Config.ParallelRecoveryStreams = 32
+	}
 	if p.Config.GetThreads() <= 0 {
 		if numCPU > 64 {
 			numCPU = 64

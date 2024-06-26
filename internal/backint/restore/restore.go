@@ -190,7 +190,7 @@ func restoreFile(ctx context.Context, config *bpb.BackintConfiguration, connectP
 		RetryBackoffInitial:           time.Duration(config.GetRetryBackoffInitial()) * time.Second,
 		RetryBackoffMax:               time.Duration(config.GetRetryBackoffMax()) * time.Second,
 		RetryBackoffMultiplier:        float64(config.GetRetryBackoffMultiplier()),
-		ParallelDownloadWorkers:       config.GetParallelStreams(),
+		ParallelDownloadWorkers:       config.GetParallelRecoveryStreams(),
 		ParallelDownloadConnectParams: connectParams,
 	}
 	startTime := time.Now()

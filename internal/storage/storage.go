@@ -355,12 +355,9 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		object = object.Key(decodedKey)
 	}
 
-	// TODO: Disabled until feature complete
-	parallelRestore := false
-	// global flag to check if parallel restore is enabled
 	var reader io.ReadCloser
 	var err error
-	if parallelRestore && rw.ParallelDownloadWorkers > 1 {
+	if rw.ParallelDownloadWorkers > 1 {
 		reader, err = rw.NewParallelReader(ctx)
 	} else {
 		object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
