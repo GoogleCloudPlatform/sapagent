@@ -170,7 +170,7 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 
 	config.CollectionConfiguration = applyDefaultCollectionConfiguration(config.GetCollectionConfiguration())
 	config.HanaMonitoringConfiguration = applyDefaultHMConfiguration(config.GetHanaMonitoringConfiguration())
-	config.DiscoveryConfiguration = ApplyDefaultDiscoveryConfiguration(config.GetDiscoveryConfiguration())
+	config.DiscoveryConfiguration = applyDefaultDiscoveryConfiguration(config.GetDiscoveryConfiguration())
 	config.SupportConfiguration = applyDefaultSupportConfiguration(config.GetSupportConfiguration())
 
 	return config
@@ -260,8 +260,7 @@ func applyDefaultHMConfiguration(configFromFile *cpb.HANAMonitoringConfiguration
 	return hmConfig
 }
 
-// ApplyDefaultDiscoveryConfiguration is exported to be used by the SystemDiscovery OTE.
-func ApplyDefaultDiscoveryConfiguration(configFromFile *cpb.DiscoveryConfiguration) *cpb.DiscoveryConfiguration {
+func applyDefaultDiscoveryConfiguration(configFromFile *cpb.DiscoveryConfiguration) *cpb.DiscoveryConfiguration {
 	discoveryConfig := configFromFile
 	if discoveryConfig == nil {
 		discoveryConfig = &cpb.DiscoveryConfiguration{}
