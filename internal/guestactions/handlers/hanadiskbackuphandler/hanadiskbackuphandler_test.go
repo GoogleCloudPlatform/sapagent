@@ -28,24 +28,32 @@ import (
 func TestHANADiskBackupHandler(t *testing.T) {
 	tests := []struct {
 		name           string
-		command        *gpb.AgentCommand
+		command        *gpb.Command
 		wantExitStatus subcommands.ExitStatus
 	}{
 		{
 			name: "InvalidParameters",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{},
+			command: &gpb.Command{
+				CommandType: &gpb.Command_AgentCommand{
+					AgentCommand: &gpb.AgentCommand{
+						Parameters: map[string]string{},
+					},
+				},
 			},
 			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
 			name: "FailureForCloudMonitoring",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"sid":              "test-sid",
-					"hdbuserstore-key": "test-hdbuserstore-key",
-					"project":          "test-project",
-					"source-disk-zone": "test-zone",
+			command: &gpb.Command{
+				CommandType: &gpb.Command_AgentCommand{
+					AgentCommand: &gpb.AgentCommand{
+						Parameters: map[string]string{
+							"sid":              "test-sid",
+							"hdbuserstore-key": "test-hdbuserstore-key",
+							"project":          "test-project",
+							"source-disk-zone": "test-zone",
+						},
+					},
 				},
 			},
 			wantExitStatus: subcommands.ExitFailure,
@@ -53,9 +61,9 @@ func TestHANADiskBackupHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, exitStatus, _ := HANADiskBackupHandler(context.Background(), tc.command, nil)
-			if exitStatus != tc.wantExitStatus {
-				t.Errorf("HANADiskBackupHandler(%v) = %q, want: %q", tc.command, exitStatus, tc.wantExitStatus)
+			res, _ := HANADiskBackupHandler(context.Background(), tc.command, nil)
+			if res.ExitCode != int32(tc.wantExitStatus) {
+				t.Errorf("HANADiskBackupHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}
 		})
 	}

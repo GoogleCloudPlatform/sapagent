@@ -28,15 +28,19 @@ import (
 func TestPerformanceDiagnosticsHandler(t *testing.T) {
 	tests := []struct {
 		name           string
-		command        *gpb.AgentCommand
+		command        *gpb.Command
 		wantExitStatus subcommands.ExitStatus
 	}{
 		{
 			name: "FailureForBackup",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"type":        "backup",
-					"test-bucket": "test-bucket",
+			command: &gpb.Command{
+				CommandType: &gpb.Command_AgentCommand{
+					AgentCommand: &gpb.AgentCommand{
+						Parameters: map[string]string{
+							"type":        "backup",
+							"test-bucket": "test-bucket",
+						},
+					},
 				},
 			},
 			wantExitStatus: subcommands.ExitFailure,
@@ -44,9 +48,9 @@ func TestPerformanceDiagnosticsHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, exitStatus, _ := PerformanceDiagnosticsHandler(context.Background(), tc.command, nil)
-			if exitStatus != tc.wantExitStatus {
-				t.Errorf("PerformanceDiagnosticsHandler(%v) = %q, want: %q", tc.command, exitStatus, tc.wantExitStatus)
+			res, _ := PerformanceDiagnosticsHandler(context.Background(), tc.command, nil)
+			if res.ExitCode != int32(tc.wantExitStatus) {
+				t.Errorf("PerformanceDiagnosticsHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}
 		})
 	}

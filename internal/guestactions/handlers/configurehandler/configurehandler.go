@@ -37,13 +37,18 @@ func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 }
 
 // ConfigureHandler is the handler for the configure command.
-func ConfigureHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
+func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	c := &configure.Configure{
 		RestartAgent: noOpRestart,
 	}
-	handlers.ParseAgentCommandParameters(ctx, command, c)
+	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), c)
 	msg, exitStatus := c.ExecuteAndGetMessage(ctx, nil)
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
-	return msg, exitStatus, RestartAgent
+	result := &gpb.CommandResult{
+		Command:  command,
+		Stdout:   msg,
+		ExitCode: int32(exitStatus),
+	}
+	return result, RestartAgent
 }

@@ -21,7 +21,6 @@ import (
 	"context"
 	"runtime"
 
-	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -34,10 +33,15 @@ import (
 const RestartAgent = false
 
 // HANADiskBackupHandler is the handler for the hanadiskbackup command.
-func HANADiskBackupHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
+func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
 	s := &hanadiskbackup.Snapshot{}
-	handlers.ParseAgentCommandParameters(ctx, command, s)
+	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), s)
 	lp := log.Parameters{OSType: runtime.GOOS}
 	message, exitStatus := s.ExecuteAndGetMessage(ctx, nil, lp, cp)
-	return message, exitStatus, RestartAgent
+	result := &gpb.CommandResult{
+		Command:  command,
+		Stdout:   message,
+		ExitCode: int32(exitStatus),
+	}
+	return result, RestartAgent
 }

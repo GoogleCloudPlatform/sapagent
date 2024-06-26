@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/gcbdrdiscoveryhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/hanadiskbackuphandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/performancediagnosticshandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
@@ -50,10 +50,11 @@ const (
 	shellCommand    = "shell_command"
 )
 
-type guestActionHandler func(context.Context, *gpb.AgentCommand, *ipb.CloudProperties) (string, subcommands.ExitStatus, bool)
+type guestActionHandler func(context.Context, *gpb.Command, *ipb.CloudProperties) (*gpb.CommandResult, bool)
 
 var guestActionsHandlers = map[string]guestActionHandler{
 	"configure":              configurehandler.ConfigureHandler,
+	"gcbdr-discovery":        gcbdrdiscoveryhandler.GCBDRDiscoveryHandler,
 	"hanadiskbackup":         hanadiskbackuphandler.HANADiskBackupHandler,
 	"performancediagnostics": performancediagnosticshandler.PerformanceDiagnosticsHandler,
 	"supportbundle":          supportbundlehandler.SupportBundleHandler,
@@ -113,16 +114,9 @@ func handleAgentCommand(ctx context.Context, command *gpb.Command, requiresResta
 		}
 		return result, requiresRestart
 	}
-	output, exitStatus, restart := handler(ctx, command.GetAgentCommand(), cloudProperties)
+	result, restart := handler(ctx, command, cloudProperties)
 	requiresRestart = requiresRestart || restart
-	log.CtxLogger(ctx).Debugw("received result for agent command",
-		"command", prototext.Format(command), "output", output, "exitStatus", exitStatus)
-	result := &gpb.CommandResult{
-		Command:  command,
-		Stdout:   output,
-		Stderr:   "",
-		ExitCode: int32(exitStatus),
-	}
+	log.CtxLogger(ctx).Debugw("received result for agent command.", "result", prototext.Format(result))
 	return result, requiresRestart
 }
 

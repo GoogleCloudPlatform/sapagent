@@ -32,10 +32,15 @@ import (
 const RestartAgent = false
 
 // VersionHandler is the handler for the version command.
-func VersionHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
+func VersionHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
 	log.CtxLogger(ctx).Infow("VersionHandler was called. Command passed in is", "command", prototext.Format(command))
 	msg := onetime.GetAgentVersion()
 	exitStatus := subcommands.ExitSuccess
 	log.CtxLogger(ctx).Infow("VersionHandler was called. Version returned -", "msg", msg, "exitStatus", exitStatus)
-	return msg, exitStatus, RestartAgent
+	result := &gpb.CommandResult{
+		Command:  command,
+		Stdout:   msg,
+		ExitCode: int32(exitStatus),
+	}
+	return result, RestartAgent
 }

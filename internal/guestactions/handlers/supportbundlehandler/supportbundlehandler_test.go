@@ -28,16 +28,20 @@ import (
 func TestSupportBundleHandler(t *testing.T) {
 	tests := []struct {
 		name           string
-		command        *gpb.AgentCommand
+		command        *gpb.Command
 		wantExitStatus subcommands.ExitStatus
 	}{
 		{
 			name: "FailureCollectingErrors",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"sid":              "test-sid",
-					"hostname":         "test-hostname",
-					"instance-numbers": "00",
+			command: &gpb.Command{
+				CommandType: &gpb.Command_AgentCommand{
+					AgentCommand: &gpb.AgentCommand{
+						Parameters: map[string]string{
+							"sid":              "test-sid",
+							"hostname":         "test-hostname",
+							"instance-numbers": "00",
+						},
+					},
 				},
 			},
 			wantExitStatus: subcommands.ExitFailure,
@@ -45,9 +49,9 @@ func TestSupportBundleHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, exitStatus, _ := SupportBundleHandler(context.Background(), tc.command, nil)
-			if exitStatus != tc.wantExitStatus {
-				t.Errorf("SupportBundleHandler(%v) = %q, want: %q", tc.command, exitStatus, tc.wantExitStatus)
+			res, _ := SupportBundleHandler(context.Background(), tc.command, nil)
+			if res.ExitCode != int32(tc.wantExitStatus) {
+				t.Errorf("SupportBundleHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}
 		})
 	}

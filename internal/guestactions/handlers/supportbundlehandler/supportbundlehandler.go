@@ -21,7 +21,6 @@ import (
 	"context"
 
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -34,10 +33,15 @@ import (
 const RestartAgent = false
 
 // SupportBundleHandler is the handler for support bundle command.
-func SupportBundleHandler(ctx context.Context, command *gpb.AgentCommand, cp *ipb.CloudProperties) (string, subcommands.ExitStatus, bool) {
+func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
 	sb := &supportbundle.SupportBundle{}
-	handlers.ParseAgentCommandParameters(ctx, command, sb)
+	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), sb)
 	msg, exitStatus := sb.ExecuteAndGetMessage(ctx, nil)
-	return msg, exitStatus, RestartAgent
+	result := &gpb.CommandResult{
+		Command:  command,
+		Stdout:   msg,
+		ExitCode: int32(exitStatus),
+	}
+	return result, RestartAgent
 }

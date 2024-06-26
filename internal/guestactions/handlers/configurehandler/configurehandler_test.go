@@ -30,15 +30,19 @@ import (
 func TestConfigureHandler(t *testing.T) {
 	tests := []struct {
 		name           string
-		command        *gpb.AgentCommand
+		command        *gpb.Command
 		createConfig   bool
 		wantExitStatus subcommands.ExitStatus
 	}{
 		{
 			name: "FailureForNoConfigurationJSON",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"loglevel": "debug",
+			command: &gpb.Command{
+				CommandType: &gpb.Command_AgentCommand{
+					AgentCommand: &gpb.AgentCommand{
+						Parameters: map[string]string{
+							"loglevel": "debug",
+						},
+					},
 				},
 			},
 			createConfig:   false,
@@ -46,9 +50,13 @@ func TestConfigureHandler(t *testing.T) {
 		},
 		{
 			name: "UsageFailureForInvalidLogLevel",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"loglevel": "invalid-loglevel",
+			command: &gpb.Command{
+				CommandType: &gpb.Command_AgentCommand{
+					AgentCommand: &gpb.AgentCommand{
+						Parameters: map[string]string{
+							"loglevel": "invalid-loglevel",
+						},
+					},
 				},
 			},
 			createConfig:   true,
@@ -56,9 +64,13 @@ func TestConfigureHandler(t *testing.T) {
 		},
 		{
 			name: "SuccessForValidLogLevel",
-			command: &gpb.AgentCommand{
-				Parameters: map[string]string{
-					"loglevel": "debug",
+			command: &gpb.Command{
+				CommandType: &gpb.Command_AgentCommand{
+					AgentCommand: &gpb.AgentCommand{
+						Parameters: map[string]string{
+							"loglevel": "debug",
+						},
+					},
 				},
 			},
 			createConfig:   true,
@@ -70,7 +82,7 @@ func TestConfigureHandler(t *testing.T) {
 			if tc.createConfig {
 				dir := t.TempDir()
 				filePath := path.Join(dir, "/configuration.json")
-				tc.command.Parameters["path"] = filePath
+				tc.command.GetAgentCommand().Parameters["path"] = filePath
 				f, err := os.Create(filePath)
 				if err != nil {
 					t.Fatalf("Failed to create configuration file: %v", err)
@@ -80,9 +92,9 @@ func TestConfigureHandler(t *testing.T) {
 				}
 				defer os.Remove(f.Name())
 			}
-			_, exitStatus, _ := ConfigureHandler(context.Background(), tc.command, nil)
-			if exitStatus != tc.wantExitStatus {
-				t.Errorf("ConfigureHandler(%v) = %q, want: %q", tc.command, exitStatus, tc.wantExitStatus)
+			res, _ := ConfigureHandler(context.Background(), tc.command, nil)
+			if res.ExitCode != int32(tc.wantExitStatus) {
+				t.Errorf("ConfigureHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}
 		})
 	}
