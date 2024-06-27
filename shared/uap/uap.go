@@ -101,13 +101,16 @@ func establishConnection(ctx context.Context, endpoint string, channel string) *
 }
 
 func setupBackoff() backoff.BackOff {
-	eBackoff := backoff.NewExponentialBackOff()
-	eBackoff.MaxElapsedTime = 8 * time.Hour
-	eBackoff.MaxInterval = 30 * time.Minute
-	eBackoff.InitialInterval = 2 * time.Second
-	eBackoff.Multiplier = 2
-	eBackoff.RandomizationFactor = 0.1
-	return eBackoff
+	b := &backoff.ExponentialBackOff{
+		InitialInterval:     2 * time.Second,
+		RandomizationFactor: 0,
+		Multiplier:          2,
+		MaxInterval:         1 * time.Hour,
+		MaxElapsedTime:      0,
+		Clock:               backoff.SystemClock,
+	}
+	b.Reset()
+	return b
 }
 
 func logAndBackoff(ctx context.Context, eBackoff backoff.BackOff, msg string) {
