@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
@@ -208,6 +209,33 @@ func TestParseAgentCommandParameters(t *testing.T) {
 				PrintDiff:         true,
 			},
 			ignoreUnexportedType: performancediagnostics.Diagnose{},
+		},
+		{
+			name: "ParseConfigureInstanceCommand",
+			command: &gpb.AgentCommand{
+				Parameters: map[string]string{
+					"apply":           "true",
+					"check":           "true",
+					"printDiff":       "true",
+					"overrideType":    "test-machine-type",
+					"hyperThreading":  "test-hyper-threading",
+					"overrideVersion": "test-override-version",
+					"help":            "true",
+					"version":         "true",
+				},
+			},
+			obj: &configureinstance.ConfigureInstance{},
+			want: &configureinstance.ConfigureInstance{
+				Apply:           true,
+				Check:           true,
+				PrintDiff:       true,
+				MachineType:     "test-machine-type",
+				HyperThreading:  "test-hyper-threading",
+				OverrideVersion: "test-override-version",
+				Help:            true,
+				Version:         true,
+			},
+			ignoreUnexportedType: configureinstance.ConfigureInstance{},
 		},
 		{
 			name: "InvalidCommandParameters",

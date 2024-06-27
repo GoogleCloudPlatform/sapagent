@@ -74,14 +74,14 @@ type diff struct {
 
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
-	Apply           bool   `json:"apply"`
-	Check           bool   `json:"check"`
+	Apply           bool   `json:"apply,string"`
+	Check           bool   `json:"check,string"`
 	MachineType     string `json:"overrideType"`
 	HyperThreading  string `json:"hyperThreading"`
 	OverrideVersion string `json:"overrideVersion"`
-	PrintDiff       bool   `json:"printDiff"`
-	Help            bool   `json:"help"`
-	Version         bool   `json:"version"`
+	PrintDiff       bool   `json:"printDiff,string"`
+	Help            bool   `json:"help,string"`
+	Version         bool   `json:"version,string"`
 
 	WriteFile   WriteFileFunc
 	ReadFile    ReadFileFunc
@@ -189,16 +189,12 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts onetime.RunOptions) (s
 	if c.OverrideVersion != overrideVersionLatest {
 		log.CtxLogger(ctx).Warnf(`overrideVersion set to %q. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes.`, c.OverrideVersion)
 	}
-	status, err := c.configureInstanceHandler(ctx)
-	if err != nil {
-		return status, err.Error()
-	}
-	return status, ""
+	return c.configureInstanceHandler(ctx)
 }
 
 // configureInstanceHandler checks and applies OS settings
 // depending on the machine type.
-func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subcommands.ExitStatus, error) {
+func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subcommands.ExitStatus, string) {
 	c.LogToBoth(ctx, "ConfigureInstance starting")
 	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
 	// usagemetrics.Action(usagemetrics.ConfigureInstanceStarted)
@@ -214,21 +210,21 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 		switch c.OverrideVersion {
 		case overrideVersionLatest:
 			if rebootRequired, err = c.configureX4(ctx); err != nil {
-				return subcommands.ExitFailure, err
+				return subcommands.ExitFailure, err.Error()
 			}
 		case overrideVersion33:
 			if rebootRequired, err = c.configureX43_3(ctx); err != nil {
-				return subcommands.ExitFailure, err
+				return subcommands.ExitFailure, err.Error()
 			}
 		case overrideVersion34:
 			if rebootRequired, err = c.configureX43_4(ctx); err != nil {
-				return subcommands.ExitFailure, err
+				return subcommands.ExitFailure, err.Error()
 			}
 		default:
-			return subcommands.ExitUsageError, fmt.Errorf("this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.MachineType)
+			return subcommands.ExitUsageError, fmt.Sprintf("this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.MachineType)
 		}
 	default:
-		return subcommands.ExitUsageError, fmt.Errorf("this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
+		return subcommands.ExitUsageError, fmt.Sprintf("this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
 	}
 
 	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
@@ -239,27 +235,40 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	// if c.Apply {
 	// 	usagemetrics.Action(usagemetrics.ConfigureInstanceApplyFinished)
 	// }
+	var messages []string
 	exitStatus := subcommands.ExitSuccess
 	if c.Apply || (c.Check && !rebootRequired) {
-		c.LogToBoth(ctx, "ConfigureInstance: SUCCESS")
+		message := "ConfigureInstance: SUCCESS"
+		c.LogToBoth(ctx, message)
+		messages = append(messages, message)
 	}
 	if c.Apply && rebootRequired {
-		c.LogToBoth(ctx, "\nPlease note that a reboot is required for the changes to take effect.")
+		message := "\nPlease note that a reboot is required for the changes to take effect."
+		c.LogToBoth(ctx, message)
+		messages = append(messages, message)
 	}
 	if c.Check && rebootRequired {
-		c.LogToBoth(ctx, "ConfigureInstance: Your system configuration doesn't match best practice for your instance type. Please run 'configureinstance -apply' to fix.")
+		message := "ConfigureInstance: Your system configuration doesn't match best practice for your instance type. Please run 'configureinstance -apply' to fix."
+		c.LogToBoth(ctx, message)
+		messages = append(messages, message)
 		exitStatus = subcommands.ExitFailure
 	}
-	c.LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams)))
+	message := fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))
+	c.LogToBoth(ctx, message)
+	messages = append(messages, message)
 
 	if c.PrintDiff {
 		if jsonDiffs, err := json.MarshalIndent(c.diffs, "", "  "); err != nil {
-			c.LogToBoth(ctx, "ConfigureInstance failed to marshal diffs")
+			message := "ConfigureInstance failed to marshal diffs"
+			c.LogToBoth(ctx, message)
+			messages = append(messages, message)
 		} else {
 			fmt.Println(string(jsonDiffs))
+			messages = append(messages, string(jsonDiffs))
 		}
 	}
-	return exitStatus, nil
+	csvMessage := strings.Join(messages, ", ")
+	return exitStatus, csvMessage
 }
 
 // LogToBoth prints to the console and writes an INFO msg to the log file.

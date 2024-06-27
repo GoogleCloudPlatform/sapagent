@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"flag"
@@ -243,18 +244,18 @@ func TestSetFlagsForConfigureInstance(t *testing.T) {
 
 func TestConfigureInstanceHandler(t *testing.T) {
 	tests := []struct {
-		name    string
-		c       ConfigureInstance
-		want    subcommands.ExitStatus
-		wantErr error
+		name            string
+		c               ConfigureInstance
+		want            subcommands.ExitStatus
+		wantMsgFragment string
 	}{
 		{
 			name: "UnsupportedMachineType",
 			c: ConfigureInstance{
 				MachineType: "",
 			},
-			want:    subcommands.ExitUsageError,
-			wantErr: cmpopts.AnyError,
+			want:            subcommands.ExitUsageError,
+			wantMsgFragment: "machine type",
 		},
 		{
 			name: "x4SuccessApply",
@@ -266,8 +267,8 @@ func TestConfigureInstanceHandler(t *testing.T) {
 				WriteFile:       defaultWriteFile(5),
 				Apply:           true,
 			},
-			want:    subcommands.ExitSuccess,
-			wantErr: nil,
+			want:            subcommands.ExitSuccess,
+			wantMsgFragment: "SUCCESS",
 		},
 		{
 			name: "x4SuccessCheck",
@@ -280,28 +281,28 @@ func TestConfigureInstanceHandler(t *testing.T) {
 				Check:           true,
 				PrintDiff:       true,
 			},
-			want:    subcommands.ExitFailure,
-			wantErr: nil,
+			want:            subcommands.ExitFailure,
+			wantMsgFragment: "doesn't match best practice",
 		},
 		{
 			name: "X4Fail",
 			c: ConfigureInstance{
 				MachineType:     "x4-megamem-1920",
 				OverrideVersion: overrideVersionLatest,
-				ReadFile:        defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
 			},
-			want:    subcommands.ExitFailure,
-			wantErr: cmpopts.AnyError,
+			want:            subcommands.ExitFailure,
+			wantMsgFragment: "ReadFile failed",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := test.c.configureInstanceHandler(context.Background())
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("configureInstanceHandler()=%v want %v", gotErr, test.wantErr)
-			}
+			got, msg := test.c.configureInstanceHandler(context.Background())
 			if got != test.want {
 				t.Errorf("configureInstanceHandler()=%v want %v", got, test.want)
+			}
+			if !strings.Contains(msg, test.wantMsgFragment) {
+				t.Errorf("configureInstanceHandler()=%q, want to contain %q", msg, test.wantMsgFragment)
 			}
 		})
 	}

@@ -26,6 +26,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configureinstancehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/gcbdrdiscoveryhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/hanadiskbackuphandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/performancediagnosticshandler"
@@ -54,6 +55,7 @@ type guestActionHandler func(context.Context, *gpb.Command, *ipb.CloudProperties
 
 var guestActionsHandlers = map[string]guestActionHandler{
 	"configure":              configurehandler.ConfigureHandler,
+	"configureinstance":      configureinstancehandler.ConfigureInstanceHandler,
 	"gcbdr-discovery":        gcbdrdiscoveryhandler.GCBDRDiscoveryHandler,
 	"hanadiskbackup":         hanadiskbackuphandler.HANADiskBackupHandler,
 	"performancediagnostics": performancediagnosticshandler.PerformanceDiagnosticsHandler,
