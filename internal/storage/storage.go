@@ -347,8 +347,10 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 		log.CtxLogger(ctx).Infow("Decryption enabled for download", "bucket", rw.BucketName, "object", rw.ObjectName)
 	}
 	object := rw.BucketHandle.Object(rw.ObjectName)
+	var decodedKey []byte
 	if rw.EncryptionKey != "" {
-		decodedKey, err := base64.StdEncoding.DecodeString(rw.EncryptionKey)
+		var err error
+		decodedKey, err = base64.StdEncoding.DecodeString(rw.EncryptionKey)
 		if err != nil {
 			return 0, err
 		}
@@ -358,7 +360,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	var reader io.ReadCloser
 	var err error
 	if rw.ParallelDownloadWorkers > 1 {
-		reader, err = rw.NewParallelReader(ctx)
+		reader, err = rw.NewParallelReader(ctx, decodedKey)
 	} else {
 		object = object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
 		reader, err = object.NewReader(ctx)

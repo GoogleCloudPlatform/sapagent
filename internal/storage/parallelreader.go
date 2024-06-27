@@ -19,6 +19,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"cloud.google.com/go/storage"
@@ -49,7 +50,7 @@ type downloadWorker struct {
 }
 
 // NewParallelReader creates workers with readers for parallel download.
-func (rw *ReadWriter) NewParallelReader(ctx context.Context) (*ParallelReader, error) {
+func (rw *ReadWriter) NewParallelReader(ctx context.Context, decodedKey []byte) (*ParallelReader, error) {
 
 	r := &ParallelReader{
 		ctx:            ctx,
@@ -67,7 +68,9 @@ func (rw *ReadWriter) NewParallelReader(ctx context.Context) (*ParallelReader, e
 		// Creates a new bucket handle for each worker to support parallel downloads.
 		bucket, _ := ConnectToBucket(ctx, rw.ParallelDownloadConnectParams)
 		r.workers[i].object = bucket.Object(rw.ObjectName)
-		// TODO: need to check if encryption is enabled
+		if len(decodedKey) > 0 {
+			r.workers[i].object = r.workers[i].object.Key(decodedKey)
+		}
 	}
 	return r, nil
 }
@@ -96,6 +99,7 @@ func (r *ParallelReader) Read(p []byte) (int, error) {
 		id := <-r.idleWorkersIDs
 		// If the worker fails to read from GCS, we must exit the loop.
 		if r.workers[id].errReading != nil {
+			log.Logger.Errorw("Failed to read from GCS", "err", r.workers[id].errReading)
 			return 0, r.workers[id].errReading
 		}
 		r.workers[id].copyReady = true
@@ -142,16 +146,13 @@ func assignWorkersChunk(r *ParallelReader, startByte int64, id int) {
 // fillWorkerBuffer fills the worker's buffer with data from GCS.
 func fillWorkerBuffer(r *ParallelReader, worker *downloadWorker, startByte int64) error {
 	if worker == nil {
-		err := errors.New("no worker defined")
-		log.Logger.Errorw("No worker is defined", "err", err)
-		return err
+		return fmt.Errorf("no worker defined")
 	}
 
 	// Assigns reader to worker with the given startByte and offset.
 	var err error
 	if worker.reader, err = worker.object.NewRangeReader(r.ctx, startByte, r.partSizeBytes); err != nil {
-		log.Logger.Errorw("Failed to create range reader", "err", err)
-		return err
+		return fmt.Errorf("failed to create range reader: %v", err)
 	}
 
 	// Reads data into the worker's buffer until the whole length is read.
@@ -159,8 +160,7 @@ func fillWorkerBuffer(r *ParallelReader, worker *downloadWorker, startByte int64
 	for {
 		var n int
 		if n, err = worker.reader.Read(worker.buffer[bytesRead:]); err != nil && err != io.EOF {
-			log.Logger.Errorw("Failed to read from range reader", "err", err)
-			return err
+			return fmt.Errorf("failed to read from range reader: %v", err)
 		}
 		if n == 0 || err == io.EOF {
 			// When all bytes are read, the loop will exit.

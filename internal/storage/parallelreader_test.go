@@ -123,9 +123,10 @@ var (
 
 func TestNewParallelReader(t *testing.T) {
 	tests := []struct {
-		name    string
-		rw      ReadWriter
-		wantErr error
+		name       string
+		rw         ReadWriter
+		decodedKey []byte
+		wantErr    error
 	}{
 		{
 			name: "NewParallelReaderSuccess",
@@ -157,10 +158,26 @@ func TestNewParallelReader(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "MultipleWorkersEncryptionKeySuccess",
+			rw: ReadWriter{
+				TotalBytes:              int64(len(testingContent1)),
+				ChunkSizeMb:             DefaultChunkSizeMb,
+				ParallelDownloadWorkers: 16,
+				ParallelDownloadConnectParams: &ConnectParameters{
+					StorageClient:    defaultStorageClient,
+					BucketName:       bucketNameParallel,
+					VerifyConnection: true,
+				},
+				ObjectName:    "object1.txt",
+			},
+			decodedKey: []byte("\ufffdL\ufffd\u001b\ufffd`\ufffd\ufffdl\u00151\ufffd4\u0006;\u0005\ufffd%]/\ufffd).\nk)\n\u001d*\ufffd\ufffd"),
+			wantErr:    nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, gotErr := test.rw.NewParallelReader(context.Background())
+			_, gotErr := test.rw.NewParallelReader(context.Background(), test.decodedKey)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("NewParallelReader() = %v, want %v", gotErr, test.wantErr)
 			}
