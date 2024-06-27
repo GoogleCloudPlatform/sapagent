@@ -152,6 +152,8 @@
         "widget": {
           "title": "Backup Success Rate",
           "scorecard": {
+            "dimensions": [],
+            "measures": [],
             "thresholds": [
               {
                 "color": "YELLOW",
@@ -182,6 +184,8 @@
         "widget": {
           "title": "Restore Success Rate",
           "scorecard": {
+            "dimensions": [],
+            "measures": [],
             "thresholds": [
               {
                 "color": "YELLOW",
@@ -210,7 +214,7 @@
         "width": 12,
         "height": 8,
         "widget": {
-          "title": "Backup Average Throughput MBps",
+          "title": "Backup Average MBps",
           "scorecard": {
             "blankView": {},
             "thresholds": [],
@@ -234,7 +238,7 @@
         "width": 12,
         "height": 8,
         "widget": {
-          "title": "Restore Average Throughput MBps",
+          "title": "Restore Average MBps",
           "scorecard": {
             "blankView": {},
             "thresholds": [],
