@@ -21,6 +21,7 @@ package fastmovingmetrics
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -184,6 +186,11 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 				usagemetrics.Action(usagemetrics.ReliabilityHANAAvailable)
 			}
 		} else {
+			metricevents.AddEvent(ctx, metricevents.Parameters{
+				Path:    mPath,
+				Message: "HANA System Availability",
+				Value:   strconv.FormatInt(availabilityValue, 10),
+			})
 			metrics = append(metrics, createMetrics(ip, mPath, nil, now, availabilityValue))
 		}
 	}

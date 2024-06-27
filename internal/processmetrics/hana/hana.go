@@ -32,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -187,6 +188,13 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 				"service_name": process.Name,
 				"pid":          process.PID,
 			}
+			metricevents.AddEvent(ctx, metricevents.Parameters{
+				Path:       servicePath,
+				Message:    fmt.Sprintf("HANA Service Availability for %s", process.Name),
+				Value:      strconv.FormatInt(boolToInt64(process.IsGreen), 10),
+				Labels:     appendLabels(ip, extraLabels),
+				Identifier: process.Name,
+			})
 			metrics = append(metrics, createMetrics(ip, servicePath, extraLabels, now, boolToInt64(process.IsGreen)))
 		}
 	}
