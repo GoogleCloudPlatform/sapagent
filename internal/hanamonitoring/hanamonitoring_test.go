@@ -40,6 +40,7 @@ import (
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	gcefake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
@@ -119,20 +120,20 @@ func newDefaultCumulativeMetric(st, et int64) *mrpb.TimeSeries {
 	}
 }
 
-func fakeHRCSucessPrimary(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
-	return 1, []string{"random"}, 1, nil
+func fakeHRCSucessPrimary(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+	return 1, []string{"random"}, 1, nil, nil
 }
 
-func fakeHRCSucessSecondary(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
-	return 2, []string{"random"}, 2, nil
+func fakeHRCSucessSecondary(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+	return 2, []string{"random"}, 2, nil, nil
 }
 
-func fakeHRCSucessError(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
-	return 0, []string{"random"}, 0, errors.New("fake error")
+func fakeHRCSucessError(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+	return 0, []string{"random"}, 0, nil, errors.New("fake error")
 }
 
-func fakeHRCSuccessForStandAlone(ctx context.Context, user, sid, instID string) (int, []string, int64, error) {
-	return 0, []string{"random"}, 1, nil
+func fakeHRCSuccessForStandAlone(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+	return 0, []string{"random"}, 1, nil, nil
 }
 
 func newTimeSeriesKey(metricType, metricLabels string) timeSeriesKey {

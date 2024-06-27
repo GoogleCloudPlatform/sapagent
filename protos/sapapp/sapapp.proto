@@ -58,9 +58,17 @@ message SAPInstance {
   string netweaver_health_check_url = 15;
   InstanceKind kind = 16;        // APP, CS, ERS
   string hdbuserstore_key = 17;  // hdbuserstore key for database
+  HANAReplicaSite hana_replication_tree =
+      18;  // Nested instances for HANA replication. This value always contains
+           // the primary instance for the HANA replication configuration.
 }
 
 message SAPInstances {
   repeated SAPInstance instances = 1;
   bool linux_cluster_member = 2;
+}
+
+message HANAReplicaSite {
+  string name = 1;
+  repeated HANAReplicaSite targets = 2;
 }

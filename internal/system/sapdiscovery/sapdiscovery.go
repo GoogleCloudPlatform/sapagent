@@ -76,11 +76,15 @@ var (
 		14: "Syncing: The secondary system is syncing again (for example, after a temporary connection loss or restart of the secondary).",
 		15: "Active: Initialization or sync with the primary is complete and the secondary is continuously replicating. No data loss will occur in SYNC mode.",
 	}
+
+	siteMapPattern = regexp.MustCompile(`((\s+\|)*)(---)?([a-zA-Z0-9_\-]+)\s\([^\)]+\)`)
+	depthPattern   = regexp.MustCompile(`\s+\|`)
 )
 
 type (
-	listInstances     func(context.Context, commandlineexecutor.Execute) ([]*instanceInfo, error)
-	replicationConfig func(context.Context, string, string, string) (int, []string, int64, error)
+	listInstances func(context.Context, commandlineexecutor.Execute) ([]*instanceInfo, error)
+	// ReplicationConfig is a function that returns the replication configuration information.
+	ReplicationConfig func(context.Context, string, string, string) (int, []string, int64, *sapb.HANAReplicaSite, error)
 	instanceInfo      struct {
 		Sid, InstanceName, Snr, ProfilePath, LDLibraryPath string
 	}
@@ -104,7 +108,7 @@ func SAPApplications(ctx context.Context) *sapb.SAPInstances {
 }
 
 // instances is a testable version of SAPApplications.
-func instances(ctx context.Context, hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute, crmdata *pacemaker.CRMMon) *sapb.SAPInstances {
+func instances(ctx context.Context, hrc ReplicationConfig, list listInstances, exec commandlineexecutor.Execute, crmdata *pacemaker.CRMMon) *sapb.SAPInstances {
 	log.CtxLogger(ctx).Debug("Discovering SAP Applications.")
 	var sapInstances []*sapb.SAPInstance
 
@@ -130,7 +134,7 @@ func instances(ctx context.Context, hrc replicationConfig, list listInstances, e
 
 // hanaInstances returns list of SAP HANA Instances present on the machine.
 // Returns error in case of failures.
-func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
+func hanaInstances(ctx context.Context, hrc ReplicationConfig, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
 	log.CtxLogger(ctx).Debug("Discovering SAP HANA instances.")
 
 	sapServicesEntries, err := list(ctx, exec)
@@ -149,23 +153,25 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 
 		instanceID := entry.InstanceName + entry.Snr
 		user := strings.ToLower(entry.Sid) + "adm"
-		siteID, HAMembers, _, err := hrc(ctx, user, entry.Sid, instanceID)
+		siteID, HAMembers, _, replicationSites, err := hrc(ctx, user, entry.Sid, instanceID)
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Failed to get HANA HA configuration for instance", "instanceid", instanceID, "error", err)
 			siteID = -1 // INSTANCE_SITE_UNDEFINED
 		}
+		log.CtxLogger(ctx).Debugw("Got replication information", "siteID", siteID, "HAMembers", HAMembers, "replicationSites", replicationSites)
 
 		instance := &sapb.SAPInstance{
-			Sapsid:         entry.Sid,
-			InstanceNumber: entry.Snr,
-			Type:           sapb.InstanceType_HANA,
-			Site:           HANASite(siteID),
-			HanaHaMembers:  HAMembers,
-			User:           user,
-			InstanceId:     instanceID,
-			ProfilePath:    entry.ProfilePath,
-			LdLibraryPath:  entry.LDLibraryPath,
-			SapcontrolPath: fmt.Sprintf("%s/sapcontrol", entry.LDLibraryPath),
+			Sapsid:              entry.Sid,
+			InstanceNumber:      entry.Snr,
+			Type:                sapb.InstanceType_HANA,
+			Site:                HANASite(siteID),
+			HanaHaMembers:       HAMembers,
+			User:                user,
+			InstanceId:          instanceID,
+			ProfilePath:         entry.ProfilePath,
+			LdLibraryPath:       entry.LDLibraryPath,
+			SapcontrolPath:      fmt.Sprintf("%s/sapcontrol", entry.LDLibraryPath),
+			HanaReplicationTree: replicationSites,
 		}
 		log.CtxLogger(ctx).Debugw("Found SAP HANA instance", "instance", prototext.Format(instance))
 		instances = append(instances, instance)
@@ -184,12 +190,12 @@ func hanaInstances(ctx context.Context, hrc replicationConfig, list listInstance
 //
 // HANA HA member nodes as array of strings {PRIMARY_NODE, SECONDARY_NODE}.
 // Exit status of systemReplicationStatus.py as int64.
-func HANAReplicationConfig(ctx context.Context, user, sid, instID string) (site int, HAMembers []string, exitStatus int64, err error) {
+func HANAReplicationConfig(ctx context.Context, user, sid, instID string) (site int, HAMembers []string, exitStatus int64, replicationSites *sapb.HANAReplicaSite, err error) {
 	return readReplicationConfig(ctx, user, sid, instID, commandlineexecutor.ExecuteCommand)
 }
 
 // readReplicationConfig is a testable version of HANAReplicationConfig.
-func readReplicationConfig(ctx context.Context, user, sid, instID string, exec commandlineexecutor.Execute) (mode int, HAMembers []string, exitStatus int64, err error) {
+func readReplicationConfig(ctx context.Context, user, sid, instID string, exec commandlineexecutor.Execute) (mode int, HAMembers []string, exitStatus int64, replicationSites *sapb.HANAReplicaSite, err error) {
 	cmd := "sudo"
 	args := "" +
 		fmt.Sprintf("-i -u %sadm /usr/sap/%s/%s/HDBSettings.sh ", strings.ToLower(sid), sid, instID) +
@@ -212,20 +218,21 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	log.CtxLogger(ctx).Debugw("SAP HANA Replication Config result", "stdout", result.StdOut)
 	if strings.Contains(result.StdOut, "mode: none") {
 		log.CtxLogger(ctx).Debugw("HANA instance is in standalone mode for instance", "instanceid", instID)
-		return 0, nil, exitStatus, nil
+		return 0, nil, exitStatus, nil, nil
 	}
 
 	match := sitePattern.FindStringSubmatch(result.StdOut)
 	if len(match) != 2 {
 		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Site for instance", "instanceid", instID)
-		return 0, nil, 0, fmt.Errorf("error determining SAP HANA Site for instance: %s", instID)
+		return 0, nil, 0, nil, fmt.Errorf("error determining SAP HANA Site for instance: %s", instID)
 	}
 	site := match[1]
 
 	haHostMap, err := readHAMembers(ctx, result.StdOut, instID)
 	if err != nil {
-		return mode, nil, exitStatus, err
+		return mode, nil, exitStatus, nil, err
 	}
+	log.CtxLogger(ctx).Debugw("HA Host Map", "haHostMap", haHostMap)
 
 	// site may be either the host name or the site name. Utilize the haHostMap to get a site name.
 	if s, ok := haHostMap[site]; ok {
@@ -233,14 +240,61 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	}
 	mode, err = readMode(ctx, result.StdOut, site)
 	if err != nil {
-		return 0, nil, 0, err
+		return 0, nil, 0, nil, err
 	}
 
-	for k := range haHostMap {
-		HAMembers = append(HAMembers, k)
-	}
+	// Separate sites into tiers.
+	log.CtxLogger(ctx).Debugw("Separating sites into tiers")
+	lines := strings.Split(result.StdOut, "\n")
+	inSiteMappings := false
+	siteStack := []*sapb.HANAReplicaSite{}
+	currentDepth := -1
+	var primarySite *sapb.HANAReplicaSite
+	for _, line := range lines {
+		if strings.Contains(line, "Site Mappings") {
+			inSiteMappings = true
+			continue
+		} else if !inSiteMappings {
+			continue
+		}
 
-	return mode, HAMembers, exitStatus, nil
+		matches := siteMapPattern.FindStringSubmatch(line)
+		if len(matches) != 5 {
+			continue
+		}
+
+		siteName := matches[4]
+		var hostName string
+		for h, s := range haHostMap {
+			log.CtxLogger(ctx).Debugw("Checking host name", "siteName", s, "hostName", h)
+			if s == siteName {
+				hostName = h
+				log.CtxLogger(ctx).Debugw("Found host name", "siteName", s, "hostName", h)
+				break
+			}
+		}
+		HAMembers = append(HAMembers, hostName)
+		log.CtxLogger(ctx).Debugw("Making site for host", "siteName", siteName, "hostName", hostName)
+		site := &sapb.HANAReplicaSite{Name: hostName}
+		depth := len(depthPattern.FindAllStringSubmatch(line, -1))
+		log.CtxLogger(ctx).Debugw("Depth of site", "site", site, "depth", depth, "currentDepth", currentDepth)
+		for depth <= currentDepth {
+			log.CtxLogger(ctx).Debugw("Popping site", "site", siteStack[len(siteStack)-1])
+			siteStack = siteStack[:len(siteStack)-1]
+			currentDepth--
+		}
+		if len(siteStack) > 0 {
+			currentSite := siteStack[len(siteStack)-1]
+			log.CtxLogger(ctx).Debugw("Appending site to parent's targets", "currentSite", currentSite, "site", site)
+			currentSite.Targets = append(currentSite.Targets, site)
+		}
+		siteStack = append(siteStack, site)
+		currentDepth = depth
+		if primarySite == nil {
+			primarySite = site
+		}
+	}
+	return mode, HAMembers, exitStatus, primarySite, nil
 }
 
 func readMode(ctx context.Context, stdOut, site string) (mode int, err error) {

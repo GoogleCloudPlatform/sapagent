@@ -18,6 +18,7 @@ package sapdiscovery
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"os"
 	"testing"
@@ -38,123 +39,34 @@ func TestMain(t *testing.M) {
 	os.Exit(t.Run())
 }
 
-const (
-	sapInitRunningOutput = `
-	saphostexec running (pid = 3640)
+var (
+	sapInitRunningOutput = `saphostexec running (pid = 3640)
 	sapstartsrv running (pid = 3958)
 	saposcol running (pid = 4031)
 	pid's (3958 3960 4229 4537)
 	running`
-
-	sapInitStoppedOutput = `
-	saphostexec stopped
-	No process running.`
-
-	hanaSingleNodeOutput = `System Replication State
-	~~~~~~~~~~~~~~~~~~~~~~~~
-	
-	online: true
-	
-	mode: none
-	done.`
-	hanaHAPrimaryOutput = `System Replication State
-	~~~~~~~~~~~~~~~~~~~~~~~~
-	
-	online: true
-	
-	mode: primary
-	operation mode: primary
-	site id: 1
-	site name: HO2_21
-	
-	is source system: true
-	is secondary/consumer system: false
-	has secondaries/consumers attached: true
-	is a takeover active: false
-	is primary suspended: false
-	
-	Host Mappings:
-	~~~~~~~~~~~~~~
-	
-	gce-1 -> [HO2_22] gce-2
-	gce-1 -> [HO2_21] gce-1
-	
-	
-	Site Mappings:
-	~~~~~~~~~~~~~~
-	HO2_21 (primary/primary)
-			|---HO2_22 (syncmem/logreplay_readaccess)
-	
-	Tier of HO2_21: 1
-	Tier of HO2_22: 2
-	
-	Replication mode of HO2_21: primary
-	Replication mode of HO2_22: syncmem
-	
-	Operation mode of HO2_21: primary
-	Operation mode of HO2_22: logreplay_readaccess
-	
-	Mapping: HO2_21 -> HO2_22
-	done.
-	`
-	hanaHASecondaryOutput = `System Replication State
-	~~~~~~~~~~~~~~~~~~~~~~~~
-	
-	online: true
-	
-	mode: syncmem
-	operation mode: logreplay_readaccess
-	site id: 2
-	site name: gce-2
-	
-	is source system: false
-	is secondary/consumer system: true
-	has secondaries/consumers attached: false
-	is a takeover active: false
-	is primary suspended: false
-	is timetravel enabled: false
-	replay mode: auto
-	active primary site: 1
-	
-	primary masters: gce-1
-	
-	Host Mappings:
-	~~~~~~~~~~~~~~
-	
-	gce-2 -> [HO2_22] gce-2
-	gce-2 -> [HO2_21] gce-1
-	
-	
-	Site Mappings:
-	~~~~~~~~~~~~~~
-	HO2_21 (primary/primary)
-			|---HO2_22 (syncmem/logreplay_readaccess)
-	
-	Tier of HO2_21: 1
-	Tier of HO2_22: 2
-	
-	Replication mode of HO2_21: primary
-	Replication mode of HO2_22: syncmem
-	
-	Operation mode of HO2_21: primary
-	Operation mode of HO2_22: logreplay_readaccess
-	
-	Mapping: HO2_21 -> HO2_22
-	done.`
-
-	defaultInstancesListOutput = `
-04.04.2024 07:27:12\nGetSystemInstanceList
-OK
-hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-tst-s4app11, 11, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, YELLOW
-tstascs11, 12, 51213, 51214, 1, MESSAGESERVER|ENQUE, GREEN
-`
+	//go:embed testdata/sapInitStoppedOutput.txt
+	sapInitStoppedOutput string
+	//go:embed testdata/hanaSingleNodeOutput.txt
+	hanaSingleNodeOutput string
+	//go:embed testdata/hanaHAPrimaryOutput.txt
+	hanaHAPrimaryOutput string
+	//go:embed testdata/hanaHASecondaryOutput.txt
+	hanaHASecondaryOutput string
+	//go:embed testdata/multiTargetHANAOutput.txt
+	multiTargetHANAOutput string
+	//go:embed testdata/multiTierHANAOutput.txt
+	multiTierHANAOutput string
+	//go:embed testdata/multiTierMultiTargetHANAOutput.txt
+	multiTierMultiTargetHANAOutput string
+	//go:embed testdata/defaultInstancesListOutput.txt
+	defaultInstancesListOutput string
 )
 
 func TestInstances(t *testing.T) {
 	tests := []struct {
 		name                  string
-		fakeReplicationConfig replicationConfig
+		fakeReplicationConfig ReplicationConfig
 		fakeList              listInstances
 		fakeExec              commandlineexecutor.Execute
 		want                  *sapb.SAPInstances
@@ -185,16 +97,15 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, error) {
-				return 0, []string{"gce-1", "gce-2"}, 10, nil
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+				return 0, nil, 10, nil, nil
 			},
 			want: &sapb.SAPInstances{
-				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
+				Instances: []*sapb.SAPInstance{{
 					Sapsid:         "HDB",
 					InstanceNumber: "00",
 					Type:           sapb.InstanceType_HANA,
 					Site:           sapb.InstanceSite_HANA_STANDALONE,
-					HanaHaMembers:  []string{"gce-1", "gce-2"},
 					SapcontrolPath: "/usr/sap/HDB/SYS/exe/sapcontrol",
 					User:           "hdbadm",
 					InstanceId:     "HDB00",
@@ -219,8 +130,16 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, error) {
-				return 1, []string{"gce-1", "gce-2"}, 15, nil
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+				log.Logger.Info("fakeReplicationConfig")
+				site1 := &sapb.HANAReplicaSite{
+					Name: "gce-1",
+				}
+				site2 := &sapb.HANAReplicaSite{
+					Name: "gce-2",
+				}
+				site1.Targets = []*sapb.HANAReplicaSite{site2}
+				return 1, []string{"gce-1", "gce-2"}, 15, site1, nil
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -234,6 +153,12 @@ func TestInstances(t *testing.T) {
 					InstanceId:     "HDB00",
 					ProfilePath:    "/usr/sap/HDB/SYS/profile/HDB_HDB00_vm1",
 					LdLibraryPath:  "/usr/sap/HDB/SYS/exe",
+					HanaReplicationTree: &sapb.HANAReplicaSite{
+						Name: "gce-1",
+						Targets: []*sapb.HANAReplicaSite{{
+							Name: "gce-2",
+						}},
+					},
 				}},
 			},
 		},
@@ -253,8 +178,8 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, error) {
-				return 1, []string{"gce-1", "gce-2"}, 15, nil
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+				return 1, []string{"gce-1", "gce-2"}, 15, nil, nil
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -332,8 +257,8 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, error) {
-				return 0, nil, 0, cmpopts.AnyError
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+				return 0, nil, 0, nil, cmpopts.AnyError
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -365,8 +290,8 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, error) {
-				return -1, nil, 0, nil
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+				return -1, nil, 0, nil, nil
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -396,65 +321,145 @@ func TestInstances(t *testing.T) {
 
 func TestReadReplicationConfig(t *testing.T) {
 	tests := []struct {
-		name         string
-		user         string
-		sid          string
-		instanceID   string
-		fakeExec     commandlineexecutor.Execute
-		wantMode     int
-		wantHAMebers []string
-		wantErr      error
-	}{
-		{
-			name:       "HANAPrimary",
-			user:       "hdbadm",
-			sid:        "HDB",
-			instanceID: "00",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: hanaHAPrimaryOutput,
-				}
-			},
-			wantMode:     1,
-			wantHAMebers: []string{"gce-1", "gce-2"},
-			wantErr:      nil,
+		name          string
+		user          string
+		sid           string
+		instanceID    string
+		fakeExec      commandlineexecutor.Execute
+		wantMode      int
+		wantHAMembers []string
+		wantSite      *sapb.HANAReplicaSite
+		wantErr       error
+	}{{
+		name:       "HANAPrimary",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: hanaHAPrimaryOutput,
+			}
 		},
-		{
-			name:       "HANASecondary",
-			user:       "hdbadm",
-			sid:        "HDB",
-			instanceID: "00",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: hanaHASecondaryOutput,
-				}
+		wantMode:      1,
+		wantHAMembers: []string{"gce-1", "gce-2"},
+		wantErr:       nil,
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-1",
+			Targets: []*sapb.HANAReplicaSite{
+				{
+					Name: "gce-2",
+				},
 			},
-			wantMode:     2,
-			wantHAMebers: []string{"gce-2", "gce-1"},
-			wantErr:      nil,
 		},
-		{
-			name:       "HANAStandalone",
-			user:       "hdbadm",
-			sid:        "HDB",
-			instanceID: "00",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: hanaSingleNodeOutput,
-				}
+	}, {
+		name:       "HANASecondary",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: hanaHASecondaryOutput,
+			}
+		},
+		wantMode:      2,
+		wantHAMembers: []string{"gce-2", "gce-1"},
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-1",
+			Targets: []*sapb.HANAReplicaSite{
+				{
+					Name: "gce-2",
+				},
 			},
-			wantMode:     0,
-			wantHAMebers: nil,
-			wantErr:      nil,
 		},
-		{
-			name:       "HANAPrimarySwappedSites",
-			user:       "hdbadm",
-			sid:        "HDB",
-			instanceID: "00",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `System Replication State
+		wantErr: nil,
+	}, {
+		name:       "HANAStandalone",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: hanaSingleNodeOutput,
+			}
+		},
+		wantMode:      0,
+		wantHAMembers: nil,
+		wantErr:       nil,
+	}, {
+		name:       "HANAMultiTarget",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: multiTargetHANAOutput,
+			}
+		},
+		wantMode:      1,
+		wantHAMembers: []string{"gce-2", "gce-1", "gce-3"},
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-1",
+			Targets: []*sapb.HANAReplicaSite{{
+				Name: "gce-2",
+			}, {
+				Name: "gce-3",
+			}},
+		},
+		wantErr: nil,
+	}, {
+		name:       "HANAMultiTier",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: multiTierHANAOutput,
+			}
+		},
+		wantMode:      1,
+		wantHAMembers: []string{"gce-2", "gce-1", "gce-3"},
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-1",
+			Targets: []*sapb.HANAReplicaSite{{
+				Name: "gce-2",
+				Targets: []*sapb.HANAReplicaSite{{
+					Name: "gce-3",
+				}},
+			}},
+		},
+		wantErr: nil,
+	}, {
+		name:       "HANAMultiTierMultiTarget",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: multiTierMultiTargetHANAOutput,
+			}
+		},
+		wantMode:      1,
+		wantHAMembers: []string{"gce-2", "gce-1", "gce-3", "gce-4"},
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-1",
+			Targets: []*sapb.HANAReplicaSite{{
+				Name: "gce-2",
+				Targets: []*sapb.HANAReplicaSite{{
+					Name: "gce-3",
+				}},
+			}, {
+				Name: "gce-4",
+			}},
+		},
+		wantErr: nil,
+	}, {
+		name:       "HANAPrimarySwappedSites",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `System Replication State
 					~~~~~~~~~~~~~~~~~~~~~~~~
 					
 					online: true
@@ -498,49 +503,110 @@ func TestReadReplicationConfig(t *testing.T) {
 					
 					Mapping: HO2_22 -> HO2_21
 					done.`,
-				}
+			}
+		},
+		wantMode:      1,
+		wantHAMembers: []string{"gce-1", "gce-2"},
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-2",
+			Targets: []*sapb.HANAReplicaSite{
+				{
+					Name: "gce-1",
+				},
 			},
-			wantMode:     1,
-			wantHAMebers: []string{"gce-1", "gce-2"},
-			wantErr:      nil,
-		}, {
-			name: "EmptySiteName",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "site name:",
-				}
-			},
-			wantMode:     0,
-			wantHAMebers: nil,
-			wantErr:      cmpopts.AnyError,
-		}, {
-			name: "NoHostMap",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "site name: gce-1",
-				}
-			},
-			wantMode:     0,
-			wantHAMebers: nil,
-			wantErr:      cmpopts.AnyError,
-		}, {
-			name: "NoReplicationMode",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `site name: gce-1
+		},
+		wantErr: nil,
+	}, {
+		name: "EmptySiteName",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "site name:",
+			}
+		},
+		wantMode:      0,
+		wantHAMembers: nil,
+		wantErr:       cmpopts.AnyError,
+	}, {
+		name: "NoHostMap",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "site name: gce-1",
+			}
+		},
+		wantMode:      0,
+		wantHAMembers: nil,
+		wantErr:       cmpopts.AnyError,
+	}, {
+		name: "NoReplicationMode",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `site name: gce-1
 					gce-2 -> [HO2_22] gce-2
 					gce-2 -> [HO2_21] gce-1
 					`,
-				}
-			},
-			wantMode:     0,
-			wantHAMebers: nil,
-			wantErr:      cmpopts.AnyError,
-		}}
+			}
+		},
+		wantMode:      0,
+		wantHAMembers: nil,
+		wantErr:       cmpopts.AnyError,
+	}, {
+		name:       "NoSiteMappings",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `System Replication State
+					~~~~~~~~~~~~~~~~~~~~~~~~
+					
+					online: true
+					
+					mode: syncmem
+					operation mode: logreplay_readaccess
+					site id: 2
+					site name: gce-2
+					
+					is source system: false
+					is secondary/consumer system: true
+					has secondaries/consumers attached: false
+					is a takeover active: false
+					is primary suspended: false
+					is timetravel enabled: false
+					replay mode: auto
+					active primary site: 1
+					
+					primary masters: gce-2
+					
+					Host Mappings:
+					~~~~~~~~~~~~~~
+					
+					gce-2 -> [HO2_22] gce-2
+					gce-2 -> [HO2_21] gce-1
+					
+					
+					~~~~~~~~~~~~~~
+					HO2_22 (primary/primary)
+							|---HO2_21 (syncmem/logreplay_readaccess)
+					
+					Tier of HO2_22: 1
+					Tier of HO2_21: 2
+					
+					Replication mode of HO2_21: syncmem
+					Replication mode of HO2_22: primary
+					
+					Operation mode of HO2_21: logreplay_readaccess
+					Operation mode of HO2_22: primary
+					
+					Mapping: HO2_22 -> HO2_21
+					done.`,
+			}
+		},
+		wantMode: 1,
+	}}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMode, gotHAMembers, _, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec)
+			gotMode, gotHAMembers, _, gotSite, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("readReplicationConfig(%s,%s,%s) error, got: %v want: %v.", test.user, test.sid, test.instanceID, err, test.wantErr)
@@ -548,8 +614,11 @@ func TestReadReplicationConfig(t *testing.T) {
 			if test.wantMode != gotMode {
 				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect mode, got: %d want: %d.", test.user, test.sid, test.instanceID, gotMode, test.wantMode)
 			}
-			if cmp.Diff(test.wantHAMebers, gotHAMembers, cmpopts.SortSlices(func(a, b string) bool { return a < b })) != "" {
-				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect haMembers, got: %s want: %s.", test.user, test.sid, test.instanceID, gotHAMembers, test.wantHAMebers)
+			if diff := cmp.Diff(test.wantHAMembers, gotHAMembers, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect haMembers, diff (-want +got):\n%s.", test.user, test.sid, test.instanceID, diff)
+			}
+			if diff := cmp.Diff(test.wantSite, gotSite, cmpopts.SortSlices(func(a, b *sapb.HANAReplicaSite) bool { return a.Name < b.Name }), protocmp.Transform()); diff != "" {
+				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect site, diff (-want +got):\n%s.", test.user, test.sid, test.instanceID, diff)
 			}
 		})
 	}

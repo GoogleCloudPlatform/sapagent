@@ -393,10 +393,11 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 
 			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for HANA", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance:     instance,
-				Config:          p.Config,
-				Client:          p.Client,
-				PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				SAPInstance:       instance,
+				Config:            p.Config,
+				Client:            p.Client,
+				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				ReplicationConfig: sapdiscovery.HANAReplicationConfig,
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -636,6 +637,7 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, sapInst
 				Client:            p.Client,
 				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(minimumFrequencyForReliability)*time.Second, 3, time.Minute, 35*time.Second),
 				ReliabilityMetric: true,
+				ReplicationConfig: sapdiscovery.HANAReplicationConfig,
 			}
 			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
 		}

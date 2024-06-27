@@ -1,0 +1,44 @@
+System Replication State
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+online: true
+
+mode: syncmem
+operation mode: logreplay_readaccess
+site id: 2
+site name: gce-2
+
+is source system: false
+is secondary/consumer system: true
+has secondaries/consumers attached: false
+is a takeover active: false
+is primary suspended: false
+is timetravel enabled: false
+replay mode: auto
+active primary site: 1
+
+primary masters: gce-1
+
+Host Mappings:
+~~~~~~~~~~~~~~
+
+gce-2 -> [HO2_22] gce-2
+gce-2 -> [HO2_21] gce-1
+
+
+Site Mappings:
+~~~~~~~~~~~~~~
+HO2_21 (primary/primary)
+    |---HO2_22 (syncmem/logreplay_readaccess)
+
+Tier of HO2_21: 1
+Tier of HO2_22: 2
+
+Replication mode of HO2_21: primary
+Replication mode of HO2_22: syncmem
+
+Operation mode of HO2_21: primary
+Operation mode of HO2_22: logreplay_readaccess
+
+Mapping: HO2_21 -> HO2_22
+done.

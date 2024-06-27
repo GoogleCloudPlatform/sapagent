@@ -53,6 +53,7 @@ type (
 		SkippedMetrics    map[string]bool
 		PMBackoffPolicy   backoff.BackOffContext
 		ReliabilityMetric bool
+		ReplicationConfig sapdiscovery.ReplicationConfig
 	}
 )
 
@@ -275,7 +276,7 @@ func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicat
 }
 
 func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) (int64, error) {
-	mode, haMembers, replicationStatus, err := sapdiscovery.HANAReplicationConfig(
+	mode, haMembers, replicationStatus, _, err := p.ReplicationConfig(
 		ctx,
 		p.SAPInstance.GetUser(),
 		p.SAPInstance.GetSapsid(),

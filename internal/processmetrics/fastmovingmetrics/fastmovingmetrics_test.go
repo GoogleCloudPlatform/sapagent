@@ -18,6 +18,7 @@ package fastmovingmetrics
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -785,5 +787,58 @@ func TestCollectWithRetry(t *testing.T) {
 	want := 2
 	if len(got) != want {
 		t.Errorf("CollectWithRetry() returned unexpected value, got=%d, want=%d", len(got), want)
+	}
+}
+
+func TestRefreshHAReplicationConfig(t *testing.T) {
+	tests := []struct {
+		name              string
+		instance          *sapb.SAPInstance
+		replicationConfig sapdiscovery.ReplicationConfig
+		wantStatus        int64
+		wantErr           error
+	}{{
+		name: "success",
+		instance: &sapb.SAPInstance{
+			User:       "test",
+			Sapsid:     "test",
+			InstanceId: "test",
+		},
+		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+			return 1, []string{"test"}, 1, &sapb.HANAReplicaSite{}, nil
+		},
+		wantStatus: 1,
+	}, {
+		name: "error",
+		instance: &sapb.SAPInstance{
+			User:       "test",
+			Sapsid:     "test",
+			InstanceId: "test",
+		},
+		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+			return 1, []string{"test"}, 1, &sapb.HANAReplicaSite{}, errors.New("replication read error")
+		},
+		wantStatus: 0,
+		wantErr:    cmpopts.AnyError,
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &InstanceProperties{
+				SAPInstance:       tc.instance,
+				Config:            &cpb.Configuration{},
+				ReplicationConfig: tc.replicationConfig,
+			}
+			got, err := refreshHAReplicationConfig(ctx, p)
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Fatalf("refreshHAReplicationConfig() returned an unexpected error: %v, diff: %v", err, diff)
+			}
+
+			if got != tc.wantStatus {
+				t.Errorf("refreshHAReplicationConfig() = %v, want: %v", got, tc.wantStatus)
+			}
+		})
 	}
 }

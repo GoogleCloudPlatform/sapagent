@@ -19,6 +19,8 @@ package recovery
 
 import (
 	"context"
+	"reflect"
+	"runtime"
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
@@ -43,6 +45,8 @@ func (r *RecoverableRoutine) StartRoutine(ctx context.Context) {
 	if r.Backoff == nil {
 		r.Backoff = backoff.NewExponentialBackOff()
 	}
+
+	rName := runtime.FuncForPC(reflect.ValueOf(r.Routine).Pointer()).Name()
 	go backoff.Retry(func() (err error) {
 		routineCtx, cancel := context.WithCancel(ctx)
 		defer func() {
@@ -55,13 +59,13 @@ func (r *RecoverableRoutine) StartRoutine(ctx context.Context) {
 					log.CtxLogger(routineCtx).Debug("Resetting backoff before restart")
 					r.Backoff.Reset()
 				}
-				err = errors.Errorf("Panic in routine, attempting to recover: %v", r)
+				err = errors.Errorf("panic in routine, attempting to recover: %v", rName)
 				r.UsageLogger.Error(r.ErrorCode)
 				// Cancel the context to cancel any subroutines
 				cancel()
 			}
 		}()
-		log.CtxLogger(routineCtx).Debugw("Starting routine", "routine", r)
+		log.CtxLogger(routineCtx).Debugw("Starting routine", "routine", rName)
 		r.lastRestart = time.Now()
 		r.Routine(routineCtx, r.RoutineArg)
 		return nil
