@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
@@ -47,56 +49,56 @@ var (
 
 func TestSendToCloudMonitoring(t *testing.T) {
 	tests := []struct {
-		name             string
-		fileSize         int64
-		sendToMonitoring bool
-		success          bool
-		metricClient     metricClientFunc
-		want             bool
+		name         string
+		fileSize     int64
+		config       *bpb.BackintConfiguration
+		success      bool
+		metricClient metricClientFunc
+		want         bool
 	}{
 		{
-			name:             "DontSendToMonitoring",
-			sendToMonitoring: false,
-			want:             false,
+			name:   "DontSendToMonitoring",
+			config: &bpb.BackintConfiguration{SendMetricsToMonitoring: &wpb.BoolValue{Value: false}},
+			want:   false,
 		},
 		{
-			name:             "FailedToCreateMetricClient",
-			sendToMonitoring: true,
+			name:   "FailedToCreateMetricClient",
+			config: &bpb.BackintConfiguration{SendMetricsToMonitoring: &wpb.BoolValue{Value: true}},
 			metricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error) {
 				return nil, fmt.Errorf("failed to create metric client")
 			},
 			want: false,
 		},
 		{
-			name:             "FailedToSendMetric",
-			sendToMonitoring: true,
+			name:   "FailedToSendMetric",
+			config: &bpb.BackintConfiguration{SendMetricsToMonitoring: &wpb.BoolValue{Value: true}},
 			metricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error) {
 				return &fake.TimeSeriesCreator{Err: fmt.Errorf("failed to send status")}, nil
 			},
 			want: false,
 		},
 		{
-			name:             "SuccessOnlyStatus",
-			sendToMonitoring: true,
-			metricClient:     defaultMetricClient,
-			fileSize:         oneGB,
-			want:             true,
+			name:         "SuccessOnlyStatus",
+			config:       &bpb.BackintConfiguration{SendMetricsToMonitoring: &wpb.BoolValue{Value: true}},
+			metricClient: defaultMetricClient,
+			fileSize:     oneGB,
+			want:         true,
 		},
 		{
-			name:             "SuccessWithThroughput",
-			sendToMonitoring: true,
-			metricClient:     defaultMetricClient,
-			success:          true,
-			fileSize:         oneGB,
-			want:             true,
+			name:         "SuccessWithThroughput",
+			config:       &bpb.BackintConfiguration{SendMetricsToMonitoring: &wpb.BoolValue{Value: true}},
+			metricClient: defaultMetricClient,
+			success:      true,
+			fileSize:     oneGB,
+			want:         true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := SendToCloudMonitoring(context.Background(), "backup", "test.txt", test.fileSize, time.Second, test.sendToMonitoring, test.success, defaultCloudProperties, defaultBackOffIntervals, test.metricClient)
+			got := SendToCloudMonitoring(context.Background(), "backup", "test.txt", test.fileSize, time.Second, test.config, test.success, defaultCloudProperties, defaultBackOffIntervals, test.metricClient)
 			if got != test.want {
-				t.Errorf("SendToCloudMonitoring(%v, %v, %v) = %v, want: %v", test.fileSize, test.sendToMonitoring, test.success, got, test.want)
+				t.Errorf("SendToCloudMonitoring(%v, %v, %v) = %v, want: %v", test.fileSize, test.config, test.success, got, test.want)
 			}
 		})
 	}

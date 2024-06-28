@@ -20,11 +20,13 @@ package metrics
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -46,8 +48,20 @@ var DefaultMetricClient = func(ctx context.Context) (cloudmonitoring.TimeSeriesC
 // SendToCloudMonitoring creates and sends time series for backint.
 // Status metrics are sent for each file detailing success/failure.
 // Throughput metrics are sent if the file size exceeds 1GB.
-func SendToCloudMonitoring(ctx context.Context, operation, fileName string, fileSize int64, transferTime time.Duration, sendToMonitoring, success bool, cloudProps *ipb.CloudProperties, bo *cloudmonitoring.BackOffIntervals, metricClient metricClientFunc) bool {
-	if !sendToMonitoring {
+func SendToCloudMonitoring(ctx context.Context, operation, fileName string, fileSize int64, transferTime time.Duration, config *bpb.BackintConfiguration, success bool, cloudProps *ipb.CloudProperties, bo *cloudmonitoring.BackOffIntervals, metricClient metricClientFunc) bool {
+	var avgTransferSpeedMBps float64
+	if transferTime.Seconds() > 0 {
+		avgTransferSpeedMBps = float64(fileSize) / (transferTime.Seconds() * 1024 * 1024)
+	}
+	fileType := "data"
+	if strings.Contains(fileName, "log_backup") {
+		fileType = "log"
+	}
+	// NOTE: This log message has specific keys used in querying Cloud Logging.
+	// Never change these keys since it would have downstream effects.
+	log.CtxLogger(ctx).Infow("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", fileSize, "fileType", fileType, "success", success, "transferTime", transferTime.Seconds(), "avgTransferSpeedMBps", avgTransferSpeedMBps, "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
+
+	if !config.GetSendMetricsToMonitoring().GetValue() {
 		return false
 	}
 	mtype := metricPrefix + operation
@@ -75,10 +89,6 @@ func SendToCloudMonitoring(ctx context.Context, operation, fileName string, file
 	}
 
 	if success && fileSize >= oneGB {
-		if transferTime.Seconds() == 0 {
-			transferTime = time.Second
-		}
-		avgTransferSpeedMBps := float64(fileSize) / (transferTime.Seconds() * 1024 * 1024)
 		ts := []*mrpb.TimeSeries{
 			timeseries.BuildFloat64(timeseries.Params{
 				CloudProp:    cloudProps,
