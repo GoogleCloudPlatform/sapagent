@@ -19,6 +19,8 @@ package metrics
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +61,7 @@ func SendToCloudMonitoring(ctx context.Context, operation, fileName string, file
 	}
 	// NOTE: This log message has specific keys used in querying Cloud Logging.
 	// Never change these keys since it would have downstream effects.
-	log.CtxLogger(ctx).Infow("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", fileSize, "fileType", fileType, "success", success, "transferTime", transferTime.Seconds(), "avgTransferSpeedMBps", avgTransferSpeedMBps, "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
+	log.CtxLogger(ctx).Infow("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", fileSize, "fileType", fileType, "success", success, "transferTime", fmt.Sprintf("%.3f", transferTime.Seconds()), "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)), "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
 
 	if !config.GetSendMetricsToMonitoring().GetValue() {
 		return false
