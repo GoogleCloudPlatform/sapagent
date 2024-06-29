@@ -287,6 +287,9 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)
 	usagemetrics.Action(usagemetrics.HANADiskSnapshot)
+	if s.HDBUserstoreKey != "" {
+		usagemetrics.Action(usagemetrics.HANADiskSnapshotUserstoreKey)
+	}
 	dbp := databaseconnector.Params{
 		Username:       s.HanaDBUser,
 		Password:       s.Password,

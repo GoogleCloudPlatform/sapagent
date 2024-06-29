@@ -241,6 +241,9 @@ func TestErrorConstants(t *testing.T) {
 	if BalanceIRQFailure != 73 {
 		t.Errorf("BalanceIRQFailure = %v, want 73", BalanceIRQFailure)
 	}
+	if HDBUserstoreKeyFailure != 74 {
+		t.Errorf("HDBUserstoreKeyFailure = %v, want 74", HDBUserstoreKeyFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -393,5 +396,14 @@ func TestActionConstants(t *testing.T) {
 	}
 	if BalanceIRQInstallFinished != 49 {
 		t.Errorf("BalanceIRQInstallFinished = %v, want 49", BalanceIRQInstallFinished)
+	}
+	if HDBUserstoreKeyConfigured != 50 {
+		t.Errorf("HDBUserstoreKeyConfigured = %v, want 50", HDBUserstoreKeyConfigured)
+	}
+	if HANADiskSnapshotUserstoreKey != 51 {
+		t.Errorf("HANADiskSnapshotUserstoreKey = %v, want 51", HANADiskSnapshotUserstoreKey)
+	}
+	if HANAInsightsOTEUserstoreKey != 52 {
+		t.Errorf("HANAInsightsOTEUserstoreKey = %v, want 52", HANAInsightsOTEUserstoreKey)
 	}
 }

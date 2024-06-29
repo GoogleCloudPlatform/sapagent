@@ -32,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -126,6 +127,9 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		return subcommands.ExitFailure
 	}
 
+	if h.hdbuserstoreKey != "" {
+		usagemetrics.Action(usagemetrics.HANAInsightsOTEUserstoreKey)
+	}
 	dbp := databaseconnector.Params{
 		Username:       h.user,
 		Password:       h.password,

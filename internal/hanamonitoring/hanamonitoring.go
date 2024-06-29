@@ -126,6 +126,14 @@ func Start(ctx context.Context, params Parameters) bool {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		return false
 	}
+	// Log usagemetric if any one of the HANA instances has hdbuserstore key configured.
+	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
+		if i.GetHdbuserstoreKey() != "" {
+			usagemetrics.Action(usagemetrics.HDBUserstoreKeyConfigured)
+			break
+		}
+	}
+
 	databases := connectToDatabases(ctx, params)
 	if len(databases) == 0 {
 		log.CtxLogger(ctx).Info("No HANA databases to query, not starting HANA Monitoring.")

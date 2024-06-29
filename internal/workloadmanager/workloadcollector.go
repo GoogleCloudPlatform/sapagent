@@ -101,6 +101,10 @@ func start(ctx context.Context, a any) {
 		log.CtxLogger(ctx).Error("Cannot collect Workload Manager metrics, no collection configuration detected")
 		return
 	}
+	// Log usagemetric if hdbuserstore key is configured.
+	if params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHdbuserstoreKey() != "" {
+		usagemetrics.Action(usagemetrics.HDBUserstoreKeyConfigured)
+	}
 	log.CtxLogger(ctx).Infow("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
 	cmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 	if cmf <= 0 {

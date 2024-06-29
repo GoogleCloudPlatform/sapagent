@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/SAP/go-hdb/driver"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -213,6 +214,7 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 		Args:       args,
 	})
 	if result.Error != nil || result.ExitCode != 0 {
+		usagemetrics.Error(usagemetrics.HDBUserstoreKeyFailure)
 		return nil, fmt.Errorf(result.StdErr)
 	}
 
@@ -281,6 +283,7 @@ func parseIntoValues(resultRow string, dest ...any) error {
 	// For NULL values the value is set to the default/zero values.
 	for i, match := range matches {
 		if len(match) < 3 {
+			usagemetrics.Error(usagemetrics.HDBUserstoreKeyFailure)
 			return fmt.Errorf("could not parse result")
 		}
 		switch d := dest[i].(type) {
@@ -331,6 +334,7 @@ func parseIntoValues(resultRow string, dest ...any) error {
 			}
 			*d = match[0] // Gets result not enclosed in quotes (e.g. int, float, etc) as string.
 		default:
+			usagemetrics.Error(usagemetrics.HDBUserstoreKeyFailure)
 			return fmt.Errorf("unsupported destination argument type: %T", d)
 		}
 	}

@@ -215,6 +215,10 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
 		return false
 	}
+	// Log usagemetric if hdbuserstore key is configured.
+	if parameters.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHdbuserstoreKey() != "" {
+		usagemetrics.Action(usagemetrics.HDBUserstoreKeyConfigured)
+	}
 
 	log.CtxLogger(ctx).Info("Starting process metrics collection in background.")
 
