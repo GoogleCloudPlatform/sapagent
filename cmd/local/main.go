@@ -34,7 +34,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configurebackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/discovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanachangedisktype"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
@@ -93,7 +94,8 @@ func registerSubCommands() {
 		&hanachangedisktype.HanaChangeDiskType{},
 		&reliability.Reliability{},
 		&systemdiscovery.SystemDiscovery{},
-		&gcbdr.Discovery{FSH: filesystem.Helper{}},
+		&discovery.Discovery{FSH: filesystem.Helper{}},
+		&backup.Backup{},
 		subcommands.HelpCommand(), // Implement "help"
 	}
 	for _, command := range scs {

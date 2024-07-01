@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package gcbdr is the module containing one time execution for HANA discovery.
-package gcbdr
+// Package discovery is the module containing one time execution for HANA discovery.
+package discovery
 
 import (
 	"context"

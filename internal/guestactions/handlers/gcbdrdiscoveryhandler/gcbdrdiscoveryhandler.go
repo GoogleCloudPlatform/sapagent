@@ -23,7 +23,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/discovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -39,7 +39,7 @@ const RestartAgent = false
 // GCBDRDiscoveryHandler is the handler for gcbdr-discovery command.
 func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
 	log.CtxLogger(ctx).Debugw("gcbdr-discovery handler called.", "command", prototext.Format(command))
-	d := &gcbdr.Discovery{}
+	d := &discovery.Discovery{}
 	applications, err := d.GetHANADiscoveryApplications(ctx, nil, commandlineexecutor.ExecuteCommand, filesystem.Helper{})
 	if err != nil {
 		result := &gpb.CommandResult{
