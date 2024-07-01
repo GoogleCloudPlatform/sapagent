@@ -40,6 +40,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -54,9 +55,9 @@ type SystemDiscovery struct {
 	HostDiscoveryInterface  system.HostDiscoveryInterface
 	SapDiscoveryInterface   system.SapDiscoveryInterface
 	AppsDiscovery           func(context.Context) *sappb.SAPInstances
-	osStatReader            func(string) (os.FileInfo, error)
-	configFileReader        func(string) (io.ReadCloser, error)
-	configPath, logLevel    string
+	OsStatReader            workloadmanager.OSStatReader
+	ConfigFileReader        workloadmanager.ConfigFileReader
+	ConfigPath, LogLevel    string
 	help, version           bool
 	IIOTEParams             *onetime.InternallyInvokedOTE
 }
@@ -83,9 +84,9 @@ func (sd *SystemDiscovery) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&sd.help, "help", false, "Displays help")
 	fs.BoolVar(&sd.version, "v", false, "Displays the current version of the agent")
 	fs.BoolVar(&sd.version, "version", false, "Displays the current version of the agent")
-	fs.StringVar(&sd.logLevel, "loglevel", "info", "Sets the log level for the agent logging")
-	fs.StringVar(&sd.configPath, "c", "", "Sets the configuration file path for systemdiscovery (default: agent's config file will be used)")
-	fs.StringVar(&sd.configPath, "config", "", "Sets the configuration file path for systemdiscovery (default: agent's config file will be used)")
+	fs.StringVar(&sd.LogLevel, "loglevel", "info", "Sets the log level for the agent logging")
+	fs.StringVar(&sd.ConfigPath, "c", "", "Sets the configuration file path for systemdiscovery (default: agent's config file will be used)")
+	fs.StringVar(&sd.ConfigPath, "config", "", "Sets the configuration file path for systemdiscovery (default: agent's config file will be used)")
 }
 
 // Execute implements the subcommand interface for systemdiscovery.
@@ -119,7 +120,7 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 		Name:     sd.Name(),
 		Help:     sd.help,
 		Version:  sd.version,
-		LogLevel: sd.logLevel,
+		LogLevel: sd.LogLevel,
 		IIOTE:    sd.IIOTEParams,
 		Fs:       fs,
 	}, args...)
@@ -141,11 +142,9 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 	log.CtxLogger(ctx).Info("SystemDiscovery one time execution initialized successfully.")
 	log.CtxLogger(ctx).Infof("config: %v", config)
 
-	// if OTE mode, initialize the SystemDiscovery params.
-	if sd.IIOTEParams == nil {
-		if err := sd.initializeWithDefaultParams(ctx, config, &lp); err != nil {
-			return nil, fmt.Errorf("failed to initialize SystemDiscovery with default params: %v", err)
-		}
+	// initialize params to default if they are not already set.
+	if err := sd.initDefaults(ctx, config, &lp); err != nil {
+		return nil, fmt.Errorf("failed to initialize SystemDiscovery params: %v", err)
 	}
 
 	// validate the params.
@@ -161,29 +160,26 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 		HostDiscoveryInterface:  sd.HostDiscoveryInterface,
 		SapDiscoveryInterface:   sd.SapDiscoveryInterface,
 		WlmService:              sd.WlmService,
-		OSStatReader:            sd.osStatReader,
-		FileReader:              sd.configFileReader,
+		OSStatReader:            sd.OsStatReader,
+		FileReader:              sd.ConfigFileReader,
 	}
 
-	log.CtxLogger(ctx).Info("Params valid. Discovery object created.")
 	log.CtxLogger(ctx).Debugf("Discovery object: %v", discovery)
 
-	// TODO: - Add the system discovery logic.
+	if ok = system.StartSAPSystemDiscovery(ctx, config, discovery); !ok {
+		return nil, fmt.Errorf("failed to start the SAP system discovery")
+	}
+	log.CtxLogger(ctx).Infof("SAP Instances discovered: %v", discovery.GetSAPInstances())
+	log.CtxLogger(ctx).Infof("SAP Systems discovered: %v", discovery.GetSAPSystems())
 
-	return nil, nil
+	return discovery, nil
 }
 
-// initializeWithDefaultParams initializes the SystemDiscovery
-// params with default implementation for OTE mode
-func (sd *SystemDiscovery) initializeWithDefaultParams(ctx context.Context, config *cpb.Configuration, lp *log.Parameters) error {
-	// Initialize the GCE service for cloud discovery.
-	gceService, err := gce.NewGCEClient(ctx)
-	if err != nil {
-		return err
-	}
-
+// initDefaults initializes the SystemDiscovery
+// params with default implementation if they aren't already.
+func (sd *SystemDiscovery) initDefaults(ctx context.Context, config *cpb.Configuration, lp *log.Parameters) error {
 	// Initialize the WLM service only if enable_discovery is set in config.
-	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
+	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() && sd.WlmService == nil {
 		wlmBasePathURL := config.GetCollectionConfiguration().GetDataWarehouseEndpoint()
 		wlmService, err := gce.NewWLMClient(ctx, wlmBasePathURL)
 		if err != nil {
@@ -192,22 +188,49 @@ func (sd *SystemDiscovery) initializeWithDefaultParams(ctx context.Context, conf
 		sd.WlmService = wlmService
 	}
 
-	sd.AppsDiscovery = sapdiscovery.SAPApplications
-	sd.CloudDiscoveryInterface = &clouddiscovery.CloudDiscovery{
-		GceService:   gceService,
-		HostResolver: net.LookupHost,
+	if sd.AppsDiscovery == nil {
+		sd.AppsDiscovery = sapdiscovery.SAPApplications
 	}
-	sd.HostDiscoveryInterface = &hostdiscovery.HostDiscovery{
-		Exists:  commandlineexecutor.CommandExists,
-		Execute: commandlineexecutor.ExecuteCommand,
+
+	// Initialize the GCE service for cloud discovery.
+	if sd.CloudDiscoveryInterface == nil {
+		gceService, err := gce.NewGCEClient(ctx)
+		if err != nil {
+			return err
+		}
+		sd.CloudDiscoveryInterface = &clouddiscovery.CloudDiscovery{
+			GceService:   gceService,
+			HostResolver: net.LookupHost,
+		}
 	}
-	sd.SapDiscoveryInterface = &appsdiscovery.SapDiscovery{
-		Execute:    commandlineexecutor.ExecuteCommand,
-		FileSystem: filesystem.Helper{},
+
+	if sd.HostDiscoveryInterface == nil {
+		sd.HostDiscoveryInterface = &hostdiscovery.HostDiscovery{
+			Exists:  commandlineexecutor.CommandExists,
+			Execute: commandlineexecutor.ExecuteCommand,
+		}
 	}
+
+	if sd.SapDiscoveryInterface == nil {
+		sd.SapDiscoveryInterface = &appsdiscovery.SapDiscovery{
+			Execute:    commandlineexecutor.ExecuteCommand,
+			FileSystem: filesystem.Helper{},
+		}
+	}
+
 	// set the CloudLogInterface if CloudLoggingClient is set.
 	if lp.CloudLoggingClient != nil {
 		sd.CloudLogInterface = lp.CloudLoggingClient.Logger(lp.CloudLogName)
+	}
+
+	// required to start the discovery process.
+	if sd.OsStatReader == nil {
+		sd.OsStatReader = workloadmanager.OSStatReader(os.Stat)
+	}
+	if sd.ConfigFileReader == nil {
+		sd.ConfigFileReader = workloadmanager.ConfigFileReader(func(path string) (io.ReadCloser, error) {
+			return os.Open(path)
+		})
 	}
 
 	return nil
@@ -253,16 +276,6 @@ func (sd *SystemDiscovery) validateParams(config *cpb.Configuration, lp *log.Par
 		return fmt.Errorf("AppsDiscovery is not set")
 	}
 
-	// required to start the discovery process.
-	if sd.osStatReader == nil {
-		sd.osStatReader = workloadmanager.OSStatReader(os.Stat)
-	}
-	if sd.configFileReader == nil {
-		sd.configFileReader = workloadmanager.ConfigFileReader(func(path string) (io.ReadCloser, error) {
-			return os.Open(path)
-		})
-	}
-
 	return nil
 }
 
@@ -272,22 +285,25 @@ func (sd *SystemDiscovery) prepareConfig(ctx context.Context, cp *iipb.CloudProp
 	var config *cpb.Configuration
 
 	// config file path is not passed.
-	if sd.configPath == "" {
+	if sd.ConfigPath == "" {
 		// "" is passed so that
 		// ReadFromFile will read the agent config file.
 		config = configuration.ReadFromFile("", os.ReadFile)
 
 		// if agent config file also has no discovery config,
-		// ApplyDefaultDiscoveryConfiguration will
-		// apply config with default values.
+		// ApplyDefaults will apply config with default values.
 		config = configuration.ApplyDefaults(config, cp)
+
+		// make EnableDiscovery always false by default
+		// to ensure WLM is not enabled by default.
+		config.DiscoveryConfiguration.EnableDiscovery = &wpb.BoolValue{Value: false}
 	} else {
 		// config file path is passed, read the config file.
-		config = configuration.ReadFromFile(sd.configPath, os.ReadFile)
+		config = configuration.ReadFromFile(sd.ConfigPath, os.ReadFile)
 
 		// config file not found. return error.
 		if config == nil {
-			return nil, fmt.Errorf("config file not found in: %s", sd.configPath)
+			return nil, fmt.Errorf("config file not found in: %s", sd.ConfigPath)
 		}
 
 		// config file found but has invalid params. return error.

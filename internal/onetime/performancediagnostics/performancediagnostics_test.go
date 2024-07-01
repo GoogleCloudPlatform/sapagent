@@ -44,8 +44,11 @@ import (
 
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	s "cloud.google.com/go/storage"
+	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 )
 
 func TestMain(t *testing.M) {
@@ -77,6 +80,21 @@ var (
 	defaultCloudProperties = &ipb.CloudProperties{
 		ProjectId:    "default-project",
 		InstanceName: "default-instance",
+	}
+
+	defaultAppsDiscovery = func(context.Context) *sappb.SAPInstances {
+		return &sappb.SAPInstances{
+			Instances: []*sappb.SAPInstance{
+				{
+					Sapsid: "test-hana-1",
+					Type:   sappb.InstanceType_HANA,
+				},
+				{
+					Sapsid: "test-hana-2",
+					Type:   sappb.InstanceType_HANA,
+				},
+			},
+		}
 	}
 
 	defaultBackintFileJSON = `{
@@ -341,7 +359,7 @@ func TestValidateParams(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Valid1",
+			name: "SuccessForIO",
 			d: &Diagnose{
 				Type:           "io",
 				OutputFilePath: "/tmp/path.txt",
@@ -350,12 +368,19 @@ func TestValidateParams(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Valid2",
+			name: "SuccessForBackupAndIO",
 			d: &Diagnose{
-				Type:           "backup, io",
+				Type:           "backup,io",
 				TestBucket:     "test_bucket",
 				OutputFilePath: "/tmp/path.txt",
 				OutputFileName: "test_bundle",
+			},
+			wantErr: false,
+		},
+		{
+			name: "SuccessForCompute",
+			d: &Diagnose{
+				Type: "compute",
 			},
 			wantErr: false,
 		},
@@ -1518,6 +1543,27 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			wantCnt: 2,
 		},
 		{
+			name: "ErrorInConfigureInstanceWithTypeCompute",
+			d: &Diagnose{
+				HyperThreading: "default",
+				Type:           "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			wantCnt: 2,
+		},
+		{
 			name: "ErrorInConfigureInstanceWithTypeAll",
 			d: &Diagnose{
 				HyperThreading: "default",
@@ -1536,7 +1582,71 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 					MkDirErr:   []error{fmt.Errorf("error"), fmt.Errorf("error")},
 				},
 			},
+			wantCnt: 4,
+		},
+		{
+			name: "ErrorInAllExceptCompute",
+			d: &Diagnose{
+				HyperThreading: "default",
+				Type:           "all",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error"), fmt.Errorf("error")},
+				},
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-instance-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+			},
 			wantCnt: 3,
+		},
+		{
+			name: "ErrorInConfigureInstanceWithSuccessInTypeCompute",
+			d: &Diagnose{
+				HyperThreading: "default",
+				Type:           "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-instance-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+			},
+			wantCnt: 1,
 		},
 	}
 
@@ -1546,7 +1656,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := performDiagnosticsOps(ctx, tc.d, tc.flagSet, tc.opts)
 			if len(got) != tc.wantCnt {
-				t.Errorf("performDiagnosticsOps(%v, %v, %v) returned an unexpected (-want +got): %v, %v", tc.d, tc.flagSet, tc.opts, len(got), tc.wantCnt)
+				t.Errorf("performDiagnosticsOps(%v, %v, %v) returned an unexpected (-want +got): %v, %v", tc.d, tc.flagSet, tc.opts, tc.wantCnt, len(got))
 			}
 		})
 	}
@@ -1778,4 +1888,277 @@ func TestRunBackint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFilterHANAInstances(t *testing.T) {
+	tests := []struct {
+		name          string
+		sapInstances  *sappb.SAPInstances
+		wantInstances []*sappb.SAPInstance
+	}{
+		{
+			name:          "SuccessSAPInstancesIsNil",
+			sapInstances:  nil,
+			wantInstances: nil,
+		},
+		{
+			name:          "SuccessSAPInstancesIsEmpty",
+			sapInstances:  &sappb.SAPInstances{},
+			wantInstances: nil,
+		},
+		{
+			name: "SuccessSAPInstancesHasNoHANAInstances",
+			sapInstances: &sappb.SAPInstances{
+				Instances: []*sappb.SAPInstance{
+					{
+						Sapsid: "test-netweawer-1",
+						Type:   sappb.InstanceType_NETWEAVER,
+					},
+					{
+						Sapsid: "test-netweawer-2",
+						Type:   sappb.InstanceType_NETWEAVER,
+					},
+				},
+			},
+			wantInstances: nil,
+		},
+		{
+			name: "SuccessSAPInstancesHasNoHANAInstances",
+			sapInstances: &sappb.SAPInstances{
+				Instances: []*sappb.SAPInstance{
+					{
+						Sapsid: "test-hana-1",
+						Type:   sappb.InstanceType_HANA,
+					},
+					{
+						Sapsid: "test-netweawer-2",
+						Type:   sappb.InstanceType_NETWEAVER,
+					},
+					{
+						Sapsid: "test-hana-3",
+						Type:   sappb.InstanceType_HANA,
+					},
+				},
+			},
+			wantInstances: []*sappb.SAPInstance{
+				{
+					Sapsid: "test-hana-1",
+					Type:   sappb.InstanceType_HANA,
+				},
+				{
+					Sapsid: "test-hana-3",
+					Type:   sappb.InstanceType_HANA,
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotInstances := filterHANAInstances(tc.sapInstances)
+			if diff := cmp.Diff(gotInstances, tc.wantInstances, protocmp.Transform()); diff != "" {
+				t.Errorf("extractHANAInstances(%v) returned an unexpected diff (-want +got): %v", tc.sapInstances, diff)
+			}
+		})
+	}
+}
+
+func TestRunSystemDiscoveryOTE(t *testing.T) {
+	tests := []struct {
+		name              string
+		d                 *Diagnose
+		flagSet           *flag.FlagSet
+		opts              *options
+		wantErr           error
+		wantHANAInstances []*sappb.SAPInstance
+	}{
+		{
+			name: "ErrorWhileExecutingOTE",
+			d: &Diagnose{
+				HyperThreading: "default",
+				Type:           "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+			},
+			wantHANAInstances: nil,
+			wantErr:           cmpopts.AnyError,
+		},
+		{
+			name: "SuccessExecutingOTE",
+			d: &Diagnose{
+				Type: "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				appsDiscovery: defaultAppsDiscovery,
+			},
+			wantHANAInstances: []*sappb.SAPInstance{
+				{
+					Sapsid: "test-hana-1",
+					Type:   sappb.InstanceType_HANA,
+				},
+				{
+					Sapsid: "test-hana-2",
+					Type:   sappb.InstanceType_HANA,
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "FailNoInstances",
+			d: &Diagnose{
+				Type: "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				appsDiscovery: func(context.Context) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
+			},
+			wantHANAInstances: nil,
+			wantErr:           cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var d Diagnose
+			gotHANAInstances, gotErr := d.runSystemDiscoveryOTE(context.Background(), tc.flagSet, tc.opts)
+			if diff := cmp.Diff(gotHANAInstances, tc.wantHANAInstances, protocmp.Transform()); diff != "" {
+				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned an unexpected diff (-want +got): %v", tc.flagSet, tc.opts, diff)
+			}
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestComputeMetrics(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       *Diagnose
+		flagSet *flag.FlagSet
+		opts    *options
+		wantErr error
+	}{
+
+		{
+			name: "FailInvalidCloudProperties",
+			d: &Diagnose{
+				Type: "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+				cp: nil,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessGetComputeMetrics",
+			d: &Diagnose{
+				Type: "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-instance-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var d Diagnose
+			gotErr := d.computeMetrics(context.Background(), tc.flagSet, tc.opts)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
+			}
+		})
+	}
+
 }

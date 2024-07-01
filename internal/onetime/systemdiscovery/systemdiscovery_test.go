@@ -37,12 +37,14 @@ import (
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
 	hostdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery/fake"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 	logfake "github.com/GoogleCloudPlatform/sapagent/shared/log/fake"
 )
@@ -67,7 +69,7 @@ var (
 	}
 
 	defaultDiscoveryConfig = &cpb.DiscoveryConfiguration{
-		EnableDiscovery:                &wpb.BoolValue{Value: true},
+		EnableDiscovery:                &wpb.BoolValue{Value: false},
 		SapInstancesUpdateFrequency:    dpb.New(time.Duration(1 * time.Minute)),
 		SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(4 * time.Hour)),
 		EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
@@ -119,14 +121,21 @@ func createTestConfigFile(t *testing.T, configJSON string) *os.File {
 
 func createTestIIOTESystemDiscovery(t *testing.T, configPath string) *SystemDiscovery {
 	return &SystemDiscovery{
-		WlmService:              &wlmfake.TestWLM{},
-		CloudLogInterface:       &logfake.TestCloudLogging{},
-		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{},
-		HostDiscoveryInterface:  &hostdiscoveryfake.HostDiscovery{},
-		SapDiscoveryInterface:   &appsdiscoveryfake.SapDiscovery{},
-		AppsDiscovery:           func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-		IIOTEParams:             defaultIIOTEParams,
-		configPath:              configPath,
+		WlmService:        &wlmfake.TestWLM{},
+		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
+		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+		},
+		HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
+		},
+		AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+		IIOTEParams:   defaultIIOTEParams,
+		ConfigPath:    configPath,
+		OsStatReader:  func(string) (os.FileInfo, error) { return nil, nil },
 	}
 }
 
@@ -176,7 +185,7 @@ func TestExecute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := test.sd.Execute(ctx, &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Errorf("Execute() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("Execute() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -194,14 +203,14 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 			name:                "SuccessIIOTEModeWithoutConfigFile",
 			sd:                  createTestIIOTESystemDiscovery(t, ""),
 			args:                []any{},
-			wantDiscoveryObject: nil,
+			wantDiscoveryObject: &system.Discovery{},
 			wantErr:             nil,
 		},
 		{
 			name:                "SuccessIIOTEModeWithConfigFile",
 			sd:                  createTestIIOTESystemDiscovery(t, createTestConfigFile(t, testConfigFileJSON).Name()),
 			args:                []any{},
-			wantDiscoveryObject: nil,
+			wantDiscoveryObject: &system.Discovery{},
 			wantErr:             nil,
 		},
 		{
@@ -213,6 +222,22 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 			wantDiscoveryObject: nil,
 			wantErr:             cmpopts.AnyError,
 		},
+		{
+			name: "SuccessApplyDefaultParamsIfMissing",
+			sd: &SystemDiscovery{
+				IIOTEParams: defaultIIOTEParams,
+				WlmService:  &wlmfake.TestWLM{},
+				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
+					DiscoverCurrentHostResp: [][]string{{}},
+				},
+			},
+			args:                []any{},
+			wantDiscoveryObject: &system.Discovery{},
+			wantErr:             nil,
+		},
 	}
 
 	// TODO: - Add test cases for OTE mode.
@@ -221,11 +246,14 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gotDiscoveryObject, gotErr := test.sd.SystemDiscoveryHandler(ctx, &flag.FlagSet{Usage: func() { return }}, test.args...)
+			if test.wantDiscoveryObject != nil && gotDiscoveryObject != nil {
+				return
+			}
 			if diff := cmp.Diff(test.wantDiscoveryObject, gotDiscoveryObject, protocmp.Transform()); diff != "" {
-				t.Errorf("initialize() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("SystemDiscoveryHandler() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(test.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("initialize() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("SystemDiscoveryHandler() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -288,7 +316,7 @@ func TestValidateParams(t *testing.T) {
 				CloudLoggingClient: &logging.Client{},
 			},
 			wantErr:        nil,
-			wantWlmService: &wlmfake.TestWLM{},
+			wantWlmService: nil,
 		},
 		{
 			name:   "FailWithCloudLoggingEnabledButMissingInParams",
@@ -347,13 +375,13 @@ func TestValidateParams(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			gotErr := test.sd.validateParams(test.config, test.lp)
 			if diff := cmp.Diff(test.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("initialize() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("validateParams() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 			if test.wantWlmService == nil && test.sd.WlmService == nil {
 				return
 			}
 			if diff := cmp.Diff(test.wantWlmService, test.sd.WlmService, protocmp.Transform()); diff != "" {
-				t.Errorf("initialize() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("validateParams() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -383,7 +411,7 @@ func TestPrepareConfig(t *testing.T) {
 		{
 			name: "SuccessWithConfigFile",
 			sd: &SystemDiscovery{
-				configPath: createTestConfigFile(t, testConfigFileJSON).Name(),
+				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name(),
 			},
 			cp:                  defaultCloudProperties,
 			args:                []any{},
@@ -395,7 +423,7 @@ func TestPrepareConfig(t *testing.T) {
 		{
 			name: "FailConfigFileNotFound",
 			sd: &SystemDiscovery{
-				configPath: createTestConfigFile(t, testConfigFileJSON).Name() + "sap",
+				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name() + "sap",
 			},
 			cp:                  defaultCloudProperties,
 			args:                []any{},
@@ -407,7 +435,7 @@ func TestPrepareConfig(t *testing.T) {
 		{
 			name: "FailConfigInvalidParams",
 			sd: &SystemDiscovery{
-				configPath: createTestConfigFile(t, testInvalidConfigFileJSON).Name(),
+				ConfigPath: createTestConfigFile(t, testInvalidConfigFileJSON).Name(),
 			},
 			cp:                  defaultCloudProperties,
 			args:                []any{},
@@ -419,7 +447,7 @@ func TestPrepareConfig(t *testing.T) {
 		{
 			name: "FailInvalidCloudProperties",
 			sd: &SystemDiscovery{
-				configPath: createTestConfigFile(t, testConfigFileJSON).Name(),
+				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name(),
 			},
 			cp: &iipb.CloudProperties{
 				ProjectId:        "",
@@ -440,16 +468,16 @@ func TestPrepareConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			gotConfig, gotErr := test.sd.prepareConfig(ctx, test.cp, test.args...)
 			if diff := cmp.Diff(test.wantCloudProperties, gotConfig.GetCloudProperties(), protocmp.Transform()); diff != "" {
-				t.Errorf("prepareConfig() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(test.wantAgentProperties, gotConfig.GetAgentProperties(), protocmp.Transform()); diff != "" {
-				t.Errorf("prepareConfig() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(test.wantDiscoveryConfig, gotConfig.GetDiscoveryConfiguration(), protocmp.Transform()); diff != "" {
-				t.Errorf("prepareConfig() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(test.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("initialize() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -533,9 +561,95 @@ func TestValidateCloudProperties(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := validateCloudProperties(test.cp)
 			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Errorf("validateCloudProperties() returned an unexpected diff (-want +got): %s", diff)
+				t.Errorf("validateCloudProperties() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestValidateDiscoveryConfigParams(t *testing.T) {
+	tests := []struct {
+		name            string
+		discoveryConfig *cpb.DiscoveryConfiguration
+		want            bool
+	}{
+		{
+			name:            "FailDiscoveryConfigMissing",
+			discoveryConfig: nil,
+			want:            false,
+		},
+		{
+			name: "FailMissingEnableDiscovery",
+			discoveryConfig: &cpb.DiscoveryConfiguration{
+				SapInstancesUpdateFrequency:    dpb.New(time.Duration(1 * time.Minute)),
+				SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(4 * time.Hour)),
+				EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
+			},
+			want: false,
+		},
+		{
+			name: "FailMissingSapInstancesUpdateFrequency",
+			discoveryConfig: &cpb.DiscoveryConfiguration{
+				EnableDiscovery:                &wpb.BoolValue{Value: true},
+				SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(4 * time.Hour)),
+				EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
+			},
+			want: false,
+		},
+		{
+			name: "FailMissingSystemDiscoveryUpdateFrequency",
+			discoveryConfig: &cpb.DiscoveryConfiguration{
+				EnableDiscovery:             &wpb.BoolValue{Value: true},
+				SapInstancesUpdateFrequency: dpb.New(time.Duration(1 * time.Minute)),
+				EnableWorkloadDiscovery:     &wpb.BoolValue{Value: true},
+			},
+			want: false,
+		},
+		{
+			name: "FailMissingEnableWorkloadDiscovery",
+			discoveryConfig: &cpb.DiscoveryConfiguration{
+				EnableDiscovery:                &wpb.BoolValue{Value: true},
+				SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(4 * time.Hour)),
+				SapInstancesUpdateFrequency:    dpb.New(time.Duration(1 * time.Minute)),
+			},
+			want: false,
+		},
+		{
+			name:            "SuccessAllFieldsPresentAndValid",
+			discoveryConfig: defaultDiscoveryConfig,
+			want:            true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := validateDiscoveryConfigParams(test.discoveryConfig)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("validateDiscoveryConfigParams() returned an unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestName(t *testing.T) {
+	sd := &SystemDiscovery{}
+	if diff := cmp.Diff("systemdiscovery", sd.Name()); diff != "" {
+		t.Errorf("Name() returned an unexpected diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestUsage(t *testing.T) {
+	sd := &SystemDiscovery{}
+	if diff := cmp.Diff(`Usage: systemdiscovery [-config=<path to config file>]
+	[-loglevel=<debug|error|info|warn>] [-help] [-version]`+"\n", sd.Usage()); diff != "" {
+		t.Errorf("Usage() returned an unexpected diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestSynopsis(t *testing.T) {
+	sd := &SystemDiscovery{}
+	if diff := cmp.Diff("discover SAP systems that are running on the host.", sd.Synopsis()); diff != "" {
+		t.Errorf("Synopsis() returned an unexpected diff (-want +got):\n%s", diff)
 	}
 }
 

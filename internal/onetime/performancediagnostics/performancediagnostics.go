@@ -40,7 +40,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/systemdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
@@ -50,6 +52,7 @@ import (
 	s "cloud.google.com/go/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
 const (
@@ -97,13 +100,15 @@ type uploader interface {
 
 // options is a struct to store the parameters required for the OTE subcommand.
 type options struct {
-	fs     filesystem.FileSystem
-	exec   commandlineexecutor.Execute
-	client storage.Client
-	z      zipper.Zipper
-	lp     log.Parameters
-	cp     *ipb.CloudProperties
-	config *bpb.BackintConfiguration
+	fs                      filesystem.FileSystem
+	exec                    commandlineexecutor.Execute
+	client                  storage.Client
+	z                       zipper.Zipper
+	lp                      log.Parameters
+	cp                      *ipb.CloudProperties
+	config                  *bpb.BackintConfiguration
+	cloudDiscoveryInterface system.CloudDiscoveryInterface
+	appsDiscovery           func(context.Context) *sappb.SAPInstances
 }
 
 type zipperHelper struct{}
@@ -139,14 +144,14 @@ func (*Diagnose) Synopsis() string {
 
 // Usage implements the subcommand interface for features.
 func (*Diagnose) Usage() string {
-	return `Usage: performancediagnostics [-type=<all|backup|io>] [-test-bucket=<name of bucket used to run backup]
+	return `Usage: performancediagnostics [-type=<all|backup|io|compute>] [-test-bucket=<name of bucket used to run backup]
 	[-backint-config-file=<path to backint config file>]	[-output-bucket=<name of bucket to upload the report] [-output-file-name=<diagnostics output name>]
 	[-output-file-path=<path to save output file generated>] [-h] [-v] [-loglevel=<debug|info|warn|error]>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for features.
 func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&d.Type, "type", "all", "Sets the type for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all>. Default: all")
+	fs.StringVar(&d.Type, "type", "all", "Sets the type for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all|compute>. Default: all")
 	fs.StringVar(&d.TestBucket, "test-bucket", "", "Sets the bucket name used to run backup operation. (optional)")
 	fs.StringVar(&d.BackintConfigFile, "backint-config-file", "", "Sets the path to backint parameters file. Must be present if type includes backup operation. (optional)")
 	fs.StringVar(&d.OutputBucket, "output-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")
@@ -264,8 +269,9 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 	// Performance diagnostics operations.
 	ops := listOperations(ctx, strings.Split(d.Type, ","))
 	for op := range ops {
-		if op == "all" {
-			// Perform all operations
+		switch op {
+		case "all":
+			// Perform all operations.
 			if err := d.backup(ctx, opts); len(err) > 0 {
 				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsBackupFailure)
 				errs = append(errs, err...)
@@ -274,18 +280,28 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsFIOFailure)
 				errs = append(errs, err...)
 			}
-		} else if op == "backup" {
-			// Perform backup operation
+			if err := d.computeMetrics(ctx, flagSet, opts); err != nil {
+				errs = append(errs, err)
+			}
+		case "backup":
+			// Perform backup operation.
 			if err := d.backup(ctx, opts); len(err) > 0 {
 				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsBackupFailure)
 				errs = append(errs, err...)
 			}
-		} else if op == "io" {
-			// Perform IO Operation
+		case "io":
+			// Perform IO Operation.
 			if err := d.runFIOCommands(ctx, opts); len(err) > 0 {
 				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsFIOFailure)
 				errs = append(errs, err...)
 			}
+		case "compute":
+			// Perform System Discovery and collect compute metrics.
+			if err := d.computeMetrics(ctx, flagSet, opts); err != nil {
+				errs = append(errs, err)
+			}
+		default:
+			log.CtxLogger(ctx).Debugw("Invalid operation provided", "operation", op)
 		}
 	}
 	return errs
@@ -294,9 +310,10 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 // validateParams checks if the parameters provided to the OTE subcommand are valid.
 func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) error {
 	typeValues := map[string]bool{
-		"all":    false,
-		"backup": false,
-		"io":     false,
+		"all":     false,
+		"backup":  false,
+		"io":      false,
+		"compute": false,
 	}
 
 	types := strings.Split(d.Type, ",")
@@ -365,6 +382,73 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 	return res
 }
 
+// computeMetrics collects the compute metrics of the
+// HANA processes running in the HANA instances discovered.
+func (d *Diagnose) computeMetrics(ctx context.Context, flagSet *flag.FlagSet, opts *options) error {
+	// Run system discovery OTE to get the HANA instances.
+	hanaInstances, err := d.runSystemDiscoveryOTE(ctx, flagSet, opts)
+	if err != nil {
+		return err
+	}
+
+	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found %d HANA instances: %v", len(hanaInstances), hanaInstances))
+
+	// TODO: - Collect HANA processes in the HANA instances.
+
+	return nil
+}
+
+// runSystemDiscoveryOTE fetches the HANA instances by
+// invoking the system discovery OTE.
+func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, opts *options) ([]*sappb.SAPInstance, error) {
+	sdOTEParams := &onetime.InternallyInvokedOTE{
+		Lp:        opts.lp,
+		Cp:        opts.cp,
+		InvokedBy: d.Name(),
+	}
+
+	// disabling wlm and cloud logging here as that's not the goal here.
+	systemDiscovery := &systemdiscovery.SystemDiscovery{
+		WlmService:              nil,
+		CloudLogInterface:       nil,
+		CloudDiscoveryInterface: opts.cloudDiscoveryInterface,
+		AppsDiscovery:           opts.appsDiscovery,
+		ConfigPath:              "",
+		IIOTEParams:             sdOTEParams,
+	}
+
+	onetime.LogMessageToFileAndConsole(ctx, "Executing system discovery OTE")
+	defer onetime.LogMessageToFileAndConsole(ctx, "Finished system discovery OTE")
+	discovery, err := systemDiscovery.SystemDiscoveryHandler(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	// filter HANA instances from the SAPInstances discovered.
+	hanaInstances := filterHANAInstances(discovery.GetSAPInstances())
+	if hanaInstances == nil || len(hanaInstances) == 0 {
+		return nil, fmt.Errorf("no HANA instances found")
+	}
+
+	return hanaInstances, nil
+}
+
+// filterHANAInstances filters the HANA instances from SAPInstances.
+func filterHANAInstances(sapInstances *sappb.SAPInstances) []*sappb.SAPInstance {
+	if sapInstances == nil {
+		return nil
+	}
+
+	var hanaInstances []*sappb.SAPInstance
+	for _, instance := range sapInstances.Instances {
+		if instance.Type == sappb.InstanceType_HANA {
+			hanaInstances = append(hanaInstances, instance)
+		}
+	}
+
+	return hanaInstances
+}
+
 // listOperations returns a map of operations to be performed.
 func listOperations(ctx context.Context, operations []string) map[string]struct{} {
 	ops := make(map[string]struct{})
@@ -373,13 +457,16 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 		if _, ok := ops[op]; ok {
 			log.CtxLogger(ctx).Debugw("Duplicate operation already listed", "operation", op)
 		}
-		if op == "all" {
+		switch op {
+		case "all":
 			return map[string]struct{}{"all": {}}
-		} else if op == "backup" {
+		case "backup":
 			ops[op] = struct{}{}
-		} else if op == "io" {
+		case "io":
 			ops[op] = struct{}{}
-		} else {
+		case "compute":
+			ops[op] = struct{}{}
+		default:
 			log.CtxLogger(ctx).Debugw("Invalid operation provided", "operation", op)
 		}
 	}
