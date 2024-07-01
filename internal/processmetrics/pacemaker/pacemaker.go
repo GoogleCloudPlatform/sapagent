@@ -21,11 +21,13 @@ package pacemaker
 
 import (
 	"context"
+	"strconv"
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -93,6 +95,13 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 			Int64Value:   int64(pacemakerVal),
 			BareMetal:    p.Config.BareMetal,
 		}
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:       pacemakerPath,
+			Message:    "Pacemaker Metrics",
+			Value:      strconv.FormatInt(int64(pacemakerVal), 10),
+			Labels:     l,
+			Identifier: sid,
+		})
 		metrics = append(metrics, timeseries.BuildInt(params))
 	}
 	log.CtxLogger(ctx).Debugw("Finished pacemaker metric collection.", "metrics", metrics)

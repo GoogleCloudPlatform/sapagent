@@ -34,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -243,6 +244,13 @@ func collectServiceMetrics(ctx context.Context, p *InstanceProperties, procs map
 
 		log.CtxLogger(ctx).Debugw("Creating metrics for process",
 			"metric", nwServicePath, "process", proc.Name, "instanceid", p.SAPInstance.GetInstanceId(), "value", value)
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:       nwServicePath,
+			Message:    "NetWeaver Service",
+			Value:      strconv.FormatInt(value, 10),
+			Labels:     metricLabels(p, extraLabels),
+			Identifier: proc.Name,
+		})
 		metrics = append(metrics, createMetrics(p, nwServicePath, extraLabels, now, value))
 	}
 	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectServiceMetrics()", "time", time.Since(start.AsTime()))

@@ -300,19 +300,14 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	}
 	now := tspb.Now()
 	sc := &sapcontrol.Properties{Instance: p.SAPInstance}
-	var (
-		err     error
-		procs   map[int]*sapcontrol.ProcessStatus
-		metrics []*mrpb.TimeSeries
-	)
-	procs, err = sc.GetProcessList(ctx, scc)
+	procs, err := sc.GetProcessList(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Error performing GetProcessList web method", log.Error(err))
 		return nil, err
 	}
 
+	var metrics []*mrpb.TimeSeries
 	availabilityValue := collectNWAvailability(p, procs)
-	mPath := pmNWAvailabilityPath
 	if p.ReliabilityMetric {
 		if availabilityValue == 0 {
 			usagemetrics.Action(usagemetrics.ReliabilitySAPNWNotAvailable)
@@ -320,7 +315,12 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 			usagemetrics.Action(usagemetrics.ReliabilitySAPNWAvailable)
 		}
 	} else {
-		metrics = append(metrics, createMetrics(p, mPath, nil, now, availabilityValue))
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:    pmNWAvailabilityPath,
+			Message: "NetWeaver Availability",
+			Value:   strconv.FormatInt(availabilityValue, 10),
+		})
+		metrics = append(metrics, createMetrics(p, pmNWAvailabilityPath, nil, now, availabilityValue))
 	}
 	return metrics, nil
 }

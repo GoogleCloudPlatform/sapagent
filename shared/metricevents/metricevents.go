@@ -20,12 +20,16 @@ package metricevents
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
-var events map[string]eventData
+var (
+	events map[string]eventData
+	mu     sync.Mutex
+)
 
 type eventData struct {
 	labels      map[string]string
@@ -50,6 +54,9 @@ type Parameters struct {
 // a cloud logging message is written if the value has changed.
 // Returns true if an event incurs a state change.
 func AddEvent(ctx context.Context, p Parameters) bool {
+	mu.Lock()
+	defer mu.Unlock()
+
 	if events == nil {
 		events = make(map[string]eventData)
 	}
