@@ -70,32 +70,35 @@ var (
 )
 
 func registerSubCommands() {
+	// NOTE: The order of the commands here is the order they will be displayed in the help message.
+	//       Be sure to keep the ordering in ascending order by subcommand name.
 	scs := [...]subcommands.Command{
-		&startdaemon.Daemon{},
-		&logusage.LogUsage{},
-		&maintenance.Mode{},
-		&remotevalidation.RemoteValidation{},
-		&hanadiskbackup.Snapshot{},
-		&migratehanamonitoring.MigrateHANAMonitoring{},
-		&validate.Validate{},
-		&hanainsights.HANAInsights{},
 		&backint.Backint{},
-		&supportbundle.SupportBundle{},
-		&hanadiskrestore.Restorer{},
-		&readmetrics.ReadMetrics{},
-		&installbackint.InstallBackint{},
+		&balanceirq.BalanceIRQ{},
 		&configure.Configure{},
-		&performancediagnostics.Diagnose{},
 		&configurebackint.ConfigureBackint{},
 		&configureinstance.ConfigureInstance{},
-		&balanceirq.BalanceIRQ{},
-		&version.Version{},
-		&migratehmadashboards.MigrateHMADashboards{},
-		&hanachangedisktype.HanaChangeDiskType{},
-		&reliability.Reliability{},
-		&systemdiscovery.SystemDiscovery{},
-		&discovery.Discovery{FSH: filesystem.Helper{}},
 		&backup.Backup{},
+		&discovery.Discovery{FSH: filesystem.Helper{}},
+		&hanachangedisktype.HanaChangeDiskType{},
+		&hanadiskbackup.Snapshot{},
+		&hanadiskrestore.Restorer{},
+		&hanainsights.HANAInsights{},
+		&installbackint.InstallBackint{},
+		&logusage.LogUsage{},
+		&maintenance.Mode{},
+		&migratehanamonitoring.MigrateHANAMonitoring{},
+		&migratehmadashboards.MigrateHMADashboards{},
+		&performancediagnostics.Diagnose{},
+		&readmetrics.ReadMetrics{},
+		&reliability.Reliability{},
+		&remotevalidation.RemoteValidation{},
+		&startdaemon.Daemon{},
+		&supportbundle.SupportBundle{},
+		&systemdiscovery.SystemDiscovery{},
+		&validate.Validate{},
+		&version.Version{},
+
 		subcommands.HelpCommand(), // Implement "help"
 	}
 	for _, command := range scs {

@@ -64,7 +64,7 @@ type (
 		Fs             *flag.FlagSet
 		IIOTE          *InternallyInvokedOTE
 	}
-	
+
 	// RunOptions is a struct which contains necessary context for the Run function.
 	RunOptions struct {
 		CloudProperties *iipb.CloudProperties
@@ -190,7 +190,7 @@ func GetAgentVersion() string {
 
 // PrintAgentVersion prints the current version of the agent to stdout.
 func PrintAgentVersion() subcommands.ExitStatus {
-	fmt.Println(GetAgentVersion())
+	fmt.Println(GetAgentVersion() + "\n")
 	return subcommands.ExitSuccess
 }
 
