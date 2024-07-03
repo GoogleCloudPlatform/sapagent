@@ -88,7 +88,7 @@ type discoveryInterface interface {
 // RemoteValidation has args for remote subcommands.
 type RemoteValidation struct {
 	project, instanceid, instancename, zone, config string
-	help, version                                   bool
+	help                                            bool
 }
 
 // Name implements the subcommand interface for remote.
@@ -101,7 +101,7 @@ func (*RemoteValidation) Synopsis() string {
 
 // Usage implements the subcommand interface for remote.
 func (*RemoteValidation) Usage() string {
-	return "Usage: remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n"
+	return "Usage: remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h]\n"
 }
 
 // SetFlags implements the subcommand interface for remote.
@@ -117,16 +117,12 @@ func (r *RemoteValidation) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.config, "c", "", "workload validation collection config")
 	fs.StringVar(&r.config, "config", "", "workload validation collection config")
 	fs.BoolVar(&r.help, "h", false, "Display help")
-	fs.BoolVar(&r.version, "v", false, "Display the current version of the agent")
 }
 
 // Execute implements the subcommand interface for remote.
 func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	if r.help {
 		return onetime.HelpCommand(f)
-	}
-	if r.version {
-		return onetime.PrintAgentVersion()
 	}
 
 	log.SetupLoggingToDiscard()

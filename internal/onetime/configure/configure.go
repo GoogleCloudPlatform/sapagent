@@ -58,13 +58,13 @@ type Configure struct {
 	SampleIntervalSec          int64        `json:"sample_interval_sec,string"`
 	QueryTimeoutSec            int64        `json:"query_timeout_sec,string"`
 	Help                       bool         `json:"help,string"`
-	Version                    bool         `json:"version,string"`
 	Enable                     bool         `json:"enable,string"`
 	Disable                    bool         `json:"disable,string"`
 	Showall                    bool         `json:"showall,string"`
 	Add                        bool         `json:"add,string"`
 	Remove                     bool         `json:"remove,string"`
 	RestartAgent               RestartAgent `json:"-"`
+	LogPath                    string       `json:"log-path"`
 }
 
 // RestartAgent abstracts restart functions(windows & linux) for testability.
@@ -104,12 +104,12 @@ func (*Configure) Synopsis() string {
 func (*Configure) Usage() string {
 	return `Usage:
 configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_evaluation|workload_discovery> | -setting=<bare_metal|log_to_cloud>]
-[-enable|-disable] [-showall] [-v] [-h]
+[-enable|-disable] [-showall] [-h]
 [process_metrics_frequency=<int>] [slow_process_metrics_frequency=<int>]
 [process_metrics_to_skip=<"comma-separated-metrics">] [-add|-remove]
 [workload_evaluation_metrics_frequency=<int>] [workload_evaluation_db_metrics_frequency=<int>]
 [-agent_metrics_frequency=<int>] [agent_health_frequency=<int>]
-[heartbeat_frequency=<int>] [sample_interval_sec=<int>] [query_timeout_sec=<int>]
+[heartbeat_frequency=<int>] [sample_interval_sec=<int>] [query_timeout_sec=<int>] [-log-path=<log-path>]
 `
 }
 
@@ -131,8 +131,7 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&c.QueryTimeoutSec, "query_timeout_sec", 0, "Sets the query timeout for HANA Monitoring. Default value is 300(s)")
 	fs.BoolVar(&c.Help, "help", false, "Display help")
 	fs.BoolVar(&c.Help, "h", false, "Display help")
-	fs.BoolVar(&c.Version, "version", false, "Print the agent version")
-	fs.BoolVar(&c.Version, "v", false, "Print the agent version")
+	fs.StringVar(&c.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/configure.log")
 	fs.BoolVar(&c.Showall, "showall", false, "Display the status of all features")
 	fs.BoolVar(&c.Enable, "enable", false, "Enable the requested feature/setting")
 	fs.BoolVar(&c.Disable, "disable", false, "Disable the requested feature/setting")
@@ -145,9 +144,9 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
 		Help:     c.Help,
-		Version:  c.Version,
 		Fs:       fs,
 		LogLevel: c.LogLevel,
+		LogPath:  c.LogPath,
 	}, args...)
 	if !completed {
 		return exitStatus

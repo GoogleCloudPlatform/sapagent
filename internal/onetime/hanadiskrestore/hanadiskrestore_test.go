@@ -443,12 +443,6 @@ func TestExecute(t *testing.T) {
 			want: subcommands.ExitUsageError,
 		},
 		{
-			name:     "Version",
-			r:        Restorer{version: true},
-			testArgs: []any{"subcommdand_name", log.Parameters{}, &ipb.CloudProperties{}},
-			want:     subcommands.ExitSuccess,
-		},
-		{
 			name:     "Help",
 			r:        Restorer{help: true},
 			testArgs: []any{"subcommdand_name", log.Parameters{}, &ipb.CloudProperties{}},

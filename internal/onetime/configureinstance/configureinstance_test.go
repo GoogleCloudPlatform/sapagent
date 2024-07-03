@@ -118,18 +118,6 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			c: ConfigureInstance{
-				Version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			c: ConfigureInstance{
 				Help: true,
@@ -232,7 +220,7 @@ func TestSynopsisForConfigureInstance(t *testing.T) {
 func TestSetFlagsForConfigureInstance(t *testing.T) {
 	c := ConfigureInstance{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"check", "apply", "overrideType", "hyperThreading", "h", "v"}
+	flags := []string{"check", "apply", "overrideType", "hyperThreading", "h", "log-path"}
 	c.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

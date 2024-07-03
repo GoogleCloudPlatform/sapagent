@@ -75,8 +75,8 @@ type (
 
 // InstallBackint has args for installbackint subcommands.
 type InstallBackint struct {
-	sid, logLevel string
-	help, version bool
+	sid, logLevel, logPath string
+	help                   bool
 
 	mkdir     mkdirFunc
 	writeFile writeFileFunc
@@ -100,14 +100,14 @@ func (*InstallBackint) Synopsis() string {
 // Usage implements the subcommand interface for installbackint.
 func (*InstallBackint) Usage() string {
 	return `Usage: installbackint [-sid=<sap-system-identification>]
-	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for installbackint.
 func (b *InstallBackint) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&b.sid, "sid", "", "SAP System Identification, defaults to $SAPSYSTEMNAME")
+	fs.StringVar(&b.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/installbackint.log")
 	fs.BoolVar(&b.help, "h", false, "Displays help")
-	fs.BoolVar(&b.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&b.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
@@ -116,8 +116,8 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     b.Name(),
 		Help:     b.help,
-		Version:  b.version,
 		LogLevel: b.logLevel,
+		LogPath:  b.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

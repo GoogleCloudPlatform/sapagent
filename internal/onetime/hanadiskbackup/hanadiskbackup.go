@@ -139,11 +139,12 @@ type Snapshot struct {
 	computeService                         *compute.Service
 	status                                 bool
 	timeSeriesCreator                      cloudmonitoring.TimeSeriesCreator
-	help, version                          bool
+	help                          bool
 	SkipDBSnapshotForChangeDiskType        bool   `json:"skip-db-snapshot-for-change-disk-type,string"`
 	HANAChangeDiskTypeOTEName              string `json:"-"`
 	ForceStopHANA                          bool   `json:"-"`
 	LogLevel                               string `json:"loglevel"`
+	LogPath                                string `json:"log-path"`
 	hanaDataPath                           string
 	logicalDataPath, physicalDataPath      string
 	Labels                                 string                        `json:"labels"`
@@ -171,7 +172,7 @@ func (*Snapshot) Usage() string {
 	[-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>]
 	[-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
 	[-confirm-data-snapshot-after-create=<true|false>]
-	[-h] [-v] [-loglevel=<debug|info|warn|error>]
+	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
 	` + "\n"
 }
 
@@ -198,20 +199,20 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.StorageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
 	fs.StringVar(&s.Description, "snapshot-description", "", "Description of the new snapshot(optional)")
 	fs.BoolVar(&s.SendToMonitoring, "send-metrics-to-monitoring", true, "Send backup related metrics to cloud monitoring. (optional) Default: true")
+	fs.StringVar(&s.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/hanadiskbackup.log")
 	fs.BoolVar(&s.help, "h", false, "Displays help")
-	fs.BoolVar(&s.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level")
 	fs.StringVar(&s.Labels, "labels", "", "Labels to be added to the disk snapshot")
 }
 
 // Execute implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	// Help and version will return before the args are parsed.
+	// Help will return before the args are parsed.
 	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     s.Name(),
 		Help:     s.help,
-		Version:  s.version,
 		LogLevel: s.LogLevel,
+		LogPath:  s.LogPath,
 		Fs:       f,
 		IIOTE:    s.IIOTEParams,
 	}, args...)

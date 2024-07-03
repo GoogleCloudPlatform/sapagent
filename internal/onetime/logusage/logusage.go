@@ -37,7 +37,8 @@ import (
 type LogUsage struct {
 	name, agentVersion, agentPriorVersion, status, image string
 	action, usageError                                   int
-	help, version                                        bool
+	help                                                 bool
+	logPath                                              string
 }
 
 // Name implements the subcommand interface for logusage.
@@ -50,7 +51,7 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 func (*LogUsage) Usage() string {
 	return `Usage: logusage [-name <tool or agent name>] [-av <tool or agent version>]
 	[-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]
-	[-image <image URL of the compute instance>] [-v] [-h]` + "\n"
+	[-image <image URL of the compute instance>] [-log-path <log-path>] [-h]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for logusage.
@@ -69,8 +70,8 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 	fs.IntVar(&l.usageError, "e", 0, "usage error code")
 	fs.StringVar(&l.image, "image", "", "the image url of the compute instance(optional), default value is retreived from metadata)")
 	fs.StringVar(&l.image, "i", "", "the image url of the compute instance(optional), default value is retreived from metadata)")
+	fs.StringVar(&l.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/logusage.log")
 	fs.BoolVar(&l.help, "h", false, "help")
-	fs.BoolVar(&l.version, "v", false, "Displays the current version of the agent")
 }
 
 // Execute implements the subcommand interface for logusage.
@@ -79,8 +80,8 @@ func (l *LogUsage) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     "",
 		Help:     l.help,
-		Version:  l.version,
 		LogLevel: "",
+		LogPath:  l.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

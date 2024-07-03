@@ -59,10 +59,10 @@ type (
 
 	// InitOptions is a struct which contains necessary context for Init function to initialise the OTEs.
 	InitOptions struct {
-		Help, Version  bool
-		Name, LogLevel string
-		Fs             *flag.FlagSet
-		IIOTE          *InternallyInvokedOTE
+		Help                    bool
+		Name, LogLevel, LogPath string
+		Fs                      *flag.FlagSet
+		IIOTE                   *InternallyInvokedOTE
 	}
 
 	// RunOptions is a struct which contains necessary context for the Run function.
@@ -86,9 +86,6 @@ func Init(ctx context.Context, opt InitOptions, args ...any) (log.Parameters, *i
 	if opt.Help {
 		return log.Parameters{}, nil, HelpCommand(opt.Fs), false
 	}
-	if opt.Version {
-		return log.Parameters{}, nil, PrintAgentVersion(), false
-	}
 
 	if len(args) < 3 {
 		log.CtxLogger(ctx).Errorf("Not enough args for Init(). Want: 3, Got: %d", len(args))
@@ -110,6 +107,9 @@ func Init(ctx context.Context, opt InitOptions, args ...any) (log.Parameters, *i
 	}
 	if opt.LogLevel == "" {
 		opt.LogLevel = "info"
+	}
+	if opt.LogPath != "" {
+		lp.LogFileName = opt.LogPath
 	}
 	SetupOneTimeLogging(lp, opt.Name, log.StringLevelToZapcore(opt.LogLevel))
 	ConfigureUsageMetricsForOTE(cloudProps, "", "")
@@ -151,16 +151,21 @@ func LogMessageToFileAndConsole(ctx context.Context, msg string) {
 
 // SetupOneTimeLogging creates logging config for the agent's one time execution.
 func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zapcore.Level) log.Parameters {
-	oteDir := `/var/log/google-cloud-sap-agent/`
-	if params.OSType == "windows" {
-		oteDir = `C:\Program Files\Google\google-cloud-sap-agent\logs\`
+	// If the user did not override the log file name, use the default log file name.
+	if params.LogFileName == "" {
+		oteDir := `/var/log/google-cloud-sap-agent/`
+		if params.OSType == "windows" {
+			oteDir = `C:\Program Files\Google\google-cloud-sap-agent\logs\`
+		}
+		params.LogFileName = oteDir + subcommandName + ".log"
 	}
 	params.Level = level
-	params.LogFileName = oteDir + subcommandName + ".log"
 	params.CloudLogName = "google-cloud-sap-agent-" + subcommandName
 	log.SetupLogging(params)
-	// make all of the OTE log files global read + write
-	os.Chmod(params.LogFileName, 0666)
+	// Make all of the OTE log files read + write for user and group.
+	// The directory is owned by sapsys group and in general, sidadm users
+	// are members of sapsys group.
+	os.Chmod(params.LogFileName, 0660)
 	return params
 }
 

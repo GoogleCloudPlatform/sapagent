@@ -121,18 +121,6 @@ func TestExecuteReliability(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			r: Reliability{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			r: Reliability{
 				help: true,
@@ -167,7 +155,7 @@ func TestSynopsisForReliability(t *testing.T) {
 func TestSetFlagsForReliability(t *testing.T) {
 	r := Reliability{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"project", "o", "bucket", "service-account", "v", "h", "loglevel"}
+	flags := []string{"project", "o", "bucket", "service-account",  "h", "loglevel", "log-path"}
 	r.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

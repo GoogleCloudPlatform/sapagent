@@ -357,17 +357,6 @@ func TestExecuteForSOSReport(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			sosr: &SupportBundle{
-				Version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			sosr: &SupportBundle{
 				Help: true,

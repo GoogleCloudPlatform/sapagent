@@ -31,9 +31,9 @@ import (
 
 // Mode has args for maintenance subcommands.
 type Mode struct {
-	sid                         string
-	enable, show, help, version bool
-	logLevel                    string
+	sid                string
+	enable, show, help bool
+	logLevel, LogPath  string
 }
 
 // Name implements the subcommand interface for maintenance.
@@ -44,7 +44,7 @@ func (*Mode) Synopsis() string { return "configure maintenance mode" }
 
 // Usage implements the subcommand interface for maintenance.
 func (*Mode) Usage() string {
-	return "Usage: maintenance [-enable=true|false -sid=<SAP System Identifier>] [show] [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
+	return "Usage: maintenance [-enable=true|false -sid=<SAP System Identifier>] [show] [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]\n"
 }
 
 // SetFlags implements the subcommand interface for maintenance.
@@ -53,8 +53,8 @@ func (m *Mode) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&m.enable, "enable", false, "Enable maintenance mode for SID")
 	fs.BoolVar(&m.show, "show", false, "Show maintenance mode status")
 	fs.BoolVar(&m.help, "h", false, "Display help")
-	fs.BoolVar(&m.version, "v", false, "Display the version of the agent")
 	fs.StringVar(&m.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&m.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/maintenance.log")
 }
 
 // Execute implements the subcommand interface for maintenance.
@@ -62,8 +62,8 @@ func (m *Mode) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcom
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     m.Name(),
 		Help:     m.help,
-		Version:  m.version,
 		LogLevel: m.logLevel,
+		LogPath:  m.LogPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

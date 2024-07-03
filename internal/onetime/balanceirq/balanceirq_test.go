@@ -109,18 +109,6 @@ func TestExecuteBalanceIRQ(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			b: BalanceIRQ{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			b: BalanceIRQ{
 				help: true,
@@ -155,7 +143,7 @@ func TestSynopsisForBalanceIRQ(t *testing.T) {
 func TestSetFlagsForBalanceIRQ(t *testing.T) {
 	b := BalanceIRQ{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"install", "h", "v"}
+	flags := []string{"install", "h"}
 	b.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

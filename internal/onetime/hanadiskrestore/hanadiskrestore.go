@@ -102,11 +102,11 @@ type Restorer struct {
 	physicalDataPath, physicalLogPath                          string
 	labelsOnDetachedDisk                                       string
 	timeSeriesCreator                                          cloudmonitoring.TimeSeriesCreator
-	help, version                                              bool
+	help                                                       bool
 	SendToMonitoring                                           bool
 	SkipDBSnapshotForChangeDiskType                            bool
 	HANAChangeDiskTypeOTEName                                  string
-	LogLevel                                                   string
+	LogLevel, LogPath                                          string
 	ForceStopHANA                                              bool
 	isGroupSnapshot                                            bool
 	NewdiskName                                                string
@@ -132,7 +132,7 @@ func (*Restorer) Usage() string {
   [-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
   [-send-metrics-to-monitoring]=<true|false>
   [csek-key-file]=<path-to-key-file>]
-  [-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
+  [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanadiskrestore.
@@ -153,21 +153,21 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&r.ProvisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
 	fs.BoolVar(&r.SendToMonitoring, "send-metrics-to-monitoring", true, "Send restore related metrics to cloud monitoring. (optional) Default: true")
 	fs.StringVar(&r.CSEKKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file for the source snapshot. (required if source snapshot is encrypted)`)
+	fs.StringVar(&r.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/hanadiskrestore.log")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
-	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.LogLevel, "loglevel", "info", "Sets the logging level")
 }
 
 // Execute implements the subcommand interface for hanadiskrestore.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	// Help and version will return before the args are parsed.
+	// Help will return before the args are parsed.
 	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     r.Name(),
 		Help:     r.help,
-		Version:  r.version,
 		Fs:       f,
 		IIOTE:    r.IIOTEParams,
 		LogLevel: r.LogLevel,
+		LogPath:  r.LogPath,
 	}, args...)
 	if !completed {
 		return exitStatus

@@ -45,8 +45,8 @@ type HANAInsights struct {
 	gceService                                      onetime.GCEInterface
 	status                                          bool
 	db                                              *databaseconnector.DBHandle
-	help, version                                   bool
-	logLevel                                        string
+	help                                            bool
+	logLevel, logPath                               string
 }
 
 const (
@@ -66,7 +66,7 @@ func (*HANAInsights) Synopsis() string { return "invoke HANA local insights work
 // Usage implements the subcommand interface for hanainsights.
 func (*HANAInsights) Usage() string {
 	return `Usage: hanainsights -project=<project-name> -host=<hostname> -port=<port-number> -sid=<HANA-SID> -user=<user-name>
-	[-password=<passwd> | -password-secret=<secret-name>] [-v] [-h] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-password=<passwd> | -password-secret=<secret-name>] [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanainsights.
@@ -79,8 +79,8 @@ func (h *HANAInsights) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&h.password, "password", "", "HANA password. (discouraged - use password-secret instead)")
 	fs.StringVar(&h.passwordSecret, "password-secret", "", "Secret Manager secret name that holds HANA Password")
 	fs.StringVar(&h.hdbuserstoreKey, "hdbuserstore-key", "", "HANA Userstore key specific to HANA instance")
+	fs.StringVar(&h.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/hanainsights.log")
 	fs.BoolVar(&h.help, "h", false, "Display help")
-	fs.BoolVar(&h.version, "v", false, "Display agent version")
 	fs.StringVar(&h.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
 
@@ -89,8 +89,8 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     h.Name(),
 		Help:     h.help,
-		Version:  h.version,
 		LogLevel: h.logLevel,
+		LogPath:  h.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

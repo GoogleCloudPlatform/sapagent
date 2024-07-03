@@ -265,18 +265,6 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			d: &Diagnose{
-				version: true,
-			},
-			args: []any{
-				"test",
-				log.Parameters{},
-				defaultCloudProperties,
-			},
-			want: subcommands.ExitSuccess,
-		},
-		{
 			name: "SuccessForHelp",
 			d: &Diagnose{
 				help: true,
@@ -308,7 +296,7 @@ func TestSetFlags(t *testing.T) {
 
 	flags := []string{
 		"type", "test-bucket", "backint-config-file", "output-bucket", "output-file-name",
-		"hyper-threading", "output-file-path", "loglevel", "help", "h", "version", "v",
+		"hyper-threading", "output-file-path", "loglevel", "help", "h", "log-path",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

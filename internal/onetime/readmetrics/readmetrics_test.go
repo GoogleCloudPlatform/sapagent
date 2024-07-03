@@ -135,18 +135,6 @@ func TestExecuteReadMetrics(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			r: ReadMetrics{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			r: ReadMetrics{
 				help: true,
@@ -181,7 +169,7 @@ func TestSynopsisForReadMetrics(t *testing.T) {
 func TestSetFlagsForReadMetrics(t *testing.T) {
 	r := ReadMetrics{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"project", "i", "o", "send-status-to-monitoring", "bucket", "service-account", "v", "h", "loglevel"}
+	flags := []string{"project", "i", "o", "send-status-to-monitoring", "bucket", "service-account", "h", "loglevel", "log-path"}
 	r.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

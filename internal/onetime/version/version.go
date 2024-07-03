@@ -26,42 +26,23 @@ import (
 )
 
 // Version has args for version subcommands.
-type Version struct {
-	sid           string
-	help, version bool
-	logLevel      string
-}
+type Version struct{}
 
 // Name implements the subcommand interface for version.
 func (*Version) Name() string { return "version" }
 
 // Synopsis implements the subcommand interface for version.
-func (*Version) Synopsis() string { return "print sapagent version information" }
+func (*Version) Synopsis() string { return "print Agent for SAP version information" }
 
 // Usage implements the subcommand interface for version.
 func (*Version) Usage() string {
-	return "Usage: version [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
+	return "Usage: version\n"
 }
 
 // SetFlags implements the subcommand interface for version.
-func (v *Version) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&v.help, "h", false, "Display help")
-	fs.BoolVar(&v.version, "v", false, "Display the version of the agent")
-	fs.StringVar(&v.logLevel, "loglevel", "info", "Sets the logging level for a log file")
-}
+func (v *Version) SetFlags(fs *flag.FlagSet) {}
 
 // Execute implements the subcommand interface for version.
 func (v *Version) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
-		Name:     v.Name(),
-		Help:     v.help,
-		Version:  v.version,
-		LogLevel: v.logLevel,
-		Fs:       f,
-	}, args...)
-	if !completed {
-		return exitStatus
-	}
-
 	return onetime.PrintAgentVersion()
 }

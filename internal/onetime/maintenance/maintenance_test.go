@@ -76,7 +76,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	m.SetFlags(fs)
 
-	flags := []string{"sid", "enable", "show", "v", "h", "loglevel"}
+	flags := []string{"sid", "enable", "show",  "h", "loglevel", "log-path"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {
@@ -109,16 +109,6 @@ func TestExecuteMaintenance(t *testing.T) {
 		{
 			name: "SuccessfullyParseArgs",
 			mm:   Mode{show: true},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				defaultCloudProperties,
-			},
-		},
-		{
-			name: "SuccessForAgentVersion",
-			mm:   Mode{version: true},
 			want: subcommands.ExitSuccess,
 			args: []any{
 				"test",

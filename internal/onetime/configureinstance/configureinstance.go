@@ -81,7 +81,7 @@ type ConfigureInstance struct {
 	OverrideVersion string `json:"overrideVersion"`
 	PrintDiff       bool   `json:"printDiff,string"`
 	Help            bool   `json:"help,string"`
-	Version         bool   `json:"version,string"`
+	LogPath         string `json:"log-path"`
 
 	WriteFile   WriteFileFunc
 	ReadFile    ReadFileFunc
@@ -113,9 +113,11 @@ func (*ConfigureInstance) Usage() string {
     [-printDiff=false]		If true, prints all configuration diffs and log messages to stdout as JSON
     [-overrideVersion="latest"]	If specified, runs a specific version of configureinstance.
                                	Possible values: ["3.3", "3.4", "latest"]
+    [-log-path="/var/log/google-cloud-sap-agent/configureinstance.log"]			The full linux log path to write the log file (optional).
+		                            Default value is /var/log/google-cloud-sap-agent/configureinstance.log
 
   Global options:
-    [-h] [-v]` + "\n"
+    [-h]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for configureinstance.
@@ -126,8 +128,8 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.MachineType, "overrideType", "", "Bypass the metadata machine type lookup")
 	fs.StringVar(&c.HyperThreading, "hyperThreading", "on", "Sets hyper threading settings for X4 machines")
 	fs.StringVar(&c.OverrideVersion, "overrideVersion", "latest", "If specified, runs a specific version of configureinstance")
+	fs.StringVar(&c.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/configureinstance.log")
 	fs.BoolVar(&c.Help, "h", false, "Displays help")
-	fs.BoolVar(&c.Version, "v", false, "Displays the current version of the agent")
 }
 
 // Execute implements the subcommand interface for configureinstance.
@@ -135,9 +137,9 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
 		Help:     c.Help,
-		Version:  c.Version,
 		Fs:       f,
 		LogLevel: "info",
+		LogPath:  c.LogPath,
 		IIOTE:    c.IIOTEParams,
 	}, args...)
 	if !completed {

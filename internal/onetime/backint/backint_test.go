@@ -130,18 +130,6 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			backint: &Backint{
-				version: true,
-			},
-			args: []any{
-				"test",
-				log.Parameters{},
-				defaultCloudProperties,
-			},
-			want: subcommands.ExitSuccess,
-		},
-		{
 			name: "SuccessForHelp",
 			backint: &Backint{
 				help: true,
@@ -225,7 +213,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	b.SetFlags(fs)
 
-	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l", "v", "h", "loglevel"}
+	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l", "h", "loglevel", "log-path", "l"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {

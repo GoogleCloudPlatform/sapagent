@@ -33,8 +33,8 @@ import (
 // Validate implements the subcommand interface.
 type Validate struct {
 	workloadCollection string
-	help, version      bool
-	logLevel           string
+	help               bool
+	logLevel, logPath  string
 }
 
 // Name returns the name of the command.
@@ -47,7 +47,7 @@ func (*Validate) Synopsis() string {
 
 // Usage returns a long string explaining the command and giving usage information.
 func (*Validate) Usage() string {
-	return "Usage: validate [-workloadcollection <filename>] [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
+	return "Usage: validate [-workloadcollection <filename>] [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]\n"
 }
 
 // SetFlags adds the flags for this command to the specified set.
@@ -55,8 +55,8 @@ func (v *Validate) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&v.workloadCollection, "workloadcollection", "", "workload collection filename")
 	fs.StringVar(&v.workloadCollection, "wc", "", "workload collection filename")
 	fs.BoolVar(&v.help, "h", false, "Displays help")
-	fs.BoolVar(&v.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&v.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&v.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/validate.log")
 }
 
 // Execute executes the command and returns an ExitStatus.
@@ -64,8 +64,8 @@ func (v *Validate) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     v.Name(),
 		Help:     v.help,
-		Version:  v.version,
 		LogLevel: v.logLevel,
+		LogPath:  v.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

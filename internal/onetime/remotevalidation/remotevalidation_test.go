@@ -73,14 +73,6 @@ func TestExecute(t *testing.T) {
 		want        subcommands.ExitStatus
 	}{
 		{
-			name: "SuccessForAgentVersion",
-			remote: &RemoteValidation{
-				version: true,
-			},
-			loadOptions: defaultLoadOptions,
-			want:        subcommands.ExitSuccess,
-		},
-		{
 			name: "SuccessForHelp",
 			remote: &RemoteValidation{
 				help: true,
@@ -253,7 +245,7 @@ func TestRemoteValidationHandler(t *testing.T) {
 }
 
 func TestUsageForRemoteValidation(t *testing.T) {
-	want := "Usage: remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h] [-v]\n"
+	want := "Usage: remote -project=<project-id> -instance=<instance-id> -name=<instance-name> -zone=<instance-zone> [-h]\n"
 	rv := RemoteValidation{}
 	got := rv.Usage()
 	if got != want {

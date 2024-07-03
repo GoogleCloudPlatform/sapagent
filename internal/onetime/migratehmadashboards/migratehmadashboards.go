@@ -40,9 +40,9 @@ const (
 // MigrateHMADashboards is a struct which implements subcommands interface.
 type (
 	MigrateHMADashboards struct {
-		project       string
-		help, version bool
-		logLevel      string
+		project           string
+		help              bool
+		logLevel, logPath string
 	}
 
 	dashboardUpdatesResults struct {
@@ -72,15 +72,15 @@ func (*MigrateHMADashboards) Synopsis() string {
 
 // Usage implements the subcommand interface for MigrateHMADashboards.
 func (*MigrateHMADashboards) Usage() string {
-	return `Usage: migratehmadashboards -project=<project-name> [-h] [-v] [-loglevel=<debug|info|warn|error>]\n`
+	return `Usage: migratehmadashboards -project=<project-name> [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]\n`
 }
 
 // SetFlags implements the subcommand interface for MigrateHMADashboards.
 func (m *MigrateHMADashboards) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&m.project, "project", "", "GCP project. (required)")
 	fs.BoolVar(&m.help, "h", false, "Display help")
-	fs.BoolVar(&m.version, "v", false, "Display agent version")
 	fs.StringVar(&m.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&m.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/migratehmadashboards.log")
 }
 
 // Execute implements the subcommand interface for Migrating HANA Monitoring Agent.
@@ -88,8 +88,8 @@ func (m *MigrateHMADashboards) Execute(ctx context.Context, f *flag.FlagSet, arg
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     m.Name(),
 		Help:     m.help,
-		Version:  m.version,
 		LogLevel: m.logLevel,
+		LogPath:  m.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

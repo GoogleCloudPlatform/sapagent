@@ -55,13 +55,13 @@ WantedBy=multi-user.target`
 
 // BalanceIRQ has args for balanceirq subcommands.
 type BalanceIRQ struct {
-	install       bool
-	help, version bool
+	install, help bool
 
 	writeFile   writeFileFunc
 	readFile    readFileFunc
 	ExecuteFunc commandlineexecutor.Execute
 	IIOTEParams *onetime.InternallyInvokedOTE
+	logPath     string
 }
 
 type socketCores struct {
@@ -82,17 +82,17 @@ func (*BalanceIRQ) Usage() string {
 	return `Usage: balanceirq [subcommand]
 
   Subcommand (optional):
-    -install	Installs a systemd service which will run balanceirq on each boot of the system
-
-  Global options:
-    [-h] [-v]` + "\n"
+    -install=<true|false>	Installs a systemd service which will run balanceirq on each boot of the system
+    -log-path=<log-path>	The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/balanceirq.log
+    -h	Displays help` + "\n"
 }
 
 // SetFlags implements the subcommand interface for configureinstance.
 func (b *BalanceIRQ) SetFlags(fs *flag.FlagSet) {
+	// TODO: Move common flags to global struct.
 	fs.BoolVar(&b.install, "install", false, "Installs balanceirq as a systemd service")
+	fs.StringVar(&b.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/balanceirq.log")
 	fs.BoolVar(&b.help, "h", false, "Displays help")
-	fs.BoolVar(&b.version, "v", false, "Displays the current version of the agent")
 }
 
 // Execute implements the subcommand interface for configureinstance.
@@ -100,9 +100,9 @@ func (b *BalanceIRQ) Execute(ctx context.Context, f *flag.FlagSet, args ...any) 
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     b.Name(),
 		Help:     b.help,
-		Version:  b.version,
 		Fs:       f,
 		LogLevel: "info",
+		LogPath:  b.logPath,
 		IIOTE:    b.IIOTEParams,
 	}, args...)
 	if !completed {

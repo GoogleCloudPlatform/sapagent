@@ -35,35 +35,53 @@ func TestSetupOneTimeLogging(t *testing.T) {
 	tests := []struct {
 		name             string
 		os               string
+		logFileOverride  string
 		subCommandName   string
 		want             string
-		wantcloudlogname string
+		wantCloudLogName string
 	}{
 		{
 			name:             "Windows",
 			os:               "windows",
 			subCommandName:   "logusage",
 			want:             `C:\Program Files\Google\google-cloud-sap-agent\logs\logusage.log`,
-			wantcloudlogname: "google-cloud-sap-agent-logusage",
+			wantCloudLogName: "google-cloud-sap-agent-logusage",
 		},
 		{
 			name:             "Linux",
 			os:               "linux",
 			subCommandName:   "snapshot",
 			want:             `/var/log/google-cloud-sap-agent/snapshot.log`,
-			wantcloudlogname: "google-cloud-sap-agent-snapshot",
+			wantCloudLogName: "google-cloud-sap-agent-snapshot",
+		},
+		{
+			name:             "LinuxWithLogFileOverride",
+			os:               "linux",
+			subCommandName:   "snapshot",
+			logFileOverride:  "/tmp/snapshot.log",
+			want:             "/tmp/snapshot.log",
+			wantCloudLogName: "google-cloud-sap-agent-snapshot",
+		},
+		{
+			name:             "WindowsWithLogFileOverride",
+			os:               "windows",
+			subCommandName:   "logusage",
+			logFileOverride:  "/tmp/logusage.log",
+			want:             "/tmp/logusage.log",
+			wantCloudLogName: "google-cloud-sap-agent-logusage",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			lp := log.Parameters{
-				LogToCloud: false,
-				OSType:     test.os,
-				Level:      2,
+				LogToCloud:  false,
+				OSType:      test.os,
+				Level:       2,
+				LogFileName: test.logFileOverride,
 			}
 			gotparams := SetupOneTimeLogging(lp, test.subCommandName, zapcore.ErrorLevel)
-			if gotparams.CloudLogName != test.wantcloudlogname {
-				t.Errorf("SetupOneTimeLogging(%s,%s) cloudlogname is incorrect, got: %s, want: %s", test.os, test.subCommandName, gotparams.CloudLogName, test.wantcloudlogname)
+			if gotparams.CloudLogName != test.wantCloudLogName {
+				t.Errorf("SetupOneTimeLogging(%s,%s) cloudlogname is incorrect, got: %s, want: %s", test.os, test.subCommandName, gotparams.CloudLogName, test.wantCloudLogName)
 			}
 
 			got := log.GetLogFile()

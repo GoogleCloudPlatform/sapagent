@@ -161,18 +161,6 @@ func TestExecuteConfigureBackint(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			b: ConfigureBackint{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			b: ConfigureBackint{
 				help: true,
@@ -228,7 +216,7 @@ func TestSynopsisForConfigureBackint(t *testing.T) {
 func TestSetFlagsForConfigureBackint(t *testing.T) {
 	b := ConfigureBackint{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"f", "v", "h", "bucket", "recovery_bucket", "log_to_cloud", "log_level", "compress", "encryption_key", "kms_key", "retries", "parallel_streams", "rate_limit_mb", "service_account_key", "threads", "file_read_timeout_ms", "buffer_size_mb", "retry_backoff_initial", "retry_backoff_max", "retry_backoff_multiplier", "log_delay_sec", "client_endpoint", "folder_prefix", "recovery_folder_prefix"}
+	flags := []string{"f", "h", "bucket", "recovery_bucket", "log_to_cloud", "log_level", "compress", "encryption_key", "kms_key", "retries", "parallel_streams", "rate_limit_mb", "service_account_key", "threads", "file_read_timeout_ms", "buffer_size_mb", "retry_backoff_initial", "retry_backoff_max", "retry_backoff_multiplier", "log_delay_sec", "client_endpoint", "folder_prefix", "recovery_folder_prefix", "log-path"}
 	b.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

@@ -590,18 +590,6 @@ func TestExecuteSnapshot(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForVersion",
-			snapshot: Snapshot{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name:     "InvalidParams",
 			snapshot: Snapshot{},
 			want:     subcommands.ExitUsageError,

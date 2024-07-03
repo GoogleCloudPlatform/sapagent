@@ -53,8 +53,8 @@ type HanaChangeDiskType struct {
 	skipDBSnapshotForChangeDiskType                    bool
 	newdiskName                                        string
 	provisionedIops, provisionedThroughput, diskSizeGb int64
-	help, version                                      bool
-	logLevel                                           string
+	help                                               bool
+	logLevel, logPath                                  string
 	IIOTEParams                                        *onetime.InternallyInvokedOTE
 }
 
@@ -74,7 +74,7 @@ func (*HanaChangeDiskType) Usage() string {
 	[-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
 	[-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
 	[skip-db-snapshot-for-change-disk-type=<true|false>]
-	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for changedisktype.
@@ -96,8 +96,8 @@ func (c *HanaChangeDiskType) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&c.diskSizeGb, "disk-size-gb", 0, "New disk size in GB, must not be less than the size of the source (optional)")
 	fs.Int64Var(&c.provisionedIops, "provisioned-iops", 0, "Number of I/O operations per second that the disk can handle. (optional)")
 	fs.Int64Var(&c.provisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
+	fs.StringVar(&c.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/hanachangedisktype.log")
 	fs.BoolVar(&c.help, "h", false, "Displays help")
-	fs.BoolVar(&c.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&c.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
@@ -106,8 +106,8 @@ func (c *HanaChangeDiskType) Execute(ctx context.Context, f *flag.FlagSet, args 
 	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
 		Help:     c.help,
-		Version:  c.version,
 		LogLevel: c.logLevel,
+		LogPath:  c.logPath,
 		Fs:       f,
 		IIOTE:    c.IIOTEParams,
 	}, args...)

@@ -58,15 +58,15 @@ type (
 
 // ConfigureBackint has args for configurebackint subcommands.
 type ConfigureBackint struct {
-	fileName      string
-	help, version bool
+	fileName string
+	help     bool
 
-	bucket, recoveryBucket, folderPrefix, recoveryFolderPrefix           string
-	encryptionKey, kmsKey, logLevel, serviceAccountKey, clientEndpoint   string
-	parallelStreams, threads, retries, bufferSizeMb, rateLimitMb         int64
-	logDelaySec, fileReadTimeoutMs, retryBackoffInitial, retryBackoffMax int64
-	retryBackoffMultiplier                                               float64
-	compress, logToCloud                                                 bool
+	bucket, recoveryBucket, folderPrefix, recoveryFolderPrefix                  string
+	encryptionKey, kmsKey, logLevel, LogPath, serviceAccountKey, clientEndpoint string
+	parallelStreams, threads, retries, bufferSizeMb, rateLimitMb                int64
+	logDelaySec, fileReadTimeoutMs, retryBackoffInitial, retryBackoffMax        int64
+	retryBackoffMultiplier                                                      float64
+	compress, logToCloud                                                        bool
 
 	writeFile writeFileFunc
 	stat      statFunc
@@ -94,14 +94,13 @@ func (*ConfigureBackint) Usage() string {
 	[-retry_backoff_initial=<10>]	[-retry_backoff_max=<300>] [-retry_backoff_multiplier=<2>]
 	[-log_delay_sec=<60>]	[-client_endpoint=<"custom.endpoint.com">]
 	[-folder_prefix=<"prefix/path">] [-recovery_folder_prefix=<"prefix/path">]
-	[-h] [-v]` + "\n"
+	[-log-path=<log-path>] [-h]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for configurebackint.
 func (c *ConfigureBackint) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.fileName, "f", "", "Path to the JSON or TXT configuration file")
 	fs.BoolVar(&c.help, "h", false, "Displays help")
-	fs.BoolVar(&c.version, "v", false, "Displays the current version of the agent")
 
 	// Using underscores for config parameters to match the proto values.
 	fs.StringVar(&c.bucket, "bucket", "", "Specify the name of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from.")
@@ -125,6 +124,7 @@ func (c *ConfigureBackint) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.clientEndpoint, "client_endpoint", "", "Specify the endpoint of the Cloud Storage client.")
 	fs.StringVar(&c.folderPrefix, "folder_prefix", "", "Specify the folder prefix of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from.")
 	fs.StringVar(&c.recoveryFolderPrefix, "recovery_folder_prefix", "", "Specify the folder prefix of the Cloud Storage bucket that the Google Cloud's Agent for SAP writes to and reads from for RESTORE operations.")
+	fs.StringVar(&c.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/configurebackint.log")
 }
 
 // Execute implements the subcommand interface for configurebackint.
@@ -132,9 +132,9 @@ func (c *ConfigureBackint) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
 		Help:     c.help,
-		Version:  c.version,
 		Fs:       f,
 		LogLevel: c.logLevel,
+		LogPath:  c.LogPath,
 	}, args...)
 	if !completed {
 		return exitStatus

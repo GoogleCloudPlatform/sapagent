@@ -59,8 +59,8 @@ type ReadMetrics struct {
 	inputFile, outputFolder    string
 	bucketName, serviceAccount string
 	sendToMonitoring           bool
-	help, version              bool
-	logLevel                   string
+	help                       bool
+	logLevel, logPath          string
 
 	queries           map[string]string
 	cmr               *cloudmetricreader.CloudMetricReader
@@ -80,7 +80,7 @@ func (*ReadMetrics) Synopsis() string { return "read metrics from Cloud Monitori
 func (*ReadMetrics) Usage() string {
 	return `Usage: readmetrics -project=<project-id> [-i=<input-file>] [-o=output-folder]
 	[-bucket=<bucket-name>] [-service-account=<service-account>]
-	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for readmetrics.
@@ -91,8 +91,8 @@ func (r *ReadMetrics) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.bucketName, "bucket", "", "GCS bucket name to send packaged results to")
 	fs.StringVar(&r.serviceAccount, "service-account", "", "Service account to authenticate with")
 	fs.BoolVar(&r.sendToMonitoring, "send-status-to-monitoring", true, "Send the execution status to cloud monitoring as a metric")
+	fs.StringVar(&r.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/readmetrics.log")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
-	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
@@ -101,8 +101,8 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     r.Name(),
 		Help:     r.help,
-		Version:  r.version,
 		LogLevel: r.logLevel,
+		LogPath:  r.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

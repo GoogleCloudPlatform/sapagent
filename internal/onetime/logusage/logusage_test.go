@@ -282,20 +282,6 @@ func TestExecuteLogUsage(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			logUsage: &LogUsage{
-				status:  "ACTION",
-				action:  1,
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			logUsage: &LogUsage{
 				status: "ACTION",
@@ -325,7 +311,7 @@ func TestSetFlagsLogUsage(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	l.SetFlags(fs)
 
-	flags := []string{"name", "n", "agent-version", "av", "prior-version", "pv", "status", "s", "action", "a", "error", "e", "v", "h"}
+	flags := []string{"name", "n", "agent-version", "av", "prior-version", "pv", "status", "s", "action", "a", "error", "e", "log-path", "h"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {

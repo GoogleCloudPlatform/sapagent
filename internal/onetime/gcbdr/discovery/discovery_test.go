@@ -122,7 +122,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	d.SetFlags(fs)
 
-	flags := []string{"v", "h", "loglevel"}
+	flags := []string{"h", "loglevel", "log-path"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {
@@ -156,16 +156,6 @@ func TestExecute(t *testing.T) {
 			name: "SuccessfullyParseArgs",
 			d:    Discovery{FSH: &fake.FileSystem{}},
 			want: subcommands.ExitFailure,
-			args: []any{
-				"test",
-				log.Parameters{},
-				defaultCloudProperties,
-			},
-		},
-		{
-			name: "SuccessForAgentVersion",
-			d:    Discovery{version: true},
-			want: subcommands.ExitSuccess,
 			args: []any{
 				"test",
 				log.Parameters{},

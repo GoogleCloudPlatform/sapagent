@@ -82,18 +82,6 @@ func TestExecuteHANAInsights(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			hanainsights: HANAInsights{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			hanainsights: HANAInsights{
 				help: true,

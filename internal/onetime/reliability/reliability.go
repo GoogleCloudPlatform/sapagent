@@ -78,8 +78,8 @@ type queryInfo struct {
 type Reliability struct {
 	projectID, outputFolder    string
 	bucketName, serviceAccount string
-	help, version              bool
-	logLevel                   string
+	help                       bool
+	logLevel, logPath          string
 
 	queries    []queryInfo
 	cmr        *cloudmetricreader.CloudMetricReader
@@ -97,7 +97,7 @@ func (*Reliability) Synopsis() string { return "read reliability data from Cloud
 func (*Reliability) Usage() string {
 	return `Usage: reliability [-project=<project-id>] [-bucket=<bucket-name>]
 	[-o=output-folder] [-service-account=<service-account>]
-	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for reliability.
@@ -106,8 +106,8 @@ func (r *Reliability) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.bucketName, "bucket", "", "GCS bucket name to send packaged results to")
 	fs.StringVar(&r.outputFolder, "o", "/tmp/google-cloud-sap-agent", "Output folder")
 	fs.StringVar(&r.serviceAccount, "service-account", "", "Service account to authenticate with")
+	fs.StringVar(&r.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/reliability.log")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
-	fs.BoolVar(&r.version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&r.logLevel, "loglevel", "info", "Sets the logging level")
 }
 
@@ -116,8 +116,8 @@ func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	_, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     r.Name(),
 		Help:     r.help,
-		Version:  r.version,
 		LogLevel: r.logLevel,
+		LogPath:  r.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

@@ -67,14 +67,6 @@ func TestExecuteValidate(t *testing.T) {
 			want: subcommands.ExitSuccess,
 		},
 		{
-			name: "SuccessForAgentVersion",
-			v: Validate{
-				version: true,
-			},
-			args: []any{"test", log.Parameters{}, defaultCloudProperties},
-			want: subcommands.ExitSuccess,
-		},
-		{
 			name: "SuccessForHelp",
 			v: Validate{
 				help: true,

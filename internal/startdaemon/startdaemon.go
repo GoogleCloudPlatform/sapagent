@@ -24,7 +24,9 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"os/user"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -139,6 +141,12 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		log.Logger.Errorw("Unable to assert args[2] of type %T to *iipb.CloudProperties.", args[2])
 		return subcommands.ExitUsageError
 	}
+	d.createLogDir()
+	log.SetupLogging(d.lp)
+	return d.startdaemonHandler(ctx)
+}
+
+func (d *Daemon) createLogDir() {
 	// Setup demon logging with default config, till we read it from the config file.
 	d.lp.CloudLogName = `google-cloud-sap-agent`
 	d.lp.LogFileName = `/var/log/google-cloud-sap-agent.log`
@@ -147,12 +155,33 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		d.lp.LogFileName = `C:\Program Files\Google\google-cloud-sap-agent\logs\google-cloud-sap-agent.log`
 		oteDir = `C:\Program Files\Google\google-cloud-sap-agent\logs`
 	}
-	// Create the directory for one time logs and let sidadm users create files under it.
-	os.MkdirAll(oteDir, 0755)
-	os.Chmod(oteDir, 0777)
-	log.SetupLogging(d.lp)
+	// Create the directory for one time logs.
+	if err := os.MkdirAll(oteDir, 0770); err != nil {
+		log.Logger.Warnw("Failed to create log directory", "error", err)
+		return
+	}
+	// In case of upgrades when directory already exists, change the permissions of exiting directory to 0770.
+	if err := os.Chmod(oteDir, 0770); err != nil {
+		log.Logger.Warnw("Failed to change permissions of log directory", "error", err)
+		return
+	}
 
-	return d.startdaemonHandler(ctx)
+	// Make the group sapsys own the log directory. This is done on a best effort basis.
+	// If any of the steps fail, we will just log the error and move on.
+	g, err := user.LookupGroup("sapsys")
+	if err != nil {
+		log.Logger.Warnw("Failed to lookup group sapsys", "error", err)
+		return
+	}
+	gid, err := strconv.Atoi(g.Gid)
+	if err != nil {
+		log.Logger.Warnw("Failed to convert sapsys group id to int", "error", err)
+		return
+	}
+	if err := os.Chown(oteDir, -1, gid); err != nil {
+		log.Logger.Warnw("Failed to change ownership of log directory", "error", err)
+		return
+	}
 }
 
 // startdaemonHandler starts up the main daemon for SAP Agent.

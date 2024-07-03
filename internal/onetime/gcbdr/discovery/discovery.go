@@ -139,9 +139,9 @@ type Pd struct {
 
 // Discovery struct has arguments for discovery subcommand.
 type Discovery struct {
-	FSH           filesystem.FileSystem
-	help, version bool
-	logLevel      string
+	FSH               filesystem.FileSystem
+	help              bool
+	logLevel, logPath string
 }
 
 // Name implements the subcommand interface for Discovery.
@@ -154,14 +154,14 @@ func (*Discovery) Synopsis() string {
 
 // Usage implements the subcommand interface for Discovery.
 func (*Discovery) Usage() string {
-	return "Usage: gcbdr-discovery [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
+	return "Usage: gcbdr-discovery [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]\n"
 }
 
 // SetFlags implements the subcommand interface for Discovery.
 func (d *Discovery) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&d.help, "h", false, "Display help")
-	fs.BoolVar(&d.version, "v", false, "Display the version of the agent")
 	fs.StringVar(&d.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&d.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/gcbdr-discovery.log")
 }
 
 // Execute implements the subcommand interface for Discovery.
@@ -169,8 +169,8 @@ func (d *Discovery) Execute(ctx context.Context, f *flag.FlagSet, args ...any) s
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     d.Name(),
 		Help:     d.help,
-		Version:  d.version,
 		LogLevel: d.logLevel,
+		LogPath:  d.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

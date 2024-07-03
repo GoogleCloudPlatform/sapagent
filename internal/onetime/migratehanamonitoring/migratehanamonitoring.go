@@ -43,8 +43,8 @@ const (
 
 // MigrateHANAMonitoring is a struct which implements subcommands interface.
 type MigrateHANAMonitoring struct {
-	help, version bool
-	logLevel      string
+	help              bool
+	logLevel, logPath string
 }
 
 // Name implements the subcommand interface for migrating HANA Monitoring Agent.
@@ -57,14 +57,14 @@ func (*MigrateHANAMonitoring) Synopsis() string {
 
 // Usage implements the subcommand interface for migrating hana monitoring agent.
 func (*MigrateHANAMonitoring) Usage() string {
-	return "Usage: migratehma [-h] [-v] [-loglevel=<debug|info|warn|error>]\n"
+	return "Usage: migratehma [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]\n"
 }
 
 // SetFlags implements the subcommand interface for migrating hana monitoring agent.
 func (m *MigrateHANAMonitoring) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&m.help, "h", false, "Displays help")
-	f.BoolVar(&m.version, "v", false, "Display the version of the agent")
 	f.StringVar(&m.logLevel, "loglevel", "info", "Sets the logging level for a log file")
+	f.StringVar(&m.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/migratehanamonitoring.log")
 }
 
 // Execute implements the subcommand interface for Migrating HANA Monitoring Agent.
@@ -72,8 +72,8 @@ func (m *MigrateHANAMonitoring) Execute(ctx context.Context, f *flag.FlagSet, ar
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     m.Name(),
 		Help:     m.help,
-		Version:  m.version,
 		LogLevel: m.logLevel,
+		LogPath:  m.logPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

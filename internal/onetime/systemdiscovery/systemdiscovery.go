@@ -49,17 +49,17 @@ import (
 // SystemDiscovery will have the arguments
 // needed for the systemdiscovery commands.
 type SystemDiscovery struct {
-	WlmService              system.WlmInterface
-	CloudLogInterface       system.CloudLogInterface
-	CloudDiscoveryInterface system.CloudDiscoveryInterface
-	HostDiscoveryInterface  system.HostDiscoveryInterface
-	SapDiscoveryInterface   system.SapDiscoveryInterface
-	AppsDiscovery           func(context.Context) *sappb.SAPInstances
-	OsStatReader            workloadmanager.OSStatReader
-	ConfigFileReader        workloadmanager.ConfigFileReader
-	ConfigPath, LogLevel    string
-	help, version           bool
-	IIOTEParams             *onetime.InternallyInvokedOTE
+	WlmService                    system.WlmInterface
+	CloudLogInterface             system.CloudLogInterface
+	CloudDiscoveryInterface       system.CloudDiscoveryInterface
+	HostDiscoveryInterface        system.HostDiscoveryInterface
+	SapDiscoveryInterface         system.SapDiscoveryInterface
+	AppsDiscovery                 func(context.Context) *sappb.SAPInstances
+	OsStatReader                  workloadmanager.OSStatReader
+	ConfigFileReader              workloadmanager.ConfigFileReader
+	ConfigPath, LogLevel, LogPath string
+	help                          bool
+	IIOTEParams                   *onetime.InternallyInvokedOTE
 }
 
 // Name implements the subcommand interface for systemdiscovery.
@@ -75,18 +75,17 @@ func (*SystemDiscovery) Synopsis() string {
 // Usage implements the subcommand interface for systemdiscovery.
 func (*SystemDiscovery) Usage() string {
 	return `Usage: systemdiscovery [-config=<path to config file>]
-	[-loglevel=<debug|error|info|warn>] [-help] [-version]` + "\n"
+	[-loglevel=<debug|error|info|warn>] [-log-path=<log-path>] [-help] [-version]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for systemdiscovery.
 func (sd *SystemDiscovery) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&sd.help, "h", false, "Displays help")
 	fs.BoolVar(&sd.help, "help", false, "Displays help")
-	fs.BoolVar(&sd.version, "v", false, "Displays the current version of the agent")
-	fs.BoolVar(&sd.version, "version", false, "Displays the current version of the agent")
 	fs.StringVar(&sd.LogLevel, "loglevel", "info", "Sets the log level for the agent logging")
 	fs.StringVar(&sd.ConfigPath, "c", "", "Sets the configuration file path for systemdiscovery (default: agent's config file will be used)")
 	fs.StringVar(&sd.ConfigPath, "config", "", "Sets the configuration file path for systemdiscovery (default: agent's config file will be used)")
+	fs.StringVar(&sd.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/systemdiscovery.log")
 }
 
 // Execute implements the subcommand interface for systemdiscovery.
@@ -95,10 +94,6 @@ func (sd *SystemDiscovery) Execute(ctx context.Context, f *flag.FlagSet, args ..
 
 	if sd.help {
 		return onetime.HelpCommand(f)
-	}
-
-	if sd.version {
-		return onetime.PrintAgentVersion()
 	}
 
 	_, err := sd.SystemDiscoveryHandler(ctx, f, args...)
@@ -119,8 +114,8 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 	lp, cp, _, ok := onetime.Init(ctx, onetime.InitOptions{
 		Name:     sd.Name(),
 		Help:     sd.help,
-		Version:  sd.version,
 		LogLevel: sd.LogLevel,
+		LogPath:  sd.LogPath,
 		IIOTE:    sd.IIOTEParams,
 		Fs:       fs,
 	}, args...)

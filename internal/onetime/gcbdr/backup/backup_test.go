@@ -104,18 +104,6 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			b: Backup{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			b: Backup{
 				help: true,

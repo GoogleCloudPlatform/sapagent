@@ -84,7 +84,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	m.SetFlags(fs)
 
-	flags := []string{"project", "v", "h", "loglevel"}
+	flags := []string{"project", "h", "loglevel", "log-path"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {
@@ -115,15 +115,6 @@ func TestExecute(t *testing.T) {
 			args: []any{
 				"test",
 				"test2",
-			},
-		},
-		{
-			name: "SuccessForAgentVersion",
-			m:    &MigrateHMADashboards{version: true},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
 			},
 		},
 		{

@@ -190,18 +190,6 @@ func TestExecuteInstallBackint(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			b: InstallBackint{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			b: InstallBackint{
 				help: true,
@@ -246,7 +234,7 @@ func TestSynopsisForInstallBackint(t *testing.T) {
 func TestSetFlagsForInstallBackint(t *testing.T) {
 	b := InstallBackint{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"sid", "v", "h", "loglevel"}
+	flags := []string{"sid", "h", "loglevel", "log-path"}
 	b.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

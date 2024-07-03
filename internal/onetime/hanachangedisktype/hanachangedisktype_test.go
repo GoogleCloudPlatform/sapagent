@@ -95,18 +95,7 @@ func TestExecute(t *testing.T) {
 				&ipb.CloudProperties{},
 			},
 		},
-		{
-			name: "SuccessForAgentVersion",
-			cdt: HanaChangeDiskType{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
+
 		{
 			name: "SuccessForHelp",
 			cdt: HanaChangeDiskType{
@@ -259,7 +248,7 @@ func TestValidateParams(t *testing.T) {
 func TestSetFlagsForChangeDiskTypeWorkflow(t *testing.T) {
 	c := &HanaChangeDiskType{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"provisioned-iops", "provisioned-throughput", "h", "v", "loglevel", "sid", "hana-sidadm",
+	flags := []string{"provisioned-iops", "provisioned-throughput", "h", "loglevel", "log-path", "sid", "hana-sidadm",
 		"source-disk", "source-disk-zone", "new-disk-name", "skip-db-snapshot-for-change-disk-type",
 		"source-disk-key-file", "storage-location", "force-stop-hana"}
 	c.SetFlags(fs)

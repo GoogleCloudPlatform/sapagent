@@ -73,7 +73,8 @@ type Diagnose struct {
 	OutputBucket      string `json:"output-bucket"`
 	Type              string `json:"type"`
 	OutputFileName    string `json:"output-file-name"`
-	help, version     bool
+	LogPath           string `json:"log-path"`
+	help              bool
 }
 
 // ReadConfigFile abstracts os.ReadFile function for testability.
@@ -149,7 +150,7 @@ func (*Diagnose) Synopsis() string {
 func (*Diagnose) Usage() string {
 	return `Usage: performancediagnostics [-type=<all|backup|io|compute>] [-test-bucket=<name of bucket used to run backup]
 	[-backint-config-file=<path to backint config file>]	[-output-bucket=<name of bucket to upload the report] [-output-file-name=<diagnostics output name>]
-	[-output-file-path=<path to save output file generated>] [-h] [-v] [-loglevel=<debug|info|warn|error]>]` + "\n"
+	[-output-file-path=<path to save output file generated>] [-h] [-loglevel=<debug|info|warn|error]>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for features.
@@ -164,10 +165,9 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&d.OverrideVersion, "override-version", "latest", "If specified, runs a specific version of configureinstance")
 	fs.BoolVar(&d.PrintDiff, "print-diff", false, "Prints all configuration diffs and log messages for configureinstance to stdout as JSON")
 	fs.StringVar(&d.LogLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
+	fs.StringVar(&d.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/performancediagnostics.log")
 	fs.BoolVar(&d.help, "help", false, "Display help.")
 	fs.BoolVar(&d.help, "h", false, "Display help.")
-	fs.BoolVar(&d.version, "version", false, "Print the agent version.")
-	fs.BoolVar(&d.version, "v", false, "Print the agent version.")
 }
 
 // Execute implements the subcommand interface for feature.
@@ -177,8 +177,8 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 		onetime.InitOptions{
 			Name:     d.Name(),
 			Help:     d.help,
-			Version:  d.version,
 			LogLevel: d.LogLevel,
+			LogPath:  d.LogPath,
 			Fs:       fs,
 		},
 		args...,
@@ -224,6 +224,9 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 	oteLog := moveFiles{
 		oldPath: fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", d.Name()),
 		newPath: path.Join(d.OutputFilePath, d.OutputFileName, fmt.Sprintf("%s.log", d.Name())),
+	}
+	if d.LogPath != "" {
+		oteLog.oldPath = d.LogPath
 	}
 	if err := addToBundle(ctx, []moveFiles{oteLog}, opts.fs); err != nil {
 		errs = append(errs, fmt.Errorf("failure in adding performance diagnostics OTE to bundle, failed with error %v", err))
@@ -370,12 +373,14 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsConfigureInstance)
 	res := ci.Execute(ctx, f)
 	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.LogLevel))
-	paths := []moveFiles{
-		{
-			oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-configure-instance.log",
-			newPath: path.Join(d.OutputFilePath, d.OutputFileName, "performance-diagnostics-configure-instance.log"),
-		},
+	ciPath := moveFiles{
+		oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-configure-instance.log",
+		newPath: path.Join(d.OutputFilePath, d.OutputFileName, "performance-diagnostics-configure-instance.log"),
 	}
+	if d.LogPath != "" {
+		ciPath.oldPath = d.LogPath
+	}
+	paths := []moveFiles{ciPath}
 	if res != subcommands.ExitSuccess {
 		onetime.LogMessageToFileAndConsole(ctx, "Error while executing ConfigureInstance OTE")
 	}
@@ -620,12 +625,16 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 		onetime.LogMessageToFileAndConsole(ctx, "Error while executing backint")
 	}
 
-	paths := []moveFiles{
-		{
-			oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-backint.log",
-			newPath: path.Join(d.OutputFilePath, d.OutputFileName, "backup/performance-diagnostics-backint.log"),
-		},
+	backintPath := moveFiles{
+		oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-backint.log",
+		newPath: path.Join(d.OutputFilePath, d.OutputFileName, "backup/performance-diagnostics-backint.log"),
 	}
+
+	if d.LogPath != "" {
+		backintPath.oldPath = d.LogPath
+	}
+	paths := []moveFiles{backintPath}
+
 	if err := addToBundle(ctx, paths, opts.fs); err != nil {
 		return err
 	}

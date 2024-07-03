@@ -146,18 +146,6 @@ func TestExecuteMigrateHANAMonitoring(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			migrate: MigrateHANAMonitoring{
-				version: true,
-			},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
-		{
 			name: "SuccessForHelp",
 			migrate: MigrateHANAMonitoring{
 				help: true,

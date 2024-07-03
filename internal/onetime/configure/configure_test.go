@@ -84,18 +84,6 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "SuccessForAgentVersion",
-			c: &Configure{
-				Version: true,
-			},
-			args: []any{
-				"test",
-				log.Parameters{},
-				defaultCloudProperties,
-			},
-			want: subcommands.ExitSuccess,
-		},
-		{
 			name: "SuccessForHelp",
 			c: &Configure{
 				Help: true,
@@ -1472,7 +1460,7 @@ func TestSetFlags(t *testing.T) {
 	c.SetFlags(fs)
 
 	flags := []string{
-		"feature", "f", "version", "v", "help", "h", "loglevel", "setting",
+		"feature", "f", "help", "h", "loglevel", "setting", "log-path",
 		"enable", "disable", "showall", "add", "remove", "process_metrics_frequency", "workload_evaluation_db_metrics_frequency",
 		"sample_interval_sec", "query_timeout_sec", "process_metrics_to_skip", "slow_process_metrics_frequency",
 		"heartbeat_frequency", "agent_health_frequency", "agent_metrics_frequency",
@@ -1579,12 +1567,12 @@ func TestShowStatus(t *testing.T) {
 func TestUsage(t *testing.T) {
 	want := `Usage:
 configure [-feature=<host_metrics|process_metrics|hana_monitoring|sap_discovery|agent_metrics|workload_evaluation|workload_discovery> | -setting=<bare_metal|log_to_cloud>]
-[-enable|-disable] [-showall] [-v] [-h]
+[-enable|-disable] [-showall] [-h]
 [process_metrics_frequency=<int>] [slow_process_metrics_frequency=<int>]
 [process_metrics_to_skip=<"comma-separated-metrics">] [-add|-remove]
 [workload_evaluation_metrics_frequency=<int>] [workload_evaluation_db_metrics_frequency=<int>]
 [-agent_metrics_frequency=<int>] [agent_health_frequency=<int>]
-[heartbeat_frequency=<int>] [sample_interval_sec=<int>] [query_timeout_sec=<int>]
+[heartbeat_frequency=<int>] [sample_interval_sec=<int>] [query_timeout_sec=<int>] [-log-path=<log-path>]
 `
 	c := &Configure{}
 	got := c.Usage()

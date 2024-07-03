@@ -44,9 +44,10 @@ type Backup struct {
 	SID             string `json:"sid"`
 	HDBUserstoreKey string `json:"hdbuserstore-key"`
 	LogLevel        string `json:"loglevel"`
-	hanaVersion     string
+	LogPath         string `json:"log-path"`
 	help            bool
-	version         bool
+	hanaVersion     string
+
 }
 
 // Name implements the subcommand interface for Backup.
@@ -59,16 +60,16 @@ func (b *Backup) Synopsis() string { return "invoke GCBDR CoreAPP backup script"
 func (b *Backup) Usage() string {
 	return `Usage: gcbdr-backup -operation-type=<prepare|freeze|unfreeze|logbackup|logpurge>
 	-sid=<HANA-sid> -hdbuserstore-key=<userstore-key>
-	[-h] [-v] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for Backup.
 func (b *Backup) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&b.OperationType, "operation-type", "", "Operation type. (required)")
 	fs.StringVar(&b.SID, "sid", "", "HANA sid. (required)")
-	fs.StringVar(&b.HDBUserstoreKey, "hdbuserstore-key", "", "HANA userstore key specific to HANA instance. (required)")
+	fs.StringVar(&b.HDBUserstoreKey, "hdbuserstore-key", "", "HANA userstore key specific to HANA instance. (required for prepare)")
+	fs.StringVar(&b.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/gcbdr-backup.log")
 	fs.BoolVar(&b.help, "h", false, "Display help")
-	fs.BoolVar(&b.version, "v", false, "Display the version of the agent")
 	fs.StringVar(&b.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
 
@@ -77,8 +78,8 @@ func (b *Backup) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     b.Name(),
 		Help:     b.help,
-		Version:  b.version,
 		LogLevel: b.LogLevel,
+		LogPath:  b.LogPath,
 		Fs:       f,
 	}, args...)
 	if !completed {

@@ -51,8 +51,8 @@ type Backint struct {
 	inFile, OutFile, ParamFile string
 	backupID, backupLevel      string
 	count                      int64
-	version, help              bool
-	logLevel                   string
+	help              bool
+	logLevel, logPath          string
 }
 
 // Name implements the subcommand interface for backint.
@@ -66,7 +66,7 @@ func (*Backint) Usage() string {
 	return `Usage: backint -function=<backup|restore|inquire|delete|diagnose>
 	-paramfile=<path-to-file> [-v] [-h] -user=<DBNAME@SID> [-input=<path-to-file>]
 	[-output=<path-to-file>] [-backupid=<database-backup-id>] [-count=<number-of-objects>]
-	[-level=<backup-level>] [-loglevel=<debug|info|warn|error>]` + "\n"
+	[-level=<backup-level>] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for backint.
@@ -87,7 +87,7 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&b.count, "c", 0, "Total number of database objects associated to the backup id specified (-s)")
 	fs.StringVar(&b.backupLevel, "level", "", "The type of backup, only usable if the function (-f) is backup")
 	fs.StringVar(&b.backupLevel, "l", "", "The type of backup, only usable if the function (-f) is backup")
-	fs.BoolVar(&b.version, "v", false, "Display the version of the agent")
+	fs.StringVar(&b.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/backint.log")
 	fs.BoolVar(&b.help, "h", false, "Display help")
 	fs.StringVar(&b.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
@@ -97,8 +97,8 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 	lp, cloudProps, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     b.Name(),
 		Help:     b.help,
-		Version:  b.version,
 		LogLevel: b.logLevel,
+		LogPath:  b.logPath,
 		Fs:       f,
 		IIOTE:    b.IIOTEParams,
 	}, args...)

@@ -54,10 +54,10 @@ type (
 		PacemakerDiagnosis     bool                          `json:"pacemaker-diagnosis,string"`
 		AgentLogsOnly          bool                          `json:"agent-logs-only,string"`
 		Help                   bool                          `json:"help,string"`
-		Version                bool                          `json:"version,string"`
 		LogLevel               string                        `json:"loglevel"`
 		ResultBucket           string                        `json:"result-bucket"`
 		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
+		LogPath                string                        `json:"log-path"`
 	}
 	zipperHelper struct{}
 
@@ -116,8 +116,8 @@ func (*SupportBundle) Synopsis() string {
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
-	[-hostname=<Hostname>] [agent-logs-only=true|false] [-h] [-v] [-loglevel=<debug|info|warn|error>]
-	[-result-bucket=<name of the result bucket where bundle zip is uploaded>]
+	[-hostname=<Hostname>] [agent-logs-only=true|false] [-h] [-loglevel=<debug|info|warn|error>]
+	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
 
@@ -129,9 +129,9 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
 	fs.BoolVar(&s.Help, "h", false, "Displays help")
-	fs.BoolVar(&s.Version, "v", false, "Displays the current version of the agent")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
+	fs.StringVar(&s.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/supportbundle.log")
 }
 
 func getReadWriter(rw storage.ReadWriter) uploader {
@@ -143,8 +143,8 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     s.Name(),
 		Help:     s.Help,
-		Version:  s.Version,
 		LogLevel: s.LogLevel,
+		LogPath:  s.LogPath,
 		Fs:       f,
 		IIOTE:    s.IIOTEParams,
 	}, args...)

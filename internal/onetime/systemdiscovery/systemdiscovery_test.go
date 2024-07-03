@@ -170,14 +170,6 @@ func TestExecute(t *testing.T) {
 			args: []any{},
 			want: subcommands.ExitSuccess,
 		},
-		{
-			name: "SuccessForAgentVersion",
-			sd: &SystemDiscovery{
-				version: true,
-			},
-			args: []any{},
-			want: subcommands.ExitSuccess,
-		},
 	}
 
 	ctx := context.Background()
@@ -641,7 +633,7 @@ func TestName(t *testing.T) {
 func TestUsage(t *testing.T) {
 	sd := &SystemDiscovery{}
 	if diff := cmp.Diff(`Usage: systemdiscovery [-config=<path to config file>]
-	[-loglevel=<debug|error|info|warn>] [-help] [-version]`+"\n", sd.Usage()); diff != "" {
+	[-loglevel=<debug|error|info|warn>] [-log-path=<log-path>] [-help] [-version]`+"\n", sd.Usage()); diff != "" {
 		t.Errorf("Usage() returned an unexpected diff (-want +got):\n%s", diff)
 	}
 }
@@ -658,9 +650,7 @@ func TestSetFlags(t *testing.T) {
 	flagSet := flag.NewFlagSet("flags", flag.ExitOnError)
 	sd.SetFlags(flagSet)
 
-	flags := []string{
-		"c", "config", "h", "help", "loglevel", "v", "version",
-	}
+	flags := []string{"c", "config", "h", "help", "loglevel", "log-path"}
 
 	for _, flag := range flags {
 		got := flagSet.Lookup(flag)
