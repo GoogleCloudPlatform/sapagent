@@ -20,7 +20,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"math/rand"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
@@ -169,7 +171,7 @@ func TestNewParallelReader(t *testing.T) {
 					BucketName:       bucketNameParallel,
 					VerifyConnection: true,
 				},
-				ObjectName:    "object1.txt",
+				ObjectName: "object1.txt",
 			},
 			decodedKey: []byte("\ufffdL\ufffd\u001b\ufffd`\ufffd\ufffdl\u00151\ufffd4\u0006;\u0005\ufffd%]/\ufffd).\nk)\n\u001d*\ufffd\ufffd"),
 			wantErr:    nil,
@@ -277,6 +279,26 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestReadContextCancel(t *testing.T) {
+	// Call Read() with a cancelled context
+	r := defaultParallelReader("largeObject.txt", testingLargeContent, 3)
+	wantBytes := 0
+	wantErr := cmpopts.AnyError
+
+	r.objectOffset = 20
+	r.idleWorkersIDs <- 0
+	r.ctx, r.cancel = context.WithCancel(context.Background())
+	r.cancel()
+
+	gotBytes, gotErr := r.Read(make([]byte, defaultPBufferSize))
+	if gotBytes != wantBytes {
+		t.Errorf("Read() = %v, want %v", gotBytes, wantBytes)
+	}
+	if !cmp.Equal(gotErr, wantErr, cmpopts.EquateErrors()) {
+		t.Errorf("Read() = %v, want %v", gotErr, wantErr)
+	}
+}
+
 func TestReadMultiple(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -376,6 +398,24 @@ func TestReadMultiple(t *testing.T) {
 	}
 }
 
+func TestReadMultipleFaulty(t *testing.T) {
+	// Create a parallel reader with one faulty worker
+	r := defaultParallelReader("largeObject.txt", testingLargeContent, 5)
+	p := make([]byte, defaultPBufferSize)
+	wantErr := cmpopts.AnyError
+	_, r.cancel = context.WithCancel(context.Background())
+	r.workers[rand.Intn(4)] = nil
+	var gotErr error
+	for gotErr == nil {
+		_, gotErr = r.Read(p)
+	}
+
+	// In case of context close, the bytesRead maybe not be 0
+	if !cmp.Equal(gotErr, wantErr, cmpopts.EquateErrors()) {
+		t.Errorf("Read() = %v, want %v", gotErr, wantErr)
+	}
+}
+
 func TestFillWorkerBuffer(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -384,12 +424,6 @@ func TestFillWorkerBuffer(t *testing.T) {
 		startByte int64
 		wantErr   error
 	}{
-		{
-			name:    "NoWorkerFailure",
-			r:       defaultParallelReader("object1.txt", testingContent1, 1),
-			worker:  nil,
-			wantErr: cmpopts.AnyError,
-		},
 		{
 			name: "RangeReaderCreateFailure",
 			r:    defaultParallelReader("object1.txt", testingContent1, 1),
@@ -460,6 +494,8 @@ func TestReaderClose(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			_, test.r.cancel = context.WithTimeout(context.Background(), time.Millisecond*100)
+			defer test.r.cancel()
 			test.r.Read(test.p)
 			gotErr := test.r.Close()
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {

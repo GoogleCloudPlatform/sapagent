@@ -29,6 +29,7 @@ import (
 // ParallelReader is a reader capable of downloading from GCS in parallel.
 type ParallelReader struct {
 	ctx             context.Context
+	cancel          context.CancelFunc
 	objectSize      int64
 	objectOffset    int64
 	partSizeBytes   int64
@@ -53,12 +54,12 @@ type downloadWorker struct {
 func (rw *ReadWriter) NewParallelReader(ctx context.Context, decodedKey []byte) (*ParallelReader, error) {
 
 	r := &ParallelReader{
-		ctx:            ctx,
 		objectSize:     rw.TotalBytes,
 		partSizeBytes:  rw.ChunkSizeMb * 1024 * 1024,
 		workers:        make([]*downloadWorker, rw.ParallelDownloadWorkers),
 		idleWorkersIDs: make(chan int, rw.ParallelDownloadWorkers),
 	}
+	r.ctx, r.cancel = context.WithCancel(ctx)
 
 	log.Logger.Infow("Performing parallel restore", "objectName", rw.ObjectName, "parallelWorkers", rw.ParallelDownloadWorkers)
 	for i := 0; i < int(rw.ParallelDownloadWorkers); i++ {
@@ -89,6 +90,10 @@ func (r *ParallelReader) Read(p []byte) (int, error) {
 		log.Logger.Infow("Workers started", "parallelWorkers", len(r.workers), "offset", r.objectOffset)
 		for i := 0; i < len(r.workers); i++ {
 			if startByte := r.partSizeBytes * int64(i); startByte < r.objectSize {
+				if r.workers[i] == nil {
+					r.cancel()
+					return 0, fmt.Errorf("no worker defined")
+				}
 				assignWorkersChunk(r, startByte, i)
 			}
 		}
@@ -97,12 +102,19 @@ func (r *ParallelReader) Read(p []byte) (int, error) {
 	// Wait for the worker to be ready which is downloading the required chunk.
 	for r.workers[r.currentWorkerID].copyReady == false {
 		id := <-r.idleWorkersIDs
-		// If the worker fails to read from GCS, we must exit the loop.
-		if r.workers[id].errReading != nil {
-			log.Logger.Errorw("Failed to read from GCS", "err", r.workers[id].errReading)
-			return 0, r.workers[id].errReading
+		select {
+		case <-r.ctx.Done():
+			log.Logger.Info("Parallel restore cancellation requested")
+			return 0, r.ctx.Err()
+		default:
+			// If the worker fails to read from GCS, we must exit the loop.
+			if r.workers[id].errReading != nil {
+				log.Logger.Errorw("Failed to read from GCS", "err", r.workers[id].errReading)
+				r.cancel()
+				return 0, r.workers[id].errReading
+			}
+			r.workers[id].copyReady = true
 		}
-		r.workers[id].copyReady = true
 	}
 
 	// Copy data from the worker's buffer to the provided p buffer.
@@ -145,11 +157,7 @@ func assignWorkersChunk(r *ParallelReader, startByte int64, id int) {
 
 // fillWorkerBuffer fills the worker's buffer with data from GCS.
 func fillWorkerBuffer(r *ParallelReader, worker *downloadWorker, startByte int64) error {
-	if worker == nil {
-		return fmt.Errorf("no worker defined")
-	}
-
-	// Assigns reader to worker with the given startByte and offset.
+	// Assigns reader to worker with the given startByte and chunk length.
 	var err error
 	if worker.reader, err = worker.object.NewRangeReader(r.ctx, startByte, r.partSizeBytes); err != nil {
 		return fmt.Errorf("failed to create range reader: %v", err)
@@ -158,23 +166,28 @@ func fillWorkerBuffer(r *ParallelReader, worker *downloadWorker, startByte int64
 	// Reads data into the worker's buffer until the whole length is read.
 	bytesRead := int64(0)
 	for {
-		var n int
-		if n, err = worker.reader.Read(worker.buffer[bytesRead:]); err != nil && err != io.EOF {
-			return fmt.Errorf("failed to read from range reader: %v", err)
+		select {
+		case <-r.ctx.Done():
+			return fmt.Errorf("context cancellation called")
+		default:
+			var n int
+			if n, err = worker.reader.Read(worker.buffer[bytesRead:]); err != nil && err != io.EOF {
+				return fmt.Errorf("failed to read from range reader: %v", err)
+			}
+			if n == 0 || err == io.EOF {
+				// When all bytes are read, the loop will exit.
+				worker.BytesRemain = bytesRead
+				worker.chunkSize = bytesRead
+				worker.bufferOffset = 0
+				return nil
+			}
+			bytesRead += int64(n)
 		}
-		if n == 0 || err == io.EOF {
-			// When all bytes are read, the loop will exit.
-			break
-		}
-		bytesRead += int64(n)
 	}
-	worker.BytesRemain = bytesRead
-	worker.chunkSize = bytesRead
-	worker.bufferOffset = 0
-	return nil
 }
 
 // Close cancels any in progress transfers and performs any necessary clean up.
 func (r *ParallelReader) Close() error {
+	r.cancel()
 	return nil
 }
