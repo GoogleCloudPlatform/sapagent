@@ -189,7 +189,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		res     []*mrpb.TimeSeries
 	)
 	err := backoff.Retry(func() error {
-		log.CtxLogger(ctx).Infof("Attempting collector retry", "attempt", attempt)
+		log.CtxLogger(ctx).Infow("Attempting collector retry", "attempt", attempt)
 		var err error
 		res, err = p.Collect(ctx)
 		if err != nil {
@@ -273,7 +273,7 @@ func collectHTTPMetrics(ctx context.Context, p *InstanceProperties) ([]*mrpb.Tim
 	case "SAP-CS":
 		return collectMessageServerMetrics(ctx, p, url)
 	default:
-		log.CtxLogger(ctx).Debugw("unsupported service name: %s", p.SAPInstance.GetServiceName())
+		log.CtxLogger(ctx).Debugw("unsupported service name", "serviceName", p.SAPInstance.GetServiceName())
 		return nil, fmt.Errorf("unsupported service name: %s", p.SAPInstance.GetServiceName())
 	}
 }
