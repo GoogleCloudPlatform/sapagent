@@ -18,9 +18,12 @@ package backup
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"flag"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -39,6 +42,21 @@ func fakeExecError(ctx context.Context, p commandlineexecutor.Params) commandlin
 	return commandlineexecutor.Result{
 		ExitCode: 1,
 		StdErr:   "error",
+		Error:    cmpopts.AnyError,
+	}
+}
+
+func fakeExecHANAVersion(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	return commandlineexecutor.Result{
+		ExitCode: 0,
+		StdOut:   "HDB version info: version: 2.00.063.00.1655123455",
+	}
+}
+
+func fakeExecHANAVersionWrongFormat(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+	return commandlineexecutor.Result{
+		ExitCode: 0,
+		StdOut:   "HDB version info:",
 	}
 }
 
@@ -128,9 +146,31 @@ func TestRun(t *testing.T) {
 		want subcommands.ExitStatus
 	}{
 		{
+			name: "InvalidParamsMissingOperationType",
+			b:    Backup{},
+			want: subcommands.ExitUsageError,
+		},
+		{
+			name: "InvalidParamsMissingSID",
+			b: Backup{
+				OperationType: "prepare",
+			},
+			want: subcommands.ExitUsageError,
+		},
+		{
+			name: "InvalidParamsMissingHDBUserstoreKey",
+			b: Backup{
+				OperationType: "prepare",
+				SID:           "sid",
+			},
+			want: subcommands.ExitUsageError,
+		},
+		{
 			name: "InvalidOperationType",
 			b: Backup{
-				OperationType: "invalid-operation",
+				OperationType:   "invalid-operation",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
 			},
 			want: subcommands.ExitUsageError,
 		},
@@ -173,21 +213,6 @@ func TestPrepareHandler(t *testing.T) {
 		want subcommands.ExitStatus
 	}{
 		{
-			name: "InvalidParams",
-			b: Backup{
-				OperationType: "prepare",
-			},
-			want: subcommands.ExitUsageError,
-		},
-		{
-			name: "InvalidParamsMissingHDBUserstoreKey",
-			b: Backup{
-				OperationType: "prepare",
-				SID:           "sid",
-			},
-			want: subcommands.ExitUsageError,
-		},
-		{
 			name: "ScriptError",
 			b: Backup{
 				OperationType:   "prepare",
@@ -213,6 +238,109 @@ func TestPrepareHandler(t *testing.T) {
 			_, got := tc.b.prepareHandler(context.Background(), tc.exec)
 			if got != tc.want {
 				t.Errorf("prepareHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFreezeHandler(t *testing.T) {
+	tests := []struct {
+		name string
+		b    Backup
+		exec commandlineexecutor.Execute
+		want subcommands.ExitStatus
+	}{
+		{
+			name: "VersionFailure",
+			b: Backup{
+				OperationType:   "freeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecError,
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "VersionSucessButFreezeFailure",
+			b: Backup{
+				OperationType:   "freeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(p.ArgsToSplit, "version") {
+					return fakeExecHANAVersion(ctx, p)
+				}
+				return fakeExecError(ctx, p)
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "FreezeSuccess",
+			b: Backup{
+				OperationType:   "freeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecHANAVersion,
+			want: subcommands.ExitSuccess,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, got := tc.b.freezeHandler(context.Background(), tc.exec)
+			if got != tc.want {
+				t.Errorf("freezeHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExtractHANAVersion(t *testing.T) {
+	tests := []struct {
+		name        string
+		b           Backup
+		exec        commandlineexecutor.Execute
+		wantVersion string
+		wantErr     error
+	}{
+		{
+			name: "CommandError",
+			b: Backup{
+				SID: "sid",
+			},
+			exec:        fakeExecError,
+			wantVersion: "",
+			wantErr:     cmpopts.AnyError,
+		},
+		{
+			name: "UnexpectedVersionOutput",
+			b: Backup{
+				SID: "sid",
+			},
+			exec:        fakeExecHANAVersionWrongFormat,
+			wantVersion: "",
+			wantErr:     cmpopts.AnyError,
+		},
+		{
+			name: "ExpectedVersionOutput",
+			b: Backup{
+				SID: "sid",
+			},
+			exec:        fakeExecHANAVersion,
+			wantVersion: "2.00.063.00.1655123455",
+			wantErr:     nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.b.extractHANAVersion(context.Background(), tc.exec)
+			if !cmp.Equal(got, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Fatalf("extractHANAVersion(%v) = %v, want %v", tc.b, got, tc.wantErr)
+			}
+			if tc.b.hanaVersion != tc.wantVersion {
+				t.Errorf("%v: got version %v, want version %v", tc.b, tc.b.hanaVersion, tc.wantVersion)
 			}
 		})
 	}
