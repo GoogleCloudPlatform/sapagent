@@ -126,12 +126,12 @@ func (ur fakeUsageReader) IOCountersWithContext(ctx context.Context) (*process.I
 func TestCollectControlProcesses(t *testing.T) {
 	tests := []struct {
 		name   string
-		params parameters
+		params Parameters
 		want   []*ProcessInfo
 	}{
 		{
 			name: "EmptyProcessList",
-			params: parameters{
+			params: Parameters{
 				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{}
 				},
@@ -144,7 +144,7 @@ func TestCollectControlProcesses(t *testing.T) {
 		},
 		{
 			name: "CommandExecutorReturnsError",
-			params: parameters{
+			params: Parameters{
 				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						Error: errors.New("could not execute command"),
@@ -159,7 +159,7 @@ func TestCollectControlProcesses(t *testing.T) {
 		},
 		{
 			name: "ProcessListCreatedSuccessfully",
-			params: parameters{
+			params: Parameters{
 				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   3077\n\nsapstart   9999\n",
@@ -177,7 +177,7 @@ func TestCollectControlProcesses(t *testing.T) {
 		},
 		{
 			name: "MalformedOutputFromCommand",
-			params: parameters{
+			params: Parameters{
 				executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{
 						StdOut: "COMMAND           PID\nsystemd             1\nkthreadd            2\nsapstartsrv   9603\n\nsapstart    9204 sample\n",
@@ -205,42 +205,42 @@ func TestCollectControlProcesses(t *testing.T) {
 func TestCollectProcessesForInstance(t *testing.T) {
 	tests := []struct {
 		name       string
-		params     parameters
+		params     Parameters
 		fakeClient sapcontrolclienttest.Fake
 		want       []*ProcessInfo
 	}{
 		{
 			name: "EmptyProcessListWebmethod",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
 				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
+				SAPInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{},
 			},
 			want: nil,
 		},
 		{
 			name: "NilSAPInstanceWebmethod",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
 				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      nil,
+				SAPInstance:      nil,
 				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse},
 			},
 			want: nil,
 		},
 		{
 			name: "ErrorInFetchingABAPProcessListWebmethod",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
 				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
+				SAPInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse, ErrABAPGetWPTable: errors.New("could not parse ABAPGetWPTable")},
 			},
 			want: []*ProcessInfo{
@@ -250,12 +250,12 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		},
 		{
 			name: "ProcessListCreatedWithABAPProcessesWebmethod",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
 				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
+				SAPInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{
 					Processes: defaultGetProcessListResponse,
 					WorkProcesses: []sapcontrolclient.WorkProcess{
@@ -273,12 +273,12 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		},
 		{
 			name: "ProcessListCreatedSuccessfullyWebmethod",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
 				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
+				SAPInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{Processes: defaultGetProcessListResponse},
 			},
 			want: []*ProcessInfo{
@@ -288,12 +288,12 @@ func TestCollectProcessesForInstance(t *testing.T) {
 		},
 		{
 			name: "ErrorInGettingProcessListWebmethod",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
 				memoryMetricPath: "/sample/test/memory",
-				sapInstance:      defaultSAPInstance,
+				SAPInstance:      defaultSAPInstance,
 				SAPControlClient: sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
 			},
 			want: nil,
@@ -302,7 +302,7 @@ func TestCollectProcessesForInstance(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := collectProcessesForInstance(context.Background(), test.params)
+			got := CollectProcessesForInstance(context.Background(), test.params)
 			// Sort by PID since sapcontrol's ProcessList does not guarantee any ordering.
 			sort.Slice(got, func(i, j int) bool { return got[i].PID < got[j].PID })
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
@@ -315,14 +315,14 @@ func TestCollectProcessesForInstance(t *testing.T) {
 func TestCollectCPUPerProcess(t *testing.T) {
 	tests := []struct {
 		name        string
-		params      parameters
+		params      Parameters
 		processList []*ProcessInfo
 		wantCount   int
 		wantError   error
 	}{
 		{
 			name: "FetchCPUPercentageMetricSuccessfully",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -335,7 +335,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 		},
 		{
 			name: "CPUMetricsNotFetched",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -348,7 +348,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 		},
 		{
 			name: "InvalidPID",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -361,7 +361,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 		},
 		{
 			name: "ErrorInNewProcessPsUtil",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -374,7 +374,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 		},
 		{
 			name: "ErrorInCPUPercentage",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -400,10 +400,10 @@ func TestCollectCPUPerProcess(t *testing.T) {
 }
 
 func TestCollectCPUPerProcessValues(t *testing.T) {
-	params := parameters{
+	params := Parameters{
 		config:      defaultConfig,
 		client:      &fake.TimeSeriesCreator{},
-		sapInstance: defaultSAPInstance,
+		SAPInstance: defaultSAPInstance,
 		newProc:     newProcessWithContextHelperTest,
 	}
 	ProcessList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
@@ -418,14 +418,14 @@ func TestCollectCPUPerProcessValues(t *testing.T) {
 func TestCollectMemoryPerProcess(t *testing.T) {
 	tests := []struct {
 		name        string
-		params      parameters
+		params      Parameters
 		processList []*ProcessInfo
 		wantCount   int
 		wantErr     error
 	}{
 		{
 			name: "FetchMemoryUsageMetricSuccessfully",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -437,7 +437,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 		},
 		{
 			name: "InvalidPID",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -449,7 +449,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 		},
 		{
 			name: "ErrorInNewProcessPsUtil",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -462,7 +462,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 		},
 		{
 			name: "ErrorInMemeoryUsage",
-			params: parameters{
+			params: Parameters{
 				config:           defaultConfig,
 				client:           &fake.TimeSeriesCreator{},
 				cpuMetricPath:    "/sample/test/proc",
@@ -489,10 +489,10 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 }
 
 func TestMemoryPerProcessValues(t *testing.T) {
-	params := parameters{
+	params := Parameters{
 		config:      defaultConfig,
 		client:      &fake.TimeSeriesCreator{},
-		sapInstance: defaultSAPInstance,
+		SAPInstance: defaultSAPInstance,
 		newProc:     newProcessWithContextHelperTest,
 	}
 	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
@@ -514,10 +514,10 @@ func TestMemoryPerProcessValues(t *testing.T) {
 }
 
 func TestCollectMemoryPerProcessLabels(t *testing.T) {
-	params := parameters{
+	params := Parameters{
 		config:      defaultConfig,
 		client:      &fake.TimeSeriesCreator{},
-		sapInstance: defaultSAPInstance,
+		SAPInstance: defaultSAPInstance,
 		newProc:     newProcessWithContextHelperTest,
 	}
 	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
@@ -536,14 +536,14 @@ func TestCollectMemoryPerProcessLabels(t *testing.T) {
 func TestCollectIOPSPerProcess(t *testing.T) {
 	tests := []struct {
 		name        string
-		params      parameters
+		params      Parameters
 		processList []*ProcessInfo
 		wantCount   int
 		wantErr     error
 	}{
 		{
 			name: "FetchIOPSMetricSuccessfully",
-			params: parameters{
+			params: Parameters{
 				config:               defaultConfig,
 				client:               &fake.TimeSeriesCreator{},
 				iopsReadsMetricPath:  "/sample/test/iops_reads",
@@ -561,7 +561,7 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 		},
 		{
 			name: "ErrorInCreatingNewProcess",
-			params: parameters{
+			params: Parameters{
 				config:               defaultConfig,
 				client:               &fake.TimeSeriesCreator{},
 				iopsReadsMetricPath:  "/sample/test/iops_reads",
@@ -574,7 +574,7 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 		},
 		{
 			name: "InvalidPID",
-			params: parameters{
+			params: Parameters{
 				config:               defaultConfig,
 				client:               &fake.TimeSeriesCreator{},
 				iopsReadsMetricPath:  "/sample/test/iops_reads",
@@ -587,7 +587,7 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 		},
 		{
 			name: "ErrorInFetchingIOPSMetric",
-			params: parameters{
+			params: Parameters{
 				config:               defaultConfig,
 				client:               &fake.TimeSeriesCreator{},
 				iopsReadsMetricPath:  "/sample/test/iops_reads",
@@ -620,7 +620,7 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 }
 
 func TestCollectIOPSPerProcessValues(t *testing.T) {
-	params := parameters{
+	params := Parameters{
 		config:               defaultConfig,
 		client:               &fake.TimeSeriesCreator{},
 		iopsReadsMetricPath:  "/sample/test/iops_reads",

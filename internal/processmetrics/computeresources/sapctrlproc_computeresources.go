@@ -50,7 +50,7 @@ type (
 // Collect method keeps on collecting all the metrics it can, logs errors if it encounters
 // any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
-	params := parameters{
+	params := Parameters{
 		executor:         p.Executor,
 		config:           p.Config,
 		client:           p.Client,

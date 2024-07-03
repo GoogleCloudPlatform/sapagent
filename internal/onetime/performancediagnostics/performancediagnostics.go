@@ -41,6 +41,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/systemdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -109,6 +111,7 @@ type options struct {
 	config                  *bpb.BackintConfiguration
 	cloudDiscoveryInterface system.CloudDiscoveryInterface
 	appsDiscovery           func(context.Context) *sappb.SAPInstances
+	collectProcesses        func(context.Context, computeresources.Parameters) []*computeresources.ProcessInfo
 }
 
 type zipperHelper struct{}
@@ -191,12 +194,13 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 // ExecuteAndGetMessage executes the OTE and returns message and exit status.
 func (d *Diagnose) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
 	opts := &options{
-		fs:     filesystem.Helper{},
-		client: s.NewClient,
-		exec:   commandlineexecutor.ExecuteCommand,
-		z:      zipperHelper{},
-		lp:     lp,
-		cp:     cp,
+		fs:               filesystem.Helper{},
+		client:           s.NewClient,
+		exec:             commandlineexecutor.ExecuteCommand,
+		z:                zipperHelper{},
+		lp:               lp,
+		cp:               cp,
+		collectProcesses: computeresources.CollectProcessesForInstance,
 	}
 	return d.diagnosticsHandler(ctx, fs, opts)
 }
@@ -280,7 +284,7 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsFIOFailure)
 				errs = append(errs, err...)
 			}
-			if err := d.computeMetrics(ctx, flagSet, opts); err != nil {
+			if err := d.computeData(ctx, flagSet, opts); err != nil {
 				errs = append(errs, err)
 			}
 		case "backup":
@@ -297,7 +301,7 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 			}
 		case "compute":
 			// Perform System Discovery and collect compute metrics.
-			if err := d.computeMetrics(ctx, flagSet, opts); err != nil {
+			if err := d.computeData(ctx, flagSet, opts); err != nil {
 				errs = append(errs, err)
 			}
 		default:
@@ -382,18 +386,24 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 	return res
 }
 
-// computeMetrics collects the compute metrics of the
+// computeData collects the compute metrics of the
 // HANA processes running in the HANA instances discovered.
-func (d *Diagnose) computeMetrics(ctx context.Context, flagSet *flag.FlagSet, opts *options) error {
+func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts *options) error {
 	// Run system discovery OTE to get the HANA instances.
-	hanaInstances, err := d.runSystemDiscoveryOTE(ctx, flagSet, opts)
+	HANAInstances, err := d.runSystemDiscoveryOTE(ctx, flagSet, opts)
 	if err != nil {
 		return err
 	}
+	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found %d HANA instances: %v", len(HANAInstances), HANAInstances))
 
-	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found %d HANA instances: %v", len(hanaInstances), hanaInstances))
+	// Collect HANA processes running in the HANA instances.
+	instanceWiseHANAProcesses, err := fetchAllProcesses(ctx, opts, HANAInstances)
+	if err != nil {
+		return err
+	}
+	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found HANA processes: %v", instanceWiseHANAProcesses))
 
-	// TODO: - Collect HANA processes in the HANA instances.
+	// TODO: - Collect compute metrics of HANA processes.
 
 	return nil
 }
@@ -425,28 +435,57 @@ func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, o
 	}
 
 	// filter HANA instances from the SAPInstances discovered.
-	hanaInstances := filterHANAInstances(discovery.GetSAPInstances())
-	if hanaInstances == nil || len(hanaInstances) == 0 {
+	HANAInstances := filterHANAInstances(discovery.GetSAPInstances())
+	if HANAInstances == nil || len(HANAInstances) == 0 {
 		return nil, fmt.Errorf("no HANA instances found")
 	}
 
-	return hanaInstances, nil
+	return HANAInstances, nil
 }
 
 // filterHANAInstances filters the HANA instances from SAPInstances.
-func filterHANAInstances(sapInstances *sappb.SAPInstances) []*sappb.SAPInstance {
-	if sapInstances == nil {
+func filterHANAInstances(SAPInstances *sappb.SAPInstances) []*sappb.SAPInstance {
+	if SAPInstances == nil {
 		return nil
 	}
 
-	var hanaInstances []*sappb.SAPInstance
-	for _, instance := range sapInstances.Instances {
+	var HANAInstances []*sappb.SAPInstance
+	for _, instance := range SAPInstances.Instances {
 		if instance.Type == sappb.InstanceType_HANA {
-			hanaInstances = append(hanaInstances, instance)
+			HANAInstances = append(HANAInstances, instance)
 		}
 	}
 
-	return hanaInstances
+	return HANAInstances
+}
+
+// fetchAllProcesses collects the HANA processes
+// running in the HANA instances. Returns a list of lists where
+// kth list contains the processes running in kth HANA instance.
+func fetchAllProcesses(ctx context.Context, opts *options, HANAInstances []*sappb.SAPInstance) ([][]*computeresources.ProcessInfo, error) {
+	var instanceWiseHANAProcesses [][]*computeresources.ProcessInfo
+	HANAProcessFound := false
+
+	for _, instance := range HANAInstances {
+		params := computeresources.Parameters{
+			SAPInstance:      instance,
+			SAPControlClient: sapcontrolclient.New(instance.GetInstanceNumber()),
+		}
+		instanceProcesses := opts.collectProcesses(ctx, params)
+		instanceWiseHANAProcesses = append(instanceWiseHANAProcesses, instanceProcesses)
+
+		if !HANAProcessFound && len(instanceProcesses) > 0 {
+			HANAProcessFound = true
+		}
+	}
+
+	// if no process is found, then no metrics can be collected,
+	// hence, returns an error to stop computeMetrics.
+	if !HANAProcessFound {
+		return nil, fmt.Errorf("no HANA processes found")
+	}
+
+	return instanceWiseHANAProcesses, nil
 }
 
 // listOperations returns a map of operations to be performed.

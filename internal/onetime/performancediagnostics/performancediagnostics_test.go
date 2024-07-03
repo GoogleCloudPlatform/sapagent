@@ -35,6 +35,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
@@ -86,12 +87,14 @@ var (
 		return &sappb.SAPInstances{
 			Instances: []*sappb.SAPInstance{
 				{
-					Sapsid: "test-hana-1",
-					Type:   sappb.InstanceType_HANA,
+					Sapsid:         "test-hana-1",
+					InstanceNumber: "001",
+					Type:           sappb.InstanceType_HANA,
 				},
 				{
-					Sapsid: "test-hana-2",
-					Type:   sappb.InstanceType_HANA,
+					Sapsid:         "test-hana-2",
+					InstanceNumber: "002",
+					Type:           sappb.InstanceType_HANA,
 				},
 			},
 		}
@@ -1613,6 +1616,14 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "001",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
 			},
 			wantCnt: 3,
 		},
@@ -1644,6 +1655,14 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "001",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
 				},
 			},
 			wantCnt: 1,
@@ -2025,12 +2044,14 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 			},
 			wantHANAInstances: []*sappb.SAPInstance{
 				{
-					Sapsid: "test-hana-1",
-					Type:   sappb.InstanceType_HANA,
+					Sapsid:         "test-hana-1",
+					InstanceNumber: "001",
+					Type:           sappb.InstanceType_HANA,
 				},
 				{
-					Sapsid: "test-hana-2",
-					Type:   sappb.InstanceType_HANA,
+					Sapsid:         "test-hana-2",
+					InstanceNumber: "002",
+					Type:           sappb.InstanceType_HANA,
 				},
 			},
 			wantErr: nil,
@@ -2085,7 +2106,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 	}
 }
 
-func TestComputeMetrics(t *testing.T) {
+func TestComputeData(t *testing.T) {
 	tests := []struct {
 		name    string
 		d       *Diagnose
@@ -2093,7 +2114,6 @@ func TestComputeMetrics(t *testing.T) {
 		opts    *options
 		wantErr error
 	}{
-
 		{
 			name: "FailInvalidCloudProperties",
 			d: &Diagnose{
@@ -2119,7 +2139,7 @@ func TestComputeMetrics(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "SuccessGetComputeMetrics",
+			name: "FailNoProcesses",
 			d: &Diagnose{
 				Type: "compute",
 			},
@@ -2146,6 +2166,48 @@ func TestComputeMetrics(t *testing.T) {
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{}
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessComputeMetrics",
+			d: &Diagnose{
+				Type: "compute",
+			},
+			flagSet: &flag.FlagSet{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				fs: &fake.FileSystem{
+					OpenErr:    []error{nil},
+					OpenResp:   []*os.File{&os.File{}},
+					CopyResp:   []int64{0},
+					CopyErr:    []error{nil},
+					CreateResp: []*os.File{&os.File{}},
+					CreateErr:  []error{nil},
+					MkDirErr:   []error{fmt.Errorf("error")},
+				},
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-instance-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "001",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
 			},
 			wantErr: nil,
 		},
@@ -2154,11 +2216,94 @@ func TestComputeMetrics(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var d Diagnose
-			gotErr := d.computeMetrics(context.Background(), tc.flagSet, tc.opts)
+			gotErr := d.computeData(context.Background(), tc.flagSet, tc.opts)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
 			}
 		})
 	}
+}
 
+func TestFetchAllProcesses(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          *options
+		HANAInstances []*sappb.SAPInstance
+		wantProcesses [][]*computeresources.ProcessInfo
+		wantErr       error
+	}{
+		{
+			name: "SuccessProcessesFound",
+			HANAInstances: []*sappb.SAPInstance{
+				{
+					Sapsid:         "test-hana-1",
+					InstanceNumber: "001",
+					Type:           sappb.InstanceType_HANA,
+				},
+			},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "001",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+			},
+			wantProcesses: [][]*computeresources.ProcessInfo{
+				{
+					{
+						PID:  "001",
+						Name: "I-001-S-test-hana-1-P-001",
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "FailNoProcessesFound",
+			HANAInstances: []*sappb.SAPInstance{
+				{
+					Sapsid:         "test-hana-1",
+					InstanceNumber: "001",
+					Type:           sappb.InstanceType_HANA,
+				},
+			},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{}
+				},
+			},
+			wantProcesses: nil,
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "FailNoInstancesPassed",
+			HANAInstances: []*sappb.SAPInstance{},
+			opts: &options{
+				exec: fakeExecForSuccess,
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{}
+				},
+			},
+			wantProcesses: nil,
+			wantErr:       cmpopts.AnyError,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotProcesses, gotErr := fetchAllProcesses(ctx, tc.opts, tc.HANAInstances)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("fetchAllProcesses(%v, %v, %v) returned error: %v, want error: %v", ctx, tc.opts, tc.HANAInstances, gotErr, tc.wantErr)
+			}
+			if diff := cmp.Diff(gotProcesses, tc.wantProcesses, protocmp.Transform()); diff != "" {
+				t.Errorf("fetchAllProcesses(%v, %v, %v) returned an unexpected diff (-want +got): %v", tc.opts, tc.HANAInstances, gotErr, diff)
+			}
+		})
+	}
 }

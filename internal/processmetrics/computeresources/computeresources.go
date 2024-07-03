@@ -57,8 +57,8 @@ var (
 )
 
 type (
-	// parameters struct contains the parameters necessary for computeresources package common methods.
-	parameters struct {
+	// Parameters struct contains the parameters necessary for computeresources package common methods.
+	Parameters struct {
 		executor             commandlineexecutor.Execute
 		config               *cnfpb.Configuration
 		client               cloudmonitoring.TimeSeriesCreator
@@ -66,7 +66,7 @@ type (
 		memoryMetricPath     string
 		iopsReadsMetricPath  string
 		iopsWritesMetricPath string
-		sapInstance          *sapb.SAPInstance
+		SAPInstance          *sapb.SAPInstance
 		newProc              newProcessWithContextHelper
 		getProcessListParams commandlineexecutor.Params
 		getABAPWPTableParams commandlineexecutor.Params
@@ -100,7 +100,7 @@ func newProc(ctx context.Context, fn newProcessWithContextHelper, pid int32) (us
 	return fn(ctx, pid)
 }
 
-func collectControlProcesses(ctx context.Context, p parameters) []*ProcessInfo {
+func collectControlProcesses(ctx context.Context, p Parameters) []*ProcessInfo {
 	var processInfos []*ProcessInfo
 	cmd := "ps"
 	args := "-e -o comm,pid"
@@ -133,8 +133,10 @@ func collectControlProcesses(ctx context.Context, p parameters) []*ProcessInfo {
 	return processInfos
 }
 
-func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessInfo {
-	if p.sapInstance == nil {
+// CollectProcessesForInstance returns the list of
+// processes running in an SAPInstance.
+func CollectProcessesForInstance(ctx context.Context, p Parameters) []*ProcessInfo {
+	if p.SAPInstance == nil {
 		log.CtxLogger(ctx).Debug("Error getting ProcessList in computeresources, no sapInstance set.")
 		return nil
 	}
@@ -144,7 +146,7 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 		err          error
 		processInfos []*ProcessInfo
 	)
-	sc := &sapcontrol.Properties{Instance: p.sapInstance}
+	sc := &sapcontrol.Properties{Instance: p.SAPInstance}
 	scc := p.SAPControlClient
 	processes, err = sc.GetProcessList(ctx, scc)
 	if err != nil {
@@ -166,7 +168,7 @@ func collectProcessesForInstance(ctx context.Context, p parameters) []*ProcessIn
 }
 
 // collectCPUPerProcess collects CPU utilization per process for HANA, Netweaver and SAP control processes.
-func collectCPUPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
+func collectCPUPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
 	var metricsCollectionErr error
 	for _, processInfo := range processes {
@@ -199,7 +201,7 @@ func collectCPUPerProcess(ctx context.Context, p parameters, processes []*Proces
 // collectMemoryPerProcess is a function responsible for collecting memory utilization
 // per process for Hana, Netweaver and SAP control processes. Metric will represent memory
 // utilization in megabytes.
-func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
+func collectMemoryPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
 	var metricsCollectionErr error
 	for _, processInfo := range processes {
@@ -242,7 +244,7 @@ func collectMemoryPerProcess(ctx context.Context, p parameters, processes []*Pro
 
 // collectIOPSPerProcess is responsible for collecting IOPS per process using gopsutil IOCounters data
 // and computing the delta between current value and last value of bytes read and written.
-func collectIOPSPerProcess(ctx context.Context, p parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
+func collectIOPSPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
 	var metricsCollectionErr error
 	for _, processInfo := range processes {
@@ -283,10 +285,10 @@ func collectIOPSPerProcess(ctx context.Context, p parameters, processes []*Proce
 	return metrics, metricsCollectionErr
 }
 
-func createMetrics(mPath string, labels map[string]string, val float64, p parameters) *mrpb.TimeSeries {
-	if p.sapInstance != nil {
-		labels["sid"] = p.sapInstance.GetSapsid()
-		labels["instance_nr"] = p.sapInstance.GetInstanceNumber()
+func createMetrics(mPath string, labels map[string]string, val float64, p Parameters) *mrpb.TimeSeries {
+	if p.SAPInstance != nil {
+		labels["sid"] = p.SAPInstance.GetSapsid()
+		labels["instance_nr"] = p.SAPInstance.GetInstanceNumber()
 	}
 	ts := timeseries.Params{
 		CloudProp:    p.config.CloudProperties,
@@ -296,7 +298,7 @@ func createMetrics(mPath string, labels map[string]string, val float64, p parame
 		Float64Value: val,
 		BareMetal:    p.config.BareMetal,
 	}
-	log.Logger.Debugw("Creating metric for instance", "metric", mPath, "value", val, "instancenumber", p.sapInstance.GetInstanceNumber(), "labels", labels)
+	log.Logger.Debugw("Creating metric for instance", "metric", mPath, "value", val, "instancenumber", p.SAPInstance.GetInstanceNumber(), "labels", labels)
 	return timeseries.BuildFloat64(ts)
 }
 

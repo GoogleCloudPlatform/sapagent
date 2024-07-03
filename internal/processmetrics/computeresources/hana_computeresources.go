@@ -60,7 +60,7 @@ type (
 // Collect method keeps on collecting all the metrics it can, logs errors if it encounters
 // any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
-	params := parameters{
+	params := Parameters{
 		executor:             p.Executor,
 		client:               p.Client,
 		config:               p.Config,
@@ -69,12 +69,12 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 		iopsReadsMetricPath:  hanaIOPSReadsPath,
 		iopsWritesMetricPath: hanaIOPSWritesPath,
 		lastValue:            p.LastValue,
-		sapInstance:          p.SAPInstance,
+		SAPInstance:          p.SAPInstance,
 		newProc:              p.NewProcHelper,
 		SAPControlClient:     p.SAPControlClient,
 	}
 	var metricsCollectionErr error
-	processes := collectProcessesForInstance(ctx, params)
+	processes := CollectProcessesForInstance(ctx, params)
 	if len(processes) == 0 {
 		log.CtxLogger(ctx).Debug("Cannot collect CPU and memory per process for hana, empty process list.")
 		return nil, nil

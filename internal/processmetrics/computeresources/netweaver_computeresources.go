@@ -58,7 +58,7 @@ type (
 // Collect method keeps on collecting all the metrics it can, logs errors if it encounters
 // any and returns the collected metrics with the last error encountered while collecting metrics.
 func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
-	params := parameters{
+	params := Parameters{
 		executor:             p.Executor,
 		client:               p.Client,
 		config:               p.Config,
@@ -67,11 +67,11 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 		iopsReadsMetricPath:  nwIOPSReadsPath,
 		iopsWritesMetricPath: nwIOPSWritePath,
 		lastValue:            p.LastValue,
-		sapInstance:          p.SAPInstance,
+		SAPInstance:          p.SAPInstance,
 		newProc:              p.NewProcHelper,
 		SAPControlClient:     p.SAPControlClient,
 	}
-	processes := collectProcessesForInstance(ctx, params)
+	processes := CollectProcessesForInstance(ctx, params)
 	var metricsCollectionErr error
 	if len(processes) == 0 {
 		log.CtxLogger(ctx).Debug("cannot collect CPU and memory per process for Netweaver, empty process list.")
