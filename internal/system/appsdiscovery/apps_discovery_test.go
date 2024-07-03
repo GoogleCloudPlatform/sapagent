@@ -2002,7 +2002,27 @@ func TestDiscoverSAPApps(t *testing.T) {
 		name:         "noSAPApps",
 		sapInstances: &sappb.SAPInstances{},
 		executor:     &fakeCommandExecutor{},
-		want:         []SapSystemDetails{},
+		fileSystem: &fakefs.FileSystem{
+			StatResp: []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:  []error{nil},
+		},
+		want: []SapSystemDetails{},
+	}, {
+		name: "noUsrSAPExecutePermission",
+		sapInstances: &sappb.SAPInstances{
+			Instances: []*sappb.SAPInstance{
+				&sappb.SAPInstance{
+					Sapsid:         "abc",
+					Type:           sappb.InstanceType_HANA,
+					InstanceNumber: "00",
+				},
+			},
+		}, executor: &fakeCommandExecutor{},
+		fileSystem: &fakefs.FileSystem{
+			StatResp: []os.FileInfo{fakefs.FileInfo{FakeMode: 0000}},
+			StatErr:  []error{nil},
+		},
+		want: []SapSystemDetails{},
 	}, {
 		name: "justHANA",
 		sapInstances: &sappb.SAPInstances{
@@ -2028,6 +2048,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 		fileSystem: &fakefs.FileSystem{
 			ReadFileResp: [][]byte{[]byte("")},
 			ReadFileErr:  []error{nil},
+			StatResp:     []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:      []error{nil},
 		},
 		want: []SapSystemDetails{{
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2102,6 +2124,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			ReadFileResp:          [][]byte{[]byte("")},
 			ReadFileErr:           []error{nil},
 			RemoveAllErr:          []error{nil},
+			StatResp:              []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:               []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -2227,6 +2251,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			WriteStringToFileResp: []int{0, 0},
 			WriteStringToFileErr:  []error{nil, nil},
 			RemoveAllErr:          []error{nil, nil},
+			StatResp:              []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:               []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -2354,6 +2380,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 		fileSystem: &fakefs.FileSystem{
 			ReadFileResp: [][]byte{[]byte{}, []byte{}},
 			ReadFileErr:  []error{nil, nil},
+			StatResp:     []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:      []error{nil},
 		},
 		want: []SapSystemDetails{{
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2476,6 +2504,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			ReadFileResp:          [][]byte{[]byte{}},
 			ReadFileErr:           []error{nil},
 			RemoveAllErr:          []error{nil},
+			StatResp:              []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:               []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -2611,6 +2641,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			MkDirErr:     []error{nil},
 			ChmodErr:     []error{nil},
 			RemoveAllErr: []error{nil},
+			StatResp:     []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:      []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{
@@ -2738,6 +2770,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			MkDirErr:     []error{nil},
 			ChmodErr:     []error{nil},
 			RemoveAllErr: []error{nil},
+			StatResp:     []os.FileInfo{fakefs.FileInfo{FakeMode: os.ModePerm}},
+			StatErr:      []error{nil},
 		},
 		want: []SapSystemDetails{{
 			AppComponent: &spb.SapDiscovery_Component{

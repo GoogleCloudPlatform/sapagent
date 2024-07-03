@@ -180,11 +180,25 @@ func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	return merged
 }
 
+// hasExecutePermission checks if the given path has execute permission for the owner.
+func (d *SapDiscovery) hasExecutePermission(path string) bool {
+	fileInfo, err := d.FileSystem.Stat(path)
+	if err != nil {
+		log.Logger.Debugw("Error getting directory info", "path", path, "error", err)
+		return false
+	}
+	return fileInfo.Mode()&0100 != 0 // 0100 is the executable bit for the owner
+}
+
 // DiscoverSAPApps attempts to identify the different SAP Applications running on the current host.
 func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances, conf *cpb.DiscoveryConfiguration) []SapSystemDetails {
 	sapSystems := []SapSystemDetails{}
 	if sapApps == nil {
 		log.CtxLogger(ctx).Debugw("No SAP applications found")
+		return sapSystems
+	}
+	if !d.hasExecutePermission("/usr/sap") {
+		log.CtxLogger(ctx).Warnw("No execute permission for /usr/sap directory, some of the discovery operations will fail. Please ensure that the root user has execute permission for /usr/sap directory.")
 		return sapSystems
 	}
 	log.CtxLogger(ctx).Debugw("SAP Apps found", "apps", sapApps)

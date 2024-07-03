@@ -22,6 +22,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 )
@@ -152,4 +153,44 @@ func (f *FileSystem) Stat(string) (os.FileInfo, error) {
 func (f *FileSystem) WalkAndZip(string, zipper.Zipper, *zip.Writer) error {
 	defer func() { f.walkAndZipCallCount++ }()
 	return f.WalkAndZipErr[f.walkAndZipCallCount]
+}
+
+// FileInfo is a fake implementation of fs.FileInfo for unit testing.
+type FileInfo struct {
+	FakeName    string
+	FakeSize    int64
+	FakeMode    fs.FileMode
+	FakeModTime time.Time
+	FakeIsDir   bool
+	FakeSYS     any
+}
+
+// Name is a fake implementation for unit testing.
+func (fi FileInfo) Name() string {
+	return fi.FakeName
+}
+
+// Size is a fake implementation for unit testing.
+func (fi FileInfo) Size() int64 {
+	return fi.FakeSize
+}
+
+// Mode is a fake implementation for unit testing.
+func (fi FileInfo) Mode() fs.FileMode {
+	return fi.FakeMode
+}
+
+// ModTime is a fake implementation for unit testing.
+func (fi FileInfo) ModTime() time.Time {
+	return fi.FakeModTime
+}
+
+// IsDir is a fake implementation for unit testing.
+func (fi FileInfo) IsDir() bool {
+	return fi.FakeIsDir
+}
+
+// Sys is a fake implementation for unit testing.
+func (fi FileInfo) Sys() any {
+	return fi.FakeSYS
 }
