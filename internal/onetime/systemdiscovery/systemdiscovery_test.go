@@ -45,7 +45,6 @@ import (
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
-	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 	logfake "github.com/GoogleCloudPlatform/sapagent/shared/log/fake"
 )
 
@@ -121,7 +120,6 @@ func createTestConfigFile(t *testing.T, configJSON string) *os.File {
 
 func createTestIIOTESystemDiscovery(t *testing.T, configPath string) *SystemDiscovery {
 	return &SystemDiscovery{
-		WlmService:        &wlmfake.TestWLM{},
 		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
 		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
@@ -135,7 +133,6 @@ func createTestIIOTESystemDiscovery(t *testing.T, configPath string) *SystemDisc
 		AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
 		IIOTEParams:   defaultIIOTEParams,
 		ConfigPath:    configPath,
-		OsStatReader:  func(string) (os.FileInfo, error) { return nil, nil },
 	}
 }
 
@@ -168,6 +165,53 @@ func TestExecute(t *testing.T) {
 				help: true,
 			},
 			args: []any{},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessWithConfig",
+			sd: &SystemDiscovery{
+				CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
+				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
+					DiscoverCurrentHostResp: [][]string{{}},
+				},
+				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
+					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
+				},
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				IIOTEParams:   nil,
+				ConfigPath:    createTestConfigFile(t, testConfigFileJSON).Name(),
+			},
+			args: []any{
+				"anything",
+				log.Parameters{},
+				defaultCloudProperties,
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessWithoutConfig",
+			sd: &SystemDiscovery{
+				CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
+				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
+					DiscoverCurrentHostResp: [][]string{{}},
+				},
+				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
+					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
+				},
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				IIOTEParams:   nil,
+			},
+			args: []any{
+				"anything",
+				log.Parameters{},
+				defaultCloudProperties,
+			},
 			want: subcommands.ExitSuccess,
 		},
 	}
@@ -206,6 +250,13 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 			wantErr:             nil,
 		},
 		{
+			name:                "FailConfigFileNotFound",
+			sd:                  createTestIIOTESystemDiscovery(t, createTestConfigFile(t, testConfigFileJSON).Name()+"sap"),
+			args:                []any{},
+			wantDiscoveryObject: nil,
+			wantErr:             cmpopts.AnyError,
+		},
+		{
 			name: "FailIIOTEParamsAndArgsNotPassed",
 			sd: &SystemDiscovery{
 				IIOTEParams: nil,
@@ -218,7 +269,7 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 			name: "SuccessApplyDefaultParamsIfMissing",
 			sd: &SystemDiscovery{
 				IIOTEParams: defaultIIOTEParams,
-				WlmService:  &wlmfake.TestWLM{},
+				ConfigPath:  createTestConfigFile(t, testConfigFileJSON).Name(),
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
@@ -231,8 +282,6 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 			wantErr:             nil,
 		},
 	}
-
-	// TODO: - Add test cases for OTE mode.
 
 	ctx := context.Background()
 	for _, test := range tests {
@@ -251,129 +300,67 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 	}
 }
 
-func TestValidateParams(t *testing.T) {
+func TestInitDefaults(t *testing.T) {
 	tests := []struct {
-		name           string
-		sd             *SystemDiscovery
-		config         *cpb.Configuration
-		lp             *log.Parameters
-		wantErr        error
-		wantWlmService *wlmfake.TestWLM
+		name    string
+		sd      *SystemDiscovery
+		lp      *log.Parameters
+		wantErr bool
 	}{
 		{
-			name: "SuccessWithWlmEnabled",
-			sd:   createTestIIOTESystemDiscovery(t, ""),
-			config: &cpb.Configuration{
-				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-					EnableDiscovery: &wpb.BoolValue{Value: true},
-				},
-			},
-			lp:             &log.Parameters{},
-			wantErr:        nil,
-			wantWlmService: &wlmfake.TestWLM{},
-		},
-		{
-			name: "SuccessWithWlmDisabled",
-			sd:   createTestIIOTESystemDiscovery(t, ""),
-			config: &cpb.Configuration{
-				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-					EnableDiscovery: &wpb.BoolValue{Value: false},
-				},
-			},
-			lp:             &log.Parameters{},
-			wantErr:        nil,
-			wantWlmService: nil,
-		},
-		{
-			name: "FailWithWlmEnabledButMissingInParams",
+			name: "HostDiscoveryInterfaceMissing",
 			sd: &SystemDiscovery{
-				IIOTEParams: defaultIIOTEParams,
-			},
-			config: &cpb.Configuration{
-				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
-					EnableDiscovery: &wpb.BoolValue{Value: true},
+				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				IIOTEParams:   nil,
 			},
-			lp:             &log.Parameters{},
-			wantErr:        cmpopts.AnyError,
-			wantWlmService: nil,
+			lp:      &log.Parameters{},
+			wantErr: false,
 		},
 		{
-			name: "SuccessWithCloudLoggingEnabled",
-			sd:   createTestIIOTESystemDiscovery(t, ""),
-			config: &cpb.Configuration{
-				DiscoveryConfiguration: defaultDiscoveryConfig,
+			name: "SAPDiscoveryInterfaceMissing",
+			sd: &SystemDiscovery{
+				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
+					DiscoverCurrentHostResp: [][]string{{}},
+				},
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				IIOTEParams:   nil,
+			},
+			lp:      &log.Parameters{},
+			wantErr: false,
+		},
+		{
+			name: "SetupCloudLogInterface",
+			sd: &SystemDiscovery{
+				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
+					DiscoverCurrentHostResp: [][]string{{}},
+				},
+				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
+					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
+				},
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				IIOTEParams:   nil,
 			},
 			lp: &log.Parameters{
 				CloudLoggingClient: &logging.Client{},
 			},
-			wantErr:        nil,
-			wantWlmService: nil,
-		},
-		{
-			name:   "FailWithCloudLoggingEnabledButMissingInParams",
-			sd:     &SystemDiscovery{},
-			config: &cpb.Configuration{},
-			lp: &log.Parameters{
-				CloudLoggingClient: &logging.Client{},
-			},
-			wantErr:        cmpopts.AnyError,
-			wantWlmService: nil,
-		},
-		{
-			name:           "FailWithCloudDiscoveryInterfaceMissingInParams",
-			sd:             &SystemDiscovery{},
-			config:         &cpb.Configuration{},
-			lp:             &log.Parameters{},
-			wantErr:        cmpopts.AnyError,
-			wantWlmService: nil,
-		},
-		{
-			name: "FailWithHostDiscoveryInterfaceMissingInParams",
-			sd: &SystemDiscovery{
-				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{},
-			},
-			config:         &cpb.Configuration{},
-			lp:             &log.Parameters{},
-			wantErr:        cmpopts.AnyError,
-			wantWlmService: nil,
-		},
-		{
-			name: "FailWithSapDiscoveryInterfaceMissingInParams",
-			sd: &SystemDiscovery{
-				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{},
-				HostDiscoveryInterface:  &hostdiscoveryfake.HostDiscovery{},
-			},
-			config:         &cpb.Configuration{},
-			lp:             &log.Parameters{},
-			wantErr:        cmpopts.AnyError,
-			wantWlmService: nil,
-		},
-		{
-			name: "FailWithAppsDiscoveryInterfaceMissingInParams",
-			sd: &SystemDiscovery{
-				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{},
-				HostDiscoveryInterface:  &hostdiscoveryfake.HostDiscovery{},
-				SapDiscoveryInterface:   &appsdiscoveryfake.SapDiscovery{},
-			},
-			config:         &cpb.Configuration{},
-			lp:             &log.Parameters{},
-			wantErr:        cmpopts.AnyError,
-			wantWlmService: nil,
+			wantErr: false,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotErr := test.sd.validateParams(test.config, test.lp)
-			if diff := cmp.Diff(test.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("validateParams() returned an unexpected diff (-want +got):\n%s", diff)
-			}
-			if test.wantWlmService == nil && test.sd.WlmService == nil {
-				return
-			}
-			if diff := cmp.Diff(test.wantWlmService, test.sd.WlmService, protocmp.Transform()); diff != "" {
-				t.Errorf("validateParams() returned an unexpected diff (-want +got):\n%s", diff)
+			gotErr := test.sd.initDefaults(context.Background(), test.lp) != nil
+			if gotErr != test.wantErr {
+				t.Errorf("initDefaults(%v) = %v, want error presence = %v", test.sd, gotErr, test.wantErr)
 			}
 		})
 	}
@@ -425,16 +412,16 @@ func TestPrepareConfig(t *testing.T) {
 			wantDiscoveryConfig: nil,
 		},
 		{
-			name: "FailConfigInvalidParams",
+			name: "SuccessApplyDefaultParamsIfInvalid",
 			sd: &SystemDiscovery{
 				ConfigPath: createTestConfigFile(t, testInvalidConfigFileJSON).Name(),
 			},
 			cp:                  defaultCloudProperties,
 			args:                []any{},
-			wantErr:             cmpopts.AnyError,
-			wantCloudProperties: nil,
-			wantAgentProperties: nil,
-			wantDiscoveryConfig: nil,
+			wantErr:             nil,
+			wantCloudProperties: defaultCloudProperties,
+			wantAgentProperties: defaultAgentProperties,
+			wantDiscoveryConfig: defaultDiscoveryConfig,
 		},
 		{
 			name: "FailInvalidCloudProperties",
@@ -559,70 +546,6 @@ func TestValidateCloudProperties(t *testing.T) {
 	}
 }
 
-func TestValidateDiscoveryConfigParams(t *testing.T) {
-	tests := []struct {
-		name            string
-		discoveryConfig *cpb.DiscoveryConfiguration
-		want            bool
-	}{
-		{
-			name:            "FailDiscoveryConfigMissing",
-			discoveryConfig: nil,
-			want:            false,
-		},
-		{
-			name: "FailMissingEnableDiscovery",
-			discoveryConfig: &cpb.DiscoveryConfiguration{
-				SapInstancesUpdateFrequency:    dpb.New(time.Duration(1 * time.Minute)),
-				SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(4 * time.Hour)),
-				EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
-			},
-			want: false,
-		},
-		{
-			name: "FailMissingSapInstancesUpdateFrequency",
-			discoveryConfig: &cpb.DiscoveryConfiguration{
-				EnableDiscovery:                &wpb.BoolValue{Value: true},
-				SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(4 * time.Hour)),
-				EnableWorkloadDiscovery:        &wpb.BoolValue{Value: true},
-			},
-			want: false,
-		},
-		{
-			name: "FailMissingSystemDiscoveryUpdateFrequency",
-			discoveryConfig: &cpb.DiscoveryConfiguration{
-				EnableDiscovery:             &wpb.BoolValue{Value: true},
-				SapInstancesUpdateFrequency: dpb.New(time.Duration(1 * time.Minute)),
-				EnableWorkloadDiscovery:     &wpb.BoolValue{Value: true},
-			},
-			want: false,
-		},
-		{
-			name: "FailMissingEnableWorkloadDiscovery",
-			discoveryConfig: &cpb.DiscoveryConfiguration{
-				EnableDiscovery:                &wpb.BoolValue{Value: true},
-				SystemDiscoveryUpdateFrequency: dpb.New(time.Duration(4 * time.Hour)),
-				SapInstancesUpdateFrequency:    dpb.New(time.Duration(1 * time.Minute)),
-			},
-			want: false,
-		},
-		{
-			name:            "SuccessAllFieldsPresentAndValid",
-			discoveryConfig: defaultDiscoveryConfig,
-			want:            true,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := validateDiscoveryConfigParams(test.discoveryConfig)
-			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Errorf("validateDiscoveryConfigParams() returned an unexpected diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
 func TestName(t *testing.T) {
 	sd := &SystemDiscovery{}
 	if diff := cmp.Diff("systemdiscovery", sd.Name()); diff != "" {
@@ -633,7 +556,7 @@ func TestName(t *testing.T) {
 func TestUsage(t *testing.T) {
 	sd := &SystemDiscovery{}
 	if diff := cmp.Diff(`Usage: systemdiscovery [-config=<path to config file>]
-	[-loglevel=<debug|error|info|warn>] [-log-path=<log-path>] [-help] [-version]`+"\n", sd.Usage()); diff != "" {
+	[-loglevel=<debug|error|info|warn>] [-log-path=<log-path>] [-help]`+"\n", sd.Usage()); diff != "" {
 		t.Errorf("Usage() returned an unexpected diff (-want +got):\n%s", diff)
 	}
 }

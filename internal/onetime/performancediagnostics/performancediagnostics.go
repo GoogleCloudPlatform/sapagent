@@ -422,9 +422,9 @@ func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, o
 		InvokedBy: d.Name(),
 	}
 
-	// disabling wlm and cloud logging here as that's not the goal here.
+	// Disabling cloud logging of system discovery data
+	// here as that's not the goal here.
 	systemDiscovery := &systemdiscovery.SystemDiscovery{
-		WlmService:              nil,
 		CloudLogInterface:       nil,
 		CloudDiscoveryInterface: opts.cloudDiscoveryInterface,
 		AppsDiscovery:           opts.appsDiscovery,
@@ -439,7 +439,7 @@ func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, o
 		return nil, err
 	}
 
-	// filter HANA instances from the SAPInstances discovered.
+	// Filter HANA instances from the SAPInstances discovered.
 	HANAInstances := filterHANAInstances(discovery.GetSAPInstances())
 	if HANAInstances == nil || len(HANAInstances) == 0 {
 		return nil, fmt.Errorf("no HANA instances found")
@@ -484,7 +484,7 @@ func fetchAllProcesses(ctx context.Context, opts *options, HANAInstances []*sapp
 		}
 	}
 
-	// if no process is found, then no metrics can be collected,
+	// If no process is found, then no metrics can be collected,
 	// hence, returns an error to stop computeMetrics.
 	if !HANAProcessFound {
 		return nil, fmt.Errorf("no HANA processes found")
@@ -540,12 +540,12 @@ func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 		errs = append(errs, err)
 		return errs
 	}
-	// run backint.Diagnose function
+	// Run backint.Diagnose function
 	if err := d.runBackint(ctx, opts); err != nil {
 		errs = append(errs, err)
 	}
 
-	// run gsutil perfdiag function
+	// Run gsutil perfdiag function
 	if err := d.runPerfDiag(ctx, opts); len(err) != 0 {
 		errs = append(errs, err...)
 	}
