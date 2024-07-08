@@ -51,8 +51,8 @@ var (
 	// sapServicesStartsrvPattern captures the sapstartsrv path in /usr/sap/sapservices.
 	// Example: "/usr/sap/DEV/ASCS01/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm"
 	// is parsed as "sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01".
-
-	sapServicesStartsrvPattern = regexp.MustCompile(`startsrv pf=/usr/sap/([A-Z][A-Z|0-9][A-Z|0-9])[/|a-z|A-Z|0-9]+/profile/([A-Z][A-Z|0-9][A-Z|0-9])_([a-z|A-Z]+)([0-9]+)`)
+	// Additional possibilities include sapstartsrv pf=/sapmnt/PRD/profile/PRD_ASCS01_alidascs11
+	sapServicesStartsrvPattern = regexp.MustCompile(`sapstartsrv pf=/(usr/sap|sapmnt)/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/([A-Z][A-Z0-9]{2})_([a-zA-Z]+)([0-9]+)`)
 
 	// sapServicesProfilePattern captures the sap profile path in /usr/sap/sapservices.
 	// Example: "/usr/sap/DEV/ASCS01/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm"
@@ -372,7 +372,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 			continue
 		}
 		path := sapServicesStartsrvPattern.FindStringSubmatch(line)
-		if len(path) != 5 {
+		if len(path) != 6 {
 			log.CtxLogger(ctx).Debugw("No SAP instance found", "line", line, "match", path)
 			continue
 		}
@@ -384,9 +384,9 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 		}
 
 		entry := &instanceInfo{
-			Sid:          path[1],
-			InstanceName: path[3],
-			Snr:          path[4],
+			Sid:          path[2],
+			InstanceName: path[4],
+			Snr:          path[5],
 			ProfilePath:  profile[1],
 		}
 

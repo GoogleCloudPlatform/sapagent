@@ -630,126 +630,143 @@ func TestListSAPInstances(t *testing.T) {
 		fakeExec commandlineexecutor.Execute
 		want     []*instanceInfo
 		wantErr  error
-	}{
-		{
-			name: "Success",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `LD_LIBRARY_PATH=/usr/sap/DEH/HDB00/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/DEH/HDB00/exe/sapstartsrv pf=/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci -D -u dehadm
+	}{{
+		name: "Success",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `LD_LIBRARY_PATH=/usr/sap/DEH/HDB00/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/DEH/HDB00/exe/sapstartsrv pf=/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci -D -u dehadm
 					LD_LIBRARY_PATH=/usr/sap/DEV/ASCS01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm
 					/usr/sap/DEV/D02/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci -D -u devadm`,
-				}
+			}
+		},
+		want: []*instanceInfo{
+			&instanceInfo{
+				Sid:           "DEH",
+				Snr:           "00",
+				InstanceName:  "HDB",
+				ProfilePath:   "/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci",
+				LDLibraryPath: "/usr/sap/DEH/HDB00/exe",
 			},
-			want: []*instanceInfo{
-				&instanceInfo{
-					Sid:           "DEH",
-					Snr:           "00",
-					InstanceName:  "HDB",
-					ProfilePath:   "/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci",
-					LDLibraryPath: "/usr/sap/DEH/HDB00/exe",
-				},
-				&instanceInfo{
-					Sid:           "DEV",
-					Snr:           "01",
-					InstanceName:  "ASCS",
-					ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci",
-					LDLibraryPath: "/usr/sap/DEV/ASCS01/exe",
-				},
-				&instanceInfo{
-					Sid:           "DEV",
-					Snr:           "02",
-					InstanceName:  "D",
-					ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci",
-					LDLibraryPath: "/usr/sap/DEV/D02/exe",
-				},
+			&instanceInfo{
+				Sid:           "DEV",
+				Snr:           "01",
+				InstanceName:  "ASCS",
+				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci",
+				LDLibraryPath: "/usr/sap/DEV/ASCS01/exe",
+			},
+			&instanceInfo{
+				Sid:           "DEV",
+				Snr:           "02",
+				InstanceName:  "D",
+				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci",
+				LDLibraryPath: "/usr/sap/DEV/D02/exe",
 			},
 		},
-		{
-			name: "ERSInstances",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `LD_LIBRARY_PATH=/usr/sap/ED7/ERS12/exe:$LD_LIBRARY_PATH; export LD_LIBRARY_PATH; /usr/sap/ED7/ERS12/exe/sapstartsrv pf=/usr/sap/ED7/SYS/profile/ED7_ERS12_aliders71 -D -u ed7adm
+	}, {
+		name: "ERSInstances",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `LD_LIBRARY_PATH=/usr/sap/ED7/ERS12/exe:$LD_LIBRARY_PATH; export LD_LIBRARY_PATH; /usr/sap/ED7/ERS12/exe/sapstartsrv pf=/usr/sap/ED7/SYS/profile/ED7_ERS12_aliders71 -D -u ed7adm
 					LD_LIBRARY_PATH=/usr/sap/FD7/ERS22/exe:$LD_LIBRARY_PATH; export LD_LIBRARY_PATH; /usr/sap/FD7/ERS22/exe/sapstartsrv pf=/usr/sap/FD7/ERS22/profile/FD7_ERS22_aliders71 -D -u fd7adm`,
-				}
+			}
+		},
+		want: []*instanceInfo{
+			&instanceInfo{
+				Sid:           "ED7",
+				Snr:           "12",
+				InstanceName:  "ERS",
+				ProfilePath:   "/usr/sap/ED7/SYS/profile/ED7_ERS12_aliders71",
+				LDLibraryPath: "/usr/sap/ED7/ERS12/exe",
 			},
-			want: []*instanceInfo{
-				&instanceInfo{
-					Sid:           "ED7",
-					Snr:           "12",
-					InstanceName:  "ERS",
-					ProfilePath:   "/usr/sap/ED7/SYS/profile/ED7_ERS12_aliders71",
-					LDLibraryPath: "/usr/sap/ED7/ERS12/exe",
-				},
-				&instanceInfo{
-					Sid:           "FD7",
-					Snr:           "22",
-					InstanceName:  "ERS",
-					ProfilePath:   "/usr/sap/FD7/ERS22/profile/FD7_ERS22_aliders71",
-					LDLibraryPath: "/usr/sap/FD7/ERS22/exe",
-				},
+			&instanceInfo{
+				Sid:           "FD7",
+				Snr:           "22",
+				InstanceName:  "ERS",
+				ProfilePath:   "/usr/sap/FD7/ERS22/profile/FD7_ERS22_aliders71",
+				LDLibraryPath: "/usr/sap/FD7/ERS22/exe",
 			},
 		},
-		{
-			name: "AlphaNumericSID",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `LD_LIBRARY_PATH=/usr/sap/H00/HDB01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/H00/HDB01/exe/sapstartsrv pf=/usr/sap/H00/SYS/profile/H00_HDB01_hana-ha-rh81sap-0-u1670561406-primary -D -u h00adm`,
-				}
-			},
-			want: []*instanceInfo{
-				&instanceInfo{
-					Sid:           "H00",
-					Snr:           "01",
-					InstanceName:  "HDB",
-					ProfilePath:   "/usr/sap/H00/SYS/profile/H00_HDB01_hana-ha-rh81sap-0-u1670561406-primary",
-					LDLibraryPath: "/usr/sap/H00/HDB01/exe",
-				},
+	}, {
+		name: "AlphaNumericSID",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `LD_LIBRARY_PATH=/usr/sap/H00/HDB01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/H00/HDB01/exe/sapstartsrv pf=/usr/sap/H00/SYS/profile/H00_HDB01_hana-ha-rh81sap-0-u1670561406-primary -D -u h00adm`,
+			}
+		},
+		want: []*instanceInfo{
+			&instanceInfo{
+				Sid:           "H00",
+				Snr:           "01",
+				InstanceName:  "HDB",
+				ProfilePath:   "/usr/sap/H00/SYS/profile/H00_HDB01_hana-ha-rh81sap-0-u1670561406-primary",
+				LDLibraryPath: "/usr/sap/H00/HDB01/exe",
 			},
 		},
-		{
-			name: "CommandFailure",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: cmpopts.AnyError,
-				}
-			},
-			wantErr: cmpopts.AnyError,
+	}, {
+		name: "CommandFailure",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				Error: cmpopts.AnyError,
+			}
 		},
-		{
-			name: "InvalidSapservicesEntry",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "/Not/SAP/Instance00",
-				}
-			},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "InvalidSapservicesEntry",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "/Not/SAP/Instance00",
+			}
 		},
-		{
-			name: "CommentedLine",
-			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `#LD_LIBRARY_PATH=/usr/sap/DEH/HDB00/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/DEH/HDB00/exe/sapstartsrv pf=/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci -D -u dehadm
+	}, {
+		name: "CommentedLine",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `#LD_LIBRARY_PATH=/usr/sap/DEH/HDB00/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;/usr/sap/DEH/HDB00/exe/sapstartsrv pf=/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci -D -u dehadm
 					LD_LIBRARY_PATH=/usr/sap/DEV/ASCS01/exe:$LD_LIBRARY_PATH;export LD_LIBRARY_PATH;sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm
 					/usr/sap/DEV/D02/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci -D -u devadm`,
-				}
+			}
+		},
+		want: []*instanceInfo{
+			&instanceInfo{
+				Sid:           "DEV",
+				Snr:           "01",
+				InstanceName:  "ASCS",
+				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci",
+				LDLibraryPath: "/usr/sap/DEV/ASCS01/exe",
 			},
-			want: []*instanceInfo{
-				&instanceInfo{
-					Sid:           "DEV",
-					Snr:           "01",
-					InstanceName:  "ASCS",
-					ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci",
-					LDLibraryPath: "/usr/sap/DEV/ASCS01/exe",
-				},
-				&instanceInfo{
-					Sid:           "DEV",
-					Snr:           "02",
-					InstanceName:  "D",
-					ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci",
-					LDLibraryPath: "/usr/sap/DEV/D02/exe",
-				},
+			&instanceInfo{
+				Sid:           "DEV",
+				Snr:           "02",
+				InstanceName:  "D",
+				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci",
+				LDLibraryPath: "/usr/sap/DEV/D02/exe",
 			},
 		},
-	}
+	}, {
+		name: "SapmntServices",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `systemctl --no-ask-password start SAPPRD_01 # sapstartsrv pf=/sapmnt/PRD/profile/PRD_ASCS01_alidascs11
+					systemctl --no-ask-password start SAPPRD_02 # sapstartsrv pf=/sapmnt/PRD/profile/PRD_ERS02_aliders11`,
+			}
+		},
+		want: []*instanceInfo{
+			&instanceInfo{
+				Sid:           "PRD",
+				Snr:           "01",
+				InstanceName:  "ASCS",
+				ProfilePath:   "/sapmnt/PRD/profile/PRD_ASCS01_alidascs11",
+				LDLibraryPath: "/usr/sap/PRD/ASCS01/exe",
+			},
+			&instanceInfo{
+				Sid:           "PRD",
+				Snr:           "02",
+				InstanceName:  "ERS",
+				ProfilePath:   "/sapmnt/PRD/profile/PRD_ERS02_aliders11",
+				LDLibraryPath: "/usr/sap/PRD/ERS02/exe",
+			},
+		},
+	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := listSAPInstances(context.Background(), test.fakeExec)
