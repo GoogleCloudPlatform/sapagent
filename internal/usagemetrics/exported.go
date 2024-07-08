@@ -83,7 +83,7 @@ func Misconfigured() {
 	Logger.Misconfigured()
 }
 
-// Error uses the standard Logger to log the ERROR status. This status is reported at most once per day.
+// Error uses the standard Logger to log the ERROR status.
 //
 // Any calls to Error should have an id mapping in this mapping sheet: go/sap-core-eng-tool-mapping.
 func Error(id int) {
