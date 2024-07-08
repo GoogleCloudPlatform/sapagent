@@ -25,6 +25,7 @@ import (
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/exp/slices"
@@ -61,6 +62,7 @@ DATABASE: DEH
 Operation succeed.
 `
 	defaultSID                = "ABC"
+	defaultSIDAdm             = "abcadm"
 	defaultInstanceNumber     = "00"
 	landscapeOutputSingleNode = `
 | Host        | Host   | Host   | Failover | Remove | Storage   | Storage   | Failover | Failover | NameServer | NameServer | IndexServer | IndexServer | Host    | Host    | Worker  | Worker  |
@@ -201,6 +203,14 @@ R3trans finished (0000).
 	app1, 11, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN
 	app2, 12, 51113, 51114, 3, ABAP|GATEWAY|ICMAN|IGS, GRAY
 	`
+	defaultProfileOutput = `
+rdisp/mshost = some-test-ascs
+dbs/hdb/dbname = DEH
+j2ee/dbname = DEH
+dbms/name = DEH
+dbid = DEH
+SAPDBHOST = test-instance
+	`
 )
 
 var (
@@ -216,7 +226,7 @@ var (
 		StdOut: defaultAppMountOutput,
 	}
 	defaultProfileResult = commandlineexecutor.Result{
-		StdOut: "rdisp/mshost = some-test-ascs",
+		StdOut: defaultProfileOutput,
 	}
 	hanaMountResult = commandlineexecutor.Result{
 		StdOut: defaultDBMountOutput,
@@ -377,6 +387,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 	tests := []struct {
 		name    string
 		exec    func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		abap    bool
 		want    []string
 		wantErr error
 	}{{
@@ -387,6 +398,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 				StdErr: "",
 			}
 		},
+		abap: true,
 		want: []string{"test-instance"},
 	}, {
 		name: "errGettingUserStore",
@@ -397,6 +409,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 				Error:  errors.New("error"),
 			}
 		},
+		abap:    true,
 		wantErr: cmpopts.AnyError,
 	}, {
 		name: "noHostsInUserstoreOutput",
@@ -406,6 +419,25 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 				StdErr: "",
 			}
 		},
+		abap:    true,
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "javaGrepEerror",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return defaultErrorResult
+		},
+		abap:    false,
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "javaNoHostInProfile",
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  nil,
+			}
+		},
+		abap:    false,
 		wantErr: cmpopts.AnyError,
 	}}
 	for _, test := range tests {
@@ -413,7 +445,7 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 			d := SapDiscovery{
 				Execute: test.exec,
 			}
-			got, err := d.discoverAppToDBConnection(context.Background(), defaultSID)
+			got, err := d.discoverAppToDBConnection(context.Background(), defaultSID, test.abap)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("discoverAppToDBConnection() mismatch (-want, +got):\n%s", diff)
 			}
@@ -424,18 +456,331 @@ func TestDiscoverAppToDBConnection(t *testing.T) {
 	}
 }
 
+func TestDiscoverDatabaseSIDUserStore(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		want    string
+		wantErr error
+	}{{
+		name: "hdbUserStoreErr",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("Some err"),
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "noSIDInUserStore",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "KEY default\nENV : dnwh75ldbci:30013\nUSER: SAPABAP1\nOperation succeed.",
+				StdErr: "",
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "sidInUserStore",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `KEY default
+				ENV : dnwh75ldbci:30013
+				USER: SAPABAP1
+				DATABASE: DEH
+			Operation succeed.`,
+				StdErr: "",
+			}
+		},
+		want: "DEH",
+	}}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := SapDiscovery{
+				Execute: tc.exec,
+			}
+			got, err := d.discoverDatabaseSIDUserStore(ctx, defaultSID, defaultSIDAdm)
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("discoverDatabaseSIDUserStore() error expectation: %s", diff)
+			}
+
+			if got != tc.want {
+				t.Errorf("discoverDatabaseSIDUserStore() = %q, want: %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDiscoverDatabaseSIDProfiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		abap    bool
+		want    string
+		wantErr error
+	}{{
+		name: "profileGrepErr",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+				Error:  errors.New("Some err"),
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "noSIDInGrep",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: "",
+				StdErr: "",
+			}
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name: "dbidInProfile",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+				dbid = HN1
+				SAPSYSTEMNAME = PTJ
+				#-----------------------------------------------------------------------
+				# SAP Central Service Instance for J2EE
+				#-----------------------------------------------------------------------
+				j2ee/scs/host = anjh75ldbci
+				j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		want: "HN1",
+	}, {
+		name: "dbmsNameInProfile",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+dbms/name = HN1
+SAPSYSTEMNAME = PTJ
+#-----------------------------------------------------------------------
+# SAP Central Service Instance for J2EE
+#-----------------------------------------------------------------------
+j2ee/scs/host = anjh75ldbci
+j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		want: "HN1",
+	}, {
+		name: "j2eeDbnameInProfile",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+j2ee/dbname = HN1
+SAPSYSTEMNAME = PTJ
+#-----------------------------------------------------------------------
+# SAP Central Service Instance for J2EE
+#-----------------------------------------------------------------------
+j2ee/scs/host = anjh75ldbci
+j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		want: "HN1",
+	}, {
+		name: "dbsHdbDbnameInProfile",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+dbs/hdb/dbname = HN1
+SAPSYSTEMNAME = PTJ
+#-----------------------------------------------------------------------
+# SAP Central Service Instance for J2EE
+#-----------------------------------------------------------------------
+j2ee/scs/host = anjh75ldbci
+j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		want: "HN1",
+	}, {
+		name: "abapAlwaysUsesDBID",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+dbs/hdb/dbname = HN4
+j2ee/dbname = HN3
+dbms/name = HN2
+dbid = HN1
+SAPSYSTEMNAME = PTJ
+#-----------------------------------------------------------------------
+# SAP Central Service Instance for J2EE
+#-----------------------------------------------------------------------
+j2ee/scs/host = anjh75ldbci
+j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: true,
+		want: "HN1",
+	}, {
+		name: "abapPrioritizesDbmsName",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+dbs/hdb/dbname = HN4
+j2ee/dbname = HN3
+dbms/name = HN2
+SAPSYSTEMNAME = PTJ
+#-----------------------------------------------------------------------
+# SAP Central Service Instance for J2EE
+#-----------------------------------------------------------------------
+j2ee/scs/host = anjh75ldbci
+j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: true,
+		want: "HN2",
+	}, {
+		name: "abapWithJ2eeName",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+dbs/hdb/dbname = HN4
+j2ee/dbname = HN3
+SAPSYSTEMNAME = PTJ
+#-----------------------------------------------------------------------
+# SAP Central Service Instance for J2EE
+#-----------------------------------------------------------------------
+j2ee/scs/host = anjh75ldbci
+j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: true,
+		want: "HN3",
+	}, {
+		name: "abapWithDbsHdbName",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+dbs/hdb/dbname = HN4
+SAPSYSTEMNAME = PTJ
+#-----------------------------------------------------------------------
+# SAP Central Service Instance for J2EE
+#-----------------------------------------------------------------------
+j2ee/scs/host = anjh75ldbci
+j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: true,
+		want: "HN4",
+	}, {
+		name: "javaAlwaysUsesJ2ee",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+	dbs/hdb/dbname = HN4
+	dbms/name = HN2
+	dbid = HN1
+	j2ee/dbname = HN3
+	SAPSYSTEMNAME = PTJ
+	#-----------------------------------------------------------------------
+	# SAP Central Service Instance for J2EE
+	#-----------------------------------------------------------------------
+	j2ee/scs/host = anjh75ldbci
+	j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: false,
+		want: "HN3",
+	}, {
+		name: "javaPrioritizesDbsHdbName",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+						dbms/name = HN2
+						dbid = HN1
+						dbs/hdb/dbname = HN4
+		SAPSYSTEMNAME = PTJ
+		#-----------------------------------------------------------------------
+		# SAP Central Service Instance for J2EE
+		#-----------------------------------------------------------------------
+		j2ee/scs/host = anjh75ldbci
+		j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: false,
+		want: "HN4",
+	}, {
+		name: "javaWithDbid",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+							dbms/name = HN2
+							dbid = HN1
+			SAPSYSTEMNAME = PTJ
+			#-----------------------------------------------------------------------
+			# SAP Central Service Instance for J2EE
+			#-----------------------------------------------------------------------
+			j2ee/scs/host = anjh75ldbci
+			j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: false,
+		want: "HN1",
+	}, {
+		name: "javaWithOnlyDbmsName",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `SAPDBHOST = anjh75ldbci
+								dbms/name = HN2
+				SAPSYSTEMNAME = PTJ
+				#-----------------------------------------------------------------------
+				# SAP Central Service Instance for J2EE
+				#-----------------------------------------------------------------------
+				j2ee/scs/host = anjh75ldbci
+				j2ee/scs/system = 01`,
+				StdErr: "",
+			}
+		},
+		abap: false,
+		want: "HN2",
+	}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := SapDiscovery{
+				Execute: tc.exec,
+			}
+			got, err := d.discoverDatabaseSIDProfiles(context.Background(), defaultSID, defaultSIDAdm, tc.abap)
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("discoverDatabaseSIDProfiles() error expectation diff: %s", diff)
+			}
+			if got != tc.want {
+				t.Errorf("discoverDatabaseSIDProfiles() = %q, want: %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDiscoverDatabaseSID(t *testing.T) {
 	var execCalls map[string]int
 	tests := []struct {
 		name          string
-		testSID       string
 		exec          commandlineexecutor.Execute
+		abap          bool
 		want          string
 		wantErr       error
 		wantExecCalls map[string]int
 	}{{
-		name:    "hdbUserStoreErr",
-		testSID: defaultSID,
+		name: "hdbUserStoreAndGrepError",
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			execCalls[params.Executable]++
 			return commandlineexecutor.Result{
@@ -444,12 +789,11 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 				Error:  errors.New("Some err"),
 			}
 		},
-		wantErr: cmpopts.AnyError,
-
-		wantExecCalls: map[string]int{"sudo": 1},
+		abap:          true,
+		wantErr:       cmpopts.AnyError,
+		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
 	}, {
-		name:    "profileGrepErr",
-		testSID: defaultSID,
+		name: "profileGrepErr",
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			execCalls[params.Executable]++
 			if params.Executable == "sudo" {
@@ -464,11 +808,11 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 				Error:  errors.New("Some err"),
 			}
 		},
+		abap:          true,
 		wantErr:       cmpopts.AnyError,
 		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
 	}, {
-		name:    "noSIDInGrep",
-		testSID: defaultSID,
+		name: "noSIDInGrep",
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			execCalls[params.Executable]++
 			return commandlineexecutor.Result{
@@ -476,11 +820,11 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 				StdErr: "",
 			}
 		},
+		abap:          true,
 		wantErr:       cmpopts.AnyError,
 		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
 	}, {
-		name:    "sidInUserStore",
-		testSID: defaultSID,
+		name: "sidInUserStore",
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			execCalls[params.Executable]++
 			if params.Executable == "sudo" {
@@ -499,12 +843,12 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 				Error:  errors.New("Some err"),
 			}
 		},
+		abap:          true,
 		want:          "DEH",
 		wantErr:       nil,
 		wantExecCalls: map[string]int{"sudo": 1},
 	}, {
-		name:    "sidInProfiles",
-		testSID: defaultSID,
+		name: "sidInProfiles",
 		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			execCalls[params.Executable]++
 			if params.Executable == "sudo" {
@@ -515,14 +859,35 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 			}
 			return commandlineexecutor.Result{
 				StdOut: `
-				grep: /usr/sap/S15/SYS/profile/DEFAULT.PFL: Permission denied
 				/usr/sap/S15/SYS/profile/s:rsdb/dbid = HN1`,
 				StdErr: "",
 			}
 		},
+		abap:          true,
 		want:          "HN1",
 		wantErr:       nil,
 		wantExecCalls: map[string]int{"sudo": 1, "sh": 1},
+	}, {
+		name: "javaOnlyUsesProfile",
+		exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			execCalls[params.Executable]++
+			if params.Executable == "sudo" {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "",
+					Error:  errors.New("Unexpected call to sudo"),
+				}
+			}
+			return commandlineexecutor.Result{
+				StdOut: `
+				/usr/sap/S15/SYS/profile/s:rsdb/dbid = HN1`,
+				StdErr: "",
+			}
+		},
+		abap:          false,
+		want:          "HN1",
+		wantErr:       nil,
+		wantExecCalls: map[string]int{"sh": 1},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -530,7 +895,7 @@ func TestDiscoverDatabaseSID(t *testing.T) {
 			d := SapDiscovery{
 				Execute: test.exec,
 			}
-			got, gotErr := d.discoverDatabaseSID(context.Background(), test.testSID)
+			got, gotErr := d.discoverDatabaseSID(context.Background(), defaultSID, test.abap)
 			if test.want != "" {
 				if got != test.want {
 					t.Errorf("discoverDatabaseSID() = %q, want %q", got, test.want)
@@ -1029,7 +1394,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			case "sudo":
 				log.CtxLogger(ctx).Infof("important test!! - sudo: %v", params.Args)
 				if slices.Contains(params.Args, "hdbuserstore") {
-					return defaultUserStoreResult
+					return defaultErrorResult
 				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
 					return defaultFailoverConfigResult
 				} else if slices.Contains(params.Args, "R3trans") {
@@ -1042,6 +1407,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 				return defaultProfileResult
 			case "df":
 				return netweaverMountResult
+			case "sh":
+				return defaultProfileResult
 			}
 			return commandlineexecutor.Result{
 				StdErr:   "Unexpected command",
@@ -1424,6 +1791,8 @@ func TestDiscoverNetweaver(t *testing.T) {
 				return defaultProfileResult
 			case "df":
 				return netweaverMountResult
+			case "sh":
+				return defaultProfileResult
 			}
 			return commandlineexecutor.Result{
 				StdErr:   "Unexpected command",
@@ -2092,20 +2461,20 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // Java
 			}, {
-				Executable: "sudo", // hdbuserstore
+				Executable: "sh", // profile for SID
 			}, {
-				Executable: "sudo", // hdbuserstore
+				Executable: "sh", // profile for nodes
 			}},
 			results: []commandlineexecutor.Result{
+				defaultProfileResult,                                             // Get profile
+				netweaverMountResult,                                             // Get NFS
+				defaultNetweaverKernelResult,                                     // Kernel version
+				defaultFailoverConfigResult,                                      // Failover config
+				defaultNetweaverInstanceListResult,                               // Netweaver hosts
+				commandlineexecutor.Result{Error: errors.New("R3trans err")},     // ABAP
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")}, // Java
+				defaultProfileResult,                                             // profile for SID
 				defaultProfileResult,
-				netweaverMountResult,
-				defaultNetweaverKernelResult,
-				defaultFailoverConfigResult,
-				defaultNetweaverInstanceListResult,
-				commandlineexecutor.Result{Error: errors.New("R3trans err")},
-				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
-				defaultUserStoreResult,
-				defaultUserStoreResult,
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -2190,9 +2559,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // Java
 			}, {
-				Executable: "sudo", // hdbuserstore
+				Executable: "sh", // profile for SID
 			}, {
-				Executable: "sudo", // hdbuserstore
+				Executable: "sh", // profile for nodes
 			}, {
 				Executable: "grep", // Get profile
 			}, {
@@ -2208,29 +2577,29 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo", // Java
 			}, {
-				Executable: "sudo", // hdbuserstore
+				Executable: "sh", // profile for SID
 			}, {
-				Executable: "sudo", // hdbuserstore
+				Executable: "sh", // profile for nodes
 			}},
 			results: []commandlineexecutor.Result{
-				defaultProfileResult,
-				netweaverMountResult,
-				defaultNetweaverKernelResult,
-				defaultFailoverConfigResult,
-				defaultNetweaverInstanceListResult,
-				commandlineexecutor.Result{Error: errors.New("R3trans err")},
-				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
-				defaultUserStoreResult,
-				defaultUserStoreResult,
-				defaultProfileResult,
-				netweaverMountResult,
-				defaultNetweaverKernelResult,
-				defaultFailoverConfigResult,
-				defaultNetweaverInstanceListResult,
-				commandlineexecutor.Result{Error: errors.New("R3trans err")},
-				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
-				defaultUserStoreResult,
-				defaultUserStoreResult,
+				defaultProfileResult,                                             // Get profile
+				netweaverMountResult,                                             // Get NFS
+				defaultNetweaverKernelResult,                                     // Kernel version
+				defaultFailoverConfigResult,                                      // Failover config
+				defaultNetweaverInstanceListResult,                               // Netweaver hosts
+				commandlineexecutor.Result{Error: errors.New("R3trans err")},     // ABAP
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")}, // Java
+				defaultProfileResult,                                             // profile for SID
+				defaultProfileResult,                                             // profile for nodes
+				defaultProfileResult,                                             // Get profile
+				netweaverMountResult,                                             // Get NFS
+				defaultNetweaverKernelResult,                                     // Kernel version
+				defaultFailoverConfigResult,                                      // Failover config
+				defaultNetweaverInstanceListResult,                               // Netweaver hosts
+				commandlineexecutor.Result{Error: errors.New("R3trans err")},     // ABAP
+				commandlineexecutor.Result{Error: errors.New("batchconfig err")}, // Java
+				defaultProfileResult,                                             // profile for SID
+				defaultProfileResult,                                             // profile for nodes
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -2465,11 +2834,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/J11/j2ee/configtool/batchconfig.csh", "-task", "get.versions.of.deployed.units"},
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
+				Executable:  "sh",
+				ArgsToSplit: `-c 'grep "dbid\|dbms/name\|j2ee/dbname\|dbs/hdb/dbname" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
+				Executable:  "sh",
+				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "dehadm", "python", "/usr/sap/DEH/HDB00/exe/python_support/landscapeHostConfiguration.py"},
@@ -2489,8 +2858,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
-				defaultUserStoreResult,
-				defaultUserStoreResult,
+				defaultProfileResult,
+				defaultProfileResult,
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
@@ -2614,11 +2983,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/J11/j2ee/configtool/batchconfig.csh", "-task", "get.versions.of.deployed.units"},
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
+				Executable:  "sh",
+				ArgsToSplit: `-c 'grep "dbid\|dbms/name\|j2ee/dbname\|dbs/hdb/dbname" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
+				Executable:  "sh",
+				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult,
@@ -2631,8 +3000,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
-				defaultUserStoreResult,
-				defaultUserStoreResult,
+				defaultProfileResult,
+				defaultProfileResult,
 			},
 		},
 		fileSystem: &fakefs.FileSystem{
@@ -2733,11 +3102,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/J11/j2ee/configtool/batchconfig.csh", "-task", "get.versions.of.deployed.units"},
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list"},
+				Executable:  "sh",
+				ArgsToSplit: `-c 'grep "dbid\|dbms/name\|j2ee/dbname\|dbs/hdb/dbname" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
-				Executable: "sudo",
-				Args:       []string{"-i", "-u", "abcadm", "hdbuserstore", "list", "DEFAULT"},
+				Executable:  "sh",
+				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "db2adm", "python", "/usr/sap/DB2/HDB00/exe/python_support/landscapeHostConfiguration.py"},
@@ -2757,8 +3126,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				commandlineexecutor.Result{Error: errors.New("batchconfig error")},
-				defaultUserStoreResult,
-				defaultUserStoreResult,
+				defaultProfileResult,
+				defaultProfileResult,
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,

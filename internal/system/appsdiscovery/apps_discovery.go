@@ -44,6 +44,7 @@ var (
 	hanaVersionRegex          = regexp.MustCompile(`version:\s+(([0-9]+\.?)+)`)
 	netweaverKernelRegex      = regexp.MustCompile(`kernel release\s+([0-9]+)`)
 	netweaverPatchNumberRegex = regexp.MustCompile(`patch number\s+([0-9]+)`)
+	sapDbHostRegex            = regexp.MustCompile(`SAPDBHOST\s+=\s+(.*)`)
 )
 
 const (
@@ -52,6 +53,10 @@ const (
 	r3transTmpFolder     = "/tmp/r3trans/"
 	tmpControlFilePath   = r3transTmpFolder + "export_products.ctl"
 	r3transOutputPath    = r3transTmpFolder + "output.txt"
+	profileDBIDNameKey   = "dbid"
+	profileDBMSNameKey   = "dbms/name"
+	profileJ2EEDBNameKey = "j2ee/dbname"
+	profileDBSHDBNameKey = "dbs/hdb/dbname"
 )
 
 type fileReader func(filename string) ([]byte, error)
@@ -321,27 +326,29 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	}
 
 	log.CtxLogger(ctx).Debugw("Checking config", "config", conf)
+	var isABAP bool
+	var wlProps *spb.SapDiscovery_WorkloadProperties
 	if conf.GetEnableWorkloadDiscovery().GetValue() {
-		isABAP, wlProps, err := d.discoverNetweaverABAP(ctx, app)
+		isABAP, wlProps, err = d.discoverNetweaverABAP(ctx, app)
 		if err != nil {
 			log.CtxLogger(ctx).Infow("Encountered error during call to discoverNetweaverABAP.", "error", err)
 		}
-		if isABAP {
-			appProps.ApplicationType = spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP
-		} else {
-			isJava, javaProps, err := d.discoverNetweaverJava(ctx, app)
-			if err != nil {
-				log.CtxLogger(ctx).Infow("Encountered error during call to discoverNetweaverJava.", "error", err)
-			}
-			if isJava {
-				wlProps = javaProps
-				appProps.ApplicationType = spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_JAVA
-			}
-		}
-		details.WorkloadProperties = wlProps
 	}
+	if isABAP {
+		appProps.ApplicationType = spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP
+	} else {
+		isJava, javaProps, err := d.discoverNetweaverJava(ctx, app)
+		if err != nil {
+			log.CtxLogger(ctx).Infow("Encountered error during call to discoverNetweaverJava.", "error", err)
+		}
+		if isJava {
+			wlProps = javaProps
+			appProps.ApplicationType = spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_JAVA
+		}
+	}
+	details.WorkloadProperties = wlProps
 
-	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid)
+	dbSID, err := d.discoverDatabaseSID(ctx, app.Sapsid, isABAP)
 	if err != nil {
 		return details
 	}
@@ -349,7 +356,7 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		Sid:          dbSID,
 		TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 	}
-	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid)
+	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid, isABAP)
 	if err != nil {
 		return details
 	}
@@ -508,22 +515,45 @@ func (d *SapDiscovery) discoverNetweaverHA(ctx context.Context, app *sappb.SAPIn
 	return ha, nodes
 }
 
-func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string) ([]string, error) {
+func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string, abap bool) (dbHosts []string, err error) {
 	sidLower := strings.ToLower(sid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	result := d.Execute(ctx, commandlineexecutor.Params{
-		Executable: "sudo",
-		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list", "DEFAULT"},
-	})
-	if result.Error != nil {
-		log.CtxLogger(ctx).Infow("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
-		return nil, result.Error
-	}
+	if abap {
+		result := d.Execute(ctx, commandlineexecutor.Params{
+			Executable: "sudo",
+			Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list", "DEFAULT"},
+		})
+		if result.Error != nil {
+			log.CtxLogger(ctx).Infow("Error retrieving hdbuserstore info", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
+			return nil, result.Error
+		}
 
-	dbHosts := parseDBHosts(result.StdOut)
-	if len(dbHosts) == 0 {
-		log.CtxLogger(ctx).Infow("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
-		return nil, errors.New("Unable to find DB hostname and port in hdbuserstore output")
+		dbHosts = parseDBHosts(result.StdOut)
+		if len(dbHosts) == 0 {
+			log.CtxLogger(ctx).Infow("Unable to find DB hostname and port in hdbuserstore output", "sid", sid)
+			return nil, errors.New("Unable to find DB hostname and port in hdbuserstore output")
+		}
+	} else {
+		sidUpper := strings.ToUpper(sid)
+		profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/*", sidUpper)
+		result := d.Execute(ctx, commandlineexecutor.Params{
+			Executable:  "sh",
+			ArgsToSplit: `-c 'grep "SAPDBHOST" ` + profilePath + `'`,
+		})
+		if result.Error != nil {
+			log.CtxLogger(ctx).Infow("Error retrieving DB hosts from profile", "sid", sid, "error", result.Error, "stdout", result.StdOut, "stderr", result.StdErr)
+			return nil, result.Error
+		}
+		matches := sapDbHostRegex.FindAllStringSubmatch(result.StdOut, -1)
+		if len(matches) == 0 {
+			log.CtxLogger(ctx).Infow("Unable to find DB hostname and port in profile output", "sid", sid)
+			return nil, errors.New("Unable to find DB hostname and port in profile output")
+		}
+		for _, m := range matches {
+			if len(m) > 1 {
+				dbHosts = append(dbHosts, m[1])
+			}
+		}
 	}
 
 	return dbHosts, nil
@@ -803,16 +833,32 @@ func parseDBHosts(s string) (dbHosts []string) {
 	return dbHosts
 }
 
-func (d *SapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (string, error) {
+func (d *SapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string, abap bool) (string, error) {
 	sidLower := strings.ToLower(appSID)
 	sidUpper := strings.ToUpper(appSID)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
+	if abap {
+		sid, _ := d.discoverDatabaseSIDUserStore(ctx, sidUpper, sidAdm)
+		if sid != "" {
+			return sid, nil
+		}
+	}
+
+	sid, _ := d.discoverDatabaseSIDProfiles(ctx, sidUpper, sidAdm, abap)
+	if sid != "" {
+		return sid, nil
+	}
+
+	return "", errors.New("no database SID found")
+}
+
+func (d *SapDiscovery) discoverDatabaseSIDUserStore(ctx context.Context, sidUpper string, sidAdm string) (string, error) {
 	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable: "sudo",
 		Args:       []string{"-i", "-u", sidAdm, "hdbuserstore", "list"},
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Infow("Error retrieving hdbuserstore info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Infow("Error retrieving hdbuserstore info", "sid", sidUpper, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
@@ -826,30 +872,99 @@ func (d *SapDiscovery) discoverDatabaseSID(ctx context.Context, appSID string) (
 		return sid[1], nil
 	}
 
+	return "", errors.New("no database SID found in userstore")
+}
+
+func (d *SapDiscovery) discoverDatabaseSIDProfiles(ctx context.Context, sidUpper string, sidAdm string, abap bool) (string, error) {
 	// No DB SID in userstore, check profiles
 	profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/*", sidUpper)
-	result = d.Execute(ctx, commandlineexecutor.Params{
+	result := d.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "sh",
-		ArgsToSplit: `-c 'grep "dbid\|dbms/name" ` + profilePath + `'`,
+		ArgsToSplit: `-c 'grep "dbid\|dbms/name\|j2ee/dbname\|dbs/hdb/dbname" ` + profilePath + `'`,
 	})
 
+	log.CtxLogger(ctx).Debugw("Profile grep output", "sid", sidUpper, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+
 	if result.Error != nil {
-		log.CtxLogger(ctx).Infow("Error retrieving sap profile info", "sid", appSID, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
+		log.CtxLogger(ctx).Infow("Error retrieving sap profile info", "sid", sidUpper, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr)
 		return "", result.Error
 	}
 
-	re, err = regexp.Compile(`(dbid|dbms\/name)\s*=\s*([a-zA-Z][a-zA-Z0-9]{2})`)
+	re, err := regexp.Compile(`(dbid|dbms\/name|j2ee\/dbname|dbs\/hdb\/dbname)\s*=\s*([a-zA-Z][a-zA-Z0-9]{2})`)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Error compiling regex", "error", err)
 		return "", err
 	}
-	sid = re.FindStringSubmatch(result.StdOut)
-	if len(sid) > 2 {
-		log.CtxLogger(ctx).Infow("Found DB SID", "sid", sid[2])
-		return sid[2], nil
+	matches := re.FindAllStringSubmatch(result.StdOut, -1)
+	log.CtxLogger(ctx).Debugw("Profile grep matches", "sid", sidUpper, "matches", matches)
+	var sidKey, sidValue string
+	if len(matches) == 1 {
+		log.CtxLogger(ctx).Debugw("Single match", "sid", sidUpper, "match", matches[0])
+		match := matches[0]
+		if len(match) > 2 {
+			sidValue = match[2]
+			log.CtxLogger(ctx).Debugw("Match", "sid", sidValue, "match", match)
+		}
+	} else if len(matches) > 1 {
+		log.CtxLogger(ctx).Debugw("Multiple matches", "sid", sidUpper, "matches", matches)
+		// Multiple matches, prioritize based on abap or Java
+		// ABAP order: dbid, dbms/name, j2ee/dbname, dbs/hdb/dbname
+		// Java order: j2ee/dbname, dbs/hdb/dbname, dbid, dbms/name
+	matchLoop:
+		for _, match := range matches {
+			log.CtxLogger(ctx).Debugw("Match", "sid", sidUpper, "match", match)
+			if len(match) > 2 {
+				if abap {
+					switch match[1] {
+					case profileDBIDNameKey:
+						sidValue = match[2]
+						break matchLoop
+					case profileDBMSNameKey:
+						if sidValue == "" || sidKey == "j2ee/dbname" || sidKey == "dbs/hdb/dbname" {
+							sidKey = match[1]
+							sidValue = match[2]
+						}
+					case profileJ2EEDBNameKey:
+						if sidValue == "" || sidKey == "dbs/hdb/dbname" {
+							sidKey = match[1]
+							sidValue = match[2]
+						}
+					case profileDBSHDBNameKey:
+						if sidValue == "" {
+							sidKey = match[1]
+							sidValue = match[2]
+						}
+					}
+				} else {
+					switch match[1] {
+					case profileJ2EEDBNameKey:
+						sidValue = match[2]
+						break matchLoop
+					case profileDBSHDBNameKey:
+						if sidValue == "" || sidKey == "dbid" || sidKey == "dbms/name" {
+							sidKey = match[1]
+							sidValue = match[2]
+						}
+					case profileDBIDNameKey:
+						if sidValue == "" || sidKey == "dbms/name" {
+							sidKey = match[1]
+							sidValue = match[2]
+						}
+					case profileDBMSNameKey:
+						if sidValue == "" {
+							sidValue = match[2]
+							sidKey = match[1]
+						}
+					}
+				}
+			}
+		}
 	}
 
-	return "", errors.New("No database SID found")
+	if sidValue == "" {
+		return "", errors.New("No database SID found in profiles")
+	}
+	return sidValue, nil
 }
 
 func (d *SapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber string) ([]string, error) {
