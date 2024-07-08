@@ -76,6 +76,13 @@ type (
 // If name is empty, file logging and usage metrics will not occur.
 // Returns the parsed args, and a bool indicating if initialization completed.
 func Init(ctx context.Context, opt InitOptions, args ...any) (log.Parameters, *iipb.CloudProperties, subcommands.ExitStatus, bool) {
+	// If the user provided a log path, check that it
+	// is not a path to directory to prevent
+	// unintentional directory access issues for the user.
+	if _, err := os.ReadDir(opt.LogPath); opt.LogPath != "" && err == nil {
+		log.CtxLogger(ctx).Errorf("Invalid log-path provided: %s is a directory. Please provide a path to a file", opt.LogPath)
+		return log.Parameters{}, nil, subcommands.ExitUsageError, false
+	}
 	if opt.IIOTE != nil {
 		// OTE is invoked internally, no need to run the below assertions, setting up one time logging
 		// and usage metrics is enough.
