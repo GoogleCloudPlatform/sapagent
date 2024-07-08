@@ -153,6 +153,18 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		extraLabels := map[string]string{
 			"ha_members": strings.Join(p.SAPInstance.GetHanaHaMembers(), ","),
 		}
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:    metricURL + pmHAReplicationPath,
+			Message: "HA Replication",
+			Value:   "0",
+			Labels:  appendLabels(p, extraLabels),
+		})
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:    metricURL + pmHAAvailabilityPath,
+			Message: "HA Availability",
+			Value:   "0",
+			Labels:  appendLabels(p, nil),
+		})
 		now := tspb.Now()
 		res = append(res, createMetrics(p, pmHAReplicationPath, extraLabels, now, 0))
 		res = append(res, createMetrics(p, pmHAAvailabilityPath, nil, now, 0))
@@ -219,6 +231,18 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 				usagemetrics.Action(usagemetrics.ReliabilityHANAHAAvailable)
 			}
 		} else {
+			metricevents.AddEvent(ctx, metricevents.Parameters{
+				Path:    metricURL + pmHAReplicationPath,
+				Message: "HA Replication",
+				Value:   strconv.FormatInt(int64(haReplicationValue), 10),
+				Labels:  appendLabels(ip, extraLabels),
+			})
+			metricevents.AddEvent(ctx, metricevents.Parameters{
+				Path:    metricURL + pmHAAvailabilityPath,
+				Message: "HA Availability",
+				Value:   strconv.FormatInt(int64(haAvailabilityValue), 10),
+				Labels:  appendLabels(ip, nil),
+			})
 			metrics = append(metrics, createMetrics(ip, pmHAReplicationPath, extraLabels, now, haReplicationValue))
 			metrics = append(metrics, createMetrics(ip, pmHAAvailabilityPath, nil, now, haAvailabilityValue))
 		}

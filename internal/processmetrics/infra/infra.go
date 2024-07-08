@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -31,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 )
 
@@ -114,7 +116,7 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	}
 	log.CtxLogger(ctx).Info("Collecting infrastructure metrics")
 
-	scheduledMigration, err := collectScheduledMigration(p, metadataServerCall)
+	scheduledMigration, err := collectScheduledMigration(ctx, p, metadataServerCall)
 	if err != nil {
 		metricsCollectionErr = err
 	}
@@ -152,7 +154,7 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 	return res, err
 }
 
-func collectScheduledMigration(p *Properties, f func() (string, error)) ([]*mrpb.TimeSeries, error) {
+func collectScheduledMigration(ctx context.Context, p *Properties, f func() (string, error)) ([]*mrpb.TimeSeries, error) {
 	if _, ok := p.skippedMetrics[migrationPath]; ok {
 		return []*mrpb.TimeSeries{}, nil
 	}
@@ -164,6 +166,11 @@ func collectScheduledMigration(p *Properties, f func() (string, error)) ([]*mrpb
 	if event == metadataMigrationResponse {
 		scheduledMigration = 1
 	}
+	metricevents.AddEvent(ctx, metricevents.Parameters{
+		Path:       metricURL + migrationPath,
+		Message:    "Scheduled Migration",
+		Value:      strconv.FormatInt(scheduledMigration, 10),
+	})
 	return []*mrpb.TimeSeries{p.createIntMetric(migrationPath, scheduledMigration)}, nil
 }
 

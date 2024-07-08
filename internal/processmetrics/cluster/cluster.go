@@ -23,6 +23,8 @@ package cluster
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
@@ -30,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -178,6 +181,13 @@ func collectNodeState(ctx context.Context, p *InstanceProperties, read readPacem
 			"node": name,
 		}
 		nodeMetric := createMetrics(p, nodesPath, extraLabels, now, int64(nodeValue))
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:       metricURL + nodesPath,
+			Message:    fmt.Sprintf("Pacemaker Node State for %s", name),
+			Value:      strconv.FormatInt(int64(nodeValue), 10),
+			Labels:     metricLabels(p, extraLabels),
+			Identifier: name,
+		})
 		metrics = append(metrics, nodeMetric)
 	}
 	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in nodeState()", "time", time.Since(now.AsTime()))
@@ -217,6 +227,13 @@ func collectResourceState(ctx context.Context, p *InstanceProperties, read readP
 			"resource": r.Name,
 		}
 		resourceMetric := createMetrics(p, resourcesPath, extraLabels, now, int64(rValue))
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:       metricURL + resourcesPath,
+			Message:    fmt.Sprintf("Pacemaker Resource State for %s", key),
+			Value:      strconv.FormatInt(int64(rValue), 10),
+			Labels:     metricLabels(p, extraLabels),
+			Identifier: key,
+		})
 		metrics = append(metrics, resourceMetric)
 	}
 	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in resourceState()", "time", time.Since(now.AsTime()))
@@ -256,6 +273,13 @@ func collectFailCount(ctx context.Context, p *InstanceProperties, read readPacem
 			"resource": r.ResourceName,
 		}
 		metrics = append(metrics, createMetrics(p, failCountsPath, extraLabels, now, int64(r.FailCount)))
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:       metricURL + failCountsPath,
+			Message:    fmt.Sprintf("Pacemaker Resource Fail Count for %s:%s", r.ResourceName, r.Node),
+			Value:      strconv.FormatInt(int64(r.FailCount), 10),
+			Labels:     metricLabels(p, extraLabels),
+			Identifier: fmt.Sprintf("%s:%s", r.ResourceName, r.Node),
+		})
 		metricValues = append(metricValues, r.FailCount)
 	}
 	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in collectFailCount()", "time", time.Since(now.AsTime()))

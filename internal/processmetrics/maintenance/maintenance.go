@@ -30,10 +30,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -201,6 +203,13 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 			BoolValue:    mntmode,
 			BareMetal:    p.Config.BareMetal,
 		}
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:       metricURL + mntmodePath,
+			Message:    fmt.Sprintf("Maintenance Mode for SID %s", sid),
+			Value:      strconv.FormatBool(mntmode),
+			Labels:     labels,
+			Identifier: sid,
+		})
 		metrics = append(metrics, timeseries.BuildBool(params))
 	}
 	return metrics, nil

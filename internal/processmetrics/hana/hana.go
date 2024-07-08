@@ -189,7 +189,7 @@ func collectHANAServiceMetrics(ctx context.Context, ip *InstanceProperties, scc 
 				"pid":          process.PID,
 			}
 			metricevents.AddEvent(ctx, metricevents.Parameters{
-				Path:       servicePath,
+				Path:       metricURL + servicePath,
 				Message:    fmt.Sprintf("HANA Service Availability for %s", process.Name),
 				Value:      strconv.FormatInt(boolToInt64(process.IsGreen), 10),
 				Labels:     appendLabels(ip, extraLabels),
@@ -229,6 +229,12 @@ func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec co
 	}
 
 	log.CtxLogger(ctx).Debugw("HANA query metrics for instance", "instanceid", p.SAPInstance.GetInstanceId(), "querystate", queryState)
+	metricevents.AddEvent(ctx, metricevents.Parameters{
+		Path:    metricURL + queryStatePath,
+		Message: fmt.Sprintf("HANA Query State for instance %s", p.SAPInstance.GetInstanceId()),
+		Value:   strconv.FormatInt(queryState.state, 10),
+		Labels:  appendLabels(p, nil),
+	})
 	return []*mrpb.TimeSeries{
 		createMetrics(p, queryStatePath, nil, now, queryState.state),
 		createMetrics(p, queryOverallTimePath, nil, now, queryState.overallTime),

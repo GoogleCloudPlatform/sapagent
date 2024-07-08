@@ -206,7 +206,7 @@ func TestCollectScheduledMigration_MetricCount(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, _ := collectScheduledMigration(test.properties, test.fakeMetadataServerCall)
+			got, _ := collectScheduledMigration(context.Background(), test.properties, test.fakeMetadataServerCall)
 			// Test one metric is exported in case of successful call to the metadata server.
 			if len(got) != test.wantCount {
 				t.Errorf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), test.wantCount)
@@ -235,7 +235,7 @@ func TestCollectScheduledMigration_MetricValue(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, _ := collectScheduledMigration(defaultProperties, test.fakeMetadataServerCall)
+			got, _ := collectScheduledMigration(context.Background(), defaultProperties, test.fakeMetadataServerCall)
 			if len(got) != 1 {
 				t.Fatalf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), 1)
 			}
@@ -254,7 +254,7 @@ func TestCollectScheduledMigration_MetricValue(t *testing.T) {
 
 func TestCollectScheduledMigration_MetricType(t *testing.T) {
 	want := "workload.googleapis.com/sap/infra/migration"
-	got, _ := collectScheduledMigration(defaultProperties, func() (string, error) { return "", nil })
+	got, _ := collectScheduledMigration(context.Background(), defaultProperties, func() (string, error) { return "", nil })
 	if len(got) != 1 {
 		t.Fatalf("collectScheduledMigration() returned unexpected metric count: got=%d, want=%d", len(got), 1)
 	}
