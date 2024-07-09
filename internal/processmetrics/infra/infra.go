@@ -140,13 +140,19 @@ func (p *Properties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, 
 		res     []*mrpb.TimeSeries
 	)
 	err := backoff.Retry(func() error {
-		var err error
-		res, err = p.Collect(ctx)
-		if err != nil {
-			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
-			attempt++
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Debugw("Context cancelled, exiting CollectWithRetry")
+			return nil
+		default:
+			var err error
+			res, err = p.Collect(ctx)
+			if err != nil {
+				log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
+				attempt++
+			}
+			return err
 		}
-		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Retry limit exceeded", "error", err)
@@ -167,9 +173,9 @@ func collectScheduledMigration(ctx context.Context, p *Properties, f func() (str
 		scheduledMigration = 1
 	}
 	metricevents.AddEvent(ctx, metricevents.Parameters{
-		Path:       metricURL + migrationPath,
-		Message:    "Scheduled Migration",
-		Value:      strconv.FormatInt(scheduledMigration, 10),
+		Path:    metricURL + migrationPath,
+		Message: "Scheduled Migration",
+		Value:   strconv.FormatInt(scheduledMigration, 10),
 	})
 	return []*mrpb.TimeSeries{p.createIntMetric(migrationPath, scheduledMigration)}, nil
 }

@@ -173,6 +173,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 
 	roleMetrics, err := collectRoleMetrics(ctx, p, commandlineexecutor.ExecuteCommand)
 	if err != nil {
+		log.CtxLogger(ctx).Debugw("Error in collecting role metrics", "error", err)
 		metricsCollectionError = err
 	}
 	if roleMetrics != nil {
@@ -189,18 +190,25 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		res     []*mrpb.TimeSeries
 	)
 	err := backoff.Retry(func() error {
-		log.CtxLogger(ctx).Infow("Attempting collector retry", "attempt", attempt)
-		var err error
-		res, err = p.Collect(ctx)
-		if err != nil {
-			log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
-			attempt++
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("Process metrics context cancelled, exiting collectAndSend.")
+			return nil
+		default:
+			log.CtxLogger(ctx).Infow("Attempting collector retry", "attempt", attempt)
+			var err error
+			res, err = p.Collect(ctx)
+			if err != nil {
+				log.CtxLogger(ctx).Debugw("Error in Collection", "attempt", attempt, "error", err)
+				attempt++
+			}
+			return err
 		}
-		return err
 	}, p.PMBackoffPolicy)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Retry limit exceeded", "InstanceId", p.SAPInstance.GetInstanceId(), "error", err)
 	}
+	log.CtxLogger(ctx).Debugw("Collected netweaver metrics", "metrics", res)
 	return res, err
 }
 
@@ -267,7 +275,7 @@ func collectHTTPMetrics(ctx context.Context, p *InstanceProperties) ([]*mrpb.Tim
 	}
 	log.CtxLogger(ctx).Debugw("SAP Instance HTTP health check", "instanceid", p.SAPInstance.GetInstanceId(), "url", url)
 
-	switch p.SAPInstance.GetServiceName() {
+	switch strings.ToUpper(p.SAPInstance.GetServiceName()) {
 	case "SAP-ICM-ABAP", "SAP-ICM-JAVA":
 		return collectICMMetrics(ctx, p, url)
 	case "SAP-CS":
@@ -588,20 +596,20 @@ func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec command
 			continue
 		}
 		bin := cols[7]
-		if strings.HasPrefix(bin, "enqr") {
+		if strings.HasPrefix(bin, "enqr.") {
 			log.CtxLogger(ctx).Debugw("Found enqr", "bin", bin)
 			roles["ers"] = "true"
 			hasRole = true
 		}
-		if strings.HasPrefix(bin, "ms") {
+		if strings.HasPrefix(bin, "ms.") {
 			log.CtxLogger(ctx).Debugw("Found ms", "bin", bin)
 			hasMS = true
 		}
-		if strings.HasPrefix(bin, "enq.") {
-			log.CtxLogger(ctx).Debugw("Found enq.", "bin", bin)
+		if strings.HasPrefix(bin, "enq.") || strings.HasPrefix(bin, "en.") {
+			log.CtxLogger(ctx).Debugw("Found enqueue process", "bin", bin)
 			hasEnq = true
 		}
-		if strings.HasPrefix(bin, "dw") || strings.HasPrefix(bin, "jstart") {
+		if strings.HasPrefix(bin, "dw.") || strings.HasPrefix(bin, "jstart.") {
 			log.CtxLogger(ctx).Debugw("Found dw or jstart", "bin", bin)
 			hasRole = true
 			roles["app"] = "true"
