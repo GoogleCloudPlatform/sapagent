@@ -766,6 +766,30 @@ func TestListSAPInstances(t *testing.T) {
 				LDLibraryPath: "/usr/sap/PRD/ERS02/exe",
 			},
 		},
+	}, {
+		name: "SingleDigitSNR",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `systemctl --no-ask-password start SAPPRD_01 # sapstartsrv pf=/sapmnt/PRD/profile/PRD_ASCS1_alidascs11
+					systemctl --no-ask-password start SAPPRD_02 # sapstartsrv pf=/sapmnt/PRD/profile/PRD_ERS2_aliders11`,
+			}
+		},
+		want: []*instanceInfo{
+			&instanceInfo{
+				Sid:           "PRD",
+				Snr:           "01",
+				InstanceName:  "ASCS",
+				ProfilePath:   "/sapmnt/PRD/profile/PRD_ASCS1_alidascs11",
+				LDLibraryPath: "/usr/sap/PRD/ASCS01/exe",
+			},
+			&instanceInfo{
+				Sid:           "PRD",
+				Snr:           "02",
+				InstanceName:  "ERS",
+				ProfilePath:   "/sapmnt/PRD/profile/PRD_ERS2_aliders11",
+				LDLibraryPath: "/usr/sap/PRD/ERS02/exe",
+			},
+		},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

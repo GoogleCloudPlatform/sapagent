@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/encoding/prototext"
@@ -382,11 +383,17 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 			log.CtxLogger(ctx).Debugw("No SAP instance profile found", "line", line, "match", profile)
 			continue
 		}
+		
+		number, err := strconv.Atoi(path[5])
+		if err != nil {
+			log.CtxLogger(ctx).Debugw("Failed to parse SAP instance number", "line", line, "match", path[5], "err", err)
+			continue
+		}
 
 		entry := &instanceInfo{
 			Sid:          path[2],
 			InstanceName: path[4],
-			Snr:          path[5],
+			Snr:          fmt.Sprintf("%02d", number),
 			ProfilePath:  profile[1],
 		}
 

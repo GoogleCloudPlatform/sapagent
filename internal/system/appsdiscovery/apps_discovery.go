@@ -392,7 +392,12 @@ func (d *SapDiscovery) discoverNetweaverHosts(ctx context.Context, app *sappb.SA
 		if name == "hostname" {
 			continue
 		}
-		instanceNumber := strings.TrimSpace(parts[1])
+		n, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil {
+			log.CtxLogger(ctx).Debugw("Failed to parse instance number", "name", name, "number", parts[1], "err", err)
+			continue
+		}
+		instanceNumber := fmt.Sprintf("%02d", n)
 		features := strings.TrimSpace(parts[5])
 		log.CtxLogger(ctx).Debugw("features", "name", name, "features", features)
 		inst := &spb.SapDiscovery_Resource_InstanceProperties_AppInstance{

@@ -5085,6 +5085,82 @@ func TestDiscoverNetweaverHosts(t *testing.T) {
 				StdOut: "",
 			}},
 		},
+	}, {
+		name: "singleDigitInstanceNumber",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `
+09.07.2024 09:23:47
+GetSystemInstanceList
+OK
+hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+ascs, 1, 50113, 50114, 1, MESSAGESERVER|ENQUE, GREEN
+ers, 2, 50213, 50214, 0.5, ENQREP, GREEN
+app11, 0, 50013, 50014, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN
+app12, 0, 50013, 50014, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN
+app13, 0, 50013, 50014, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN
+app14, 0, 50013, 50014, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN`,
+			}},
+		},
+		wantASCS: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "ascs",
+			Number: "01",
+		}},
+		wantERS: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "ers",
+			Number: "02",
+		}},
+		wantApp: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "app11",
+			Number: "00",
+		}, {
+			Name:   "app12",
+			Number: "00",
+		}, {
+			Name:   "app13",
+			Number: "00",
+		}, {
+			Name:   "app14",
+			Number: "00",
+		}},
+	}, {
+		name: "invalidInstanceNumber",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "sidadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: `
+09.07.2024 09:23:47
+GetSystemInstanceList
+OK
+hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+ascs, 1, 50113, 50114, 1, MESSAGESERVER|ENQUE, GREEN
+ers, qq, 50213, 50214, 0.5, ENQREP, GREEN
+app11, 0, 50013, 50014, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN`,
+			}},
+		},
+		wantASCS: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "ascs",
+			Number: "01",
+		}},
+		wantApp: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+			Name:   "app11",
+			Number: "00",
+		}},
 	}}
 
 	ctx := context.Background()
