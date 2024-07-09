@@ -194,6 +194,16 @@ func TestRun(t *testing.T) {
 			want: subcommands.ExitSuccess,
 		},
 		{
+			name: "SuccessForLogbackup",
+			b: Backup{
+				OperationType:   "logbackup",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecSuccess,
+			want: subcommands.ExitSuccess,
+		},
+		{
 			name: "CheckForCaseInsensitiveOperationType",
 			b: Backup{
 				OperationType:   "PREPARE",
@@ -367,6 +377,43 @@ func TestUnfreezeHandler(t *testing.T) {
 			_, got := tc.b.unfreezeHandler(context.Background(), tc.exec)
 			if got != tc.want {
 				t.Errorf("unfreezeHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLogbackupHandler(t *testing.T) {
+	tests := []struct {
+		name string
+		b    Backup
+		exec commandlineexecutor.Execute
+		want subcommands.ExitStatus
+	}{
+		{
+			name: "ScriptError",
+			b: Backup{
+				OperationType:   "logbackup",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecError,
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "Success",
+			b: Backup{
+				OperationType:   "logbackup",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecSuccess,
+			want: subcommands.ExitSuccess,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, got := tc.b.logbackupHandler(context.Background(), tc.exec); got != tc.want {
+				t.Errorf("logbackupHandler(%v) = %v, want %v", tc.b, got, tc.want)
 			}
 		})
 	}

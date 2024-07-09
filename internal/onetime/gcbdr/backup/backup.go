@@ -32,9 +32,10 @@ import (
 )
 
 const (
-	prepareScriptPath  = "/act/custom_apps/act_saphana_prepare.sh"
-	freezeScriptPath   = "/act/custom_apps/act_saphana_pre.sh"
-	unfreezeScriptPath = "/act/custom_apps/act_saphana_post.sh"
+	prepareScriptPath   = "/act/custom_apps/act_saphana_prepare.sh"
+	freezeScriptPath    = "/act/custom_apps/act_saphana_pre.sh"
+	unfreezeScriptPath  = "/act/custom_apps/act_saphana_post.sh"
+	logbackupScriptPath = "/act/custom_apps/act_saphana_logbackup.sh"
 )
 
 type operationHandler func(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus)
@@ -112,9 +113,10 @@ func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute) (str
 	}
 	// TODO: b/349947544 - Add support for other operations.
 	operationHandlers := map[string]operationHandler{
-		"prepare":  b.prepareHandler,
-		"freeze":   b.freezeHandler,
-		"unfreeze": b.unfreezeHandler,
+		"prepare":   b.prepareHandler,
+		"freeze":    b.freezeHandler,
+		"unfreeze":  b.unfreezeHandler,
+		"logbackup": b.logbackupHandler,
 	}
 	b.OperationType = strings.ToLower(b.OperationType)
 	handler, ok := operationHandlers[b.OperationType]
@@ -183,6 +185,24 @@ func (b *Backup) unfreezeHandler(ctx context.Context, exec commandlineexecutor.E
 		return errMessage, subcommands.ExitFailure
 	}
 	return "GCBDR CoreAPP script for unfreeze operation executed successfully", subcommands.ExitSuccess
+}
+
+// logbackupHandler executes the GCBDR CoreAPP script for logbackup operation.
+func (b *Backup) logbackupHandler(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+	scriptCMD := fmt.Sprintf("%s %s %s", logbackupScriptPath, b.SID, b.HDBUserstoreKey)
+	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
+	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
+	args := commandlineexecutor.Params{
+		Executable:  "/bin/bash",
+		User:        sidAdm,
+		ArgsToSplit: cmd,
+	}
+	res := exec(ctx, args)
+	if res.ExitCode != 0 || res.Error != nil {
+		errMessage := fmt.Sprintf("failed to execute GCBDR CoreAPP script for logbackup operation: %v", res.StdErr)
+		return errMessage, subcommands.ExitFailure
+	}
+	return "GCBDR CoreAPP script for logbackup operation executed successfully", subcommands.ExitSuccess
 }
 
 func (b *Backup) validateParams() error {
