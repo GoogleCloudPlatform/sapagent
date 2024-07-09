@@ -163,13 +163,34 @@ func TestRun(t *testing.T) {
 			want: subcommands.ExitUsageError,
 		},
 		{
-			name: "Success",
+			name: "SuccessForPrepare",
 			b: Backup{
 				OperationType:   "prepare",
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
 			exec: fakeExecSuccess,
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessForFreeze",
+			b: Backup{
+				OperationType:   "freeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecHANAVersion,
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessForUnfreeze",
+			b: Backup{
+				OperationType:   "unfreeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				JobName:         "jobname",
+			},
+			exec: fakeExecHANAVersion,
 			want: subcommands.ExitSuccess,
 		},
 		{
@@ -279,6 +300,73 @@ func TestFreezeHandler(t *testing.T) {
 			_, got := tc.b.freezeHandler(context.Background(), tc.exec)
 			if got != tc.want {
 				t.Errorf("freezeHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUnfreezeHandler(t *testing.T) {
+	tests := []struct {
+		name string
+		b    Backup
+		exec commandlineexecutor.Execute
+		want subcommands.ExitStatus
+	}{
+		{
+			name: "InvalidParamsMissingJobName",
+			b: Backup{
+				OperationType:   "unfreeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			want: subcommands.ExitUsageError,
+		},
+		{
+			name: "VersionFailure",
+			b: Backup{
+				OperationType:   "unfreeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				JobName:         "jobname",
+			},
+			exec: fakeExecError,
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "VersionSucessButUnfreezeFailure",
+			b: Backup{
+				OperationType:   "unfreeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				JobName:         "jobname",
+			},
+			exec: func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(p.ArgsToSplit, "version") {
+					return fakeExecHANAVersion(ctx, p)
+				}
+				return fakeExecError(ctx, p)
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "UnfreezeSuccess",
+			b: Backup{
+				OperationType:   "unfreeze",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				JobName:         "jobname",
+				SnapshotStatus:  "UNSUCCESSFUL",
+				SnapshotType:    "PD",
+			},
+			exec: fakeExecHANAVersion,
+			want: subcommands.ExitSuccess,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, got := tc.b.unfreezeHandler(context.Background(), tc.exec)
+			if got != tc.want {
+				t.Errorf("unfreezeHandler(%v) = %v, want %v", tc.b, got, tc.want)
 			}
 		})
 	}

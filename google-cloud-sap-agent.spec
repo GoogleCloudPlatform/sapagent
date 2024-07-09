@@ -34,7 +34,7 @@ Obsoletes: google-sapnetweavermonitoring-agent
 %attr(0644,root,root) %{_docdir}/README.md
 %attr(0644,root,root) %{_docdir}/THIRD_PARTY_NOTICES
 # Uncomment below line to package sap-core-app package needed by GCBDR.
-# %attr(0644,root,root) %{_gcbdr_sap_core_app_dir}
+# %attr(0654,root,root) %{_gcbdr_sap_core_app_dir}
 
 %pre
 # If we need to check install / upgrade ($1 = 1 is install, $1 = 2 is upgrade)

@@ -139,7 +139,7 @@ type Snapshot struct {
 	computeService                         *compute.Service
 	status                                 bool
 	timeSeriesCreator                      cloudmonitoring.TimeSeriesCreator
-	help                          bool
+	help                                   bool
 	SkipDBSnapshotForChangeDiskType        bool   `json:"skip-db-snapshot-for-change-disk-type,string"`
 	HANAChangeDiskTypeOTEName              string `json:"-"`
 	ForceStopHANA                          bool   `json:"-"`
@@ -193,7 +193,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.AbandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
 	fs.BoolVar(&s.SkipDBSnapshotForChangeDiskType, "skip-db-snapshot-for-change-disk-type", false, "Skip DB snapshot for change disk type, (optional) Default: false")
 	fs.BoolVar(&s.ConfirmDataSnapshotAfterCreate, "confirm-data-snapshot-after-create", true, "Confirm HANA data snapshot after disk snapshot create and then wait for upload. (optional) Default: true")
-	fs.StringVar(&s.SnapshotName, "snapshot-name", "", "Snapshot name override.(Optional - deafaults to 'snapshot-diskname-yyyymmdd-hhmmss'.)")
+	fs.StringVar(&s.SnapshotName, "snapshot-name", "", "Snapshot name override.(Optional - defaults to 'snapshot-diskname-yyyymmdd-hhmmss'.)")
 	fs.StringVar(&s.SnapshotType, "snapshot-type", "STANDARD", "Snapshot type override.(Optional - defaults to 'STANDARD', use 'ARCHIVE' for archive snapshots.)")
 	fs.StringVar(&s.DiskKeyFile, "source-disk-key-file", "", `Path to the customer-supplied encryption key of the source disk. (optional)\n (required if the source disk is protected by a customer-supplied encryption key.)`)
 	fs.StringVar(&s.StorageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")

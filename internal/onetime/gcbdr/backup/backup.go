@@ -32,8 +32,9 @@ import (
 )
 
 const (
-	prepareScriptPath = "/act/custom_apps/act_saphana_prepare.sh"
-	freezeScriptPath  = "/act/custom_apps/act_saphana_pre.sh"
+	prepareScriptPath  = "/act/custom_apps/act_saphana_prepare.sh"
+	freezeScriptPath   = "/act/custom_apps/act_saphana_pre.sh"
+	unfreezeScriptPath = "/act/custom_apps/act_saphana_post.sh"
 )
 
 type operationHandler func(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus)
@@ -43,11 +44,13 @@ type Backup struct {
 	OperationType   string `json:"operation-type"`
 	SID             string `json:"sid"`
 	HDBUserstoreKey string `json:"hdbuserstore-key"`
+	JobName         string `json:"job-name"`
+	SnapshotStatus  string `json:"snapshot-status"`
+	SnapshotType    string `json:"snapshot-type"`
 	LogLevel        string `json:"loglevel"`
 	LogPath         string `json:"log-path"`
 	help            bool
 	hanaVersion     string
-
 }
 
 // Name implements the subcommand interface for Backup.
@@ -60,6 +63,7 @@ func (b *Backup) Synopsis() string { return "invoke GCBDR CoreAPP backup script"
 func (b *Backup) Usage() string {
 	return `Usage: gcbdr-backup -operation-type=<prepare|freeze|unfreeze|logbackup|logpurge>
 	-sid=<HANA-sid> -hdbuserstore-key=<userstore-key>
+	[-job-name=<job-name>] [-snapshot-type=<snapshot-type>] [-snapshot-name=<snapshot-name>]
 	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
@@ -69,6 +73,9 @@ func (b *Backup) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&b.SID, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&b.HDBUserstoreKey, "hdbuserstore-key", "", "HANA userstore key specific to HANA instance. (required for prepare)")
 	fs.StringVar(&b.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/gcbdr-backup.log")
+	fs.StringVar(&b.JobName, "job-name", "", "Job name. (required for unfreeze operation)")
+	fs.StringVar(&b.SnapshotStatus, "snapshot-status", "", "Snapshot status. (Optional - defaults to 'SUCCESSFUL')")
+	fs.StringVar(&b.SnapshotType, "snapshot-type", "", "Snapshot type. (Optional - defaults to 'LVM')")
 	fs.BoolVar(&b.help, "h", false, "Display help")
 	fs.StringVar(&b.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
@@ -105,8 +112,9 @@ func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute) (str
 	}
 	// TODO: b/349947544 - Add support for other operations.
 	operationHandlers := map[string]operationHandler{
-		"prepare": b.prepareHandler,
-		"freeze":  b.freezeHandler,
+		"prepare":  b.prepareHandler,
+		"freeze":   b.freezeHandler,
+		"unfreeze": b.unfreezeHandler,
 	}
 	b.OperationType = strings.ToLower(b.OperationType)
 	handler, ok := operationHandlers[b.OperationType]
@@ -143,11 +151,35 @@ func (b *Backup) freezeHandler(ctx context.Context, exec commandlineexecutor.Exe
 		ArgsToSplit: cmd,
 	}
 	res := exec(ctx, args)
-	if res.ExitCode != 0 {
+	if res.ExitCode != 0 || res.Error != nil {
 		errMessage := fmt.Sprintf("failed to execute GCBDR CoreAPP script for freeze operation: %v", res.StdErr)
 		return errMessage, subcommands.ExitFailure
 	}
 	return "GCBDR CoreAPP script for freeze operation executed successfully", subcommands.ExitSuccess
+}
+
+// unfreezeHandler executes the GCBDR CoreAPP script for unfreeze operation.
+func (b *Backup) unfreezeHandler(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+	if b.JobName == "" {
+		return "job-name is required for unfreeze operation", subcommands.ExitUsageError
+	}
+	if err := b.extractHANAVersion(ctx, exec); err != nil {
+		return fmt.Sprintf("failed to extract HANA version: %v", err), subcommands.ExitFailure
+	}
+	scriptCmd := fmt.Sprintf("%s %s %s %s %s %s %s", unfreezeScriptPath, b.SID, b.HDBUserstoreKey, b.hanaVersion, b.JobName, b.SnapshotStatus, b.SnapshotType)
+	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCmd)
+	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
+	args := commandlineexecutor.Params{
+		Executable:  "/bin/bash",
+		User:        sidAdm,
+		ArgsToSplit: cmd,
+	}
+	res := exec(ctx, args)
+	if res.ExitCode != 0 || res.Error != nil {
+		errMessage := fmt.Sprintf("failed to execute GCBDR CoreAPP script for unfreeze operation: %v", res.StdErr)
+		return errMessage, subcommands.ExitFailure
+	}
+	return "GCBDR CoreAPP script for unfreeze operation executed successfully", subcommands.ExitSuccess
 }
 
 func (b *Backup) validateParams() error {
