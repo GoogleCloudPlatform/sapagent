@@ -21,8 +21,8 @@ MemoryAccounting=yes
 TasksAccounting=yes
 MemoryLimit=1G
 MemoryMax=1G
-ProtectSystem=full
-ReadWritePaths=/var/log /tmp -/usr/sap -/etc/google-cloud-sap-agent
+ProtectSystem=yes
+ReadWritePaths=/var/log /tmp -/usr/sap -/etc
 # Do not use ProtectClock, when that is enabled then the agent cannot see LVM mounts
 ProtectKernelModules=true
 RestrictRealtime=true
