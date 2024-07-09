@@ -145,9 +145,12 @@ func (b *Backup) freezeHandler(ctx context.Context, exec commandlineexecutor.Exe
 	if err := b.extractHANAVersion(ctx, exec); err != nil {
 		return fmt.Sprintf("failed to extract HANA version: %v", err), subcommands.ExitFailure
 	}
-	cmd := fmt.Sprintf("%s %s %s %s", freezeScriptPath, b.SID, b.HDBUserstoreKey, b.hanaVersion)
+	scriptCMD := fmt.Sprintf("%s %s %s %s", freezeScriptPath, b.SID, b.HDBUserstoreKey, b.hanaVersion)
+	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
+	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
 	args := commandlineexecutor.Params{
 		Executable:  "/bin/bash",
+		User:        sidAdm,
 		ArgsToSplit: cmd,
 	}
 	res := exec(ctx, args)
@@ -166,8 +169,8 @@ func (b *Backup) unfreezeHandler(ctx context.Context, exec commandlineexecutor.E
 	if err := b.extractHANAVersion(ctx, exec); err != nil {
 		return fmt.Sprintf("failed to extract HANA version: %v", err), subcommands.ExitFailure
 	}
-	scriptCmd := fmt.Sprintf("%s %s %s %s %s %s %s", unfreezeScriptPath, b.SID, b.HDBUserstoreKey, b.hanaVersion, b.JobName, b.SnapshotStatus, b.SnapshotType)
-	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCmd)
+	scriptCMD := fmt.Sprintf("%s %s %s %s %s %s %s", unfreezeScriptPath, b.SID, b.HDBUserstoreKey, b.hanaVersion, b.JobName, b.SnapshotStatus, b.SnapshotType)
+	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
 	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
 	args := commandlineexecutor.Params{
 		Executable:  "/bin/bash",
