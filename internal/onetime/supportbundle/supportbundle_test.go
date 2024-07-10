@@ -555,7 +555,7 @@ func TestSOSReportHandler(t *testing.T) {
 			exec:           fakeExec,
 			fs:             mockedfilesystem{reqErr: os.ErrInvalid},
 			z:              mockedZipper{},
-			wantMessage:    "Error while extracting system DB errors, Error while extracting tenant DB errors, Error while extracting journalctl logs, Error while extracting HANA version, Error while copying file: /etc/google-cloud-sap-agent/configuration.json, Error while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
+			wantMessage:    "Error while extracting system DB errors, Error while extracting tenant DB errors, Error while extracting journalctl logs, Error while extracting HANA version, Error while fetching package info, Error while fetching OS processes, Error while fetching systemd services, Error while copying file: /etc/google-cloud-sap-agent/configuration.json, Error while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
 			wantExitStatus: subcommands.ExitFailure,
 		},
 		{
@@ -1702,6 +1702,140 @@ func TestUploadZip(t *testing.T) {
 			gotErr := tc.sb.uploadZip(ctx, tc.destFilesPath, "bundle", tc.ctb, tc.grw, tc.fs, st.NewClient)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("uploadZip(%q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.ctb, tc.grw, diff)
+			}
+		})
+	}
+}
+
+func TestFetchPackageInfo(t *testing.T) {
+	tests := []struct {
+		name          string
+		destFilesPath string
+		hostname      string
+		exec          commandlineexecutor.Execute
+		fu            filesystem.FileSystem
+		want          error
+	}{
+		{
+			name:          "AllCommandsFailure",
+			destFilesPath: "samplePath",
+			hostname:      "testhost",
+			exec:          fakeExecForErrOnly,
+			fu:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "FileCreationError",
+			destFilesPath: "failure",
+			hostname:      "testhost",
+			exec:          fakeExec,
+			fu:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "Success",
+			destFilesPath: "samplePath",
+			hostname:      "testhost",
+			exec:          fakeExec,
+			fu:            mockedfilesystem{},
+			want:          nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := fetchPackageInfo(context.Background(), test.destFilesPath, test.hostname, test.exec, test.fu); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("fetchPackageInfo(%q, %q, %v, %v) = %v, want %v", test.destFilesPath, test.hostname, test.exec, test.fu, got, test.want)
+			}
+		})
+	}
+}
+
+func TestFetchOSProcessesErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		destFilesPath string
+		hostname      string
+		exec          commandlineexecutor.Execute
+		fu            filesystem.FileSystem
+		wantErr       error
+	}{
+		{
+			name:          "CommandFailure",
+			destFilesPath: "samplePath",
+			hostname:      "testhost",
+			exec:          fakeExecForErrOnly,
+			fu:            mockedfilesystem{},
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "FileCreationError",
+			destFilesPath: "failure",
+			hostname:      "testhost",
+			exec:          fakeExec,
+			fu:            mockedfilesystem{},
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "Success",
+			destFilesPath: "samplePath",
+			hostname:      "testhost",
+			exec:          fakeExec,
+			fu:            mockedfilesystem{},
+			wantErr:       nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if gotErr := fetchOSProcesses(ctx, tc.destFilesPath, tc.hostname, tc.exec, tc.fu); !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("fetchOSProcesses(%q, %q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.hostname, tc.exec, tc.fu, gotErr)
+			}
+		})
+	}
+}
+
+func TestFetchSystemDServicesErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		destFilesPath string
+		hostname      string
+		exec          commandlineexecutor.Execute
+		fu            filesystem.FileSystem
+		wantErr       error
+	}{
+		{
+			name:          "CommandFailure",
+			destFilesPath: "samplePath",
+			hostname:      "testhost",
+			exec:          fakeExecForErrOnly,
+			fu:            mockedfilesystem{},
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "FileCreationError",
+			destFilesPath: "failure",
+			hostname:      "testhost",
+			exec:          fakeExec,
+			fu:            mockedfilesystem{},
+			wantErr:       cmpopts.AnyError,
+		},
+		{
+			name:          "Success",
+			destFilesPath: "samplePath",
+			hostname:      "testhost",
+			exec:          fakeExec,
+			fu:            mockedfilesystem{},
+			wantErr:       nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if gotErr := fetchSystemDServices(context.Background(), tc.destFilesPath, tc.hostname, tc.exec, tc.fu); !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("fetchSystemDServices(%q, %q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.hostname, tc.exec, tc.fu, gotErr)
 			}
 		})
 	}

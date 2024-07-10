@@ -214,6 +214,15 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		if isError := extractHANAVersion(ctx, destFilesPath, s.Sid, s.Hostname, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting HANA version")
 		}
+		if isError := fetchPackageInfo(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
+			failureMsgs = append(failureMsgs, "Error while fetching package info")
+		}
+		if isError := fetchOSProcesses(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
+			failureMsgs = append(failureMsgs, "Error while fetching OS processes")
+		}
+		if isError := fetchSystemDServices(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
+			failureMsgs = append(failureMsgs, "Error while fetching systemd services")
+		}
 		reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
@@ -728,6 +737,34 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 		}
 	}
 	return nil
+}
+
+// fetchPackageInfo collects the information about various packages installed on the VM.
+func fetchPackageInfo(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting package info...")
+	p := commandlineexecutor.Params{
+		Executable:  "sudo",
+		ArgsToSplit: "rpm -qa",
+	}
+	return execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "packages.txt", fu)
+}
+
+func fetchOSProcesses(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting OS processes...")
+	p := commandlineexecutor.Params{
+		Executable:  "sudo",
+		ArgsToSplit: "ps aux",
+	}
+	return execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "processes.txt", fu)
+}
+
+func fetchSystemDServices(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
+	onetime.LogMessageToFileAndConsole(ctx, "Collecting systemd services...")
+	p := commandlineexecutor.Params{
+		Executable:  "sudo",
+		ArgsToSplit: "systemctl list-units --type=service",
+	}
+	return execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "systemd_services.txt", fu)
 }
 
 func (s *SupportBundle) validateParams() []string {
