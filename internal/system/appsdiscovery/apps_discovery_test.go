@@ -3052,9 +3052,17 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				VirtualHostname: "app1",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "11",
+				}},
 			}, {
 				VirtualHostname: "app2",
 				InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app2",
+					Number: "12",
+				}},
 			}},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
 				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{{
@@ -3888,6 +3896,116 @@ func TestMergeSystemDetails(t *testing.T) {
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
+		},
+	}, {
+		name: "mergesInstancePropertiesWithDifferentVirtualHostnames",
+		oldDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+			}},
+		},
+		newDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "otherhostname",
+				InstanceNumber:  3456,
+			}},
+		},
+		want: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+			}, {
+				VirtualHostname: "otherhostname",
+				InstanceNumber:  3456,
+			}},
+		},
+	}, {
+		name: "mergesInstancePropertiesDoesntOverwriteOldVirtualHostname",
+		oldDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+			}},
+		},
+		newDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  3456,
+			}},
+		},
+		want: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+			}},
+		},
+	}, {
+		name: "mergesInstancePropertiesCombinesAppInstances",
+		oldDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "01",
+				}},
+			}},
+		},
+		newDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app2",
+					Number: "02",
+				}},
+			}},
+		},
+		want: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "01",
+				}, {
+					Name:   "app2",
+					Number: "02",
+				}},
+			}},
+		},
+	}, {
+		name: "mergesInstancePropertiesDoesntOverwriteAppInstances",
+		oldDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "01",
+				}},
+			}},
+		},
+		newDetails: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "02",
+				}},
+			}},
+		},
+		want: SapSystemDetails{
+			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+				VirtualHostname: "saphostagent",
+				InstanceNumber:  1234,
+				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					Name:   "app1",
+					Number: "01",
+				}},
+			}},
 		},
 	}}
 	for _, test := range tests {

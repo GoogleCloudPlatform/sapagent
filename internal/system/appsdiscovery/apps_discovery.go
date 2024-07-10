@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
@@ -166,6 +167,35 @@ func mergeWorkloadProperties(old, new *spb.SapDiscovery_WorkloadProperties) *spb
 	return new
 }
 
+func mergeInstanceProperties(old, new []*spb.SapDiscovery_Resource_InstanceProperties) []*spb.SapDiscovery_Resource_InstanceProperties {
+	if old == nil {
+		return new
+	}
+	merged := old
+	vHostNames := make(map[string]*spb.SapDiscovery_Resource_InstanceProperties)
+	for _, iProp := range merged {
+		vHostNames[iProp.GetVirtualHostname()] = iProp
+	}
+	for _, iProp := range new {
+		if p, ok := vHostNames[iProp.GetVirtualHostname()]; ok {
+			p.InstanceRole |= iProp.GetInstanceRole()
+			var appNames []string
+			for _, app := range p.GetAppInstances() {
+				appNames = append(appNames, app.GetName())
+			}
+			for _, app := range iProp.GetAppInstances() {
+				if !slices.Contains(appNames, app.GetName()) {
+					p.AppInstances = append(p.AppInstances, app)
+					appNames = append(appNames, app.GetName())
+				}
+			}
+		} else {
+			merged = append(merged, iProp)
+		}
+	}
+	return merged
+}
+
 func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	merged := old
 	merged.AppOnHost = old.AppOnHost || new.AppOnHost
@@ -175,13 +205,9 @@ func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
 	merged.AppHosts = removeDuplicates(append(merged.AppHosts, new.AppHosts...))
 	merged.DBHosts = removeDuplicates(append(merged.DBHosts, new.DBHosts...))
 	merged.WorkloadProperties = mergeWorkloadProperties(old.WorkloadProperties, new.WorkloadProperties)
-	for _, iProp := range new.InstanceProperties {
-		merged.InstanceProperties = append(merged.InstanceProperties, &spb.SapDiscovery_Resource_InstanceProperties{
-			VirtualHostname: iProp.VirtualHostname,
-			InstanceRole:    iProp.InstanceRole,
-		})
-	}
+	merged.InstanceProperties = mergeInstanceProperties(old.InstanceProperties, new.InstanceProperties)
 
+	log.Logger.Debugf("Merged System Details. %s", merged)
 	return merged
 }
 
@@ -212,6 +238,7 @@ func (d *SapDiscovery) DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPIn
 		case sappb.InstanceType_NETWEAVER:
 			log.CtxLogger(ctx).Infow("discovering netweaver", "sid", app.Sapsid)
 			sys := d.discoverNetweaver(ctx, app, conf)
+			log.CtxLogger(ctx).Debugf("Netweaver system: %s", sys)
 			// See if a system with the same SID already exists
 			found := false
 			for i, s := range sapSystems {
