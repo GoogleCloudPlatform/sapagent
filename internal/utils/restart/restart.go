@@ -35,7 +35,7 @@ func LinuxRestartAgent(ctx context.Context) subcommands.ExitStatus {
 	})
 	if result.ExitCode != 0 {
 		log.Print("Could not restart the agent")
-		log.CtxLogger(ctx).Errorw("failed restarting sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
+		log.CtxLogger(ctx).Errorw("failed restarting sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr, "stdout:", result.StdOut)
 		return subcommands.ExitFailure
 	}
 	log.Print("Waiting 70 seconds for agent restart")
@@ -48,7 +48,7 @@ func LinuxRestartAgent(ctx context.Context) subcommands.ExitStatus {
 	})
 	if result.ExitCode != 0 {
 		log.Print("Could not restart the agent")
-		log.CtxLogger(ctx).Errorw("failed checking the status of sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr)
+		log.CtxLogger(ctx).Errorw("failed checking the status of sap agent", "errorCode:", result.ExitCode, "error:", result.StdErr, "stdout:", result.StdOut)
 		return subcommands.ExitFailure
 	}
 
