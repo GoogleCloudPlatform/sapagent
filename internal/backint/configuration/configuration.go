@@ -213,7 +213,7 @@ func (p *Parameters) ApplyDefaults(numCPU int64) {
 		if numCPU > 64 {
 			numCPU = 64
 		}
-		log.Logger.Info("threads defaulted to %d", numCPU)
+		log.Logger.Infof("threads defaulted to %d", numCPU)
 		p.Config.Threads = numCPU
 	}
 	if p.Config.GetThreads() > 64 {
