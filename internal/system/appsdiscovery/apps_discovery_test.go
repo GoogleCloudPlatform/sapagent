@@ -3579,164 +3579,166 @@ func TestMergeSystemDetails(t *testing.T) {
 			},
 		},
 	}, {
-		name: "mergeWlProperties",
+		name: "mergeWlPropertiesOnlyOld",
 		oldDetails: SapSystemDetails{
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*pv{
-					&pv{Name: "SAP S/4HANA", Version: "2021"},
-					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-				},
-				SoftwareComponentVersions: []*scp{
-					&scp{
-						Name:       "EA-DFPS",
-						Version:    "806",
-						ExtVersion: "0000",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "EA-HR",
-						Version:    "608",
-						ExtVersion: "0095",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "S4COREOP",
-						Version:    "106",
-						ExtVersion: "0000000000",
-						Type:       "I",
-					},
-				},
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version1",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version1",
+					ExtVersion: "x",
+					Type:       "type",
+				}},
 			},
 		},
 		newDetails: SapSystemDetails{
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*pv{
-					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
-					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-				},
-				SoftwareComponentVersions: []*scp{
-					&scp{
-						Name:       "EA-DFPS",
-						Version:    "806",
-						ExtVersion: "0000",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "EA-HR",
-						Version:    "608",
-						ExtVersion: "0095",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "S4CORE",
-						Version:    "106",
-						ExtVersion: "0000000000",
-						Type:       "R",
-					},
-				},
+				ProductVersions:           []*pv{},
+				SoftwareComponentVersions: []*scp{},
 			},
 		},
 		want: SapSystemDetails{
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*pv{
-					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
-					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-				},
-				SoftwareComponentVersions: []*scp{
-					&scp{
-						Name:       "EA-DFPS",
-						Version:    "806",
-						ExtVersion: "0000",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "EA-HR",
-						Version:    "608",
-						ExtVersion: "0095",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "S4CORE",
-						Version:    "106",
-						ExtVersion: "0000000000",
-						Type:       "R",
-					},
-				},
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version1",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version1",
+					ExtVersion: "x",
+					Type:       "type",
+				}},
 			},
 		},
 	}, {
-		name: "mergeNewWlProperties",
-		oldDetails: SapSystemDetails{
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
-		},
+		name:       "mergeWlPropertiesOnlyNew",
+		oldDetails: SapSystemDetails{},
 		newDetails: SapSystemDetails{
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*pv{
-					&pv{Name: "SAP S/4HANA", Version: "2021"},
-					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
-					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-				},
-				SoftwareComponentVersions: []*scp{
-					&scp{
-						Name:       "EA-DFPS",
-						Version:    "806",
-						ExtVersion: "0000",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "EA-HR",
-						Version:    "608",
-						ExtVersion: "0095",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "S4CORE",
-						Version:    "106",
-						ExtVersion: "0000000000",
-						Type:       "R",
-					},
-					&scp{
-						Name:       "S4COREOP",
-						Version:    "106",
-						ExtVersion: "0000000000",
-						Type:       "I",
-					},
-				},
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version1",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version1",
+					ExtVersion: "x",
+					Type:       "type",
+				}},
 			},
 		},
 		want: SapSystemDetails{
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*pv{
-					&pv{Name: "SAP S/4HANA", Version: "2021"},
-					&pv{Name: "SAP NETWEAVER", Version: "7.5"},
-					&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-				},
-				SoftwareComponentVersions: []*scp{
-					&scp{
-						Name:       "EA-DFPS",
-						Version:    "806",
-						ExtVersion: "0000",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "EA-HR",
-						Version:    "608",
-						ExtVersion: "0095",
-						Type:       "N",
-					},
-					&scp{
-						Name:       "S4CORE",
-						Version:    "106",
-						ExtVersion: "0000000000",
-						Type:       "R",
-					},
-					&scp{
-						Name:       "S4COREOP",
-						Version:    "106",
-						ExtVersion: "0000000000",
-						Type:       "I",
-					},
-				},
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version1",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version1",
+					ExtVersion: "x",
+					Type:       "type",
+				}},
+			},
+		},
+	}, {
+		name: "mergeWlProperties",
+		oldDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version1",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version1",
+					ExtVersion: "x",
+					Type:       "type",
+				}},
+			},
+		},
+		newDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{{
+					Name:    "product2",
+					Version: "version2",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component2",
+					Version:    "version2",
+					ExtVersion: "y",
+					Type:       "type2",
+				}},
+			},
+		},
+		want: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version1",
+				}, {
+					Name:    "product2",
+					Version: "version2",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version1",
+					ExtVersion: "x",
+					Type:       "type",
+				}, {
+					Name:       "component2",
+					Version:    "version2",
+					ExtVersion: "y",
+					Type:       "type2",
+				}},
+			},
+		},
+	}, {
+		name: "mergeWlPropertiesNewOverwritesOldByName",
+		oldDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version1",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version1",
+					ExtVersion: "x",
+					Type:       "type",
+				}},
+			},
+		},
+		newDetails: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version2",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version2",
+					ExtVersion: "y",
+					Type:       "type2",
+				}},
+			},
+		},
+		want: SapSystemDetails{
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*pv{{
+					Name:    "product1",
+					Version: "version2",
+				}},
+				SoftwareComponentVersions: []*scp{{
+					Name:       "component1",
+					Version:    "version2",
+					ExtVersion: "y",
+					Type:       "type2",
+				}},
 			},
 		},
 	}, {
@@ -4815,82 +4817,87 @@ func TestMergeWorkloadProperties(t *testing.T) {
 	}{{
 		name: "multipleEntriesWithOverlap",
 		old: &spb.SapDiscovery_WorkloadProperties{
-			ProductVersions: []*pv{
-				&pv{Name: "SAP S/4HANA", Version: "2021"},
-				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-			},
-			SoftwareComponentVersions: []*scp{
-				&scp{
-					Name:       "EA-DFPS",
-					Version:    "806",
-					ExtVersion: "0000",
-					Type:       "N",
-				},
-				&scp{
-					Name:       "EA-HR",
-					Version:    "608",
-					ExtVersion: "0095",
-					Type:       "N",
-				},
-				&scp{
+			ProductVersions: []*pv{{
+				Name:    "SAP S/4HANA",
+				Version: "2021",
+			}, {
+				Name:    "SAP FIORI FRONT-END SERVER",
+				Version: "6.0",
+			}},
+			SoftwareComponentVersions: []*scp{{
+				Name:       "EA-DFPS",
+				Version:    "806",
+				ExtVersion: "0000",
+				Type:       "N",
+			}, {
+				Name:       "EA-HR",
+				Version:    "608",
+				ExtVersion: "0095",
+				Type:       "N",
+			}, {
+				Name:       "S4COREOP",
+				Version:    "106",
+				ExtVersion: "0000000000",
+				Type:       "I",
+			}},
+		},
+		new: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{{
+				Name:    "SAP NETWEAVER",
+				Version: "7.5",
+			}, {
+				Name:    "SAP FIORI FRONT-END SERVER",
+				Version: "6.0",
+			}},
+			SoftwareComponentVersions: []*scp{{
+				Name:       "EA-DFPS",
+				Version:    "806",
+				ExtVersion: "0000",
+				Type:       "N",
+			}, {
+				Name:       "EA-HR",
+				Version:    "608",
+				ExtVersion: "0095",
+				Type:       "N",
+			}, {
+				Name:       "S4CORE",
+				Version:    "106",
+				ExtVersion: "0000000000",
+				Type:       "R",
+			}},
+		},
+		want: &spb.SapDiscovery_WorkloadProperties{
+			ProductVersions: []*pv{{
+				Name:    "SAP S/4HANA",
+				Version: "2021",
+			}, {
+				Name:    "SAP NETWEAVER",
+				Version: "7.5",
+			}, {
+				Name:    "SAP FIORI FRONT-END SERVER",
+				Version: "6.0",
+			}},
+			SoftwareComponentVersions: []*scp{{
+				Name:       "EA-DFPS",
+				Version:    "806",
+				ExtVersion: "0000",
+				Type:       "N",
+			}, {
+				Name:       "EA-HR",
+				Version:    "608",
+				ExtVersion: "0095",
+				Type:       "N",
+			}, {
+				Name:       "S4CORE",
+				Version:    "106",
+				ExtVersion: "0000000000",
+				Type:       "R",
+				}, {
 					Name:       "S4COREOP",
 					Version:    "106",
 					ExtVersion: "0000000000",
 					Type:       "I",
-				},
-			},
-		},
-		new: &spb.SapDiscovery_WorkloadProperties{
-			ProductVersions: []*pv{
-				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
-				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-			},
-			SoftwareComponentVersions: []*scp{
-				&scp{
-					Name:       "EA-DFPS",
-					Version:    "806",
-					ExtVersion: "0000",
-					Type:       "N",
-				},
-				&scp{
-					Name:       "EA-HR",
-					Version:    "608",
-					ExtVersion: "0095",
-					Type:       "N",
-				},
-				&scp{
-					Name:       "S4CORE",
-					Version:    "106",
-					ExtVersion: "0000000000",
-					Type:       "R",
-				},
-			},
-		},
-		want: &spb.SapDiscovery_WorkloadProperties{
-			ProductVersions: []*pv{
-				&pv{Name: "SAP NETWEAVER", Version: "7.5"},
-				&pv{Name: "SAP FIORI FRONT-END SERVER", Version: "6.0"},
-			},
-			SoftwareComponentVersions: []*scp{
-				&scp{
-					Name:       "EA-DFPS",
-					Version:    "806",
-					ExtVersion: "0000",
-					Type:       "N",
-				},
-				&scp{
-					Name:       "EA-HR",
-					Version:    "608",
-					ExtVersion: "0095",
-					Type:       "N",
-				},
-				&scp{
-					Name:       "S4CORE",
-					Version:    "106",
-					ExtVersion: "0000000000",
-					Type:       "R",
-				},
-			},
+			}},
 		},
 	}, {
 		name: "nilOld",

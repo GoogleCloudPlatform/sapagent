@@ -164,7 +164,28 @@ func mergeWorkloadProperties(old, new *spb.SapDiscovery_WorkloadProperties) *spb
 	if new == nil {
 		return old
 	}
-	return new
+	merged := new
+	productMap := make(map[string]*spb.SapDiscovery_WorkloadProperties_ProductVersion)
+	for _, prod := range new.GetProductVersions() {
+		productMap[prod.GetName()] = prod
+	}
+	for _, prod := range old.GetProductVersions() {
+		if _, ok := productMap[prod.GetName()]; !ok {
+			new.ProductVersions = append(new.ProductVersions, prod)
+		}
+	}
+
+	componentMap := make(map[string]*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties)
+	for _, comp := range new.GetSoftwareComponentVersions() {
+		componentMap[comp.GetName()] = comp
+	}
+	for _, comp := range old.GetSoftwareComponentVersions() {
+		if _, ok := componentMap[comp.GetName()]; !ok {
+			new.SoftwareComponentVersions = append(new.SoftwareComponentVersions, comp)
+		}
+	}
+
+	return merged
 }
 
 func mergeInstanceProperties(old, new []*spb.SapDiscovery_Resource_InstanceProperties) []*spb.SapDiscovery_Resource_InstanceProperties {
