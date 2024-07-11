@@ -204,6 +204,17 @@ func TestRun(t *testing.T) {
 			want: subcommands.ExitSuccess,
 		},
 		{
+			name: "SuccessForLogpurge",
+			b: Backup{
+				OperationType:   "logpurge",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				LogBackupEndPIT: "2024-01-01 00:00:00",
+			},
+			exec: fakeExecHANAVersion,
+			want: subcommands.ExitSuccess,
+		},
+		{
 			name: "CheckForCaseInsensitiveOperationType",
 			b: Backup{
 				OperationType:   "PREPARE",
@@ -414,6 +425,70 @@ func TestLogbackupHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, got := tc.b.logbackupHandler(context.Background(), tc.exec); got != tc.want {
 				t.Errorf("logbackupHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLogpurgeHandler(t *testing.T) {
+	tests := []struct {
+		name string
+		b    Backup
+		exec commandlineexecutor.Execute
+		want subcommands.ExitStatus
+	}{
+		{
+			name: "InvalidParamsMissingLogBackupEndPIT",
+			b: Backup{
+				OperationType:   "logpurge",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			want: subcommands.ExitUsageError,
+		},
+		{
+			name: "ScriptError",
+			b: Backup{
+				OperationType:   "logpurge",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				LogBackupEndPIT: "2024-01-01 00:00:00",
+			},
+			exec: fakeExecError,
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "VersionSucessButLogpurgeFailure",
+			b: Backup{
+				OperationType:   "logpurge",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				LogBackupEndPIT: "2024-01-01 00:00:00",
+			},
+			exec: func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(p.ArgsToSplit, "version") {
+					return fakeExecHANAVersion(ctx, p)
+				}
+				return fakeExecError(ctx, p)
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name: "Success",
+			b: Backup{
+				OperationType:   "logpurge",
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+				LogBackupEndPIT: "2024-01-01 00:00:00",
+			},
+			exec: fakeExecHANAVersion,
+			want: subcommands.ExitSuccess,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, got := tc.b.logpurgeHandler(context.Background(), tc.exec); got != tc.want {
+				t.Errorf("logpurgeHandler(%v) = %v, want %v", tc.b, got, tc.want)
 			}
 		})
 	}

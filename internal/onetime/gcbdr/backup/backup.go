@@ -36,22 +36,28 @@ const (
 	freezeScriptPath    = "/act/custom_apps/act_saphana_pre.sh"
 	unfreezeScriptPath  = "/act/custom_apps/act_saphana_post.sh"
 	logbackupScriptPath = "/act/custom_apps/act_saphana_logbackup.sh"
+	logpurgeScriptPath  = "/act/custom_apps/act_saphana_logdelete.sh"
 )
 
 type operationHandler func(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus)
 
 // Backup contains the parameters for the gcbdr-backup command.
 type Backup struct {
-	OperationType   string `json:"operation-type"`
-	SID             string `json:"sid"`
-	HDBUserstoreKey string `json:"hdbuserstore-key"`
-	JobName         string `json:"job-name"`
-	SnapshotStatus  string `json:"snapshot-status"`
-	SnapshotType    string `json:"snapshot-type"`
-	LogLevel        string `json:"loglevel"`
-	LogPath         string `json:"log-path"`
-	help            bool
-	hanaVersion     string
+	OperationType               string `json:"operation-type"`
+	SID                         string `json:"sid"`
+	HDBUserstoreKey             string `json:"hdbuserstore-key"`
+	JobName                     string `json:"job-name"`
+	SnapshotStatus              string `json:"snapshot-status"`
+	SnapshotType                string `json:"snapshot-type"`
+	CatalogBackupRetentionDays  int64  `json:"catalog-backup-retention-days,string"`
+	ProductionLogRetentionHours int64  `json:"production-log-retention-hours,string"`
+	LogBackupEndPIT             string `json:"log-backup-end-pit"`
+	LastBackedUpDBNames         string `json:"last-backed-up-db-names"`
+	UseSystemDBKey              bool   `json:"use-systemdb-key,string"`
+	LogLevel                    string `json:"loglevel"`
+	LogPath                     string `json:"log-path"`
+	help                        bool
+	hanaVersion                 string
 }
 
 // Name implements the subcommand interface for Backup.
@@ -65,6 +71,9 @@ func (b *Backup) Usage() string {
 	return `Usage: gcbdr-backup -operation-type=<prepare|freeze|unfreeze|logbackup|logpurge>
 	-sid=<HANA-sid> -hdbuserstore-key=<userstore-key>
 	[-job-name=<job-name>] [-snapshot-type=<snapshot-type>] [-snapshot-name=<snapshot-name>]
+	[-catalog-backup-retention-days=<retention-days>] [-production-log-retention-hours=<retention-hours>]
+	[-log-backup-end-pit=<datetime with format YYYY-MM-DD HH:MM:SS>]
+	[-use-systemdb-key=<true|false>] [-last-backed-up-db-names=<db-names>]
 	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
@@ -77,6 +86,11 @@ func (b *Backup) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&b.JobName, "job-name", "", "Job name. (required for unfreeze operation)")
 	fs.StringVar(&b.SnapshotStatus, "snapshot-status", "", "Snapshot status. (Optional - defaults to 'SUCCESSFUL')")
 	fs.StringVar(&b.SnapshotType, "snapshot-type", "", "Snapshot type. (Optional - defaults to 'LVM')")
+	fs.StringVar(&b.LogBackupEndPIT, "log-backup-end-pit", "", "Log backup end PIT. (required for logpurge operation)")
+	fs.StringVar(&b.LastBackedUpDBNames, "last-backed-up-db-names", "", "Last backed up DB names. (Optional)")
+	fs.Int64Var(&b.CatalogBackupRetentionDays, "catalog-backup-retention-days", 7, "Catalog backup retention days. (Optional - defaults to 7)")
+	fs.Int64Var(&b.ProductionLogRetentionHours, "production-log-retention-hours", 0, "Production log retention hours. (Optional - defaults to 1)")
+	fs.BoolVar(&b.UseSystemDBKey, "use-systemdb-key", false, "Use system DB key. (Optional - defaults to false)")
 	fs.BoolVar(&b.help, "h", false, "Display help")
 	fs.StringVar(&b.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
@@ -111,12 +125,12 @@ func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute) (str
 	if err := b.validateParams(); err != nil {
 		return err.Error(), subcommands.ExitUsageError
 	}
-	// TODO: b/349947544 - Add support for other operations.
 	operationHandlers := map[string]operationHandler{
 		"prepare":   b.prepareHandler,
 		"freeze":    b.freezeHandler,
 		"unfreeze":  b.unfreezeHandler,
 		"logbackup": b.logbackupHandler,
+		"logpurge":  b.logpurgeHandler,
 	}
 	b.OperationType = strings.ToLower(b.OperationType)
 	handler, ok := operationHandlers[b.OperationType]
@@ -135,7 +149,7 @@ func (b *Backup) prepareHandler(ctx context.Context, exec commandlineexecutor.Ex
 		ArgsToSplit: cmd,
 	}
 	res := exec(ctx, args)
-	if res.ExitCode != 0 {
+	if res.ExitCode != 0 || res.Error != nil {
 		errMessage := fmt.Sprintf("failed to execute GCBDR CoreAPP script for prepare operation: %v", res.StdErr)
 		return errMessage, subcommands.ExitFailure
 	}
@@ -203,6 +217,30 @@ func (b *Backup) logbackupHandler(ctx context.Context, exec commandlineexecutor.
 		return errMessage, subcommands.ExitFailure
 	}
 	return "GCBDR CoreAPP script for logbackup operation executed successfully", subcommands.ExitSuccess
+}
+
+// logpurgeHandler executes the GCBDR CoreAPP script for logpurge operation.
+func (b *Backup) logpurgeHandler(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+	if b.LogBackupEndPIT == "" {
+		return "log-backup-end-pit is required for logpurge operation", subcommands.ExitUsageError
+	}
+	if err := b.extractHANAVersion(ctx, exec); err != nil {
+		return fmt.Sprintf("failed to extract HANA version: %v", err), subcommands.ExitFailure
+	}
+	scriptCMD := fmt.Sprintf("%s %s %s %s %d %s %t %s %d %s %s", logpurgeScriptPath, b.SID, b.HDBUserstoreKey, b.HDBUserstoreKey, b.CatalogBackupRetentionDays, b.hanaVersion, b.UseSystemDBKey, b.LogBackupEndPIT, b.ProductionLogRetentionHours, b.LastBackedUpDBNames, b.SnapshotType)
+	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
+	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
+	args := commandlineexecutor.Params{
+		Executable:  "/bin/bash",
+		User:        sidAdm,
+		ArgsToSplit: cmd,
+	}
+	res := exec(ctx, args)
+	if res.ExitCode != 0 || res.Error != nil {
+		errMessage := fmt.Sprintf("failed to execute GCBDR CoreAPP script for logpurge operation: %v", res.StdErr)
+		return errMessage, subcommands.ExitFailure
+	}
+	return "GCBDR CoreAPP script for logpurge operation executed successfully", subcommands.ExitSuccess
 }
 
 func (b *Backup) validateParams() error {
