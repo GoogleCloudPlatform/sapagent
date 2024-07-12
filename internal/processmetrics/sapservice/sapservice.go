@@ -20,6 +20,8 @@ package sapservice
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
@@ -28,6 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 )
 
@@ -113,13 +116,25 @@ func queryInstanceState(ctx context.Context, p *InstanceProperties, metric strin
 			Executable:  command,
 			ArgsToSplit: args,
 		})
+		sendMetric := int64(1)
 		if metric == "is-failed" && result.ExitCode != 0 && result.ExitStatusParsed {
 			log.CtxLogger(ctx).Debugw("No error while executing command, not sending is_failed metric", "command", command, "args", args)
-			continue
+			sendMetric = 0
 		} else if metric != "is-failed" && result.Error == nil {
 			log.CtxLogger(ctx).Debugw("No error while executing command, not sending is_disabled metric", "command", command, "args", args)
+			sendMetric = 0
+		}
+		metricevents.AddEvent(ctx, metricevents.Parameters{
+			Path:       metricURL + mPathMap[metric],
+			Message:    fmt.Sprintf("%s metric for service %s", metric, service),
+			Value:      strconv.FormatInt(sendMetric, 10),
+			Labels:     map[string]string{"service": service},
+			Identifier: service,
+		})
+		if sendMetric == 0 {
 			continue
 		}
+
 		log.CtxLogger(ctx).Debugw("Error while executing command", "command", command, "args", args, "stderr", result.StdErr)
 		params := timeseries.Params{
 			CloudProp:    p.Config.CloudProperties,
