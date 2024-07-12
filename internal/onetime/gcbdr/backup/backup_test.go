@@ -128,22 +128,23 @@ func TestExecute(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	tests := []struct {
-		name string
-		b    Backup
-		exec commandlineexecutor.Execute
-		want subcommands.ExitStatus
+		name               string
+		b                  Backup
+		exec               commandlineexecutor.Execute
+		wantExitStatus     subcommands.ExitStatus
+		wantResponseStatus bool
 	}{
 		{
-			name: "InvalidParamsMissingOperationType",
-			b:    Backup{},
-			want: subcommands.ExitUsageError,
+			name:           "InvalidParamsMissingOperationType",
+			b:              Backup{},
+			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
 			name: "InvalidParamsMissingSID",
 			b: Backup{
 				OperationType: "prepare",
 			},
-			want: subcommands.ExitUsageError,
+			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
 			name: "InvalidParamsMissingHDBUserstoreKey",
@@ -151,7 +152,7 @@ func TestRun(t *testing.T) {
 				OperationType: "prepare",
 				SID:           "sid",
 			},
-			want: subcommands.ExitUsageError,
+			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
 			name: "InvalidOperationType",
@@ -160,7 +161,7 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			want: subcommands.ExitUsageError,
+			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
 			name: "SuccessForPrepare",
@@ -169,8 +170,9 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec: fakeExecSuccess,
-			want: subcommands.ExitSuccess,
+			exec:               fakeExecSuccess,
+			wantExitStatus:     subcommands.ExitSuccess,
+			wantResponseStatus: true,
 		},
 		{
 			name: "SuccessForFreeze",
@@ -179,8 +181,9 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec: fakeExecHANAVersion,
-			want: subcommands.ExitSuccess,
+			exec:               fakeExecHANAVersion,
+			wantExitStatus:     subcommands.ExitSuccess,
+			wantResponseStatus: true,
 		},
 		{
 			name: "SuccessForUnfreeze",
@@ -190,8 +193,9 @@ func TestRun(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 				JobName:         "jobname",
 			},
-			exec: fakeExecHANAVersion,
-			want: subcommands.ExitSuccess,
+			exec:               fakeExecHANAVersion,
+			wantExitStatus:     subcommands.ExitSuccess,
+			wantResponseStatus: true,
 		},
 		{
 			name: "SuccessForLogbackup",
@@ -200,8 +204,9 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec: fakeExecSuccess,
-			want: subcommands.ExitSuccess,
+			exec:               fakeExecSuccess,
+			wantExitStatus:     subcommands.ExitSuccess,
+			wantResponseStatus: true,
 		},
 		{
 			name: "SuccessForLogpurge",
@@ -211,8 +216,9 @@ func TestRun(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 				LogBackupEndPIT: "2024-01-01 00:00:00",
 			},
-			exec: fakeExecHANAVersion,
-			want: subcommands.ExitSuccess,
+			exec:               fakeExecHANAVersion,
+			wantExitStatus:     subcommands.ExitSuccess,
+			wantResponseStatus: true,
 		},
 		{
 			name: "CheckForCaseInsensitiveOperationType",
@@ -221,15 +227,19 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec: fakeExecSuccess,
-			want: subcommands.ExitSuccess,
+			exec:               fakeExecSuccess,
+			wantExitStatus:     subcommands.ExitSuccess,
+			wantResponseStatus: true,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, got := tc.b.Run(context.Background(), tc.exec)
-			if got != tc.want {
-				t.Errorf("Run(%v) = %v, want %v", tc.b, got, tc.want)
+			response, _, exitStatus := tc.b.Run(context.Background(), tc.exec)
+			if exitStatus != tc.wantExitStatus {
+				t.Errorf("Run(%v) = %v; want %v", tc.b, exitStatus, tc.wantExitStatus)
+			}
+			if response != nil && response.Status.GetValue() != tc.wantResponseStatus {
+				t.Errorf("Run(%v) = %v; want %v", tc.b, response.Status, tc.wantResponseStatus)
 			}
 		})
 	}

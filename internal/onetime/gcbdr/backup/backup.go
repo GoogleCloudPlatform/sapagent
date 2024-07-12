@@ -25,10 +25,13 @@ import (
 	"strings"
 
 	"flag"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/safetext/shsprintf"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+
+	bpb "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrbackup"
 )
 
 const (
@@ -108,7 +111,7 @@ func (b *Backup) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		return exitStatus
 	}
 
-	message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand)
+	_, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand)
 	switch exitStatus {
 	case subcommands.ExitUsageError:
 		onetime.LogErrorToFileAndConsole(ctx, "GCBDR-backup Usage Error:", errors.New(message))
@@ -121,9 +124,9 @@ func (b *Backup) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 }
 
 // Run performs the functionality specified by the gcbdr-backup subcommand.
-func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute) (*bpb.BackupResponse, string, subcommands.ExitStatus) {
 	if err := b.validateParams(); err != nil {
-		return err.Error(), subcommands.ExitUsageError
+		return nil, err.Error(), subcommands.ExitUsageError
 	}
 	operationHandlers := map[string]operationHandler{
 		"prepare":   b.prepareHandler,
@@ -136,9 +139,14 @@ func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute) (str
 	handler, ok := operationHandlers[b.OperationType]
 	if !ok {
 		errMessage := fmt.Sprintf("invalid operation type: %s", b.OperationType)
-		return errMessage, subcommands.ExitUsageError
+		return nil, errMessage, subcommands.ExitUsageError
 	}
-	return handler(ctx, exec)
+	message, exitStatus := handler(ctx, exec)
+	response := &bpb.BackupResponse{}
+	if exitStatus == subcommands.ExitSuccess {
+		response.Status = &wpb.BoolValue{Value: true}
+	}
+	return response, message, exitStatus
 }
 
 // prepareHandler executes the GCBDR CoreAPP script for prepare operation.

@@ -25,6 +25,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
@@ -233,6 +234,43 @@ func TestParseAgentCommandParameters(t *testing.T) {
 				Help:            true,
 			},
 			ignoreUnexportedType: configureinstance.ConfigureInstance{},
+		},
+		{
+			name: "ParseGCBDRBackupCommand",
+			command: &gpb.AgentCommand{
+				Parameters: map[string]string{
+					"operation-type":                 "test-operation-type",
+					"sid":                            "test-sid",
+					"hdbuserstore-key":               "test-hdbuserstore-key",
+					"job-name":                       "test-job-name",
+					"snapshot-status":                "test-snapshot-status",
+					"snapshot-type":                  "test-snapshot-type",
+					"catalog-backup-retention-days":  "2",
+					"production-log-retention-hours": "1",
+					"log-backup-end-pit":             "test-log-backup-end-pit",
+					"last-backed-up-db-names":        "test-last-backed-up-db-names",
+					"use-systemdb-key":               "true",
+					"loglevel":                       "debug",
+					"log-path":                       "test-log-path",
+				},
+			},
+			obj: &backup.Backup{},
+			want: &backup.Backup{
+				OperationType:               "test-operation-type",
+				SID:                         "test-sid",
+				HDBUserstoreKey:             "test-hdbuserstore-key",
+				JobName:                     "test-job-name",
+				SnapshotStatus:              "test-snapshot-status",
+				SnapshotType:                "test-snapshot-type",
+				CatalogBackupRetentionDays:  2,
+				ProductionLogRetentionHours: 1,
+				LogBackupEndPIT:             "test-log-backup-end-pit",
+				LastBackedUpDBNames:         "test-last-backed-up-db-names",
+				UseSystemDBKey:              true,
+				LogLevel:                    "debug",
+				LogPath:                     "test-log-path",
+			},
+			ignoreUnexportedType: backup.Backup{},
 		},
 		{
 			name: "InvalidCommandParameters",
