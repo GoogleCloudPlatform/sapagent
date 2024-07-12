@@ -406,4 +406,7 @@ func TestActionConstants(t *testing.T) {
 	if HANAInsightsOTEUserstoreKey != 52 {
 		t.Errorf("HANAInsightsOTEUserstoreKey = %v, want 52", HANAInsightsOTEUserstoreKey)
 	}
+	if BackintRecoveryParameterEnabled != 53 {
+		t.Errorf("BackintRecoveryParameterEnabled = %v, want 53", BackintRecoveryParameterEnabled)
+	}
 }

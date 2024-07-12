@@ -172,6 +172,7 @@ const (
 	HDBUserstoreKeyConfigured               = 50 //	HDBUserstoreKeyConfigured
 	HANADiskSnapshotUserstoreKey            = 51 //	HANADiskSnapshotUserstoreKey
 	HANAInsightsOTEUserstoreKey             = 52 //	HANAInsightsOTEUserstoreKey
+	BackintRecoveryParameterEnabled         = 53 //	BackintRecoveryParameterEnabled
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")

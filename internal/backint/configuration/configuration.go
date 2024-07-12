@@ -68,6 +68,9 @@ func (p *Parameters) ParseArgsAndValidateConfig(readConfig ReadConfigFile, readE
 			return p.Config, false
 		}
 	}
+	if p.Config.GetRecoveryBucket() != "" || p.Config.GetRecoveryFolderPrefix() != "" {
+		usagemetrics.Action(usagemetrics.BackintRecoveryParameterEnabled)
+	}
 	return p.Config, true
 }
 
