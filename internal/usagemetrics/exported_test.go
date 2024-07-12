@@ -32,8 +32,7 @@ func TestMain(t *testing.M) {
 
 func TestRunning(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusRunning)
 	Running()
@@ -44,8 +43,7 @@ func TestRunning(t *testing.T) {
 
 func TestStarted(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusStarted)
 	Started()
@@ -56,8 +54,7 @@ func TestStarted(t *testing.T) {
 
 func TestStopped(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusStopped)
 	Stopped()
@@ -68,8 +65,7 @@ func TestStopped(t *testing.T) {
 
 func TestConfigured(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusConfigured)
 	Configured()
@@ -80,8 +76,7 @@ func TestConfigured(t *testing.T) {
 
 func TestMisconfigured(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusMisconfigured)
 	Misconfigured()
@@ -92,8 +87,7 @@ func TestMisconfigured(t *testing.T) {
 
 func TestError(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusError)
 	Error(1)
@@ -104,8 +98,7 @@ func TestError(t *testing.T) {
 
 func TestInstalled(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusInstalled)
 	Installed()
@@ -116,8 +109,7 @@ func TestInstalled(t *testing.T) {
 
 func TestUpdated(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusUpdated)
 	Updated("2.0")
@@ -128,8 +120,7 @@ func TestUpdated(t *testing.T) {
 
 func TestUninstalled(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusUninstalled)
 	Uninstalled()
@@ -140,12 +131,43 @@ func TestUninstalled(t *testing.T) {
 
 func TestAction(t *testing.T) {
 	// Choose a test project number to bypass sending a request to the compute server.
-	SetCloudProperties(&iipb.CloudProperties{NumericProjectId: "922508251869"})
-	SetAgentProperties(&cpb.AgentProperties{LogUsageMetrics: true})
+	SetProperties(&cpb.AgentProperties{LogUsageMetrics: true}, &iipb.CloudProperties{NumericProjectId: "922508251869"})
 
 	prevLastCalled := Logger.LastCalled(StatusAction)
 	Action(1)
 	if Logger.LastCalled(StatusAction).Equal(prevLastCalled) {
 		t.Errorf("Action() did not update lastCalled timestamp for ACTION status")
+	}
+}
+
+func TestGetImageOsFromImageURI(t *testing.T) {
+	tests := []struct {
+		name string
+		uri  string
+		want string
+	}{
+		{
+			name: "emptyuri",
+			uri:  "",
+			want: "unknown",
+		},
+		{
+			name: "invaliduri",
+			uri:  "invaliduri-noslashes",
+			want: "unknown",
+		},
+		{
+			name: "validuri",
+			uri:  "/projects/test-project/global/images/test-image",
+			want: "test-image",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := getImageOsFromImageURI(test.uri)
+			if got != test.want {
+				t.Errorf("getImageOsFromImageURI(%v) = %v, want %v", test.uri, got, test.want)
+			}
+		})
 	}
 }

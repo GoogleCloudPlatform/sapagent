@@ -22,14 +22,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
 	"golang.org/x/oauth2/google"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -51,23 +49,6 @@ const (
 )
 
 var (
-	imageProjects [12]string = [12]string{
-		"centos-cloud",
-		"cos-cloud",
-		"debian-cloud",
-		"fedora-coreos-cloud",
-		"rhel-cloud",
-		"rhel-sap-cloud",
-		"suse-cloud",
-		"suse-sap-cloud",
-		"ubuntu-os-cloud",
-		"ubuntu-os-pro-cloud",
-		"windows-cloud",
-		"windows-sql-cloud",
-	}
-	imagePattern = regexp.MustCompile(
-		fmt.Sprintf("projects[/](?:%s)[/]global[/]images[/](.*)", strings.Join(imageProjects[:], "|")),
-	)
 	lock = sync.Mutex{}
 )
 
@@ -80,10 +61,11 @@ type TimeSource interface {
 
 // AgentProperties contains the properties of the agent used by UsageMetrics library.
 type AgentProperties struct {
-	Name            string
-	Version         string
-	LogUsageMetrics bool
-	LogPrefix       string
+	Name             string
+	Version          string
+	LogUsageMetrics  bool
+	LogUsagePrefix   string
+	LogUsageOptional string // optional string to be added to the usage log: "UsageLogPrefix/AgentName/AgentVersion[/OptionalString]/Status"
 }
 
 func (ap *AgentProperties) getLogUsageMetrics() bool {
@@ -108,7 +90,6 @@ type Logger struct {
 	agentProps             *AgentProperties
 	cloudProps             *CloudProperties
 	timeSource             TimeSource
-	image                  string
 	isTestProject          bool
 	lastCalled             map[Status]time.Time
 	dailyLogRunningStarted bool
@@ -194,7 +175,7 @@ func (l *Logger) log(s string) error {
 		log.Logger.Warnw("Unable to send agent status without properly set zone in cloud properties", "l.cloudProps", l.cloudProps)
 		return errors.New("unable to send agent status without properly set zone in cloud properties")
 	}
-	err := l.requestComputeAPIWithUserAgent(buildComputeURL(l.cloudProps), buildUserAgent(l.agentProps, l.image, s, l.cloudProps.InstanceID))
+	err := l.requestComputeAPIWithUserAgent(buildComputeURL(l.cloudProps), buildUserAgent(l.agentProps, s))
 	if err != nil {
 		log.Logger.Warnw("failed to send agent status", "error", err)
 		return err
@@ -242,10 +223,8 @@ func (l *Logger) requestComputeAPIWithUserAgent(url, ua string) error {
 func (l *Logger) SetCloudProps(cp *CloudProperties) {
 	l.cloudProps = cp
 	if cp != nil {
-		l.image = parseImage(cp.Image)
 		l.isTestProject = l.projectExclusions[cp.ProjectNumber]
 	} else {
-		l.image = metadataserver.ImageUnknown
 		l.isTestProject = false
 	}
 }
@@ -280,23 +259,13 @@ func buildComputeURL(cp *CloudProperties) string {
 
 // buildUserAgent returns a User-Agent string that will be submitted to the compute API.
 //
-// User-Agent is of the form "logPrefix/AgentName/Version/image_os_version-instance_id/logged_status".
-func buildUserAgent(ap *AgentProperties, image, status, instanceID string) string {
-	ua := fmt.Sprintf("%s/%s/%s/%s-%s/%s", ap.LogPrefix, ap.Name, ap.Version, image, instanceID, status)
+// User-Agent is of the form "UsageLogPrefix/AgentName/AgentVersion[/OptionalString]/Status".
+func buildUserAgent(ap *AgentProperties, status string) string {
+	ua := fmt.Sprintf("%s/%s/%s", ap.LogUsagePrefix, ap.Name, ap.Version)
+	if ap.LogUsageOptional != "" {
+		ua = fmt.Sprintf("%s/%s", ua, ap.LogUsageOptional)
+	}
+	ua = fmt.Sprintf("%s/%s", ua, status)
 	ua = strings.ReplaceAll(strings.ReplaceAll(ua, " ", ""), "\n", "")
 	return ua
-}
-
-// parseImage retrieves the OS and version from the image URI.
-//
-// The metadata server returns image as "projects/PROJECT_NAME/global/images/OS-VERSION".
-func parseImage(image string) string {
-	if image == metadataserver.ImageUnknown {
-		return image
-	}
-	match := imagePattern.FindStringSubmatch(image)
-	if len(match) >= 2 {
-		return match[1]
-	}
-	return metadataserver.ImageUnknown
 }

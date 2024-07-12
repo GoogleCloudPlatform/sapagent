@@ -150,14 +150,13 @@ func (l *LogUsage) logUsageStatus(cloudProps *iipb.CloudProperties) error {
 }
 
 func configureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version, image string) {
-	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
-		Name:            name,
-		Version:         version,
-		LogUsageMetrics: true,
-	})
 	// Override the imageURL with value passed in args.
 	if image != "" && cp != nil {
 		cp.Image = image
 	}
-	usagemetrics.SetCloudProperties(cp)
+	usagemetrics.SetProperties(&cpb.AgentProperties{
+		Name:            name,
+		Version:         version,
+		LogUsageMetrics: true,
+	}, cp)
 }

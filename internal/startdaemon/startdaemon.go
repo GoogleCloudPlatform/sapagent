@@ -233,12 +233,11 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 
 // configureUsageMetricsForDaemon sets up UsageMetrics for Daemon.
 func configureUsageMetricsForDaemon(cp *iipb.CloudProperties) {
-	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
+	usagemetrics.SetProperties(&cpb.AgentProperties{
 		Name:            configuration.AgentName,
 		Version:         configuration.AgentVersion,
 		LogUsageMetrics: true,
-	})
-	usagemetrics.SetCloudProperties(cp)
+	}, cp)
 }
 
 // startServices starts underlying services of SAP Agent.

@@ -136,12 +136,11 @@ func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string)
 		version = configuration.AgentVersion
 	}
 
-	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
+	usagemetrics.SetProperties(&cpb.AgentProperties{
 		Name:            name,
 		Version:         version,
 		LogUsageMetrics: true,
-	})
-	usagemetrics.SetCloudProperties(cp)
+	}, cp)
 }
 
 // LogErrorToFileAndConsole prints out the error message to console and also to the log file.

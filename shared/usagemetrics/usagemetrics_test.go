@@ -31,30 +31,27 @@ import (
 )
 
 var (
-	testImage = "rhel-8-v20220101"
-
 	// Choose a project number which maps to a test instance.
 	// This value is used in tests to ensure that the Logger.isTestProject field is set to true.
 	testProjectNumber = "922508251869"
 
 	defaultAgentProps = &AgentProperties{
-		Version:         "1.0",
-		Name:            "Agent Name",
-		LogUsageMetrics: true,
-		LogPrefix:       "sap-core-eng",
+		Version:          "1.0",
+		Name:             "Agent Name",
+		LogUsageMetrics:  true,
+		LogUsagePrefix:   "sap-core-eng",
+		LogUsageOptional: "optional",
 	}
 	defaultCloudProps = &CloudProperties{
 		ProjectNumber: testProjectNumber,
 		ProjectID:     "test-project",
 		Zone:          "test-zone",
 		InstanceName:  "test-instance",
-		Image:         fmt.Sprintf("projects/rhel-cloud/global/images/%s", testImage),
 	}
 	zonelessCloudProps = &CloudProperties{
 		ProjectNumber: testProjectNumber,
 		ProjectID:     "test-project",
 		InstanceName:  "test-instance",
-		Image:         fmt.Sprintf("projects/rhel-cloud/global/images/%s", testImage),
 	}
 	defaultNow        = time.Now()
 	defaultTimeSource = clockwork.NewFakeClockAt(defaultNow)
@@ -149,7 +146,7 @@ func TestLogger_Running(t *testing.T) {
 				Version:         "1.0",
 				Name:            "Agent Name",
 				LogUsageMetrics: false,
-				LogPrefix:       "sap-core-eng",
+				LogUsagePrefix:  "sap-core-eng",
 			},
 			nowOffset: defaultNow.Add(24 * time.Hour),
 			want:      defaultNow,
@@ -191,7 +188,7 @@ func TestLogger_Started(t *testing.T) {
 				Version:         "1.0",
 				Name:            "Agent Name",
 				LogUsageMetrics: false,
-				LogPrefix:       "sap-core-eng",
+				LogUsagePrefix:  "sap-core-eng",
 			},
 			want: time.Time{},
 		},
@@ -379,7 +376,6 @@ func TestBuildUserAgent(t *testing.T) {
 	tests := []struct {
 		name       string
 		agentProps *AgentProperties
-		image      string
 		status     string
 		instanceID string
 		want       string
@@ -387,49 +383,15 @@ func TestBuildUserAgent(t *testing.T) {
 		{
 			name:       "success",
 			agentProps: defaultAgentProps,
-			image:      testImage,
 			status:     "RUNNING",
-			instanceID: "123",
-			want:       fmt.Sprintf("sap-core-eng/AgentName/1.0/%s-123/RUNNING", testImage),
+			want:       "sap-core-eng/AgentName/1.0/optional/RUNNING",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := buildUserAgent(test.agentProps, test.image, test.status, test.instanceID); got != test.want {
+			if got := buildUserAgent(test.agentProps, test.status); got != test.want {
 				t.Errorf("buildUserAgent() got=%s want %s", got, test.want)
-			}
-		})
-	}
-}
-
-func TestParseImage(t *testing.T) {
-	tests := []struct {
-		name  string
-		image string
-		want  string
-	}{
-		{
-			name:  "unknownImage",
-			image: metadataserver.ImageUnknown,
-			want:  metadataserver.ImageUnknown,
-		},
-		{
-			name:  "noPatternMatch",
-			image: "invalidImageString",
-			want:  metadataserver.ImageUnknown,
-		},
-		{
-			name:  "success",
-			image: fmt.Sprintf("projects/rhel-cloud/global/images/%s", testImage),
-			want:  testImage,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := parseImage(test.image); got != test.want {
-				t.Errorf("parseImage(%q) got=%s want=%s", test.image, got, test.want)
 			}
 		})
 	}
@@ -440,7 +402,7 @@ func TestSetAgentProperties(t *testing.T) {
 		Name:            "sapagent",
 		Version:         "1.0",
 		LogUsageMetrics: true,
-		LogPrefix:       "sap-core-eng",
+		LogUsagePrefix:  "sap-core-eng",
 	}
 
 	logger := NewLogger(nil, nil, clockwork.NewRealClock(), nil)
@@ -483,9 +445,6 @@ func TestSetCloudProperties(t *testing.T) {
 			logger.SetCloudProps(test.cloudProps)
 			if d := cmp.Diff(test.cloudProps, logger.cloudProps, cmp.AllowUnexported(CloudProperties{})); d != "" {
 				t.Errorf("SetCloudProperties(%v) mismatch (-want, +got):\n%s", test.cloudProps, d)
-			}
-			if logger.image != test.wantImage {
-				t.Errorf("SetCloudProperties(%v) unexpected image. got=%s want=%s", test.cloudProps, logger.image, test.wantImage)
 			}
 			if logger.isTestProject != test.wantIsTestProject {
 				t.Errorf("SetCloudProperties(%v) unexpected isTestProject. got=%t want=%t", test.cloudProps, logger.isTestProject, test.wantIsTestProject)

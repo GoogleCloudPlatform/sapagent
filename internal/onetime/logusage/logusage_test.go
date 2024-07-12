@@ -38,9 +38,9 @@ func TestMain(t *testing.M) {
 
 func TestLogUsageHandler(t *testing.T) {
 	// Prevent requests to the compute endpoint during test execution
-	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
+	usagemetrics.SetProperties(&cpb.AgentProperties{
 		LogUsageMetrics: false,
-	})
+	}, &ipb.CloudProperties{})
 
 	tests := []struct {
 		name     string
@@ -132,9 +132,9 @@ func TestLogUsageHandler(t *testing.T) {
 
 func TestLogUsageStatus(t *testing.T) {
 	// Prevent requests to the compute endpoint during test execution
-	usagemetrics.SetAgentProperties(&cpb.AgentProperties{
+	usagemetrics.SetProperties(&cpb.AgentProperties{
 		LogUsageMetrics: false,
-	})
+	}, &ipb.CloudProperties{})
 
 	tests := []struct {
 		name              string

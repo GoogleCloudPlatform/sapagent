@@ -17,9 +17,12 @@ limitations under the License.
 package usagemetrics
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/usagemetrics"
 
@@ -30,19 +33,26 @@ import (
 // Logger is the standard usage logger for the SAP agent.
 var Logger = usagemetrics.NewLogger(nil, nil, clockwork.NewRealClock(), projectExclusionList)
 
-// SetAgentProperties sets the configured agent properties on the standard Logger.
-func SetAgentProperties(ap *cpb.AgentProperties) {
-	Logger.SetAgentProps(
-		&usagemetrics.AgentProperties{
-			Name:            ap.GetName(),
-			Version:         ap.GetVersion(),
-			LogUsageMetrics: ap.GetLogUsageMetrics(),
-			LogPrefix:       "sap-core-eng",
-		})
+func getImageOsFromImageURI(uri string) string {
+	split := strings.Split(uri, "/")
+	if len(split) > 1 {
+		return split[len(split)-1]
+	}
+	return metadataserver.ImageUnknown
 }
 
-// SetCloudProperties sets the configured cloud properties on the standard Logger.
-func SetCloudProperties(cp *iipb.CloudProperties) {
+// SetProperties sets the configured agent properties on the standard Logger.
+func SetProperties(ap *cpb.AgentProperties, cp *iipb.CloudProperties) {
+	img := getImageOsFromImageURI(cp.GetImage())
+	opt := fmt.Sprintf("%s-%s", img, cp.GetInstanceId())
+	Logger.SetAgentProps(
+		&usagemetrics.AgentProperties{
+			Name:             ap.GetName(),
+			Version:          ap.GetVersion(),
+			LogUsageMetrics:  ap.GetLogUsageMetrics(),
+			LogUsagePrefix:   "sap-core-eng",
+			LogUsageOptional: opt,
+		})
 	Logger.SetCloudProps(&usagemetrics.CloudProperties{
 		ProjectID:     cp.ProjectId,
 		Zone:          cp.Zone,
