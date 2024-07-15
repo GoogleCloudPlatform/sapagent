@@ -332,7 +332,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		}
 	}
 	avgTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
-	log.CtxLogger(ctx).Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "objectSizeInBucket", objectSize, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	log.CtxLogger(ctx).Infow("Upload success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "objectSizeInBucket", objectSize, "percentComplete", 100, "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)))
 	return bytesWritten, nil
 }
 
@@ -397,7 +397,7 @@ func (rw *ReadWriter) Download(ctx context.Context) (int64, error) {
 	}
 
 	avgTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
-	log.CtxLogger(ctx).Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	log.CtxLogger(ctx).Infow("Download success", "bucket", rw.BucketName, "object", rw.ObjectName, "bytesWritten", bytesWritten, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", 100, "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)))
 	return bytesWritten, nil
 }
 
@@ -485,7 +485,7 @@ func (rw *ReadWriter) logProgress(logMessage string, n int64) {
 		}
 		lastTransferSpeedMBps := float64(rw.bytesTransferred-rw.lastBytesTransferred) / rw.lastTransferTime.Seconds() / 1024 / 1024
 		totalTransferSpeedMBps := float64(rw.bytesTransferred) / rw.totalTransferTime.Seconds() / 1024 / 1024
-		log.Logger.Infow(logMessage, "bucket", rw.BucketName, "object", rw.ObjectName, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", math.Round(percentComplete), "lastTransferSpeedMBps", math.Round(lastTransferSpeedMBps), "totalTransferSpeedMBps", math.Round(totalTransferSpeedMBps))
+		log.Logger.Infow(logMessage, "bucket", rw.BucketName, "object", rw.ObjectName, "bytesTransferred", rw.bytesTransferred, "totalBytes", rw.TotalBytes, "percentComplete", fmt.Sprintf("%g", math.Round(percentComplete)), "lastTransferSpeedMBps", fmt.Sprintf("%g", math.Round(lastTransferSpeedMBps)), "totalTransferSpeedMBps", fmt.Sprintf("%g", math.Round(totalTransferSpeedMBps)))
 		rw.lastLog = time.Now()
 		rw.lastBytesTransferred = rw.bytesTransferred
 		// Prevent potential divide by zero by defaulting to 1 nanosecond.

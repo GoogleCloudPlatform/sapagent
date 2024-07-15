@@ -326,7 +326,7 @@ func composeChunks(ctx context.Context, p parameters, chunkError bool, startTime
 	}
 
 	avgTransferSpeedMBps := float64(p.fileSize) / time.Since(startTime).Seconds() / 1024 / 1024
-	log.CtxLogger(ctx).Infow("All chunks uploaded, composing into 1 object", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object, "avgTransferSpeedMBps", math.Round(avgTransferSpeedMBps))
+	log.CtxLogger(ctx).Infow("All chunks uploaded, composing into 1 object", "chunks", p.config.GetParallelStreams(), "fileName", p.fileName, "object", object, "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)))
 	var srcs []*store.ObjectHandle
 	// The composer can take between 1 to 32 objects to compose into 1 object
 	// parallel_streams are limited to 32 in the configuration so only 1 compose call is needed.
