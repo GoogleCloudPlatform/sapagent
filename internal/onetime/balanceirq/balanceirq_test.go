@@ -340,6 +340,32 @@ func TestReadSockets(t *testing.T) {
 			want:    []socketCores{{socket: "1", cores: "1-2,3-4"}},
 			wantErr: nil,
 		},
+		{
+			name: "SuccessMultipleSockets",
+			b: BalanceIRQ{
+				readFile: defaultReadFile([]error{nil, nil, nil}, []string{"1-2", "1-2,3-4", "5-6,7-8"}),
+			},
+			want:    []socketCores{{socket: "1", cores: "1-2,3-4"}, {socket: "2", cores: "5-6,7-8"}},
+			wantErr: nil,
+		},
+		{
+			name: "SuccessPinToSocket",
+			b: BalanceIRQ{
+				readFile:    defaultReadFile([]error{nil, nil, nil}, []string{"1-2", "1-2,3-4", "5-6,7-8"}),
+				pinToSocket: "1",
+			},
+			want:    []socketCores{{socket: "1", cores: "1-2,3-4"}},
+			wantErr: nil,
+		},
+		{
+			name: "PinToSocketNotFound",
+			b: BalanceIRQ{
+				readFile:    defaultReadFile([]error{nil, nil, nil}, []string{"1-2", "1-2,3-4", "5-6,7-8"}),
+				pinToSocket: "3",
+			},
+			want:    nil,
+			wantErr: cmpopts.AnyError,
+		},
 	}
 	for _, test := range test {
 		t.Run(test.name, func(t *testing.T) {

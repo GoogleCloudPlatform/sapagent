@@ -55,6 +55,7 @@ WantedBy=multi-user.target`
 
 // BalanceIRQ has args for balanceirq subcommands.
 type BalanceIRQ struct {
+	pinToSocket   string
 	install, help bool
 
 	writeFile   writeFileFunc
@@ -82,6 +83,7 @@ func (*BalanceIRQ) Usage() string {
 	return `Usage: balanceirq [subcommand]
 
   Subcommand (optional):
+    -pin-to-socket=<"socket">	Pins all interrupts to a specific socket
     -install=<true|false>	Installs a systemd service which will run balanceirq on each boot of the system
     -log-path=<log-path>	The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/balanceirq.log
     -h	Displays help` + "\n"
@@ -90,6 +92,7 @@ func (*BalanceIRQ) Usage() string {
 // SetFlags implements the subcommand interface for configureinstance.
 func (b *BalanceIRQ) SetFlags(fs *flag.FlagSet) {
 	// TODO: Move common flags to global struct.
+	fs.StringVar(&b.pinToSocket, "pin-to-socket", "", "Pins all interrupts to a specific socket")
 	fs.BoolVar(&b.install, "install", false, "Installs balanceirq as a systemd service")
 	fs.StringVar(&b.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/balanceirq.log")
 	fs.BoolVar(&b.help, "h", false, "Displays help")
@@ -152,7 +155,7 @@ func (b *BalanceIRQ) balanceIRQHandler(ctx context.Context) (subcommands.ExitSta
 	// Assign sockets to interrupts as evenly as possible.
 	for i, interrupt := range interrupts {
 		socket := sockets[i%len(sockets)]
-		if err := b.writeFile(fmt.Sprintf("/proc/irq/%s/smp_affinity", interrupt), []byte(socket.cores), 0644); err != nil {
+		if err := b.writeFile(fmt.Sprintf("/proc/irq/%s/smp_affinity_list", interrupt), []byte(socket.cores), 0644); err != nil {
 			return subcommands.ExitFailure, err
 		}
 		log.CtxLogger(ctx).Infof("Interrupt %s assigned to socket %s, cores %s", interrupt, socket.socket, socket.cores)
@@ -217,8 +220,18 @@ func (b *BalanceIRQ) readSockets(ctx context.Context) ([]socketCores, error) {
 			socket: node,
 			cores:  strings.TrimSpace(string(socketData))})
 	}
-	log.CtxLogger(ctx).Infof("Sockets: %#v", sockets)
-	return sockets, nil
+	if b.pinToSocket == "" {
+		log.CtxLogger(ctx).Infof("Sockets: %#v", sockets)
+		return sockets, nil
+	}
+
+	for _, s := range sockets {
+		if s.socket == b.pinToSocket {
+			log.CtxLogger(ctx).Infof("Pinning all interrupts to provided socket %s", b.pinToSocket)
+			return []socketCores{s}, nil
+		}
+	}
+	return nil, fmt.Errorf("provided socket (%s) not found, available sockets and cores: %v", b.pinToSocket, sockets)
 }
 
 // parseNumberRanges parses a comma separated list of number ranges.
