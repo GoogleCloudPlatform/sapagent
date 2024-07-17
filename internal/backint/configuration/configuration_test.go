@@ -268,6 +268,78 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name:   "CompressedXMLMultipartBackup",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:             "testUser",
+				Function:           bpb.Function_BACKUP,
+				ParamFile:          "testParamsFile.json",
+				Bucket:             "testBucket",
+				XmlMultipartUpload: true,
+				Compress:           true,
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "xml_multipart_upload": true, "compress": true}`), nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:   "EncyptedXMLMultipartBackupEncryptionKey",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:             "testUser",
+				Function:           bpb.Function_BACKUP,
+				ParamFile:          "testParamsFile.json",
+				Bucket:             "testBucket",
+				XmlMultipartUpload: true,
+				EncryptionKey:      "testKey",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "xml_multipart_upload": true, "encryption_key": "testKey"}`), nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:   "EncyptedXMLMultipartBackupKmsKey",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:             "testUser",
+				Function:           bpb.Function_BACKUP,
+				ParamFile:          "testParamsFile.json",
+				Bucket:             "testBucket",
+				XmlMultipartUpload: true,
+				KmsKey:             "testKey",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "xml_multipart_upload": true, "kms_key": "testKey"}`), nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CompressedParallelRestore",
+			params: &Parameters{
+				User:      "testUser",
+				ParamFile: "testParamsFile.json",
+				Function:  "restore",
+				InFile:    "/input.txt",
+				OutFile:   "/output.txt",
+			},
+			want: &bpb.BackintConfiguration{
+				UserId:                  "testUser",
+				Function:                bpb.Function_RESTORE,
+				ParamFile:               "testParamsFile.json",
+				Bucket:                  "testBucket",
+				ParallelRecoveryStreams: 2,
+				Compress:                true,
+				InputFile:               "/input.txt",
+				OutputFile:              "/output.txt",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "parallel_recovery_streams": 2, "compress": true}`), nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name:   "DefaultParallelStreamsForXMLMultipart",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{

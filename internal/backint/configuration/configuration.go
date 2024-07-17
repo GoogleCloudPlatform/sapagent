@@ -171,12 +171,17 @@ func (p *Parameters) validateParameters() error {
 	if p.Config.GetEncryptionKey() != "" && p.Config.GetKmsKey() != "" {
 		return errors.New("only one of encryption_key or kms_key can be provided")
 	}
-	if p.Config.GetFunction() == bpb.Function_BACKUP && p.Config.GetParallelStreams() > 1 {
+	if p.Config.GetFunction() == bpb.Function_BACKUP && (p.Config.GetParallelStreams() > 1 || p.Config.GetXmlMultipartUpload()) {
 		if p.Config.GetCompress() {
 			return errors.New("compressed parallel backups are not supported - 'parallel_streams' must be set to 1 in order to compress data")
 		}
 		if p.Config.GetEncryptionKey() != "" || p.Config.GetKmsKey() != "" {
 			return errors.New("encrypted parallel backups are not supported - 'parallel_streams' must be set to 1 in order to encrypt data")
+		}
+	}
+	if p.Config.GetFunction() == bpb.Function_RESTORE && p.Config.GetParallelRecoveryStreams() > 1 {
+		if p.Config.GetCompress() {
+			return errors.New("compressed parallel restores are not supported - 'parallel_recovery_streams' must be set to 0 or 1 in order to compress data")
 		}
 	}
 
