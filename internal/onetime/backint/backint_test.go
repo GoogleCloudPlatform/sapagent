@@ -175,7 +175,7 @@ func TestBackintHandler(t *testing.T) {
 			client: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
 				return nil, errors.New("client create error")
 			},
-			want: subcommands.ExitUsageError,
+			want: subcommands.ExitFailure,
 		},
 		{
 			name: "SuccessfulBackup",
@@ -183,7 +183,7 @@ func TestBackintHandler(t *testing.T) {
 				User:      "test@TST",
 				Function:  "backup",
 				ParamFile: defaultParametersFile(t).Name(),
-				inFile:    t.TempDir() + "/input.txt",
+				InFile:    t.TempDir() + "/input.txt",
 				OutFile:   t.TempDir() + "/output.txt",
 			},
 			client: defaultStorageClient,
@@ -192,15 +192,15 @@ func TestBackintHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.backint.inFile != "" {
-				f, err := os.Create(test.backint.inFile)
+			if test.backint.InFile != "" {
+				f, err := os.Create(test.backint.InFile)
 				if err != nil {
-					t.Fatalf("os.Create(%v) failed: %v", test.backint.inFile, err)
+					t.Fatalf("os.Create(%v) failed: %v", test.backint.InFile, err)
 				}
 				defer f.Close()
 			}
 
-			got := test.backint.backintHandler(context.Background(), nil, log.Parameters{}, defaultCloudProperties, test.client)
+			_, got := test.backint.backintHandler(context.Background(), nil, log.Parameters{}, defaultCloudProperties, test.client)
 			if got != test.want {
 				t.Errorf("(%#v).backintHandler()=%v, want %v", test.backint, got, test.want)
 			}

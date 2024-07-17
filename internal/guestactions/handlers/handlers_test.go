@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
@@ -271,6 +272,37 @@ func TestParseAgentCommandParameters(t *testing.T) {
 				LogPath:                     "test-log-path",
 			},
 			ignoreUnexportedType: backup.Backup{},
+		},
+		{
+			name: "ParseBackintCommand",
+			command: &gpb.AgentCommand{
+				Parameters: map[string]string{
+					"user":      "test-user",
+					"function":  "test-function",
+					"input":     "test-input",
+					"output":    "test-output",
+					"paramfile": "test-paramfile",
+					"backupid":  "test-backupid",
+					"level":     "test-level",
+					"count":     "2",
+					"loglevel":  "test-loglevel",
+					"log-path":  "test-log-path",
+				},
+			},
+			obj: &backint.Backint{},
+			want: &backint.Backint{
+				User:        "test-user",
+				Function:    "test-function",
+				InFile:      "test-input",
+				OutFile:     "test-output",
+				ParamFile:   "test-paramfile",
+				BackupID:    "test-backupid",
+				BackupLevel: "test-level",
+				Count:       2,
+				LogLevel:    "test-loglevel",
+				LogPath:     "test-log-path",
+			},
+			ignoreUnexportedType: backint.Backint{},
 		},
 		{
 			name: "InvalidCommandParameters",

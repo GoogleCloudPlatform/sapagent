@@ -78,14 +78,14 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 		read              ReadConfigFile
 		readEncryptionKey ReadConfigFile
 		want              *bpb.BackintConfiguration
-		wantOk            bool
+		wantErr           error
 	}{
 		{
 			name: "NoUser",
 			params: &Parameters{
 				User: "",
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "NoParamsFile",
@@ -93,7 +93,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				User:      "testUser",
 				ParamFile: "",
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "NoFunction",
@@ -102,7 +102,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				ParamFile: "testParamsFile.json",
 				Function:  "",
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "InvalidFunction",
@@ -111,21 +111,21 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				ParamFile: "testParamsFile.json",
 				Function:  "testFunction",
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "ParametersReadFileError",
-			params: defaultParameters,
-			want:   defaultConfigArgsParsed,
-			read:   readConfigFileError,
-			wantOk: false,
+			name:    "ParametersReadFileError",
+			params:  defaultParameters,
+			want:    defaultConfigArgsParsed,
+			read:    readConfigFileError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "ParametersFileEmpty",
-			params: defaultParameters,
-			want:   defaultConfigArgsParsed,
-			read:   defaultReadConfigFile,
-			wantOk: false,
+			name:    "ParametersFileEmpty",
+			params:  defaultParameters,
+			want:    defaultConfigArgsParsed,
+			read:    defaultReadConfigFile,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "ParametersFileMalformed",
@@ -134,7 +134,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`test`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "NoBucket",
@@ -143,7 +143,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": ""}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "BucketWithForwardSlash",
@@ -157,7 +157,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "//test-bucket"}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "BucketWithGsPrefix",
@@ -171,7 +171,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "gs:test-bucket"}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "RecoveryBucketWithForwardSlash",
@@ -186,7 +186,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "test-bucket", "recovery_bucket": "//test-bucket"}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "RecoveryBucketWithGsPrefix",
@@ -201,7 +201,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "test-bucket", "recovery_bucket": "gs:test-bucket"}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "EncyptionKeyAndKmsKeyDefined",
@@ -217,7 +217,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "encryption_key": "testKey", "kms_key": "testKey"}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "CompressedParallelBackup",
@@ -233,7 +233,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "parallel_streams": 2, "compress": true}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "EncyptedParallelBackupEncryptionKey",
@@ -249,7 +249,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "parallel_streams": 2, "encryption_key": "testKey"}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "EncyptedParallelBackupKmsKey",
@@ -265,7 +265,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "parallel_streams": 2, "kms_key": "testKey"}`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "DefaultParallelStreamsForXMLMultipart",
@@ -290,7 +290,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "xml_multipart_upload": true}`), nil
 			},
-			wantOk: true,
+			wantErr: nil,
 		},
 		{
 			name:   "SuccessfullyParseWithDefaultsApplied",
@@ -317,7 +317,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "recovery_bucket": "recoveryBucket", "rate_limit_mb": -1, "folder_prefix": "test/1/2/3"}`), nil
 			},
-			wantOk: true,
+			wantErr: nil,
 		},
 		{
 			name: "SuccessfullyParseNoDefaults",
@@ -353,7 +353,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "recovery_bucket": "recoveryBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 200, "rate_limit_mb": 200, "folder_prefix": "test/1/2/3/", "recovery_folder_prefix": "test/1/2/3/", "storage_class": "COLDLINE", "send_metrics_to_monitoring": false}`), nil
 			},
-			wantOk: true,
+			wantErr: nil,
 		},
 		{
 			name: "SuccessfullyParseRecoveryParametersNoFolder",
@@ -386,7 +386,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "recovery_bucket": "recoveryBucket", "folder_prefix": "test/1/2/3", "recovery_folder_prefix": ""}`), nil
 			},
-			wantOk: true,
+			wantErr: nil,
 		},
 		{
 			name: "SuccessfullyParseRecoveryParametersNoBucket",
@@ -419,14 +419,14 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`{"bucket": "testBucket", "recovery_bucket": "", "folder_prefix": "test/1/2/3", "recovery_folder_prefix": "test/recovery/1/2/3/"}`), nil
 			},
-			wantOk: true,
+			wantErr: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read, test.readEncryptionKey)
-			if gotOk != test.wantOk {
-				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotOk, test.wantOk)
+			got, gotErr := test.params.ParseArgsAndValidateConfig(test.read, test.readEncryptionKey)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotErr, test.wantErr)
 			}
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%#v.ParseArgsAndValidateConfig() had unexpected diff (-want +got):\n%s", test.params, diff)
@@ -525,7 +525,7 @@ func TestLegacyParameters(t *testing.T) {
 		read              ReadConfigFile
 		readEncryptionKey ReadConfigFile
 		want              *bpb.BackintConfiguration
-		wantOk            bool
+		wantErr           error
 	}{
 		{
 			name:   "EmptyValueForParameter",
@@ -534,7 +534,7 @@ func TestLegacyParameters(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`#BUCKET`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "FailedToParseReadIdleTimeout",
@@ -543,7 +543,7 @@ func TestLegacyParameters(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`#READ_IDLE_TIMEOUT abc`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "FailedToParseChunkSize",
@@ -552,7 +552,7 @@ func TestLegacyParameters(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`#CHUNK_SIZE_MB abc`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "FailedToParseRateLimit",
@@ -561,7 +561,7 @@ func TestLegacyParameters(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`#RATE_LIMIT_MB abc`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "FailedToParseRetries",
@@ -570,7 +570,7 @@ func TestLegacyParameters(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`#MAX_GCS_RETRY abc`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "FailedToParseParallelFactor",
@@ -579,7 +579,7 @@ func TestLegacyParameters(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`#PARALLEL_FACTOR abc`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "FailedToParseThreads",
@@ -588,7 +588,7 @@ func TestLegacyParameters(t *testing.T) {
 			read: func(p string) ([]byte, error) {
 				return []byte(`#THREADS abc`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "EncyptionKeyAndKmsKeyDefined",
@@ -608,7 +608,7 @@ func TestLegacyParameters(t *testing.T) {
 #ENCRYPTION_KEY testKey
 #KMS_KEY_NAME testKey`), nil
 			},
-			wantOk: false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "SuccessfullyParseAllArgs",
@@ -663,14 +663,14 @@ func TestLegacyParameters(t *testing.T) {
 			readEncryptionKey: func(p string) ([]byte, error) {
 				return []byte("base64EncodedTestKey"), nil
 			},
-			wantOk: true,
+			wantErr: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotOk := test.params.ParseArgsAndValidateConfig(test.read, test.readEncryptionKey)
-			if gotOk != test.wantOk {
-				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotOk, test.wantOk)
+			got, gotErr := test.params.ParseArgsAndValidateConfig(test.read, test.readEncryptionKey)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("%#v.ParseArgsAndValidateConfig() = %v, want %v", test.params, gotErr, test.wantErr)
 			}
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%#v.ParseArgsAndValidateConfig() had unexpected diff (-want +got):\n%s", test.params, diff)

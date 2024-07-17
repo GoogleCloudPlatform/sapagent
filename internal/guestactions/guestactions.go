@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/prototext"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/backinthandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configureinstancehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/gcbdrbackuphandler"
@@ -55,6 +56,7 @@ const (
 type guestActionHandler func(context.Context, *gpb.Command, *ipb.CloudProperties) (*gpb.CommandResult, bool)
 
 var guestActionsHandlers = map[string]guestActionHandler{
+	"backint":                backinthandler.BackintHandler,
 	"configure":              configurehandler.ConfigureHandler,
 	"configureinstance":      configureinstancehandler.ConfigureInstanceHandler,
 	"gcbdr-backup":           gcbdrbackuphandler.GCBDRBackupHandler,

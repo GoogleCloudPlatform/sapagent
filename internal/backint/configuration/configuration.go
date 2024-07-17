@@ -48,30 +48,30 @@ type Parameters struct {
 
 // ParseArgsAndValidateConfig reads the backint args and params and validates them.
 // If valid, the proto will be populated and defaults will be applied.
-func (p *Parameters) ParseArgsAndValidateConfig(readConfig ReadConfigFile, readEncryptionKey ReadConfigFile) (*bpb.BackintConfiguration, bool) {
+func (p *Parameters) ParseArgsAndValidateConfig(readConfig ReadConfigFile, readEncryptionKey ReadConfigFile) (*bpb.BackintConfiguration, error) {
 	if err := p.parseCommandLineArgs(); err != nil {
 		log.Logger.Errorw("Incorrect command line arguments", "error", err)
 		usagemetrics.Error(usagemetrics.BackintIncorrectArguments)
-		return p.Config, false
+		return p.Config, err
 	}
 
 	if code, err := p.readParametersFile(readConfig); err != nil {
 		log.Logger.Errorf("Parameters file at '%s' has error: %v. Please fix the error and restart backint", p.ParamFile, err)
 		usagemetrics.Error(code)
-		return p.Config, false
+		return p.Config, err
 	}
 
 	p.ApplyDefaults(int64(runtime.NumCPU()))
 
 	if p.Config.GetEncryptionKey() != "" {
 		if err := p.readEncryptionKeyFromFile(readEncryptionKey); err != nil {
-			return p.Config, false
+			return p.Config, err
 		}
 	}
 	if p.Config.GetRecoveryBucket() != "" || p.Config.GetRecoveryFolderPrefix() != "" {
 		usagemetrics.Action(usagemetrics.BackintRecoveryParameterEnabled)
 	}
-	return p.Config, true
+	return p.Config, nil
 }
 
 // LogLevelToZapcore returns the zapcore equivalent of the configuration log level.
