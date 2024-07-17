@@ -139,6 +139,32 @@ message SapDiscovery {
         INSTANCE_ROLE_APP_SERVER = 4;
         // Database node.
         INSTANCE_ROLE_DATABASE = 8;
+        // Combinations of roles.
+        // Application central services and enqueue replication server.
+        INSTANCE_ROLE_ASCS_ERS = 3;
+        // Application central services and application server.
+        INSTANCE_ROLE_ASCS_APP_SERVER = 5;
+        // Application central services and database.
+        INSTANCE_ROLE_ASCS_DATABASE = 9;
+        // Enqueue replication server and application server.
+        INSTANCE_ROLE_ERS_APP_SERVER = 6;
+        // Enqueue replication server and database.
+        INSTANCE_ROLE_ERS_DATABASE = 10;
+        // Application server and database.
+        INSTANCE_ROLE_APP_SERVER_DATABASE = 12;
+        // Application central services, enqueue replication server and
+        // application server.
+        INSTANCE_ROLE_ASCS_ERS_APP_SERVER = 7;
+        // Application central services, enqueue replication server and
+        // database.
+        INSTANCE_ROLE_ASCS_ERS_DATABASE = 11;
+        // Application central services, application server and database.
+        INSTANCE_ROLE_ASCS_APP_SERVER_DATABASE = 13;
+        // Enqueue replication server, application server and database.
+        INSTANCE_ROLE_ERS_APP_SERVER_DATABASE = 14;
+        // Application central services, enqueue replication server,
+        // application server and database.
+        INSTANCE_ROLE_ASCS_ERS_APP_SERVER_DATABASE = 15;
       }
 
       // Bitmask of instance role, a resource may have multiple roles at once.
