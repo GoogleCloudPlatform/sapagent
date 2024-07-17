@@ -244,6 +244,12 @@ func TestErrorConstants(t *testing.T) {
 	if HDBUserstoreKeyFailure != 74 {
 		t.Errorf("HDBUserstoreKeyFailure = %v, want 74", HDBUserstoreKeyFailure)
 	}
+	if ServiceDisableFailure != 75 {
+		t.Errorf("ServiceDisableFailure = %v, want 75", ServiceDisableFailure)
+	}
+	if ServiceEnableFailure != 76 {
+		t.Errorf("ServiceEnableFailure = %v, want 76", ServiceEnableFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -408,5 +414,17 @@ func TestActionConstants(t *testing.T) {
 	}
 	if BackintRecoveryParameterEnabled != 53 {
 		t.Errorf("BackintRecoveryParameterEnabled = %v, want 53", BackintRecoveryParameterEnabled)
+	}
+	if ServiceDisableStarted != 54 {
+		t.Errorf("ServiceDisableStarted = %v, want 77", ServiceDisableStarted)
+	}
+	if ServiceDisableFinished != 55 {
+		t.Errorf("ServiceDisableFinished = %v, want 78", ServiceDisableFinished)
+	}
+	if ServiceEnableStarted != 56 {
+		t.Errorf("ServiceEnableStarted = %v, want 79", ServiceEnableStarted)
+	}
+	if ServiceEnableFinished != 57 {
+		t.Errorf("ServiceEnableFinished = %v, want 80", ServiceEnableFinished)
 	}
 }

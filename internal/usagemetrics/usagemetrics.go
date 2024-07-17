@@ -113,6 +113,8 @@ const (
 	PerformanceDiagnosticsFIOFailure               = 72 //	PerformanceDiagnosticsFIOFailure
 	BalanceIRQFailure                              = 73 //	BalanceIRQFailure
 	HDBUserstoreKeyFailure                         = 74 //	HDBUserstoreKeyQueryFailure
+	ServiceDisableFailure                          = 75 //	ServiceDisableFailure
+	ServiceEnableFailure                           = 76 //	ServiceEnableFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -173,6 +175,10 @@ const (
 	HANADiskSnapshotUserstoreKey            = 51 //	HANADiskSnapshotUserstoreKey
 	HANAInsightsOTEUserstoreKey             = 52 //	HANAInsightsOTEUserstoreKey
 	BackintRecoveryParameterEnabled         = 53 //	BackintRecoveryParameterEnabled
+	ServiceDisableStarted                   = 54 //	ServiceDisableStarted
+	ServiceDisableFinished                  = 55 //	ServiceDisableFinished
+	ServiceEnableStarted                    = 56 //	ServiceEnableStarted
+	ServiceEnableFinished                   = 57 //	ServiceEnableFinished
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")
