@@ -464,7 +464,7 @@ func TestReadReplicationConfig(t *testing.T) {
 					
 					online: true
 					
-					mode: syncmem
+					mode: primary
 					operation mode: logreplay_readaccess
 					site id: 2
 					site name: gce-2
@@ -525,7 +525,6 @@ func TestReadReplicationConfig(t *testing.T) {
 		},
 		wantMode:      0,
 		wantHAMembers: nil,
-		wantErr:       cmpopts.AnyError,
 	}, {
 		name: "NoHostMap",
 		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -561,7 +560,7 @@ func TestReadReplicationConfig(t *testing.T) {
 					
 					online: true
 					
-					mode: syncmem
+					mode: primary
 					operation mode: logreplay_readaccess
 					site id: 2
 					site name: gce-2
@@ -602,6 +601,60 @@ func TestReadReplicationConfig(t *testing.T) {
 			}
 		},
 		wantMode: 1,
+	}, {
+		name:       "primaryOffline",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+				System Replication State
+				~~~~~~~~~~~~~~~~~~~~~~~~
+				
+				online: false
+				
+				mode: primary
+				operation mode: unknown
+				site id: 1
+				site name: sap-posdb00
+				
+				is source system: unknown
+				is secondary/consumer system: true
+				has secondaries/consumers attached: unknown
+				is a takeover active: false
+				is primary suspended: false
+				done.`,
+			}
+		},
+		wantMode: 1,
+	}, {
+		name:       "secondaryOffline",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+					System Replication State
+					~~~~~~~~~~~~~~~~~~~~~~~~
+					
+					online: false
+					
+					mode: syncmem
+					operation mode: unknown
+					site id: 1
+					site name: sap-posdb00
+					
+					is source system: unknown
+					is secondary/consumer system: false
+					has secondaries/consumers attached: unknown
+					is a takeover active: false
+					is primary suspended: false
+					done.`,
+			}
+		},
+		wantMode: 2,
 	}}
 
 	for _, test := range tests {

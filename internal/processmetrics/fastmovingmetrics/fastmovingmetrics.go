@@ -249,6 +249,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 				Value:   strconv.FormatInt(int64(haAvailabilityValue), 10),
 				Labels:  appendLabels(ip, nil),
 			})
+			log.CtxLogger(ctx).Debugw("Reporting HA metrics", "replication", haReplicationValue, "availability", haAvailabilityValue)
 			metrics = append(metrics, createMetrics(ip, pmHAReplicationPath, extraLabels, now, haReplicationValue))
 			metrics = append(metrics, createMetrics(ip, pmHAAvailabilityPath, nil, now, haAvailabilityValue))
 		}
@@ -274,6 +275,9 @@ func hanaAvailability(p *InstanceProperties, processes map[int]*sapcontrol.Proce
 
 func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicationStatus int64) int64 {
 	var value int64 = unknownState
+	if p.SAPInstance.GetSite() == sapb.InstanceSite_HANA_SECONDARY {
+		return currentNodeSecondary
+	}
 	switch replicationStatus {
 	case replicationActive:
 		if sapControlResult == sapControlAllProcessesRunning {

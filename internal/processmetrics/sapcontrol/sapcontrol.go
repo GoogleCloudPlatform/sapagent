@@ -107,7 +107,7 @@ func ExecProcessList(ctx context.Context, exec commandlineexecutor.Execute, para
 	if !ok {
 		return result, result.ExitCode, fmt.Errorf("invalid sapcontrol return code: %d", result.ExitCode)
 	}
-	log.CtxLogger(ctx).Debugw("Sapcontrol ExitStatusProcessList", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
+	log.CtxLogger(ctx).Debugw("Sapcontrol ExecStatusProcessList", "status", result.ExitCode, "message", message, "stdout", result.StdOut)
 
 	return result, result.ExitCode, nil
 }

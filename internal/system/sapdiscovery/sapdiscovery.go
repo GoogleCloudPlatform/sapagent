@@ -80,6 +80,7 @@ var (
 
 	siteMapPattern = regexp.MustCompile(`((\s+\|)*)(---)?([a-zA-Z0-9_\-]+)\s\([^\)]+\)`)
 	depthPattern   = regexp.MustCompile(`\s+\|`)
+	modePattern    = regexp.MustCompile(`mode: (primary|syncmem|async|sync)\n`)
 )
 
 type (
@@ -222,26 +223,34 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 		return 0, nil, exitStatus, nil, nil
 	}
 
+	if exitStatus == 10 {
+		// Since this is a system with replication, as indicated by failing the "mode: none" check, the
+		// exit status of 10 indicates an error in the system.
+		exitStatus = 0
+	}
+
 	match := sitePattern.FindStringSubmatch(result.StdOut)
 	if len(match) != 2 {
 		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Site for instance", "instanceid", instID)
-		return 0, nil, 0, nil, fmt.Errorf("error determining SAP HANA Site for instance: %s", instID)
+		return 0, nil, 0, nil, nil
 	}
 	site := match[1]
 
+	mode, err = readMode(ctx, result.StdOut, site)
+	if err != nil {
+		return 0, nil, exitStatus, nil, err
+	}
+
 	haHostMap, err := readHAMembers(ctx, result.StdOut, instID)
 	if err != nil {
-		return mode, nil, exitStatus, nil, err
+		log.CtxLogger(ctx).Infow("Error reading HA members", "instanceid", instID, "error", err)
+		return mode, nil, exitStatus, nil, nil
 	}
 	log.CtxLogger(ctx).Debugw("HA Host Map", "haHostMap", haHostMap)
 
 	// site may be either the host name or the site name. Utilize the haHostMap to get a site name.
 	if s, ok := haHostMap[site]; ok {
 		site = s
-	}
-	mode, err = readMode(ctx, result.StdOut, site)
-	if err != nil {
-		return 0, nil, 0, nil, err
 	}
 
 	// Separate sites into tiers.
@@ -299,16 +308,13 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 }
 
 func readMode(ctx context.Context, stdOut, site string) (mode int, err error) {
-	modePattern, err := regexp.Compile(fmt.Sprintf("Replication mode of %s: (.*)\n", site))
-	if err != nil {
-		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "siteID", site)
-		return 0, fmt.Errorf("error determining SAP HANA Replication Mode for instance")
-	}
+	log.CtxLogger(ctx).Debugw("Reading SAP HANA Replication Mode for instance", "siteID", site)
 	match := modePattern.FindStringSubmatch(stdOut)
 	if len(match) < 2 {
-		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "siteID", site)
+		log.CtxLogger(ctx).Debugw("Error determining SAP HANA Replication Mode for instance", "siteID", site, "stdOut", stdOut)
 		return 0, fmt.Errorf("error determining SAP HANA Replication Mode for site: %s", site)
 	}
+	log.CtxLogger(ctx).Debugw("Match", "match", match)
 	if match[1] == "primary" {
 		mode = 1
 		log.CtxLogger(ctx).Debug("Current SAP HANA node is primary")
@@ -383,7 +389,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 			log.CtxLogger(ctx).Debugw("No SAP instance profile found", "line", line, "match", profile)
 			continue
 		}
-		
+
 		number, err := strconv.Atoi(path[5])
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Failed to parse SAP instance number", "line", line, "match", path[5], "err", err)
