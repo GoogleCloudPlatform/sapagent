@@ -408,6 +408,99 @@
                 "value_type": "VALUE_INT64"
             }
         ]
+    },
+    {
+        "name": "blocked_transaction_queries",
+        "sql": "select DATABASE_NAME, STATS.HOST, SVC.SERVICE_NAME, LOCK_TYPE, count(*) from M_DATABASES, M_SERVICES SVC, M_BLOCKED_TRANSACTIONS STATS where STATS.HOST=SVC.HOST AND STATS.PORT=SVC.PORT GROUP BY DATABASE_NAME, STATS.HOST, SERVICE_NAME, LOCK_TYPE;",
+        "columns": [
+            {
+                "name": "database_name",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "host",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "service",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "lock_type",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "count",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "transactions/blocked"
+            }
+        ]
+    },
+    {
+        "name": "data_backup_state_queries",
+        "sql": "select STATE_NAME,UTC_END_TIME AS last_backup_time,BACKUP_ID from M_BACKUP_CATALOG where ENTRY_TYPE_NAME = 'complete data backup' ORDER BY LAST_BACKUP_TIME DESC LIMIT 1",
+        "columns": [
+            {
+                "name": "state_name",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "last_backup_time",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "backup_id",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "backups/data"
+            }
+        ]
+    },
+    {
+        "name": "log_backup_state_queries",
+        "sql": "WITH RecentLogBackups AS ( SELECT TOP 20 * FROM M_BACKUP_CATALOG WHERE ENTRY_TYPE_NAME = 'log backup' ) SELECT SUM(CASE WHEN STATE_NAME = 'successful' THEN 1 ELSE 0 END) AS successful_backups, SUM(CASE WHEN STATE_NAME = 'failed' THEN 1 ELSE 0 END) AS failed_backups FROM RecentLogBackups;",
+        "columns": [
+            {
+                "name": "successful_backups",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "backups/log"
+            },
+            {
+                "name": "failed_backups",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            }
+        ]
+    },
+    {
+        "name": "memory_unloads_queries",
+        "sql": "SELECT HOST,TABLE_NAME,COUNT(*) FROM M_CS_UNLOADS where REASON='LOW MEMORY' GROUP BY TABLE_NAME,HOST",
+        "columns": [
+            {
+                "name": "host",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+              },
+              {
+                "name": "table_name",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+              },
+              {
+                "name": "count",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "memory/unloads"
+              }
+        ]
     }
   ]
 }
