@@ -81,6 +81,7 @@ var (
 			},
 			SelfLink: defaultInstanceLink,
 		}},
+
 		NodeGroups: []*compute.NodeGroup{{
 			Name: "test-node-group",
 			Zone: "test-zone",
@@ -92,6 +93,52 @@ var (
 			}},
 		},
 	}
+
+	x4TenantGCE = &fakegcebeta.TestGCE{
+		Project: "test-project",
+		Zone:    "test-zone",
+		Instances: []*compute.Instance{{
+			Name:        "test-instance-name",
+			MachineType: "x4-megamem-960-metal",
+			SelfLink:    defaultInstanceLink,
+			ResourceStatus: &compute.ResourceStatus{
+				UpcomingMaintenance: sampleUpcomingMaintenance,
+			},
+		}},
+	}
+
+	x4TenantGCENoMaintenance = &fakegcebeta.TestGCE{
+		Project: "test-project",
+		Zone:    "test-zone",
+		Instances: []*compute.Instance{{
+			Name:        "test-instance-name",
+			MachineType: "x4-megamem-960-metal",
+			SelfLink:    defaultInstanceLink,
+		}},
+	}
+	x4TenantGCENoMaintenanceSpecialTypePath = &fakegcebeta.TestGCE{
+		Project: "test-project",
+		Zone:    "test-zone",
+		Instances: []*compute.Instance{{
+			Name:        "test-instance-name",
+			MachineType: "/special/path/to/x4-megamem-960-metal",
+			SelfLink:    defaultInstanceLink,
+		}},
+	}
+
+	nonX4TenantGCE = &fakegcebeta.TestGCE{
+		Project: "test-project",
+		Zone:    "test-zone",
+		Instances: []*compute.Instance{{
+			Name:        "test-instance-name",
+			MachineType: "n1-ultramem-40",
+			SelfLink:    defaultInstanceLink,
+			ResourceStatus: &compute.ResourceStatus{
+				UpcomingMaintenance: sampleUpcomingMaintenance,
+			},
+		}},
+	}
+
 	defaultInstanceLink       = "https://www.googleapis.com/compute/v1/projects/test-project-id/zones/test-zone/instances/test-instance-id"
 	sampleUpcomingMaintenance = &compute.UpcomingMaintenance{
 		CanReschedule:         true,
@@ -296,27 +343,85 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		skipMetrics         map[string]bool
 		wantValues          map[string]string
 		wantErr             error
-	}{{
-		name:            "UpcomingMaint",
-		cloudProperties: defaultCloudProperties,
-		gceService:      stamGCE,
-		upcomingMaintenance: &compute.UpcomingMaintenance{
-			CanReschedule:         true,
-			WindowStartTime:       "2023-06-21T15:57:53Z",
-			WindowEndTime:         "2023-06-21T23:57:53Z",
-			LatestWindowStartTime: "2023-06-21T15:57:53Z",
-			MaintenanceStatus:     "PENDING",
-			Type:                  "SCHEDULED",
+	}{
+		{
+			name:            "UpcomingMaintX4",
+			cloudProperties: defaultCloudProperties,
+			gceService:      x4TenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "true",
+				metricURL + maintPath + "/window_start_time":        "1687363073",
+				metricURL + maintPath + "/window_end_time":          "1687391873",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/maintenance_status":       "1",
+				metricURL + maintPath + "/type":                     "1",
+			},
 		},
-		wantValues: map[string]string{
-			metricURL + maintPath + "/can_reschedule":           "true",
-			metricURL + maintPath + "/window_start_time":        "1687363073",
-			metricURL + maintPath + "/window_end_time":          "1687391873",
-			metricURL + maintPath + "/latest_window_start_time": "1687363073",
-			metricURL + maintPath + "/maintenance_status":       "1",
-			metricURL + maintPath + "/type":                     "1",
+		{
+			name:                "UpcomingMaintNotX4",
+			cloudProperties:     defaultCloudProperties,
+			gceService:          nonX4TenantGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{},
+			wantValues:          map[string]string{},
+			wantErr:             cmpopts.AnyError,
 		},
-	},
+		{
+			name:                "NoMaintX4",
+			cloudProperties:     defaultCloudProperties,
+			gceService:          x4TenantGCENoMaintenance,
+			upcomingMaintenance: &compute.UpcomingMaintenance{},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "false",
+				metricURL + maintPath + "/window_start_time":        "0",
+				metricURL + maintPath + "/window_end_time":          "0",
+				metricURL + maintPath + "/latest_window_start_time": "0",
+				metricURL + maintPath + "/maintenance_status":       "0",
+				metricURL + maintPath + "/type":                     "0",
+			},
+		},
+		{
+			name:                "NoMaintX4SpecialTypePath",
+			cloudProperties:     defaultCloudProperties,
+			gceService:          x4TenantGCENoMaintenanceSpecialTypePath,
+			upcomingMaintenance: &compute.UpcomingMaintenance{},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "false",
+				metricURL + maintPath + "/window_start_time":        "0",
+				metricURL + maintPath + "/window_end_time":          "0",
+				metricURL + maintPath + "/latest_window_start_time": "0",
+				metricURL + maintPath + "/maintenance_status":       "0",
+				metricURL + maintPath + "/type":                     "0",
+			},
+		},
+		{
+			name:            "UpcomingMaint",
+			cloudProperties: defaultCloudProperties,
+			gceService:      stamGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "true",
+				metricURL + maintPath + "/window_start_time":        "1687363073",
+				metricURL + maintPath + "/window_end_time":          "1687391873",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/maintenance_status":       "1",
+				metricURL + maintPath + "/type":                     "1",
+			},
+		},
 		{
 			name:            "CanRescheduleSkipped",
 			cloudProperties: defaultCloudProperties,

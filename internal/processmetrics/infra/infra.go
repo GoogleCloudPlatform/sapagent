@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -196,46 +197,59 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 		log.CtxLogger(ctx).Debugw("Could not get instance from compute API", "project", project, "zone", zone, "instance", instName, "error", err)
 		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not get instance from compute API: %w", err)
 	}
-	if instance.Scheduling == nil || len(instance.Scheduling.NodeAffinities) == 0 {
-		log.CtxLogger(ctx).Debug("Not a sole tenant node; skipping maintenance metric collection.")
-		return []*mrpb.TimeSeries{}, fmt.Errorf("not a sole tenant node; skipping maintenance metric collection")
-	}
+	log.CtxLogger(ctx).Debugw("Instance details", "type", instance.MachineType)
 
-	n, err := p.resolveNodeGroup(project, zone, instance.SelfLink)
-	if errors.Is(err, ErrNoStamMatch) {
-		return []*mrpb.TimeSeries{}, err
-	} else if err != nil {
-		log.CtxLogger(ctx).Debugw("Could not resolve node", "link", instance.SelfLink, "error", err)
-		return []*mrpb.TimeSeries{}, fmt.Errorf("Could not resolve node: %w", err)
-	}
-	if n.UpcomingMaintenance == nil {
-		log.CtxLogger(ctx).Debugw("No upcoming maintenance", "cp", cp)
-		n.UpcomingMaintenance = &compute.UpcomingMaintenance{}
+	upM := &compute.UpcomingMaintenance{}
+	if strings.Contains(instance.MachineType, "x4-") && strings.Contains(instance.MachineType, "metal") {
+
+		if (instance.ResourceStatus == nil) || (instance.ResourceStatus.UpcomingMaintenance == nil) {
+			log.CtxLogger(ctx).Debugw("No upcoming maintenance", "cp", cp)
+		} else {
+			upM = instance.ResourceStatus.UpcomingMaintenance
+		}
 	} else {
-		log.CtxLogger(ctx).Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
+		if instance.Scheduling == nil || len(instance.Scheduling.NodeAffinities) == 0 {
+			log.CtxLogger(ctx).Debug("Not a sole tenant node; skipping maintenance metric collection.")
+			return []*mrpb.TimeSeries{}, fmt.Errorf("not a sole tenant node; skipping maintenance metric collection")
+		}
+
+		n, err := p.resolveNodeGroup(project, zone, instance.SelfLink)
+		if errors.Is(err, ErrNoStamMatch) {
+			return []*mrpb.TimeSeries{}, err
+		} else if err != nil {
+			log.CtxLogger(ctx).Debugw("Could not resolve node", "link", instance.SelfLink, "error", err)
+			return []*mrpb.TimeSeries{}, fmt.Errorf("could not resolve node: %w", err)
+		}
+		if n.UpcomingMaintenance == nil {
+			log.CtxLogger(ctx).Debugw("No upcoming maintenance", "cp", cp)
+		} else {
+			log.CtxLogger(ctx).Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
+			upM = n.UpcomingMaintenance
+		}
+
 	}
 
 	m := []*mrpb.TimeSeries{}
-
 	if _, ok := p.skippedMetrics[maintPath+"/can_reschedule"]; !ok {
-		m = append(m, p.createBoolMetric(maintPath+"/can_reschedule", n.UpcomingMaintenance.CanReschedule))
+		m = append(m, p.createBoolMetric(maintPath+"/can_reschedule", upM.CanReschedule))
 	}
 	if _, ok := p.skippedMetrics[maintPath+"/type"]; !ok {
-		m = append(m, p.createIntMetric(maintPath+"/type", enumToInt(n.UpcomingMaintenance.Type, MaintenanceTypes)))
+		m = append(m, p.createIntMetric(maintPath+"/type", enumToInt(upM.Type, MaintenanceTypes)))
 	}
 	if _, ok := p.skippedMetrics[maintPath+"/maintenance_status"]; !ok {
-		m = append(m, p.createIntMetric(maintPath+"/maintenance_status", enumToInt(n.UpcomingMaintenance.MaintenanceStatus, MaintenanceStatuses)))
+		m = append(m, p.createIntMetric(maintPath+"/maintenance_status", enumToInt(upM.MaintenanceStatus, MaintenanceStatuses)))
 	}
 	if _, ok := p.skippedMetrics[maintPath+"/window_start_time"]; !ok {
-		m = append(m, p.createIntMetric(maintPath+"/window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowStartTime)))
+		m = append(m, p.createIntMetric(maintPath+"/window_start_time", rfc3339ToUnix(upM.WindowStartTime)))
 	}
 	if _, ok := p.skippedMetrics[maintPath+"/window_end_time"]; !ok {
-		m = append(m, p.createIntMetric(maintPath+"/window_end_time", rfc3339ToUnix(n.UpcomingMaintenance.WindowEndTime)))
+		m = append(m, p.createIntMetric(maintPath+"/window_end_time", rfc3339ToUnix(upM.WindowEndTime)))
 	}
 	if _, ok := p.skippedMetrics[maintPath+"/latest_window_start_time"]; !ok {
-		m = append(m, p.createIntMetric(maintPath+"/latest_window_start_time", rfc3339ToUnix(n.UpcomingMaintenance.LatestWindowStartTime)))
+		m = append(m, p.createIntMetric(maintPath+"/latest_window_start_time", rfc3339ToUnix(upM.LatestWindowStartTime)))
 	}
 	return m, nil
+
 }
 
 // createMetric creates a mrpb.TimeSeries object for the given metric.
