@@ -118,8 +118,8 @@ func TestConfigureX43_3(t *testing.T) {
 				WriteFile:   defaultWriteFile(5),
 				Apply:       true,
 			},
-			want:    false,
-			wantErr: cmpopts.AnyError,
+			want:    true,
+			wantErr: nil,
 		},
 		{
 			name: "Success",
