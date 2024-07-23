@@ -248,10 +248,13 @@ type BackintConfiguration struct {
 	DiagnoseTmpDirectory    string              `protobuf:"bytes,37,opt,name=diagnose_tmp_directory,json=diagnoseTmpDirectory,proto3" json:"diagnose_tmp_directory,omitempty"`
 	CustomTime              string              `protobuf:"bytes,38,opt,name=custom_time,json=customTime,proto3" json:"custom_time,omitempty"` // This updates the customTime metadata entry:
 	//	Format: RFC 3339 format - "YYYY-MM-DD'T'HH:MM:SS.SS'Z'" or
-	//	YYYY-MM-DD'T'HH:MM:SS'Z'.
+	//	"YYYY-MM-DD'T'HH:MM:SS'Z'".
+	//	Example: "2024-06-25T13:25:00Z"
 	//
 	// Reference:
-	// https://cloud.google.com/storage/docs/metadata#custom-time
+	// https://cloud.google.com/storage/docs/metadata#custom-time.
+	// A value of "UTCNow" will set the customTime to the current time in
+	// UTC.
 	ParallelRecoveryStreams int64 `protobuf:"varint,39,opt,name=parallel_recovery_streams,json=parallelRecoveryStreams,proto3" json:"parallel_recovery_streams,omitempty"`
 }
 

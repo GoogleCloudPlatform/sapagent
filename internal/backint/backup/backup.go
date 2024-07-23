@@ -189,10 +189,15 @@ func backupFile(ctx context.Context, p parameters) string {
 	var customTime time.Time
 	var err error
 	if p.config.GetCustomTime() != "" {
-		customTime, err = time.Parse(time.RFC3339, p.config.GetCustomTime())
-		if err != nil {
-			log.CtxLogger(ctx).Warnw("Error parsing custom_time field. CustomTime feild will not be set.", "err", err, "customTime", p.config.GetCustomTime(), "Expected Format", time.RFC3339)
+		if p.config.GetCustomTime() == "UTCNow" {
+			customTime = time.Now().UTC()
+		} else {
+			customTime, err = time.Parse(time.RFC3339, p.config.GetCustomTime())
+			if err != nil {
+				log.CtxLogger(ctx).Warnw("Error parsing custom_time field. CustomTime feild will not be set.", "err", err, "customTime", p.config.GetCustomTime(), "Expected Format", time.RFC3339)
+			}
 		}
+		log.CtxLogger(ctx).Infow("CustomTime set to", "customTime", customTime)
 	}
 
 	rw := storage.ReadWriter{

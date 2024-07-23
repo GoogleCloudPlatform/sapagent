@@ -62,9 +62,12 @@ message BackintConfiguration {
   string custom_time =
       38;  // This updates the customTime metadata entry:
            //   Format: RFC 3339 format - "YYYY-MM-DD'T'HH:MM:SS.SS'Z'" or
-           //   YYYY-MM-DD'T'HH:MM:SS'Z'.
+           //   "YYYY-MM-DD'T'HH:MM:SS'Z'".
+           //   Example: "2024-06-25T13:25:00Z"
            // Reference:
-           // https://cloud.google.com/storage/docs/metadata#custom-time
+           // https://cloud.google.com/storage/docs/metadata#custom-time.
+           // A value of "UTCNow" will set the customTime to the current time in
+           // UTC.
   int64 parallel_recovery_streams = 39;
 }
 
