@@ -488,18 +488,62 @@
                 "name": "host",
                 "metric_type": "METRIC_LABEL",
                 "value_type": "VALUE_STRING"
-              },
-              {
+            },
+            {
                 "name": "table_name",
                 "metric_type": "METRIC_LABEL",
                 "value_type": "VALUE_STRING"
-              },
-              {
+            },
+            {
                 "name": "count",
                 "metric_type": "METRIC_GAUGE",
                 "value_type": "VALUE_INT64",
                 "name_override": "memory/unloads"
-              }
+            }
+        ]
+    },
+    {
+        "name": "avg_write_time_queries",
+        "sql": "select host, type, avg_write_time from PUBLIC.M_VOLUME_IO_DETAILED_STATISTICS where (type = 'LOG' or type = 'DATA') and volume_id in (select volume_id from m_volumes where service_name = 'indexserver') and (write_count <> 0 or avg_trigger_async_write_time <> 0) and avg_write_time <>0",
+        "columns": [
+            {
+                "name": "host",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "type",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "avg_write_time",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "disk/writetime"
+            }
+        ]
+    },
+    {
+        "name": "avg_read_time_queries",
+        "sql": "select host,type, avg_read_time from PUBLIC.M_VOLUME_IO_DETAILED_STATISTICS where type = 'DATA' and volume_id in (select volume_id from m_volumes where service_name = 'indexserver') and (read_count <> 0 or avg_trigger_async_read_time <> 0) and avg_read_time <>0",
+        "columns": [
+            {
+                "name": "host",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "type",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "avg_read_time",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "disk/readtime"
+            }
         ]
     }
   ]
