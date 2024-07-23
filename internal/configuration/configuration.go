@@ -111,6 +111,7 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 
 	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
+	validateAgentConfiguration(config)
 	return config
 }
 
@@ -286,6 +287,47 @@ func applyDefaultSupportConfiguration(configFromFile *cpb.SupportConfiguration) 
 		supportConfig = &cpb.SupportConfiguration{}
 	}
 	return supportConfig
+}
+
+// validateAgentConfiguration checks a configuration for any invalid values.
+func validateAgentConfiguration(config *cpb.Configuration) bool {
+	valid := true
+
+	// Validate the HANA Metrics config.
+	hmConfig := config.GetCollectionConfiguration().GetHanaMetricsConfig()
+	hasHANAUserPassword := hmConfig.GetHanaDbUser() != "" && hmConfig.GetHanaDbPassword() != ""
+	hasHANAUserPasswordSecret := hmConfig.GetHanaDbUser() != "" && hmConfig.GetHanaDbPasswordSecretName() != ""
+	if hmConfig.GetHdbuserstoreKey() != "" && hasHANAUserPassword {
+		log.Logger.Info("For hana_metrics_config, if hdbuserstore_key is set, then hana_db_user and hana_db_password will be ignored.")
+		valid = false
+	}
+	if hmConfig.GetHdbuserstoreKey() != "" && hasHANAUserPasswordSecret {
+		log.Logger.Info("For hana_metrics_config, if hdbuserstore_key is set, then hana_db_user and hana_db_password_secret_name will be ignored.")
+		valid = false
+	}
+	if hasHANAUserPassword && hasHANAUserPasswordSecret {
+		log.Logger.Info("For hana_metrics_config, only one of hana_db_password and hana_db_password_secret_name needs to be set.")
+		valid = false
+	}
+
+	// Validate the Workload Validation DB Metrics config.
+	wlmDBConfig := config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig()
+	hasHANAUserPassword = wlmDBConfig.GetHanaDbUser() != "" && wlmDBConfig.GetHanaDbPassword() != ""
+	hasHANAUserPasswordSecret = wlmDBConfig.GetHanaDbUser() != "" && wlmDBConfig.GetHanaDbPasswordSecretName() != ""
+	if wlmDBConfig.GetHdbuserstoreKey() != "" && hasHANAUserPassword {
+		log.Logger.Info("For workload_validation_db_metrics_config, if hdbuserstore_key is set, then hana_db_user and hana_db_password will be ignored.")
+		valid = false
+	}
+	if wlmDBConfig.GetHdbuserstoreKey() != "" && hasHANAUserPasswordSecret {
+		log.Logger.Info("For workload_validation_db_metrics_config, if hdbuserstore_key is set, then hana_db_user and hana_db_password_secret_name will be ignored.")
+		valid = false
+	}
+	if hasHANAUserPassword && hasHANAUserPasswordSecret {
+		log.Logger.Info("For workload_validation_db_metrics_config, only one of hana_db_password and hana_db_password_secret_name needs to be set.")
+		valid = false
+	}
+
+	return valid
 }
 
 // PrepareHMConf reads the default HANA Monitoring queries, parses them into a proto,

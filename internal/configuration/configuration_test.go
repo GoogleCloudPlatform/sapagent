@@ -1241,3 +1241,99 @@ func TestLogLevelToZapcore(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAgentConfiguration(t *testing.T) {
+	tests := []struct{
+		name string
+		config *cpb.Configuration
+		want bool
+	}{
+		{
+			name: "hana_metrics_config_hdbuserstore_key_and_hana_db_user_password",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser: "user",
+						HanaDbPassword: "password",
+						HdbuserstoreKey: "userstore_key",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "hana_metrics_config_hdbuserstore_key_and_hana_db_user_password_secret_name",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser: "user",
+						HanaDbPasswordSecretName: "secret_name",
+						HdbuserstoreKey: "userstore_key",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "hana_metrics_config_hana_db_user_and_hana_db_password_secret_name",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser: "user",
+						HanaDbPassword: "password",
+						HanaDbPasswordSecretName: "secret_name",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "workload_validation_db_metrics_config_hdbuserstore_key_and_hana_db_user_password",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser: "user",
+						HanaDbPassword: "password",
+						HdbuserstoreKey: "userstore_key",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "workload_validation_db_metrics_config_hdbuserstore_key_and_hana_db_user_password_secret_name",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser: "user",
+						HanaDbPasswordSecretName: "secret_name",
+						HdbuserstoreKey: "userstore_key",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "workload_validation_db_metrics_config_hana_db_password_and_hana_db_password_secret_name",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser: "user",
+						HanaDbPassword: "password",
+						HanaDbPasswordSecretName: "secret_name",
+					},
+				},
+			},
+			want: false,
+		},
+	}
+	
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := validateAgentConfiguration(test.config)
+			if got != test.want {
+				t.Errorf("validateAgentConfig(%v) = %t, want: %t", test.config, got, test.want)
+			}
+		})
+	}
+}
