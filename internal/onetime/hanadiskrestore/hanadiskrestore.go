@@ -507,6 +507,8 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	if !ok {
 		return fmt.Errorf("newly created disk %v is not attached to the instance", newDiskName)
 	}
+	// Introducing sleep to let symlinks for the new disk to be created.
+	time.Sleep(5 * time.Second)
 
 	if r.DataDiskVG != "" {
 		if err := r.renameLVM(ctx, exec, cp, dev, newDiskName); err != nil {
