@@ -48,7 +48,7 @@ type (
 		Executor         commandlineexecutor.Execute
 		SAPInstance      *sapb.SAPInstance
 		LastValue        map[string]*process.IOCountersStat
-		NewProcHelper    newProcessWithContextHelper
+		NewProcHelper    NewProcessWithContextHelper
 		SAPControlClient sapcontrol.ClientInterface
 		SkippedMetrics   map[string]bool
 		PMBackoffPolicy  backoff.BackOffContext
@@ -63,14 +63,14 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 	params := Parameters{
 		executor:             p.Executor,
 		client:               p.Client,
-		config:               p.Config,
+		Config:               p.Config,
 		memoryMetricPath:     hanaMemoryPath,
 		cpuMetricPath:        hanaCPUPath,
 		iopsReadsMetricPath:  hanaIOPSReadsPath,
 		iopsWritesMetricPath: hanaIOPSWritesPath,
-		lastValue:            p.LastValue,
+		LastValue:            p.LastValue,
 		SAPInstance:          p.SAPInstance,
-		newProc:              p.NewProcHelper,
+		NewProc:              p.NewProcHelper,
 		SAPControlClient:     p.SAPControlClient,
 	}
 	var metricsCollectionErr error
@@ -81,7 +81,7 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 	}
 	res := make([]*mrpb.TimeSeries, 0)
 	if _, ok := p.SkippedMetrics[hanaCPUPath]; !ok {
-		cpuMetrics, err := collectCPUPerProcess(ctx, params, processes)
+		cpuMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectCPUMetric)
 		if err != nil {
 			metricsCollectionErr = err
 		}

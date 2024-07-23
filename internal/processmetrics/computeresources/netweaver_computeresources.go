@@ -45,7 +45,7 @@ type (
 		Client           cloudmonitoring.TimeSeriesCreator
 		Executor         commandlineexecutor.Execute
 		SAPInstance      *sapb.SAPInstance
-		NewProcHelper    newProcessWithContextHelper
+		NewProcHelper    NewProcessWithContextHelper
 		SAPControlClient sapcontrol.ClientInterface
 		LastValue        map[string]*process.IOCountersStat
 		SkippedMetrics   map[string]bool
@@ -61,14 +61,14 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 	params := Parameters{
 		executor:             p.Executor,
 		client:               p.Client,
-		config:               p.Config,
+		Config:               p.Config,
 		memoryMetricPath:     nwMemoryPath,
 		cpuMetricPath:        nwCPUPath,
 		iopsReadsMetricPath:  nwIOPSReadsPath,
 		iopsWritesMetricPath: nwIOPSWritePath,
-		lastValue:            p.LastValue,
+		LastValue:            p.LastValue,
 		SAPInstance:          p.SAPInstance,
-		newProc:              p.NewProcHelper,
+		NewProc:              p.NewProcHelper,
 		SAPControlClient:     p.SAPControlClient,
 	}
 	processes := CollectProcessesForInstance(ctx, params)
@@ -79,7 +79,7 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 	}
 	res := []*mrpb.TimeSeries{}
 	if _, ok := p.SkippedMetrics[nwCPUPath]; !ok {
-		cpuMetrics, err := collectCPUPerProcess(ctx, params, processes)
+		cpuMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectCPUMetric)
 		if err != nil {
 			metricsCollectionErr = err
 		}

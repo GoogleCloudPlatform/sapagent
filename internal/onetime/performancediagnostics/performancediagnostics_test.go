@@ -19,6 +19,7 @@ package performancediagnostics
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -34,6 +35,7 @@ import (
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
@@ -56,6 +58,8 @@ func TestMain(t *testing.M) {
 	log.SetupLoggingForTest()
 	os.Exit(t.Run())
 }
+
+const expectedCPUPercentage float64 = 46
 
 var (
 	fakeServer = fakestorage.NewServer([]fakestorage.Object{
@@ -229,6 +233,58 @@ func defaultParametersFile(t *testing.T) *os.File {
 	}
 	f.WriteString(defaultBackintFileJSON)
 	return f
+}
+
+type fakeUsageReader struct {
+	wantErrMemoryUsage      error
+	wantErrForCPUUsageStats error
+	wantErrForIOPStats      error
+}
+
+func (ur fakeUsageReader) CPUPercentWithContext(ctx context.Context) (float64, error) {
+	if ur.wantErrForCPUUsageStats != nil {
+		return 0, ur.wantErrForCPUUsageStats
+	}
+	return expectedCPUPercentage * float64(runtime.NumCPU()), nil
+}
+
+func (ur fakeUsageReader) MemoryInfoWithContext(ctx context.Context) (*process.MemoryInfoStat, error) {
+	if ur.wantErrMemoryUsage != nil {
+		return nil, ur.wantErrMemoryUsage
+	}
+	op := &process.MemoryInfoStat{
+		RSS:  2000000,
+		VMS:  4000000,
+		Swap: 6000000,
+	}
+	return op, nil
+}
+
+func (ur fakeUsageReader) IOCountersWithContext(ctx context.Context) (*process.IOCountersStat, error) {
+	if ur.wantErrForIOPStats != nil {
+		return nil, ur.wantErrForIOPStats
+	}
+	return &process.IOCountersStat{
+		ReadBytes:  12000,
+		WriteBytes: 24000,
+	}, nil
+}
+
+func newProcessWithContextHelperTest(ctx context.Context, pid int32) (computeresources.UsageReader, error) {
+	// treating 111 as the PID which results into errors
+	if pid == 111 {
+		return nil, errors.New("could not create new process")
+	}
+	if pid == 222 {
+		return fakeUsageReader{wantErrForCPUUsageStats: errors.New("could not get CPU percentage stats")}, nil
+	}
+	if pid == 333 {
+		return fakeUsageReader{wantErrMemoryUsage: errors.New("could not get memory usage stats")}, nil
+	}
+	if pid == 444 {
+		return fakeUsageReader{wantErrForIOPStats: errors.New("could not get IOP stats")}, nil
+	}
+	return fakeUsageReader{}, nil
 }
 
 func TestExecute(t *testing.T) {
@@ -1904,14 +1960,11 @@ func TestFilterHANAInstances(t *testing.T) {
 		wantInstances []*sappb.SAPInstance
 	}{
 		{
-			name:          "SuccessSAPInstancesIsNil",
-			sapInstances:  nil,
-			wantInstances: nil,
+			name: "SuccessSAPInstancesIsNil",
 		},
 		{
-			name:          "SuccessSAPInstancesIsEmpty",
-			sapInstances:  &sappb.SAPInstances{},
-			wantInstances: nil,
+			name:         "SuccessSAPInstancesIsEmpty",
+			sapInstances: &sappb.SAPInstances{},
 		},
 		{
 			name: "SuccessSAPInstancesHasNoHANAInstances",
@@ -1927,7 +1980,6 @@ func TestFilterHANAInstances(t *testing.T) {
 					},
 				},
 			},
-			wantInstances: nil,
 		},
 		{
 			name: "SuccessSAPInstancesHasNoHANAInstances",
@@ -1998,8 +2050,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 					MkDirErr:   []error{fmt.Errorf("error")},
 				},
 			},
-			wantHANAInstances: nil,
-			wantErr:           cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "SuccessExecutingOTE",
@@ -2042,7 +2093,6 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 					Type:           sappb.InstanceType_HANA,
 				},
 			},
-			wantErr: nil,
 		},
 		{
 			name: "FailNoInstances",
@@ -2075,8 +2125,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 					return &sappb.SAPInstances{}
 				},
 			},
-			wantHANAInstances: nil,
-			wantErr:           cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 	}
 
@@ -2084,11 +2133,11 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var d Diagnose
 			gotHANAInstances, gotErr := d.runSystemDiscoveryOTE(context.Background(), tc.flagSet, tc.opts)
-			if diff := cmp.Diff(gotHANAInstances, tc.wantHANAInstances, protocmp.Transform()); diff != "" {
-				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned an unexpected diff (-want +got): %v", tc.flagSet, tc.opts, diff)
-			}
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
+			}
+			if diff := cmp.Diff(gotHANAInstances, tc.wantHANAInstances, protocmp.Transform()); diff != "" {
+				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned an unexpected diff (-want +got): %v", tc.flagSet, tc.opts, diff)
 			}
 		})
 	}
@@ -2123,6 +2172,34 @@ func TestComputeData(t *testing.T) {
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailCPUMetricCollection",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-instance-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "222",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+				newProc:         newProcessWithContextHelperTest,
+				totalDataPoints: 3,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -2196,8 +2273,9 @@ func TestComputeData(t *testing.T) {
 						},
 					}
 				},
+				totalDataPoints: 3,
+				newProc:         newProcessWithContextHelperTest,
 			},
-			wantErr: nil,
 		},
 	}
 
@@ -2248,7 +2326,6 @@ func TestFetchAllProcesses(t *testing.T) {
 					},
 				},
 			},
-			wantErr: nil,
 		},
 		{
 			name: "FailNoProcessesFound",
@@ -2265,8 +2342,7 @@ func TestFetchAllProcesses(t *testing.T) {
 					return []*computeresources.ProcessInfo{}
 				},
 			},
-			wantProcesses: nil,
-			wantErr:       cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:          "FailNoInstancesPassed",
@@ -2277,8 +2353,7 @@ func TestFetchAllProcesses(t *testing.T) {
 					return []*computeresources.ProcessInfo{}
 				},
 			},
-			wantProcesses: nil,
-			wantErr:       cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 	}
 
@@ -2291,6 +2366,72 @@ func TestFetchAllProcesses(t *testing.T) {
 			}
 			if diff := cmp.Diff(gotProcesses, tc.wantProcesses, protocmp.Transform()); diff != "" {
 				t.Errorf("fetchAllProcesses(%v, %v, %v) returned an unexpected diff (-want +got): %v", tc.opts, tc.HANAInstances, gotErr, diff)
+			}
+		})
+	}
+}
+
+func TestCollectMetrics(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      *options
+		instance  *sappb.SAPInstance
+		processes []*computeresources.ProcessInfo
+		wantCount int
+		wantErr   error
+	}{
+		{
+			name: "SuccessCollectMetrics",
+			opts: &options{
+				exec:            fakeExecForSuccess,
+				frequency:       0,
+				totalDataPoints: 2,
+				newProc:         newProcessWithContextHelperTest,
+			},
+			instance: &sappb.SAPInstance{
+				Sapsid:         "test-hana-1",
+				InstanceNumber: "001",
+				Type:           sappb.InstanceType_HANA,
+			},
+			processes: []*computeresources.ProcessInfo{
+				{
+					PID:  "9023",
+					Name: "I-001-S-test-hana-1-P-001",
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name: "FailCollectCPUMetrics",
+			opts: &options{
+				exec:            fakeExecForSuccess,
+				frequency:       0,
+				totalDataPoints: 2,
+			},
+			instance: &sappb.SAPInstance{
+				Sapsid:         "test-hana-1",
+				InstanceNumber: "001",
+				Type:           sappb.InstanceType_HANA,
+			},
+			processes: []*computeresources.ProcessInfo{
+				{
+					PID:  "222",
+					Name: "I-001-S-test-hana-1-P-001",
+				},
+			},
+			wantCount: 1,
+			wantErr:   cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			metrics, gotErr := collectMetrics(context.Background(), tc.opts, tc.instance, tc.processes)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectMetrics(%v, %v, %v) returned error: %v, want error: %v", context.Background(), tc.opts, tc.instance, gotErr, tc.wantErr)
+			}
+			if len(metrics) != tc.wantCount {
+				t.Errorf("collectMetrics(%v, %v, %v) returned an unexpected number of metrics: %v, want: %v", context.Background(), tc.opts, tc.instance, len(metrics), tc.wantCount)
 			}
 		})
 	}

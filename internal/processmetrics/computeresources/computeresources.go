@@ -39,6 +39,13 @@ import (
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
+// Enum for choosing the metric type to collect.
+const (
+	collectCPUMetric = iota
+	collectMemoryMetric
+	collectDiskIOPSMetric
+)
+
 const (
 	metricURL                 = "workload.googleapis.com"
 	linuxProcStatPath         = "/proc/PID/stat"
@@ -60,27 +67,27 @@ type (
 	// Parameters struct contains the parameters necessary for computeresources package common methods.
 	Parameters struct {
 		executor             commandlineexecutor.Execute
-		config               *cnfpb.Configuration
+		Config               *cnfpb.Configuration
 		client               cloudmonitoring.TimeSeriesCreator
 		cpuMetricPath        string
 		memoryMetricPath     string
 		iopsReadsMetricPath  string
 		iopsWritesMetricPath string
 		SAPInstance          *sapb.SAPInstance
-		newProc              newProcessWithContextHelper
+		NewProc              NewProcessWithContextHelper
 		getProcessListParams commandlineexecutor.Params
 		getABAPWPTableParams commandlineexecutor.Params
 		SAPControlClient     sapcontrol.ClientInterface
-		lastValue            map[string]*process.IOCountersStat
+		LastValue            map[string]*process.IOCountersStat
 	}
 
-	// newProcessWithContextHelper is a strategy which creates a new process type
+	// NewProcessWithContextHelper is a strategy which creates a new process type
 	// from PSUtil library using the provided context and PID.
-	newProcessWithContextHelper func(context.Context, int32) (usageReader, error)
+	NewProcessWithContextHelper func(context.Context, int32) (UsageReader, error)
 
-	// usageReader is an interface providing abstraction over PSUtil methods for calculating CPU
+	// UsageReader is an interface providing abstraction over PSUtil methods for calculating CPU
 	// percentage and memory usage stats for a process and makes them unit testable.
-	usageReader interface {
+	UsageReader interface {
 		CPUPercentWithContext(context.Context) (float64, error)
 		MemoryInfoWithContext(context.Context) (*process.MemoryInfoStat, error)
 		IOCountersWithContext(context.Context) (*process.IOCountersStat, error)
@@ -91,9 +98,29 @@ type (
 		Name string
 		PID  string
 	}
+
+	// MemoryUsage holds the memory usage metrics for a process.
+	MemoryUsage struct {
+		VMS  Metric
+		RSS  Metric
+		Swap Metric
+	}
+
+	// DiskUsage holds the disk IOPS metrics for a process.
+	DiskUsage struct {
+		DeltaReads  Metric
+		DeltaWrites Metric
+	}
+
+	// Metric is a struct to hold the metric value and its metadata.
+	Metric struct {
+		Value       float64
+		ProcessInfo *ProcessInfo
+		TimeStamp   *tspb.Timestamp
+	}
 )
 
-func newProc(ctx context.Context, fn newProcessWithContextHelper, pid int32) (usageReader, error) {
+func newProc(ctx context.Context, fn NewProcessWithContextHelper, pid int32) (UsageReader, error) {
 	if fn == nil {
 		return process.NewProcessWithContext(ctx, pid)
 	}
@@ -167,9 +194,41 @@ func CollectProcessesForInstance(ctx context.Context, p Parameters) []*ProcessIn
 	return processInfos
 }
 
-// collectCPUPerProcess collects CPU utilization per process for HANA, Netweaver and SAP control processes.
-func collectCPUPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
+func collectTimeSeriesMetrics(ctx context.Context, p Parameters, processes []*ProcessInfo, metricType int) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
+	var metricsCollectionErr error
+
+	switch metricType {
+	case collectCPUMetric:
+		// Collect CPU Usage per process.
+		cpuUsages, err := CollectCPUPerProcess(ctx, p, processes)
+		if err != nil {
+			metricsCollectionErr = err
+		}
+
+		// Build time series metrics.
+		for _, cpuUsage := range cpuUsages {
+			labels := map[string]string{
+				"process": FormatProcessLabel(cpuUsage.ProcessInfo.Name, cpuUsage.ProcessInfo.PID),
+			}
+			metrics = append(metrics, createMetrics(p.cpuMetricPath, labels, cpuUsage.Value, p))
+		}
+	case collectMemoryMetric:
+		// TODO: Refactor Memory Metrics method.
+		return collectMemoryPerProcess(ctx, p, processes)
+	case collectDiskIOPSMetric:
+		// TODO: Refactor Disk IOPS Metrics method.
+		return collectIOPSPerProcess(ctx, p, processes)
+	default:
+		metricsCollectionErr = fmt.Errorf("Invalid metric type: %v", metricType)
+	}
+
+	return metrics, metricsCollectionErr
+}
+
+// CollectCPUPerProcess collects CPU utilization per process for HANA, Netweaver and SAP control processes.
+func CollectCPUPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*Metric, error) {
+	var cpuUsages []*Metric
 	var metricsCollectionErr error
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
@@ -177,25 +236,25 @@ func collectCPUPerProcess(ctx context.Context, p Parameters, processes []*Proces
 			log.CtxLogger(ctx).Debugw("Could not parse PID", "pid", processInfo.PID, "process", processInfo.Name, "error", err)
 			continue
 		}
-		proc, err := newProc(ctx, p.newProc, int32(pid))
+		proc, err := newProc(ctx, p.NewProc, int32(pid))
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
 			metricsCollectionErr = err
 			continue
 		}
-		labels := map[string]string{
-			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
-		}
-		cpuusage, err := proc.CPUPercentWithContext(ctx)
+		cpuUsage, err := proc.CPUPercentWithContext(ctx)
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Could not get process CPU stats", "pid", pid, "error", err)
 			metricsCollectionErr = err
 			continue
 		}
-		cpuusage = cpuusage / float64(runtime.NumCPU())
-		metrics = append(metrics, createMetrics(p.cpuMetricPath, labels, cpuusage, p))
+		cpuUsages = append(cpuUsages, &Metric{
+			ProcessInfo: processInfo,
+			Value:       cpuUsage / float64(runtime.NumCPU()),
+			TimeStamp:   tspb.Now(),
+		})
 	}
-	return metrics, metricsCollectionErr
+	return cpuUsages, metricsCollectionErr
 }
 
 // collectMemoryPerProcess is a function responsible for collecting memory utilization
@@ -210,7 +269,7 @@ func collectMemoryPerProcess(ctx context.Context, p Parameters, processes []*Pro
 			log.CtxLogger(ctx).Debugw("Could not parse PID", "pid", processInfo.PID, "process", processInfo.Name, "error", err)
 			continue
 		}
-		proc, err := newProc(ctx, p.newProc, int32(pid))
+		proc, err := newProc(ctx, p.NewProc, int32(pid))
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
 			metricsCollectionErr = err
@@ -223,17 +282,17 @@ func collectMemoryPerProcess(ctx context.Context, p Parameters, processes []*Pro
 			continue
 		}
 		vmSizeLables := map[string]string{
-			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
+			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSize",
 		}
 		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS)/million, p)
 		rSSLables := map[string]string{
-			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
+			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmRSS",
 		}
 		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS)/million, p)
 		swapLables := map[string]string{
-			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
+			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
 			"memType": "VmSwap",
 		}
 		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap)/million, p)
@@ -253,7 +312,7 @@ func collectIOPSPerProcess(ctx context.Context, p Parameters, processes []*Proce
 			log.CtxLogger(ctx).Debugw("Could not parse PID", "pid", processInfo.PID, "process", processInfo.Name, "error", err)
 			continue
 		}
-		proc, err := newProc(ctx, p.newProc, int32(pid))
+		proc, err := newProc(ctx, p.NewProc, int32(pid))
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Could not create process", "pid", pid, "process", processInfo.Name, "error", err)
 			metricsCollectionErr = err
@@ -266,18 +325,18 @@ func collectIOPSPerProcess(ctx context.Context, p Parameters, processes []*Proce
 			continue
 		}
 		key := fmt.Sprintf("%s:%s", processInfo.Name, processInfo.PID)
-		if _, ok := p.lastValue[key]; !ok {
+		if _, ok := p.LastValue[key]; !ok {
 			log.CtxLogger(ctx).Debugw("not creating metric since last value is not updated for IOPS stats", "pid", pid)
-			p.lastValue[key] = currVal
+			p.LastValue[key] = currVal
 			continue
 		}
 		labels := map[string]string{
-			"process": formatProcessLabel(processInfo.Name, processInfo.PID),
+			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
 		}
-		deltaReads := float64(currVal.ReadBytes-p.lastValue[key].ReadBytes) / thousand
-		deltaWrites := float64(currVal.WriteBytes-p.lastValue[key].WriteBytes) / thousand
-		p.lastValue[key] = currVal
-		freq := p.config.GetCollectionConfiguration().GetProcessMetricsFrequency()
+		deltaReads := float64(currVal.ReadBytes-p.LastValue[key].ReadBytes) / thousand
+		deltaWrites := float64(currVal.WriteBytes-p.LastValue[key].WriteBytes) / thousand
+		p.LastValue[key] = currVal
+		freq := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
 		reads := createMetrics(p.iopsReadsMetricPath, labels, deltaReads/float64(freq), p)
 		writes := createMetrics(p.iopsWritesMetricPath, labels, deltaWrites/float64(freq), p)
 		metrics = append(metrics, reads, writes)
@@ -291,18 +350,19 @@ func createMetrics(mPath string, labels map[string]string, val float64, p Parame
 		labels["instance_nr"] = p.SAPInstance.GetInstanceNumber()
 	}
 	ts := timeseries.Params{
-		CloudProp:    p.config.CloudProperties,
+		CloudProp:    p.Config.CloudProperties,
 		MetricType:   metricURL + mPath,
 		MetricLabels: labels,
 		Timestamp:    tspb.Now(),
 		Float64Value: val,
-		BareMetal:    p.config.BareMetal,
+		BareMetal:    p.Config.BareMetal,
 	}
 	log.Logger.Debugw("Creating metric for instance", "metric", mPath, "value", val, "instancenumber", p.SAPInstance.GetInstanceNumber(), "labels", labels)
 	return timeseries.BuildFloat64(ts)
 }
 
-func formatProcessLabel(pname, pid string) string {
+// FormatProcessLabel creates a unique label for a process.
+func FormatProcessLabel(pname, pid string) string {
 	result := forwardSlashChar.ReplaceAllString(pname, "_")
 	result = dashChars.ReplaceAllString(result, "_")
 	return result + ":" + pid

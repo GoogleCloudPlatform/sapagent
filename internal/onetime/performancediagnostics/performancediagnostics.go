@@ -35,6 +35,7 @@ import (
 
 	"flag"
 	"google.golang.org/protobuf/encoding/protojson"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
@@ -53,6 +54,7 @@ import (
 
 	s "cloud.google.com/go/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -113,6 +115,18 @@ type options struct {
 	cloudDiscoveryInterface system.CloudDiscoveryInterface
 	appsDiscovery           func(context.Context) *sappb.SAPInstances
 	collectProcesses        func(context.Context, computeresources.Parameters) []*computeresources.ProcessInfo
+	newProc                 computeresources.NewProcessWithContextHelper
+	frequency               int // collection frequency in seconds for compute data.
+	totalDataPoints         int // total data points to collect in time-series for compute data.
+}
+
+// processStat is a struct to store the CPU, Memory and
+// Disk IOPS time series metrics for a process.
+type processStat struct {
+	processInfo *computeresources.ProcessInfo
+	cpuUsage    []*computeresources.Metric
+	memoryUsage []*computeresources.MemoryUsage
+	diskUsage   []*computeresources.DiskUsage
 }
 
 type zipperHelper struct{}
@@ -201,6 +215,9 @@ func (d *Diagnose) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, l
 		lp:               lp,
 		cp:               cp,
 		collectProcesses: computeresources.CollectProcessesForInstance,
+		// TODO: Fine tune frequency and data point default values.
+		frequency:       5,
+		totalDataPoints: 6,
 	}
 	return d.diagnosticsHandler(ctx, fs, opts)
 }
@@ -394,6 +411,8 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 // computeData collects the compute metrics of the
 // HANA processes running in the HANA instances discovered.
 func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts *options) error {
+	var err error
+
 	// Run system discovery OTE to get the HANA instances.
 	HANAInstances, err := d.runSystemDiscoveryOTE(ctx, flagSet, opts)
 	if err != nil {
@@ -408,9 +427,21 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	}
 	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found HANA processes: %v", instanceWiseHANAProcesses))
 
-	// TODO: - Collect compute metrics of HANA processes.
+	// Collect process-wise time-series CPU, Memory, IOPS metrics.
+	//
+	// err from here is the most recent error encountered and
+	// its done this way to collect as many metrics as possible.
+	for i, ip := range instanceWiseHANAProcesses {
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for instance %v", HANAInstances[i].GetInstanceNumber()))
+		if _, metricsCollectionErr := collectMetrics(ctx, opts, HANAInstances[i], ip); metricsCollectionErr != nil {
+			err = metricsCollectionErr
+		}
 
-	return nil
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for instance %v", HANAInstances[i].GetInstanceNumber()))
+		// TODO: Use collectMetrics return value for report.
+	}
+
+	return err
 }
 
 // runSystemDiscoveryOTE fetches the HANA instances by
@@ -491,6 +522,57 @@ func fetchAllProcesses(ctx context.Context, opts *options, HANAInstances []*sapp
 	}
 
 	return instanceWiseHANAProcesses, nil
+}
+
+// collectMetrics collects the time-series CPU, Memory and
+// IOPS metrics for the given processes.
+func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, error) {
+	// ptsm stores the process-wise time-series metrics.
+	ptsm := make(map[string]*processStat)
+
+	// Initialize ptsm to avoid key lookup errors.
+	for _, process := range processes {
+		ptsm[computeresources.FormatProcessLabel(process.Name, process.PID)] = &processStat{
+			processInfo: process,
+		}
+	}
+
+	// Set up parameters to collect metrics.
+	params := computeresources.Parameters{
+		SAPInstance: instance,
+		LastValue:   make(map[string]*process.IOCountersStat),
+		NewProc:     opts.newProc,
+		Config: &cpb.Configuration{
+			CloudProperties: opts.cp,
+			CollectionConfiguration: &cpb.CollectionConfiguration{
+				ProcessMetricsFrequency: int64(opts.frequency),
+			},
+		},
+	}
+
+	var err error
+	for itr := 1; itr <= opts.totalDataPoints; itr++ {
+		// Collect CPU Metrics.
+		cpuUsages, cpuErr := computeresources.CollectCPUPerProcess(ctx, params, processes)
+		if cpuErr != nil {
+			err = cpuErr
+		}
+
+		for _, metric := range cpuUsages {
+			processLabel := computeresources.FormatProcessLabel(metric.ProcessInfo.Name, metric.ProcessInfo.PID)
+			ptsm[processLabel].cpuUsage = append(ptsm[processLabel].cpuUsage, metric)
+		}
+
+		// The processes for which metrics was not collected in this
+		// iteration can be detected if metric's nil for that timestamp.
+
+		// TODO: Collect Memory Metrics.
+		// TODO: Collect Disk IOPS Metrics.
+
+		time.Sleep(time.Duration(opts.frequency) * time.Second)
+	}
+
+	return ptsm, err
 }
 
 // listOperations returns a map of operations to be performed.

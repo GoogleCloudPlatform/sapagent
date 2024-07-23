@@ -39,7 +39,7 @@ type (
 		Config          *cnfpb.Configuration
 		Client          cloudmonitoring.TimeSeriesCreator
 		Executor        commandlineexecutor.Execute
-		NewProcHelper   newProcessWithContextHelper
+		NewProcHelper   NewProcessWithContextHelper
 		SkippedMetrics  map[string]bool
 		PMBackoffPolicy backoff.BackOffContext
 	}
@@ -52,11 +52,11 @@ type (
 func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	params := Parameters{
 		executor:         p.Executor,
-		config:           p.Config,
+		Config:           p.Config,
 		client:           p.Client,
 		cpuMetricPath:    sapCTRLCPUPath,
 		memoryMetricPath: sapCtrlMemoryPath,
-		newProc:          p.NewProcHelper,
+		NewProc:          p.NewProcHelper,
 	}
 	processes := collectControlProcesses(ctx, params)
 	var metricsCollectionError error
@@ -66,7 +66,7 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb
 	}
 	res := []*mrpb.TimeSeries{}
 	if _, ok := p.SkippedMetrics[sapCTRLCPUPath]; !ok {
-		cpuMetrics, err := collectCPUPerProcess(ctx, params, processes)
+		cpuMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectCPUMetric)
 		if err != nil {
 			metricsCollectionError = err
 		}
