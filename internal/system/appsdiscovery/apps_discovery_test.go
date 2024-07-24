@@ -64,26 +64,21 @@ Operation succeed.
 	defaultSID                = "ABC"
 	defaultSIDAdm             = "abcadm"
 	defaultInstanceNumber     = "00"
-	landscapeOutputSingleNode = `
-| Host        | Host   | Host   | Failover | Remove | Storage   | Storage   | Failover | Failover | NameServer | NameServer | IndexServer | IndexServer | Host    | Host    | Worker  | Worker  |
-|             | Active | Status | Status   | Status | Config    | Actual    | Config   | Actual   | Config     | Actual     | Config      | Actual      | Config  | Actual  | Config  | Actual  |
-|             |        |        |          |        | Partition | Partition | Group    | Group    | Role       | Role       | Role        | Role        | Roles   | Roles   | Groups  | Groups  |
-| ----------- | ------ | ------ | -------- | ------ | --------- | --------- | -------- | -------- | ---------- | ---------- | ----------- | ----------- | ------- | ------- | ------- | ------- |
-| test-instance   | yes    | info   |          |        |         1 |         0 | default  | default  | master 1   | slave      | worker      | standby     | worker  | standby | default | -       |
-
-overall host status: info
+	landscapeOutputSingleNode = `24.07.2024 13:57:24
+	GetSystemInstanceList
+	OK
+	hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+	test-instance, 0, 50013, 50014, 0.3, HDB|HDB_WORKER, GREEN 
 `
-	landscapeOutputMultipleNodes = `
-| Host        | Host   | Host   | Failover | Remove | Storage   | Storage   | Failover | Failover | NameServer | NameServer | IndexServer | IndexServer | Host    | Host    | Worker  | Worker  |
-|             | Active | Status | Status   | Status | Config    | Actual    | Config   | Actual   | Config     | Actual     | Config      | Actual      | Config  | Actual  | Config  | Actual  |
-|             |        |        |          |        | Partition | Partition | Group    | Group    | Role       | Role       | Role        | Role        | Roles   | Roles   | Groups  | Groups  |
-| ----------- | ------ | ------ | -------- | ------ | --------- | --------- | -------- | -------- | ---------- | ---------- | ----------- | ----------- | ------- | ------- | ------- | ------- |
-| test-instance   | yes    | info   |          |        |         1 |         0 | default  | default  | master 1   | slave      | worker      | standby     | worker  | standby | default | -       |
-| test-instancew1 | yes    | ok     |          |        |         2 |         2 | default  | default  | master 2   | slave      | worker      | slave       | worker  | worker  | default | default |
-| test-instancew2 | yes    | ok     |          |        |         3 |         3 | default  | default  | slave      | slave      | worker      | slave       | worker  | worker  | default | default |
-| test-instancew3 | yes    | info   |          |        |         0 |         1 | default  | default  | master 3   | master     | standby     | master      | standby | worker  | default | default |
+	landscapeOutputMultipleNodes = `24.07.2024 13:57:24
+	GetSystemInstanceList
+	OK
+	hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+test-instance , 0, 50013, 50014, 0.3, HDB|HDB_WORKER, GREEN 
+test-instancew1, 0, 50013, 50014, 0.3, HDB|HDB_WORKER, GREEN 
+test-instancew2, 0, 50013, 50014, 0.3, HDB|HDB_WORKER, GREEN 
+test-instancew3, 0, 50013, 50014, 0.3, HDB|HDB_WORKER, GREEN 
 
-overall host status: info
 `
 	defaultAppMountOutput = `
 Filesystem                        Size  Used Avail Use% Mounted on
@@ -941,19 +936,7 @@ func TestDiscoverDBNodes(t *testing.T) {
 		},
 		want: []string{"test-instance", "test-instancew1", "test-instancew2", "test-instancew3"},
 	}, {
-		name:           "pythonScriptReturnsNonfatalCode",
-		sid:            defaultSID,
-		instanceNumber: defaultInstanceNumber,
-		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut:   landscapeOutputSingleNode,
-				Error:    cmpopts.AnyError,
-				ExitCode: 3,
-			}
-		},
-		want: []string{"test-instance"},
-	}, {
-		name:           "pythonScriptFails",
+		name:           "sapcontrolFails",
 		sid:            defaultSID,
 		instanceNumber: defaultInstanceNumber,
 		execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -2841,7 +2824,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
 				Executable: "sudo",
-				Args:       []string{"-i", "-u", "dehadm", "python", "/usr/sap/DEH/HDB00/exe/python_support/landscapeHostConfiguration.py"},
+				Args:       []string{"-i", "-u", "dehadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
 			}, {
 				Executable: "df",
 				Args:       []string{"-h"},
@@ -2954,7 +2937,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 		executor: &fakeCommandExecutor{
 			params: []commandlineexecutor.Params{{
 				Executable: "sudo",
-				Args:       []string{"-i", "-u", "dehadm", "python", "/usr/sap/DEH/HDB00/exe/python_support/landscapeHostConfiguration.py"},
+				Args:       []string{"-i", "-u", "dehadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
 			}, {
 				Executable: "df",
 				Args:       []string{"-h"},
@@ -3117,7 +3100,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
 				Executable: "sudo",
-				Args:       []string{"-i", "-u", "db2adm", "python", "/usr/sap/DB2/HDB00/exe/python_support/landscapeHostConfiguration.py"},
+				Args:       []string{"-i", "-u", "db2adm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
 			}, {
 				Executable: "df",
 				Args:       []string{"-h"},
@@ -4892,11 +4875,11 @@ func TestMergeWorkloadProperties(t *testing.T) {
 				Version:    "106",
 				ExtVersion: "0000000000",
 				Type:       "R",
-				}, {
-					Name:       "S4COREOP",
-					Version:    "106",
-					ExtVersion: "0000000000",
-					Type:       "I",
+			}, {
+				Name:       "S4COREOP",
+				Version:    "106",
+				ExtVersion: "0000000000",
+				Type:       "I",
 			}},
 		},
 	}, {

@@ -1025,48 +1025,38 @@ func (d *SapDiscovery) discoverDBNodes(ctx context.Context, sid, instanceNumber 
 		return nil, errors.New("To discover additional HANA nodes, SID and instance number must be provided")
 	}
 	sidLower := strings.ToLower(sid)
-	sidUpper := strings.ToUpper(sid)
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
-	scriptPath := fmt.Sprintf("/usr/sap/%s/HDB%s/exe/python_support/landscapeHostConfiguration.py", sidUpper, instanceNumber)
-	result := d.Execute(ctx, commandlineexecutor.Params{
+	cmd := commandlineexecutor.Params{
 		Executable: "sudo",
-		Args:       []string{"-i", "-u", sidAdm, "python", scriptPath},
-	})
-	// The commandlineexecutor interface returns an error any time the command
-	// has an exit status != 0. However, only 0 and 1 are considered true
-	// error exit codes for this script.
-	if result.Error != nil && result.ExitCode < 2 {
-		log.CtxLogger(ctx).Infow("Error running landscapeHostConfiguration.py", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
+		Args:       []string{"-i", "-u", sidAdm, "sapcontrol", "-nr", instanceNumber, "-function", "GetSystemInstanceList"},
+	}
+	result := d.Execute(ctx, cmd)
+	if result.Error != nil || result.ExitCode != 0 {
+		log.CtxLogger(ctx).Infow("Error running GetSystemInstanceList", "sid", sid, "error", result.Error, "stdOut", result.StdOut, "stdErr", result.StdErr, "exitcode", result.ExitCode)
 		return nil, result.Error
 	}
 
 	// Example output:
-	// | Host        | Host   | Host   | Failover | Remove | Storage   | Storage   | Failover | Failover | NameServer | NameServer | IndexServer | IndexServer | Host    | Host    | Worker  | Worker  |
-	// |             | Active | Status | Status   | Status | Config    | Actual    | Config   | Actual   | Config     | Actual     | Config      | Actual      | Config  | Actual  | Config  | Actual  |
-	// |             |        |        |          |        | Partition | Partition | Group    | Group    | Role       | Role       | Role        | Role        | Roles   | Roles   | Groups  | Groups  |
-	// | ----------- | ------ | ------ | -------- | ------ | --------- | --------- | -------- | -------- | ---------- | ---------- | ----------- | ----------- | ------- | ------- | ------- | ------- |
-	// | dru-s4dan   | yes    | ok     |          |        |         1 |         1 | default  | default  | master 1   | master     | worker      | master      | worker  | worker  | default | default |
-	// | dru-s4danw1 | yes    | ok     |          |        |         2 |         2 | default  | default  | master 2   | slave      | worker      | slave       | worker  | worker  | default | default |
-	// | dru-s4danw2 | yes    | ok     |          |        |         3 |         3 | default  | default  | slave      | slave      | worker      | slave       | worker  | worker  | default | default |
-	// | dru-s4danw3 | yes    | ignore |          |        |         0 |         0 | default  | default  | master 3   | slave      | standby     | standby     | standby | standby | default | -       |
+	//
+	// 24.07.2024 13:57:24
+	// GetSystemInstanceList
+	// OK
+	// hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+	// sap-ph1hdbw1, 0, 50013, 50014, 0.3, HDB|HDB_WORKER, GRAY
+	// sap-ph1hdbw2, 0, 50013, 50014, 0.3, HDB|HDB_STANDBY, GREEN
+	// sap-ph1hdb, 0, 50013, 50014, 0.3, HDB|HDB_WORKER, GREEN
 	var hosts []string
 	lines := strings.Split(result.StdOut, "\n")
-	pastHeaders := false
 	for _, line := range lines {
-		cols := strings.Split(line, "|")
-		if len(cols) < 2 {
+		parts := strings.Split(line, ",")
+		if len(parts) < 6 {
 			continue
 		}
-		trimmed := strings.TrimSpace(cols[1])
-		if trimmed == "" {
+		name := strings.TrimSpace(parts[0])
+		if name == "hostname" {
 			continue
 		}
-		if !pastHeaders {
-			pastHeaders = !headerLineRegex.MatchString(trimmed)
-			continue
-		}
-
-		hosts = append(hosts, trimmed)
+		hosts = append(hosts, name)
 	}
 	return hosts, nil
 }
