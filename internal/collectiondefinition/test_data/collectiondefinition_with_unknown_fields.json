@@ -670,6 +670,56 @@
           "value": "HA_IN_SAME_ZONE"
         }
       ],
+      "hana_backup_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_backup_tenant_name",
+            "min_version": "3.3"
+          },
+          "value": "TENANT_NAME"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_last_backup_timestamp_utc",
+            "min_version": "3.3"
+          },
+          "value": "LAST_BACKUP_TIMESTAMP"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_delta_backup_tenant_name",
+            "min_version": "3.5"
+          },
+          "value": "DELTA_TENANT_NAME"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_last_delta_backup_timestamp_utc",
+            "min_version": "3.5"
+          },
+          "value": "LAST_DELTA_BACKUP_TIMESTAMP"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_snapshot_backup_tenant_name",
+            "min_version": "3.5"
+          },
+          "value": "SNAPSHOT_TENANT_NAME"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "oldest_last_snapshot_backup_timestamp_utc",
+            "min_version": "3.5"
+          },
+          "value": "LAST_SNAPSHOT_BACKUP_TIMESTAMP"
+        }
+      ],
       "os_command_metrics": [
         {
           "metric_info": {
