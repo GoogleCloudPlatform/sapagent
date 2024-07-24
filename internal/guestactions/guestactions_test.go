@@ -22,14 +22,22 @@ import (
 	"fmt"
 	"testing"
 
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 )
+
+type fakeRestarter struct{}
+
+func (f *fakeRestarter) Restart(cancel context.CancelFunc) context.CancelFunc {
+	return cancel
+}
 
 func TestHandleShellCommand(t *testing.T) {
 	tests := []struct {
@@ -311,13 +319,72 @@ func TestMessageHandler(t *testing.T) {
 		},
 	}
 
+	ga := &GuestActions{
+		CancelFunc: func() {},
+		Restarter:  &fakeRestarter{},
+	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			got, _ := messageHandler(ctx, test.message, nil)
+			got := ga.messageHandler(ctx, test.message, nil)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&gpb.GuestActionError{}, "error_message")); diff != "" {
 				t.Errorf("messageHandler(%v) returned diff (-want +got):\n%s", test.message, diff)
 			}
 		})
+	}
+}
+
+func TestStartUAPCommunication(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *cpb.Configuration
+		want   bool
+	}{
+		{
+			name:   "Default",
+			config: &cpb.Configuration{},
+			want:   false,
+		},
+		{
+			name: "UAPDisabled",
+			config: &cpb.Configuration{
+				UapConfiguration: &cpb.UAPConfiguration{
+					Enabled: &wpb.BoolValue{Value: false},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "UAPEnabled",
+			config: &cpb.Configuration{
+				UapConfiguration: &cpb.UAPConfiguration{
+					Enabled: &wpb.BoolValue{Value: true},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "TestChannelEnabled",
+			config: &cpb.Configuration{
+				UapConfiguration: &cpb.UAPConfiguration{
+					Enabled:            &wpb.BoolValue{Value: true},
+					TestChannelEnabled: &wpb.BoolValue{Value: true},
+				},
+			},
+			want: true,
+		},
+	}
+
+	ctx := context.Background()
+	ga := &GuestActions{
+		CancelFunc: func() {},
+		Restarter:  &fakeRestarter{},
+	}
+
+	for _, tc := range tests {
+		if got := ga.StartUAPCommunication(ctx, tc.config); got != tc.want {
+			t.Errorf("StartUAPCommunication(%v) = %v, want: %v", tc.config, got, tc.want)
+		}
 	}
 }

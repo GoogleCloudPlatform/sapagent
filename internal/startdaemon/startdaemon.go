@@ -143,7 +143,8 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	}
 	d.createLogDir()
 	log.SetupLogging(d.lp)
-	return d.startdaemonHandler(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+	return d.startdaemonHandler(ctx, cancel, false)
 }
 
 func (d *Daemon) createLogDir() {
@@ -185,7 +186,7 @@ func (d *Daemon) createLogDir() {
 }
 
 // startdaemonHandler starts up the main daemon for SAP Agent.
-func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus {
+func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFunc, restarting bool) subcommands.ExitStatus {
 	// Daemon mode operation
 	d.config = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
 	if d.config.GetBareMetal() && d.config.GetCloudProperties() == nil {
@@ -226,8 +227,10 @@ func (d *Daemon) startdaemonHandler(ctx context.Context) subcommands.ExitStatus 
 	configureUsageMetricsForDaemon(d.config.GetCloudProperties())
 	usagemetrics.Configured()
 	usagemetrics.Started()
-	ctx, cancel := context.WithCancel(ctx)
-	d.startServices(ctx, cancel, runtime.GOOS)
+	if !restarting {
+		d.startGuestActions(cancel)
+	}
+	d.startServices(ctx, cancel, runtime.GOOS, restarting)
 	return subcommands.ExitSuccess
 }
 
@@ -241,7 +244,7 @@ func configureUsageMetricsForDaemon(cp *iipb.CloudProperties) {
 }
 
 // startServices starts underlying services of SAP Agent.
-func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, goos string) {
+func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, goos string, restarting bool) {
 	if d.config.GetCloudProperties() == nil {
 		log.Logger.Error("Cloud properties are not set, cannot start services.")
 		usagemetrics.Error(usagemetrics.CloudPropertiesNotSet)
@@ -409,7 +412,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	// start the Host Metrics Collection
 	hmCtx := log.SetCtx(ctx, "context", "HostMetrics")
 	hmp := HostMetricsParams{d.config, instanceInfoReader, cmr, healthMonitor}
-	hmp.startCollection(hmCtx)
+	hmp.startCollection(hmCtx, restarting)
 
 	// Start the Workload Manager metrics collection
 	wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
@@ -451,12 +454,18 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		HRC:               sapdiscovery.HANAReplicationConfig,
 	})
 
-	// Start UAP Communication
-	guestActionsCtx := log.SetCtx(ctx, "context", "UAPCommunication")
-	guestactions.StartUAPCommunication(guestActionsCtx, d.config)
-
 	go usagemetrics.LogRunningDaily()
 	waitForShutdown(shutdownch, cancel)
+}
+
+func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
+	// Start UAP Communication with a separate new context (not impacted by cancels).
+	guestActionsCtx := log.SetCtx(context.Background(), "context", "UAPCommunication")
+	ga := guestactions.GuestActions{
+		CancelFunc: cancel,
+		Restarter:  d,
+	}
+	ga.StartUAPCommunication(guestActionsCtx, d.config)
 }
 
 // startAgentMetricsService returns health monitor for services.
@@ -532,7 +541,7 @@ type HostMetricsParams struct {
 }
 
 // startCollection for HostMetricsParams initiates collection of HostMetrics.
-func (hmp HostMetricsParams) startCollection(ctx context.Context) {
+func (hmp HostMetricsParams) startCollection(ctx context.Context, restarting bool) {
 	hmHeartbeatSpec, err := hmp.healthMonitor.Register(hostMetricsServiceName)
 	if err != nil {
 		log.Logger.Error("Failed to register host metrics service", log.Error(err))
@@ -541,7 +550,7 @@ func (hmp HostMetricsParams) startCollection(ctx context.Context) {
 		return
 	}
 	hmCtx, hmCancel := context.WithCancel(ctx)
-	hostmetrics.StartSAPHostAgentProvider(hmCtx, hmCancel, hostmetrics.Parameters{
+	hostmetrics.StartSAPHostAgentProvider(hmCtx, hmCancel, restarting, hostmetrics.Parameters{
 		Config:             hmp.config,
 		InstanceInfoReader: *hmp.instanceInfoReader,
 		CloudMetricReader:  *hmp.cmr,
@@ -581,4 +590,15 @@ func waitForShutdown(ch <-chan os.Signal, cancel context.CancelFunc) {
 	usagemetrics.Stopped()
 	time.Sleep(3 * time.Second)
 	log.Logger.Info("Shutting down...")
+}
+
+// Restart restarts the daemon services and makes Daemon implement Restarter.
+func (d *Daemon) Restart(cancel context.CancelFunc) context.CancelFunc {
+	log.Logger.Info("Restarting daemon services")
+	cancel()
+	time.Sleep(5 * time.Second)
+	ctx, newCancel := context.WithCancel(context.Background())
+	log.Logger.Infow("Restarting daemon services", "d", d)
+	go d.startdaemonHandler(ctx, cancel, true)
+	return newCancel
 }

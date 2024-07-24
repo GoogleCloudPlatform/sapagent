@@ -75,11 +75,12 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 // StartSAPHostAgentProvider will startup the http server and collect metrics for the sap host agent
 // if enabled in the configuration. Returns true if the collection goroutine is started, and false otherwise.
-func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, params Parameters) bool {
+func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, restarting bool, params Parameters) bool {
 	if !params.Config.GetProvideSapHostAgentMetrics().GetValue() {
 		log.CtxLogger(ctx).Info("Not providing SAP Host Agent metrics")
 		return false
 	}
+	// This routine runs forever (without respecting ctx cancellation) and does not need to be restarted.
 	httpServerRoutine = &recovery.RecoverableRoutine{
 		Routine:             runHTTPServer,
 		RoutineArg:          cancel,
@@ -87,7 +88,12 @@ func StartSAPHostAgentProvider(ctx context.Context, cancel context.CancelFunc, p
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
-	httpServerRoutine.StartRoutine(ctx)
+	if restarting {
+		log.CtxLogger(ctx).Debug("Not starting HTTP server routine as it is already running")
+	} else {
+		log.CtxLogger(ctx).Debug("Starting HTTP server routine")
+		httpServerRoutine.StartRoutine(ctx)
+	}
 
 	collectHostMetricsRoutine = &recovery.RecoverableRoutine{
 		Routine:             collectHostMetrics,

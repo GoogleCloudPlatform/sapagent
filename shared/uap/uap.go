@@ -26,7 +26,6 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -42,10 +41,7 @@ const (
 
 type (
 	// MessageHandlerFunc is the function that the agent will use to handle incoming messages.
-	MessageHandlerFunc func(context.Context, *gpb.GuestActionRequest, *ipb.CloudProperties) (*gpb.GuestActionResponse, bool)
-
-	// RestartHandlerFunc is the function that restarts the agent.
-	RestartHandlerFunc func(context.Context) subcommands.ExitStatus
+	MessageHandlerFunc func(context.Context, *gpb.GuestActionRequest, *ipb.CloudProperties) *gpb.GuestActionResponse
 )
 
 var sendMessage = func(c *client.Connection, msg *acpb.MessageBody) error {
@@ -69,13 +65,13 @@ func sendStatusMessage(ctx context.Context, operationID string, body *anypb.Any,
 	messageToSend := &acpb.MessageBody{Labels: labels, Body: body}
 	log.CtxLogger(ctx).Debugw("Sending status message to UAP.", "messageToSend", messageToSend)
 	if err := sendMessage(conn, messageToSend); err != nil {
-		return fmt.Errorf("Error sending status message to UAP: %v", err)
+		return fmt.Errorf("error sending status message to UAP: %v", err)
 	}
 	return nil
 }
 
-func listenForMessages(ctx context.Context, conn *client.Connection) *acpb.MessageBody {
-	log.CtxLogger(ctx).Debugw("Listening for messages from UAP Highway.")
+func listenForMessages(ctx context.Context, conn *client.Connection, endpoint string, channel string) *acpb.MessageBody {
+	log.CtxLogger(ctx).Debugw("Listening for messages from UAP Highway.", "endpoint", endpoint, "channel", channel)
 	msg, err := receive(conn)
 	if err != nil {
 		log.CtxLogger(ctx).Warn(err)
@@ -86,7 +82,7 @@ func listenForMessages(ctx context.Context, conn *client.Connection) *acpb.Messa
 }
 
 func establishConnection(ctx context.Context, endpoint string, channel string) *client.Connection {
-	log.CtxLogger(ctx).Infow("Establishing connection with UAP Highway.", "channel", channel)
+	log.CtxLogger(ctx).Infow("Establishing connection with UAP Highway.", "endpoint", endpoint, "channel", channel)
 	opts := []option.ClientOption{}
 	if endpoint != "" {
 		log.CtxLogger(ctx).Infow("Using non-default endpoint.", "endpoint", endpoint)
@@ -143,7 +139,7 @@ func parseRequest(ctx context.Context, msg *anypb.Any) (*gpb.GuestActionRequest,
 // "channel" is the registered channel name to be used for communication
 // between the agent and the service provider.
 // "messageHandler" is the function that the agent will use to handle incoming messages.
-func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, messageHandler MessageHandlerFunc, restartHandler RestartHandlerFunc, cloudProperties *ipb.CloudProperties) error {
+func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, messageHandler MessageHandlerFunc, cloudProperties *ipb.CloudProperties) error {
 	eBackoff := setupBackoff()
 	conn := establishConnection(ctx, endpoint, channel)
 	for conn == nil {
@@ -171,7 +167,7 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 			return lastErr
 		}
 		// listen for messages
-		msg := listenForMessages(ctx, conn)
+		msg := listenForMessages(ctx, conn, endpoint, channel)
 		log.CtxLogger(ctx).Infow("ListenForMessages complete.", "msg", prototext.Format(msg))
 		// parse message
 		if msg.GetLabels() == nil {
@@ -201,7 +197,7 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 			continue
 		}
 		// handle the message
-		gaRes, requiresRestart := messageHandler(ctx, gaReq, cloudProperties)
+		gaRes := messageHandler(ctx, gaReq, cloudProperties)
 		statusMsg := succeeded
 		if gaRes.GetError().GetErrorMessage() != "" {
 			log.CtxLogger(ctx).Warnw("Encountered error during UAP message handling.", "err", gaRes.GetError().GetErrorMessage())
@@ -214,11 +210,6 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 		if err != nil {
 			log.CtxLogger(ctx).Warnw("Encountered error during sendStatusMessage.", "err", err)
 			lastErr = err
-		}
-
-		if requiresRestart {
-			log.CtxLogger(ctx).Info("Calling restartHandler")
-			restartHandler(ctx)
 		}
 	}
 }

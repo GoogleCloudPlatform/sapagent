@@ -31,7 +31,6 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/google/subcommands"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -139,7 +138,7 @@ func TestListenForMessages(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			receive = test.receive
-			got := listenForMessages(ctx, conn)
+			got := listenForMessages(ctx, conn, "testendpoint", "testchannel")
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("listenForMessages() returned diff (-want +got):\n%s", diff)
 			}
@@ -330,9 +329,9 @@ func TestCommunicateWithUAP(t *testing.T) {
 			receive = test.receive
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			got := CommunicateWithUAP(ctx, "endpoint", "channel", func(context.Context, *gpb.GuestActionRequest, *ipb.CloudProperties) (*gpb.GuestActionResponse, bool) {
-				return nil, false
-			}, func(context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess }, nil)
+			got := CommunicateWithUAP(ctx, "endpoint", "channel", func(context.Context, *gpb.GuestActionRequest, *ipb.CloudProperties) *gpb.GuestActionResponse {
+				return nil
+			}, nil)
 			if got == nil {
 				if test.want != "" {
 					t.Errorf("CommunicateWithUAP() returned nil error, want error: %s", test.want)

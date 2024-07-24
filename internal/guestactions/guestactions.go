@@ -20,7 +20,6 @@ package guestactions
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"strings"
 	"time"
 
@@ -35,7 +34,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/restart"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -53,7 +51,18 @@ const (
 	shellCommand    = "shell_command"
 )
 
+// GuestActions is a struct that holds the state for guest actions.
+type GuestActions struct {
+	CancelFunc context.CancelFunc
+	Restarter  Restarter
+}
+
 type guestActionHandler func(context.Context, *gpb.Command, *ipb.CloudProperties) (*gpb.CommandResult, bool)
+
+// Restarter is an interface for restarting the agent services.
+type Restarter interface {
+	Restart(cancel context.CancelFunc) context.CancelFunc
+}
 
 var guestActionsHandlers = map[string]guestActionHandler{
 	"backint":                backinthandler.BackintHandler,
@@ -107,7 +116,7 @@ func handleShellCommand(ctx context.Context, command *gpb.Command, execute comma
 	}
 }
 
-func handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool, cloudProperties *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool, cloudProperties *ipb.CloudProperties) (*gpb.CommandResult, bool) {
 	agentCommand := strings.ToLower(command.GetAgentCommand().GetCommand())
 	handler, ok := guestActionsHandlers[agentCommand]
 	if !ok {
@@ -122,6 +131,10 @@ func handleAgentCommand(ctx context.Context, command *gpb.Command, requiresResta
 	}
 	result, restart := handler(ctx, command, cloudProperties)
 	requiresRestart = requiresRestart || restart
+	if requiresRestart {
+		log.CtxLogger(ctx).Info("requiresRestart is true, calling restarter")
+		g.Restarter.Restart(g.CancelFunc)
+	}
 	log.CtxLogger(ctx).Debugw("received result for agent command.", "result", prototext.Format(result))
 	return result, requiresRestart
 }
@@ -135,7 +148,7 @@ func errorResult(errMsg string) *gpb.CommandResult {
 	}
 }
 
-func messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudProperties *ipb.CloudProperties) (*gpb.GuestActionResponse, bool) {
+func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudProperties *ipb.CloudProperties) *gpb.GuestActionResponse {
 	requiresRestart := false
 	var results []*gpb.CommandResult
 	log.CtxLogger(ctx).Debugw("received GuestActionReqest to handle", "gar", prototext.Format(gar))
@@ -148,43 +161,39 @@ func messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudPrope
 		case fd == nil:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
 			results = append(results, errorResult(errMsg))
-			return guestActionResponse(ctx, results, errMsg), false
+			return guestActionResponse(ctx, results, errMsg)
 		case fd.Name() == shellCommand:
 			result = handleShellCommand(ctx, command, commandlineexecutor.ExecuteCommand)
 			results = append(results, result)
 		case fd.Name() == agentCommand:
-			result, requiresRestart = handleAgentCommand(ctx, command, requiresRestart, cloudProperties)
+			result, requiresRestart = g.handleAgentCommand(ctx, command, requiresRestart, cloudProperties)
 			results = append(results, result)
 		default:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
 			results = append(results, errorResult(errMsg))
-			return guestActionResponse(ctx, results, errMsg), requiresRestart
+			return guestActionResponse(ctx, results, errMsg)
 		}
 		// Exit early if we get an error
 		if result.GetExitCode() != int32(0) {
 			errMsg := fmt.Sprintf("received nonzero exit code with output: %s", result.GetStdout())
-			return guestActionResponse(ctx, results, errMsg), requiresRestart
+			return guestActionResponse(ctx, results, errMsg)
 		}
 	}
-	return guestActionResponse(ctx, results, ""), requiresRestart
+	return guestActionResponse(ctx, results, "")
 }
 
-func start(ctx context.Context, a any) {
+func (g *GuestActions) start(ctx context.Context, a any) {
 	args, ok := a.(guestActionsOptions)
 	if !ok {
 		log.CtxLogger(ctx).Warn("args is not of type guestActionsArgs")
 		return
 	}
-	restartHandler := restart.LinuxRestartAgent
-	if runtime.GOOS == "windows" {
-		restartHandler = restart.WindowsRestartAgent
-	}
-	uap.CommunicateWithUAP(ctx, args.endpoint, args.channel, messageHandler, restartHandler, args.cloudProperties)
+	uap.CommunicateWithUAP(ctx, args.endpoint, args.channel, g.messageHandler, args.cloudProperties)
 }
 
 // StartUAPCommunication establishes communication with UAP Highway.
 // Returns true if the goroutine is started, and false otherwise.
-func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool {
+func (g *GuestActions) StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool {
 	if !config.GetUapConfiguration().GetEnabled().GetValue() {
 		log.CtxLogger(ctx).Info("Not configured to communicate with UAP")
 		return false
@@ -199,8 +208,12 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 	dailyMetricsRoutine.StartRoutine(ctx)
 
 	communicateRoutine := &recovery.RecoverableRoutine{
-		Routine:             start,
-		RoutineArg:          guestActionsOptions{channel: defaultChannel, endpoint: defaultEndpoint, cloudProperties: config.CloudProperties},
+		Routine: g.start,
+		RoutineArg: guestActionsOptions{
+			channel:         defaultChannel,
+			endpoint:        defaultEndpoint,
+			cloudProperties: config.CloudProperties,
+		},
 		ErrorCode:           usagemetrics.GuestActionsFailure,
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,
@@ -210,8 +223,12 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 
 	if config.GetUapConfiguration().GetTestChannelEnabled().GetValue() {
 		testRoutine := &recovery.RecoverableRoutine{
-			Routine:             start,
-			RoutineArg:          guestActionsOptions{channel: testChannel, endpoint: defaultEndpoint, cloudProperties: config.CloudProperties},
+			Routine: g.start,
+			RoutineArg: guestActionsOptions{
+				channel:         testChannel,
+				endpoint:        defaultEndpoint,
+				cloudProperties: config.CloudProperties,
+			},
 			ErrorCode:           usagemetrics.GuestActionsFailure,
 			UsageLogger:         *usagemetrics.Logger,
 			ExpectedMinDuration: 10 * time.Second,
