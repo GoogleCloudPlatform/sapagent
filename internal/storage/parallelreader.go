@@ -72,6 +72,7 @@ func (rw *ReadWriter) NewParallelReader(ctx context.Context, decodedKey []byte) 
 		if len(decodedKey) > 0 {
 			r.workers[i].object = r.workers[i].object.Key(decodedKey)
 		}
+		r.workers[i].object = r.workers[i].object.Retryer(rw.retryOptions("Failed to download data from Google Cloud Storage, retrying.")...)
 	}
 	return r, nil
 }
