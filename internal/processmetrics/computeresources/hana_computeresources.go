@@ -90,7 +90,7 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 		}
 	}
 	if _, ok := p.SkippedMetrics[hanaMemoryPath]; !ok {
-		memoryMetrics, err := collectMemoryPerProcess(ctx, params, processes)
+		memoryMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectMemoryMetric)
 		if err != nil {
 			metricsCollectionErr = err
 		}

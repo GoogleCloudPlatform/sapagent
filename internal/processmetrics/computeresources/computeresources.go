@@ -101,15 +101,15 @@ type (
 
 	// MemoryUsage holds the memory usage metrics for a process.
 	MemoryUsage struct {
-		VMS  Metric
-		RSS  Metric
-		Swap Metric
+		VMS  *Metric
+		RSS  *Metric
+		Swap *Metric
 	}
 
 	// DiskUsage holds the disk IOPS metrics for a process.
 	DiskUsage struct {
-		DeltaReads  Metric
-		DeltaWrites Metric
+		DeltaReads  *Metric
+		DeltaWrites *Metric
 	}
 
 	// Metric is a struct to hold the metric value and its metadata.
@@ -205,17 +205,26 @@ func collectTimeSeriesMetrics(ctx context.Context, p Parameters, processes []*Pr
 		if err != nil {
 			metricsCollectionErr = err
 		}
-
 		// Build time series metrics.
 		for _, cpuUsage := range cpuUsages {
-			labels := map[string]string{
-				"process": FormatProcessLabel(cpuUsage.ProcessInfo.Name, cpuUsage.ProcessInfo.PID),
-			}
-			metrics = append(metrics, createMetrics(p.cpuMetricPath, labels, cpuUsage.Value, p))
+			// buildMetricLabel can never be nil here
+			// as cpuUsage from CollectCPUPerProcess is never nil.
+			metrics = append(metrics, createMetrics(p.cpuMetricPath, buildMetricLabel(collectCPUMetric, "", cpuUsage), cpuUsage.Value, p))
 		}
 	case collectMemoryMetric:
-		// TODO: Refactor Memory Metrics method.
-		return collectMemoryPerProcess(ctx, p, processes)
+		// Collect Memory Usage per process.
+		memoryUsages, err := CollectMemoryPerProcess(ctx, p, processes)
+		if err != nil {
+			metricsCollectionErr = err
+		}
+		// Build time series metrics.
+		for _, memoryUsage := range memoryUsages {
+			// buildMetricLabel can never be nil here
+			// as memoryUsage from CollectMemoryPerProcess is never nil.
+			metrics = append(metrics, createMetrics(p.memoryMetricPath, buildMetricLabel(collectMemoryMetric, "VmSize", memoryUsage.VMS), memoryUsage.VMS.Value, p))
+			metrics = append(metrics, createMetrics(p.memoryMetricPath, buildMetricLabel(collectMemoryMetric, "VmRSS", memoryUsage.RSS), memoryUsage.RSS.Value, p))
+			metrics = append(metrics, createMetrics(p.memoryMetricPath, buildMetricLabel(collectMemoryMetric, "VmSwap", memoryUsage.Swap), memoryUsage.Swap.Value, p))
+		}
 	case collectDiskIOPSMetric:
 		// TODO: Refactor Disk IOPS Metrics method.
 		return collectIOPSPerProcess(ctx, p, processes)
@@ -224,6 +233,22 @@ func collectTimeSeriesMetrics(ctx context.Context, p Parameters, processes []*Pr
 	}
 
 	return metrics, metricsCollectionErr
+}
+
+// buildMetricLabel builds the metric label for a given metric type.
+func buildMetricLabel(metricType int, metricLabel string, metric *Metric) map[string]string {
+	if metric == nil {
+		return nil
+	}
+	processLabel := FormatProcessLabel(metric.ProcessInfo.Name, metric.ProcessInfo.PID)
+	labels := map[string]string{
+		"process": processLabel,
+	}
+	if metricType == collectMemoryMetric {
+		// metricLabel is the memory type: VmSize, VmRSS, VmSwap.
+		labels["memType"] = metricLabel
+	}
+	return labels
 }
 
 // CollectCPUPerProcess collects CPU utilization per process for HANA, Netweaver and SAP control processes.
@@ -257,11 +282,10 @@ func CollectCPUPerProcess(ctx context.Context, p Parameters, processes []*Proces
 	return cpuUsages, metricsCollectionErr
 }
 
-// collectMemoryPerProcess is a function responsible for collecting memory utilization
-// per process for Hana, Netweaver and SAP control processes. Metric will represent memory
-// utilization in megabytes.
-func collectMemoryPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
-	var metrics []*mrpb.TimeSeries
+// CollectMemoryPerProcess collects memory utilization per process
+// in megabytes for HANA, Netweaver and SAP control processes.
+func CollectMemoryPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*MemoryUsage, error) {
+	var memoryUsages []*MemoryUsage
 	var metricsCollectionErr error
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
@@ -281,24 +305,13 @@ func collectMemoryPerProcess(ctx context.Context, p Parameters, processes []*Pro
 			metricsCollectionErr = err
 			continue
 		}
-		vmSizeLables := map[string]string{
-			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
-			"memType": "VmSize",
-		}
-		vmSizeMetrics := createMetrics(p.memoryMetricPath, vmSizeLables, float64(memoryUsage.VMS)/million, p)
-		rSSLables := map[string]string{
-			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
-			"memType": "VmRSS",
-		}
-		rSSMetrics := createMetrics(p.memoryMetricPath, rSSLables, float64(memoryUsage.RSS)/million, p)
-		swapLables := map[string]string{
-			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
-			"memType": "VmSwap",
-		}
-		swapMetrics := createMetrics(p.memoryMetricPath, swapLables, float64(memoryUsage.Swap)/million, p)
-		metrics = append(metrics, vmSizeMetrics, rSSMetrics, swapMetrics)
+		memoryUsages = append(memoryUsages, &MemoryUsage{
+			VMS:  &Metric{ProcessInfo: processInfo, Value: float64(memoryUsage.VMS) / million, TimeStamp: tspb.Now()},
+			RSS:  &Metric{ProcessInfo: processInfo, Value: float64(memoryUsage.RSS) / million, TimeStamp: tspb.Now()},
+			Swap: &Metric{ProcessInfo: processInfo, Value: float64(memoryUsage.Swap) / million, TimeStamp: tspb.Now()},
+		})
 	}
-	return metrics, metricsCollectionErr
+	return memoryUsages, metricsCollectionErr
 }
 
 // collectIOPSPerProcess is responsible for collecting IOPS per process using gopsutil IOCounters data

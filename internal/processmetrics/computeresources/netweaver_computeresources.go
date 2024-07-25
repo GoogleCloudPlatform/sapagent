@@ -88,7 +88,7 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 		}
 	}
 	if _, ok := p.SkippedMetrics[nwMemoryPath]; !ok {
-		memoryMetrics, err := collectMemoryPerProcess(ctx, params, processes)
+		memoryMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectMemoryMetric)
 		if err != nil {
 			metricsCollectionErr = err
 		}

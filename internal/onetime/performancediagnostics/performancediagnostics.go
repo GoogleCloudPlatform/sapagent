@@ -557,16 +557,23 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		if cpuErr != nil {
 			err = cpuErr
 		}
-
 		for _, metric := range cpuUsages {
 			processLabel := computeresources.FormatProcessLabel(metric.ProcessInfo.Name, metric.ProcessInfo.PID)
 			ptsm[processLabel].cpuUsage = append(ptsm[processLabel].cpuUsage, metric)
 		}
 
+		// Collect Memory Metrics.
+		memoryUsages, memErr := computeresources.CollectMemoryPerProcess(ctx, params, processes)
+		if memErr != nil {
+			err = memErr
+		}
+		for _, metric := range memoryUsages {
+			processLabel := computeresources.FormatProcessLabel(metric.VMS.ProcessInfo.Name, metric.VMS.ProcessInfo.PID)
+			ptsm[processLabel].memoryUsage = append(ptsm[processLabel].memoryUsage, metric)
+		}
+
 		// The processes for which metrics was not collected in this
 		// iteration can be detected if metric's nil for that timestamp.
-
-		// TODO: Collect Memory Metrics.
 		// TODO: Collect Disk IOPS Metrics.
 
 		time.Sleep(time.Duration(opts.frequency) * time.Second)

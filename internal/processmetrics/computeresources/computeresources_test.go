@@ -34,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
 
@@ -402,6 +403,51 @@ func TestCollectTimeSeriesMetricsCPUValues(t *testing.T) {
 	}
 }
 
+func TestCollectTimeSeriesMetricsMemoryValues(t *testing.T) {
+	params := Parameters{
+		Config:      defaultConfig,
+		client:      &fake.TimeSeriesCreator{},
+		SAPInstance: defaultSAPInstance,
+		NewProc:     newProcessWithContextHelperTest,
+	}
+	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
+	want := map[string]float64{
+		"VmRSS":  2,
+		"VmSize": 4,
+		"VmSwap": 6,
+	}
+	memoryUtilMap := make(map[string]float64)
+	got, _ := collectTimeSeriesMetrics(context.Background(), params, processList, collectMemoryMetric)
+	for _, item := range got {
+		key := item.GetMetric().GetLabels()["memType"]
+		val := item.GetPoints()[0].GetValue().GetDoubleValue()
+		memoryUtilMap[key] = val
+	}
+	if diff := cmp.Diff(want, memoryUtilMap, protocmp.Transform()); diff != "" {
+		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
+	}
+}
+
+func TestCollectTimeSeriesMetricsMemoryLabels(t *testing.T) {
+	params := Parameters{
+		Config:      defaultConfig,
+		client:      &fake.TimeSeriesCreator{},
+		SAPInstance: defaultSAPInstance,
+		NewProc:     newProcessWithContextHelperTest,
+	}
+	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
+	want := make(map[string]string)
+	want["process"] = "hdbdindexserver:9023"
+	want["memType"] = "VmSize"
+	want["sid"] = "HDB"
+	want["instance_nr"] = "001"
+	got, _ := collectTimeSeriesMetrics(context.Background(), params, processList, collectMemoryMetric)
+	gotVal := got[0].GetMetric().GetLabels()
+	if diff := cmp.Diff(want, gotVal, protocmp.Transform()); diff != "" {
+		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
+	}
+}
+
 func TestCollectCPUPerProcess(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -495,34 +541,25 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 		{
 			name: "FetchMemoryUsageMetricSuccessfully",
 			params: Parameters{
-				Config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				NewProc:          newProcessWithContextHelperTest,
+				Config:  defaultConfig,
+				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
-			wantCount:   3,
+			wantCount:   1,
 		},
 		{
 			name: "InvalidPID",
 			params: Parameters{
-				Config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				NewProc:          newProcessWithContextHelperTest,
+				Config:  defaultConfig,
+				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "abc"}},
 		},
 		{
 			name: "ErrorInNewProcessPsUtil",
 			params: Parameters{
-				Config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				NewProc:          newProcessWithContextHelperTest,
+				Config:  defaultConfig,
+				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
 			wantErr:     cmpopts.AnyError,
@@ -530,11 +567,8 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 		{
 			name: "ErrorInMemeoryUsage",
 			params: Parameters{
-				Config:           defaultConfig,
-				client:           &fake.TimeSeriesCreator{},
-				cpuMetricPath:    "/sample/test/proc",
-				memoryMetricPath: "/sample/test/memory",
-				NewProc:          newProcessWithContextHelperTest,
+				Config:  defaultConfig,
+				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "333"}},
 			wantErr:     cmpopts.AnyError,
@@ -543,12 +577,12 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := collectMemoryPerProcess(context.Background(), test.params, test.processList)
-			if len(got) != test.wantCount {
-				t.Errorf("collectMemoryPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
-			}
+			got, gotErr := CollectMemoryPerProcess(context.Background(), test.params, test.processList)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("collectMemoryPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantErr)
+				t.Errorf("CollectMemoryPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantErr)
+			}
+			if len(got) != test.wantCount {
+				t.Errorf("CollectMemoryPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
 			}
 		})
 	}
@@ -562,40 +596,18 @@ func TestMemoryPerProcessValues(t *testing.T) {
 		NewProc:     newProcessWithContextHelperTest,
 	}
 	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
-	want := map[string]float64{
-		"VmRSS":  2,
-		"VmSize": 4,
-		"VmSwap": 6,
+	want := []MemoryUsage{
+		{
+			VMS:  &Metric{ProcessInfo: processList[0], Value: 4, TimeStamp: tspb.Now()},
+			RSS:  &Metric{ProcessInfo: processList[0], Value: 2, TimeStamp: tspb.Now()},
+			Swap: &Metric{ProcessInfo: processList[0], Value: 6, TimeStamp: tspb.Now()},
+		},
 	}
-	memoryUtilMap := make(map[string]float64)
-	got, _ := collectMemoryPerProcess(context.Background(), params, processList)
-	for _, item := range got {
-		key := item.GetMetric().GetLabels()["memType"]
-		val := item.GetPoints()[0].GetValue().GetDoubleValue()
-		memoryUtilMap[key] = val
-	}
-	if diff := cmp.Diff(want, memoryUtilMap, protocmp.Transform()); diff != "" {
-		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
-	}
-}
-
-func TestCollectMemoryPerProcessLabels(t *testing.T) {
-	params := Parameters{
-		Config:      defaultConfig,
-		client:      &fake.TimeSeriesCreator{},
-		SAPInstance: defaultSAPInstance,
-		NewProc:     newProcessWithContextHelperTest,
-	}
-	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
-	want := make(map[string]string)
-	want["process"] = "hdbdindexserver:9023"
-	want["memType"] = "VmSize"
-	want["sid"] = "HDB"
-	want["instance_nr"] = "001"
-	got, _ := collectMemoryPerProcess(context.Background(), params, processList)
-	gotVal := got[0].GetMetric().GetLabels()
-	if diff := cmp.Diff(want, gotVal, protocmp.Transform()); diff != "" {
-		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
+	got, _ := CollectMemoryPerProcess(context.Background(), params, processList)
+	for index, item := range got {
+		if item.VMS.Value != want[index].VMS.Value || item.RSS.Value != want[index].RSS.Value || item.Swap.Value != want[index].Swap.Value {
+			t.Errorf("CollectMemoryPerProcess(%v) = %v, want %v", params, got, want)
+		}
 	}
 }
 
@@ -714,5 +726,41 @@ func TestCollectIOPSPerProcessValues(t *testing.T) {
 		if item.GetPoints()[0].GetValue().GetDoubleValue() != want[i] {
 			t.Errorf("collectIOPSPerProcess(%v, %v) = %v, want %v", params, processList, item.GetPoints()[0].GetValue().GetDoubleValue(), want[i])
 		}
+	}
+}
+
+func TestBuildMetricLabel(t *testing.T) {
+	tests := []struct {
+		name        string
+		metricType  int
+		metricLabel string
+		metric      *Metric
+		wantLabels  map[string]string
+	}{
+		{
+			name:       "SuccessMetricLabelForCPUMetric",
+			metricType: collectCPUMetric,
+			metric:     &Metric{ProcessInfo: &ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
+			wantLabels: map[string]string{"process": "hdbdindexserver:9023"},
+		},
+		{
+			name:        "SuccessMetricLabelForMemoryMetric",
+			metricType:  collectMemoryMetric,
+			metricLabel: "VmSize",
+			metric:      &Metric{ProcessInfo: &ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
+			wantLabels:  map[string]string{"process": "hdbdindexserver:9023", "memType": "VmSize"},
+		},
+		{
+			name: "FailMetricIsNil",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotLabels := buildMetricLabel(test.metricType, test.metricLabel, test.metric)
+			if diff := cmp.Diff(test.wantLabels, gotLabels, protocmp.Transform()); diff != "" {
+				t.Errorf("buildMetricLabel(%v, %v, %v) returned unexpected diff (-want +got):\n%s", test.metricType, test.metricLabel, test.metric, diff)
+			}
+		})
 	}
 }

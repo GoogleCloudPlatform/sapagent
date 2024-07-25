@@ -75,7 +75,7 @@ func (p *SAPControlProcInstanceProperties) Collect(ctx context.Context) ([]*mrpb
 		}
 	}
 	if _, ok := p.SkippedMetrics[sapCtrlMemoryPath]; !ok {
-		memoryMetrics, err := collectMemoryPerProcess(ctx, params, processes)
+		memoryMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectMemoryMetric)
 		if err != nil {
 			metricsCollectionError = err
 		}

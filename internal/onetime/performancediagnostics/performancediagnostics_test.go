@@ -2204,6 +2204,34 @@ func TestComputeData(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "FailMemoryMetricCollection",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-instance-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "333",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+				newProc:         newProcessWithContextHelperTest,
+				totalDataPoints: 3,
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "FailNoProcesses",
 			d: &Diagnose{
 				Type: "compute",
@@ -2416,6 +2444,26 @@ func TestCollectMetrics(t *testing.T) {
 			processes: []*computeresources.ProcessInfo{
 				{
 					PID:  "222",
+					Name: "I-001-S-test-hana-1-P-001",
+				},
+			},
+			wantCount: 1,
+			wantErr:   cmpopts.AnyError,
+		},
+		{
+			name: "FailCollectMemoryMetrics",
+			opts: &options{
+				exec:            fakeExecForSuccess,
+				totalDataPoints: 2,
+			},
+			instance: &sappb.SAPInstance{
+				Sapsid:         "test-hana-1",
+				InstanceNumber: "001",
+				Type:           sappb.InstanceType_HANA,
+			},
+			processes: []*computeresources.ProcessInfo{
+				{
+					PID:  "333",
 					Name: "I-001-S-test-hana-1-P-001",
 				},
 			},
