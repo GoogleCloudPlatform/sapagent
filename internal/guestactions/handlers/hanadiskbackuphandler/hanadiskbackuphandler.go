@@ -23,6 +23,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
@@ -34,6 +35,7 @@ const RestartAgent = false
 
 // HANADiskBackupHandler is the handler for the hanadiskbackup command.
 func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	usagemetrics.Action(usagemetrics.UAPHANADiskBackupCommand)
 	s := &hanadiskbackup.Snapshot{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), s)
 	lp := log.Parameters{OSType: runtime.GOOS}

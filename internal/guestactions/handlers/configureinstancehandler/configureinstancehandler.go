@@ -25,6 +25,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -37,6 +38,7 @@ const RestartAgent = false
 
 // ConfigureInstanceHandler is the handler for configure instance command.
 func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	usagemetrics.Action(usagemetrics.UAPConfigureInstanceCommand)
 	log.CtxLogger(ctx).Debugw("Configure Instance handler called.", "command", prototext.Format(command))
 	c := &configureinstance.ConfigureInstance{
 		ReadFile:    os.ReadFile,

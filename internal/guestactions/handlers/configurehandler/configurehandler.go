@@ -23,6 +23,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -38,6 +39,7 @@ func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 
 // ConfigureHandler is the handler for the configure command.
 func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	usagemetrics.Action(usagemetrics.UAPConfigureCommand)
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	c := &configure.Configure{
 		RestartAgent: noOpRestart,

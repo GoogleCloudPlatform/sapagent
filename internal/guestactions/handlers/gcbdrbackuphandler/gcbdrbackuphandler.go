@@ -25,6 +25,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -38,6 +39,7 @@ const RestartAgent = false
 
 // GCBDRBackupHandler is the handler for gcbdr-backup command.
 func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	usagemetrics.Action(usagemetrics.UAPGCBDRBackupCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-backup handler called.", "command", prototext.Format(command))
 	b := &backup.Backup{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)

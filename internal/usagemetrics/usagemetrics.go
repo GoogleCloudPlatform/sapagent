@@ -179,6 +179,16 @@ const (
 	ServiceDisableFinished                  = 55 //	ServiceDisableFinished
 	ServiceEnableStarted                    = 56 //	ServiceEnableStarted
 	ServiceEnableFinished                   = 57 //	ServiceEnableFinished
+	UAPShellCommand                         = 58 //	UAPShellCommand
+	UAPBackintCommand                       = 59 //	UAPBackintCommand
+	UAPConfigureCommand                     = 60 //	UAPConfigureCommand
+	UAPConfigureInstanceCommand             = 61 //	UAPConfigureInstanceCommand
+	UAPGCBDRBackupCommand                   = 62 //	UAPGCBDRBackupCommand
+	UAPGCBDRDiscoveryCommand                = 63 //	UAPGCBDRDiscoveryCommand
+	UAPHANADiskBackupCommand                = 64 //	UAPHANADiskBackupCommand
+	UAPPerformanceDiagnosticsCommand        = 65 //	UAPPerformanceDiagnosticsCommand
+	UAPSupportBundleCommand                 = 66 //	UAPSupportBundleCommand
+	UAPVersionCommand                       = 67 //	UAPVersionCommand
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")

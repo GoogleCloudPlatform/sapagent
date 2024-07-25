@@ -92,6 +92,7 @@ func guestActionResponse(ctx context.Context, results []*gpb.CommandResult, erro
 }
 
 func handleShellCommand(ctx context.Context, command *gpb.Command, execute commandlineexecutor.Execute) *gpb.CommandResult {
+	usagemetrics.Action(usagemetrics.UAPShellCommand)
 	sc := command.GetShellCommand()
 	result := execute(
 		ctx,

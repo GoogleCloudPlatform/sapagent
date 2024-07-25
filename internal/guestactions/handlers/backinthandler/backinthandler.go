@@ -23,6 +23,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
@@ -34,6 +35,7 @@ const RestartAgent = false
 
 // BackintHandler is the handler for the backint command.
 func BackintHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	usagemetrics.Action(usagemetrics.UAPBackintCommand)
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	b := &backint.Backint{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)

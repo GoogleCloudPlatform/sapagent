@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -33,6 +34,7 @@ const RestartAgent = false
 
 // VersionHandler is the handler for the version command.
 func VersionHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	usagemetrics.Action(usagemetrics.UAPVersionCommand)
 	log.CtxLogger(ctx).Infow("VersionHandler was called. Command passed in is", "command", prototext.Format(command))
 	msg := onetime.GetAgentVersion()
 	exitStatus := subcommands.ExitSuccess

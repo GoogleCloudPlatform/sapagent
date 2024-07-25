@@ -416,15 +416,45 @@ func TestActionConstants(t *testing.T) {
 		t.Errorf("BackintRecoveryParameterEnabled = %v, want 53", BackintRecoveryParameterEnabled)
 	}
 	if ServiceDisableStarted != 54 {
-		t.Errorf("ServiceDisableStarted = %v, want 77", ServiceDisableStarted)
+		t.Errorf("ServiceDisableStarted = %v, want 54", ServiceDisableStarted)
 	}
 	if ServiceDisableFinished != 55 {
-		t.Errorf("ServiceDisableFinished = %v, want 78", ServiceDisableFinished)
+		t.Errorf("ServiceDisableFinished = %v, want 55", ServiceDisableFinished)
 	}
 	if ServiceEnableStarted != 56 {
-		t.Errorf("ServiceEnableStarted = %v, want 79", ServiceEnableStarted)
+		t.Errorf("ServiceEnableStarted = %v, want 56", ServiceEnableStarted)
 	}
 	if ServiceEnableFinished != 57 {
-		t.Errorf("ServiceEnableFinished = %v, want 80", ServiceEnableFinished)
+		t.Errorf("ServiceEnableFinished = %v, want 57", ServiceEnableFinished)
+	}
+	if UAPShellCommand != 58 {
+		t.Errorf("UAPShellCommand = %v, want 58", UAPShellCommand)
+	}
+	if UAPBackintCommand != 59 {
+		t.Errorf("UAPBackintCommand = %v, want 59", UAPBackintCommand)
+	}
+	if UAPConfigureCommand != 60 {
+		t.Errorf("UAPConfigureCommand = %v, want 60", UAPConfigureCommand)
+	}
+	if UAPConfigureInstanceCommand != 61 {
+		t.Errorf("UAPConfigureInstanceCommand = %v, want 61", UAPConfigureInstanceCommand)
+	}
+	if UAPGCBDRBackupCommand != 62 {
+		t.Errorf("UAPGCBDRBackupCommand = %v, want 62", UAPGCBDRBackupCommand)
+	}
+	if UAPGCBDRDiscoveryCommand != 63 {
+		t.Errorf("UAPGCBDRDiscoveryCommand = %v, want 63", UAPGCBDRDiscoveryCommand)
+	}
+	if UAPHANADiskBackupCommand != 64 {
+		t.Errorf("UAPHANADiskBackupCommand = %v, want 64", UAPHANADiskBackupCommand)
+	}
+	if UAPPerformanceDiagnosticsCommand != 65 {
+		t.Errorf("UAPPerformanceDiagnosticsCommand = %v, want 65", UAPPerformanceDiagnosticsCommand)
+	}
+	if UAPSupportBundleCommand != 66 {
+		t.Errorf("UAPSupportBundleCommand = %v, want 66", UAPSupportBundleCommand)
+	}
+	if UAPVersionCommand != 67 {
+		t.Errorf("UAPVersionCommand = %v, want 67", UAPVersionCommand)
 	}
 }

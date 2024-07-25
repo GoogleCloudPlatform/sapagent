@@ -23,6 +23,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
@@ -34,6 +35,7 @@ const RestartAgent = false
 
 // PerformanceDiagnosticsHandler is the handler for the performance diagnostics command.
 func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	usagemetrics.Action(usagemetrics.UAPPerformanceDiagnosticsCommand)
 	d := &performancediagnostics.Diagnose{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), d)
 	lp := log.Parameters{OSType: runtime.GOOS}
