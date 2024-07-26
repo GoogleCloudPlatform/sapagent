@@ -54,6 +54,9 @@ message WorkloadAction {
 enum SapWorkloadAction {
   SAP_WORKLOAD_ACTION_UNSPECIFIED = 0;
   SAP_WLM_EVALUATION_FIX = 1;
+  SAP_START = 2;
+  SAP_STOP = 3;
+  SAP_SNOOZE = 4;
 }
 
 /**
