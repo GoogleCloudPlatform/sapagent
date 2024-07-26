@@ -19,12 +19,11 @@ package hanadiskbackuphandler
 
 import (
 	"context"
-	"runtime"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -38,8 +37,10 @@ func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.Cl
 	usagemetrics.Action(usagemetrics.UAPHANADiskBackupCommand)
 	s := &hanadiskbackup.Snapshot{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), s)
-	lp := log.Parameters{OSType: runtime.GOOS}
-	message, exitStatus := s.ExecuteAndGetMessage(ctx, nil, lp, cp)
+	message, exitStatus := s.Run(ctx, onetime.RunOptions{
+		CloudProperties: cp,
+		DaemonMode:      true,
+	})
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   message,

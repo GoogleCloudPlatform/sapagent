@@ -152,12 +152,14 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 		return exitStatus
 	}
 
-	_, exitStatus = s.ExecuteAndGetMessage(ctx, f, args...)
+	_, exitStatus = s.Run(ctx, onetime.RunOptions{
+		DaemonMode:      false,
+	})
 	return exitStatus
 }
 
-// ExecuteAndGetMessage executes the command and returns the message and exit status.
-func (s *SupportBundle) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, args ...any) (string, subcommands.ExitStatus) {
+// Run executes the command and returns the message and exit status.
+func (s *SupportBundle) Run(ctx context.Context, opts onetime.RunOptions) (string, subcommands.ExitStatus) {
 	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
 }
 

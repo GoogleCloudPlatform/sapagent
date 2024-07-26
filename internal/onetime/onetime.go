@@ -68,6 +68,7 @@ type (
 	// RunOptions is a struct which contains necessary context for the Run function.
 	RunOptions struct {
 		CloudProperties *iipb.CloudProperties
+		DaemonMode      bool
 	}
 )
 
@@ -144,6 +145,7 @@ func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string)
 }
 
 // LogErrorToFileAndConsole prints out the error message to console and also to the log file.
+// TODO: Add logging control for Daemon mode invocations.
 func LogErrorToFileAndConsole(ctx context.Context, msg string, err error) {
 	log.Print(msg + " " + err.Error() + "\n" + "Refer to log file at:" + log.GetLogFile())
 	log.CtxLogger(ctx).Errorw(msg, "error", err.Error())

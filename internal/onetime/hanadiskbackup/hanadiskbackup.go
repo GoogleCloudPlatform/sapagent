@@ -220,13 +220,19 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return exitStatus
 	}
 
-	_, status := s.ExecuteAndGetMessage(ctx, f, lp, cp)
+	_, status := s.Run(ctx, onetime.RunOptions{
+		CloudProperties: cp,
+		DaemonMode: false,
+	})
+	if status == subcommands.ExitFailure {
+		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
+	}
 	return status
 }
 
-// ExecuteAndGetMessage executes the command and returns the message and exit status.
-func (s *Snapshot) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
-	if err := s.validateParameters(runtime.GOOS, cp); err != nil {
+// Run executes the command and returns the message and exit status.
+func (s *Snapshot) Run(ctx context.Context, opts onetime.RunOptions) (string, subcommands.ExitStatus) {
+	if err := s.validateParameters(runtime.GOOS, opts.CloudProperties); err != nil {
 		errMessage := err.Error()
 		log.Print(errMessage)
 		return errMessage, subcommands.ExitUsageError
@@ -240,9 +246,8 @@ func (s *Snapshot) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, lp
 		return errMessage, subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
-	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, cp)
+	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, opts.CloudProperties)
 	if exitStatus != subcommands.ExitSuccess {
-		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
 		return message, subcommands.ExitFailure
 	}
 	return message, subcommands.ExitSuccess

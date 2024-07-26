@@ -35,14 +35,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-
-	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func TestMain(t *testing.M) {
@@ -378,26 +377,20 @@ func TestExecuteForSOSReport(t *testing.T) {
 	}
 }
 
-func TestExecuteAndGetMessage(t *testing.T) {
+func TestRun(t *testing.T) {
 	tests := []struct {
 		name           string
 		sosr           *SupportBundle
-		args           []any
 		wantExitStatus subcommands.ExitStatus
 	}{
 		{
 			name:           "FailLengthArgs",
 			sosr:           &SupportBundle{},
-			args:           []any{},
 			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
-			name: "FailAssertArgs",
-			sosr: &SupportBundle{},
-			args: []any{
-				"test",
-				"test2",
-			},
+			name:           "FailAssertArgs",
+			sosr:           &SupportBundle{},
 			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
@@ -407,19 +400,14 @@ func TestExecuteAndGetMessage(t *testing.T) {
 				InstanceNums: "",
 				Hostname:     "sample_host",
 			},
-			args: []any{
-				"test",
-				log.Parameters{},
-				&iipb.CloudProperties{},
-			},
 			wantExitStatus: subcommands.ExitUsageError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, exitStatus := test.sosr.ExecuteAndGetMessage(context.Background(), &flag.FlagSet{Usage: func() {}}, test.args...)
+			_, exitStatus := test.sosr.Run(context.Background(), onetime.RunOptions{})
 			if exitStatus != test.wantExitStatus {
-				t.Errorf("ExecuteAndGetMessage(%v, %v) = %v; want: %v", test.sosr, test.args, exitStatus, test.wantExitStatus)
+				t.Errorf("ExecuteAndGetMessage(%v) = %v; want: %v", test.sosr, exitStatus, test.wantExitStatus)
 			}
 		})
 	}

@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -39,7 +40,9 @@ func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *ipb.Clo
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
 	sb := &supportbundle.SupportBundle{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), sb)
-	msg, exitStatus := sb.ExecuteAndGetMessage(ctx, nil)
+	msg, exitStatus := sb.Run(ctx, onetime.RunOptions{
+		DaemonMode:      true,
+	})
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   msg,
