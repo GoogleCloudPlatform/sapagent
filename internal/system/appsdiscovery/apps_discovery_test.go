@@ -1360,8 +1360,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: exampleWorkloadProperties,
@@ -1423,8 +1422,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: exampleJavaWorkloadProperties,
@@ -1480,8 +1478,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance", "test-instance2"},
 			WorkloadProperties: exampleWorkloadProperties,
@@ -1535,8 +1532,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid: "abc",
 			},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
@@ -1749,8 +1745,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 		},
@@ -1806,8 +1801,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid: "abc",
 			},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -2496,8 +2490,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppOnHost: true,
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -2623,8 +2616,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppOnHost: true,
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -2665,8 +2657,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			AppOnHost: true,
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -3150,8 +3141,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppOnHost: true,
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
-				Sid:          "DEH",
-				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+				Sid: "DEH",
 			},
 			DBOnHost:           false,
 			DBHosts:            []string{"test-instance"},

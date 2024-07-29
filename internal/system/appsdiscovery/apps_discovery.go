@@ -155,6 +155,10 @@ func mergeComponent(old, new *spb.SapDiscovery_Component) *spb.SapDiscovery_Comp
 		merged.TopologyType = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
 	}
 
+	if merged.GetTopologyType() == spb.SapDiscovery_Component_TOPOLOGY_TYPE_UNSPECIFIED {
+		merged.TopologyType = new.GetTopologyType()
+	}
+
 	merged.HaHosts = removeDuplicates(append(merged.GetHaHosts(), new.GetHaHosts()...))
 
 	return merged
@@ -401,8 +405,7 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		return details
 	}
 	details.DBComponent = &spb.SapDiscovery_Component{
-		Sid:          dbSID,
-		TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
+		Sid: dbSID,
 	}
 	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid, isABAP)
 	if err != nil {
@@ -410,9 +413,6 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	}
 
 	details.DBHosts = dbHosts
-	if len(details.DBHosts) > 1 {
-		details.DBComponent.TopologyType = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
-	}
 	return details
 }
 
