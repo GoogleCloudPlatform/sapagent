@@ -53,7 +53,7 @@ func (*Service) Usage() string {
 	return `Usage: service <subcommand> [args]
 
   Subcommands:
-    -dsiasble	  disables and stops the google-cloud-sap-agent systemd service
+    -disable	  disables and stops the google-cloud-sap-agent systemd service
     -enable	    enables and starts the google-cloud-sap-agent systemd service
 
   Args (optional):
