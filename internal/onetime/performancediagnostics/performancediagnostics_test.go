@@ -2028,7 +2028,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 		d                 *Diagnose
 		flagSet           *flag.FlagSet
 		opts              *options
-		wantErr           error
+		wantErr           bool
 		wantHANAInstances []*sappb.SAPInstance
 	}{
 		{
@@ -2050,7 +2050,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 					MkDirErr:   []error{fmt.Errorf("error")},
 				},
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
 		},
 		{
 			name: "SuccessExecutingOTE",
@@ -2125,16 +2125,16 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 					return &sappb.SAPInstances{}
 				},
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var d Diagnose
-			gotHANAInstances, gotErr := d.runSystemDiscoveryOTE(context.Background(), tc.flagSet, tc.opts)
-			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
+			gotHANAInstances, err := d.runSystemDiscoveryOTE(context.Background(), tc.flagSet, tc.opts)
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error presence: %v", tc.flagSet, tc.opts, err, tc.wantErr)
 			}
 			if diff := cmp.Diff(gotHANAInstances, tc.wantHANAInstances, protocmp.Transform()); diff != "" {
 				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned an unexpected diff (-want +got): %v", tc.flagSet, tc.opts, diff)
@@ -2149,7 +2149,7 @@ func TestComputeData(t *testing.T) {
 		d       *Diagnose
 		flagSet *flag.FlagSet
 		opts    *options
-		wantErr error
+		wantErr bool
 	}{
 		{
 			name: "FailInvalidCloudProperties",
@@ -2173,7 +2173,7 @@ func TestComputeData(t *testing.T) {
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
 		},
 		{
 			name: "FailCPUMetricCollection",
@@ -2201,7 +2201,7 @@ func TestComputeData(t *testing.T) {
 				newProc:         newProcessWithContextHelperTest,
 				totalDataPoints: 3,
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
 		},
 		{
 			name: "FailMemoryMetricCollection",
@@ -2229,7 +2229,35 @@ func TestComputeData(t *testing.T) {
 				newProc:         newProcessWithContextHelperTest,
 				totalDataPoints: 3,
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
+		},
+		{
+			name: "FailDiskIOPSMetricCollection",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				cp: &ipb.CloudProperties{
+					ProjectId:        "default-project",
+					InstanceId:       "default-instance-id",
+					InstanceName:     "default-instance",
+					Zone:             "default-zone",
+					NumericProjectId: "13102003",
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "444",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+				newProc:         newProcessWithContextHelperTest,
+				totalDataPoints: 3,
+			},
+			wantErr: true,
 		},
 		{
 			name: "FailNoProcesses",
@@ -2263,7 +2291,7 @@ func TestComputeData(t *testing.T) {
 					return []*computeresources.ProcessInfo{}
 				},
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
 		},
 		{
 			name: "SuccessComputeMetrics",
@@ -2310,9 +2338,9 @@ func TestComputeData(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var d Diagnose
-			gotErr := d.computeData(context.Background(), tc.flagSet, tc.opts)
-			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
+			err := d.computeData(context.Background(), tc.flagSet, tc.opts)
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("computeData(%v, %v) = %v, want error presence: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
 			}
 		})
 	}
@@ -2324,7 +2352,7 @@ func TestFetchAllProcesses(t *testing.T) {
 		opts          *options
 		HANAInstances []*sappb.SAPInstance
 		wantProcesses [][]*computeresources.ProcessInfo
-		wantErr       error
+		wantErr       bool
 	}{
 		{
 			name: "SuccessProcessesFound",
@@ -2370,7 +2398,7 @@ func TestFetchAllProcesses(t *testing.T) {
 					return []*computeresources.ProcessInfo{}
 				},
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
 		},
 		{
 			name:          "FailNoInstancesPassed",
@@ -2381,19 +2409,19 @@ func TestFetchAllProcesses(t *testing.T) {
 					return []*computeresources.ProcessInfo{}
 				},
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: true,
 		},
 	}
 
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotProcesses, gotErr := fetchAllProcesses(ctx, tc.opts, tc.HANAInstances)
-			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("fetchAllProcesses(%v, %v, %v) returned error: %v, want error: %v", ctx, tc.opts, tc.HANAInstances, gotErr, tc.wantErr)
+			gotProcesses, err := fetchAllProcesses(ctx, tc.opts, tc.HANAInstances)
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("fetchAllProcesses(%v, %v, %v) returned error: %v, want error presence: %v", tc.opts, tc.HANAInstances, err, gotErr, tc.wantErr)
 			}
 			if diff := cmp.Diff(gotProcesses, tc.wantProcesses, protocmp.Transform()); diff != "" {
-				t.Errorf("fetchAllProcesses(%v, %v, %v) returned an unexpected diff (-want +got): %v", tc.opts, tc.HANAInstances, gotErr, diff)
+				t.Errorf("fetchAllProcesses(%v, %v, %v) returned an unexpected diff (-want +got): %v", tc.opts, tc.HANAInstances, err, diff)
 			}
 		})
 	}
@@ -2405,14 +2433,14 @@ func TestCollectMetrics(t *testing.T) {
 		opts      *options
 		instance  *sappb.SAPInstance
 		processes []*computeresources.ProcessInfo
+		cancelCtx bool
 		wantCount int
-		wantErr   error
+		wantErr   bool
 	}{
 		{
 			name: "SuccessCollectMetrics",
 			opts: &options{
 				exec:            fakeExecForSuccess,
-				frequency:       0,
 				totalDataPoints: 2,
 				newProc:         newProcessWithContextHelperTest,
 			},
@@ -2433,7 +2461,6 @@ func TestCollectMetrics(t *testing.T) {
 			name: "FailCollectCPUMetrics",
 			opts: &options{
 				exec:            fakeExecForSuccess,
-				frequency:       0,
 				totalDataPoints: 2,
 			},
 			instance: &sappb.SAPInstance{
@@ -2448,7 +2475,7 @@ func TestCollectMetrics(t *testing.T) {
 				},
 			},
 			wantCount: 1,
-			wantErr:   cmpopts.AnyError,
+			wantErr:   true,
 		},
 		{
 			name: "FailCollectMemoryMetrics",
@@ -2468,15 +2495,72 @@ func TestCollectMetrics(t *testing.T) {
 				},
 			},
 			wantCount: 1,
-			wantErr:   cmpopts.AnyError,
+			wantErr:   true,
+		},
+		{
+			name: "FailCollectIOPSMetrics",
+			opts: &options{
+				exec:            fakeExecForSuccess,
+				totalDataPoints: 2,
+			},
+			instance: &sappb.SAPInstance{
+				Sapsid:         "test-hana-1",
+				InstanceNumber: "001",
+				Type:           sappb.InstanceType_HANA,
+			},
+			processes: []*computeresources.ProcessInfo{
+				{
+					PID:  "444",
+					Name: "I-001-S-test-hana-1-P-001",
+				},
+			},
+			wantCount: 1,
+			wantErr:   true,
+		},
+		{
+			name: "FailCancelContext",
+			opts: &options{
+				exec:            fakeExecForSuccess,
+				totalDataPoints: 2,
+				newProc:         newProcessWithContextHelperTest,
+			},
+			instance: &sappb.SAPInstance{
+				Sapsid:         "test-hana-1",
+				InstanceNumber: "001",
+				Type:           sappb.InstanceType_HANA,
+			},
+			processes: []*computeresources.ProcessInfo{
+				{
+					PID:  "9023",
+					Name: "I-001-S-test-hana-1-P-001",
+				},
+			},
+			cancelCtx: true,
+			wantErr:   true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			metrics, gotErr := collectMetrics(context.Background(), tc.opts, tc.instance, tc.processes)
-			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("collectMetrics(%v, %v, %v) returned error: %v, want error: %v", context.Background(), tc.opts, tc.instance, gotErr, tc.wantErr)
+			if tc.cancelCtx {
+				// Create a context with a cancel function
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+
+				metrics, err := collectMetrics(ctx, tc.opts, tc.instance, tc.processes)
+				if metrics != nil {
+					t.Error("collectMetrics expected to return nil when context is canceled")
+				}
+				if err == nil {
+					t.Error("collectMetrics expected to return an error when context is canceled")
+				} else if !errors.Is(err, context.Canceled) {
+					t.Errorf("collectMetrics returned unexpected error: %v", err)
+				}
+				return
+			}
+			metrics, err := collectMetrics(context.Background(), tc.opts, tc.instance, tc.processes)
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("collectMetrics(%v, %v, %v) returned error: %v, want error presence: %v", context.Background(), tc.opts, tc.instance, err, tc.wantErr)
 			}
 			if len(metrics) != tc.wantCount {
 				t.Errorf("collectMetrics(%v, %v, %v) returned an unexpected number of metrics: %v, want: %v", context.Background(), tc.opts, tc.instance, len(metrics), tc.wantCount)

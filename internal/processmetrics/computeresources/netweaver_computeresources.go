@@ -98,7 +98,7 @@ func (p *NetweaverInstanceProperties) Collect(ctx context.Context) ([]*mrpb.Time
 	}
 	skipIOPS := p.SkippedMetrics[nwIOPSReadsPath] || p.SkippedMetrics[nwIOPSWritePath]
 	if !skipIOPS {
-		iopsMetrics, err := collectIOPSPerProcess(ctx, params, processes)
+		iopsMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectDiskIOPSMetric)
 		if err != nil {
 			metricsCollectionErr = err
 		}

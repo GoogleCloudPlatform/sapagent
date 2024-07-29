@@ -194,6 +194,8 @@ func CollectProcessesForInstance(ctx context.Context, p Parameters) []*ProcessIn
 	return processInfos
 }
 
+// collectTimeSeriesMetrics collects one time series data point
+// per process of the given metric type (CPU, Memory or disk IOPS).
 func collectTimeSeriesMetrics(ctx context.Context, p Parameters, processes []*ProcessInfo, metricType int) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
 	var metricsCollectionErr error
@@ -226,8 +228,18 @@ func collectTimeSeriesMetrics(ctx context.Context, p Parameters, processes []*Pr
 			metrics = append(metrics, createMetrics(p.memoryMetricPath, buildMetricLabel(collectMemoryMetric, "VmSwap", memoryUsage.Swap), memoryUsage.Swap.Value, p))
 		}
 	case collectDiskIOPSMetric:
-		// TODO: Refactor Disk IOPS Metrics method.
-		return collectIOPSPerProcess(ctx, p, processes)
+		// Collect IOPS Usage per process.
+		diskUsages, err := CollectIOPSPerProcess(ctx, p, processes)
+		if err != nil {
+			metricsCollectionErr = err
+		}
+		// Build time series metrics.
+		for _, diskUsage := range diskUsages {
+			// buildMetricLabel can never be nil here
+			// as diskUsage from CollectIOPSPerProcess is never nil.
+			metrics = append(metrics, createMetrics(p.iopsReadsMetricPath, buildMetricLabel(collectDiskIOPSMetric, "", diskUsage.DeltaReads), diskUsage.DeltaReads.Value, p))
+			metrics = append(metrics, createMetrics(p.iopsWritesMetricPath, buildMetricLabel(collectDiskIOPSMetric, "", diskUsage.DeltaWrites), diskUsage.DeltaWrites.Value, p))
+		}
 	default:
 		metricsCollectionErr = fmt.Errorf("Invalid metric type: %v", metricType)
 	}
@@ -314,10 +326,10 @@ func CollectMemoryPerProcess(ctx context.Context, p Parameters, processes []*Pro
 	return memoryUsages, metricsCollectionErr
 }
 
-// collectIOPSPerProcess is responsible for collecting IOPS per process using gopsutil IOCounters data
+// CollectIOPSPerProcess is responsible for collecting IOPS per process using gopsutil IOCounters data
 // and computing the delta between current value and last value of bytes read and written.
-func collectIOPSPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*mrpb.TimeSeries, error) {
-	var metrics []*mrpb.TimeSeries
+func CollectIOPSPerProcess(ctx context.Context, p Parameters, processes []*ProcessInfo) ([]*DiskUsage, error) {
+	var diskUsages []*DiskUsage
 	var metricsCollectionErr error
 	for _, processInfo := range processes {
 		pid, err := strconv.Atoi(processInfo.PID)
@@ -343,18 +355,16 @@ func collectIOPSPerProcess(ctx context.Context, p Parameters, processes []*Proce
 			p.LastValue[key] = currVal
 			continue
 		}
-		labels := map[string]string{
-			"process": FormatProcessLabel(processInfo.Name, processInfo.PID),
-		}
 		deltaReads := float64(currVal.ReadBytes-p.LastValue[key].ReadBytes) / thousand
 		deltaWrites := float64(currVal.WriteBytes-p.LastValue[key].WriteBytes) / thousand
 		p.LastValue[key] = currVal
 		freq := p.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()
-		reads := createMetrics(p.iopsReadsMetricPath, labels, deltaReads/float64(freq), p)
-		writes := createMetrics(p.iopsWritesMetricPath, labels, deltaWrites/float64(freq), p)
-		metrics = append(metrics, reads, writes)
+		diskUsages = append(diskUsages, &DiskUsage{
+			DeltaReads:  &Metric{ProcessInfo: processInfo, Value: deltaReads / float64(freq), TimeStamp: tspb.Now()},
+			DeltaWrites: &Metric{ProcessInfo: processInfo, Value: deltaWrites / float64(freq), TimeStamp: tspb.Now()},
+		})
 	}
-	return metrics, metricsCollectionErr
+	return diskUsages, metricsCollectionErr
 }
 
 func createMetrics(mPath string, labels map[string]string, val float64, p Parameters) *mrpb.TimeSeries {

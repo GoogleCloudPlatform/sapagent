@@ -38,11 +38,11 @@ const (
 )
 
 type (
-	// HanaInstanceProperties have the required context for collecting metrics for cpu
+	// HANAInstanceProperties have the required context for collecting metrics for cpu
 	// memory per process for HANA, Netweaver and SAP Control.
 	// It also implements the InstanceProperiesInterface for abstraction as defined in the
 	// computreresources.go file.
-	HanaInstanceProperties struct {
+	HANAInstanceProperties struct {
 		Config           *cnfpb.Configuration
 		Client           cloudmonitoring.TimeSeriesCreator
 		Executor         commandlineexecutor.Execute
@@ -59,7 +59,7 @@ type (
 // utilization of SAP HANA Processes.
 // Collect method keeps on collecting all the metrics it can, logs errors if it encounters
 // any and returns the collected metrics with the last error encountered while collecting metrics.
-func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+func (p *HANAInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	params := Parameters{
 		executor:             p.Executor,
 		client:               p.Client,
@@ -100,7 +100,7 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 	}
 	skipIOPS := p.SkippedMetrics[hanaIOPSReadsPath] || p.SkippedMetrics[hanaIOPSWritesPath]
 	if !skipIOPS {
-		iopsMetrics, err := collectIOPSPerProcess(ctx, params, processes)
+		iopsMetrics, err := collectTimeSeriesMetrics(ctx, params, processes, collectDiskIOPSMetric)
 		if err != nil {
 			metricsCollectionErr = err
 		}
@@ -113,7 +113,7 @@ func (p *HanaInstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSerie
 }
 
 // CollectWithRetry decorates the Collect method with retry mechanism.
-func (p *HanaInstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
+func (p *HANAInstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	var (
 		attempt = 1
 		res     []*mrpb.TimeSeries

@@ -414,14 +414,14 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	var err error
 
 	// Run system discovery OTE to get the HANA instances.
-	HANAInstances, err := d.runSystemDiscoveryOTE(ctx, flagSet, opts)
+	hanaInstances, err := d.runSystemDiscoveryOTE(ctx, flagSet, opts)
 	if err != nil {
 		return err
 	}
-	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found %d HANA instances: %v", len(HANAInstances), HANAInstances))
+	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found %d HANA instances: %v", len(hanaInstances), hanaInstances))
 
 	// Collect HANA processes running in the HANA instances.
-	instanceWiseHANAProcesses, err := fetchAllProcesses(ctx, opts, HANAInstances)
+	instanceWiseHANAProcesses, err := fetchAllProcesses(ctx, opts, hanaInstances)
 	if err != nil {
 		return err
 	}
@@ -432,12 +432,11 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	// err from here is the most recent error encountered and
 	// its done this way to collect as many metrics as possible.
 	for i, ip := range instanceWiseHANAProcesses {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for instance %v", HANAInstances[i].GetInstanceNumber()))
-		if _, metricsCollectionErr := collectMetrics(ctx, opts, HANAInstances[i], ip); metricsCollectionErr != nil {
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for instance %v", hanaInstances[i].GetInstanceNumber()))
+		if _, metricsCollectionErr := collectMetrics(ctx, opts, hanaInstances[i], ip); metricsCollectionErr != nil {
 			err = metricsCollectionErr
 		}
-
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for instance %v", HANAInstances[i].GetInstanceNumber()))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for instance %v", hanaInstances[i].GetInstanceNumber()))
 		// TODO: Use collectMetrics return value for report.
 	}
 
@@ -471,28 +470,28 @@ func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, o
 	}
 
 	// Filter HANA instances from the SAPInstances discovered.
-	HANAInstances := filterHANAInstances(discovery.GetSAPInstances())
-	if HANAInstances == nil || len(HANAInstances) == 0 {
+	hanaInstances := filterHANAInstances(discovery.GetSAPInstances())
+	if hanaInstances == nil || len(hanaInstances) == 0 {
 		return nil, fmt.Errorf("no HANA instances found")
 	}
 
-	return HANAInstances, nil
+	return hanaInstances, nil
 }
 
 // filterHANAInstances filters the HANA instances from SAPInstances.
-func filterHANAInstances(SAPInstances *sappb.SAPInstances) []*sappb.SAPInstance {
-	if SAPInstances == nil {
+func filterHANAInstances(sapInstances *sappb.SAPInstances) []*sappb.SAPInstance {
+	if sapInstances == nil {
 		return nil
 	}
 
-	var HANAInstances []*sappb.SAPInstance
-	for _, instance := range SAPInstances.Instances {
+	var hanaInstances []*sappb.SAPInstance
+	for _, instance := range sapInstances.Instances {
 		if instance.Type == sappb.InstanceType_HANA {
-			HANAInstances = append(HANAInstances, instance)
+			hanaInstances = append(hanaInstances, instance)
 		}
 	}
 
-	return HANAInstances
+	return hanaInstances
 }
 
 // fetchAllProcesses collects the HANA processes
@@ -500,7 +499,7 @@ func filterHANAInstances(SAPInstances *sappb.SAPInstances) []*sappb.SAPInstance 
 // kth list contains the processes running in kth HANA instance.
 func fetchAllProcesses(ctx context.Context, opts *options, HANAInstances []*sappb.SAPInstance) ([][]*computeresources.ProcessInfo, error) {
 	var instanceWiseHANAProcesses [][]*computeresources.ProcessInfo
-	HANAProcessFound := false
+	hanaProcessFound := false
 
 	for _, instance := range HANAInstances {
 		params := computeresources.Parameters{
@@ -510,14 +509,14 @@ func fetchAllProcesses(ctx context.Context, opts *options, HANAInstances []*sapp
 		instanceProcesses := opts.collectProcesses(ctx, params)
 		instanceWiseHANAProcesses = append(instanceWiseHANAProcesses, instanceProcesses)
 
-		if !HANAProcessFound && len(instanceProcesses) > 0 {
-			HANAProcessFound = true
+		if !hanaProcessFound && len(instanceProcesses) > 0 {
+			hanaProcessFound = true
 		}
 	}
 
 	// If no process is found, then no metrics can be collected,
 	// hence, returns an error to stop computeMetrics.
-	if !HANAProcessFound {
+	if !hanaProcessFound {
 		return nil, fmt.Errorf("no HANA processes found")
 	}
 
@@ -572,13 +571,37 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 			ptsm[processLabel].memoryUsage = append(ptsm[processLabel].memoryUsage, metric)
 		}
 
-		// The processes for which metrics was not collected in this
-		// iteration can be detected if metric's nil for that timestamp.
-		// TODO: Collect Disk IOPS Metrics.
+		// Collect disk IOPS metrics.
+		diskUsages, diskErr := computeresources.CollectIOPSPerProcess(ctx, params, processes)
+		if diskErr != nil {
+			err = diskErr
+		}
+		for _, metric := range diskUsages {
+			processLabel := computeresources.FormatProcessLabel(metric.DeltaReads.ProcessInfo.Name, metric.DeltaReads.ProcessInfo.PID)
+			ptsm[processLabel].diskUsage = append(ptsm[processLabel].diskUsage, metric)
+		}
 
-		time.Sleep(time.Duration(opts.frequency) * time.Second)
+		// Append nil for missed process metrics.
+		for _, process := range processes {
+			processLabel := computeresources.FormatProcessLabel(process.Name, process.PID)
+			if len(ptsm[processLabel].cpuUsage) != itr {
+				ptsm[processLabel].cpuUsage = append(ptsm[processLabel].cpuUsage, nil)
+			}
+			if len(ptsm[processLabel].memoryUsage) != itr {
+				ptsm[processLabel].memoryUsage = append(ptsm[processLabel].memoryUsage, nil)
+			}
+			if len(ptsm[processLabel].diskUsage) != itr {
+				ptsm[processLabel].diskUsage = append(ptsm[processLabel].diskUsage, nil)
+			}
+		}
+
+		// Proceed to next iteration after `frequency` seconds.
+		select {
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
+		case <-time.After(time.Duration(opts.frequency) * time.Second):
+		}
 	}
-
 	return ptsm, err
 }
 

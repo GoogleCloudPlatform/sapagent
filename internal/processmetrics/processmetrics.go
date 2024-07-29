@@ -373,7 +373,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 		}
 		if instance.GetType() == sapb.InstanceType_HANA {
 			log.CtxLogger(ctx).Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", instance)
-			hanaComputeresourcesCollector := &computeresources.HanaInstanceProperties{
+			hanaComputeresourcesCollector := &computeresources.HANAInstanceProperties{
 				Config:           p.Config,
 				Client:           p.Client,
 				Executor:         commandlineexecutor.ExecuteCommand,

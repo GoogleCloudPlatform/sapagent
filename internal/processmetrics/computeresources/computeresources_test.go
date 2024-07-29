@@ -313,7 +313,7 @@ func TestCollectTimeSeriesMetrics(t *testing.T) {
 		processList []*ProcessInfo
 		wantCount   int
 		metricType  int
-		wantError   error
+		wantError   bool
 	}{
 		{
 			name: "FetchCPUPercentageMetricSuccessfully",
@@ -370,18 +370,18 @@ func TestCollectTimeSeriesMetrics(t *testing.T) {
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
 			metricType:  3,
-			wantError:   cmpopts.AnyError,
+			wantError:   true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := collectTimeSeriesMetrics(context.Background(), test.params, test.processList, test.metricType)
+			got, err := collectTimeSeriesMetrics(context.Background(), test.params, test.processList, test.metricType)
+			if gotErr := err != nil; gotErr != test.wantError {
+				t.Errorf("collectTimeSeriesMetrics(%v, %v, %v) returned error: %v, want error presence: %v", test.params, test.processList, test.metricType, err, test.wantError)
+			}
 			if len(got) != test.wantCount {
 				t.Errorf("collectTimeSeriesMetrics(%v, %v, %v) = %d , want %d", test.params, test.processList, test.metricType, len(got), test.wantCount)
-			}
-			if !cmp.Equal(gotErr, test.wantError, cmpopts.EquateErrors()) {
-				t.Errorf("collectTimeSeriesMetrics(%v, %v, %v) = %v, want %v", test.params, test.processList, test.metricType, gotErr, test.wantError)
 			}
 		})
 	}
@@ -396,10 +396,13 @@ func TestCollectTimeSeriesMetricsCPUValues(t *testing.T) {
 	}
 	ProcessList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
 	want := float64(expectedCPUPercentage)
-	got, _ := collectTimeSeriesMetrics(context.Background(), params, ProcessList, collectCPUMetric)
+	got, err := collectTimeSeriesMetrics(context.Background(), params, ProcessList, collectCPUMetric)
+	if err != nil {
+		t.Errorf("collectTimeSeriesMetrics(%v, %v) returned unexpected error: %v", params, ProcessList, err)
+	}
 	gotVal := got[0].GetPoints()[0].GetValue().GetDoubleValue()
 	if gotVal != want {
-		t.Errorf("collectCPUPerProcess(%v, %v) = %f , want %f", params, ProcessList, gotVal, want)
+		t.Errorf("collectTimeSeriesMetrics(%v, %v) = %f , want %f", params, ProcessList, gotVal, want)
 	}
 }
 
@@ -417,14 +420,17 @@ func TestCollectTimeSeriesMetricsMemoryValues(t *testing.T) {
 		"VmSwap": 6,
 	}
 	memoryUtilMap := make(map[string]float64)
-	got, _ := collectTimeSeriesMetrics(context.Background(), params, processList, collectMemoryMetric)
+	got, err := collectTimeSeriesMetrics(context.Background(), params, processList, collectMemoryMetric)
+	if err != nil {
+		t.Errorf("collectTimeSeriesMetrics(%v) returned unexpected error: %v", params, err)
+	}
 	for _, item := range got {
 		key := item.GetMetric().GetLabels()["memType"]
 		val := item.GetPoints()[0].GetValue().GetDoubleValue()
 		memoryUtilMap[key] = val
 	}
 	if diff := cmp.Diff(want, memoryUtilMap, protocmp.Transform()); diff != "" {
-		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
+		t.Errorf("collectTimeSeriesMetrics(%v) returned unexpected diff (-want +got):\n%s", params, diff)
 	}
 }
 
@@ -441,10 +447,40 @@ func TestCollectTimeSeriesMetricsMemoryLabels(t *testing.T) {
 	want["memType"] = "VmSize"
 	want["sid"] = "HDB"
 	want["instance_nr"] = "001"
-	got, _ := collectTimeSeriesMetrics(context.Background(), params, processList, collectMemoryMetric)
+	got, err := collectTimeSeriesMetrics(context.Background(), params, processList, collectMemoryMetric)
+	if err != nil {
+		t.Errorf("collectTimeSeriesMetrics(%v) returned unexpected error: %v", params, err)
+	}
 	gotVal := got[0].GetMetric().GetLabels()
 	if diff := cmp.Diff(want, gotVal, protocmp.Transform()); diff != "" {
-		t.Errorf("collectMemoryPerProcess(%v) returned unexpected diff (-want +got):\n%s", params, diff)
+		t.Errorf("collectTimeSeriesMetrics(%v) returned unexpected diff (-want +got):\n%s", params, diff)
+	}
+}
+
+func TestCollectTimeSeriesMetricsIOPSValues(t *testing.T) {
+	params := Parameters{
+		Config:               defaultConfig,
+		client:               &fake.TimeSeriesCreator{},
+		iopsReadsMetricPath:  "/sample/test/iops_reads",
+		iopsWritesMetricPath: "/sample/test/iops_writes",
+		LastValue: map[string]*process.IOCountersStat{
+			"hdbdindexserver:9023": &process.IOCountersStat{
+				ReadBytes:  10000,
+				WriteBytes: 20000,
+			},
+		},
+		NewProc: newProcessWithContextHelperTest,
+	}
+	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
+	want := []float64{0.4, 0.8}
+	got, err := collectTimeSeriesMetrics(context.Background(), params, processList, collectDiskIOPSMetric)
+	if err != nil {
+		t.Errorf("collectTimeSeriesMetrics(%v, %v) returned unexpected error: %v", params, processList, err)
+	}
+	for i, item := range got {
+		if item.GetPoints()[0].GetValue().GetDoubleValue() != want[i] {
+			t.Errorf("collectTimeSeriesMetrics(%v, %v) = %v, want %v", params, processList, item.GetPoints()[0].GetValue().GetDoubleValue(), want[i])
+		}
 	}
 }
 
@@ -454,7 +490,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 		params      Parameters
 		processList []*ProcessInfo
 		wantCount   int
-		wantError   error
+		wantErr     bool
 	}{
 		{
 			name: "FetchCPUPercentageMetricSuccessfully",
@@ -472,7 +508,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 			},
 			// For 64-bit systems, pid_max is 2^22. Set to max int32 to ensure it does not exist.
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "2147483647"}},
-			wantError:   cmpopts.AnyError,
+			wantErr:     true,
 		},
 		{
 			name: "InvalidPID",
@@ -489,7 +525,7 @@ func TestCollectCPUPerProcess(t *testing.T) {
 				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
-			wantError:   cmpopts.AnyError,
+			wantErr:     true,
 		},
 		{
 			name: "ErrorInCPUPercentage",
@@ -498,18 +534,18 @@ func TestCollectCPUPerProcess(t *testing.T) {
 				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "222"}},
-			wantError:   cmpopts.AnyError,
+			wantErr:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := CollectCPUPerProcess(context.Background(), test.params, test.processList)
+			got, err := CollectCPUPerProcess(context.Background(), test.params, test.processList)
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Errorf("CollectCPUPerProcess(%v, %v) returned unexpected error: %v, want error presence: %v", test.params, test.processList, err, test.wantErr)
+			}
 			if len(got) != test.wantCount {
 				t.Errorf("CollectCPUPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
-			}
-			if !cmp.Equal(gotErr, test.wantError, cmpopts.EquateErrors()) {
-				t.Errorf("CollectCPUPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantError)
 			}
 		})
 	}
@@ -523,7 +559,10 @@ func TestCollectCPUPerProcessValues(t *testing.T) {
 	}
 	ProcessList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
 	want := float64(expectedCPUPercentage)
-	got, _ := CollectCPUPerProcess(context.Background(), params, ProcessList)
+	got, err := CollectCPUPerProcess(context.Background(), params, ProcessList)
+	if err != nil {
+		t.Errorf("CollectCPUPerProcess(%v, %v) returned unexpected error: %v", params, ProcessList, err)
+	}
 	gotVal := got[0].Value
 	if gotVal != want {
 		t.Errorf("CollectCPUPerProcess(%v, %v) = %f , want %f", params, ProcessList, gotVal, want)
@@ -536,7 +575,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 		params      Parameters
 		processList []*ProcessInfo
 		wantCount   int
-		wantErr     error
+		wantErr     bool
 	}{
 		{
 			name: "FetchMemoryUsageMetricSuccessfully",
@@ -562,7 +601,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
-			wantErr:     cmpopts.AnyError,
+			wantErr:     true,
 		},
 		{
 			name: "ErrorInMemeoryUsage",
@@ -571,15 +610,15 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "333"}},
-			wantErr:     cmpopts.AnyError,
+			wantErr:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := CollectMemoryPerProcess(context.Background(), test.params, test.processList)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("CollectMemoryPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantErr)
+			got, err := CollectMemoryPerProcess(context.Background(), test.params, test.processList)
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Errorf("CollectMemoryPerProcess(%v, %v) returned unexpected error: %v, want error presence: %v", test.params, test.processList, err, test.wantErr)
 			}
 			if len(got) != test.wantCount {
 				t.Errorf("CollectMemoryPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
@@ -603,9 +642,12 @@ func TestMemoryPerProcessValues(t *testing.T) {
 			Swap: &Metric{ProcessInfo: processList[0], Value: 6, TimeStamp: tspb.Now()},
 		},
 	}
-	got, _ := CollectMemoryPerProcess(context.Background(), params, processList)
-	for index, item := range got {
-		if item.VMS.Value != want[index].VMS.Value || item.RSS.Value != want[index].RSS.Value || item.Swap.Value != want[index].Swap.Value {
+	got, err := CollectMemoryPerProcess(context.Background(), params, processList)
+	if err != nil {
+		t.Errorf("CollectMemoryPerProcess(%v, %v) returned unexpected error: %v", params, processList, err)
+	}
+	for i, item := range got {
+		if item.VMS.Value != want[i].VMS.Value || item.RSS.Value != want[i].RSS.Value || item.Swap.Value != want[i].Swap.Value {
 			t.Errorf("CollectMemoryPerProcess(%v) = %v, want %v", params, got, want)
 		}
 	}
@@ -617,15 +659,12 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 		params      Parameters
 		processList []*ProcessInfo
 		wantCount   int
-		wantErr     error
+		wantErr     bool
 	}{
 		{
 			name: "FetchIOPSMetricSuccessfully",
 			params: Parameters{
-				Config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				iopsReadsMetricPath:  "/sample/test/iops_reads",
-				iopsWritesMetricPath: "/sample/test/iops_writes",
+				Config: defaultConfig,
 				LastValue: map[string]*process.IOCountersStat{
 					"hdbdindexserver:9023": &process.IOCountersStat{
 						ReadCount:  50,
@@ -635,50 +674,38 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
-			wantCount:   2,
+			wantCount:   1,
 		},
 		{
 			name: "NoIOPSMetricsAsThisIsTheFirstCall",
 			params: Parameters{
-				Config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				iopsReadsMetricPath:  "/sample/test/iops_reads",
-				iopsWritesMetricPath: "/sample/test/iops_writes",
-				LastValue:            make(map[string]*process.IOCountersStat),
-				NewProc:              newProcessWithContextHelperTest,
+				Config:    defaultConfig,
+				LastValue: make(map[string]*process.IOCountersStat),
+				NewProc:   newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}},
 		},
 		{
 			name: "ErrorInCreatingNewProcess",
 			params: Parameters{
-				Config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				iopsReadsMetricPath:  "/sample/test/iops_reads",
-				iopsWritesMetricPath: "/sample/test/iops_writes",
-				NewProc:              newProcessWithContextHelperTest,
+				Config:  defaultConfig,
+				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "111"}},
-			wantErr:     cmpopts.AnyError,
+			wantErr:     true,
 		},
 		{
 			name: "InvalidPID",
 			params: Parameters{
-				Config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				iopsReadsMetricPath:  "/sample/test/iops_reads",
-				iopsWritesMetricPath: "/sample/test/iops_writes",
-				NewProc:              newProcessWithContextHelperTest,
+				Config:  defaultConfig,
+				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "abc"}},
 		},
 		{
 			name: "ErrorInFetchingIOPSMetric",
 			params: Parameters{
-				Config:               defaultConfig,
-				client:               &fake.TimeSeriesCreator{},
-				iopsReadsMetricPath:  "/sample/test/iops_reads",
-				iopsWritesMetricPath: "/sample/test/iops_writes",
+				Config: defaultConfig,
 				LastValue: map[string]*process.IOCountersStat{
 					"hdbdindexserver:444": &process.IOCountersStat{
 						ReadCount:  50,
@@ -688,18 +715,18 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 				NewProc: newProcessWithContextHelperTest,
 			},
 			processList: []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "444"}},
-			wantErr:     cmpopts.AnyError,
+			wantErr:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := collectIOPSPerProcess(context.Background(), test.params, test.processList)
-			if len(got) != test.wantCount {
-				t.Errorf("collectIOPSPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
+			got, err := CollectIOPSPerProcess(context.Background(), test.params, test.processList)
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Errorf("CollectIOPSPerProcess(%v, %v) returned unexpected error: %v", test.params, test.processList, err)
 			}
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("collectIOPSPerProcess(%v, %v) = %v, want %v", test.params, test.processList, gotErr, test.wantErr)
+			if len(got) != test.wantCount {
+				t.Errorf("CollectIOPSPerProcess(%v, %v) = %d , want %d", test.params, test.processList, len(got), test.wantCount)
 			}
 		})
 	}
@@ -707,24 +734,29 @@ func TestCollectIOPSPerProcess(t *testing.T) {
 
 func TestCollectIOPSPerProcessValues(t *testing.T) {
 	params := Parameters{
-		Config:               defaultConfig,
-		client:               &fake.TimeSeriesCreator{},
-		iopsReadsMetricPath:  "/sample/test/iops_reads",
-		iopsWritesMetricPath: "/sample/test/iops_writes",
+		Config:  defaultConfig,
+		NewProc: newProcessWithContextHelperTest,
 		LastValue: map[string]*process.IOCountersStat{
 			"hdbdindexserver:9023": &process.IOCountersStat{
 				ReadBytes:  10000,
 				WriteBytes: 20000,
 			},
 		},
-		NewProc: newProcessWithContextHelperTest,
 	}
 	processList := []*ProcessInfo{&ProcessInfo{Name: "hdbdindexserver", PID: "9023"}}
-	got, _ := collectIOPSPerProcess(context.Background(), params, processList)
-	want := []float64{0.4, 0.8}
+	want := []DiskUsage{
+		{
+			DeltaReads:  &Metric{ProcessInfo: processList[0], Value: 0.4, TimeStamp: tspb.Now()},
+			DeltaWrites: &Metric{ProcessInfo: processList[0], Value: 0.8, TimeStamp: tspb.Now()},
+		},
+	}
+	got, err := CollectIOPSPerProcess(context.Background(), params, processList)
+	if err != nil {
+		t.Errorf("CollectIOPSPerProcess(%v, %v) returned unexpected error: %v", params, processList, err)
+	}
 	for i, item := range got {
-		if item.GetPoints()[0].GetValue().GetDoubleValue() != want[i] {
-			t.Errorf("collectIOPSPerProcess(%v, %v) = %v, want %v", params, processList, item.GetPoints()[0].GetValue().GetDoubleValue(), want[i])
+		if item.DeltaReads.Value != want[i].DeltaReads.Value || item.DeltaWrites.Value != want[i].DeltaWrites.Value {
+			t.Errorf("CollectIOPSPerProcess(%v) = %v, want %v", params, got, want)
 		}
 	}
 }

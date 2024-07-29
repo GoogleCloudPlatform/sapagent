@@ -22,8 +22,6 @@ import (
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
@@ -74,7 +72,7 @@ func TestCollectForHANA(t *testing.T) {
 		executor       commandlineexecutor.Execute
 		fakeClient     sapcontrolclienttest.Fake
 		wantCount      int
-		wantErr        error
+		wantErr        bool
 		lastValue      map[string]*process.IOCountersStat
 	}{
 		{
@@ -159,7 +157,7 @@ func TestCollectForHANA(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			testHanaInstanceProps := &HanaInstanceProperties{
+			testHanaInstanceProps := &HANAInstanceProperties{
 				Config:           test.config,
 				Client:           &fake.TimeSeriesCreator{},
 				Executor:         test.executor,
@@ -170,18 +168,17 @@ func TestCollectForHANA(t *testing.T) {
 				SkippedMetrics:   test.skippedMetrics,
 			}
 			got, err := testHanaInstanceProps.Collect(context.Background())
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Errorf("Collect() returned an unexpected error: %v, want error presence: %v", err, test.wantErr)
+			}
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() = %d , want %d", len(got), test.wantCount)
-			}
-
-			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("Collect() = %v, want %v", err, test.wantErr)
 			}
 
 			for _, metric := range got {
 				points := metric.GetPoints()
 				if points[0].GetValue().GetDoubleValue() < 0 {
-					t.Errorf("Metric value for compute resources cannot be negative.")
+					t.Errorf("Metric value for compute resources cannot be negative. Got: %v", points[0].GetValue().GetDoubleValue())
 				}
 			}
 		})
@@ -190,7 +187,7 @@ func TestCollectForHANA(t *testing.T) {
 
 func TestCollectWithRetryHANA(t *testing.T) {
 	c := context.Background()
-	hp := &HanaInstanceProperties{
+	hp := &HANAInstanceProperties{
 		Config:           defaultConfig,
 		Client:           &fake.TimeSeriesCreator{},
 		Executor:         commandlineexecutor.ExecuteCommand,
