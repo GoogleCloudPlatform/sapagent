@@ -397,7 +397,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 		}
 
 		entry := &instanceInfo{
-			Sid:          path[2],
+			Sid:          strings.ToUpper(path[2]),
 			InstanceName: path[4],
 			Snr:          fmt.Sprintf("%02d", number),
 			ProfilePath:  profile[1],

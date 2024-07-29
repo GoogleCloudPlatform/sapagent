@@ -81,6 +81,20 @@ const (
 
 var (
 	msWorkProcess = regexp.MustCompile(`LB=([0-9]+)`)
+
+	// regex for finding application processes
+	// Matching groups:
+	// 1. Process name
+	// 2. SID
+	// 3. Instance type
+	// 4. Instance number
+	// 5. Profile path root
+	// 6. SID
+	// 7. SID
+	// 8. Instance type
+	// 9. Instance number
+	// 10. Instance name
+	appProcessRegex = regexp.MustCompile(`(enq|enqr|ms|dw|jstart).sap([A-Za-z][A-Za-z0-9]{2})_(D|ASCS|ERS)([0-9]{2}) pf=/(usr/sap|sapmnt)/([A-Za-z][A-Za-z0-9]{2})/SYS/profile/([A-Za-z][A-Za-z0-9]{2})_(D|ASCS|ERS)([0-9]{2})_(.*)`)
 )
 
 // Collect is Netweaver implementation of Collector interface from processmetrics.go.
@@ -590,29 +604,33 @@ func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec command
 	hasMS := false
 	lines := strings.Split(result.StdOut, "\n")
 	for _, line := range lines {
-		cols := regexp.MustCompile("\\s+").Split(line, -1)
-		if len(cols) < 8 {
-			// Not enough columns on the line
+		matches := appProcessRegex.FindStringSubmatch(line)
+		log.CtxLogger(ctx).Debugw("Line", "line", line, "matches", matches)
+		if len(matches) < 3 {
 			continue
 		}
-		bin := cols[7]
-		if strings.HasPrefix(bin, "enqr.") {
+		bin := matches[1]
+		sid := strings.ToUpper(matches[2])
+		if sid != p.SAPInstance.GetSapsid() {
+			continue
+		}
+		switch bin {
+		case "enqr":
 			log.CtxLogger(ctx).Debugw("Found enqr", "bin", bin)
 			roles["ers"] = "true"
 			hasRole = true
-		}
-		if strings.HasPrefix(bin, "ms.") {
+		case "ms":
 			log.CtxLogger(ctx).Debugw("Found ms", "bin", bin)
 			hasMS = true
-		}
-		if strings.HasPrefix(bin, "enq.") || strings.HasPrefix(bin, "en.") {
-			log.CtxLogger(ctx).Debugw("Found enqueue process", "bin", bin)
-			hasEnq = true
-		}
-		if strings.HasPrefix(bin, "dw.") || strings.HasPrefix(bin, "jstart.") {
-			log.CtxLogger(ctx).Debugw("Found dw or jstart", "bin", bin)
 			hasRole = true
+		case "enq":
+			log.CtxLogger(ctx).Debugw("Found enq", "bin", bin)
+			hasEnq = true
+			hasRole = true
+		case "dw", "jstart":
+			log.CtxLogger(ctx).Debugw("Found dw or jstart", "bin", bin)
 			roles["app"] = "true"
+			hasRole = true
 		}
 	}
 	if hasMS && hasEnq {
