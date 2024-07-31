@@ -226,8 +226,9 @@ func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFu
 
 	configureUsageMetricsForDaemon(d.config.GetCloudProperties())
 	usagemetrics.Configured()
-	usagemetrics.Started()
 	if !restarting {
+		usagemetrics.Started()
+		go usagemetrics.LogRunningDaily()
 		d.startGuestActions(cancel)
 	}
 	d.startServices(ctx, cancel, runtime.GOOS, restarting)
@@ -387,8 +388,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
 		wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
 		workloadmanager.StartMetricsCollection(wmCtx, wlmparams)
-		go usagemetrics.LogRunningDaily()
-		waitForShutdown(shutdownch, cancel)
+		waitForShutdown(ctx, shutdownch, cancel)
 		return
 	}
 
@@ -454,8 +454,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		HRC:               sapdiscovery.HANAReplicationConfig,
 	})
 
-	go usagemetrics.LogRunningDaily()
-	waitForShutdown(shutdownch, cancel)
+	waitForShutdown(ctx, shutdownch, cancel)
 }
 
 func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
@@ -581,9 +580,15 @@ func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
 }
 
 // waitForShutdown observes a channel for a shutdown signal, then proceeds to shut down the Agent.
-func waitForShutdown(ch <-chan os.Signal, cancel context.CancelFunc) {
-	// wait for the shutdown signal
-	<-ch
+func waitForShutdown(ctx context.Context, ch <-chan os.Signal, cancel context.CancelFunc) {
+	select {
+	// If the context is canceled, we will not wait for the shutdown signal.
+	case <-ctx.Done():
+		log.Logger.Info("Encountered context cancellation, skipping shutdown")
+		return
+	// If the shutdown signal is observed, we will shut down by executing the following lines.
+	case <-ch:
+	}
 
 	log.Logger.Info("Shutdown signal observed, the agent will begin shutting down")
 	cancel()

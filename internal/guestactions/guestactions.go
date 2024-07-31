@@ -134,7 +134,7 @@ func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Comm
 	requiresRestart = requiresRestart || restart
 	if requiresRestart {
 		log.CtxLogger(ctx).Info("requiresRestart is true, calling restarter")
-		g.Restarter.Restart(g.CancelFunc)
+		g.CancelFunc = g.Restarter.Restart(g.CancelFunc)
 	}
 	log.CtxLogger(ctx).Debugw("received result for agent command.", "result", prototext.Format(result))
 	return result, requiresRestart
