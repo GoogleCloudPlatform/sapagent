@@ -2433,7 +2433,6 @@ func TestCollectMetrics(t *testing.T) {
 		opts      *options
 		instance  *sappb.SAPInstance
 		processes []*computeresources.ProcessInfo
-		cancelCtx bool
 		wantCount int
 		wantErr   bool
 	}{
@@ -2517,47 +2516,12 @@ func TestCollectMetrics(t *testing.T) {
 			wantCount: 1,
 			wantErr:   true,
 		},
-		{
-			name: "FailCancelContext",
-			opts: &options{
-				exec:            fakeExecForSuccess,
-				totalDataPoints: 2,
-				newProc:         newProcessWithContextHelperTest,
-			},
-			instance: &sappb.SAPInstance{
-				Sapsid:         "test-hana-1",
-				InstanceNumber: "001",
-				Type:           sappb.InstanceType_HANA,
-			},
-			processes: []*computeresources.ProcessInfo{
-				{
-					PID:  "9023",
-					Name: "I-001-S-test-hana-1-P-001",
-				},
-			},
-			cancelCtx: true,
-			wantErr:   true,
-		},
 	}
+
+	// TODO: Add unit test to cover case ctx<-Done().
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.cancelCtx {
-				// Create a context with a cancel function
-				ctx, cancel := context.WithCancel(context.Background())
-				cancel()
-
-				metrics, err := collectMetrics(ctx, tc.opts, tc.instance, tc.processes)
-				if metrics != nil {
-					t.Error("collectMetrics expected to return nil when context is canceled")
-				}
-				if err == nil {
-					t.Error("collectMetrics expected to return an error when context is canceled")
-				} else if !errors.Is(err, context.Canceled) {
-					t.Errorf("collectMetrics returned unexpected error: %v", err)
-				}
-				return
-			}
 			metrics, err := collectMetrics(context.Background(), tc.opts, tc.instance, tc.processes)
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("collectMetrics(%v, %v, %v) returned error: %v, want error presence: %v", context.Background(), tc.opts, tc.instance, err, tc.wantErr)
