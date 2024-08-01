@@ -215,7 +215,7 @@ message SapDiscovery {
       // Deprecated: ApplicationType now tells you whether this is ABAP or Java.
       bool abap = 5 [deprecated = true];
       // Instance number of the SAP application instance.
-      string instance_number = 6;
+      string instance_number = 6 [deprecated = true];
       // Instance number of the ASCS instance.
       string ascs_instance_number = 7;
       // Instance number of the ERS instance.

@@ -340,6 +340,10 @@ func sortSapSystemDetails(a, b SapSystemDetails) bool {
 	return a.AppComponent.GetSid() < b.AppComponent.GetSid()
 }
 
+func sortInstanceProperties(a, b *spb.SapDiscovery_Resource_InstanceProperties) bool {
+	return a.GetVirtualHostname() < b.GetVirtualHostname()
+}
+
 type fakeCommandExecutor struct {
 	t                *testing.T
 	params           []commandlineexecutor.Params
@@ -3440,40 +3444,6 @@ func TestMergeSystemDetails(t *testing.T) {
 		newDetails: SapSystemDetails{DBOnHost: false},
 		want:       SapSystemDetails{DBOnHost: true},
 	}, {
-		name: "dontOverwriteAppSID",
-		oldDetails: SapSystemDetails{
-			AppComponent: &spb.SapDiscovery_Component{
-				Sid: "abc",
-			},
-		},
-		newDetails: SapSystemDetails{
-			AppComponent: &spb.SapDiscovery_Component{
-				Sid: "def",
-			},
-		},
-		want: SapSystemDetails{
-			AppComponent: &spb.SapDiscovery_Component{
-				Sid: "abc",
-			},
-		},
-	}, {
-		name: "dontOverwriteDBSID",
-		oldDetails: SapSystemDetails{
-			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "abc",
-			},
-		},
-		newDetails: SapSystemDetails{
-			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "def",
-			},
-		},
-		want: SapSystemDetails{
-			DBComponent: &spb.SapDiscovery_Component{
-				Sid: "abc",
-			},
-		},
-	}, {
 		name:       "useNewAppSidWithoutOldAppSid",
 		oldDetails: SapSystemDetails{},
 		newDetails: SapSystemDetails{
@@ -3743,7 +3713,7 @@ func TestMergeSystemDetails(t *testing.T) {
 						DatabaseType:   spb.SapDiscovery_Component_DatabaseProperties_HANA,
 						SharedNfsUri:   "1.2.3.4",
 						DatabaseSid:    "DB1",
-						InstanceNumber: "00",
+						InstanceNumber: "01",
 					}},
 			},
 		},
@@ -3776,37 +3746,6 @@ func TestMergeSystemDetails(t *testing.T) {
 						SharedNfsUri:   "1.2.3.4",
 						DatabaseSid:    "DB1",
 						InstanceNumber: "01",
-					}},
-			},
-		},
-	}, {
-		name: "mergeDBPropertiesHasDBSID",
-		oldDetails: SapSystemDetails{
-			DBComponent: &spb.SapDiscovery_Component{
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						DatabaseSid:  "DB1",
-					}},
-			},
-		},
-		newDetails: SapSystemDetails{
-			DBComponent: &spb.SapDiscovery_Component{
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED,
-						SharedNfsUri: "1.2.3.4",
-						DatabaseSid:  "DB2",
-					}},
-			},
-		},
-		want: SapSystemDetails{
-			DBComponent: &spb.SapDiscovery_Component{
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
-						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
-						SharedNfsUri: "1.2.3.4",
-						DatabaseSid:  "DB1",
 					}},
 			},
 		},
@@ -3896,7 +3835,7 @@ func TestMergeSystemDetails(t *testing.T) {
 			}},
 		},
 	}, {
-		name: "mergesInstancePropertiesDoesntOverwriteOldVirtualHostname",
+		name: "mergesInstancePropertiesOverwritesOldVirtualHostname",
 		oldDetails: SapSystemDetails{
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "saphostagent",
@@ -3912,7 +3851,7 @@ func TestMergeSystemDetails(t *testing.T) {
 		want: SapSystemDetails{
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "saphostagent",
-				InstanceNumber:  1234,
+				InstanceNumber:  3456,
 			}},
 		},
 	}, {
@@ -3951,7 +3890,7 @@ func TestMergeSystemDetails(t *testing.T) {
 			}},
 		},
 	}, {
-		name: "mergesInstancePropertiesDoesntOverwriteAppInstances",
+		name: "mergesInstancePropertiesOverwritesAppInstances",
 		oldDetails: SapSystemDetails{
 			InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
 				VirtualHostname: "saphostagent",
@@ -3978,7 +3917,7 @@ func TestMergeSystemDetails(t *testing.T) {
 				InstanceNumber:  1234,
 				AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 					Name:   "app1",
-					Number: "01",
+					Number: "02",
 				}},
 			}},
 		},
@@ -3986,7 +3925,15 @@ func TestMergeSystemDetails(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := mergeSystemDetails(test.oldDetails, test.newDetails)
-			if diff := cmp.Diff(test.want, got, cmp.AllowUnexported(SapSystemDetails{}), protocmp.Transform(), cmpopts.EquateEmpty(), protocmp.SortRepeatedFields(&spb.SapDiscovery_WorkloadProperties{}, "product_versions", "software_component_versions")); diff != "" {
+			diffOpts := []cmp.Option{
+				cmp.AllowUnexported(SapSystemDetails{}),
+				protocmp.Transform(),
+				cmpopts.EquateEmpty(),
+				protocmp.SortRepeatedFields(&spb.SapDiscovery_WorkloadProperties{}, "product_versions", "software_component_versions"),
+				protocmp.SortRepeatedFields(&spb.SapDiscovery_Resource_InstanceProperties{}, "app_instances"),
+				cmpopts.SortSlices(sortInstanceProperties),
+			}
+			if diff := cmp.Diff(test.want, got, diffOpts...); diff != "" {
 				t.Errorf("mergeSystemDetails() mismatch (-want, +got):\n%s", diff)
 			}
 		})

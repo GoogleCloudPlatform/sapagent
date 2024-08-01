@@ -93,52 +93,77 @@ func removeDuplicates[T comparable](s []T) []T {
 }
 
 func mergeAppProperties(old, new *spb.SapDiscovery_Component_ApplicationProperties) *spb.SapDiscovery_Component_ApplicationProperties {
-	if old == nil {
-		return new
+	log.Logger.Debugw("Merging app properties.", "old", prototext.Format(old), "new", prototext.Format(new))
+	if new == nil {
+		return old
 	}
-	merged := proto.Clone(old).(*spb.SapDiscovery_Component_ApplicationProperties)
-	if old.GetApplicationType() == spb.SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED {
-		merged.ApplicationType = new.ApplicationType
+	merged := proto.Clone(new).(*spb.SapDiscovery_Component_ApplicationProperties)
+	if merged.GetApplicationType() == spb.SapDiscovery_Component_ApplicationProperties_APPLICATION_TYPE_UNSPECIFIED {
+		log.Logger.Debugw("Merging app properties, using old type.", "old", prototext.Format(old), "new", prototext.Format(new))
+		merged.ApplicationType = old.ApplicationType
 	}
 	if merged.AscsUri == "" {
-		merged.AscsUri = new.AscsUri
+		log.Logger.Debugw("Merging app properties, using old ASCS URI.", "old", prototext.Format(old), "new", prototext.Format(new))
+		merged.AscsUri = old.AscsUri
 	}
 	if merged.NfsUri == "" {
-		merged.NfsUri = new.NfsUri
+		log.Logger.Debugw("Merging app properties, using old NFS URI.", "old", prototext.Format(old), "new", prototext.Format(new))
+		merged.NfsUri = old.NfsUri
+	}
+	if merged.KernelVersion == "" {
+		log.Logger.Debugw("Merging app properties, using old kernel version.", "old", prototext.Format(old), "new", prototext.Format(new))
+		merged.KernelVersion = old.KernelVersion
+	}
+	if merged.AscsInstanceNumber == "" {
+		log.Logger.Debugw("Merging app properties, using old ASCS instance number.", "old", prototext.Format(old), "new", prototext.Format(new))
+		merged.AscsInstanceNumber = old.AscsInstanceNumber
+	}
+	if merged.ErsInstanceNumber == "" {
+		log.Logger.Debugw("Merging app properties, using old ERS instance number.", "old", prototext.Format(old), "new", prototext.Format(new))
+		merged.ErsInstanceNumber = old.ErsInstanceNumber
 	}
 	return merged
 }
 
 func mergeDBProperties(old, new *spb.SapDiscovery_Component_DatabaseProperties) *spb.SapDiscovery_Component_DatabaseProperties {
-	if old == nil {
-		return new
+	if new == nil {
+		return old
 	}
-	merged := proto.Clone(old).(*spb.SapDiscovery_Component_DatabaseProperties)
-	if old.GetDatabaseType() == spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED {
-		merged.DatabaseType = new.DatabaseType
+	merged := proto.Clone(new).(*spb.SapDiscovery_Component_DatabaseProperties)
+	if merged.GetDatabaseType() == spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED {
+		merged.DatabaseType = old.DatabaseType
+	}
+	if merged.PrimaryInstanceUri == "" {
+		merged.PrimaryInstanceUri = old.PrimaryInstanceUri
 	}
 	if merged.SharedNfsUri == "" {
-		merged.SharedNfsUri = new.SharedNfsUri
+		merged.SharedNfsUri = old.SharedNfsUri
 	}
-	if merged.DatabaseSid == "" {
-		merged.DatabaseSid = new.DatabaseSid
+	if merged.DatabaseVersion == "" {
+		merged.DatabaseVersion = old.DatabaseVersion
 	}
 	if merged.InstanceNumber == "" {
-		merged.InstanceNumber = new.InstanceNumber
+		merged.InstanceNumber = old.InstanceNumber
+	}
+	if merged.DatabaseSid == "" {
+		merged.DatabaseSid = old.DatabaseSid
 	}
 	return merged
 }
 
 func mergeComponent(old, new *spb.SapDiscovery_Component) *spb.SapDiscovery_Component {
+	if new == nil {
+		return old
+	}
 	if old == nil {
 		return new
 	}
 
-	merged := proto.Clone(old).(*spb.SapDiscovery_Component)
+	merged := proto.Clone(new).(*spb.SapDiscovery_Component)
 
-	if old.GetProperties() == nil {
-		merged.Properties = new.Properties
-	} else if new.GetProperties() != nil {
+	if merged.GetProperties() == nil {
+		merged.Properties = old.Properties
+	} else if old.GetProperties() != nil {
 		switch x := old.Properties.(type) {
 		case *spb.SapDiscovery_Component_ApplicationProperties_:
 			merged.Properties = &spb.SapDiscovery_Component_ApplicationProperties_{
@@ -156,10 +181,19 @@ func mergeComponent(old, new *spb.SapDiscovery_Component) *spb.SapDiscovery_Comp
 	}
 
 	if merged.GetTopologyType() == spb.SapDiscovery_Component_TOPOLOGY_TYPE_UNSPECIFIED {
-		merged.TopologyType = new.GetTopologyType()
+		merged.TopologyType = old.GetTopologyType()
+	}
+
+	if merged.HostProject == "" {
+		merged.HostProject = old.HostProject
+	}
+
+	if merged.Sid == "" {
+		merged.Sid = old.Sid
 	}
 
 	merged.HaHosts = removeDuplicates(append(merged.GetHaHosts(), new.GetHaHosts()...))
+	merged.ReplicationSites = removeDuplicates(append(merged.GetReplicationSites(), new.GetReplicationSites()...))
 
 	return merged
 }
@@ -193,15 +227,15 @@ func mergeWorkloadProperties(old, new *spb.SapDiscovery_WorkloadProperties) *spb
 }
 
 func mergeInstanceProperties(old, new []*spb.SapDiscovery_Resource_InstanceProperties) []*spb.SapDiscovery_Resource_InstanceProperties {
-	if old == nil {
-		return new
+	if new == nil {
+		return old
 	}
-	merged := old
+	merged := new
 	vHostNames := make(map[string]*spb.SapDiscovery_Resource_InstanceProperties)
 	for _, iProp := range merged {
 		vHostNames[iProp.GetVirtualHostname()] = iProp
 	}
-	for _, iProp := range new {
+	for _, iProp := range old {
 		if p, ok := vHostNames[iProp.GetVirtualHostname()]; ok {
 			p.InstanceRole |= iProp.GetInstanceRole()
 			var appNames []string
@@ -222,13 +256,13 @@ func mergeInstanceProperties(old, new []*spb.SapDiscovery_Resource_InstancePrope
 }
 
 func mergeSystemDetails(old, new SapSystemDetails) SapSystemDetails {
-	merged := old
+	merged := new
 	merged.AppOnHost = old.AppOnHost || new.AppOnHost
 	merged.DBOnHost = old.DBOnHost || new.DBOnHost
 	merged.AppComponent = mergeComponent(old.AppComponent, new.AppComponent)
 	merged.DBComponent = mergeComponent(old.DBComponent, new.DBComponent)
-	merged.AppHosts = removeDuplicates(append(merged.AppHosts, new.AppHosts...))
-	merged.DBHosts = removeDuplicates(append(merged.DBHosts, new.DBHosts...))
+	merged.AppHosts = removeDuplicates(append(old.AppHosts, new.AppHosts...))
+	merged.DBHosts = removeDuplicates(append(old.DBHosts, new.DBHosts...))
 	merged.WorkloadProperties = mergeWorkloadProperties(old.WorkloadProperties, new.WorkloadProperties)
 	merged.InstanceProperties = mergeInstanceProperties(old.InstanceProperties, new.InstanceProperties)
 
