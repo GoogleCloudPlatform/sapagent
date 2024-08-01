@@ -48,13 +48,15 @@ var (
 	machineTypePattern = regexp.MustCompile("machineTypes/([^/]*)")
 
 	// not a const so we can override in test suite.
-	metadataServerURL = "http://metadata.google.internal/computeMetadata/v1"
+	metadataServerURL                     = "http://metadata.google.internal/computeMetadata/v1"
+	metadataNoUpcomingMaintenanceResponse = `{ "error": "no notifications have been received yet, try again later" }`
 )
 
 const (
-	cloudPropertiesURI  = "/"
-	maintenanceEventURI = "/instance/maintenance-event"
-	diskType            = "/instance/disks/"
+	cloudPropertiesURI     = "/"
+	maintenanceEventURI    = "/instance/maintenance-event"
+	upcomingMaintenanceURI = "/instance/upcoming-maintenance"
+	diskType               = "/instance/disks/"
 
 	helpString = `For information on permissions needed to access metadata refer: https://cloud.google.com/compute/docs/metadata/querying-metadata#permissions. Restart the agent after adding necessary permissions.`
 )
@@ -177,6 +179,13 @@ func get(uri, queryString string) ([]byte, error) {
 	}
 	defer res.Body.Close()
 	if !isStatusSuccess(res.StatusCode) {
+		if uri == upcomingMaintenanceURI && res.StatusCode == 503 {
+			body, errIO := io.ReadAll(res.Body)
+			if errIO != nil {
+				return nil, fmt.Errorf("failed to read response body from metadata server: %v", err)
+			}
+			return body, nil
+		}
 		return nil, fmt.Errorf("unsuccessful response from metadata server: %s, %s", res.Status, helpString)
 	}
 	body, err := io.ReadAll(res.Body)
@@ -324,6 +333,15 @@ func FetchCloudProperties() *CloudProperties {
 // FetchGCEMaintenanceEvent retrieves information about pending host maintenance events.
 func FetchGCEMaintenanceEvent() (string, error) {
 	body, err := get(maintenanceEventURI, "")
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+// FetchGCEUpcomingMaintenance retrieves information about upcoming host maintenance events.
+func FetchGCEUpcomingMaintenance() (string, error) {
+	body, err := get(upcomingMaintenanceURI, "")
 	if err != nil {
 		return "", err
 	}

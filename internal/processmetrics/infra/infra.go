@@ -63,7 +63,8 @@ const (
 	*/
 	maintPath = "/sap/infra/upcoming_maintenance"
 
-	metadataMigrationResponse = "MIGRATE_ON_HOST_MAINTENANCE"
+	metadataMigrationResponse             = "MIGRATE_ON_HOST_MAINTENANCE"
+	metadataNoUpcomingMaintenanceResponse = `{ "error": "no notifications have been received yet, try again later" }`
 )
 
 var (
@@ -82,6 +83,8 @@ var (
 	}
 	// ErrNoStamMatch indicates that a matching STAM node group could not be found.
 	ErrNoStamMatch = errors.New("no STAM node group found")
+
+	upcomingMaintenanceMSCall = metadataserver.FetchGCEUpcomingMaintenance
 )
 
 // Properties struct has necessary context for Metrics collection.
@@ -124,6 +127,7 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	if scheduledMigration != nil {
 		metrics = append(metrics, scheduledMigration...)
 	}
+
 	upcomingMaintenance, err := p.collectUpcomingMaintenance(ctx)
 	if err != nil {
 		metricsCollectionErr = err
@@ -131,6 +135,7 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	if upcomingMaintenance != nil {
 		metrics = append(metrics, upcomingMaintenance...)
 	}
+
 	return metrics, metricsCollectionErr
 }
 
@@ -172,6 +177,7 @@ func collectScheduledMigration(ctx context.Context, p *Properties, f func() (str
 	var scheduledMigration int64
 	if event == metadataMigrationResponse {
 		scheduledMigration = 1
+		log.CtxLogger(ctx).Debug("Scheduled Migration Event found querying metadata server")
 	}
 	metricevents.AddEvent(ctx, metricevents.Parameters{
 		Path:    metricURL + migrationPath,
@@ -179,6 +185,76 @@ func collectScheduledMigration(ctx context.Context, p *Properties, f func() (str
 		Value:   strconv.FormatInt(scheduledMigration, 10),
 	})
 	return []*mrpb.TimeSeries{p.createIntMetric(migrationPath, scheduledMigration)}, nil
+}
+
+func upcomingMaintenanceStringToObject(ctx context.Context, s string) (*compute.UpcomingMaintenance, error) {
+	var m compute.UpcomingMaintenance
+	var err error
+	if s == "" {
+		log.CtxLogger(ctx).Debug("Empty maintenance string")
+		return &m, nil
+	}
+	if s == metadataNoUpcomingMaintenanceResponse {
+		log.CtxLogger(ctx).Debug("No upcoming maintenance found")
+		return &m, nil
+	}
+
+	lines := strings.Split(s, "\n")
+	if len(lines) == 0 {
+		log.CtxLogger(ctx).Debug("Multi line maintenance string expected")
+		return &m, nil
+	}
+	for _, line := range lines {
+		kv := strings.Split(line, " ")
+		if len(kv) == 2 {
+			k := kv[0]
+			v := kv[1]
+			switch k {
+			case "can_reschedule":
+				m.CanReschedule = (v == "true")
+			case "latest_window_start_time":
+				m.LatestWindowStartTime = v
+			case "maintenance_status":
+				m.MaintenanceStatus = v
+			case "type":
+				m.Type = v
+			case "window_start_time":
+				m.WindowStartTime = v
+			case "window_end_time":
+				m.WindowEndTime = v
+			default:
+				log.CtxLogger(ctx).Debugw("upcomingMaintenanceStringToObject", "unknown key", k)
+			}
+		}
+	}
+	return &m, err
+}
+
+func (p *Properties) collectUpcomingMaintenanceMS(ctx context.Context, f func() (string, error)) (*compute.UpcomingMaintenance, error) {
+	if _, ok := p.skippedMetrics[migrationPath]; ok {
+		return nil, nil
+	}
+	log.CtxLogger(ctx).Info("collectUpcomingMaintenanceMS")
+	upM := &compute.UpcomingMaintenance{}
+
+	event, err := f()
+	if err != nil {
+		if event == metadataNoUpcomingMaintenanceResponse {
+			return upM, nil
+		}
+		return nil, err
+	}
+
+	if event != "" {
+		log.CtxLogger(ctx).Debugw("collectUpcomingMaintenanceMS", "event", event)
+		upM, err = upcomingMaintenanceStringToObject(ctx, event)
+		if err != nil {
+			log.CtxLogger(ctx).Infow("collectUpcomingMaintenanceMS", "error", err)
+			return nil, err
+		}
+	}
+
+	return upM, nil
 }
 
 func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.TimeSeries, error) {
@@ -200,19 +276,24 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 	log.CtxLogger(ctx).Debugw("Instance details", "type", instance.MachineType)
 
 	upM := &compute.UpcomingMaintenance{}
-	if strings.Contains(instance.MachineType, "x4-") && strings.Contains(instance.MachineType, "metal") {
+	m := []*mrpb.TimeSeries{}
+	var metricsCollectionErr error
 
-		if (instance.ResourceStatus == nil) || (instance.ResourceStatus.UpcomingMaintenance == nil) {
-			log.CtxLogger(ctx).Debugw("No upcoming maintenance", "cp", cp)
-		} else {
-			upM = instance.ResourceStatus.UpcomingMaintenance
+	if instance.Scheduling == nil || len(instance.Scheduling.NodeAffinities) == 0 {
+		// Once the upcoming maintenance API is available in the GCE beta service,
+		// we might want to change the code to use the API directly - though maybe there is not
+		// much benefit in doing so.
+		log.CtxLogger(ctx).Debug("Not a sole tenant node; maintenance metric collection done via metadata server")
+
+		upcomingMaintenanceViaMS, err := p.collectUpcomingMaintenanceMS(ctx, upcomingMaintenanceMSCall)
+		if err != nil {
+			log.CtxLogger(ctx).Infow("Metadata server call", "error", err)
+			metricsCollectionErr = err
+		}
+		if upcomingMaintenanceViaMS != nil {
+			upM = upcomingMaintenanceViaMS
 		}
 	} else {
-		if instance.Scheduling == nil || len(instance.Scheduling.NodeAffinities) == 0 {
-			log.CtxLogger(ctx).Debug("Not a sole tenant node; skipping maintenance metric collection.")
-			return []*mrpb.TimeSeries{}, fmt.Errorf("not a sole tenant node; skipping maintenance metric collection")
-		}
-
 		n, err := p.resolveNodeGroup(project, zone, instance.SelfLink)
 		if errors.Is(err, ErrNoStamMatch) {
 			return []*mrpb.TimeSeries{}, err
@@ -226,10 +307,8 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 			log.CtxLogger(ctx).Infof("Found upcoming maintenance: %+v", n.UpcomingMaintenance)
 			upM = n.UpcomingMaintenance
 		}
-
 	}
 
-	m := []*mrpb.TimeSeries{}
 	if _, ok := p.skippedMetrics[maintPath+"/can_reschedule"]; !ok {
 		m = append(m, p.createBoolMetric(maintPath+"/can_reschedule", upM.CanReschedule))
 	}
@@ -248,7 +327,8 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 	if _, ok := p.skippedMetrics[maintPath+"/latest_window_start_time"]; !ok {
 		m = append(m, p.createIntMetric(maintPath+"/latest_window_start_time", rfc3339ToUnix(upM.LatestWindowStartTime)))
 	}
-	return m, nil
+
+	return m, metricsCollectionErr
 
 }
 

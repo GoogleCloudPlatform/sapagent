@@ -94,51 +94,6 @@ var (
 		},
 	}
 
-	x4TenantGCE = &fakegcebeta.TestGCE{
-		Project: "test-project",
-		Zone:    "test-zone",
-		Instances: []*compute.Instance{{
-			Name:        "test-instance-name",
-			MachineType: "x4-megamem-960-metal",
-			SelfLink:    defaultInstanceLink,
-			ResourceStatus: &compute.ResourceStatus{
-				UpcomingMaintenance: sampleUpcomingMaintenance,
-			},
-		}},
-	}
-
-	x4TenantGCENoMaintenance = &fakegcebeta.TestGCE{
-		Project: "test-project",
-		Zone:    "test-zone",
-		Instances: []*compute.Instance{{
-			Name:        "test-instance-name",
-			MachineType: "x4-megamem-960-metal",
-			SelfLink:    defaultInstanceLink,
-		}},
-	}
-	x4TenantGCENoMaintenanceSpecialTypePath = &fakegcebeta.TestGCE{
-		Project: "test-project",
-		Zone:    "test-zone",
-		Instances: []*compute.Instance{{
-			Name:        "test-instance-name",
-			MachineType: "/special/path/to/x4-megamem-960-metal",
-			SelfLink:    defaultInstanceLink,
-		}},
-	}
-
-	nonX4TenantGCE = &fakegcebeta.TestGCE{
-		Project: "test-project",
-		Zone:    "test-zone",
-		Instances: []*compute.Instance{{
-			Name:        "test-instance-name",
-			MachineType: "n1-ultramem-40",
-			SelfLink:    defaultInstanceLink,
-			ResourceStatus: &compute.ResourceStatus{
-				UpcomingMaintenance: sampleUpcomingMaintenance,
-			},
-		}},
-	}
-
 	defaultInstanceLink       = "https://www.googleapis.com/compute/v1/projects/test-project-id/zones/test-zone/instances/test-instance-id"
 	sampleUpcomingMaintenance = &compute.UpcomingMaintenance{
 		CanReschedule:         true,
@@ -156,18 +111,26 @@ var (
 	)
 )
 
+var upcomingMaintenanceViaMetadataServerBody = `can_reschedule false
+latest_window_start_time 2024-07-29T14:19:53+00:00
+maintenance_status PENDING
+type SCHEDULED
+window_end_time 2024-07-29T18:19:52+00:00
+window_start_time 2024-07-29T14:19:57+00:00`
+
 func defaultBOPolicy(ctx context.Context) backoff.BackOffContext {
 	return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
 }
 
 func TestCollect(t *testing.T) {
 	tests := []struct {
-		name                   string
-		properties             *Properties
-		fakeMetadataServerCall func() (string, error)
-		gceService             *fakegcebeta.TestGCE
-		wantCount              int
-		wantErr                error
+		name                          string
+		properties                    *Properties
+		fakeMetadataServerCall        func() (string, error)
+		fakeUpcomingMaintenanceMSCall func() (string, error)
+		gceService                    *fakegcebeta.TestGCE
+		wantCount                     int
+		wantErr                       error
 	}{
 		{
 			name:       "bareMetal",
@@ -175,9 +138,52 @@ func TestCollect(t *testing.T) {
 			wantCount:  0,
 		},
 		{
-			name:                   "GCE",
-			properties:             defaultProperties,
-			fakeMetadataServerCall: func() (string, error) { return "", nil },
+			name:                          "GCE",
+			properties:                    defaultProperties,
+			fakeMetadataServerCall:        func() (string, error) { return "", nil },
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
+			gceService: &fakegcebeta.TestGCE{
+				Instances: []*compute.Instance{}, // this gce service declaration is in fact detected as not beta
+			},
+			wantCount: 1,
+			wantErr:   cmpopts.AnyError, // p.collectUpcomingMaintenance returns an error
+		},
+		{
+			name:                          "GCEBetaNoUpcomingMaintenance",
+			properties:                    defaultProperties,
+			fakeMetadataServerCall:        func() (string, error) { return "", nil },
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
+			gceService: &fakegcebeta.TestGCE{ // this gce declaration is detected as beta
+				Project: "test-project",
+				Zone:    "test-zone",
+				Instances: []*compute.Instance{{
+					Name: "test-instance-name",
+				}},
+			},
+			wantCount: 7, // we receive an empty maintenance from the metadata server so we still publish the metrics
+			wantErr:   nil,
+		},
+		{
+			name:                          "soleTenant",
+			properties:                    defaultProperties,
+			fakeMetadataServerCall:        func() (string, error) { return "", nil },
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
+			gceService:                    stamGCE,
+			wantCount:                     7,
+		},
+		{
+			name:                          "soleTenantWithMetadataServerMaintenance",
+			properties:                    defaultProperties,
+			fakeMetadataServerCall:        func() (string, error) { return "", nil },
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return upcomingMaintenanceViaMetadataServerBody, nil },
+			gceService:                    stamGCE,
+			wantCount:                     7,
+		},
+		{
+			name:                          "GCEWithMaintenance",
+			properties:                    defaultProperties,
+			fakeMetadataServerCall:        func() (string, error) { return "", nil },
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return upcomingMaintenanceViaMetadataServerBody, nil },
 			gceService: &fakegcebeta.TestGCE{
 				Instances: []*compute.Instance{},
 			},
@@ -185,21 +191,30 @@ func TestCollect(t *testing.T) {
 			wantErr:   cmpopts.AnyError, // p.collectUpcomingMaintenance returns an error
 		},
 		{
-			name:                   "soleTenant",
-			properties:             defaultProperties,
-			fakeMetadataServerCall: func() (string, error) { return "", nil },
-			gceService:             stamGCE,
-			wantCount:              7,
+			name:                          "GCEBetaWithUpcomingMaintenance",
+			properties:                    defaultProperties,
+			fakeMetadataServerCall:        func() (string, error) { return "", nil },
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return upcomingMaintenanceViaMetadataServerBody, nil },
+			gceService: &fakegcebeta.TestGCE{
+				Project: "test-project",
+				Zone:    "test-zone",
+				Instances: []*compute.Instance{{
+					Name: "test-instance-name",
+				}},
+			},
+			wantCount: 7,
+			wantErr:   nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metadataServerCall = test.fakeMetadataServerCall
 			p := test.properties
 			if test.gceService != nil {
 				p.gceBetaService = test.gceService
 			}
 			p.gceBetaService = test.gceService
+			metadataServerCall = test.fakeMetadataServerCall
+			upcomingMaintenanceMSCall = test.fakeUpcomingMaintenanceMSCall
 			got, gotErr := p.Collect(context.Background())
 			if len(got) != test.wantCount {
 				t.Errorf("Collect() returned unexpected metric count: got=%+v, want=%d", got, test.wantCount)
@@ -336,71 +351,15 @@ func metricValues(metrics []*mrpb.TimeSeries) (map[string]string, error) {
 
 func TestCollectUpcomingMaintenance(t *testing.T) {
 	tests := []struct {
-		name                string
-		cloudProperties     *iipb.CloudProperties
-		gceService          *fakegcebeta.TestGCE
-		upcomingMaintenance *compute.UpcomingMaintenance
-		skipMetrics         map[string]bool
-		wantValues          map[string]string
-		wantErr             error
+		name                          string
+		cloudProperties               *iipb.CloudProperties
+		gceService                    *fakegcebeta.TestGCE
+		upcomingMaintenance           *compute.UpcomingMaintenance
+		skipMetrics                   map[string]bool
+		wantValues                    map[string]string
+		wantErr                       error
+		fakeUpcomingMaintenanceMSCall func() (string, error)
 	}{
-		{
-			name:            "UpcomingMaintX4",
-			cloudProperties: defaultCloudProperties,
-			gceService:      x4TenantGCE,
-			upcomingMaintenance: &compute.UpcomingMaintenance{
-				CanReschedule:         true,
-				WindowStartTime:       "2023-06-21T15:57:53Z",
-				WindowEndTime:         "2023-06-21T23:57:53Z",
-				LatestWindowStartTime: "2023-06-21T15:57:53Z",
-				MaintenanceStatus:     "PENDING",
-				Type:                  "SCHEDULED",
-			},
-			wantValues: map[string]string{
-				metricURL + maintPath + "/can_reschedule":           "true",
-				metricURL + maintPath + "/window_start_time":        "1687363073",
-				metricURL + maintPath + "/window_end_time":          "1687391873",
-				metricURL + maintPath + "/latest_window_start_time": "1687363073",
-				metricURL + maintPath + "/maintenance_status":       "1",
-				metricURL + maintPath + "/type":                     "1",
-			},
-		},
-		{
-			name:                "UpcomingMaintNotX4",
-			cloudProperties:     defaultCloudProperties,
-			gceService:          nonX4TenantGCE,
-			upcomingMaintenance: &compute.UpcomingMaintenance{},
-			wantValues:          map[string]string{},
-			wantErr:             cmpopts.AnyError,
-		},
-		{
-			name:                "NoMaintX4",
-			cloudProperties:     defaultCloudProperties,
-			gceService:          x4TenantGCENoMaintenance,
-			upcomingMaintenance: &compute.UpcomingMaintenance{},
-			wantValues: map[string]string{
-				metricURL + maintPath + "/can_reschedule":           "false",
-				metricURL + maintPath + "/window_start_time":        "0",
-				metricURL + maintPath + "/window_end_time":          "0",
-				metricURL + maintPath + "/latest_window_start_time": "0",
-				metricURL + maintPath + "/maintenance_status":       "0",
-				metricURL + maintPath + "/type":                     "0",
-			},
-		},
-		{
-			name:                "NoMaintX4SpecialTypePath",
-			cloudProperties:     defaultCloudProperties,
-			gceService:          x4TenantGCENoMaintenanceSpecialTypePath,
-			upcomingMaintenance: &compute.UpcomingMaintenance{},
-			wantValues: map[string]string{
-				metricURL + maintPath + "/can_reschedule":           "false",
-				metricURL + maintPath + "/window_start_time":        "0",
-				metricURL + maintPath + "/window_end_time":          "0",
-				metricURL + maintPath + "/latest_window_start_time": "0",
-				metricURL + maintPath + "/maintenance_status":       "0",
-				metricURL + maintPath + "/type":                     "0",
-			},
-		},
 		{
 			name:            "UpcomingMaint",
 			cloudProperties: defaultCloudProperties,
@@ -421,6 +380,29 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/maintenance_status":       "1",
 				metricURL + maintPath + "/type":                     "1",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return upcomingMaintenanceViaMetadataServerBody, nil },
+		},
+		{
+			name:            "UpcomingMaintWithAnotherOneInMetadataServer", // Sole tenant Node Group notification will prevail over metadata server notification.
+			cloudProperties: defaultCloudProperties,
+			gceService:      stamGCE,
+			upcomingMaintenance: &compute.UpcomingMaintenance{
+				CanReschedule:         true,
+				WindowStartTime:       "2023-06-21T15:57:53Z",
+				WindowEndTime:         "2023-06-21T23:57:53Z",
+				LatestWindowStartTime: "2023-06-21T15:57:53Z",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+			},
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "true",
+				metricURL + maintPath + "/window_start_time":        "1687363073",
+				metricURL + maintPath + "/window_end_time":          "1687391873",
+				metricURL + maintPath + "/latest_window_start_time": "1687363073",
+				metricURL + maintPath + "/maintenance_status":       "1",
+				metricURL + maintPath + "/type":                     "1",
+			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		},
 		{
 			name:            "CanRescheduleSkipped",
@@ -442,6 +424,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/maintenance_status":       "1",
 				metricURL + maintPath + "/type":                     "1",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		},
 		{
 			name:            "WindowStartTimeSkipped",
@@ -463,6 +446,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/maintenance_status":       "1",
 				metricURL + maintPath + "/type":                     "1",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		},
 		{
 			name:            "WindowEndTimeSkipped",
@@ -484,6 +468,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/maintenance_status":       "1",
 				metricURL + maintPath + "/type":                     "1",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		},
 		{
 			name:            "LatestWindowStartTimeSkipped",
@@ -505,6 +490,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/maintenance_status": "1",
 				metricURL + maintPath + "/type":               "1",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		},
 		{
 			name:            "MaintenanceStatusSkipped",
@@ -526,6 +512,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/latest_window_start_time": "1687363073",
 				metricURL + maintPath + "/type":                     "1",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		},
 		{
 			name:            "TypeSkipped",
@@ -547,6 +534,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/latest_window_start_time": "1687363073",
 				metricURL + maintPath + "/maintenance_status":       "1",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		},
 		{
 			name:                "NoMaint",
@@ -561,8 +549,9 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 				metricURL + maintPath + "/maintenance_status":       "0",
 				metricURL + maintPath + "/type":                     "0",
 			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
 		}, {
-			name:            "NotSoleTenant",
+			name:            "NotSoleTenantWithMaintenanceInMetadataServer",
 			cloudProperties: defaultCloudProperties,
 			gceService: &fakegcebeta.TestGCE{
 				Project: "test-project",
@@ -571,9 +560,39 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 					Name: "test-instance-name",
 				}},
 			},
-			wantErr:    cmpopts.AnyError,
-			wantValues: map[string]string{},
+			wantErr: nil,
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "false",
+				metricURL + maintPath + "/window_start_time":        "1722262797",
+				metricURL + maintPath + "/window_end_time":          "1722277192",
+				metricURL + maintPath + "/latest_window_start_time": "1722262793",
+				metricURL + maintPath + "/maintenance_status":       "1",
+				metricURL + maintPath + "/type":                     "1",
+			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return upcomingMaintenanceViaMetadataServerBody, nil },
 		}, {
+			name:            "NotSoleTenantWithoutMaintenanceInMetadataServer",
+			cloudProperties: defaultCloudProperties,
+			gceService: &fakegcebeta.TestGCE{
+				Project: "test-project",
+				Zone:    "test-zone",
+				Instances: []*compute.Instance{{
+					Name: "test-instance-name",
+				}},
+			},
+			wantErr: nil,
+			wantValues: map[string]string{
+				metricURL + maintPath + "/can_reschedule":           "false",
+				metricURL + maintPath + "/window_start_time":        "0",
+				metricURL + maintPath + "/window_end_time":          "0",
+				metricURL + maintPath + "/latest_window_start_time": "0",
+				metricURL + maintPath + "/maintenance_status":       "0",
+				metricURL + maintPath + "/type":                     "0",
+			},
+			fakeUpcomingMaintenanceMSCall: func() (string, error) { return "", nil },
+		},
+
+		{
 			name:            "NonStamSoleTenant",
 			cloudProperties: defaultCloudProperties,
 			gceService:      soleTenantGCE,
@@ -618,6 +637,7 @@ func TestCollectUpcomingMaintenance(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
+		upcomingMaintenanceMSCall = tc.fakeUpcomingMaintenanceMSCall
 		if tc.gceService != nil && tc.gceService.NodeGroupNodes != nil {
 			tc.gceService.NodeGroupNodes.Items[0].UpcomingMaintenance = tc.upcomingMaintenance
 		}
@@ -759,5 +779,91 @@ func TestCollectWithRetry(t *testing.T) {
 	_, err := p.CollectWithRetry(c)
 	if err == nil {
 		t.Error("CollectWithRetry() got success expected error")
+	}
+}
+
+func TestUpcomingMaintenanceStringToObject(t *testing.T) {
+
+	tests := []struct {
+		name    string
+		body    string
+		want    *compute.UpcomingMaintenance
+		wantErr error
+	}{
+		{
+			name:    "NoScheduledMainteanance",
+			body:    metadataNoUpcomingMaintenanceResponse,
+			want:    &compute.UpcomingMaintenance{},
+			wantErr: nil,
+		},
+		{
+			name:    "EmptyMainteananceString",
+			body:    "",
+			want:    &compute.UpcomingMaintenance{},
+			wantErr: nil,
+		},
+		{
+			name: "ScheduledMainteanance",
+			body: upcomingMaintenanceViaMetadataServerBody,
+			want: &compute.UpcomingMaintenance{
+				CanReschedule:         false,
+				LatestWindowStartTime: "2024-07-29T14:19:53+00:00",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+				WindowEndTime:         "2024-07-29T18:19:52+00:00",
+				WindowStartTime:       "2024-07-29T14:19:57+00:00",
+			},
+			wantErr: nil,
+		},
+	}
+	for _, tc := range tests {
+		got, err := upcomingMaintenanceStringToObject(context.Background(), tc.body)
+		if err != nil {
+			t.Errorf("upcomingMaintenanceStringToObject(%s) returned an unexpected error: %v", tc.name, err)
+		}
+		if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+			t.Errorf("upcomingMaintenanceStringToObject(%s) returned an unexpected diff (-want +got): %v", tc.name, diff)
+		}
+	}
+}
+
+func TestCollectUpcomingMaintenanceViaMS(t *testing.T) {
+	tests := []struct {
+		name string
+		f    func() (string, error)
+		want *compute.UpcomingMaintenance
+	}{
+		{
+			name: "ScheduledMainteanance",
+			f:    func() (string, error) { return upcomingMaintenanceViaMetadataServerBody, nil },
+			want: &compute.UpcomingMaintenance{
+				CanReschedule:         false,
+				LatestWindowStartTime: "2024-07-29T14:19:53+00:00",
+				MaintenanceStatus:     "PENDING",
+				Type:                  "SCHEDULED",
+				WindowEndTime:         "2024-07-29T18:19:52+00:00",
+				WindowStartTime:       "2024-07-29T14:19:57+00:00",
+			},
+		},
+		{
+			name: "NoScheduledMainteanance",
+			f:    func() (string, error) { return "", nil },
+			want: &compute.UpcomingMaintenance{},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		var p Properties
+		got, err := p.collectUpcomingMaintenanceMS(ctx, tc.f)
+		if err != nil {
+			t.Errorf("collectUpcomingMaintenanceMS(%v) returned an unexpected error: %v", tc.name, err)
+			continue
+		}
+
+		if diff := cmp.Diff(tc.want, got); diff != "" {
+			t.Errorf("collectUpcomingMaintenanceMS(%v) returned an unexpected diff (-want +got): %v", tc.name, diff)
+		}
 	}
 }
