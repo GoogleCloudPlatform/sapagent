@@ -58,9 +58,11 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // restore downloads files from the bucket based on each line of the input. Results for each
 // restore are written to the output. Issues with file operations will return errors.
 func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProps *ipb.CloudProperties) error {
+	startTime := time.Now()
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
+	var lastFileName string
 	for scanner.Scan() {
 		line := scanner.Text()
 		log.CtxLogger(ctx).Infow("Executing restore input", "line", line)
@@ -75,6 +77,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			}
 			fileName := s[1]
 			destName := fileName
+			lastFileName = fileName
 			// Destination is an optional parameter.
 			if len(s) > 2 {
 				destName = s[2]
@@ -100,6 +103,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 			externalBackupID := parse.TrimAndClean(s[1])
 			fileName := s[2]
 			destName := fileName
+			lastFileName = fileName
 			// Destination is an optional parameter.
 			if len(s) > 3 {
 				destName = s[3]
@@ -125,6 +129,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 	if err := scanner.Err(); err != nil {
 		return err
 	}
+	metrics.WriteFileTransferLog(ctx, "restore", lastFileName, time.Since(startTime), config, cloudProps)
 	return nil
 }
 

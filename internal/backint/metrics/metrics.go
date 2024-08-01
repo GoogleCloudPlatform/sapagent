@@ -40,6 +40,11 @@ const (
 	metricPrefix = "workload.googleapis.com/sap/agent/backint/"
 )
 
+var (
+	totalFileSize int64
+	totalSuccess  bool
+)
+
 type metricClientFunc func(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error)
 
 // DefaultMetricClient creates a new metric client from the monitoring package.
@@ -47,21 +52,33 @@ var DefaultMetricClient = func(ctx context.Context) (cloudmonitoring.TimeSeriesC
 	return monitoring.NewMetricClient(ctx)
 }
 
-// SendToCloudMonitoring creates and sends time series for backint.
-// Status metrics are sent for each file detailing success/failure.
-// Throughput metrics are sent if the file size exceeds 1GB.
-func SendToCloudMonitoring(ctx context.Context, operation, fileName string, fileSize int64, transferTime time.Duration, config *bpb.BackintConfiguration, success bool, cloudProps *ipb.CloudProperties, bo *cloudmonitoring.BackOffIntervals, metricClient metricClientFunc) bool {
-	var avgTransferSpeedMBps float64
-	if transferTime.Seconds() > 0 {
-		avgTransferSpeedMBps = float64(fileSize) / (transferTime.Seconds() * 1024 * 1024)
-	}
+// WriteFileTransferLog writes a log message with transfer details for the
+// entire backup or restore operation, summing all files transferred.
+func WriteFileTransferLog(ctx context.Context, operation, fileName string, transferTime time.Duration, config *bpb.BackintConfiguration, cloudProps *ipb.CloudProperties) {
 	fileType := "data"
 	if strings.Contains(fileName, "log_backup") {
 		fileType = "log"
 	}
+	var avgTransferSpeedMBps float64
+	if transferTime.Seconds() > 0 {
+		avgTransferSpeedMBps = float64(totalFileSize) / (transferTime.Seconds() * 1024 * 1024)
+	}
+
 	// NOTE: This log message has specific keys used in querying Cloud Logging.
 	// Never change these keys since it would have downstream effects.
-	log.CtxLogger(ctx).Infow("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", fileSize, "fileType", fileType, "success", success, "transferTime", fmt.Sprintf("%.3f", transferTime.Seconds()), "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)), "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
+	log.CtxLogger(ctx).Infow("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", totalFileSize, "fileType", fileType, "success", totalSuccess, "transferTime", fmt.Sprintf("%.3f", transferTime.Seconds()), "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)), "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
+}
+
+// SendToCloudMonitoring creates and sends time series for backint.
+// Status metrics are sent for each file detailing success/failure.
+// Throughput metrics are sent if the file size exceeds 1GB.
+func SendToCloudMonitoring(ctx context.Context, operation, fileName string, fileSize int64, transferTime time.Duration, config *bpb.BackintConfiguration, success bool, cloudProps *ipb.CloudProperties, bo *cloudmonitoring.BackOffIntervals, metricClient metricClientFunc) bool {
+	if totalFileSize == 0 {
+		totalSuccess = success
+	} else {
+		totalSuccess = totalSuccess && success
+	}
+	totalFileSize += fileSize
 
 	if !config.GetSendMetricsToMonitoring().GetValue() {
 		return false
@@ -91,6 +108,10 @@ func SendToCloudMonitoring(ctx context.Context, operation, fileName string, file
 	}
 
 	if success && fileSize >= oneGB {
+		var avgTransferSpeedMBps float64
+		if transferTime.Seconds() > 0 {
+			avgTransferSpeedMBps = float64(fileSize) / (transferTime.Seconds() * 1024 * 1024)
+		}
 		ts := []*mrpb.TimeSeries{
 			timeseries.BuildFloat64(timeseries.Params{
 				CloudProp:    cloudProps,

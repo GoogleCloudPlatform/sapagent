@@ -91,9 +91,11 @@ func Execute(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 // backup uploads pipes and files based on each line of the input. Results for each upload are
 // written to the output. Issues with file operations will return errors.
 func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, input io.Reader, output io.Writer, cloudProps *ipb.CloudProperties) error {
+	startTime := time.Now()
 	wp := workerpool.New(int(config.GetThreads()))
 	mu := &sync.Mutex{}
 	scanner := bufio.NewScanner(input)
+	var lastFileName string
 	for scanner.Scan() {
 		line := scanner.Text()
 		log.CtxLogger(ctx).Infow("Executing backup input", "line", line)
@@ -120,6 +122,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 				stat:             os.Stat,
 				copier:           io.Copy,
 			}
+			lastFileName = s[1]
 			// Filesize is an optional parameter
 			if len(s) > 2 {
 				fileSize, err := strconv.Atoi(s[2])
@@ -154,6 +157,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 	if err := scanner.Err(); err != nil {
 		return err
 	}
+	metrics.WriteFileTransferLog(ctx, "backup", lastFileName, time.Since(startTime), config, cloudProps)
 	return nil
 }
 
