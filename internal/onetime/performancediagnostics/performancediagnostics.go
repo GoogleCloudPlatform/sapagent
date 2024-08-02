@@ -60,7 +60,8 @@ import (
 )
 
 const (
-	bundlePath = `/tmp/google-cloud-sap-agent/`
+	bundlePath      = `/tmp/google-cloud-sap-agent/`
+	timeStampFormat = time.TimeOnly
 )
 
 // Diagnose has args for performance diagnostics OTE subcommands.
@@ -124,9 +125,12 @@ type options struct {
 // Disk IOPS time series metrics for a process.
 type processStat struct {
 	processInfo *computeresources.ProcessInfo
-	cpuUsage    []*computeresources.Metric
-	memoryUsage []*computeresources.MemoryUsage
-	diskUsage   []*computeresources.DiskUsage
+	cpuUsage    []*computeresources.Metric // CPU metric
+	vms         []*computeresources.Metric // Memory metric
+	rss         []*computeresources.Metric // Memory metric
+	swap        []*computeresources.Metric // Memory metric
+	deltaReads  []*computeresources.Metric // Disk IOPS metric
+	deltaWrites []*computeresources.Metric // Disk IOPS metric
 }
 
 type zipperHelper struct{}
@@ -432,12 +436,14 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	// err from here is the most recent error encountered and
 	// its done this way to collect as many metrics as possible.
 	for i, ip := range instanceWiseHANAProcesses {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for instance %v", hanaInstances[i].GetInstanceNumber()))
-		if _, metricsCollectionErr := collectMetrics(ctx, opts, hanaInstances[i], ip); metricsCollectionErr != nil {
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for instance: %v", hanaInstances[i]))
+		ptsm, metricsCollectionErr := collectMetrics(ctx, opts, hanaInstances[i], ip)
+		if metricsCollectionErr != nil {
 			err = metricsCollectionErr
 		}
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for instance %v", hanaInstances[i].GetInstanceNumber()))
-		// TODO: Use collectMetrics return value for report.
+		onetime.LogMessageToFileAndConsole(ctx, buildReport(ptsm))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for instance: %v", hanaInstances[i]))
+		// TODO: Write report to File and add it to bundle.
 	}
 
 	return err
@@ -523,16 +529,25 @@ func fetchAllProcesses(ctx context.Context, opts *options, HANAInstances []*sapp
 	return instanceWiseHANAProcesses, nil
 }
 
-// collectMetrics collects the time-series CPU, Memory and
-// IOPS metrics for the given processes.
-func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, error) {
+// initializeCollectMetrics initializes the map to store the
+// process-wise time-series metrics and params to collect metrics.
+func initializeCollectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, computeresources.Parameters) {
 	// ptsm stores the process-wise time-series metrics.
 	ptsm := make(map[string]*processStat)
 
 	// Initialize ptsm to avoid key lookup errors.
 	for _, process := range processes {
+		// Metric arrays have fixed size of opts.totalDataPoints
+		// to make it simple to identify missed process metrics
+		// after collectMetrics which is useful for final report.
 		ptsm[computeresources.FormatProcessLabel(process.Name, process.PID)] = &processStat{
 			processInfo: process,
+			cpuUsage:    make([]*computeresources.Metric, opts.totalDataPoints),
+			vms:         make([]*computeresources.Metric, opts.totalDataPoints),
+			rss:         make([]*computeresources.Metric, opts.totalDataPoints),
+			swap:        make([]*computeresources.Metric, opts.totalDataPoints),
+			deltaReads:  make([]*computeresources.Metric, opts.totalDataPoints),
+			deltaWrites: make([]*computeresources.Metric, opts.totalDataPoints),
 		}
 	}
 
@@ -549,8 +564,17 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		},
 	}
 
+	return ptsm, params
+}
+
+// collectMetrics collects the time-series CPU, Memory and
+// IOPS metrics for the given processes.
+func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, error) {
+	// ptsm stores the process-wise time-series metrics.
+	ptsm, params := initializeCollectMetrics(ctx, opts, instance, processes)
+
 	var err error
-	for itr := 1; itr <= opts.totalDataPoints; itr++ {
+	for itr := 0; itr < opts.totalDataPoints; itr++ {
 		// Collect CPU Metrics.
 		cpuUsages, cpuErr := computeresources.CollectCPUPerProcess(ctx, params, processes)
 		if cpuErr != nil {
@@ -558,7 +582,7 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		}
 		for _, metric := range cpuUsages {
 			processLabel := computeresources.FormatProcessLabel(metric.ProcessInfo.Name, metric.ProcessInfo.PID)
-			ptsm[processLabel].cpuUsage = append(ptsm[processLabel].cpuUsage, metric)
+			ptsm[processLabel].cpuUsage[itr] = metric
 		}
 
 		// Collect Memory Metrics.
@@ -568,7 +592,9 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		}
 		for _, metric := range memoryUsages {
 			processLabel := computeresources.FormatProcessLabel(metric.VMS.ProcessInfo.Name, metric.VMS.ProcessInfo.PID)
-			ptsm[processLabel].memoryUsage = append(ptsm[processLabel].memoryUsage, metric)
+			ptsm[processLabel].vms[itr] = metric.VMS
+			ptsm[processLabel].rss[itr] = metric.RSS
+			ptsm[processLabel].swap[itr] = metric.Swap
 		}
 
 		// Collect disk IOPS metrics.
@@ -578,21 +604,8 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		}
 		for _, metric := range diskUsages {
 			processLabel := computeresources.FormatProcessLabel(metric.DeltaReads.ProcessInfo.Name, metric.DeltaReads.ProcessInfo.PID)
-			ptsm[processLabel].diskUsage = append(ptsm[processLabel].diskUsage, metric)
-		}
-
-		// Append nil for missed process metrics.
-		for _, process := range processes {
-			processLabel := computeresources.FormatProcessLabel(process.Name, process.PID)
-			if len(ptsm[processLabel].cpuUsage) != itr {
-				ptsm[processLabel].cpuUsage = append(ptsm[processLabel].cpuUsage, nil)
-			}
-			if len(ptsm[processLabel].memoryUsage) != itr {
-				ptsm[processLabel].memoryUsage = append(ptsm[processLabel].memoryUsage, nil)
-			}
-			if len(ptsm[processLabel].diskUsage) != itr {
-				ptsm[processLabel].diskUsage = append(ptsm[processLabel].diskUsage, nil)
-			}
+			ptsm[processLabel].deltaReads[itr] = metric.DeltaReads
+			ptsm[processLabel].deltaWrites[itr] = metric.DeltaWrites
 		}
 
 		// Proceed to next iteration after `frequency` seconds.
@@ -603,6 +616,75 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		}
 	}
 	return ptsm, err
+}
+
+// buildReport returns a report string for the given process-wise
+// time-series metrics formatted as table with uniform column width.
+func buildReport(ptsm map[string]*processStat) string {
+	var report string
+
+	// Find the maximum width from metric values to have a uniform
+	// column width in the report for better readability.
+	maxWidth := len(timeStampFormat)
+	for _, process := range ptsm {
+		maxWidth = max(maxWidth, maxWidthOf(process.cpuUsage))
+		maxWidth = max(maxWidth, maxWidthOf(process.vms))
+		maxWidth = max(maxWidth, maxWidthOf(process.rss))
+		maxWidth = max(maxWidth, maxWidthOf(process.swap))
+		maxWidth = max(maxWidth, maxWidthOf(process.deltaReads))
+		maxWidth = max(maxWidth, maxWidthOf(process.deltaWrites))
+	}
+
+	for _, process := range ptsm {
+		report += fmt.Sprintf("\n\n----\tProcess: %v:%v\t----\n", process.processInfo.PID, process.processInfo.Name)
+
+		// Add a row of TimeStamps in HH:MM:SS format.
+		report += fmt.Sprint("| TimeStamp(HH:MM:SS)\t | ")
+		for _, metric := range process.cpuUsage {
+			if metric == nil {
+				report += fmt.Sprintf("%s | ", strings.Repeat("-", maxWidth))
+				continue
+			}
+			formattedTime := time.Unix(metric.TimeStamp.GetSeconds(), int64(metric.TimeStamp.GetNanos())).Format(timeStampFormat)
+			report += fmt.Sprintf("%s%s | ", strings.Repeat(" ", maxWidth-len(formattedTime)), formattedTime)
+		}
+
+		// Add rows with time-series metrics for each metric type.
+		report += buildMetricReport("CPU(usage in percent)", process.cpuUsage, maxWidth)
+		report += buildMetricReport("Memory(VMS in MB)", process.vms, maxWidth)
+		report += buildMetricReport("Memory(RSS in MB)", process.rss, maxWidth)
+		report += buildMetricReport("Memory(Swap in MB)", process.swap, maxWidth)
+		report += buildMetricReport("IOPS(DeltaReads /s)", process.deltaReads, maxWidth)
+		report += buildMetricReport("IOPS(DeltaWrites /s)", process.deltaWrites, maxWidth)
+	}
+	return report
+}
+
+// buildMetricReport returns a row with the metric name
+// values of given metrics separated by `|`.
+func buildMetricReport(metricName string, metrics []*computeresources.Metric, maxWidth int) string {
+	var report string
+	for _, metric := range metrics {
+		if metric == nil {
+			report += fmt.Sprintf("%s | ", strings.Repeat("-", maxWidth))
+			continue
+		}
+		formattedValue := strconv.FormatFloat(metric.Value, 'f', 4, 64)
+		report += fmt.Sprintf("%s%s | ", strings.Repeat(" ", int(maxWidth)-len(formattedValue)), formattedValue)
+	}
+	return fmt.Sprintf("\n| %s\t | %s", metricName, report)
+}
+
+// maxWidthOf returns the maximum possible width needed to display
+// the metric values from the given list of data points.
+func maxWidthOf(metrics []*computeresources.Metric) int {
+	var maxWidth int
+	for _, metric := range metrics {
+		if metric != nil {
+			maxWidth = max(maxWidth, len(strconv.FormatFloat(metric.Value, 'f', 4, 64)))
+		}
+	}
+	return maxWidth
 }
 
 // listOperations returns a map of operations to be performed.

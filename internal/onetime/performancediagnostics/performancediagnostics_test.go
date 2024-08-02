@@ -45,6 +45,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	s "cloud.google.com/go/storage"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
@@ -120,6 +121,26 @@ var (
 		"log_delay_sec": 3
 	}
 	`
+
+	defaultMetrics = []*computeresources.Metric{
+		{
+			Value:     13.0,
+			TimeStamp: &tpb.Timestamp{Seconds: 13102003, Nanos: 2003},
+		},
+		nil,
+	}
+
+	defaultTimeString = time.Unix(13102003, 2003).Format(timeStampFormat)
+	defaultReport     = `
+
+----	Process: 1455:hdbindexserver	----
+| TimeStamp(HH:MM:SS)	 | ` + defaultTimeString + ` | -------- | 
+| CPU(usage in percent)	 |  13.0000 | -------- | 
+| Memory(VMS in MB)	 |  13.0000 | -------- | 
+| Memory(RSS in MB)	 |  13.0000 | -------- | 
+| Memory(Swap in MB)	 |  13.0000 | -------- | 
+| IOPS(DeltaReads /s)	 |  13.0000 | -------- | 
+| IOPS(DeltaWrites /s)	 |  13.0000 | -------- | `
 )
 
 type fakeBucketHandle struct {
@@ -2528,6 +2549,180 @@ func TestCollectMetrics(t *testing.T) {
 			}
 			if len(metrics) != tc.wantCount {
 				t.Errorf("collectMetrics(%v, %v, %v) returned an unexpected number of metrics: %v, want: %v", context.Background(), tc.opts, tc.instance, len(metrics), tc.wantCount)
+			}
+		})
+	}
+}
+
+func TestBuildReport(t *testing.T) {
+	tests := []struct {
+		name string
+		ptsm map[string]*processStat
+		want string
+	}{
+		{
+			name: "SuccessNoProcesses",
+			ptsm: map[string]*processStat{},
+		},
+		{
+			name: "SuccessMetricsPresent",
+			ptsm: map[string]*processStat{
+				"hdbindexserver:1455": &processStat{
+					processInfo: &computeresources.ProcessInfo{
+						PID:  "1455",
+						Name: "hdbindexserver",
+					},
+					cpuUsage:    defaultMetrics,
+					vms:         defaultMetrics,
+					rss:         defaultMetrics,
+					swap:        defaultMetrics,
+					deltaReads:  defaultMetrics,
+					deltaWrites: defaultMetrics,
+				},
+			},
+			want: defaultReport,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildReport(tc.ptsm)
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("buildReport(%v) returned an unexpected diff (-want +got): %v", tc.ptsm, diff)
+			}
+		})
+	}
+}
+
+func TestBuildMetricReport(t *testing.T) {
+	tests := []struct {
+		name       string
+		metricName string
+		metrics    []*computeresources.Metric
+		maxWidth   int
+		wantReport string
+	}{
+		{
+			name:       "SuccessAllMetricsPresent",
+			metricName: "Memory(VMS in MB)",
+			maxWidth:   9,
+			metrics: []*computeresources.Metric{
+				{
+					Value: 150.0,
+				},
+				{
+					Value: 850.786,
+				},
+				{
+					Value: 1310.2003,
+				},
+			},
+			wantReport: "\n| Memory(VMS in MB)\t |  150.0000 |  850.7860 | 1310.2003 | ",
+		},
+		{
+			name:       "SuccessMissingMetrics",
+			metricName: "CPU(usage in percent)",
+			maxWidth:   9,
+			metrics: []*computeresources.Metric{
+				{
+					Value: 16.0,
+				},
+				nil,
+				{
+					Value: 1310.2003,
+				},
+			},
+			wantReport: "\n| CPU(usage in percent)\t |   16.0000 | --------- | 1310.2003 | ",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotReport := buildMetricReport(tc.metricName, tc.metrics, tc.maxWidth)
+			if diff := cmp.Diff(gotReport, tc.wantReport); diff != "" {
+				t.Errorf("buildMetricReport(%v, %v, %v) returned an unexpected diff (-want +got): %v", tc.metricName, tc.metrics, tc.maxWidth, diff)
+			}
+		})
+	}
+}
+
+func TestMaxWidthOf(t *testing.T) {
+	tests := []struct {
+		name    string
+		metrics []*computeresources.Metric
+		want    int
+	}{
+		{
+			name: "SuccessAllPositiveValues",
+			metrics: []*computeresources.Metric{
+				{
+					Value: 150.0,
+				},
+				{
+					Value: 100.78956,
+				},
+				{
+					Value: 18965.0,
+				},
+			},
+			want: 10,
+		},
+		{
+			name: "SuccessAllNegativeValues",
+			metrics: []*computeresources.Metric{
+				{
+					Value: -150.0,
+				},
+				{
+					Value: -100.78956,
+				},
+				{
+					Value: -18965.0,
+				},
+			},
+			want: 11,
+		},
+		{
+			name: "SuccessPositiveAndNegativeValues",
+			metrics: []*computeresources.Metric{
+				{
+					Value: -150.0,
+				},
+				{
+					Value: -100.78956,
+				},
+				{
+					Value: 18965.0,
+				},
+				{
+					Value: -13102003.12,
+				},
+			},
+			want: 14,
+		},
+		{
+			name: "SuccessNilMetricsPresent",
+			metrics: []*computeresources.Metric{
+				{
+					Value: -100.78956,
+				},
+				{
+					Value: 18965.0,
+				},
+				nil,
+			},
+			want: 10,
+		},
+		{
+			name: "SuccessNoMetrics",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := maxWidthOf(tc.metrics)
+			if got != tc.want {
+				t.Errorf("maxWidthOf(%v) = %v, want: %v", tc.metrics, got, tc.want)
 			}
 		})
 	}
