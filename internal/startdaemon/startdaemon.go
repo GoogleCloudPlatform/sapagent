@@ -388,7 +388,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
 		wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
 		workloadmanager.StartMetricsCollection(wmCtx, wlmparams)
-		waitForShutdown(ctx, shutdownch, cancel)
+		waitForShutdown(ctx, shutdownch, cancel, restarting)
 		return
 	}
 
@@ -454,7 +454,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		HRC:               sapdiscovery.HANAReplicationConfig,
 	})
 
-	waitForShutdown(ctx, shutdownch, cancel)
+	waitForShutdown(ctx, shutdownch, cancel, restarting)
 }
 
 func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
@@ -580,15 +580,16 @@ func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
 }
 
 // waitForShutdown observes a channel for a shutdown signal, then proceeds to shut down the Agent.
-func waitForShutdown(ctx context.Context, ch <-chan os.Signal, cancel context.CancelFunc) {
-	select {
-	// If the context is canceled, we will not wait for the shutdown signal.
-	case <-ctx.Done():
-		log.Logger.Info("Encountered context cancellation, skipping shutdown")
+func waitForShutdown(ctx context.Context, ch <-chan os.Signal, cancel context.CancelFunc, restarting bool) {
+	// If we're restarting, we wait for context cancellation instead of a shutdown signal.
+	if restarting {
+		<-ctx.Done()
+		log.Logger.Info("Skipping shutdown signal handling during restart")
 		return
-	// If the shutdown signal is observed, we will shut down by executing the following lines.
-	case <-ch:
 	}
+
+	// If the shutdown signal is observed, we will shut down by executing the following lines.
+	<-ch
 
 	log.Logger.Info("Shutdown signal observed, the agent will begin shutting down")
 	cancel()
