@@ -157,7 +157,7 @@ func backup(ctx context.Context, config *bpb.BackintConfiguration, connectParams
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	metrics.WriteFileTransferLog(ctx, "backup", lastFileName, time.Since(startTime), config, cloudProps)
+	metrics.WriteFileTransferLog(ctx, "backup", parse.TrimAndClean(lastFileName), time.Since(startTime), config, cloudProps)
 	return nil
 }
 

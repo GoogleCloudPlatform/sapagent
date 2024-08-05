@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -55,6 +56,8 @@ var DefaultMetricClient = func(ctx context.Context) (cloudmonitoring.TimeSeriesC
 // WriteFileTransferLog writes a log message with transfer details for the
 // entire backup or restore operation, summing all files transferred.
 func WriteFileTransferLog(ctx context.Context, operation, fileName string, transferTime time.Duration, config *bpb.BackintConfiguration, cloudProps *ipb.CloudProperties) {
+	// Only send the base filename and the immediate parent directory.
+	fileName = fmt.Sprintf(`%s/%s`, filepath.Base(filepath.Dir(fileName)), filepath.Base(fileName))
 	fileType := "data"
 	if strings.Contains(fileName, "log_backup") {
 		fileType = "log"
@@ -66,7 +69,11 @@ func WriteFileTransferLog(ctx context.Context, operation, fileName string, trans
 
 	// NOTE: This log message has specific keys used in querying Cloud Logging.
 	// Never change these keys since it would have downstream effects.
-	log.CtxLogger(ctx).Infow("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", totalFileSize, "fileType", fileType, "success", totalSuccess, "transferTime", fmt.Sprintf("%.3f", transferTime.Seconds()), "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)), "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
+	if totalSuccess {
+		log.CtxLogger(ctx).Infow("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", totalFileSize, "fileType", fileType, "success", totalSuccess, "transferTime", fmt.Sprintf("%.3f", transferTime.Seconds()), "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)), "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
+	} else {
+		log.CtxLogger(ctx).Errorw("SAP_BACKINT_FILE_TRANSFER", "operation", operation, "fileName", fileName, "fileSize", totalFileSize, "fileType", fileType, "success", totalSuccess, "transferTime", fmt.Sprintf("%.3f", transferTime.Seconds()), "avgTransferSpeedMBps", fmt.Sprintf("%g", math.Round(avgTransferSpeedMBps)), "userID", config.GetUserId(), "instanceName", cloudProps.GetInstanceName())
+	}
 }
 
 // SendToCloudMonitoring creates and sends time series for backint.

@@ -129,7 +129,7 @@ func restore(ctx context.Context, config *bpb.BackintConfiguration, connectParam
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	metrics.WriteFileTransferLog(ctx, "restore", lastFileName, time.Since(startTime), config, cloudProps)
+	metrics.WriteFileTransferLog(ctx, "restore", parse.TrimAndClean(lastFileName), time.Since(startTime), config, cloudProps)
 	return nil
 }
 
