@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -44,6 +45,7 @@ const (
 var (
 	totalFileSize int64
 	totalSuccess  bool
+	mu            = &sync.Mutex{}
 )
 
 type metricClientFunc func(ctx context.Context) (cloudmonitoring.TimeSeriesCreator, error)
@@ -80,12 +82,14 @@ func WriteFileTransferLog(ctx context.Context, operation, fileName string, trans
 // Status metrics are sent for each file detailing success/failure.
 // Throughput metrics are sent if the file size exceeds 1GB.
 func SendToCloudMonitoring(ctx context.Context, operation, fileName string, fileSize int64, transferTime time.Duration, config *bpb.BackintConfiguration, success bool, cloudProps *ipb.CloudProperties, bo *cloudmonitoring.BackOffIntervals, metricClient metricClientFunc) bool {
+	mu.Lock()
 	if totalFileSize == 0 {
 		totalSuccess = success
 	} else {
 		totalSuccess = totalSuccess && success
 	}
 	totalFileSize += fileSize
+	mu.Unlock()
 
 	if !config.GetSendMetricsToMonitoring().GetValue() {
 		return false
