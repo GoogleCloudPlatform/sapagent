@@ -84,8 +84,11 @@ var (
 		return fakeServer.Client(), nil
 	}
 	defaultCloudProperties = &ipb.CloudProperties{
-		ProjectId:    "default-project",
-		InstanceName: "default-instance",
+		ProjectId:        "default-project",
+		InstanceId:       "default-id",
+		InstanceName:     "default-instance",
+		Zone:             "default-zone",
+		NumericProjectId: "13102003",
 	}
 
 	defaultAppsDiscovery = func(context.Context) *sappb.SAPInstances {
@@ -306,6 +309,28 @@ func newProcessWithContextHelperTest(ctx context.Context, pid int32) (computeres
 		return fakeUsageReader{wantErrForIOPStats: errors.New("could not get IOP stats")}, nil
 	}
 	return fakeUsageReader{}, nil
+}
+
+func fakeFileSystem(isValid bool) *fake.FileSystem {
+	if isValid {
+		return &fake.FileSystem{
+			MkDirErr:              []error{nil},
+			OpenFileResp:          []*os.File{&os.File{}, &os.File{}, &os.File{}, &os.File{}},
+			OpenFileErr:           []error{nil, nil, nil, nil},
+			WriteStringToFileResp: []int{0, 0, 0, 0},
+			WriteStringToFileErr:  []error{nil, nil, nil, nil},
+		}
+	}
+
+	return &fake.FileSystem{
+		OpenErr:    []error{nil},
+		OpenResp:   []*os.File{&os.File{}},
+		CopyResp:   []int64{0},
+		CopyErr:    []error{nil},
+		CreateResp: []*os.File{&os.File{}},
+		CreateErr:  []error{nil},
+		MkDirErr:   []error{fmt.Errorf("error")},
+	}
 }
 
 func TestExecute(t *testing.T) {
@@ -1150,13 +1175,7 @@ func TestRunFIOCommands(t *testing.T) {
 			name: "Success",
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					MkDirErr:              []error{nil},
-					OpenFileResp:          []*os.File{&os.File{}, &os.File{}, &os.File{}, &os.File{}},
-					OpenFileErr:           []error{nil, nil, nil, nil},
-					WriteStringToFileResp: []int{0, 0, 0, 0},
-					WriteStringToFileErr:  []error{nil, nil, nil, nil},
-				},
+				fs:   fakeFileSystem(true),
 			},
 			wantCnt: 0,
 		},
@@ -1577,15 +1596,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
+				fs:   fakeFileSystem(false),
 			},
 			wantCnt: 2,
 		},
@@ -1598,15 +1609,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
+				fs:   fakeFileSystem(false),
 			},
 			wantCnt: 2,
 		},
@@ -1619,15 +1622,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
+				fs:   fakeFileSystem(false),
 			},
 			wantCnt: 2,
 		},
@@ -1662,21 +1657,19 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error"), fmt.Errorf("error")},
+					OpenErr:               []error{nil},
+					OpenResp:              []*os.File{&os.File{}},
+					CopyResp:              []int64{0},
+					CopyErr:               []error{nil},
+					CreateResp:            []*os.File{&os.File{}},
+					CreateErr:             []error{nil},
+					MkDirErr:              []error{fmt.Errorf("error"), fmt.Errorf("error"), nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					OpenFileErr:           []error{nil},
+					WriteStringToFileResp: []int{0, 1, 1},
+					WriteStringToFileErr:  []error{nil, nil, nil},
 				},
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-instance-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
-				},
+				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
@@ -1702,21 +1695,19 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
+					OpenErr:               []error{nil},
+					OpenResp:              []*os.File{&os.File{}},
+					CopyResp:              []int64{0},
+					CopyErr:               []error{nil},
+					CreateResp:            []*os.File{&os.File{}},
+					CreateErr:             []error{nil},
+					MkDirErr:              []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					OpenFileErr:           []error{nil},
+					WriteStringToFileResp: []int{1, 1, 1},
+					WriteStringToFileErr:  []error{nil, nil, nil},
 				},
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-instance-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
-				},
+				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
@@ -1833,15 +1824,7 @@ func TestDiagnosticsHandler(t *testing.T) {
 			},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
+				fs:   fakeFileSystem(false),
 			},
 			want: subcommands.ExitUsageError,
 		},
@@ -1925,15 +1908,7 @@ func TestRunBackint(t *testing.T) {
 			},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
+				fs:   fakeFileSystem(false),
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -2061,15 +2036,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
+				fs:   fakeFileSystem(false),
 			},
 			wantErr: true,
 		},
@@ -2081,22 +2048,8 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
-				},
+				fs:   fakeFileSystem(false),
+				cp:   defaultCloudProperties,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
@@ -2123,22 +2076,8 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
-				},
+				fs:   fakeFileSystem(false),
+				cp:   defaultCloudProperties,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
@@ -2180,16 +2119,8 @@ func TestComputeData(t *testing.T) {
 			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
-				cp: nil,
+				fs:   fakeFileSystem(false),
+				cp:   nil,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
@@ -2197,15 +2128,122 @@ func TestComputeData(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "FailToCreateComputeDirectory",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				cp:   defaultCloudProperties,
+				fs: &fake.FileSystem{
+					MkDirErr: []error{fmt.Errorf("error")},
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "222",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+				newProc: newProcessWithContextHelperTest,
+			},
+			wantErr: true,
+		},
+		{
+			name: "FailToOpenFileInComputeDirectory",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				cp:   defaultCloudProperties,
+				fs: &fake.FileSystem{
+					MkDirErr:     []error{nil},
+					OpenFileErr:  []error{fmt.Errorf("error")},
+					OpenFileResp: []*os.File{nil},
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "222",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+				newProc: newProcessWithContextHelperTest,
+			},
+			wantErr: true,
+		},
+		{
+			name: "FailToWriteToComputeFile",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				cp:   defaultCloudProperties,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					OpenFileErr:           []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					WriteStringToFileErr:  []error{fmt.Errorf("error")},
+					WriteStringToFileResp: []int{0},
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "222",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+				newProc: newProcessWithContextHelperTest,
+			},
+			wantErr: true,
+		},
+		{
+			name: "FailToAppendToComputeFile",
+			opts: &options{
+				exec: fakeExecForSuccess,
+				cp:   defaultCloudProperties,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					OpenFileErr:           []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					WriteStringToFileResp: []int{1, 1, 0},
+					WriteStringToFileErr:  []error{nil, nil, fmt.Errorf("error")},
+				},
+				appsDiscovery: defaultAppsDiscovery,
+				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+				},
+				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
+					return []*computeresources.ProcessInfo{
+						{
+							PID:  "222",
+							Name: fmt.Sprintf("I-%s-S-%s-P-001", p.SAPInstance.GetInstanceNumber(), p.SAPInstance.GetSapsid()),
+						},
+					}
+				},
+				newProc: newProcessWithContextHelperTest,
+			},
+			wantErr: true,
+		},
+		{
 			name: "FailCPUMetricCollection",
 			opts: &options{
 				exec: fakeExecForSuccess,
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-instance-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
+				cp:   defaultCloudProperties,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					OpenFileErr:           []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					WriteStringToFileResp: []int{1, 1, 1},
+					WriteStringToFileErr:  []error{nil, nil, nil},
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
@@ -2228,12 +2266,13 @@ func TestComputeData(t *testing.T) {
 			name: "FailMemoryMetricCollection",
 			opts: &options{
 				exec: fakeExecForSuccess,
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-instance-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
+				cp:   defaultCloudProperties,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					OpenFileErr:           []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					WriteStringToFileResp: []int{1, 1, 1},
+					WriteStringToFileErr:  []error{nil, nil, nil},
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
@@ -2256,12 +2295,13 @@ func TestComputeData(t *testing.T) {
 			name: "FailDiskIOPSMetricCollection",
 			opts: &options{
 				exec: fakeExecForSuccess,
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-instance-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
+				cp:   defaultCloudProperties,
+				fs: &fake.FileSystem{
+					MkDirErr:              []error{nil},
+					OpenFileErr:           []error{nil},
+					OpenFileResp:          []*os.File{&os.File{}},
+					WriteStringToFileResp: []int{1, 1, 1},
+					WriteStringToFileErr:  []error{nil, nil, nil},
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
@@ -2287,23 +2327,8 @@ func TestComputeData(t *testing.T) {
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
-				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-instance-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
-				},
+				exec:          fakeExecForSuccess,
+				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
@@ -2321,23 +2346,9 @@ func TestComputeData(t *testing.T) {
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
-				exec: fakeExecForSuccess,
-				fs: &fake.FileSystem{
-					OpenErr:    []error{nil},
-					OpenResp:   []*os.File{&os.File{}},
-					CopyResp:   []int64{0},
-					CopyErr:    []error{nil},
-					CreateResp: []*os.File{&os.File{}},
-					CreateErr:  []error{nil},
-					MkDirErr:   []error{fmt.Errorf("error")},
-				},
-				cp: &ipb.CloudProperties{
-					ProjectId:        "default-project",
-					InstanceId:       "default-instance-id",
-					InstanceName:     "default-instance",
-					Zone:             "default-zone",
-					NumericProjectId: "13102003",
-				},
+				exec:          fakeExecForSuccess,
+				fs:            fakeFileSystem(true),
+				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},

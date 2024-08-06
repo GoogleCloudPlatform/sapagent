@@ -233,8 +233,8 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 	}
 
 	destFilesPath := path.Join(d.OutputFilePath, d.OutputFileName)
-	if err := opts.fs.MkdirAll(destFilesPath, 0777); err != nil {
-		errMessage := fmt.Sprintf("error while making directory: %s", destFilesPath)
+	if err := opts.fs.MkdirAll(destFilesPath, 0770); err != nil {
+		errMessage := fmt.Sprintf("error while creating a new directory: %s", destFilesPath)
 		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	}
@@ -431,19 +431,40 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	}
 	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found HANA processes: %v", instanceWiseHANAProcesses))
 
+	// Create a new directory for "compute".
+	computePath := path.Join(d.OutputFilePath, d.OutputFileName, "compute")
+	if err := opts.fs.MkdirAll(computePath, 0770); err != nil {
+		return fmt.Errorf("error while creating a new directory: %v", err)
+	}
+
+	// Create a new file to write the report. If the file already
+	// exists, truncate it to ensure only the latest data is written.
+	f, err := opts.fs.OpenFile(path.Join(computePath, "hana-compute-resources.txt"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0660)
+	if err != nil {
+		return fmt.Errorf("error while opening file: %v", err)
+	}
+	defer f.Close()
+	if _, err := opts.fs.WriteStringToFile(f, "HANA Compute Resources Usage Report\n"); err != nil {
+		return fmt.Errorf("error while writing to file: %v", err)
+	}
+
 	// Collect process-wise time-series CPU, Memory, IOPS metrics.
 	//
 	// err from here is the most recent error encountered and
 	// its done this way to collect as many metrics as possible.
 	for i, ip := range instanceWiseHANAProcesses {
 		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for instance: %v", hanaInstances[i]))
+		instanceReport := fmt.Sprintf("\nInstance: %v\n", hanaInstances[i])
 		ptsm, metricsCollectionErr := collectMetrics(ctx, opts, hanaInstances[i], ip)
 		if metricsCollectionErr != nil {
 			err = metricsCollectionErr
 		}
-		onetime.LogMessageToFileAndConsole(ctx, buildReport(ptsm))
+		instanceReport += fmt.Sprintf("%v\n", buildReport(ptsm))
 		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for instance: %v", hanaInstances[i]))
-		// TODO: Write report to File and add it to bundle.
+		// Write report to the File.
+		if _, fileWriteErr := opts.fs.WriteStringToFile(f, instanceReport); fileWriteErr != nil {
+			err = fileWriteErr
+		}
 	}
 
 	return err
@@ -716,7 +737,7 @@ func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 	var errs []error
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsBackup)
 	backupPath := path.Join(d.OutputFilePath, d.OutputFileName, "backup")
-	if err := opts.fs.MkdirAll(backupPath, 0777); err != nil {
+	if err := opts.fs.MkdirAll(backupPath, 0770); err != nil {
 		errs = append(errs, err)
 		return errs
 	}
@@ -878,8 +899,8 @@ func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 	onetime.LogMessageToFileAndConsole(ctx, "Running FIO commands...")
 	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFIO)
 	targetPath := path.Join(d.OutputFilePath, d.OutputFileName, "io")
-	if err := opts.fs.MkdirAll(targetPath, 0777); err != nil {
-		errs = append(errs, fmt.Errorf("error while making directory: %s, error %s", targetPath, err.Error()))
+	if err := opts.fs.MkdirAll(targetPath, 0770); err != nil {
+		errs = append(errs, fmt.Errorf("error while creating a new directory: %s, error %s", targetPath, err.Error()))
 		return errs
 	}
 	fileNames := []string{"data_randread_256K_100G", "data_randread_512K_100G", "data_randread_1M_100G", "data_randread_64M_100G"}
@@ -910,7 +931,7 @@ func execAndWriteToFile(ctx context.Context, opFile, targetPath string, params c
 	if res.ExitCode != 0 && res.StdErr != "" {
 		return fmt.Errorf("error while executing %s command %v", res.StdErr, res.ExitCode)
 	}
-	f, err := opts.fs.OpenFile(path.Join(targetPath, opFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	f, err := opts.fs.OpenFile(path.Join(targetPath, opFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0660)
 	if err != nil {
 		return err
 	}
