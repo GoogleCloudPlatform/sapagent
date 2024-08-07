@@ -133,7 +133,7 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 	log.CtxLogger(ctx).Infof("config: %v", config)
 
 	// Initialize params to default if they are not already set.
-	if err := sd.initDefaults(ctx, &lp); err != nil {
+	if err := sd.initDefaults(ctx, &lp, gce.NewGCEClient); err != nil {
 		return nil, fmt.Errorf("failed to initialize SystemDiscovery params: %v", err)
 	}
 
@@ -160,21 +160,9 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 
 // initDefaults initializes the SystemDiscovery
 // params with default implementation if they aren't already.
-func (sd *SystemDiscovery) initDefaults(ctx context.Context, lp *log.Parameters) error {
+func (sd *SystemDiscovery) initDefaults(ctx context.Context, lp *log.Parameters, gceServiceCreator onetime.GCEServiceFunc) error {
 	if sd.AppsDiscovery == nil {
 		sd.AppsDiscovery = sapdiscovery.SAPApplications
-	}
-
-	// Initialize the GCE service for cloud discovery.
-	if sd.CloudDiscoveryInterface == nil {
-		gceService, err := gce.NewGCEClient(ctx)
-		if err != nil {
-			return err
-		}
-		sd.CloudDiscoveryInterface = &clouddiscovery.CloudDiscovery{
-			GceService:   gceService,
-			HostResolver: net.LookupHost,
-		}
 	}
 
 	if sd.HostDiscoveryInterface == nil {
@@ -194,6 +182,18 @@ func (sd *SystemDiscovery) initDefaults(ctx context.Context, lp *log.Parameters)
 	// Set the CloudLogInterface if CloudLoggingClient is set.
 	if lp.CloudLoggingClient != nil {
 		sd.CloudLogInterface = lp.CloudLoggingClient.Logger(lp.CloudLogName)
+	}
+
+	// Initialize the GCE service for cloud discovery.
+	if sd.CloudDiscoveryInterface == nil {
+		gceService, err := gceServiceCreator(ctx)
+		if err != nil {
+			return err
+		}
+		sd.CloudDiscoveryInterface = &clouddiscovery.CloudDiscovery{
+			GceService:   gceService,
+			HostResolver: net.LookupHost,
+		}
 	}
 
 	return nil
@@ -220,7 +220,7 @@ func (sd *SystemDiscovery) prepareConfig(ctx context.Context, cp *iipb.CloudProp
 	config.DiscoveryConfiguration.EnableDiscovery = &wpb.BoolValue{Value: false}
 
 	// Validate if CloudProperties has all the required fields.
-	if !validateCloudProperties(cp) {
+	if !validateCloudProperties(config.GetCloudProperties()) {
 		return nil, fmt.Errorf("CloudProperties not found or has invalid fields")
 	}
 

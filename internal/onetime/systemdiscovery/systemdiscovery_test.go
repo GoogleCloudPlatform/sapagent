@@ -20,6 +20,7 @@ package systemdiscovery
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -27,12 +28,11 @@ import (
 	"flag"
 	logging "cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/system"
+	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
@@ -106,6 +106,25 @@ var (
 		Lp:        log.Parameters{},
 		Cp:        defaultCloudProperties,
 	}
+
+	defaultSAPInstances = &sappb.SAPInstances{
+		Instances: []*sappb.SAPInstance{
+			{
+				Sapsid:         "test-hana-1",
+				InstanceNumber: "001",
+				Type:           sappb.InstanceType_HANA,
+			},
+			{
+				Sapsid:         "test-hana-2",
+				InstanceNumber: "002",
+				Type:           sappb.InstanceType_HANA,
+			},
+		},
+	}
+
+	defaultAppsDiscovery = func(context.Context) *sappb.SAPInstances {
+		return defaultSAPInstances
+	}
 )
 
 func createTestConfigFile(t *testing.T, configJSON string) *os.File {
@@ -130,7 +149,7 @@ func createTestIIOTESystemDiscovery(t *testing.T, configPath string) *SystemDisc
 		SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 		},
-		AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+		AppsDiscovery: defaultAppsDiscovery,
 		IIOTEParams:   defaultIIOTEParams,
 		ConfigPath:    configPath,
 	}
@@ -181,7 +200,6 @@ func TestExecute(t *testing.T) {
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 				},
 				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-				IIOTEParams:   nil,
 				ConfigPath:    createTestConfigFile(t, testConfigFileJSON).Name(),
 			},
 			args: []any{
@@ -205,7 +223,6 @@ func TestExecute(t *testing.T) {
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 				},
 				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-				IIOTEParams:   nil,
 			},
 			args: []any{
 				"anything",
@@ -232,38 +249,35 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 		name                string
 		sd                  *SystemDiscovery
 		args                []any
-		wantDiscoveryObject *system.Discovery
-		wantErr             error
+		wantErr             bool
+		wantDiscoveryObject bool
+		wantSAPInstances    *sappb.SAPInstances
 	}{
 		{
 			name:                "SuccessIIOTEModeWithoutConfigFile",
 			sd:                  createTestIIOTESystemDiscovery(t, ""),
 			args:                []any{},
-			wantDiscoveryObject: &system.Discovery{},
-			wantErr:             nil,
+			wantDiscoveryObject: true,
+			wantSAPInstances:    defaultSAPInstances,
 		},
 		{
 			name:                "SuccessIIOTEModeWithConfigFile",
 			sd:                  createTestIIOTESystemDiscovery(t, createTestConfigFile(t, testConfigFileJSON).Name()),
 			args:                []any{},
-			wantDiscoveryObject: &system.Discovery{},
-			wantErr:             nil,
+			wantDiscoveryObject: true,
+			wantSAPInstances:    defaultSAPInstances,
 		},
 		{
-			name:                "FailConfigFileNotFound",
-			sd:                  createTestIIOTESystemDiscovery(t, createTestConfigFile(t, testConfigFileJSON).Name()+"sap"),
-			args:                []any{},
-			wantDiscoveryObject: nil,
-			wantErr:             cmpopts.AnyError,
+			name:    "FailConfigFileNotFound",
+			sd:      createTestIIOTESystemDiscovery(t, createTestConfigFile(t, testConfigFileJSON).Name()+"sap"),
+			args:    []any{},
+			wantErr: true,
 		},
 		{
-			name: "FailIIOTEParamsAndArgsNotPassed",
-			sd: &SystemDiscovery{
-				IIOTEParams: nil,
-			},
-			args:                []any{},
-			wantDiscoveryObject: nil,
-			wantErr:             cmpopts.AnyError,
+			name:    "FailIIOTEParamsAndArgsNotPassed",
+			sd:      &SystemDiscovery{},
+			args:    []any{},
+			wantErr: true,
 		},
 		{
 			name: "SuccessApplyDefaultParamsIfMissing",
@@ -278,22 +292,25 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 				},
 			},
 			args:                []any{},
-			wantDiscoveryObject: &system.Discovery{},
-			wantErr:             nil,
+			wantDiscoveryObject: true,
+			wantSAPInstances:    &sappb.SAPInstances{},
 		},
 	}
 
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotDiscoveryObject, gotErr := test.sd.SystemDiscoveryHandler(ctx, &flag.FlagSet{Usage: func() { return }}, test.args...)
-			if test.wantDiscoveryObject != nil && gotDiscoveryObject != nil {
+			discovery, err := test.sd.SystemDiscoveryHandler(ctx, &flag.FlagSet{Usage: func() { return }}, test.args...)
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Errorf("SystemDiscoveryHandler() returned an unexpected error: %v, want error presence = %v", err, test.wantErr)
+			}
+			if err != nil {
 				return
 			}
-			if diff := cmp.Diff(test.wantDiscoveryObject, gotDiscoveryObject, protocmp.Transform()); diff != "" {
-				t.Errorf("SystemDiscoveryHandler() returned an unexpected diff (-want +got):\n%s", diff)
+			if gotDiscoveryObject := discovery != nil; gotDiscoveryObject != test.wantDiscoveryObject {
+				t.Errorf("SystemDiscoveryHandler() returned an unexpected discovery object: %v, want discovery object presence = %v", discovery, test.wantDiscoveryObject)
 			}
-			if diff := cmp.Diff(test.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+			if diff := cmp.Diff(test.wantSAPInstances, discovery.GetSAPInstances(), protocmp.Transform()); diff != "" {
 				t.Errorf("SystemDiscoveryHandler() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -302,10 +319,11 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 
 func TestInitDefaults(t *testing.T) {
 	tests := []struct {
-		name    string
-		sd      *SystemDiscovery
-		lp      *log.Parameters
-		wantErr bool
+		name       string
+		sd         *SystemDiscovery
+		lp         *log.Parameters
+		fakeNewGCE onetime.GCEServiceFunc
+		wantErr    bool
 	}{
 		{
 			name: "HostDiscoveryInterfaceMissing",
@@ -314,10 +332,8 @@ func TestInitDefaults(t *testing.T) {
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
 				},
 				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-				IIOTEParams:   nil,
 			},
-			lp:      &log.Parameters{},
-			wantErr: false,
+			lp: &log.Parameters{},
 		},
 		{
 			name: "SAPDiscoveryInterfaceMissing",
@@ -329,10 +345,25 @@ func TestInitDefaults(t *testing.T) {
 					DiscoverCurrentHostResp: [][]string{{}},
 				},
 				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-				IIOTEParams:   nil,
 			},
-			lp:      &log.Parameters{},
-			wantErr: false,
+			lp: &log.Parameters{},
+		},
+		{
+			name: "CloudDiscoveryInterfaceMissing",
+			sd: &SystemDiscovery{
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+			},
+			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			lp:         &log.Parameters{},
+		},
+		{
+			name: "ErrorCreatingGCE",
+			sd: &SystemDiscovery{
+				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+			},
+			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return nil, fmt.Errorf("error creating GCE") },
+			lp:         &log.Parameters{},
+			wantErr:    true,
 		},
 		{
 			name: "SetupCloudLogInterface",
@@ -347,20 +378,18 @@ func TestInitDefaults(t *testing.T) {
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 				},
 				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-				IIOTEParams:   nil,
 			},
 			lp: &log.Parameters{
 				CloudLoggingClient: &logging.Client{},
 			},
-			wantErr: false,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotErr := test.sd.initDefaults(context.Background(), test.lp) != nil
-			if gotErr != test.wantErr {
-				t.Errorf("initDefaults(%v) = %v, want error presence = %v", test.sd, gotErr, test.wantErr)
+			err := test.sd.initDefaults(context.Background(), test.lp, test.fakeNewGCE)
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Errorf("initDefaults() returned an unexpected error: %v, want error presence = %v", err, test.wantErr)
 			}
 		})
 	}
@@ -372,7 +401,7 @@ func TestPrepareConfig(t *testing.T) {
 		sd                  *SystemDiscovery
 		cp                  *iipb.CloudProperties
 		args                []any
-		wantErr             error
+		wantErr             bool
 		wantCloudProperties *iipb.CloudProperties
 		wantAgentProperties *cpb.AgentProperties
 		wantDiscoveryConfig *cpb.DiscoveryConfiguration
@@ -382,7 +411,6 @@ func TestPrepareConfig(t *testing.T) {
 			sd:                  &SystemDiscovery{},
 			cp:                  defaultCloudProperties,
 			args:                []any{},
-			wantErr:             nil,
 			wantCloudProperties: defaultCloudProperties,
 			wantAgentProperties: defaultAgentProperties,
 			wantDiscoveryConfig: defaultDiscoveryConfig,
@@ -394,7 +422,6 @@ func TestPrepareConfig(t *testing.T) {
 			},
 			cp:                  defaultCloudProperties,
 			args:                []any{},
-			wantErr:             nil,
 			wantCloudProperties: defaultCloudProperties,
 			wantAgentProperties: defaultAgentProperties,
 			wantDiscoveryConfig: testDiscoveryConfig,
@@ -404,12 +431,9 @@ func TestPrepareConfig(t *testing.T) {
 			sd: &SystemDiscovery{
 				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name() + "sap",
 			},
-			cp:                  defaultCloudProperties,
-			args:                []any{},
-			wantErr:             cmpopts.AnyError,
-			wantCloudProperties: nil,
-			wantAgentProperties: nil,
-			wantDiscoveryConfig: nil,
+			cp:      defaultCloudProperties,
+			args:    []any{},
+			wantErr: true,
 		},
 		{
 			name: "SuccessApplyDefaultParamsIfInvalid",
@@ -418,7 +442,6 @@ func TestPrepareConfig(t *testing.T) {
 			},
 			cp:                  defaultCloudProperties,
 			args:                []any{},
-			wantErr:             nil,
 			wantCloudProperties: defaultCloudProperties,
 			wantAgentProperties: defaultAgentProperties,
 			wantDiscoveryConfig: defaultDiscoveryConfig,
@@ -429,23 +452,25 @@ func TestPrepareConfig(t *testing.T) {
 				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name(),
 			},
 			cp: &iipb.CloudProperties{
-				ProjectId:        "",
 				InstanceId:       "default-instance-id",
 				InstanceName:     "default-instance",
 				NumericProjectId: "13102003",
 			},
-			args:                []any{},
-			wantErr:             cmpopts.AnyError,
-			wantCloudProperties: nil,
-			wantAgentProperties: nil,
-			wantDiscoveryConfig: nil,
+			args:    []any{},
+			wantErr: true,
 		},
 	}
 
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotConfig, gotErr := test.sd.prepareConfig(ctx, test.cp, test.args...)
+			gotConfig, err := test.sd.prepareConfig(ctx, test.cp, test.args...)
+			if gotErr := err != nil; gotErr != test.wantErr {
+				t.Errorf("prepareConfig() = %v, want error presence = %v", err, test.wantErr)
+			}
+			if err != nil {
+				return
+			}
 			if diff := cmp.Diff(test.wantCloudProperties, gotConfig.GetCloudProperties(), protocmp.Transform()); diff != "" {
 				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
 			}
@@ -453,9 +478,6 @@ func TestPrepareConfig(t *testing.T) {
 				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(test.wantDiscoveryConfig, gotConfig.GetDiscoveryConfiguration(), protocmp.Transform()); diff != "" {
-				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
-			}
-			if diff := cmp.Diff(test.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("prepareConfig() returned an unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -481,7 +503,6 @@ func TestValidateCloudProperties(t *testing.T) {
 				Zone:             "default-zone",
 				NumericProjectId: "13102003",
 			},
-			want: false,
 		},
 		{
 			name: "FailMissingInstanceId",
@@ -491,7 +512,6 @@ func TestValidateCloudProperties(t *testing.T) {
 				Zone:             "default-zone",
 				NumericProjectId: "13102003",
 			},
-			want: false,
 		},
 		{
 			name: "FailMissingInstanceName",
@@ -501,7 +521,6 @@ func TestValidateCloudProperties(t *testing.T) {
 				Zone:             "default-zone",
 				NumericProjectId: "13102003",
 			},
-			want: false,
 		},
 		{
 			name: "FailMissingZone",
@@ -511,7 +530,6 @@ func TestValidateCloudProperties(t *testing.T) {
 				InstanceName:     "default-instance",
 				NumericProjectId: "13102003",
 			},
-			want: false,
 		},
 		{
 			name: "FailMissingNumericProjectId",
@@ -521,18 +539,15 @@ func TestValidateCloudProperties(t *testing.T) {
 				InstanceName: "default-instance",
 				Zone:         "default-zone",
 			},
-			want: false,
 		},
 		{
 			name: "FailEmptyData",
 			cp: &iipb.CloudProperties{
-				ProjectId:        "",
 				InstanceId:       "default-instance-id",
 				InstanceName:     "default-instance",
 				Zone:             "default-zone",
 				NumericProjectId: "13102003",
 			},
-			want: false,
 		},
 	}
 
