@@ -192,17 +192,17 @@ func (c *ConfigureInstance) saptuneReapply3_3(ctx context.Context, sapTuneReappl
 		return nil
 	}
 	log.CtxLogger(ctx).Info("Executing SAPTune re-apply.")
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution revert HANA", Timeout: 120}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune solution revert HANA' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution revert HANA", Timeout: 300}); res.ExitCode != 0 {
+		return fmt.Errorf("'saptune solution revert HANA' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
 	}
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution apply HANA", Timeout: 120}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune solution apply HANA' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution apply HANA", Timeout: 300}); res.ExitCode != 0 {
+		return fmt.Errorf("'saptune solution apply HANA' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
 	}
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4", Timeout: 120}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune note revert google-x4' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4", Timeout: 300}); res.ExitCode != 0 {
+		return fmt.Errorf("'saptune note revert google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
 	}
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: 120}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune note apply google-x4' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: 300}); res.ExitCode != 0 {
+		return fmt.Errorf("'saptune note apply google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
 	}
 	return nil
 }
