@@ -40,11 +40,6 @@ var (
 // configureX4 checks and applies OS settings on X4.
 // Returns true if a reboot is required.
 func (c *ConfigureInstance) configureX43_4(ctx context.Context) (bool, error) {
-	rebootSLES, err := c.configureX4SLES3_4(ctx)
-	if err != nil {
-		return false, err
-	}
-
 	log.CtxLogger(ctx).Info("Continuing with general X4 configurations.")
 	rebootSystemdSystem, err := c.checkAndRegenerateLines(ctx, "/etc/systemd/system.conf", systemConf3_4)
 	if err != nil {
@@ -90,8 +85,12 @@ func (c *ConfigureInstance) configureX43_4(ctx context.Context) (bool, error) {
 			}
 		}
 	}
-
 	log.CtxLogger(ctx).Info("General X4 configurations complete.")
+
+	rebootSLES, err := c.configureX4SLES3_4(ctx)
+	if err != nil {
+		return false, fmt.Errorf("general X4 configurations completed, OS specific configurations failed: %v", err)
+	}
 	return rebootSLES || rebootSystemdSystem || rebootSystemdLogin || rebootModprobe || rebootGrub, nil
 }
 
