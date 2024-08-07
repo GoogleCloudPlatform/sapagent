@@ -288,7 +288,7 @@ func (c *ConfigureInstance) LogToBoth(ctx context.Context, msg string) {
 func (c *ConfigureInstance) backupAndWriteFile(ctx context.Context, filePath string, data []byte, perm os.FileMode) error {
 	backup := fmt.Sprintf("%s-old-%s", filePath, time.Now().Format(dateTimeFormat))
 	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "cp", ArgsToSplit: fmt.Sprintf("%s %s", filePath, backup)}); res.ExitCode != 0 {
-		c.LogToBoth(ctx, fmt.Sprintf("'cp %s %s' failed, continuing with write, code: %d, stderr: %s", filePath, backup, res.ExitCode, res.StdErr))
+		log.CtxLogger(ctx).Infof("'cp %s %s' failed, continuing with write, code: %d, stderr: %s", filePath, backup, res.ExitCode, res.StdErr)
 	}
 	return c.WriteFile(filePath, data, perm)
 }
