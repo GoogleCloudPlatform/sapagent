@@ -22,7 +22,6 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -52,6 +51,6 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 }
 
 // ExecuteAndGetMessage executes the backint command and returns the message and exit status.
-func (b *Backint) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cloudProps *ipb.CloudProperties) (string, subcommands.ExitStatus) {
+func (b *Backint) Run(ctx context.Context, opts *onetime.RunOptions) (string, subcommands.ExitStatus) {
 	return "Backint is not supported for windows platforms.", subcommands.ExitUsageError
 }

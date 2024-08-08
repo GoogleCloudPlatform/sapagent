@@ -58,6 +58,7 @@ type Backint struct {
 	LogLevel    string                        `json:"loglevel"`
 	LogPath     string                        `json:"log-path"`
 	help        bool
+	oteLogger   *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for backint.
@@ -110,17 +111,47 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 	if !completed {
 		return exitStatus
 	}
+	lp.LogToCloud = true
 
-	_, exitStatus = b.ExecuteAndGetMessage(ctx, f, lp, cloudProps)
+	// If an error occurs during an operation, collect the support bundle.
+	defer func() {
+		if configuration.BackintFunction(b.Function) == bpb.Function_DIAGNOSE || b.OutFile == "/dev/stdout"  || b.OutFile == "" {
+			return
+		}
+		outFileContents, err := os.ReadFile(b.OutFile)
+		if err != nil {
+			// Backint errors before/during file creation will be handled by
+			// preceding code and is out of scope for this support bundle collection.
+			log.CtxLogger(ctx).Errorw("Error reading output file", "fileName", b.OutFile, "err", err)
+			return
+		}
+		if strings.Contains(string(outFileContents), "#ERROR") {
+			log.CtxLogger(ctx).Info("Collecting agent support bundle due to Backint error.")
+			supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Function)
+		}
+	}()
+
+	_, exitStatus = b.Run(ctx, onetime.CreateRunOptions(cloudProps, false))
+	if exitStatus == subcommands.ExitFailure {
+		supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Name())
+	}
 	return exitStatus
 }
 
-// ExecuteAndGetMessage executes the backint command and returns the message and exit status.
-func (b *Backint) ExecuteAndGetMessage(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cloudProps *ipb.CloudProperties) (string, subcommands.ExitStatus) {
-	return b.backintHandler(ctx, f, lp, cloudProps, s.NewClient)
+// Run executes the backint command and returns the message and exit status.
+func (b *Backint) Run(ctx context.Context, opts *onetime.RunOptions) (string, subcommands.ExitStatus) {
+	b.oteLogger = opts.Logger
+	if b.oteLogger == nil {
+		// Log everything if logger is not defined by caller.
+		b.oteLogger = &onetime.OTELogger{
+			LogToConsole: true,
+			LogUsage:     true,
+		}
+	}
+	return b.backintHandler(ctx, opts.CloudProperties, s.NewClient)
 }
 
-func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cloudProps *ipb.CloudProperties, client storage.Client) (string, subcommands.ExitStatus) {
+func (b *Backint) backintHandler(ctx context.Context, cloudProps *ipb.CloudProperties, client storage.Client) (string, subcommands.ExitStatus) {
 	log.CtxLogger(ctx).Info("Backint starting")
 	p := configuration.Parameters{
 		User:        b.User,
@@ -136,7 +167,6 @@ func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Pa
 	if err != nil {
 		return err.Error(), subcommands.ExitUsageError
 	}
-	lp.LogToCloud = config.GetLogToCloud().GetValue()
 	log.CtxLogger(ctx).Infow("Args parsed and config validated", "config", configuration.ConfigToPrint(config))
 
 	connectParams := &storage.ConnectParameters{
@@ -152,9 +182,8 @@ func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Pa
 		return "Failed to connect to bucket", subcommands.ExitFailure
 	}
 
-	usagemetrics.Action(usagemetrics.BackintRunning)
-	if ok := run(ctx, config, connectParams, f, lp, cloudProps); !ok {
-		supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Name())
+	b.oteLogger.LogUsageAction(usagemetrics.BackintRunning)
+	if ok := b.runBackint(ctx, config, connectParams, cloudProps); !ok {
 		return "Failed to run backint", subcommands.ExitFailure
 	}
 
@@ -163,10 +192,10 @@ func (b *Backint) backintHandler(ctx context.Context, f *flag.FlagSet, lp log.Pa
 	return message, subcommands.ExitSuccess
 }
 
-// run opens the input file and creates the output file then selects which Backint function
+// runBackint opens the input file and creates the output file then selects which Backint function
 // to execute based on the configuration. Issues with file operations or config will return false.
-func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, f *flag.FlagSet, lp log.Parameters, cloudProps *ipb.CloudProperties) bool {
-	usagemetrics.Action(usagemetrics.BackintRunning)
+func (b *Backint) runBackint(ctx context.Context, config *bpb.BackintConfiguration, connectParams *storage.ConnectParameters, cloudProps *ipb.CloudProperties) bool {
+	b.oteLogger.LogUsageAction(usagemetrics.BackintRunning)
 	log.CtxLogger(ctx).Infow("Executing Backint function", "function", config.GetFunction().String(), "inFile", config.GetInputFile(), "outFile", config.GetOutputFile())
 	inFile, err := os.Open(config.GetInputFile())
 	if err != nil {
@@ -189,17 +218,6 @@ func run(ctx context.Context, config *bpb.BackintConfiguration, connectParams *s
 		return false
 	}
 
-	// If an error occurs during an operation, collect the support bundle.
-	defer func() {
-		if config.GetFunction() == bpb.Function_DIAGNOSE || config.GetOutputFile() == "/dev/stdout" {
-			return
-		}
-		outFileContents, _ := os.ReadFile(config.GetOutputFile())
-		if strings.Contains(string(outFileContents), "#ERROR") {
-			log.CtxLogger(ctx).Info("Collecting agent support bundle due to Backint error.")
-			supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, config.GetFunction().String())
-		}
-	}()
 
 	switch config.GetFunction() {
 	case bpb.Function_BACKUP:

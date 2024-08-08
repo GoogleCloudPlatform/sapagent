@@ -27,6 +27,7 @@ import (
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -69,6 +70,11 @@ var (
 	defaultCloudProperties = &ipb.CloudProperties{
 		ProjectId:    "default-project",
 		InstanceName: "default-instance",
+	}
+
+	defaultOTELogger = &onetime.OTELogger{
+		LogToConsole: true,
+		LogUsage:     true,
 	}
 )
 
@@ -162,7 +168,9 @@ func TestBackintHandler(t *testing.T) {
 	}{
 		{
 			name:    "FailParseAndValidateConfig",
-			backint: &Backint{},
+			backint: &Backint{
+				oteLogger: defaultOTELogger,
+			},
 			want:    subcommands.ExitUsageError,
 		},
 		{
@@ -171,6 +179,7 @@ func TestBackintHandler(t *testing.T) {
 				User:      "test@TST",
 				Function:  "backup",
 				ParamFile: defaultParametersFile(t).Name(),
+				oteLogger: defaultOTELogger,
 			},
 			client: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
 				return nil, errors.New("client create error")
@@ -185,6 +194,7 @@ func TestBackintHandler(t *testing.T) {
 				ParamFile: defaultParametersFile(t).Name(),
 				InFile:    t.TempDir() + "/input.txt",
 				OutFile:   t.TempDir() + "/output.txt",
+				oteLogger: defaultOTELogger,
 			},
 			client: defaultStorageClient,
 			want:   subcommands.ExitSuccess,
@@ -200,7 +210,7 @@ func TestBackintHandler(t *testing.T) {
 				defer f.Close()
 			}
 
-			_, got := test.backint.backintHandler(context.Background(), nil, log.Parameters{}, defaultCloudProperties, test.client)
+			_, got := test.backint.backintHandler(context.Background(), defaultCloudProperties, test.client)
 			if got != test.want {
 				t.Errorf("(%#v).backintHandler()=%v, want %v", test.backint, got, test.want)
 			}
@@ -222,7 +232,10 @@ func TestSetFlags(t *testing.T) {
 	}
 }
 
-func TestRun(t *testing.T) {
+func TestRunBackint(t *testing.T) {
+	backint := &Backint{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name   string
 		config *bpb.BackintConfiguration
@@ -358,9 +371,9 @@ func TestRun(t *testing.T) {
 				defer f.Close()
 			}
 
-			got := run(context.Background(), test.config, test.params, &flag.FlagSet{}, log.Parameters{}, defaultCloudProperties)
+			got := backint.runBackint(context.Background(), test.config, test.params, defaultCloudProperties)
 			if got != test.want {
-				t.Errorf("run(%#v) = %v, want %v", test.config, got, test.want)
+				t.Errorf("runBackint(%#v) = %v, want %v", test.config, got, test.want)
 			}
 		})
 	}

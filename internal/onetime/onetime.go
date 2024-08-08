@@ -69,6 +69,13 @@ type (
 	RunOptions struct {
 		CloudProperties *iipb.CloudProperties
 		DaemonMode      bool
+		Logger          *OTELogger
+	}
+
+	// OTELogger is a struct which contains necessary context for the Onetime workflow logging.
+	OTELogger struct {
+		LogToConsole bool
+		LogUsage     bool
 	}
 )
 
@@ -145,7 +152,7 @@ func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string)
 }
 
 // LogErrorToFileAndConsole prints out the error message to console and also to the log file.
-// TODO: Add logging control for Daemon mode invocations.
+// TODO: Remove these once all OTEs use the OTElogger for logging.
 func LogErrorToFileAndConsole(ctx context.Context, msg string, err error) {
 	log.Print(msg + " " + err.Error() + "\n" + "Refer to log file at:" + log.GetLogFile())
 	log.CtxLogger(ctx).Errorw(msg, "error", err.Error())
@@ -213,4 +220,47 @@ func LogFilePath(name string, iiote *InternallyInvokedOTE) string {
 		return fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", name)
 	}
 	return fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", iiote.InvokedBy)
+}
+
+// CreateRunOptions centralizes the RunOptions logic for OTE vs Daemon mode
+// invocations, returning the corresponding RunOptions struct.
+func CreateRunOptions(cloudProperties *iipb.CloudProperties, daemonMode bool) *RunOptions {
+	return &RunOptions{
+		CloudProperties: cloudProperties,
+		DaemonMode:      daemonMode,
+		Logger: &OTELogger{
+			LogToConsole: !daemonMode,
+			LogUsage:     !daemonMode,
+		},
+	}
+}
+
+// LogErrorToFileAndConsole prints out the error message to console and also to the log file.
+func (l *OTELogger) LogErrorToFileAndConsole(ctx context.Context, msg string, err error) {
+	if l.LogToConsole {
+		log.Print(fmt.Sprintf("%s %s\nRefer to log file at:%s", msg, err.Error(), log.GetLogFile()))
+	}
+	log.CtxLogger(ctx).Errorw(msg, "error", err.Error())
+}
+
+// LogMessageToFileAndConsole prints out the console message and also to the log file.
+func (l *OTELogger) LogMessageToFileAndConsole(ctx context.Context, msg string) {
+	if l.LogToConsole {
+		fmt.Println(msg)
+	}
+	log.CtxLogger(ctx).Info(msg)
+}
+
+// LogUsageAction logs the usagemetric action as per the OTELogger params.
+func (l *OTELogger) LogUsageAction(action int) {
+	if l.LogUsage {
+		usagemetrics.Action(action)
+	}
+}
+
+// LogUsageError logs the usagemetric action as per the OTELogger params.
+func (l *OTELogger) LogUsageError(error int) {
+	if l.LogUsage {
+		usagemetrics.Error(error)
+	}
 }

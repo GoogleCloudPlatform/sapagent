@@ -19,10 +19,10 @@ package backinthandler
 
 import (
 	"context"
-	"runtime"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -39,8 +39,7 @@ func BackintHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProp
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	b := &backint.Backint{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)
-	lp := log.Parameters{OSType: runtime.GOOS}
-	msg, exitStatus := b.ExecuteAndGetMessage(ctx, nil, lp, cp)
+	msg, exitStatus := b.Run(ctx, onetime.CreateRunOptions(cp, true))
 	log.CtxLogger(ctx).Debugw("Handled command result", "msg", msg, "exitStatus", exitStatus)
 	result := &gpb.CommandResult{
 		Command:  command,

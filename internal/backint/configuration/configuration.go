@@ -102,7 +102,7 @@ func (p *Parameters) parseCommandLineArgs() error {
 	if p.Function == "" {
 		return errors.New("function must be provided")
 	}
-	function := bpb.Function(bpb.Function_value[strings.ToUpper(p.Function)])
+	function := BackintFunction(p.Function)
 	if function == bpb.Function_FUNCTION_UNSPECIFIED {
 		return errors.New("function must be one of: [backup, restore, inquire, delete, diagnose]")
 	}
@@ -384,4 +384,9 @@ func ConfigToPrint(config *bpb.BackintConfiguration) *bpb.BackintConfiguration {
 		maskedconfig.ServiceAccountKey = "***"
 	}
 	return maskedconfig
+}
+
+// BackintFunction is a helper function to return BackintFunction enum for the given string.
+func BackintFunction(function string) bpb.Function {
+	return bpb.Function(bpb.Function_value[strings.ToUpper(function)])
 }
