@@ -1321,9 +1321,6 @@ func TestDiscoverSAPSystems(t *testing.T) {
 						AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 							Name:   "some-app-instance-name",
 							Number: "99",
-						}, {
-							Name:   "some-app-instance-name",
-							Number: "99",
 						}},
 					},
 				}},

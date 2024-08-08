@@ -469,21 +469,27 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 							r.InstanceProperties.VirtualHostname = iProp.VirtualHostname
 						}
 						r.InstanceProperties.InstanceRole |= iProp.InstanceRole
-						r.InstanceProperties.AppInstances = append(r.InstanceProperties.AppInstances, iProp.AppInstances...)
-						log.CtxLogger(ctx).Debugf("Adding instance properties to resource: %s", r.ResourceUri)
+
+						appInstances := make(map[string]*spb.SapDiscovery_Resource_InstanceProperties_AppInstance)
+						for _, app := range r.InstanceProperties.AppInstances {
+							appInstances[app.GetName()] = app
+						}
+						for _, app := range iProp.AppInstances {
+							if _, ok := appInstances[app.GetName()]; !ok {
+								r.InstanceProperties.AppInstances = append(r.InstanceProperties.AppInstances, app)
+								appInstances[app.GetName()] = app
+							}
+						}
+						log.CtxLogger(ctx).Debugw("Adding instance properties to resource", "resource_uri", r.ResourceUri, "instance_properties", r.InstanceProperties)
 					}
 				}
-				switch iProp.InstanceRole {
-				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE:
+				if (iProp.InstanceRole & spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE) != 0 {
 					log.CtxLogger(ctx).Debug("Instance properties are for a database instance")
 					if system.GetDatabaseLayer() != nil {
 						system.DatabaseLayer.Resources = removeDuplicates(append(system.GetDatabaseLayer().Resources, res...))
 					}
-				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER:
-					fallthrough
-				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS:
-					fallthrough
-				case spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS:
+				}
+				if (iProp.InstanceRole & spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS_ERS_APP_SERVER) != 0 {
 					log.CtxLogger(ctx).Debug("Instance properties are for a application instance")
 					if system.GetApplicationLayer() != nil {
 						system.ApplicationLayer.Resources = removeDuplicates(append(system.GetApplicationLayer().Resources, res...))
