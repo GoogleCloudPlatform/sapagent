@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
@@ -45,6 +46,8 @@ var defaultCloudProperties = &ipb.CloudProperties{
 	ProjectId:    "default-project",
 	InstanceName: "default-instance",
 }
+
+var defaultOTELogger = onetime.CreateOTELogger(false)
 
 func joinLines(lines []string) string {
 	return strings.Join(lines, "\n")
@@ -1339,8 +1342,9 @@ func TestModifyConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
+			test.c.oteLogger = defaultOTELogger
 			writeFile(ctx, test.oldConfig, test.c.Path)
-			_, got := test.c.modifyConfig(ctx, nil, test.readFunc)
+			_, got := test.c.modifyConfig(ctx, test.readFunc)
 			if got != test.want {
 				t.Errorf("modifyConfig(%v) returned unexpected ExitStatus.\ngot: %v\nwant %v", test.c.Path, got, test.want)
 				return
@@ -1513,6 +1517,7 @@ func TestShowFeatures(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.c.oteLogger = defaultOTELogger
 			if tc.c != nil && len(tc.c.Path) > 0 {
 				writeFile(context.Background(), tc.config, tc.c.Path)
 			}

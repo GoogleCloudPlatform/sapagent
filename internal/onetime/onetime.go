@@ -69,7 +69,6 @@ type (
 	RunOptions struct {
 		CloudProperties *iipb.CloudProperties
 		DaemonMode      bool
-		Logger          *OTELogger
 	}
 
 	// OTELogger is a struct which contains necessary context for the Onetime workflow logging.
@@ -228,10 +227,14 @@ func CreateRunOptions(cloudProperties *iipb.CloudProperties, daemonMode bool) *R
 	return &RunOptions{
 		CloudProperties: cloudProperties,
 		DaemonMode:      daemonMode,
-		Logger: &OTELogger{
-			LogToConsole: !daemonMode,
-			LogUsage:     !daemonMode,
-		},
+	}
+}
+
+// CreateOTELogger creates a new OTELogger based on the bool value of daemonMode.
+func CreateOTELogger(daemonMode bool) *OTELogger {
+	return &OTELogger{
+		LogToConsole: !daemonMode,
+		LogUsage:     !daemonMode,
 	}
 }
 

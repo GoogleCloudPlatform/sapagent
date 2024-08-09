@@ -115,7 +115,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 
 	// If an error occurs during an operation, collect the support bundle.
 	defer func() {
-		if configuration.BackintFunction(b.Function) == bpb.Function_DIAGNOSE || b.OutFile == "/dev/stdout"  || b.OutFile == "" {
+		if configuration.BackintFunction(b.Function) == bpb.Function_DIAGNOSE || b.OutFile == "/dev/stdout" || b.OutFile == "" {
 			return
 		}
 		outFileContents, err := os.ReadFile(b.OutFile)
@@ -140,14 +140,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 
 // Run executes the backint command and returns the message and exit status.
 func (b *Backint) Run(ctx context.Context, opts *onetime.RunOptions) (string, subcommands.ExitStatus) {
-	b.oteLogger = opts.Logger
-	if b.oteLogger == nil {
-		// Log everything if logger is not defined by caller.
-		b.oteLogger = &onetime.OTELogger{
-			LogToConsole: true,
-			LogUsage:     true,
-		}
-	}
+	b.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	return b.backintHandler(ctx, opts.CloudProperties, s.NewClient)
 }
 
@@ -217,7 +210,6 @@ func (b *Backint) runBackint(ctx context.Context, config *bpb.BackintConfigurati
 		log.CtxLogger(ctx).Errorw("Output file does not have writable permissions", "fileName", config.GetOutputFile(), "err", err)
 		return false
 	}
-
 
 	switch config.GetFunction() {
 	case bpb.Function_BACKUP:

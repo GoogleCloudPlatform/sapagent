@@ -72,10 +72,7 @@ var (
 		InstanceName: "default-instance",
 	}
 
-	defaultOTELogger = &onetime.OTELogger{
-		LogToConsole: true,
-		LogUsage:     true,
-	}
+	defaultOTELogger = onetime.CreateOTELogger(false)
 )
 
 func defaultParametersFile(t *testing.T) *os.File {
@@ -167,11 +164,11 @@ func TestBackintHandler(t *testing.T) {
 		want    subcommands.ExitStatus
 	}{
 		{
-			name:    "FailParseAndValidateConfig",
+			name: "FailParseAndValidateConfig",
 			backint: &Backint{
 				oteLogger: defaultOTELogger,
 			},
-			want:    subcommands.ExitUsageError,
+			want: subcommands.ExitUsageError,
 		},
 		{
 			name: "FailConnectToBucket",

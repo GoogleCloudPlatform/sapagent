@@ -23,6 +23,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -45,7 +46,7 @@ func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudPr
 		RestartAgent: noOpRestart,
 	}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), c)
-	msg, exitStatus := c.ExecuteAndGetMessage(ctx, nil)
+	msg, exitStatus := c.Run(ctx, onetime.CreateRunOptions(nil, true))
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
 	result := &gpb.CommandResult{
 		Command:  command,
