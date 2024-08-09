@@ -647,7 +647,7 @@ func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec command
 // createMetrics - create mrpb.TimeSeries object for the given metric.
 func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
-		CloudProp:    p.Config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 		MetricType:   metricURL + mPath,
 		MetricLabels: metricLabels(p, extraLabels),
 		Timestamp:    now,

@@ -103,7 +103,7 @@ func SendToCloudMonitoring(ctx context.Context, operation, fileName string, file
 	}
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  cloudProps,
+			CloudProp:  timeseries.ConvertCloudProperties(cloudProps),
 			MetricType: mtype + "/status",
 			Timestamp:  tspb.Now(),
 			BoolValue:  success,
@@ -125,7 +125,7 @@ func SendToCloudMonitoring(ctx context.Context, operation, fileName string, file
 		}
 		ts := []*mrpb.TimeSeries{
 			timeseries.BuildFloat64(timeseries.Params{
-				CloudProp:    cloudProps,
+				CloudProp:    timeseries.ConvertCloudProperties(cloudProps),
 				MetricType:   mtype + "/throughput",
 				Timestamp:    tspb.Now(),
 				Float64Value: avgTransferSpeedMBps,

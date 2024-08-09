@@ -377,7 +377,7 @@ func collectNWAvailability(p *InstanceProperties, procs map[int]*sapcontrol.Proc
 func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	mLabels := appendLabels(p, extraLabels)
 	params := timeseries.Params{
-		CloudProp:    p.Config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 		MetricType:   metricURL + mPath,
 		MetricLabels: mLabels,
 		Timestamp:    now,

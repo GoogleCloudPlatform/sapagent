@@ -500,7 +500,7 @@ func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configu
 
 	p := timeseries.Params{
 		BareMetal:    c.BareMetal,
-		CloudProp:    c.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(c.CloudProperties),
 		MetricType:   t,
 		MetricLabels: l,
 		Timestamp:    now,

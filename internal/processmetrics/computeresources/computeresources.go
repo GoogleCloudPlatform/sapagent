@@ -373,7 +373,7 @@ func createMetrics(mPath string, labels map[string]string, val float64, p Parame
 		labels["instance_nr"] = p.SAPInstance.GetInstanceNumber()
 	}
 	ts := timeseries.Params{
-		CloudProp:    p.Config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 		MetricType:   metricURL + mPath,
 		MetricLabels: labels,
 		Timestamp:    tspb.Now(),

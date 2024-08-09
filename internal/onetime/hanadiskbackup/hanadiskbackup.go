@@ -222,7 +222,7 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 
 	_, status := s.Run(ctx, onetime.RunOptions{
 		CloudProperties: cp,
-		DaemonMode: false,
+		DaemonMode:      false,
 	})
 	if status == subcommands.ExitFailure {
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
@@ -831,7 +831,7 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 	log.CtxLogger(ctx).Infow("Optional: sending HANA disk snapshot status to cloud monitoring", "status", s.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  cp,
+			CloudProp:  timeseries.ConvertCloudProperties(cp),
 			MetricType: metricPrefix + s.Name() + "/status",
 			Timestamp:  tspb.Now(),
 			BoolValue:  s.status,
@@ -856,7 +856,7 @@ func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 	log.CtxLogger(ctx).Infow("Optional: Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildFloat64(timeseries.Params{
-			CloudProp:    cp,
+			CloudProp:    timeseries.ConvertCloudProperties(cp),
 			MetricType:   mtype,
 			Timestamp:    tspb.Now(),
 			Float64Value: dur.Seconds(),

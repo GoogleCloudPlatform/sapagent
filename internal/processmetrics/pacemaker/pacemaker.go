@@ -88,7 +88,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		}
 
 		params := timeseries.Params{
-			CloudProp:    p.Config.CloudProperties,
+			CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 			MetricType:   pacemakerPath,
 			MetricLabels: l,
 			Timestamp:    tspb.Now(),

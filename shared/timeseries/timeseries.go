@@ -26,10 +26,21 @@ import (
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
+// CloudProperties has the necessary data to create a timeseries points.
+type CloudProperties struct {
+	ProjectID        string
+	InstanceID       string
+	Zone             string
+	InstanceName     string
+	Image            string
+	NumericProjectID string
+	Region           string
+}
+
 // Params has the necessary data to create a timeseries points.
 type Params struct {
 	BareMetal    bool
-	CloudProp    *ipb.CloudProperties
+	CloudProp    *CloudProperties
 	MetricType   string
 	MetricLabels map[string]string
 	MetricKind   mpb.MetricDescriptor_MetricKind
@@ -38,6 +49,19 @@ type Params struct {
 	Int64Value   int64
 	Float64Value float64
 	BoolValue    bool
+}
+
+// ConvertCloudProperties converts Cloud Properties proto to CloudProperties struct.
+func ConvertCloudProperties(cp *ipb.CloudProperties) *CloudProperties {
+	return &CloudProperties{
+		ProjectID:        cp.GetProjectId(),
+		InstanceID:       cp.GetInstanceId(),
+		Zone:             cp.GetZone(),
+		InstanceName:     cp.GetInstanceName(),
+		Image:            cp.GetImage(),
+		NumericProjectID: cp.GetNumericProjectId(),
+		Region:           cp.GetRegion(),
+	}
 }
 
 // BuildInt builds a cloudmonitoring timeseries with Int64 point.
@@ -114,24 +138,24 @@ func buildTimeSeries(p Params) *mrpb.TimeSeries {
 	}
 }
 
-func monitoredResource(cp *ipb.CloudProperties, bareMetal bool) *mrespb.MonitoredResource {
+func monitoredResource(cp *CloudProperties, bareMetal bool) *mrespb.MonitoredResource {
 	if bareMetal {
 		return &mrespb.MonitoredResource{
 			Type: "generic_node",
 			Labels: map[string]string{
-				"project_id": cp.GetProjectId(),
-				"location":   cp.GetRegion(),
-				"namespace":  cp.GetInstanceName(),
-				"node_id":    cp.GetInstanceName(),
+				"project_id": cp.ProjectID,
+				"location":   cp.Region,
+				"namespace":  cp.InstanceName,
+				"node_id":    cp.InstanceName,
 			},
 		}
 	}
 	return &mrespb.MonitoredResource{
 		Type: "gce_instance",
 		Labels: map[string]string{
-			"project_id":  cp.GetProjectId(),
-			"zone":        cp.GetZone(),
-			"instance_id": cp.GetInstanceId(),
+			"project_id":  cp.ProjectID,
+			"zone":        cp.Zone,
+			"instance_id": cp.InstanceID,
 		},
 	}
 }

@@ -153,7 +153,7 @@ func (p *Properties) createMetric(labels map[string]string) *mrpb.TimeSeries {
 	log.Logger.Debugw("Creating metric for instance", "metric", labels["mountPath"], "value", true, "labels", labels)
 
 	ts := timeseries.Params{
-		CloudProp:    p.Config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 		MetricType:   path.Join(metricURL, volumePath),
 		MetricLabels: labels,
 		Timestamp:    tspb.Now(),

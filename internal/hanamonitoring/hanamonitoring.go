@@ -442,7 +442,7 @@ func createQueryResponseTimeMetric(ctx context.Context, dbName, sid string, quer
 		"sid":           sid,
 	}
 	ts := timeseries.Params{
-		CloudProp:    params.Config.GetCloudProperties(),
+		CloudProp:    timeseries.ConvertCloudProperties(params.Config.GetCloudProperties()),
 		MetricType:   metricURL + "/" + query.GetName() + "/time_taken_ms",
 		MetricLabels: labels,
 		Timestamp:    timestamp,
@@ -498,7 +498,7 @@ func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryNa
 	}
 
 	ts := timeseries.Params{
-		CloudProp:    params.Config.GetCloudProperties(),
+		CloudProp:    timeseries.ConvertCloudProperties(params.Config.GetCloudProperties()),
 		MetricType:   metricPath,
 		MetricLabels: labels,
 		Timestamp:    timestamp,
@@ -536,7 +536,7 @@ func createCumulativeMetric(ctx context.Context, c *cpb.Column, val any, labels 
 	}
 
 	ts := timeseries.Params{
-		CloudProp:    params.Config.GetCloudProperties(),
+		CloudProp:    timeseries.ConvertCloudProperties(params.Config.GetCloudProperties()),
 		MetricType:   metricPath,
 		MetricLabels: labels,
 		Timestamp:    timestamp,

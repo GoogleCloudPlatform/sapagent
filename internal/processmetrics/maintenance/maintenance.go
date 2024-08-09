@@ -196,7 +196,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		labels["sid"] = sid
 		log.CtxLogger(ctx).Debugw("MaintenanceMode metric for SID", "sid", sid, "maintenancemode", mntmode)
 		params := timeseries.Params{
-			CloudProp:    p.Config.CloudProperties,
+			CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 			MetricType:   metricURL + mntmodePath,
 			MetricLabels: labels,
 			Timestamp:    tspb.Now(),

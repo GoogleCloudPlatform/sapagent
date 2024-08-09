@@ -137,7 +137,7 @@ func queryInstanceState(ctx context.Context, p *InstanceProperties, metric strin
 
 		log.CtxLogger(ctx).Debugw("Error while executing command", "command", command, "args", args, "stderr", result.StdErr)
 		params := timeseries.Params{
-			CloudProp:    p.Config.CloudProperties,
+			CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 			MetricType:   metricURL + mPathMap[metric],
 			MetricLabels: map[string]string{"service": service},
 			Timestamp:    tspb.Now(),

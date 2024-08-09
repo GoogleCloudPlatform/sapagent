@@ -230,7 +230,7 @@ func (s *Service) collectAndSubmitHealth(ctx context.Context) error {
 	timeSeries := s.createHealthTimeSeries(healthy)
 	request := s.createTimeSeriesRequestFactory(timeSeries)
 	if err := s.timeSeriesSubmitter(ctx, request); err != nil {
-		return fmt.Errorf("Failed submitting agent health to cloud monitoring: %v", err)
+		return fmt.Errorf("failed submitting agent health to cloud monitoring: %v", err)
 	}
 	return nil
 }
@@ -239,12 +239,12 @@ func (s *Service) collectAndSubmitHealth(ctx context.Context) error {
 func (s *Service) collectAndSubmitMetrics(ctx context.Context) error {
 	usage, err := s.usageReader(ctx)
 	if err != nil {
-		return fmt.Errorf("Failed collecting agent process metrics: %v", err)
+		return fmt.Errorf("failed collecting agent process metrics: %v", err)
 	}
 	timeSeries := s.createMetricTimeSeries(usage)
 	request := s.createTimeSeriesRequestFactory(timeSeries)
 	if err := s.timeSeriesSubmitter(ctx, request); err != nil {
-		return fmt.Errorf("Failed submitting agent metrics to cloud monitoring: %v", err)
+		return fmt.Errorf("failed submitting agent metrics to cloud monitoring: %v", err)
 	}
 	return nil
 }
@@ -264,7 +264,7 @@ func (s *Service) createHealthTimeSeries(healthy bool) []*mrpb.TimeSeries {
 	params := timeseries.Params{
 		BareMetal:  s.config.BareMetal,
 		BoolValue:  healthy,
-		CloudProp:  s.config.CloudProperties,
+		CloudProp:  timeseries.ConvertCloudProperties(s.config.GetCloudProperties()),
 		MetricType: metricURL + agentHealth,
 		Timestamp:  s.now(),
 	}
@@ -277,7 +277,7 @@ func (s *Service) createMetricTimeSeries(u usage) []*mrpb.TimeSeries {
 	now := s.now()
 	params := timeseries.Params{
 		BareMetal:    s.config.BareMetal,
-		CloudProp:    s.config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(s.config.GetCloudProperties()),
 		Float64Value: u.cpu,
 		MetricType:   metricURL + agentCPU,
 		Timestamp:    now,
@@ -286,7 +286,7 @@ func (s *Service) createMetricTimeSeries(u usage) []*mrpb.TimeSeries {
 
 	params = timeseries.Params{
 		BareMetal:    s.config.BareMetal,
-		CloudProp:    s.config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(s.config.GetCloudProperties()),
 		Float64Value: float64(u.memory),
 		MetricType:   metricURL + agentMemory,
 		Timestamp:    now,

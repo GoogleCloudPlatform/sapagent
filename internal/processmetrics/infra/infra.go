@@ -335,7 +335,7 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 // createMetric creates a mrpb.TimeSeries object for the given metric.
 func (p *Properties) createIntMetric(mPath string, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
-		CloudProp:  p.Config.CloudProperties,
+		CloudProp:  timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 		MetricType: metricURL + mPath,
 		Timestamp:  tspb.Now(),
 		Int64Value: val,
@@ -347,7 +347,7 @@ func (p *Properties) createIntMetric(mPath string, val int64) *mrpb.TimeSeries {
 // createBoolMetric creates a mrpb.TimeSeries object for the given boolean metric.
 func (p *Properties) createBoolMetric(mPath string, val bool) *mrpb.TimeSeries {
 	params := timeseries.Params{
-		CloudProp:  p.Config.CloudProperties,
+		CloudProp:  timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 		MetricType: metricURL + mPath,
 		Timestamp:  tspb.Now(),
 		BoolValue:  val,

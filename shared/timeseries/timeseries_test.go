@@ -28,7 +28,6 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -54,13 +53,13 @@ var (
 		"namespace":  "test-bms",
 		"node_id":    "test-bms",
 	}
-	defaultCloudProperties = &ipb.CloudProperties{
-		ProjectId:  "test-project",
+	defaultCloudProperties = &CloudProperties{
+		ProjectID:  "test-project",
 		Zone:       "test-zone",
-		InstanceId: "123456",
+		InstanceID: "123456",
 	}
-	bmsCloudProperties = &ipb.CloudProperties{
-		ProjectId:    "test-project",
+	bmsCloudProperties = &CloudProperties{
+		ProjectID:    "test-project",
 		Region:       "test-location",
 		InstanceName: "test-bms",
 	}
@@ -185,7 +184,7 @@ func TestBuildFloat64(t *testing.T) {
 func TestMonitoredResource(t *testing.T) {
 	tests := []struct {
 		name       string
-		cloudProps *ipb.CloudProperties
+		cloudProps *CloudProperties
 		bareMetal  bool
 		want       *mrespb.MonitoredResource
 	}{

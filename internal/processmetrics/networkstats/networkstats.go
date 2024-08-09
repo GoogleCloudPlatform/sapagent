@@ -288,7 +288,7 @@ func (p *Properties) createMetric(labels map[string]string, data metricVal) *mrp
 	log.Logger.Debugw("Creating metric for instance", "metric", metricPath, "value", data.val, "labels", labels)
 
 	ts := timeseries.Params{
-		CloudProp:    p.Config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
 		MetricType:   metricURL + metricPath,
 		MetricLabels: labels,
 		Timestamp:    tspb.Now(),

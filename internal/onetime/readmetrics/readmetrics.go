@@ -319,7 +319,7 @@ func (r *ReadMetrics) sendStatusToMonitoring(ctx context.Context, bo *cloudmonit
 	log.CtxLogger(ctx).Infow("Sending ReadMetrics status to cloud monitoring", "status", r.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  r.cloudProps,
+			CloudProp:  timeseries.ConvertCloudProperties(r.cloudProps),
 			MetricType: "workload.googleapis.com/sap/agent/" + r.Name(),
 			Timestamp:  tspb.Now(),
 			BoolValue:  r.status,

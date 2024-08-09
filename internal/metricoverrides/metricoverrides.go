@@ -188,7 +188,7 @@ func (metricData *demoMetricData) createTimeSeries(ip *DemoInstanceProperties) [
 		startTimestamp = tpb.New(timestamp.AsTime().Add(-1 * time.Second))
 	}
 	tsParams := timeseries.Params{
-		CloudProp:    ip.Config.CloudProperties,
+		CloudProp:    timeseries.ConvertCloudProperties(ip.Config.CloudProperties),
 		MetricType:   ip.MetricTypePrefix + metricData.name,
 		MetricLabels: metricData.labels,
 		Timestamp:    timestamp,

@@ -688,7 +688,7 @@ func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 	log.CtxLogger(ctx).Infow("Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildFloat64(timeseries.Params{
-			CloudProp:    cp,
+			CloudProp:    timeseries.ConvertCloudProperties(cp),
 			MetricType:   mtype,
 			Timestamp:    tspb.Now(),
 			Float64Value: dur.Seconds(),
