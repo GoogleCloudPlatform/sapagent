@@ -632,7 +632,7 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		// Proceed to next iteration after `frequency` seconds.
 		select {
 		case <-ctx.Done():
-			return nil, context.Cause(ctx)
+			return ptsm, context.Cause(ctx)
 		case <-time.After(time.Duration(opts.frequency) * time.Second):
 		}
 	}

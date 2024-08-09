@@ -259,6 +259,16 @@ func defaultParametersFile(t *testing.T) *os.File {
 	return f
 }
 
+func countMissedMetrics(metrics []*computeresources.Metric) int {
+	var count int
+	for _, metric := range metrics {
+		if metric == nil {
+			count++
+		}
+	}
+	return count
+}
+
 type fakeUsageReader struct {
 	wantErrMemoryUsage      error
 	wantErrForCPUUsageStats error
@@ -2550,8 +2560,6 @@ func TestCollectMetrics(t *testing.T) {
 		},
 	}
 
-	// TODO: Add unit test to cover case ctx<-Done().
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			metrics, err := collectMetrics(context.Background(), tc.opts, tc.instance, tc.processes)
@@ -2562,6 +2570,66 @@ func TestCollectMetrics(t *testing.T) {
 				t.Errorf("collectMetrics(%v, %v, %v) returned an unexpected number of metrics: %v, want: %v", context.Background(), tc.opts, tc.instance, len(metrics), tc.wantCount)
 			}
 		})
+	}
+}
+
+// This test relies on context cancellation happening before the 2nd
+// round of metric collection and hence frequency should be greater
+// than cancelation timeout duration else the test will be flaky.
+func TestCollectMetricsContextCancellation(t *testing.T) {
+	opts := &options{
+		exec:            fakeExecForSuccess,
+		frequency:       4,
+		totalDataPoints: 2,
+		newProc:         newProcessWithContextHelperTest,
+	}
+	instance := &sappb.SAPInstance{
+		Sapsid:         "test-hana-1",
+		InstanceNumber: "001",
+		Type:           sappb.InstanceType_HANA,
+	}
+	processes := []*computeresources.ProcessInfo{
+		{
+			PID:  "9023",
+			Name: "I-001-S-test-hana-1-P-001",
+		},
+	}
+
+	// Minimum timeout duration of 2 seconds needed to ensure that
+	// context is cancelled before 2nd round of metric collection.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	metrics, err := collectMetrics(ctx, opts, instance, processes)
+	if err == nil {
+		t.Errorf("collectMetrics() returned unexpected error: %v, want error to be non-nil", err)
+	}
+
+	processLabel := computeresources.FormatProcessLabel(processes[0].Name, processes[0].PID)
+
+	// For cpuUsage and memoryUsage, 1 round of metric collection is
+	// done before ctx is cancelled, so expect 1 missed metric.
+	if missedMetrics := countMissedMetrics(metrics[processLabel].cpuUsage); missedMetrics != 1 {
+		t.Errorf("collectMetrics() returned an unexpected number of missed metrics for cpuUsage: %v, want: %v", missedMetrics, 1)
+	}
+	if missedMetrics := countMissedMetrics(metrics[processLabel].vms); missedMetrics != 1 {
+		t.Errorf("collectMetrics() returned an unexpected number of missed metrics for vms: %v, want: %v", missedMetrics, 1)
+	}
+	if missedMetrics := countMissedMetrics(metrics[processLabel].rss); missedMetrics != 1 {
+		t.Errorf("collectMetrics() returned an unexpected number of missed metrics for rss: %v, want: %v", missedMetrics, 1)
+	}
+	if missedMetrics := countMissedMetrics(metrics[processLabel].swap); missedMetrics != 1 {
+		t.Errorf("collectMetrics() returned an unexpected number of missed metrics for swap: %v, want: %v", missedMetrics, 1)
+	}
+
+	// For disk IOPS, as it's delta reads and writes, 2nd round is when
+	// the 1st delta is calculated and ctx is cancelled before that so
+	// expect that to be missed too.
+	if missedMetrics := countMissedMetrics(metrics[processLabel].deltaReads); missedMetrics != 2 {
+		t.Errorf("collectMetrics() returned an unexpected number of missed metrics for deltaReads: %v, want: %v", missedMetrics, 2)
+	}
+	if missedMetrics := countMissedMetrics(metrics[processLabel].deltaWrites); missedMetrics != 2 {
+		t.Errorf("collectMetrics() returned an unexpected number of missed metrics for deltaWrites: %v, want: %v", missedMetrics, 2)
 	}
 }
 
