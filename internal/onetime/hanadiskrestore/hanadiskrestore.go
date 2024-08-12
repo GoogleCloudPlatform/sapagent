@@ -347,7 +347,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		disksDetached := []*ipb.Disk{}
 		for _, d := range r.disks {
 			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
-				log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
+				log.CtxLogger(ctx).Errorf("failed to detach old data disk: %v", err)
 				// Reattaching detached disks.
 				for _, disk := range disksDetached {
 					if err := r.gceService.AttachDisk(ctx, disk.DiskName, cp, r.Project, r.DataDiskZone); err != nil {
@@ -509,7 +509,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
 			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
 			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, newDiskName, dev); err != nil {
-				log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", err)
+				log.CtxLogger(ctx).Infof("Failed to detach newly attached restored disk: %v", err)
 				return err
 			}
 			return err
