@@ -29,7 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 
-	impb "google3/third_party/sapagent/protos/instancemetadata/instancemetadata_go_proto"
+	impb "github.com/GoogleCloudPlatform/sapagent/protos/instancemetadata"
 )
 
 type (
