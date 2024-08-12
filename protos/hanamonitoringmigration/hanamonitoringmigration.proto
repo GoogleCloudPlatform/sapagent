@@ -17,6 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.hanamonitoringmigration;
 
+
 import "instanceinfo/instanceinfo.proto";
 
 
@@ -46,7 +47,7 @@ message HANAInstance {
   string host = 3;
   int64 port = 4;
   string user = 5;
-  string password = 6;
+  string password = 6 ;
   string secret_name = 7;
   bool enable_ssl = 8;
   bool validate_certificate = 9;
