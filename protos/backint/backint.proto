@@ -21,13 +21,14 @@ import "google/protobuf/wrappers.proto";
 
 
 
+
 message BackintConfiguration {
   string bucket = 1;
   int64 retries = 2;
   int64 parallel_streams = 3;
   int64 threads = 4;
   int64 buffer_size_mb = 5;
-  string encryption_key = 6;
+  string encryption_key = 6 ;
   bool compress = 7;
   string kms_key = 8;
   string service_account_key = 9;
