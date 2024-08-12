@@ -339,8 +339,8 @@ func TestRestoreHandler(t *testing.T) {
 		name               string
 		restorer           Restorer
 		fakeMetricClient   metricClientCreator
-		fakeNewGCE         gceServiceFunc
-		fakeComputeService computeServiceFunc
+		fakeNewGCE         onetime.GCEServiceFunc
+		fakeComputeService onetime.ComputeServiceFunc
 		want               subcommands.ExitStatus
 	}{
 		{

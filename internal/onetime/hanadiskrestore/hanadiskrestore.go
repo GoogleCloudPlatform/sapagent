@@ -60,12 +60,6 @@ type (
 	// metricClientCreator provides testable replacement for monitoring.NewMetricClient API.
 	metricClientCreator func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error)
 
-	// gceServiceFunc provides testable replacement for gce.New API.
-	gceServiceFunc func(context.Context) (*gce.GCE, error)
-
-	// computeServiceFunc provides testable replacement for compute.Service API
-	computeServiceFunc func(context.Context) (*compute.Service, error)
-
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
 		GetInstance(project, zone, instance string) (*compute.Instance, error)
@@ -220,7 +214,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 }
 
 // restoreHandler is the main handler for the restore subcommand.
-func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
+func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
 	var err error
 	if err = r.validateParameters(runtime.GOOS, cp); err != nil {
 		log.Print(err.Error())

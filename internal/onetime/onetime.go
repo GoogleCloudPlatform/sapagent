@@ -38,6 +38,9 @@ import (
 )
 
 type (
+	// ComputeServiceFunc provides testable replacement
+	// for compute.Service API.
+	ComputeServiceFunc func(context.Context) (*compute.Service, error)
 
 	// GCEServiceFunc provides testable replacement for gce.New API.
 	GCEServiceFunc func(context.Context) (*gce.GCE, error)

@@ -58,12 +58,6 @@ type (
 	// queryFunc provides testable replacement to the SQL API.
 	queryFunc func(context.Context, *databaseconnector.DBHandle, string) (string, error)
 
-	// gceServiceFunc provides testable replacement for gce.New API.
-	gceServiceFunc func(context.Context) (*gce.GCE, error)
-
-	// computeServiceFunc provides testable replacement for compute.Service API
-	computeServiceFunc func(context.Context) (*compute.Service, error)
-
 	// diskSnapshotFunc provides testable replacement for compute.service.Disks.CreateSnapshot
 	diskSnapshotFunc func(*compute.Snapshot) fakeDiskCreateSnapshotCall
 
@@ -253,7 +247,7 @@ func (s *Snapshot) Run(ctx context.Context, opts onetime.RunOptions) (string, su
 	return message, subcommands.ExitSuccess
 }
 
-func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
+func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
 	var err error
 	s.status = false
 

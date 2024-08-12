@@ -144,8 +144,8 @@ func TestSnapshotHandler(t *testing.T) {
 	tests := []struct {
 		name               string
 		snapshot           Snapshot
-		fakeNewGCE         gceServiceFunc
-		fakeComputeService computeServiceFunc
+		fakeNewGCE         onetime.GCEServiceFunc
+		fakeComputeService onetime.ComputeServiceFunc
 		want               subcommands.ExitStatus
 	}{
 		{
