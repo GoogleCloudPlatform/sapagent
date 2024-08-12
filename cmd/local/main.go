@@ -41,6 +41,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanainsights"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/installbackint"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/instancemetadata"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/logusage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
@@ -86,6 +87,7 @@ func registerSubCommands() {
 		&hanadiskrestore.Restorer{},
 		&hanainsights.HANAInsights{},
 		&installbackint.InstallBackint{},
+		&instancemetadata.InstanceMetadata{},
 		&logusage.LogUsage{},
 		&maintenance.Mode{},
 		&migratehanamonitoring.MigrateHANAMonitoring{},

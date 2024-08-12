@@ -23,4 +23,5 @@ message Metadata {
   string os_name = 1;
   string os_version = 2;
   string agent_version = 3;
+  string agent_build_change = 4;
 }

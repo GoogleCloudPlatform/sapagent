@@ -44,5 +44,10 @@ func (v *Version) SetFlags(fs *flag.FlagSet) {}
 
 // Execute implements the subcommand interface for version.
 func (v *Version) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	return onetime.PrintAgentVersion()
+	_, exitStatus := v.Run(ctx, onetime.RunOptions{})
+	return exitStatus
+}
+
+func (v *Version) Run(ctx context.Context, opts onetime.RunOptions) (string, subcommands.ExitStatus) {
+	return onetime.GetAgentVersion(), subcommands.ExitSuccess
 }

@@ -22,6 +22,7 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -57,5 +58,19 @@ func TestExecuteVersion(t *testing.T) {
 	got := v.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, args...)
 	if got != want {
 		t.Errorf("Execute(%v, %v)=%v, want %v", v, args, got, want)
+	}
+}
+
+func TestRunVersion(t *testing.T) {
+	v := Version{}
+	want := subcommands.ExitSuccess
+	args := []any{
+		"test",
+		log.Parameters{},
+		nil,
+	}
+	gotString, gotStatus := v.Run(context.Background(), onetime.RunOptions{})
+	if gotStatus != want {
+		t.Errorf("Run(%v, %v)=%v, want %v", v, args, gotString, want)
 	}
 }
