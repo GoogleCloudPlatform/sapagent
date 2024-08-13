@@ -37,10 +37,7 @@ func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.Cl
 	usagemetrics.Action(usagemetrics.UAPHANADiskBackupCommand)
 	s := &hanadiskbackup.Snapshot{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), s)
-	message, exitStatus := s.Run(ctx, onetime.RunOptions{
-		CloudProperties: cp,
-		DaemonMode:      true,
-	})
+	message, exitStatus := s.Run(ctx, onetime.CreateRunOptions(cp, true))
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   message,

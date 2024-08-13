@@ -29,6 +29,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	hdpb "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrhanadiscovery"
@@ -186,7 +187,6 @@ func TestExecute(t *testing.T) {
 func TestDiscoveryHandler(t *testing.T) {
 	tests := []struct {
 		name       string
-		fs         *flag.FlagSet
 		exec       commandlineexecutor.Execute
 		fsh        filesystem.FileSystem
 		want       *Applications
@@ -194,7 +194,6 @@ func TestDiscoveryHandler(t *testing.T) {
 	}{
 		{
 			name: "Success",
-			fs:   flag.NewFlagSet("flags", flag.ExitOnError),
 			exec: testCommandExecute(validXMLString, "", nil),
 			fsh: &fake.FileSystem{
 				ReadFileResp: [][]byte{[]byte(validXMLString)},
@@ -205,7 +204,6 @@ func TestDiscoveryHandler(t *testing.T) {
 		},
 		{
 			name:       "FailureInExecutingCommand",
-			fs:         flag.NewFlagSet("flags", flag.ExitOnError),
 			exec:       testCommandExecute("", "", &exec.ExitError{}),
 			fsh:        &fake.FileSystem{},
 			want:       nil,
@@ -213,7 +211,6 @@ func TestDiscoveryHandler(t *testing.T) {
 		},
 		{
 			name: "FailureInReadingFile",
-			fs:   flag.NewFlagSet("flags", flag.ExitOnError),
 			exec: testCommandExecute(validXMLString, "", nil),
 			fsh: &fake.FileSystem{
 				ReadFileResp: [][]byte{[]byte(validXMLString)},
@@ -224,7 +221,6 @@ func TestDiscoveryHandler(t *testing.T) {
 		},
 		{
 			name: "FailureInUmarshallingXML",
-			fs:   flag.NewFlagSet("flags", flag.ExitOnError),
 			exec: testCommandExecute("", "", nil),
 			fsh: &fake.FileSystem{
 				ReadFileResp: [][]byte{[]byte("random")},
@@ -240,44 +236,42 @@ func TestDiscoveryHandler(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var d Discovery
-			got, gotStatus := d.discoveryHandler(ctx, tc.fs, tc.exec, tc.fsh)
+			got, gotStatus := d.discoveryHandler(ctx, tc.exec, tc.fsh)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("discoveryHandler(%v, %v, %v) returned an unexpected diff (-want +got): %v", tc.fs, tc.exec, tc.fsh, diff)
+				t.Errorf("discoveryHandler(%v, %v) returned an unexpected diff (-want +got): %v", tc.exec, tc.fsh, diff)
 			}
 			if tc.wantStatus != gotStatus {
-				t.Errorf("discoveryHandler(%v, %v, %v) returned an unexpected status: %v", tc.fs, tc.exec, tc.fsh, gotStatus)
+				t.Errorf("discoveryHandler(%v, %v) returned an unexpected status: %v", tc.exec, tc.fsh, gotStatus)
 			}
 		})
 	}
 }
 
-func TestGetHANADiscoveryApplications(t *testing.T) {
+func TestRun(t *testing.T) {
+	runOpts := &onetime.RunOptions{}
 	tests := []struct {
-		name    string
-		fs      *flag.FlagSet
-		exec    commandlineexecutor.Execute
-		fsh     filesystem.FileSystem
-		want    *hdpb.ApplicationsList
-		wantErr error
+		name           string
+		exec           commandlineexecutor.Execute
+		fsh            filesystem.FileSystem
+		want           *hdpb.ApplicationsList
+		wantExitStatus subcommands.ExitStatus
 	}{
 		{
 			name: "Success",
-			fs:   flag.NewFlagSet("flags", flag.ExitOnError),
 			exec: testCommandExecute(validXMLString, "", nil),
 			fsh: &fake.FileSystem{
 				ReadFileResp: [][]byte{[]byte(validXMLString)},
 				ReadFileErr:  []error{nil},
 			},
-			want:    successfulProtoMessage(validXMLString),
-			wantErr: nil,
+			want:           successfulProtoMessage(validXMLString),
+			wantExitStatus: subcommands.ExitSuccess,
 		},
 		{
-			name:    "FailureInExecutingCommand",
-			fs:      flag.NewFlagSet("flags", flag.ExitOnError),
-			exec:    testCommandExecute("", "", &exec.ExitError{}),
-			fsh:     &fake.FileSystem{},
-			wantErr: cmpopts.AnyError,
-			want:    nil,
+			name:           "FailureInExecutingCommand",
+			exec:           testCommandExecute("", "", &exec.ExitError{}),
+			fsh:            &fake.FileSystem{},
+			wantExitStatus: subcommands.ExitFailure,
+			want:           nil,
 		},
 	}
 
@@ -286,13 +280,13 @@ func TestGetHANADiscoveryApplications(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var d Discovery
-			got, err := d.GetHANADiscoveryApplications(ctx, tc.fs, tc.exec, tc.fsh)
+			got, exitStatus := d.Run(ctx, runOpts, tc.exec, tc.fsh)
 
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("GetHANADiscoveryApplications(%v, %v, %v) returned an unexpected diff (-want +got): %v", tc.fs, tc.exec, tc.fsh, diff)
+				t.Errorf("GetHANADiscoveryApplications(%v, %v) returned an unexpected diff (-want +got): %v", tc.exec, tc.fsh, diff)
 			}
-			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("GetHANADiscoveryApplications(%v, %v, %v) returned an unexpected error: %v", tc.fs, tc.exec, tc.fsh, err)
+			if tc.wantExitStatus != exitStatus {
+				t.Errorf("GetHANADiscoveryApplications(%v, %v) returned an unexpected status: %v", tc.exec, tc.fsh, exitStatus)
 			}
 		})
 	}

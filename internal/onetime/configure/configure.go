@@ -143,7 +143,7 @@ func (c *Configure) SetFlags(fs *flag.FlagSet) {
 
 // Execute implements the subcommand interface for feature.
 func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
+	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     c.Name(),
 		Help:     c.Help,
 		Fs:       fs,
@@ -154,7 +154,7 @@ func (c *Configure) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) 
 		return exitStatus
 	}
 	c.usageFunc = fs.Usage
-	_, res := c.Run(ctx, onetime.CreateRunOptions(nil, false), args...)
+	_, res := c.Run(ctx, onetime.CreateRunOptions(cp, false), args...)
 	return res
 }
 
@@ -181,7 +181,7 @@ func (c *Configure) Run(ctx context.Context, runOpts *onetime.RunOptions, args .
 
 	newCfg, res := c.modifyConfig(ctx, os.ReadFile)
 	if res == subcommands.ExitSuccess {
-		fmt.Println("Successfully modified configuration.json and restarted the agent.")
+		c.oteLogger.LogMessageToConsole("Successfully modified configuration.json and restarted the agent.")
 	}
 	return newCfg, res
 }
@@ -260,7 +260,7 @@ func (c *Configure) showFeatures(ctx context.Context) (string, subcommands.ExitS
 		}
 		output += out
 	}
-	fmt.Println(output)
+	c.oteLogger.LogMessageToConsole(output)
 	return output, subcommands.ExitSuccess
 }
 
@@ -317,10 +317,9 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 		return "Insufficient flags. Please check usage", subcommands.ExitUsageError
 	}
 
-	newCfg, err := writeFile(ctx, config, c.Path)
+	newCfg, err := c.writeFile(ctx, config, c.Path)
 	if err != nil {
-		log.Print("Unable to write configuration.json")
-		log.CtxLogger(ctx).Errorw("Unable to write configuration.json", "error:", err)
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "Unable to write configuration.json", err)
 		return newCfg, subcommands.ExitUsageError
 	}
 	return newCfg, c.RestartAgent(ctx)
@@ -523,7 +522,7 @@ func (c *Configure) modifyProcessMetricsToSkip(ctx context.Context, config *cpb.
 }
 
 // writeFile writes the configuration to the given path.
-func writeFile(ctx context.Context, config *cpb.Configuration, path string) (string, error) {
+func (c *Configure) writeFile(ctx context.Context, config *cpb.Configuration, path string) (string, error) {
 	file, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(config)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Unable to marshal configuration.json")
@@ -536,8 +535,7 @@ func writeFile(ctx context.Context, config *cpb.Configuration, path string) (str
 
 	err = os.WriteFile(path, fileBuf.Bytes(), 0644)
 	if err != nil {
-		fmt.Println("Unable to write configuration.json", "err: ", err)
-		log.CtxLogger(ctx).Errorw("Unable to write configuration.json")
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "Unable to write configuration.json", err)
 		return "Unable to write configuration.json", err
 	}
 	return fileBuf.String(), nil

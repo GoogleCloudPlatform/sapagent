@@ -100,7 +100,9 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "FailureForModifyConfig",
-			c:    &Configure{Feature: "host_metrics"},
+			c: &Configure{
+				Feature: "host_metrics",
+			},
 			want: subcommands.ExitFailure,
 			args: []any{
 				"test",
@@ -131,7 +133,8 @@ func TestExecute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			if test.c != nil && test.c.Path != "" {
-				writeFile(ctx, &cpb.Configuration{
+				test.c.oteLogger = defaultOTELogger
+				test.c.writeFile(ctx, &cpb.Configuration{
 					ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
 					LogLevel:                   1,
 					CollectionConfiguration: &cpb.CollectionConfiguration{
@@ -1343,7 +1346,7 @@ func TestModifyConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			test.c.oteLogger = defaultOTELogger
-			writeFile(ctx, test.oldConfig, test.c.Path)
+			test.c.writeFile(ctx, test.oldConfig, test.c.Path)
 			_, got := test.c.modifyConfig(ctx, test.readFunc)
 			if got != test.want {
 				t.Errorf("modifyConfig(%v) returned unexpected ExitStatus.\ngot: %v\nwant %v", test.c.Path, got, test.want)
@@ -1360,6 +1363,9 @@ func TestModifyConfig(t *testing.T) {
 }
 
 func TestWriteFile(t *testing.T) {
+	configure := &Configure{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name     string
 		path     string
@@ -1404,7 +1410,7 @@ func TestWriteFile(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, gotErr := writeFile(context.Background(), tc.config, tc.path)
+			_, gotErr := configure.writeFile(context.Background(), tc.config, tc.path)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("writeFile(%v, %v) returned an unexpected diff (-want +got): %v", tc.config, tc.path, diff)
 			}
@@ -1519,7 +1525,7 @@ func TestShowFeatures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.c.oteLogger = defaultOTELogger
 			if tc.c != nil && len(tc.c.Path) > 0 {
-				writeFile(context.Background(), tc.config, tc.c.Path)
+				tc.c.writeFile(context.Background(), tc.config, tc.c.Path)
 			}
 			_, got := tc.c.showFeatures(ctx)
 			if diff := cmp.Diff(tc.want, got); diff != "" {

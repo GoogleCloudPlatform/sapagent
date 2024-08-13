@@ -241,6 +241,13 @@ func CreateOTELogger(daemonMode bool) *OTELogger {
 	}
 }
 
+// LogMessageToConsole prints out the console message.
+func (l *OTELogger) LogMessageToConsole(msg string) {
+	if l.LogToConsole {
+		fmt.Println(msg)
+	}
+}
+
 // LogErrorToFileAndConsole prints out the error message to console and also to the log file.
 func (l *OTELogger) LogErrorToFileAndConsole(ctx context.Context, msg string, err error) {
 	if l.LogToConsole {

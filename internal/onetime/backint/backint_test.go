@@ -164,11 +164,9 @@ func TestBackintHandler(t *testing.T) {
 		want    subcommands.ExitStatus
 	}{
 		{
-			name: "FailParseAndValidateConfig",
-			backint: &Backint{
-				oteLogger: defaultOTELogger,
-			},
-			want: subcommands.ExitUsageError,
+			name:    "FailParseAndValidateConfig",
+			backint: &Backint{},
+			want:    subcommands.ExitUsageError,
 		},
 		{
 			name: "FailConnectToBucket",
@@ -176,7 +174,6 @@ func TestBackintHandler(t *testing.T) {
 				User:      "test@TST",
 				Function:  "backup",
 				ParamFile: defaultParametersFile(t).Name(),
-				oteLogger: defaultOTELogger,
 			},
 			client: func(ctx context.Context, opts ...option.ClientOption) (*s.Client, error) {
 				return nil, errors.New("client create error")
@@ -191,7 +188,6 @@ func TestBackintHandler(t *testing.T) {
 				ParamFile: defaultParametersFile(t).Name(),
 				InFile:    t.TempDir() + "/input.txt",
 				OutFile:   t.TempDir() + "/output.txt",
-				oteLogger: defaultOTELogger,
 			},
 			client: defaultStorageClient,
 			want:   subcommands.ExitSuccess,
@@ -199,6 +195,7 @@ func TestBackintHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.backint.oteLogger = defaultOTELogger
 			if test.backint.InFile != "" {
 				f, err := os.Create(test.backint.InFile)
 				if err != nil {

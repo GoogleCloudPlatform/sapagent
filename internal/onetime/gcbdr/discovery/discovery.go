@@ -20,7 +20,6 @@ package discovery
 import (
 	"context"
 	"encoding/xml"
-	"errors"
 	"fmt"
 
 	"flag"
@@ -177,11 +176,11 @@ func (d *Discovery) Execute(ctx context.Context, f *flag.FlagSet, args ...any) s
 		return exitStatus
 	}
 
-	_, exitStatus = d.discoveryHandler(ctx, f, commandlineexecutor.ExecuteCommand, d.FSH)
+	_, exitStatus = d.discoveryHandler(ctx, commandlineexecutor.ExecuteCommand, d.FSH)
 	return exitStatus
 }
 
-func (d *Discovery) discoveryHandler(ctx context.Context, fs *flag.FlagSet, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*Applications, subcommands.ExitStatus) {
+func (d *Discovery) discoveryHandler(ctx context.Context, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*Applications, subcommands.ExitStatus) {
 	log.CtxLogger(ctx).Info("Starting HANA DB discovery using GCBDR CoreAPP script")
 	args := commandlineexecutor.Params{
 		Executable:  "/bin/bash",
@@ -207,15 +206,16 @@ func (d *Discovery) discoveryHandler(ctx context.Context, fs *flag.FlagSet, exec
 	return apps, subcommands.ExitSuccess
 }
 
-// GetHANADiscoveryApplications returns the list of HANA discovery applications.
-func (d *Discovery) GetHANADiscoveryApplications(ctx context.Context, fs *flag.FlagSet, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*hdpb.ApplicationsList, error) {
-	apps, exitStatus := d.discoveryHandler(ctx, fs, exec, fsh)
+// Run provides the Daemon mode invocation for gcbdr discovery, returning the
+// list of HANA discovery applications.
+func (d *Discovery) Run(ctx context.Context, opts *onetime.RunOptions, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*hdpb.ApplicationsList, subcommands.ExitStatus) {
+	apps, exitStatus := d.discoveryHandler(ctx, exec, fsh)
 	if exitStatus != subcommands.ExitSuccess {
 		log.CtxLogger(ctx).Errorf("Failed to get HANA discovery applications: %v", exitStatus)
-		return nil, errors.New("Failed to get HANA discovery applications")
+		return nil, exitStatus
 	}
 	result := constructApplicationsProto(apps)
-	return result, nil
+	return result, subcommands.ExitSuccess
 }
 
 func constructApplicationsProto(apps *Applications) *hdpb.ApplicationsList {

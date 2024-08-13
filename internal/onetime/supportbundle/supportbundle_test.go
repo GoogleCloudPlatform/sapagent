@@ -44,6 +44,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+var defaultRunOptions = onetime.CreateRunOptions(nil, false)
+var defaultOTELogger = onetime.CreateOTELogger(false)
+
 func TestMain(t *testing.M) {
 	log.SetupLoggingForTest()
 	os.Exit(t.Run())
@@ -321,7 +324,9 @@ func fakeExecSLES(ctx context.Context, p commandlineexecutor.Params) commandline
 }
 
 func TestSetFlagsForSOSReport(t *testing.T) {
-	sosrc := SupportBundle{}
+	sosrc := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"sid", "instance-numbers", "hostname"}
 	sosrc.SetFlags(fs)
@@ -369,6 +374,7 @@ func TestExecuteForSOSReport(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.sosr.oteLogger = defaultOTELogger
 			got := test.sosr.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.sosr, test.args, got, test.want)
@@ -405,7 +411,8 @@ func TestRun(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, exitStatus := test.sosr.Run(context.Background(), onetime.RunOptions{})
+			test.sosr.oteLogger = defaultOTELogger
+			_, exitStatus := test.sosr.Run(context.Background(), defaultRunOptions)
 			if exitStatus != test.wantExitStatus {
 				t.Errorf("ExecuteAndGetMessage(%v) = %v; want: %v", test.sosr, exitStatus, test.wantExitStatus)
 			}
@@ -483,6 +490,7 @@ func TestValidateParams(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.sosrc.oteLogger = defaultOTELogger
 			got := test.sosrc.validateParams()
 			if len(got) != len(test.want) || !slices.Equal(got, test.want) {
 				t.Errorf("validateParams() = %v, want %v", got, test.want)
@@ -505,7 +513,8 @@ func TestSOSReportHandler(t *testing.T) {
 	}{
 		{
 			name: "InvalidParams",
-			sosr: &SupportBundle{Sid: "DEH",
+			sosr: &SupportBundle{
+				Sid:          "DEH",
 				InstanceNums: "",
 				Hostname:     "sample_host",
 			},
@@ -595,6 +604,7 @@ func TestSOSReportHandler(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.sosr.oteLogger = defaultOTELogger
 			message, exitStatus := test.sosr.supportBundleHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z)
 			if !strings.Contains(message, test.wantMessage) || exitStatus != test.wantExitStatus {
 				t.Errorf("sosReportHandler() = %v, %v; want %v, %v", message, exitStatus, test.wantMessage, test.wantExitStatus)
@@ -604,6 +614,9 @@ func TestSOSReportHandler(t *testing.T) {
 }
 
 func TestExtractErrorsUsingGrep(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name     string
 		ctx      context.Context
@@ -663,7 +676,7 @@ func TestExtractErrorsUsingGrep(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := execAndWriteToFile(test.ctx, test.destFile, test.hostname, test.exec, test.p, test.opFile, test.fu)
+			got := sosr.execAndWriteToFile(test.ctx, test.destFile, test.hostname, test.exec, test.p, test.opFile, test.fu)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("extractErrorsUsingGREP() = %v, want %v", got, test.want)
 			}
@@ -672,6 +685,9 @@ func TestExtractErrorsUsingGrep(t *testing.T) {
 }
 
 func TestExtractSystemDBErrors(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name      string
 		destFile  string
@@ -711,7 +727,7 @@ func TestExtractSystemDBErrors(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := extractSystemDBErrors(context.Background(), test.destFile, test.hostname, test.hanaPaths, test.exec, test.fs); got != test.want {
+			if got := sosr.extractSystemDBErrors(context.Background(), test.destFile, test.hostname, test.hanaPaths, test.exec, test.fs); got != test.want {
 				t.Errorf("extractSystemDBErrors() = %v, want %v", got, test.want)
 			}
 		})
@@ -719,6 +735,9 @@ func TestExtractSystemDBErrors(t *testing.T) {
 }
 
 func TestExtractTenantDBErrors(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name      string
 		destFile  string
@@ -758,7 +777,7 @@ func TestExtractTenantDBErrors(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := extractTenantDBErrors(context.Background(), test.destFile, "DEH", test.hostname, test.hanaPaths, test.exec, test.fs); got != test.want {
+			if got := sosr.extractTenantDBErrors(context.Background(), test.destFile, "DEH", test.hostname, test.hanaPaths, test.exec, test.fs); got != test.want {
 				t.Errorf("extractTenantDBErrors() = %v, want %v", got, test.want)
 			}
 		})
@@ -766,6 +785,9 @@ func TestExtractTenantDBErrors(t *testing.T) {
 }
 
 func TestExtractJournalCTLLogs(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name     string
 		destFile string
@@ -794,7 +816,7 @@ func TestExtractJournalCTLLogs(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := extractJournalCTLLogs(context.Background(), test.destFile, test.hostname, test.exec, test.fs); got != test.want {
+			if got := sosr.extractJournalCTLLogs(context.Background(), test.destFile, test.hostname, test.exec, test.fs); got != test.want {
 				t.Errorf("extractJournalCTLLogs() = %v, want %v", got, test.want)
 			}
 		})
@@ -802,6 +824,9 @@ func TestExtractJournalCTLLogs(t *testing.T) {
 }
 
 func TestExtractBackintErrors(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name       string
 		destFile   string
@@ -847,7 +872,7 @@ func TestExtractBackintErrors(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := extractBackintErrors(context.Background(), test.destFile, test.globalPath, test.hostname, test.exec, test.fs); got != test.want {
+			if got := sosr.extractBackintErrors(context.Background(), test.destFile, test.globalPath, test.hostname, test.exec, test.fs); got != test.want {
 				t.Errorf("extractBackintErrors() = %v, want %v", got, test.want)
 			}
 		})
@@ -899,6 +924,9 @@ func TestWalkAndZip(t *testing.T) {
 }
 
 func TestNameservertraceAndBackupLog(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name     string
 		hanaPath []string
@@ -937,7 +965,7 @@ func TestNameservertraceAndBackupLog(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := nameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
+			got := sosr.nameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("nameServerTracesAndBackupLog(%q, %q, %q)=%q, want %q", test.hanaPath, test.sid, test.fu, got, test.want)
 			}
@@ -946,6 +974,9 @@ func TestNameservertraceAndBackupLog(t *testing.T) {
 }
 
 func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name     string
 		hanaPath []string
@@ -984,7 +1015,7 @@ func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := tenantDBNameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
+			got := sosr.tenantDBNameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("nameServerTracesAndBackupLog(%q, %q, %q)=%q, want %q", test.hanaPath, test.sid, test.fu, got, test.want)
 			}
@@ -993,6 +1024,9 @@ func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
 }
 
 func TestBackintParameterFiles(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name       string
 		globalPath string
@@ -1032,7 +1066,7 @@ func TestBackintParameterFiles(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := backintParameterFiles(context.Background(), test.globalPath, test.sid, test.fu)
+			got := sosr.backintParameterFiles(context.Background(), test.globalPath, test.sid, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("backintParameterFiles(%q, %q, %q) = %q, want %q", test.globalPath, test.sid, test.fu, got, test.want)
 			}
@@ -1041,6 +1075,9 @@ func TestBackintParameterFiles(t *testing.T) {
 }
 
 func TestBackintlogs(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name       string
 		globalPath string
@@ -1105,7 +1142,7 @@ func TestBackintlogs(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		got := backintLogs(context.Background(), test.globalPath, test.sid, test.fu)
+		got := sosr.backintLogs(context.Background(), test.globalPath, test.sid, test.fu)
 		if !cmp.Equal(got, test.want) {
 			t.Errorf("BackIntLogs(%q, %q, %q) = %q, want %q", test.globalPath, test.sid, test.fu, got, test.want)
 		}
@@ -1113,6 +1150,9 @@ func TestBackintlogs(t *testing.T) {
 }
 
 func TestAgentLogsFiles(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name string
 		path string
@@ -1146,7 +1186,7 @@ func TestAgentLogsFiles(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := agentLogFiles(context.Background(), test.path, test.fu)
+			got := sosr.agentLogFiles(context.Background(), test.path, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("agentLogFiles(%q) = %v, want %v", test.path, got, test.want)
 			}
@@ -1268,6 +1308,9 @@ func TestZipSource(t *testing.T) {
 }
 
 func TestRemoveDestinationFolder(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name string
 		path string
@@ -1289,7 +1332,7 @@ func TestRemoveDestinationFolder(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := removeDestinationFolder(context.Background(), test.path, test.fu)
+			got := sosr.removeDestinationFolder(context.Background(), test.path, test.fu)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("removeDestinationFolder(%q) = %v, want %v", test.path, got, test.want)
 			}
@@ -1298,6 +1341,9 @@ func TestRemoveDestinationFolder(t *testing.T) {
 }
 
 func TestRotateOldBundles(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name string
 		dir  string
@@ -1333,7 +1379,7 @@ func TestRotateOldBundles(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := rotateOldBundles(context.Background(), test.dir, test.fs)
+			got := sosr.rotateOldBundles(context.Background(), test.dir, test.fs)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("rotateOldBundles(%q) = %v, want %v", test.dir, got, test.want)
 			}
@@ -1342,6 +1388,9 @@ func TestRotateOldBundles(t *testing.T) {
 }
 
 func TestCollectPacemakerLogs(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name         string
 		ctx          context.Context
@@ -1394,7 +1443,7 @@ func TestCollectPacemakerLogs(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := pacemakerLogs(test.ctx, test.destFilePath, test.exec, test.fs)
+			got := sosr.pacemakerLogs(test.ctx, test.destFilePath, test.exec, test.fs)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("collectPacemakerLogs(%q) = %v, want %v", test.destFilePath, got, test.want)
 			}
@@ -1403,6 +1452,9 @@ func TestCollectPacemakerLogs(t *testing.T) {
 }
 
 func TestCollectRHELPacemakerLogs(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name          string
 		ctx           context.Context
@@ -1452,7 +1504,7 @@ func TestCollectRHELPacemakerLogs(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := rhelPacemakerLogs(test.ctx, test.exec, test.destFilesPath, test.fs); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+			if got := sosr.rhelPacemakerLogs(test.ctx, test.exec, test.destFilesPath, test.fs); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("collectRHELPacemakerLogs(%q) = %v, want %v", test.destFilesPath, got, test.want)
 			}
 		})
@@ -1460,6 +1512,9 @@ func TestCollectRHELPacemakerLogs(t *testing.T) {
 }
 
 func TestExtractHANAVersion(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name          string
 		destFilesPath string
@@ -1492,7 +1547,7 @@ func TestExtractHANAVersion(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
-		got := extractHANAVersion(ctx, tc.destFilesPath, tc.sid, tc.hostname, tc.exec, tc.fu)
+		got := sosr.extractHANAVersion(ctx, tc.destFilesPath, tc.sid, tc.hostname, tc.exec, tc.fu)
 		if got != tc.want {
 			t.Errorf("extractHANAVersion(%v, %v, %v, %v, %v) = %v, want: %v", tc.destFilesPath, tc.sid, tc.hostname, tc.exec, tc.fu, got, tc.want)
 		}
@@ -1500,6 +1555,9 @@ func TestExtractHANAVersion(t *testing.T) {
 }
 
 func TestCollectSLESPacemakerLogs(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name          string
 		ctx           context.Context
@@ -1552,7 +1610,7 @@ func TestCollectSLESPacemakerLogs(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := slesPacemakerLogs(test.ctx, test.exec, test.destFilesPath, test.fs); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+			if got := sosr.slesPacemakerLogs(test.ctx, test.exec, test.destFilesPath, test.fs); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("collectSLESPacemakerLogs(%q) = %v, want %v", test.destFilesPath, got, test.want)
 			}
 		})
@@ -1687,6 +1745,7 @@ func TestUploadZip(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.sb.oteLogger = defaultOTELogger
 			gotErr := tc.sb.uploadZip(ctx, tc.destFilesPath, "bundle", tc.ctb, tc.grw, tc.fs, st.NewClient)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("uploadZip(%q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.ctb, tc.grw, diff)
@@ -1696,6 +1755,9 @@ func TestUploadZip(t *testing.T) {
 }
 
 func TestFetchPackageInfo(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name          string
 		destFilesPath string
@@ -1732,7 +1794,7 @@ func TestFetchPackageInfo(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := fetchPackageInfo(context.Background(), test.destFilesPath, test.hostname, test.exec, test.fu); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+			if got := sosr.fetchPackageInfo(context.Background(), test.destFilesPath, test.hostname, test.exec, test.fu); !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("fetchPackageInfo(%q, %q, %v, %v) = %v, want %v", test.destFilesPath, test.hostname, test.exec, test.fu, got, test.want)
 			}
 		})
@@ -1740,6 +1802,9 @@ func TestFetchPackageInfo(t *testing.T) {
 }
 
 func TestFetchOSProcessesErrors(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name          string
 		destFilesPath string
@@ -1778,7 +1843,7 @@ func TestFetchOSProcessesErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if gotErr := fetchOSProcesses(ctx, tc.destFilesPath, tc.hostname, tc.exec, tc.fu); !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+			if gotErr := sosr.fetchOSProcesses(ctx, tc.destFilesPath, tc.hostname, tc.exec, tc.fu); !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("fetchOSProcesses(%q, %q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.hostname, tc.exec, tc.fu, gotErr)
 			}
 		})
@@ -1786,6 +1851,9 @@ func TestFetchOSProcessesErrors(t *testing.T) {
 }
 
 func TestFetchSystemDServicesErrors(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
 	tests := []struct {
 		name          string
 		destFilesPath string
@@ -1822,7 +1890,7 @@ func TestFetchSystemDServicesErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if gotErr := fetchSystemDServices(context.Background(), tc.destFilesPath, tc.hostname, tc.exec, tc.fu); !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+			if gotErr := sosr.fetchSystemDServices(context.Background(), tc.destFilesPath, tc.hostname, tc.exec, tc.fu); !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("fetchSystemDServices(%q, %q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.hostname, tc.exec, tc.fu, gotErr)
 			}
 		})

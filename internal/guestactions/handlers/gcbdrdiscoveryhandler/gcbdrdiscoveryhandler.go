@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/discovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -42,12 +43,12 @@ func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *ipb.Cl
 	usagemetrics.Action(usagemetrics.UAPGCBDRDiscoveryCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-discovery handler called.", "command", prototext.Format(command))
 	d := &discovery.Discovery{}
-	applications, err := d.GetHANADiscoveryApplications(ctx, nil, commandlineexecutor.ExecuteCommand, filesystem.Helper{})
-	if err != nil {
+	applications, exitStatus := d.Run(ctx, onetime.CreateRunOptions(cp, true), commandlineexecutor.ExecuteCommand, filesystem.Helper{})
+	if exitStatus != subcommands.ExitSuccess {
 		result := &gpb.CommandResult{
 			Command:  command,
-			Stdout:   err.Error(),
-			ExitCode: int32(subcommands.ExitFailure),
+			Stdout:   fmt.Sprintf("Failed to get HANA discovery applications: %v", exitStatus),
+			ExitCode: int32(exitStatus),
 		}
 		return result, RestartAgent
 	}

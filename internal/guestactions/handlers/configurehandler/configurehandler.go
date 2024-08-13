@@ -46,7 +46,7 @@ func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudPr
 		RestartAgent: noOpRestart,
 	}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), c)
-	msg, exitStatus := c.Run(ctx, onetime.CreateRunOptions(nil, true))
+	msg, exitStatus := c.Run(ctx, onetime.CreateRunOptions(cp, true))
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
 	result := &gpb.CommandResult{
 		Command:  command,

@@ -40,9 +40,7 @@ func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *ipb.Clo
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
 	sb := &supportbundle.SupportBundle{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), sb)
-	msg, exitStatus := sb.Run(ctx, onetime.RunOptions{
-		DaemonMode:      true,
-	})
+	msg, exitStatus := sb.Run(ctx, onetime.CreateRunOptions(cp, true))
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   msg,

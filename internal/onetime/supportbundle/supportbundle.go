@@ -58,6 +58,7 @@ type (
 		ResultBucket           string                        `json:"result-bucket"`
 		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 		LogPath                string                        `json:"log-path"`
+		oteLogger              *onetime.OTELogger
 	}
 	zipperHelper struct{}
 
@@ -140,7 +141,7 @@ func getReadWriter(rw storage.ReadWriter) uploader {
 
 // Execute implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
+	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     s.Name(),
 		Help:     s.Help,
 		LogLevel: s.LogLevel,
@@ -152,14 +153,13 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 		return exitStatus
 	}
 
-	_, exitStatus = s.Run(ctx, onetime.RunOptions{
-		DaemonMode:      false,
-	})
+	_, exitStatus = s.Run(ctx, onetime.CreateRunOptions(cp, false))
 	return exitStatus
 }
 
 // Run executes the command and returns the message and exit status.
-func (s *SupportBundle) Run(ctx context.Context, opts onetime.RunOptions) (string, subcommands.ExitStatus) {
+func (s *SupportBundle) Run(ctx context.Context, opts *onetime.RunOptions) (string, subcommands.ExitStatus) {
+	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
 }
 
@@ -179,7 +179,7 @@ func CollectAgentSupport(ctx context.Context, f *flag.FlagSet, lp log.Parameters
 func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) (string, subcommands.ExitStatus) {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
-		onetime.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
 		return fmt.Sprintf("Invalid params for collecting support bundle Report for Agent for SAP: %s", errMessage), subcommands.ExitUsageError
 	}
 	s.Sid = strings.ToUpper(s.Sid)
@@ -187,10 +187,10 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	destFilesPath := fmt.Sprintf("%s%s", destFilePathPrefix, bundlename)
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
 		errMessage := "Error while making directory: " + destFilesPath
-		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting Support Bundle Report for Agent for SAP...")
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting Support Bundle Report for Agent for SAP...")
 	reqFilePaths := []string{linuxConfigFilePath}
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.Sid)
 
@@ -201,43 +201,43 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 	var failureMsgs []string
 	if !s.AgentLogsOnly {
-		if isError := extractSystemDBErrors(ctx, destFilesPath, s.Hostname, hanaPaths, exec, fs); isError {
+		if isError := s.extractSystemDBErrors(ctx, destFilesPath, s.Hostname, hanaPaths, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting system DB errors")
 		}
-		if isError := extractTenantDBErrors(ctx, destFilesPath, s.Sid, s.Hostname, hanaPaths, exec, fs); isError {
+		if isError := s.extractTenantDBErrors(ctx, destFilesPath, s.Sid, s.Hostname, hanaPaths, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting tenant DB errors")
 		}
-		if isError := extractBackintErrors(ctx, destFilesPath, globalPath, s.Hostname, exec, fs); isError {
+		if isError := s.extractBackintErrors(ctx, destFilesPath, globalPath, s.Hostname, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting backint errors")
 		}
-		if isError := extractJournalCTLLogs(ctx, destFilesPath, s.Hostname, exec, fs); isError {
+		if isError := s.extractJournalCTLLogs(ctx, destFilesPath, s.Hostname, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting journalctl logs")
 		}
-		if isError := extractHANAVersion(ctx, destFilesPath, s.Sid, s.Hostname, exec, fs); isError {
+		if isError := s.extractHANAVersion(ctx, destFilesPath, s.Sid, s.Hostname, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting HANA version")
 		}
-		if isError := fetchPackageInfo(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
+		if isError := s.fetchPackageInfo(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
 			failureMsgs = append(failureMsgs, "Error while fetching package info")
 		}
-		if isError := fetchOSProcesses(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
+		if isError := s.fetchOSProcesses(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
 			failureMsgs = append(failureMsgs, "Error while fetching OS processes")
 		}
-		if isError := fetchSystemDServices(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
+		if isError := s.fetchSystemDServices(ctx, destFilesPath, s.Hostname, exec, fs); isError != nil {
 			failureMsgs = append(failureMsgs, "Error while fetching systemd services")
 		}
-		reqFilePaths = append(reqFilePaths, nameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
-		reqFilePaths = append(reqFilePaths, tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
-		reqFilePaths = append(reqFilePaths, backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
-		reqFilePaths = append(reqFilePaths, backintLogs(ctx, globalPath, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, s.nameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, s.tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, s.backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, s.backintLogs(ctx, globalPath, s.Sid, fs)...)
 	}
-	reqFilePaths = append(reqFilePaths, agentLogFiles(ctx, linuxLogFilesPath, fs)...)
-	reqFilePaths = append(reqFilePaths, agentOTELogFiles(ctx, agentOnetimeFilesPath, fs)...)
+	reqFilePaths = append(reqFilePaths, s.agentLogFiles(ctx, linuxLogFilesPath, fs)...)
+	reqFilePaths = append(reqFilePaths, s.agentOTELogFiles(ctx, agentOnetimeFilesPath, fs)...)
 
 	for _, path := range reqFilePaths {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", path))
+		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", path))
 		if err := copyFile(path, destFilesPath+path, fs); err != nil {
 			errMessage := "Error while copying file: " + path
-			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
 		}
 	}
@@ -247,33 +247,33 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	zipfile := fmt.Sprintf("%s/%s.zip", destFilesPath, bundlename)
 	if err := zipSource(destFilesPath, zipfile, fs, z); err != nil {
 		errMessage := fmt.Sprintf("Error while zipping destination folder %s", destFilesPath)
-		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		failureMsgs = append(failureMsgs, errMessage)
 	} else {
 		msg := fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath))
-		onetime.LogMessageToFileAndConsole(ctx, msg)
+		s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
 		successMsgs = append(successMsgs, msg)
 	}
 
 	if s.ResultBucket != "" {
 		if err := s.uploadZip(ctx, zipfile, bundlename, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
 			errMessage := fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.ResultBucket)
-			fmt.Println(errMessage, " Error: ", err)
+			s.oteLogger.LogMessageToConsole(fmt.Sprintf(errMessage, " Error: ", err))
 			failureMsgs = append(failureMsgs, errMessage)
 		} else {
 			msg := fmt.Sprintf("Bundle uploaded to bucket %s", s.ResultBucket)
 			successMsgs = append(successMsgs, msg)
 			// removing the destination directory after zip file is created.
-			if err := removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
+			if err := s.removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
 				errMessage := fmt.Sprintf("Error while removing destination folder %s", destFilesPath)
-				fmt.Println(errMessage, " Error: ", err)
+				s.oteLogger.LogMessageToConsole(fmt.Sprintf(errMessage, " Error: ", err))
 				failureMsgs = append(failureMsgs, errMessage)
 			}
 		}
 	}
 
 	// Rotate out old support bundles so we don't fill the file system.
-	if err := rotateOldBundles(ctx, destFilePathPrefix, fs); err != nil {
+	if err := s.rotateOldBundles(ctx, destFilePathPrefix, fs); err != nil {
 		errMessage := fmt.Sprintf("Error while rotating old support bundles: %s", err.Error())
 		failureMsgs = append(failureMsgs, errMessage)
 	}
@@ -283,14 +283,14 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		pacemakerFilesDir := fmt.Sprintf("%spacemaker-%s", destFilePathPrefix, time.Now().UTC().String()[:16])
 		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, " ", "-")
 		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, ":", "-")
-		err := pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
+		err := s.pacemakerLogs(ctx, pacemakerFilesDir, exec, fs)
 		if err != nil {
 			errMessage := "Error while collecting pacemaker logs"
-			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
 		} else {
 			msg := fmt.Sprintf("Pacemaker logs are collected and sent to directory %s", pacemakerFilesDir)
-			onetime.LogMessageToFileAndConsole(ctx, msg)
+			s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
 			successMsgs = append(successMsgs, msg)
 		}
 	}
@@ -303,7 +303,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 // uploadZip uploads the zip file to the bucket provided.
 func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName string, ctb storage.BucketConnector, grw getReaderWriter, fs filesystem.FileSystem, client storage.Client) error {
-	fmt.Println(fmt.Sprintf("Uploading bundle %s to bucket %s", destFilesPath, s.ResultBucket))
+	s.oteLogger.LogMessageToConsole(fmt.Sprintf("Uploading bundle %s to bucket %s", destFilesPath, s.ResultBucket))
 	f, err := fs.Open(destFilesPath)
 	if err != nil {
 		return err
@@ -345,7 +345,7 @@ func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName
 		return err
 	}
 	log.CtxLogger(ctx).Infow("File uploaded", "bucket", s.ResultBucket, "bytesWritten", bytesWritten, "fileSize", fileSize)
-	fmt.Println(fmt.Sprintf("Bundle uploaded to bucket %s", s.ResultBucket))
+	s.oteLogger.LogMessageToConsole(fmt.Sprintf("Bundle uploaded to bucket %s", s.ResultBucket))
 	return nil
 }
 
@@ -397,13 +397,13 @@ func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper)
 	return fs.Rename(tempZip, target)
 }
 
-func backintParameterFiles(ctx context.Context, globalPath string, sid string, fs filesystem.FileSystem) []string {
+func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath string, sid string, fs filesystem.FileSystem) []string {
 	backupFiles := regexp.MustCompile(`_backup_parameter_file.*`)
 	res := []string{globalPath + globalINIFile}
 
 	content, err := fs.ReadFile(globalPath + globalINIFile)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while reading file: "+globalPath+globalINIFile, err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading file: "+globalPath+globalINIFile, err)
 		return nil
 	}
 	contentData := string(content)
@@ -411,22 +411,22 @@ func backintParameterFiles(ctx context.Context, globalPath string, sid string, f
 	for _, path := range op {
 		pathSplit := strings.Split(path, "=")
 		if len(pathSplit) != 2 {
-			onetime.LogMessageToFileAndConsole(ctx, "Unexpected output from global.ini content")
+			s.oteLogger.LogMessageToFileAndConsole(ctx, "Unexpected output from global.ini content")
 			continue
 		}
 		rfp := strings.TrimSpace(strings.Split(path, "=")[1])
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", rfp))
+		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", rfp))
 		res = append(res, rfp)
 	}
 	return res
 }
 
-func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
+func (s *SupportBundle) nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
 	res := []string{}
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
 		if err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
+			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
 			return nil
 		}
 		for _, fd := range fds {
@@ -434,7 +434,7 @@ func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid 
 				continue
 			}
 			if matchNameServerTraceAndBackup(fd.Name()) {
-				onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
+				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
 				res = append(res, path.Join(hanaPath+"/trace/", fd.Name()))
 			}
 		}
@@ -442,12 +442,12 @@ func nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid 
 	return res
 }
 
-func tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
+func (s *SupportBundle) tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
 	res := []string{}
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid))
 		if err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
+			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
 			return nil
 		}
 		for _, fd := range fds {
@@ -455,7 +455,7 @@ func tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []stri
 				continue
 			}
 			if matchNameServerTraceAndBackup(fd.Name()) {
-				onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name())))
+				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name())))
 				res = append(res, path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name()))
 			}
 		}
@@ -479,11 +479,11 @@ func matchNameServerTraceAndBackup(name string) bool {
 }
 
 // backintLogs returns the list of backint logs to be collected.
-func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
+func (s *SupportBundle) backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
 	res := []string{}
 	fds, err := fs.ReadDir(globalPath + backintGCSPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+globalPath+backintGCSPath, err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+globalPath+backintGCSPath, err)
 		return nil
 	}
 	for _, fd := range fds {
@@ -499,11 +499,11 @@ func backintLogs(ctx context.Context, globalPath, sid string, fs filesystem.File
 }
 
 // agentOTELogFiles returns the list of agent OTE log files to be collected.
-func agentOTELogFiles(ctx context.Context, agentOTEFilesPath string, fu filesystem.FileSystem) []string {
+func (s *SupportBundle) agentOTELogFiles(ctx context.Context, agentOTEFilesPath string, fu filesystem.FileSystem) []string {
 	res := []string{}
 	fds, err := fu.ReadDir(agentOTEFilesPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+agentOTEFilesPath, err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+agentOTEFilesPath, err)
 		return res
 	}
 	for _, fd := range fds {
@@ -512,11 +512,11 @@ func agentOTELogFiles(ctx context.Context, agentOTEFilesPath string, fu filesyst
 	return res
 }
 
-func agentLogFiles(ctx context.Context, linuxLogFilesPath string, fu filesystem.FileSystem) []string {
+func (s *SupportBundle) agentLogFiles(ctx context.Context, linuxLogFilesPath string, fu filesystem.FileSystem) []string {
 	res := []string{}
 	fds, err := fu.ReadDir(linuxLogFilesPath)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+linuxLogFilesPath, err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+linuxLogFilesPath, err)
 		return res
 	}
 	for _, fd := range fds {
@@ -531,31 +531,31 @@ func agentLogFiles(ctx context.Context, linuxLogFilesPath string, fu filesystem.
 }
 
 // extractJournalCTLLogs extracts the journalctl logs for google-cloud-sap-agent.
-func extractJournalCTLLogs(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole(ctx, "Extracting journal CTL logs...")
+func (s *SupportBundle) extractJournalCTLLogs(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Extracting journal CTL logs...")
 	var hasErrors bool
 	p := commandlineexecutor.Params{
 		Executable:  "bash",
 		ArgsToSplit: "-c 'journalctl | grep google-cloud-sap-agent'",
 	}
-	if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, journalCTLLogs, fu); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while executing command: journalctl | grep google-cloud-sap-agent", err)
+	if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, journalCTLLogs, fu); err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while executing command: journalctl | grep google-cloud-sap-agent", err)
 		hasErrors = true
 	}
 	return hasErrors
 }
 
 // extractSystemDBErrors extracts the errors from system DB backup logs.
-func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole(ctx, "Extracting errors from System DB files...")
+func (s *SupportBundle) extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Extracting errors from System DB files...")
 	var hasErrors bool
 	for _, hanaPath := range hanaPaths {
 		p := commandlineexecutor.Params{
 			Executable:  "grep",
 			ArgsToSplit: fmt.Sprintf("-w ERROR %s/trace/backup.log", hanaPath),
 		}
-		onetime.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+hanaPath+"/trace/backup.log")
-		if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, systemDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+hanaPath+"/trace/backup.log")
+		if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, systemDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
 			hasErrors = true
 		}
 	}
@@ -563,8 +563,8 @@ func extractSystemDBErrors(ctx context.Context, destFilesPath, hostname string, 
 }
 
 // extractTenantDBErrors extracts the errors from tenant DB backup logs.
-func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole(ctx, "Extracting errors from TenantDB files...")
+func (s *SupportBundle) extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Extracting errors from TenantDB files...")
 	var hasErrors bool
 	for _, hanaPath := range hanaPaths {
 		filePath := fmt.Sprintf("%s/trace/DB_%s/backup.log", hanaPath, sid)
@@ -572,8 +572,8 @@ func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname str
 			Executable:  "grep",
 			ArgsToSplit: "-w ERROR " + filePath,
 		}
-		onetime.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+filePath)
-		if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, tenantDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+filePath)
+		if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, tenantDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
 			hasErrors = true
 		}
 	}
@@ -581,8 +581,8 @@ func extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname str
 }
 
 // extractBackintErrors extracts the errors from backint logs.
-func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	onetime.LogMessageToFileAndConsole(ctx, "Extracting errors from Backint logs...")
+func (s *SupportBundle) extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Extracting errors from Backint logs...")
 	fds, err := fu.ReadDir(globalPath + backintGCSPath + "/logs")
 	if err != nil {
 		return true
@@ -594,8 +594,8 @@ func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostna
 			Executable:  "grep",
 			ArgsToSplit: "-w SEVERE " + logFilePath,
 		}
-		onetime.LogMessageToFileAndConsole(ctx, "Executing command: grep -w SEVERE"+logFilePath)
-		if err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, backintErrorsFile, fu); err != nil {
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w SEVERE"+logFilePath)
+		if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, backintErrorsFile, fu); err != nil {
 			hasErrors = true
 		}
 	}
@@ -603,15 +603,15 @@ func extractBackintErrors(ctx context.Context, destFilesPath, globalPath, hostna
 }
 
 // extractHANAVersion extracts the HANA version from the sap env.
-func extractHANAVersion(ctx context.Context, destFilesPath, sid, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+func (s *SupportBundle) extractHANAVersion(ctx context.Context, destFilesPath, sid, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
 	cmd := "-c 'source /usr/sap/" + sid + "/home/.sapenv.sh && /usr/sap/" + sid + "/*/HDB version'"
 	params := commandlineexecutor.Params{
 		User:        fmt.Sprintf("%sadm", strings.ToLower(sid)),
 		Executable:  "bash",
 		ArgsToSplit: cmd,
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Executing command: bash -c 'HDB version'")
-	err := execAndWriteToFile(ctx, destFilesPath, hostname, exec, params, hanaVersionFile, fu)
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: bash -c 'HDB version'")
+	err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, params, hanaVersionFile, fu)
 	if err != nil {
 		return true
 	}
@@ -619,33 +619,33 @@ func extractHANAVersion(ctx context.Context, destFilesPath, sid, hostname string
 }
 
 // execAndWriteToFile executes the command and writes the output to the file.
-func execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, params commandlineexecutor.Params, opFile string, fu filesystem.FileSystem) error {
+func (s *SupportBundle) execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, params commandlineexecutor.Params, opFile string, fu filesystem.FileSystem) error {
 	res := exec(ctx, params)
 	if res.ExitCode != 0 && res.StdErr != "" {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while executing command", errors.New(res.StdErr))
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while executing command", errors.New(res.StdErr))
 		return errors.New(res.StdErr)
 	}
 	f, err := fu.OpenFile(destFilesPath+"/"+hostname+opFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while opening the file", err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while opening the file", err)
 		return err
 	}
 	defer f.Close()
 	if _, err := fu.WriteStringToFile(f, res.StdOut); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while writing to the file", err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while writing to the file", err)
 		return err
 	}
 	return nil
 }
 
 // pacemakerLogs collects the pacemaker logs.
-func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) error {
+func (s *SupportBundle) pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) error {
 	rhelParams := commandlineexecutor.Params{
 		Executable:  "grep",
 		ArgsToSplit: "-qE rhel /etc/os-release",
 	}
-	if val := checkForLinuxOSType(ctx, exec, rhelParams); val {
-		if err := rhelPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
+	if val := s.checkForLinuxOSType(ctx, exec, rhelParams); val {
+		if err := s.rhelPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
 			return err
 		}
 		return nil
@@ -654,8 +654,8 @@ func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineex
 		Executable:  "grep",
 		ArgsToSplit: "-qE SLES /etc/os-release",
 	}
-	if val := checkForLinuxOSType(ctx, exec, slesParams); val {
-		if err := slesPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
+	if val := s.checkForLinuxOSType(ctx, exec, slesParams); val {
+		if err := s.slesPacemakerLogs(ctx, exec, destFilesPath, fs); err != nil {
 			return err
 		}
 		return nil
@@ -664,17 +664,17 @@ func pacemakerLogs(ctx context.Context, destFilesPath string, exec commandlineex
 }
 
 // checkForLinuxOSType checks if the OS type is RHEL or SLES.
-func checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, p commandlineexecutor.Params) bool {
+func (s *SupportBundle) checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, p commandlineexecutor.Params) bool {
 	res := exec(ctx, p)
 	if res.ExitCode != 0 || res.StdErr != "" {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), errors.New(res.StdErr))
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), errors.New(res.StdErr))
 		return false
 	}
 	return true
 }
 
 // slesPacemakerLogs collects the pacemaker logs for SLES OS type.
-func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
+func (s *SupportBundle) slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
 	// time.Now().UTC() returns current time UTC format with milliseconds precision,
 	// we only need it till first 16 characters to satisfy the hb_report and crm_report command
 	to := time.Now().UTC().String()[:16]
@@ -682,14 +682,14 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	if err := fu.MkdirAll(destFilesPath, 0777); err != nil {
 		return err
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting hb_report...")
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting hb_report...")
 	res := exec(ctx, commandlineexecutor.Params{
 		Executable:  "hb_report",
 		ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
 		Timeout:     3600,
 	})
 	if res.ExitCode != 0 {
-		onetime.LogMessageToFileAndConsole(ctx, "Collecting crm_report...")
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting crm_report...")
 		res := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
 			ArgsToSplit: fmt.Sprintf("-S -f %s -t %s %s", from[:10], to[:10], destFilesPath+"/report"),
@@ -699,7 +699,7 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 			return errors.New(res.StdErr)
 		}
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting supportconfig...")
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting supportconfig...")
 	res = exec(ctx, commandlineexecutor.Params{
 		Executable:  "supportconfig",
 		ArgsToSplit: fmt.Sprintf("-bl -R %s", destFilesPath),
@@ -712,8 +712,8 @@ func slesPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 }
 
 // rhelPacemakerLogs collects the pacemaker logs for RHEL OS type.
-func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting sosreport...")
+func (s *SupportBundle) rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, destFilesPath string, fu filesystem.FileSystem) error {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting sosreport...")
 	p := commandlineexecutor.Params{
 		Executable:  "sosreport",
 		ArgsToSplit: fmt.Sprintf("--batch --tmp-dir %s", destFilesPath),
@@ -724,11 +724,11 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 	}
 	res := exec(ctx, p)
 	if res.ExitCode != 0 && res.StdErr != "" {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while executing command %s", p.Executable), errors.New(res.StdErr))
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while executing command %s", p.Executable), errors.New(res.StdErr))
 		// if sosreport is unsuccessful in collecting pacemaker data, we will fallback to crm_report
 		from := time.Now().UTC().AddDate(0, 0, -3).String()[:16]
 		to := time.Now().UTC().String()[:16]
-		onetime.LogMessageToFileAndConsole(ctx, "Collecting crm_report...")
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting crm_report...")
 		crmRes := exec(ctx, commandlineexecutor.Params{
 			Executable:  "crm_report",
 			ArgsToSplit: fmt.Sprintf("-S -f '%s' -t '%s' --dest %s", from, to, destFilesPath+"/report"),
@@ -742,31 +742,31 @@ func rhelPacemakerLogs(ctx context.Context, exec commandlineexecutor.Execute, de
 }
 
 // fetchPackageInfo collects the information about various packages installed on the VM.
-func fetchPackageInfo(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting package info...")
+func (s *SupportBundle) fetchPackageInfo(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting package info...")
 	p := commandlineexecutor.Params{
 		Executable:  "sudo",
 		ArgsToSplit: "rpm -qa",
 	}
-	return execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "packages.txt", fu)
+	return s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "packages.txt", fu)
 }
 
-func fetchOSProcesses(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting OS processes...")
+func (s *SupportBundle) fetchOSProcesses(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting OS processes...")
 	p := commandlineexecutor.Params{
 		Executable:  "sudo",
 		ArgsToSplit: "ps aux",
 	}
-	return execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "processes.txt", fu)
+	return s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "processes.txt", fu)
 }
 
-func fetchSystemDServices(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting systemd services...")
+func (s *SupportBundle) fetchSystemDServices(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) error {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting systemd services...")
 	p := commandlineexecutor.Params{
 		Executable:  "sudo",
 		ArgsToSplit: "systemctl list-units --type=service",
 	}
-	return execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "systemd_services.txt", fu)
+	return s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "systemd_services.txt", fu)
 }
 
 func (s *SupportBundle) validateParams() []string {
@@ -793,18 +793,18 @@ func (s *SupportBundle) validateParams() []string {
 	return errs
 }
 
-func removeDestinationFolder(ctx context.Context, path string, fu filesystem.FileSystem) error {
+func (s *SupportBundle) removeDestinationFolder(ctx context.Context, path string, fu filesystem.FileSystem) error {
 	if err := fu.RemoveAll(path); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing folder %s", path), err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing folder %s", path), err)
 		return err
 	}
 	return nil
 }
 
-func rotateOldBundles(ctx context.Context, dir string, fs filesystem.FileSystem) error {
+func (s *SupportBundle) rotateOldBundles(ctx context.Context, dir string, fs filesystem.FileSystem) error {
 	fds, err := fs.ReadDir(dir)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while reading folder %s", dir), err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while reading folder %s", dir), err)
 		return err
 	}
 	sort.Slice(fds, func(i, j int) bool { return fds[i].ModTime().After(fds[j].ModTime()) })
@@ -813,9 +813,9 @@ func rotateOldBundles(ctx context.Context, dir string, fs filesystem.FileSystem)
 		if strings.Contains(fd.Name(), "supportbundle") {
 			bundleCount++
 			if bundleCount > 5 {
-				onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Removing old bundle %s", dir+fd.Name()))
+				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Removing old bundle %s", dir+fd.Name()))
 				if err := fs.RemoveAll(dir + fd.Name()); err != nil {
-					onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing old bundle %s", dir+fd.Name()), err)
+					s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing old bundle %s", dir+fd.Name()), err)
 					return err
 				}
 			}

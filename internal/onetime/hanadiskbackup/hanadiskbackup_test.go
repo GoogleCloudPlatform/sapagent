@@ -49,18 +49,21 @@ func TestMain(t *testing.M) {
 	os.Exit(t.Run())
 }
 
-var defaultSnapshot = Snapshot{
-	Project:    "my-project",
-	Host:       "localhost",
-	Port:       "123",
-	Sid:        "HDB",
-	HanaDBUser: "system",
-	Disk:       "pd-1",
-	DiskZone:   "us-east1-a",
-	Password:   "password",
-}
-
 var (
+	defaultOTELogger = onetime.CreateOTELogger(false)
+
+	defaultSnapshot = Snapshot{
+		Project:    "my-project",
+		Host:       "localhost",
+		Port:       "123",
+		Sid:        "HDB",
+		HanaDBUser: "system",
+		Disk:       "pd-1",
+		DiskZone:   "us-east1-a",
+		Password:   "password",
+		oteLogger:  defaultOTELogger,
+	}
+
 	testCommandExecute = func(stdout, stderr string, err error) commandlineexecutor.Execute {
 		return func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			exitCode := 0
@@ -164,6 +167,7 @@ func TestSnapshotHandler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			_, got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
@@ -291,6 +295,7 @@ func TestReadConsistencyGroup(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			gotCG, gotErr := test.snapshot.readConsistencyGroup(ctx, test.snapshot.Disk)
 			if diff := cmp.Diff(gotErr, test.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("readConsistencyGroup()=%v, want=%v, diff=%v", gotErr, test.wantErr, diff)
@@ -378,6 +383,7 @@ func TestValidateDisksBelongToCG(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.validateDisksBelongToCG(ctx)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateDisksBelongToCG()=%v, want=%v", got, test.want)
@@ -455,6 +461,7 @@ func TestReadDiskMapping(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.readDiskMapping(context.Background(), defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("readDiskMapping()=%v, want=%v", got, test.want)
@@ -503,6 +510,7 @@ func TestParseLabels(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.s.oteLogger = defaultOTELogger
 			got := test.s.parseLabels()
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
@@ -602,6 +610,7 @@ func TestExecuteSnapshot(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.snapshot, test.args, got, test.want)
@@ -623,9 +632,11 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name:     "EmptyPort",
-			snapshot: Snapshot{Port: ""},
-			want:     cmpopts.AnyError,
+			name: "EmptyPort",
+			snapshot: Snapshot{
+				Port: "",
+			},
+			want: cmpopts.AnyError,
 		},
 		{
 			name: "ChangeDiskTypeWorkflow",
@@ -643,14 +654,21 @@ func TestValidateParameters(t *testing.T) {
 			want: nil,
 		},
 		{
-			name:     "EmptySID",
-			snapshot: Snapshot{Port: "123", Sid: ""},
-			want:     cmpopts.AnyError,
+			name: "EmptySID",
+			snapshot: Snapshot{
+				Port: "123",
+				Sid:  "",
+			},
+			want: cmpopts.AnyError,
 		},
 		{
-			name:     "EmptyUser",
-			snapshot: Snapshot{Port: "123", Sid: "HDB", HanaDBUser: ""},
-			want:     cmpopts.AnyError,
+			name: "EmptyUser",
+			snapshot: Snapshot{
+				Port:       "123",
+				Sid:        "HDB",
+				HanaDBUser: "",
+			},
+			want: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDisk",
@@ -740,6 +758,7 @@ func TestValidateParameters(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.validateParameters(test.os, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateParameters(snapshot=%v, os=%v)=%v, want=%v", test.snapshot, test.os, got, test.want)
@@ -834,6 +853,7 @@ func TestIsDiskAttachedToInstance(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc.s.oteLogger = defaultOTELogger
 		gotErr := tc.s.isDiskAttachedToInstance(context.Background(), tc.disk, tc.cp)
 		if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("isDiskAttachedToInstance(%v, %v) returned diff (-want +got):\n%s", tc.disk, tc.cp, diff)
@@ -993,6 +1013,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			gotErr := tc.s.runWorkflowForInstantSnapshotGroups(ctx, tc.run, tc.createSnapshot, tc.cp)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("runWorkflowForInstantSnapshotGroups(%v, %v, %v) returned diff (-want +got):\n%s", tc.run, tc.createSnapshot, tc.cp, diff)
@@ -1131,6 +1152,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.runWorkflowForDiskSnapshot(context.Background(), test.run, test.createSnapshot, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("runWorkflow()=%v, want=%v", got, test.want)
@@ -1194,6 +1216,7 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			got := tc.s.createInstantSnapshotGroup(context.Background())
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("createInstantGroupSnapshot() returned diff (-want +got):\n%s", diff)
@@ -1296,6 +1319,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			gotErr := tc.s.convertISGtoSSG(ctx, tc.cp, tc.createSnapshot)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("convertIS() returned diff (-want +got):\n%s", diff)
@@ -1361,6 +1385,7 @@ func TestCreateBackup(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			got, err := tc.s.createBackup(ctx, tc.snapshot, tc.createSnapshot)
 			if diff := cmp.Diff(tc.wantOp, got, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("buildSnapshot() returned diff (-want +got):\n%s", diff)
@@ -1398,15 +1423,19 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 			run: func(context.Context, *databaseconnector.DBHandle, string) (string, error) {
 				return "stale-snapshot", nil
 			},
-			snapshot: Snapshot{AbandonPrepared: false},
-			want:     cmpopts.AnyError,
+			snapshot: Snapshot{
+				AbandonPrepared: false,
+			},
+			want: cmpopts.AnyError,
 		},
 		{name: "PreparedSnapshotPresentAbandonTrue",
 			run: func(context.Context, *databaseconnector.DBHandle, string) (string, error) {
 				return "stale-snapshot", nil
 			},
-			snapshot: Snapshot{AbandonPrepared: true},
-			want:     nil,
+			snapshot: Snapshot{
+				AbandonPrepared: true,
+			},
+			want: nil,
 		},
 		{
 			name: "AbandonSnapshotFailure",
@@ -1416,12 +1445,15 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 				}
 				return "stale-snapshot", nil
 			},
-			snapshot: Snapshot{AbandonPrepared: true},
-			want:     cmpopts.AnyError,
+			snapshot: Snapshot{
+				AbandonPrepared: true,
+			},
+			want: cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.abandonPreparedSnapshot(context.Background(), test.run)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("abandonPreparedSnapshot()=%v, want=%v", got, test.want)
@@ -1499,6 +1531,7 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			_, got := test.snapshot.createNewHANASnapshot(context.Background(), test.run)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("createNewHANASnapshot()=%v, want=%v", got, test.want)
@@ -1538,6 +1571,7 @@ func TestSendStatusToMonitoring(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.sendStatusToMonitoring(context.Background(), cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond), defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("sendStatusToMonitoring()=%v, want=%v", got, test.want)
@@ -1598,6 +1632,7 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.snapshotName, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
@@ -1642,6 +1677,7 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			got := tc.s.createGroupBackupLabels()
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
