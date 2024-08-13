@@ -68,6 +68,7 @@ type ReadMetrics struct {
 	status            bool
 	timeSeriesCreator cloudmonitoring.TimeSeriesCreator
 	cloudProps        *ipb.CloudProperties
+	oteLogger         *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for readmetrics.
@@ -109,7 +110,12 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 		return exitStatus
 	}
 	r.cloudProps = cloudProps
+	return r.Run(ctx, onetime.CreateRunOptions(cloudProps, false), args...)
+}
 
+// Run executes the command and returns the status.
+func (r *ReadMetrics) Run(ctx context.Context, runOpts *onetime.RunOptions, args ...any) subcommands.ExitStatus {
+	r.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
 	log.CtxLogger(ctx).Info("ReadMetrics starting")
 	if r.projectID == "" {
 		r.projectID = r.cloudProps.GetProjectId()
@@ -142,14 +148,14 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	}
 	if r.timeSeriesCreator, err = monitoring.NewMetricClient(ctx, opts...); err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring metric client", "error", err)
-		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		r.oteLogger.LogUsageError(usagemetrics.MetricClientCreateFailure)
 		return subcommands.ExitFailure
 	}
 
 	mqc, err := monitoring.NewQueryClient(ctx, opts...)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring query client", "error", err)
-		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		r.oteLogger.LogUsageError(usagemetrics.QueryClientCreateFailure)
 		return subcommands.ExitFailure
 	}
 	r.cmr = &cloudmetricreader.CloudMetricReader{
@@ -163,7 +169,7 @@ func (r *ReadMetrics) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 // readMetricsHandler executes all queries, saves results to the local
 // filesystem, and optionally uploads results to a GCS bucket.
 func (r *ReadMetrics) readMetricsHandler(ctx context.Context, copier storage.IOFileCopier) subcommands.ExitStatus {
-	usagemetrics.Action(usagemetrics.ReadMetricsStarted)
+	r.oteLogger.LogUsageAction(usagemetrics.ReadMetricsStarted)
 	if err := os.MkdirAll(r.outputFolder, os.ModePerm); err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create output folder", "outputFolder", r.outputFolder, "err", err)
 		return subcommands.ExitFailure
@@ -179,21 +185,21 @@ func (r *ReadMetrics) readMetricsHandler(ctx context.Context, copier storage.IOF
 		data, err := r.executeQuery(ctx, identifier, query)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to execute query", "identifier", identifier, "query", query, "err", err)
-			usagemetrics.Error(usagemetrics.ReadMetricsQueryFailure)
+			r.oteLogger.LogUsageError(usagemetrics.ReadMetricsQueryFailure)
 			return subcommands.ExitFailure
 		}
 
 		fileName, err := r.writeResults(data, identifier)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to write results", "identifier", identifier, "query", query, "err", err)
-			usagemetrics.Error(usagemetrics.ReadMetricsWriteFileFailure)
+			r.oteLogger.LogUsageError(usagemetrics.ReadMetricsWriteFileFailure)
 			return subcommands.ExitFailure
 		}
 
 		if r.bucket != nil {
 			if err := r.uploadFile(ctx, fileName, copier); err != nil {
 				log.CtxLogger(ctx).Errorw("Failed to upload file", "fileName", fileName, "err", err)
-				usagemetrics.Error(usagemetrics.ReadMetricsBucketUploadFailure)
+				r.oteLogger.LogUsageError(usagemetrics.ReadMetricsBucketUploadFailure)
 				return subcommands.ExitFailure
 			}
 		}
@@ -201,7 +207,7 @@ func (r *ReadMetrics) readMetricsHandler(ctx context.Context, copier storage.IOF
 
 	log.CtxLogger(ctx).Info("ReadMetrics finished")
 	r.status = true
-	usagemetrics.Action(usagemetrics.ReadMetricsFinished)
+	r.oteLogger.LogUsageAction(usagemetrics.ReadMetricsFinished)
 	return subcommands.ExitSuccess
 }
 
