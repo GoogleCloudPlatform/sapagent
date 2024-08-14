@@ -18,8 +18,10 @@ package parse
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -265,5 +267,66 @@ func TestOpenFileWithRetries(t *testing.T) {
 		if cmp.Diff(err, tc.wantError, cmpopts.EquateErrors()) != "" {
 			t.Errorf("OpenFileWithRetries(%v) = %v, wantError: %v", tc.fileName, err, tc.wantError)
 		}
+	}
+}
+
+func TestCustomTime(t *testing.T) {
+	testCases := []struct {
+		name       string
+		customTime string
+		now        time.Time
+		want       time.Time
+	}{
+		{
+			name:       "Empty CustomTime",
+			customTime: "",
+			now:        time.Now(),
+			want:       time.Time{},
+		},
+		{
+			name:       "UTCNow",
+			customTime: "UTCNow",
+			now:        time.Date(2024, 8, 13, 13, 8, 0, 0, time.UTC),
+			want:       time.Date(2024, 8, 13, 13, 8, 0, 0, time.UTC),
+		},
+		{
+			name:       "UTCNow+NNd Format",
+			customTime: "UTCNow+3d",
+			now:        time.Date(2024, 8, 13, 13, 8, 0, 0, time.UTC),
+			want:       time.Date(2024, 8, 16, 13, 8, 0, 0, time.UTC),
+		},
+		{
+			name:       "RFC3339 Format",
+			customTime: "2024-08-20T10:30:00Z",
+			now:        time.Now(),
+			want:       time.Date(2024, 8, 20, 10, 30, 0, 0, time.UTC),
+		},
+		{
+			name:       "Invalid UTCNow+NNd Format (missing 'd')",
+			customTime: "UTCNow+3",
+			now:        time.Now(),
+			want:       time.Time{},
+		},
+		{
+			name:       "Invalid UTCNow+NNd Format (non-numeric days)",
+			customTime: "UTCNow+threed",
+			now:        time.Now(),
+			want:       time.Time{},
+		},
+		{
+			name:       "Invalid RFC3339 Format",
+			customTime: "2024-08-20 10:30:00", // Missing 'T' and 'Z'
+			now:        time.Now(),
+			want:       time.Time{},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			got := CustomTime(context.Background(), test.customTime, test.now)
+			if !got.Equal(test.want) {
+				t.Errorf("customTime(%v, %v) = %v, want %v", test.customTime, test.now, got, test.want)
+			}
+		})
 	}
 }

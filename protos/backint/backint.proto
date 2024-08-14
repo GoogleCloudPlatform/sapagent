@@ -61,14 +61,16 @@ message BackintConfiguration {
   bool shorten_folder_path = 36;
   string diagnose_tmp_directory = 37;
   string custom_time =
-      38;  // This updates the customTime metadata entry:
-           //   Format: RFC 3339 format - "YYYY-MM-DD'T'HH:MM:SS.SS'Z'" or
-           //   "YYYY-MM-DD'T'HH:MM:SS'Z'".
+      38;  // This updates the customTime metadata entry (Reference:
+           // https://cloud.google.com/storage/docs/metadata#custom-time):
+           // Accepted values:
+           //   1. A specific timestamp in Format: RFC 3339 format -
+           //   "YYYY-MM-DD'T'HH:MM:SS.SS'Z'" or "YYYY-MM-DD'T'HH:MM:SS'Z'".
            //   Example: "2024-06-25T13:25:00Z"
-           // Reference:
-           // https://cloud.google.com/storage/docs/metadata#custom-time.
-           // A value of "UTCNow" will set the customTime to the current time in
-           // UTC.
+           //   2. A value of "UTCNow" will set the customTime to the current
+           //   UTC time.
+           //   3. A value of "UTCNow+<INT>d" will set the customTime to the current
+           //   UTC time plus INT days. INT is any positive integer. Example: "UTCNow+1d"
   int64 parallel_recovery_streams = 39;
 }
 

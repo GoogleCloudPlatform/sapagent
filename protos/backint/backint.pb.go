@@ -246,15 +246,16 @@ type BackintConfiguration struct {
 	SendMetricsToMonitoring *wrappers.BoolValue `protobuf:"bytes,35,opt,name=send_metrics_to_monitoring,json=sendMetricsToMonitoring,proto3" json:"send_metrics_to_monitoring,omitempty"`
 	ShortenFolderPath       bool                `protobuf:"varint,36,opt,name=shorten_folder_path,json=shortenFolderPath,proto3" json:"shorten_folder_path,omitempty"`
 	DiagnoseTmpDirectory    string              `protobuf:"bytes,37,opt,name=diagnose_tmp_directory,json=diagnoseTmpDirectory,proto3" json:"diagnose_tmp_directory,omitempty"`
-	CustomTime              string              `protobuf:"bytes,38,opt,name=custom_time,json=customTime,proto3" json:"custom_time,omitempty"` // This updates the customTime metadata entry:
-	//	Format: RFC 3339 format - "YYYY-MM-DD'T'HH:MM:SS.SS'Z'" or
-	//	"YYYY-MM-DD'T'HH:MM:SS'Z'".
-	//	Example: "2024-06-25T13:25:00Z"
-	//
-	// Reference:
-	// https://cloud.google.com/storage/docs/metadata#custom-time.
-	// A value of "UTCNow" will set the customTime to the current time in
-	// UTC.
+	CustomTime              string              `protobuf:"bytes,38,opt,name=custom_time,json=customTime,proto3" json:"custom_time,omitempty"` // This updates the customTime metadata entry (Reference:
+	// https://cloud.google.com/storage/docs/metadata#custom-time):
+	// Accepted values:
+	//  1. A specific timestamp in Format: RFC 3339 format -
+	//     "YYYY-MM-DD'T'HH:MM:SS.SS'Z'" or "YYYY-MM-DD'T'HH:MM:SS'Z'".
+	//     Example: "2024-06-25T13:25:00Z"
+	//  2. A value of "UTCNow" will set the customTime to the current
+	//     UTC time.
+	//  3. A value of "UTCNow+<INT>d" will set the customTime to the current
+	//     UTC time plus INT days. INT is any positive integer. Example: "UTCNow+1d"
 	ParallelRecoveryStreams int64 `protobuf:"varint,39,opt,name=parallel_recovery_streams,json=parallelRecoveryStreams,proto3" json:"parallel_recovery_streams,omitempty"`
 }
 

@@ -18,9 +18,12 @@ limitations under the License.
 package parse
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -137,4 +140,43 @@ func OpenFileWithRetries(name string, flag int, perm os.FileMode, timeoutMs int6
 		log.Logger.Errorw("Timeout opening file", "fileName", name, "elapsedTimeMs", bo.GetElapsedTime().Milliseconds(), "timeoutMs", timeoutMs, "err", err)
 	}
 	return file, err
+}
+
+// CustomTime returns the custom time to be set in the metadata of the object.
+// If custom_time is not set or if there is an error parsing the time, an empty time is returned.
+// If custom_time is set to UTCNow, the current time is returned.
+// If custom_time is set to UTCNow+<INT>d, the current time plus the number of days is returned.
+// If custom_time is set to a time in RFC3339 format, the time is returned.
+func CustomTime(ctx context.Context, customTime string, now time.Time) time.Time {
+	if customTime == "" {
+		return time.Time{}
+	}
+
+	if customTime == "UTCNow" {
+		return now
+	}
+
+	if strings.HasPrefix(customTime, "UTCNow") {
+		// Regex to capture the number and the unit (d for days).
+		re := regexp.MustCompile(`UTCNow\+(\d+)(d)`)
+		matches := re.FindStringSubmatch(customTime)
+
+		if len(matches) != 3 {
+			log.Logger.Warnw("Could not parse custom_time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). CustomTime field will not be set.", "customTime", customTime, "Expected Format", "UTCNow+<INT>d")
+			return time.Time{}
+		}
+		numDays, err := strconv.Atoi(matches[1])
+		if err != nil {
+			log.Logger.Warnw("Could not parse custom_time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). CustomTime feild will not be set.", "customTime", customTime, "Expected Format", "UTCNow+<INT>d", "err", err)
+			return time.Time{}
+		}
+		// Add the specified number of days.
+		return now.AddDate(0, 0, numDays)
+	}
+
+	ct, err := time.Parse(time.RFC3339, customTime)
+	if err != nil {
+		log.Logger.Warnw("Could not parse custom_time field. CustomTime feild will not be set.", "err", err, "customTime", customTime, "Expected Format", time.RFC3339)
+	}
+	return ct
 }

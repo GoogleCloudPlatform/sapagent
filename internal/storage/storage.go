@@ -275,6 +275,7 @@ func (rw *ReadWriter) Upload(ctx context.Context) (int64, error) {
 		objectWriter.Metadata = rw.Metadata
 		if !rw.CustomTime.IsZero() {
 			objectWriter.CustomTime = rw.CustomTime
+			log.CtxLogger(ctx).Infow("CustomTime set for upload", "bucket", rw.BucketName, "object", rw.ObjectName, "customTime", rw.CustomTime)
 		}
 		if rw.Compress {
 			objectWriter.ObjectAttrs.ContentType = compressedContentType
