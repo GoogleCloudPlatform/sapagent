@@ -174,9 +174,7 @@ func CheckDataDeviceForStripes(ctx context.Context, logicalDataPath string, exec
 		Executable:  "/bin/sh",
 		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", logicalDataPath),
 	})
-	if result.ExitCode == 0 {
-		return fmt.Errorf("backup of striped HANA data disks are not currently supported, exiting")
-	}
+	// TODO: Update this when ISG APIs are in prod.
 	log.CtxLogger(ctx).Debugf("CheckDataDeviceForStripes", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	return nil

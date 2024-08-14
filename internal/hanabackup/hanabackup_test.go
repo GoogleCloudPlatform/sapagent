@@ -240,9 +240,9 @@ func TestCheckDataDeviceForStripes(t *testing.T) {
 		want     error
 	}{
 		{
-			name:     "SpripesPresent",
+			name:     "StripesPresent",
 			fakeExec: fakeCommandExecute("", "", nil),
-			want:     cmpopts.AnyError,
+			want:     nil,
 		},
 		{
 			name:     "StripesNotPresent",

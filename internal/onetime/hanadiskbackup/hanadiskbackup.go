@@ -81,8 +81,6 @@ type (
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
-		CreateISG(gce.ISG, string) error
-		DescribeISG(string) ([]*compute.InstantSnapshot, error)
 	}
 )
 
@@ -275,12 +273,11 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		}
 
 		if len(s.disks) > 1 {
-			if err := s.validateDisksBelongToCG(ctx); err != nil {
-				errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-				return errMessage, subcommands.ExitFailure
-			}
-			s.groupSnapshot = true
+			errMessage := "ERROR: backup of striped HANA data disks are not currently supported, exiting"
+			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
+
+			// TODO: Uncomment this code once prod APIs for ISGs are available.
 		}
 		log.CtxLogger(ctx).Infow("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgPath, "groupSnapshot", s.groupSnapshot)
 	}
@@ -713,45 +710,17 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	if s.gceService == nil {
 		return fmt.Errorf("gceService needed to convert Instant Snapshot Group")
 	}
-	if err := s.gceService.CreateISG(s.isg, s.groupSnapshotName); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("GroupSnapshot not supported yet")
+
+	// TODO: Update this when prod API is available.
 }
 
 func (s *Snapshot) convertISGtoSSG(ctx context.Context, cp *ipb.CloudProperties, createSnapshot diskSnapshotFunc) error {
 	if s.gceService == nil {
 		return fmt.Errorf("gceService needed to proceed")
 	}
-	instantSnapshots, err := s.gceService.DescribeISG(s.groupSnapshotName)
-	if err != nil {
-		return err
-	}
-
-	for _, is := range instantSnapshots {
-		isName := fmt.Sprintf("%s-%s", is.Name, s.SnapshotType)
-		snapshot := &compute.Snapshot{
-			Description:           s.Description,
-			Name:                  isName,
-			SnapshotType:          s.SnapshotType,
-			SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", cp.GetProjectId(), cp.GetZone(), is.Name),
-			StorageLocations:      []string{s.StorageLocation},
-			Labels:                s.parseLabels(),
-		}
-
-		if _, err := s.createBackup(ctx, snapshot, createSnapshot); err != nil {
-			return err
-		}
-		if s.FreezeFileSystem {
-			if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-				s.oteLogger.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
-				return err
-			}
-			freezeTime := time.Since(dbFreezeStartTime)
-			defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", isName, freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
-		}
-	}
-	return nil
+	return fmt.Errorf("GroupSnapshot not supported yet")
+	// TODO: Update this when prod API is available.
 }
 
 func (s *Snapshot) createDiskSnapshot(ctx context.Context, createSnapshot diskSnapshotFunc) (*compute.Operation, error) {

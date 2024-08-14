@@ -71,7 +71,6 @@ type (
 		AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error
 		DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
 		WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error
-		GetGroupSnapshotsService() *gce.GroupSnapshotsService
 	}
 )
 
@@ -453,13 +452,8 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 			r.DiskSizeGb = snapshot.DiskSizeGb
 		}
 	} else {
-		snapshot, err := r.gceService.GetGroupSnapshotsService().Get(r.Project, r.GroupSnapshot).Do()
-		if err != nil {
-			return fmt.Errorf("failed to check if group-snapshot=%v is present: %v", r.GroupSnapshot, err)
-		}
-		if r.DiskSizeGb == 0 {
-			r.DiskSizeGb = snapshot.Snapshots[0].DiskSizeGb
-		}
+		return fmt.Errorf("Staging ISGs not added yet")
+		// TODO: Update this when staging API is available.
 	}
 	disk := &compute.Disk{
 		Name:                        newDiskName,
@@ -560,18 +554,8 @@ func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execu
 // restoreFromGroupSnapshot creates several new HANA data disks from snapshots belonging
 // to given group snapshot and attaches them to the instance.
 func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
-	groupSnapshot, err := r.gceService.GetGroupSnapshotsService().Get(r.Project, r.GroupSnapshot).Do()
-	if err != nil {
-		return fmt.Errorf("failed to get group snapshot: %v", err)
-	}
-
-	for _, snapshot := range groupSnapshot.Snapshots {
-		timestamp := time.Now().Unix()
-		if err := r.restoreFromSnapshot(ctx, exec, cp, snapshotKey, fmt.Sprintf("%s-%d", snapshot.SourceDisk, timestamp), snapshot.Name); err != nil {
-			return err
-		}
-	}
-	return nil
+	return fmt.Errorf("Staging ISGs not added yet")
+	// TODO: Update this when staging API is available.
 }
 
 // checkPreConditions checks if the HANA data and log disks are on the same physical disk.
@@ -628,9 +612,8 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		}
 		r.extractLabels(ctx, snapshot)
 	} else {
-		if _, err = r.gceService.GetGroupSnapshotsService().Get(r.Project, r.GroupSnapshot).Do(); err != nil {
-			return fmt.Errorf("failed to check if group-snapshot=%v is present: %v", r.GroupSnapshot, err)
-		}
+		return fmt.Errorf("Staging ISGs not added yet")
+		// TODO: Update this when staging API is available.
 	}
 
 	if r.NewDiskType == "" {

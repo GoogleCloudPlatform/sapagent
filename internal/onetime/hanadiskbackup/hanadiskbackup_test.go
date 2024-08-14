@@ -953,9 +953,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			s: &Snapshot{
 				AbandonPrepared: true,
 				gceService: &fake.TestGCE{
-					IsDiskAttached:          true,
-					DescribeISGSnapshots:    nil,
-					DescribeISGSnapshotsErr: cmpopts.AnyError,
+					IsDiskAttached: true,
 				},
 				cgPath: "test-cg-success",
 			},
@@ -970,9 +968,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			s: &Snapshot{
 				AbandonPrepared: true,
 				gceService: &fake.TestGCE{
-					IsDiskAttached:          true,
-					DescribeISGSnapshotsErr: nil,
-					DescribeISGSnapshots:    []*compute.InstantSnapshot{},
+					IsDiskAttached: true,
 				},
 				computeService: &compute.Service{},
 				cgPath:         "test-cg-success",
@@ -995,8 +991,6 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					DiskAttachedToInstanceDeviceName: "pd-1",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
-					DescribeISGSnapshotsErr:          nil,
-					DescribeISGSnapshots:             []*compute.InstantSnapshot{},
 					CreationCompletionErr:            nil,
 				},
 				computeService: &compute.Service{},
@@ -1006,7 +1000,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
-			wantErr: nil,
+			wantErr: cmpopts.AnyError,
 		},
 	}
 
@@ -1210,7 +1204,7 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 				cgPath:     "test-snapshot-success",
 				gceService: &fake.TestGCE{},
 			},
-			want: nil,
+			want: cmpopts.AnyError,
 		},
 	}
 
@@ -1241,29 +1235,15 @@ func TestConvertISGtoSSG(t *testing.T) {
 		{
 			name: "DescribeISGFailure",
 			s: &Snapshot{
-				gceService: &fake.TestGCE{
-					DescribeISGSnapshotsErr: cmpopts.AnyError,
-					DescribeISGSnapshots:    nil,
-				},
+				gceService: &fake.TestGCE{},
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "createBackupError",
 			s: &Snapshot{
-				isg: &ISG{},
-				gceService: &fake.TestGCE{
-					DescribeISGSnapshots: []*compute.InstantSnapshot{
-						{
-							Name: "instant-snapshot-1",
-						},
-						{
-							Name: "instant-snapshot-2",
-						},
-					},
-					DescribeISGSnapshotsErr: nil,
-					CreationCompletionErr:   nil,
-				},
+				isg:        &ISG{},
+				gceService: &fake.TestGCE{CreationCompletionErr: nil},
 			},
 			cp:             defaultCloudProperties,
 			createSnapshot: createDiskSnapshotFail,
@@ -1275,18 +1255,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 				FreezeFileSystem: true,
 				isg:              &ISG{},
 				computeService:   &compute.Service{},
-				gceService: &fake.TestGCE{
-					DescribeISGSnapshots: []*compute.InstantSnapshot{
-						{
-							Name: "instant-snapshot-1",
-						},
-						{
-							Name: "instant-snapshot-2",
-						},
-					},
-					DescribeISGSnapshotsErr: nil,
-					CreationCompletionErr:   nil,
-				},
+				gceService:       &fake.TestGCE{CreationCompletionErr: nil},
 			},
 			cp:             defaultCloudProperties,
 			createSnapshot: createDiskSnapshotSuccess,
@@ -1297,22 +1266,11 @@ func TestConvertISGtoSSG(t *testing.T) {
 			s: &Snapshot{
 				isg:            &ISG{},
 				computeService: &compute.Service{},
-				gceService: &fake.TestGCE{
-					DescribeISGSnapshots: []*compute.InstantSnapshot{
-						{
-							Name: "instant-snapshot-1",
-						},
-						{
-							Name: "instant-snapshot-2",
-						},
-					},
-					DescribeISGSnapshotsErr: nil,
-					CreationCompletionErr:   nil,
-				},
+				gceService:     &fake.TestGCE{CreationCompletionErr: nil},
 			},
 			cp:             defaultCloudProperties,
 			createSnapshot: createDiskSnapshotSuccess,
-			wantErr:        nil,
+			wantErr:        cmpopts.AnyError,
 		},
 	}
 

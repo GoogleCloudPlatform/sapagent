@@ -628,12 +628,6 @@ func TestCheckPreConditions(t *testing.T) {
 					DiskAttachedToInstanceDeviceName: "test-device-name",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: nil,
-							DoErr:           cmpopts.AnyError,
-						},
-					},
 				},
 				isGroupSnapshot: true,
 			},
@@ -684,16 +678,10 @@ func TestCheckPreConditions(t *testing.T) {
 					DiskAttachedToInstanceDeviceName: "test-device-name",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: &gce.GroupSnapshot{},
-							DoErr:           nil,
-						},
-					},
 				},
 				isGroupSnapshot: true,
 			},
-			wantErr: nil,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "NewTypePresent",
@@ -741,16 +729,10 @@ func TestCheckPreConditions(t *testing.T) {
 					DiskAttachedToInstanceDeviceName: "test-device-name",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: &gce.GroupSnapshot{},
-							DoErr:           nil,
-						},
-					},
 				},
 				isGroupSnapshot: true,
 			},
-			wantErr: nil,
+			wantErr: cmpopts.AnyError,
 		},
 	}
 
@@ -1197,21 +1179,7 @@ func TestGroupRestore(t *testing.T) {
 			name: "GroupSnapshotErr",
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
-				gceService: &fake.TestGCE{
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: &gce.GroupSnapshot{
-								Snapshots: []*compute.Snapshot{
-									&compute.Snapshot{
-										Name:       "test-snapshot-name",
-										SourceDisk: "test-source-disk",
-									},
-								},
-							},
-							DoErr: cmpopts.AnyError,
-						},
-					},
-				},
+				gceService:    &fake.TestGCE{},
 			},
 			want: cmpopts.AnyError,
 		},
@@ -1219,14 +1187,7 @@ func TestGroupRestore(t *testing.T) {
 			name: "Success",
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
-				gceService: &fake.TestGCE{
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: &gce.GroupSnapshot{},
-							DoErr:           cmpopts.AnyError,
-						},
-					},
-				},
+				gceService:    &fake.TestGCE{},
 			},
 			want: cmpopts.AnyError,
 		},
@@ -1254,14 +1215,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 		{
 			name: "GetGroupSnapshotErr",
 			r: &Restorer{
-				gceService: &fake.TestGCE{
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: &gce.GroupSnapshot{},
-							DoErr:           cmpopts.AnyError,
-						},
-					},
-				},
+				gceService: &fake.TestGCE{},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1276,21 +1230,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 		{
 			name: "RestoreFromSnapshotErr",
 			r: &Restorer{
-				gceService: &fake.TestGCE{
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: &gce.GroupSnapshot{
-								Snapshots: []*compute.Snapshot{
-									&compute.Snapshot{
-										Name:       "test-snapshot-name",
-										SourceDisk: "test-source-disk",
-									},
-								},
-							},
-							DoErr: cmpopts.AnyError,
-						},
-					},
-				},
+				gceService: &fake.TestGCE{},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1305,14 +1245,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 		{
 			name: "RestoreFromSnapshotSuccess",
 			r: &Restorer{
-				gceService: &fake.TestGCE{
-					GroupSnapshotsService: &gce.GroupSnapshotsService{
-						GetCall: &gce.GroupSnapshotsGetCall{
-							DoGroupSnapshot: &gce.GroupSnapshot{},
-							DoErr:           nil,
-						},
-					},
-				},
+				gceService: &fake.TestGCE{},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1322,7 +1255,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			},
 			cp:          defaultCloudProperties,
 			snapshotKey: "test-snapshot-key",
-			want:        nil,
+			want:        cmpopts.AnyError,
 		},
 	}
 

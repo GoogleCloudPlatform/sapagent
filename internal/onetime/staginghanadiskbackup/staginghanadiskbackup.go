@@ -81,8 +81,6 @@ type (
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
-		CreateISG(gce.ISG, string) error
-		DescribeISG(string) ([]*compute.InstantSnapshot, error)
 	}
 )
 
@@ -713,45 +711,46 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	if s.gceService == nil {
 		return fmt.Errorf("gceService needed to convert Instant Snapshot Group")
 	}
-	if err := s.gceService.CreateISG(s.isg, s.groupSnapshotName); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("Staging ISGs not added yet")
+
+	// TODO: Update this with staging APIs.
 }
 
 func (s *Snapshot) convertISGtoSSG(ctx context.Context, cp *ipb.CloudProperties, createSnapshot diskSnapshotFunc) error {
 	if s.gceService == nil {
 		return fmt.Errorf("gceService needed to proceed")
 	}
-	instantSnapshots, err := s.gceService.DescribeISG(s.groupSnapshotName)
-	if err != nil {
-		return err
-	}
+	return fmt.Errorf("Staging ISGs not added yet")
+	// TODO: Update this with staging APIs.
+	// instantSnapshots, err := s.gceService.DescribeISG(s.groupSnapshotName)
+	// if err != nil {
+	// 	return err
+	// }
 
-	for _, is := range instantSnapshots {
-		isName := fmt.Sprintf("%s-%s", is.Name, s.SnapshotType)
-		snapshot := &compute.Snapshot{
-			Description:           s.Description,
-			Name:                  isName,
-			SnapshotType:          s.SnapshotType,
-			SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", cp.GetProjectId(), cp.GetZone(), is.Name),
-			StorageLocations:      []string{s.StorageLocation},
-			Labels:                s.parseLabels(),
-		}
+	// for _, is := range instantSnapshots {
+	// 	isName := fmt.Sprintf("%s-%s", is.Name, s.SnapshotType)
+	// 	snapshot := &compute.Snapshot{
+	// 		Description:           s.Description,
+	// 		Name:                  isName,
+	// 		SnapshotType:          s.SnapshotType,
+	// 		SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", cp.GetProjectId(), cp.GetZone(), is.Name),
+	// 		StorageLocations:      []string{s.StorageLocation},
+	// 		Labels:                s.parseLabels(),
+	// 	}
 
-		if _, err := s.createBackup(ctx, snapshot, createSnapshot); err != nil {
-			return err
-		}
-		if s.FreezeFileSystem {
-			if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-				onetime.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
-				return err
-			}
-			freezeTime := time.Since(dbFreezeStartTime)
-			defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", isName, freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
-		}
-	}
-	return nil
+	// 	if _, err := s.createBackup(ctx, snapshot, createSnapshot); err != nil {
+	// 		return err
+	// 	}
+	// 	if s.FreezeFileSystem {
+	// 		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+	// 			onetime.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
+	// 			return err
+	// 		}
+	// 		freezeTime := time.Since(dbFreezeStartTime)
+	// 		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", isName, freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
+	// 	}
+	// }
+	// return nil
 }
 
 func (s *Snapshot) createDiskSnapshot(ctx context.Context, createSnapshot diskSnapshotFunc) (*compute.Operation, error) {

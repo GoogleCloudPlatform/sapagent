@@ -33,34 +33,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
-// ISG is a temporary interface representing the expected behavior of Instant Snapshot Groups.
-// It will be replaced by a concrete struct when the full implementation is available.
-type ISG any
-
-// GroupSnapshotsService represents a consistent snapshot taken of multiple disks taken at the same point in time.
-type GroupSnapshotsService struct {
-	GetCall *GroupSnapshotsGetCall
-	// Get(string, string) GroupSnapshotsGetCall
-}
-
-// GroupSnapshotsGetCall represents a call to the GCE API to retrieve a consistent snapshot of multiple disks taken at the same point in time.
-type GroupSnapshotsGetCall struct {
-	DoGroupSnapshot *GroupSnapshot
-	DoErr           error
-	// Do(...googleapi.CallOption) (*GroupSnapshot, error)
-}
-
-// GroupSnapshot represents a consistent snapshot of multiple disks taken at the same point in time.
-type GroupSnapshot struct {
-	Snapshots []*compute.Snapshot
-}
-
 // GCE is a wrapper for Google Compute Engine services.
 type GCE struct {
-	service        *compute.Service
-	file           *file.Service
-	secret         *secretmanager.Client
-	groupSnapshots *GroupSnapshotsService
+	service *compute.Service
+	file    *file.Service
+	secret  *secretmanager.Client
 }
 
 // NewGCEClient creates a new GCE service wrapper.
@@ -78,7 +55,7 @@ func NewGCEClient(ctx context.Context) (*GCE, error) {
 		return nil, errors.Wrap(err, "error creating secret manager client")
 	}
 
-	return &GCE{s, f, sm, nil}, nil
+	return &GCE{s, f, sm}, nil
 }
 
 // OverrideComputeBasePath overrides the base path of the GCE clients.
@@ -397,29 +374,4 @@ func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, 
 		return fmt.Errorf("Disk %v is still attached to the instance", dataDiskName)
 	}
 	return nil
-}
-
-// CreateISG creates an Instant Snapshot Group of striped disks.
-func (g *GCE) CreateISG(ISG, string) error {
-	return nil
-}
-
-// DescribeISG describes the contents of an Instant Snapshot Group.
-func (g *GCE) DescribeISG(string) ([]*compute.InstantSnapshot, error) {
-	return nil, nil
-}
-
-// GetGroupSnapshotsService returns the GroupSnapshotsService.
-func (g *GCE) GetGroupSnapshotsService() *GroupSnapshotsService {
-	return g.groupSnapshots
-}
-
-// Get returns the GroupSnapshotsGetCall.
-func (gss *GroupSnapshotsService) Get(string, string) *GroupSnapshotsGetCall {
-	return gss.GetCall
-}
-
-// Do fetches and returns the GroupSnapshot and any error while performing the call.
-func (gsgc *GroupSnapshotsGetCall) Do() (*GroupSnapshot, error) {
-	return gsgc.DoGroupSnapshot, gsgc.DoErr
 }

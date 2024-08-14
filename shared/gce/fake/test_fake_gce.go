@@ -19,13 +19,10 @@ package fake
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
 	file "google.golang.org/api/file/v1"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -64,10 +61,6 @@ type TestGCE struct {
 	ListZoneOperationsResp      []*compute.OperationList
 	ListZoneOperationsErr       []error
 	ListZoneOperationsCallCount int
-
-	DescribeISGSnapshots          []*compute.InstantSnapshot
-	DescribeISGSnapshotsErr       error
-	DescribeISGSnapshotsCallCount int
 
 	GetAddressResp      []*compute.Address
 	GetAddressErr       []error
@@ -126,8 +119,6 @@ type TestGCE struct {
 
 	AttachDiskErr error
 	DetachDiskErr error
-
-	GroupSnapshotsService *gce.GroupSnapshotsService
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -363,22 +354,4 @@ func (g *TestGCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, proje
 // WaitForDiskOpCompletionWithRetry fakes calls to the cloud APIs to wait for a disk operation to complete.
 func (g *TestGCE) WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error {
 	return g.DiskOpErr
-}
-
-// CreateISG fakes calls to the cloud APIs to create an Instant Snapshot Group.
-func (g *TestGCE) CreateISG(isg gce.ISG, name string) error {
-	if strings.Contains(name, "failure") {
-		return fmt.Errorf("failed to create ISG")
-	}
-	return nil
-}
-
-// DescribeISG fakes calls to the cloud APIs to describe the contents of an Instant Snapshot Group.
-func (g *TestGCE) DescribeISG(string) ([]*compute.InstantSnapshot, error) {
-	return g.DescribeISGSnapshots, g.DescribeISGSnapshotsErr
-}
-
-// GetGroupSnapshotsService fakes calls to the cloud APIs to retrieve a GroupSnapshotsService.
-func (g *TestGCE) GetGroupSnapshotsService() *gce.GroupSnapshotsService {
-	return g.GroupSnapshotsService
 }
