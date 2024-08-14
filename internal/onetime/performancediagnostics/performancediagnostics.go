@@ -429,7 +429,6 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	if err != nil {
 		return err
 	}
-	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found HANA processes: %v", instanceWiseHANAProcesses))
 
 	// Create a new directory for "compute".
 	computePath := path.Join(d.OutputFilePath, d.OutputFileName, "compute")
@@ -453,14 +452,14 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	// err from here is the most recent error encountered and
 	// its done this way to collect as many metrics as possible.
 	for i, ip := range instanceWiseHANAProcesses {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for instance: %v", hanaInstances[i]))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for the %v processes in instance: %v", len(instanceWiseHANAProcesses[i]), hanaInstances[i].GetSapsid()))
 		instanceReport := fmt.Sprintf("\nInstance: %v\n", hanaInstances[i])
 		ptsm, metricsCollectionErr := collectMetrics(ctx, opts, hanaInstances[i], ip)
 		if metricsCollectionErr != nil {
 			err = metricsCollectionErr
 		}
 		instanceReport += fmt.Sprintf("%v\n", buildReport(ptsm))
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for instance: %v", hanaInstances[i]))
+		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for the %v processes in instance: %v", len(instanceWiseHANAProcesses[i]), hanaInstances[i].GetSapsid()))
 		// Write report to the File.
 		if _, fileWriteErr := opts.fs.WriteStringToFile(f, instanceReport); fileWriteErr != nil {
 			err = fileWriteErr
