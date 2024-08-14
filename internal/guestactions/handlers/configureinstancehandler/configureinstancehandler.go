@@ -46,7 +46,7 @@ func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *ipb
 		ExecuteFunc: commandlineexecutor.ExecuteCommand,
 	}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), c)
-	runOptions := onetime.RunOptions{CloudProperties: cp}
+	runOptions := onetime.CreateRunOptions(cp, true)
 	exitStatus, message := c.Run(ctx, runOptions)
 	result := &gpb.CommandResult{
 		Command:  command,

@@ -88,6 +88,7 @@ type ConfigureInstance struct {
 	ExecuteFunc commandlineexecutor.Execute
 	IIOTEParams *onetime.InternallyInvokedOTE
 	diffs       []diff
+	oteLogger   *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for configureinstance.
@@ -154,13 +155,13 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	if c.ExecuteFunc == nil {
 		c.ExecuteFunc = commandlineexecutor.ExecuteCommand
 	}
-	status, msg := c.Run(ctx, onetime.RunOptions{CloudProperties: cloudProps})
+	status, msg := c.Run(ctx, onetime.CreateRunOptions(cloudProps, false))
 	switch {
 	case status == subcommands.ExitUsageError:
-		onetime.LogErrorToFileAndConsole(ctx, "ConfigureInstance Usage Error:", errors.New(msg))
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "ConfigureInstance Usage Error:", errors.New(msg))
 	case status == subcommands.ExitFailure:
-		onetime.LogErrorToFileAndConsole(ctx, "ConfigureInstance Failure:", errors.New(msg))
-		usagemetrics.Error(usagemetrics.ConfigureInstanceFailure)
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "ConfigureInstance Failure:", errors.New(msg))
+		c.oteLogger.LogUsageError(usagemetrics.ConfigureInstanceFailure)
 	}
 	return status
 }
@@ -175,7 +176,8 @@ func (c *ConfigureInstance) IsSupportedMachineType() bool {
 // Return values:
 //   - subcommands.ExitStatus: The exit status of the subcommand.
 //   - string: A message providing additional details about the exit status.
-func (c *ConfigureInstance) Run(ctx context.Context, opts onetime.RunOptions) (subcommands.ExitStatus, string) {
+func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (subcommands.ExitStatus, string) {
+	c.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	if !c.Check && !c.Apply {
 		return subcommands.ExitUsageError, "-check or -apply must be specified"
 	}
@@ -198,8 +200,7 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts onetime.RunOptions) (s
 // depending on the machine type.
 func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subcommands.ExitStatus, string) {
 	c.LogToBoth(ctx, "ConfigureInstance starting")
-	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
-	// usagemetrics.Action(usagemetrics.ConfigureInstanceStarted)
+	c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceStarted)
 	rebootRequired := false
 	var err error
 
@@ -229,14 +230,13 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 		return subcommands.ExitUsageError, fmt.Sprintf("this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
 	}
 
-	// TODO: b/342113969 - Add usage metrics for configureinstance failures.
-	// usagemetrics.Action(usagemetrics.ConfigureInstanceFinished)
-	// if c.Check {
-	// 	usagemetrics.Action(usagemetrics.ConfigureInstanceCheckFinished)
-	// }
-	// if c.Apply {
-	// 	usagemetrics.Action(usagemetrics.ConfigureInstanceApplyFinished)
-	// }
+	c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceFinished)
+	if c.Check {
+		c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceCheckFinished)
+	}
+	if c.Apply {
+		c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceApplyFinished)
+	}
 	var messages []string
 	exitStatus := subcommands.ExitSuccess
 	if c.Apply || (c.Check && !rebootRequired) {
@@ -265,7 +265,7 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 			c.LogToBoth(ctx, message)
 			messages = append(messages, message)
 		} else {
-			fmt.Println(string(jsonDiffs))
+			c.oteLogger.LogMessageToConsole(string(jsonDiffs))
 			messages = append(messages, string(jsonDiffs))
 		}
 	}
@@ -278,7 +278,7 @@ func (c *ConfigureInstance) LogToBoth(ctx context.Context, msg string) {
 	if c.PrintDiff {
 		c.diffs = append(c.diffs, diff{Filename: "", Got: msg, Want: "", Operation: operationLogMessage})
 	} else {
-		fmt.Println(msg)
+		c.oteLogger.LogMessageToConsole(msg)
 	}
 	log.CtxLogger(ctx).Info(msg)
 }

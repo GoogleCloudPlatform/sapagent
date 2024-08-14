@@ -103,7 +103,7 @@ func osSettings(ctx context.Context, params Parameters) string {
 	if !ci.IsSupportedMachineType() {
 		return ""
 	}
-	status, msg := ci.Run(ctx, onetime.RunOptions{CloudProperties: params.Config.GetCloudProperties()})
+	status, msg := ci.Run(ctx, onetime.CreateRunOptions(params.Config.GetCloudProperties(), true))
 	switch status {
 	case subcommands.ExitSuccess:
 		return "pass"
