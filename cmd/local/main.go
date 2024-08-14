@@ -52,6 +52,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/reliability"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/service"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/staginghanadiskbackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/staginghanadiskrestore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/systemdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
@@ -102,6 +104,8 @@ func registerSubCommands() {
 		&systemdiscovery.SystemDiscovery{},
 		&validate.Validate{},
 		&version.Version{},
+		&staginghanadiskbackup.Snapshot{},
+		&staginghanadiskrestore.Restorer{},
 
 		subcommands.HelpCommand(), // Implement "help"
 	}
