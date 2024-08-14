@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -244,6 +245,7 @@ func TestBalanceIRQHandler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		test.b.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
 			got, gotErr := test.b.balanceIRQHandler(context.Background())
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {

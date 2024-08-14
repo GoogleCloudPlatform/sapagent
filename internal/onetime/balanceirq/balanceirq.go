@@ -63,6 +63,7 @@ type BalanceIRQ struct {
 	ExecuteFunc commandlineexecutor.Execute
 	IIOTEParams *onetime.InternallyInvokedOTE
 	logPath     string
+	oteLogger   *onetime.OTELogger
 }
 
 type socketCores struct {
@@ -89,7 +90,7 @@ func (*BalanceIRQ) Usage() string {
     -h	Displays help` + "\n"
 }
 
-// SetFlags implements the subcommand interface for configureinstance.
+// SetFlags implements the subcommand interface for balanceirq.
 func (b *BalanceIRQ) SetFlags(fs *flag.FlagSet) {
 	// TODO: Move common flags to global struct.
 	fs.StringVar(&b.pinToSocket, "pin-to-socket", "", "Pins all interrupts to a specific socket")
@@ -98,7 +99,7 @@ func (b *BalanceIRQ) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&b.help, "h", false, "Displays help")
 }
 
-// Execute implements the subcommand interface for configureinstance.
+// Execute implements the subcommand interface for balanceirq.
 func (b *BalanceIRQ) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     b.Name(),
@@ -112,14 +113,19 @@ func (b *BalanceIRQ) Execute(ctx context.Context, f *flag.FlagSet, args ...any) 
 		return exitStatus
 	}
 
+	return b.Run(ctx, onetime.CreateRunOptions(nil, false))
+}
+
+// Run performs the functionality specified by the balanceirq subcommand.
+func (b *BalanceIRQ) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
 	b.writeFile = os.WriteFile
 	b.readFile = os.ReadFile
 	b.ExecuteFunc = commandlineexecutor.ExecuteCommand
+	b.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
 	exitStatus, err := b.balanceIRQHandler(ctx)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("BalanceIRQ: FAILED, detailed logs are at %s", onetime.LogFilePath(b.Name(), b.IIOTEParams))+" err: ", err)
-		log.CtxLogger(ctx).Errorw("BalanceIRQ failed", "err", err)
-		usagemetrics.Error(usagemetrics.BalanceIRQFailure)
+		b.oteLogger.LogErrorToFileAndConsole(ctx, "BalanceIRQ failed", err)
+		b.oteLogger.LogUsageError(usagemetrics.BalanceIRQFailure)
 	}
 	return exitStatus
 }
@@ -127,19 +133,19 @@ func (b *BalanceIRQ) Execute(ctx context.Context, f *flag.FlagSet, args ...any) 
 // balanceIRQHandler balances interrupt requests over the sockets.
 func (b *BalanceIRQ) balanceIRQHandler(ctx context.Context) (subcommands.ExitStatus, error) {
 	if b.install {
-		b.LogToBoth(ctx, "BalanceIRQ install starting")
-		usagemetrics.Action(usagemetrics.BalanceIRQInstallStarted)
+		b.oteLogger.LogMessageToFileAndConsole(ctx, "BalanceIRQ install starting")
+		b.oteLogger.LogUsageAction(usagemetrics.BalanceIRQInstallStarted)
 		if err := b.installSystemdService(ctx); err != nil {
 			return subcommands.ExitFailure, err
 		}
-		b.LogToBoth(ctx, "BalanceIRQ install: SUCCESS")
-		b.LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(b.Name(), b.IIOTEParams)))
-		usagemetrics.Action(usagemetrics.BalanceIRQInstallFinished)
+		b.oteLogger.LogMessageToFileAndConsole(ctx, "BalanceIRQ install: SUCCESS")
+		b.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(b.Name(), b.IIOTEParams)))
+		b.oteLogger.LogUsageAction(usagemetrics.BalanceIRQInstallFinished)
 		return subcommands.ExitSuccess, nil
 	}
 
-	b.LogToBoth(ctx, "BalanceIRQ starting")
-	usagemetrics.Action(usagemetrics.BalanceIRQStarted)
+	b.oteLogger.LogMessageToFileAndConsole(ctx, "BalanceIRQ starting")
+	b.oteLogger.LogUsageAction(usagemetrics.BalanceIRQStarted)
 	if err := b.disableProvidedIRQBalance(ctx); err != nil {
 		return subcommands.ExitFailure, err
 	}
@@ -162,16 +168,10 @@ func (b *BalanceIRQ) balanceIRQHandler(ctx context.Context) (subcommands.ExitSta
 	}
 
 	exitStatus := subcommands.ExitSuccess
-	b.LogToBoth(ctx, "BalanceIRQ: SUCCESS")
-	b.LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(b.Name(), b.IIOTEParams)))
-	usagemetrics.Action(usagemetrics.BalanceIRQFinished)
+	b.oteLogger.LogMessageToFileAndConsole(ctx, "BalanceIRQ: SUCCESS")
+	b.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(b.Name(), b.IIOTEParams)))
+	b.oteLogger.LogUsageAction(usagemetrics.BalanceIRQFinished)
 	return exitStatus, nil
-}
-
-// LogToBoth prints to the console and writes an INFO msg to the log file.
-func (b *BalanceIRQ) LogToBoth(ctx context.Context, msg string) {
-	fmt.Println(msg)
-	log.CtxLogger(ctx).Info(msg)
 }
 
 // readInterrupts reads the interrupts in use by IDPF from /proc/interrupts.
