@@ -27,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/sys/unix"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -38,7 +39,7 @@ func TestMain(t *testing.M) {
 
 var (
 	defaultBackint = InstallBackint{
-		sid: "TST",
+		SID: "TST",
 	}
 )
 
@@ -509,6 +510,7 @@ func TestInstallBackintHandler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		test.b.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
 			got := test.b.installBackintHandler(context.Background(), t.TempDir())
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {

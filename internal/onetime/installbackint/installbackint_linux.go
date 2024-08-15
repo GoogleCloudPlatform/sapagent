@@ -75,7 +75,7 @@ type (
 
 // InstallBackint has args for installbackint subcommands.
 type InstallBackint struct {
-	sid, logLevel, logPath string
+	SID, logLevel, logPath string
 	help                   bool
 
 	mkdir     mkdirFunc
@@ -87,6 +87,7 @@ type InstallBackint struct {
 	readFile  readFileFunc
 	chmod     chmodFunc
 	chown     chownFunc
+	oteLogger *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for installbackint.
@@ -105,7 +106,7 @@ func (*InstallBackint) Usage() string {
 
 // SetFlags implements the subcommand interface for installbackint.
 func (b *InstallBackint) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&b.sid, "sid", "", "SAP System Identification, defaults to $SAPSYSTEMNAME")
+	fs.StringVar(&b.SID, "sid", "", "SAP System Identification, defaults to $SAPSYSTEMNAME")
 	fs.StringVar(&b.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/installbackint.log")
 	fs.BoolVar(&b.help, "h", false, "Displays help")
 	fs.StringVar(&b.logLevel, "loglevel", "info", "Sets the logging level")
@@ -124,12 +125,17 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 		return exitStatus
 	}
 
-	if b.sid == "" {
-		b.sid = os.Getenv("SAPSYSTEMNAME")
-		log.CtxLogger(ctx).Warnf("sid defaulted to $SAPSYSTEMNAME: %s", b.sid)
-		if b.sid == "" {
-			log.CtxLogger(ctx).Errorf("sid is not defined. Set the sid command line argument, or ensure $SAPSYSTEMNAME is set. Usage:" + b.Usage())
-			fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
+	return b.Run(ctx, onetime.CreateRunOptions(nil, false))
+}
+
+// Run performs the functionality specified by the installbackint subcommand.
+func (b *InstallBackint) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
+	b.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
+	if b.SID == "" {
+		b.SID = os.Getenv("SAPSYSTEMNAME")
+		log.CtxLogger(ctx).Warnf("sid defaulted to $SAPSYSTEMNAME: %q", b.SID)
+		if b.SID == "" {
+			b.oteLogger.LogErrorToFileAndConsole(ctx, "Backint installation: FAILED", fmt.Errorf("sid is not defined. Set the sid command line argument, or ensure $SAPSYSTEMNAME is set. Usage:"+b.Usage()))
 			return subcommands.ExitUsageError
 		}
 	}
@@ -145,10 +151,9 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 	// Lchown works similar to chown except it can change
 	// the uid and gid of symbolic links as well.
 	b.chown = os.Lchown
-	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.sid)); err != nil {
-		fmt.Println("Backint installation: FAILED, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log")
-		log.CtxLogger(ctx).Errorw("InstallBackint failed", "sid", b.sid, "err", err)
-		usagemetrics.Error(usagemetrics.InstallBackintFailure)
+	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.SID)); err != nil {
+		b.oteLogger.LogErrorToFileAndConsole(ctx, "Backint installation: FAILED", err)
+		b.oteLogger.LogUsageError(usagemetrics.InstallBackintFailure)
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
@@ -158,7 +163,7 @@ func (b *InstallBackint) Execute(ctx context.Context, f *flag.FlagSet, args ...a
 // in order to execute Backint from SAP HANA for the specified sid.
 func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallDir string) error {
 	log.CtxLogger(ctx).Info("InstallBackint starting")
-	usagemetrics.Action(usagemetrics.InstallBackintStarted)
+	b.oteLogger.LogUsageAction(usagemetrics.InstallBackintStarted)
 	var stat unix.Stat_t
 	if err := b.stat(baseInstallDir, &stat); err != nil {
 		return fmt.Errorf("unable to stat base install directory: %s, ensure the sid is correct. err: %v", baseInstallDir, err)
@@ -215,9 +220,8 @@ func (b *InstallBackint) installBackintHandler(ctx context.Context, baseInstallD
 		return err
 	}
 
-	fmt.Println("Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log\n\nNote: The default parameter values are optimized for performance for most systems.\nFor more information: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/configure-backint-backup-recovery")
-	log.CtxLogger(ctx).Info("InstallBackint succeeded")
-	usagemetrics.Action(usagemetrics.InstallBackintFinished)
+	b.oteLogger.LogMessageToFileAndConsole(ctx, "Backint installation: SUCCESS, detailed logs are at /var/log/google-cloud-sap-agent/installbackint.log\n\nNote: The default parameter values are optimized for performance for most systems.\nFor more information: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/configure-backint-backup-recovery")
+	b.oteLogger.LogUsageAction(usagemetrics.InstallBackintFinished)
 	return nil
 }
 
