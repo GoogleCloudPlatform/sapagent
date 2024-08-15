@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -234,7 +235,7 @@ func TestRun(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			response, _, exitStatus := tc.b.Run(context.Background(), tc.exec)
+			response, _, exitStatus := tc.b.Run(context.Background(), tc.exec, onetime.CreateRunOptions(nil, false))
 			if exitStatus != tc.wantExitStatus {
 				t.Errorf("Run(%v) = %v; want %v", tc.b, exitStatus, tc.wantExitStatus)
 			}

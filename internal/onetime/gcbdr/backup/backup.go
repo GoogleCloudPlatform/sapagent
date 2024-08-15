@@ -61,6 +61,7 @@ type Backup struct {
 	LogPath                     string `json:"log-path"`
 	help                        bool
 	hanaVersion                 string
+	oteLogger                   *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for Backup.
@@ -111,20 +112,21 @@ func (b *Backup) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		return exitStatus
 	}
 
-	_, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand)
+	_, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand, onetime.CreateRunOptions(nil, false))
 	switch exitStatus {
 	case subcommands.ExitUsageError:
-		onetime.LogErrorToFileAndConsole(ctx, "GCBDR-backup Usage Error:", errors.New(message))
+		b.oteLogger.LogErrorToFileAndConsole(ctx, "GCBDR-backup Usage Error:", errors.New(message))
 	case subcommands.ExitFailure:
-		onetime.LogErrorToFileAndConsole(ctx, "GCBDR-backup Failure:", errors.New(message))
+		b.oteLogger.LogErrorToFileAndConsole(ctx, "GCBDR-backup Failure:", errors.New(message))
 	case subcommands.ExitSuccess:
-		onetime.LogMessageToFileAndConsole(ctx, message)
+		b.oteLogger.LogMessageToFileAndConsole(ctx, message)
 	}
 	return exitStatus
 }
 
 // Run performs the functionality specified by the gcbdr-backup subcommand.
-func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute) (*bpb.BackupResponse, string, subcommands.ExitStatus) {
+func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute, runOpts *onetime.RunOptions) (*bpb.BackupResponse, string, subcommands.ExitStatus) {
+	b.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
 	if err := b.validateParams(); err != nil {
 		return nil, err.Error(), subcommands.ExitUsageError
 	}

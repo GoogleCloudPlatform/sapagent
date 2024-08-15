@@ -25,6 +25,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -43,10 +44,10 @@ func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.Cloud
 	log.CtxLogger(ctx).Debugw("gcbdr-backup handler called.", "command", prototext.Format(command))
 	b := &backup.Backup{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)
-	backupResponse, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand)
+	backupResponse, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand, onetime.CreateRunOptions(cp, true))
 	anyBackupResponse, err := apb.New(backupResponse)
 	if err != nil {
-		failureMessage := fmt.Sprintf("Failed to marshal response to any. Error: %v", err)
+		failureMessage := fmt.Sprintf("failed to marshal response to any. Error: %v", err)
 		log.CtxLogger(ctx).Debug(failureMessage)
 		result := &gpb.CommandResult{
 			Command:  command,
