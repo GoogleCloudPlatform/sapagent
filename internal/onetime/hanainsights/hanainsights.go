@@ -47,6 +47,7 @@ type HANAInsights struct {
 	db                                              *databaseconnector.DBHandle
 	help                                            bool
 	logLevel, logPath                               string
+	oteLogger                                       *onetime.OTELogger
 }
 
 const (
@@ -97,6 +98,12 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 		return exitStatus
 	}
 
+	return h.Run(ctx, onetime.CreateRunOptions(nil, false), args...)
+}
+
+// Run executes the command and returns the status.
+func (h *HANAInsights) Run(ctx context.Context, runOpts *onetime.RunOptions, args ...any) subcommands.ExitStatus {
+	h.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
 	return h.hanaInsightsHandler(ctx, gce.NewGCEClient, os.WriteFile, os.MkdirAll)
 }
 
@@ -117,18 +124,18 @@ func (h *HANAInsights) validateParameters(os string) error {
 func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc, wf writeFile, c createDir) subcommands.ExitStatus {
 	var err error
 	if err = h.validateParameters(runtime.GOOS); err != nil {
-		log.Print(err.Error())
+		h.oteLogger.LogMessageToConsole(err.Error())
 		return subcommands.ExitUsageError
 	}
 
 	h.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
+		h.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
 		return subcommands.ExitFailure
 	}
 
 	if h.hdbuserstoreKey != "" {
-		usagemetrics.Action(usagemetrics.HANAInsightsOTEUserstoreKey)
+		h.oteLogger.LogUsageAction(usagemetrics.HANAInsightsOTEUserstoreKey)
 	}
 	dbp := databaseconnector.Params{
 		Username:       h.user,
@@ -142,7 +149,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		SID:            h.sid,
 	}
 	if h.db, err = databaseconnector.CreateDBHandle(ctx, dbp); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to connect to database", err)
+		h.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to connect to database", err)
 		return subcommands.ExitFailure
 	}
 
@@ -154,7 +161,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 
 	insights, err := ruleengine.Run(ctx, h.db, rules)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failure in rule engine", err)
+		h.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failure in rule engine", err)
 		return subcommands.ExitFailure
 	}
 	log.CtxLogger(ctx).Infow("Generating HANA insights", insights)

@@ -194,6 +194,7 @@ func TestHANAInsightsHandler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		test.hanainsights.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
 			got := test.hanainsights.hanaInsightsHandler(context.Background(), test.fakeNewGCE, fakeWritefileSuccess, fakeCreateDirSuccess)
 			if got != test.want {
