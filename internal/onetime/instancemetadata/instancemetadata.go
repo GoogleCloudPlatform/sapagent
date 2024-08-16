@@ -35,9 +35,10 @@ import (
 type (
 	// InstanceMetadata stores the arguments for the instancemetadata subcommand.
 	InstanceMetadata struct {
-		logLevel string
-		logPath  string
-		help     bool
+		logLevel  string
+		logPath   string
+		help      bool
+		oteLogger *onetime.OTELogger
 	}
 )
 
@@ -73,27 +74,25 @@ func (m *InstanceMetadata) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		return exitStatus
 	}
 
-	_, status := m.Run(ctx, onetime.RunOptions{
-		CloudProperties: cp,
-		DaemonMode:      false,
-	})
+	_, status := m.Run(ctx, onetime.CreateRunOptions(cp, false))
 	if status != subcommands.ExitSuccess {
-		onetime.LogMessageToFileAndConsole(ctx, "Failed to fetch instance metadata")
+		m.oteLogger.LogMessageToFileAndConsole(ctx, "Failed to fetch instance metadata")
 	}
 	return status
 }
 
 // Run executes the MetadataHandler and returns the response.
-func (m *InstanceMetadata) Run(ctx context.Context, opts onetime.RunOptions) (*impb.Metadata, subcommands.ExitStatus) {
-	return m.metadataHandler(ctx, opts)
+func (m *InstanceMetadata) Run(ctx context.Context, opts *onetime.RunOptions) (*impb.Metadata, subcommands.ExitStatus) {
+	m.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
+	return m.metadataHandler(ctx)
 }
 
-func (m *InstanceMetadata) metadataHandler(ctx context.Context, opts onetime.RunOptions) (*impb.Metadata, subcommands.ExitStatus) {
+func (m *InstanceMetadata) metadataHandler(ctx context.Context) (*impb.Metadata, subcommands.ExitStatus) {
 	response := &impb.Metadata{
 		OsName:           runtime.GOOS,
 		AgentVersion:     configuration.AgentVersion,
 		AgentBuildChange: configuration.AgentBuildChange,
 	}
-	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Instance Metadata: %s", prototext.Format(response)))
+	m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Instance Metadata: %s", prototext.Format(response)))
 	return response, subcommands.ExitSuccess
 }

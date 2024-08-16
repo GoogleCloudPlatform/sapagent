@@ -98,12 +98,13 @@ func TestExecute(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
-	runOpts := onetime.RunOptions{
-		CloudProperties: &ipb.CloudProperties{
+	runOpts := onetime.CreateRunOptions(
+		&ipb.CloudProperties{
 			InstanceName: "test-instance",
 			Zone:         "us-central1-a",
 		},
-	}
+		false,
+	)
 	m := &InstanceMetadata{}
 	want := &impb.Metadata{}
 	want.OsName = runtime.GOOS
