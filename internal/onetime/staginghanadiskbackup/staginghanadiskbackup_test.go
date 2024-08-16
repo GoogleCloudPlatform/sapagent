@@ -163,6 +163,7 @@ func TestSnapshotHandler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		test.snapshot.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
 			_, got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
 			if got != test.want {
@@ -834,6 +835,7 @@ func TestIsDiskAttachedToInstance(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		gotErr := tc.s.isDiskAttachedToInstance(context.Background(), tc.disk, tc.cp)
 		if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("isDiskAttachedToInstance(%v, %v) returned diff (-want +got):\n%s", tc.disk, tc.cp, diff)
@@ -986,6 +988,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
 			gotErr := tc.s.runWorkflowForInstantSnapshotGroups(ctx, tc.run, tc.createSnapshot, tc.cp)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
@@ -1124,6 +1127,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test.snapshot.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
 			got := test.snapshot.runWorkflowForDiskSnapshot(context.Background(), test.run, test.createSnapshot, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
@@ -1187,6 +1191,7 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.s.createInstantSnapshotGroup(context.Background())
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
@@ -1318,6 +1323,7 @@ func TestCreateBackup(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.s.createBackup(ctx, tc.snapshot, tc.createSnapshot)
 			if diff := cmp.Diff(tc.wantOp, got, cmpopts.EquateErrors()); diff != "" {
