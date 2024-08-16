@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	hmmpb "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -172,7 +173,6 @@ func TestMigrationHandler(t *testing.T) {
 	tests := []struct {
 		name           string
 		migrate        MigrateHANAMonitoring
-		fs             *flag.FlagSet
 		readFile       configuration.ReadConfigFile
 		writeFile      configuration.WriteConfigFile
 		wantExitStatus subcommands.ExitStatus
@@ -272,10 +272,11 @@ func TestMigrationHandler(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test.migrate.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
-			got := test.migrate.migrationHandler(context.Background(), test.fs, test.readFile, test.writeFile)
+			got := test.migrate.migrationHandler(context.Background(), test.readFile, test.writeFile)
 			if got != test.wantExitStatus {
-				t.Errorf("migrationHandler(%v) = %v, want = %v", test.fs, got, test.wantExitStatus)
+				t.Errorf("migrationHandler() = %v, want = %v", got, test.wantExitStatus)
 			}
 		})
 	}
@@ -303,8 +304,11 @@ func TestParseOldConf(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		m := MigrateHANAMonitoring{
+			oteLogger: onetime.CreateOTELogger(false),
+		}
 		t.Run(test.name, func(t *testing.T) {
-			got := parseOldConf(context.Background(), test.read)
+			got := m.parseOldConf(context.Background(), test.read)
 			if cmp.Diff(got, test.want, protocmp.Transform()) != "" {
 				t.Errorf("parseOldConf(%v) = %v, want = %v", test.read, got, test.want)
 			}
@@ -334,8 +338,11 @@ func TestParseAgentConf(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		m := MigrateHANAMonitoring{
+			oteLogger: onetime.CreateOTELogger(false),
+		}
 		t.Run(test.name, func(t *testing.T) {
-			if got := parseAgentConf(context.Background(), test.read); cmp.Diff(got, test.want, protocmp.Transform()) != "" {
+			if got := m.parseAgentConf(context.Background(), test.read); cmp.Diff(got, test.want, protocmp.Transform()) != "" {
 				t.Errorf("parseAgentConf(%v) = %v, want = %v", test.read, got, test.want)
 			}
 		})
