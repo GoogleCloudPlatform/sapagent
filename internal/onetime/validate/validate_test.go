@@ -27,6 +27,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
@@ -126,7 +127,9 @@ func TestValidateWorkloadCollectionHandler(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			validate := Validate{}
+			validate := Validate{
+				oteLogger: onetime.CreateOTELogger(false),
+			}
 			got := validate.validateWorkloadCollectionHandler(context.Background(), test.read, "filepath")
 			if got != test.want {
 				t.Errorf("validateWorkloadCollectionHandler() got %v, want %v", got, test.want)
