@@ -391,6 +391,7 @@ func TestRestoreHandler(t *testing.T) {
 		return "", "", "", nil
 	}
 	for _, test := range tests {
+		test.restorer.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
 			got := test.restorer.restoreHandler(context.Background(), test.fakeMetricClient, test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties, checkDir, checkDir)
 			if got != test.want {
@@ -1153,6 +1154,7 @@ func TestDiskRestore(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc.r.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.r.diskRestore(context.Background(), tc.exec, defaultCloudProperties)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
@@ -1194,6 +1196,7 @@ func TestGroupRestore(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc.r.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.r.groupRestore(context.Background(), defaultCloudProperties)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {

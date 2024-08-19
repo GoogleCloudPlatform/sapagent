@@ -106,6 +106,7 @@ type Restorer struct {
 	CSEKKeyFile                                                string
 	ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
 	IIOTEParams                                                *onetime.InternallyInvokedOTE
+	oteLogger                                                  *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for hanadiskrestore.
@@ -166,7 +167,13 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return exitStatus
 	}
 
-	return r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, cp, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
+	return r.Run(ctx, onetime.CreateRunOptions(cp, false))
+}
+
+// Run performs the functionality specified by the hanadiskrestore subcommand.
+func (r *Restorer) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
+	r.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
+	return r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, runOpts.CloudProperties, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
 }
 
 // validateParameters validates the parameters passed to the restore subcommand.
@@ -216,7 +223,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
 	var err error
 	if err = r.validateParameters(runtime.GOOS, cp); err != nil {
-		log.Print(err.Error())
+		r.oteLogger.LogMessageToConsole(err.Error())
 		return subcommands.ExitUsageError
 	}
 
@@ -228,30 +235,30 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 
 	r.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
 		return subcommands.ExitFailure
 	}
 
 	log.CtxLogger(ctx).Infow("Starting HANA disk snapshot restore", "sid", r.Sid)
-	usagemetrics.Action(usagemetrics.HANADiskRestore)
+	r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestore)
 
 	if r.computeService, err = computeServiceCreator(ctx); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create compute service,", err)
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create compute service,", err)
 		return subcommands.ExitFailure
 	}
 
 	if err := r.checkPreConditions(ctx, cp, checkDataDir, checkLogDir); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: Pre-restore check failed,", err)
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Pre-restore check failed,", err)
 		return subcommands.ExitFailure
 	}
 	if !r.SkipDBSnapshotForChangeDiskType {
 		if err := r.prepare(ctx, cp, hanabackup.WaitForIndexServerToStopWithRetry, commandlineexecutor.ExecuteCommand); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore prepare failed,", err)
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore prepare failed,", err)
 			return subcommands.ExitFailure
 		}
 	} else {
 		if err := r.prepareForHANAChangeDiskType(ctx, cp); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore prepare failed,", err)
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore prepare failed,", err)
 			return subcommands.ExitFailure
 		}
 	}
@@ -271,7 +278,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	}
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
-	onetime.LogMessageToFileAndConsole(ctx, "SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/disk-snapshot-backup-recovery#recover_to_specific_point-in-time for next steps.")
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/disk-snapshot-backup-recovery#recover_to_specific_point-in-time for next steps.")
 	if r.labelsOnDetachedDisk != "" {
 		if !r.isGroupSnapshot {
 			if err := r.appendLabelsToDetachedDisk(ctx, r.DataDiskName); err != nil {
@@ -387,19 +394,19 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) error {
 	snapShotKey := ""
 	if r.CSEKKeyFile != "" {
-		usagemetrics.Action(usagemetrics.EncryptedSnapshotRestore)
+		r.oteLogger.LogUsageAction(usagemetrics.EncryptedSnapshotRestore)
 
 		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.SourceSnapshot)
 		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
 		if err != nil {
-			usagemetrics.Error(usagemetrics.EncryptedSnapshotRestoreFailure)
+			r.oteLogger.LogUsageError(usagemetrics.EncryptedSnapshotRestoreFailure)
 			return err
 		}
 		snapShotKey = key
 	}
 
 	if err := r.restoreFromSnapshot(ctx, exec, cp, snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone)
 		hanabackup.RescanVolumeGroups(ctx)
 		return err
@@ -414,19 +421,19 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) error {
 	snapShotKey := ""
 	if r.CSEKKeyFile != "" {
-		usagemetrics.Action(usagemetrics.EncryptedSnapshotRestore)
+		r.oteLogger.LogUsageAction(usagemetrics.EncryptedSnapshotRestore)
 
 		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.GroupSnapshot)
 		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
 		if err != nil {
-			usagemetrics.Error(usagemetrics.EncryptedSnapshotRestoreFailure)
+			r.oteLogger.LogUsageError(usagemetrics.EncryptedSnapshotRestoreFailure)
 			return err
 		}
 		snapShotKey = key
 	}
 
 	if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 		for _, d := range r.disks {
 			r.gceService.AttachDisk(ctx, d.DiskName, cp, r.Project, r.DataDiskZone)
 		}
@@ -476,11 +483,11 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 
 	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		return fmt.Errorf("failed to insert new data disk: %v", err)
 	}
 	if err := r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "insert data disk failed", err)
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "insert data disk failed", err)
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
