@@ -62,6 +62,10 @@ import (
 const (
 	bundlePath      = `/tmp/google-cloud-sap-agent/`
 	timeStampFormat = time.TimeOnly
+	// TODO: Fine tune frequency and data point default values.
+	minFrequency           = 5
+	minTotalDataPoints     = 1
+	defaultTotalDataPoints = 6
 )
 
 // Diagnose has args for performance diagnostics OTE subcommands.
@@ -77,6 +81,8 @@ type Diagnose struct {
 	Type              string `json:"type"`
 	OutputFileName    string `json:"output-file-name"`
 	LogPath           string `json:"log-path"`
+	Frequency         int    `json:"frequency,string"`    // Collection frequency in seconds for compute data.
+	TotalDataPoints   int    `json:"total-points,string"` // Total data points to collect in time-series for compute data.
 	help              bool
 }
 
@@ -117,8 +123,6 @@ type options struct {
 	appsDiscovery           func(context.Context) *sappb.SAPInstances
 	collectProcesses        func(context.Context, computeresources.Parameters) []*computeresources.ProcessInfo
 	newProc                 computeresources.NewProcessWithContextHelper
-	frequency               int // collection frequency in seconds for compute data.
-	totalDataPoints         int // total data points to collect in time-series for compute data.
 }
 
 // processStat is a struct to store the CPU, Memory and
@@ -168,7 +172,9 @@ func (*Diagnose) Synopsis() string {
 func (*Diagnose) Usage() string {
 	return `Usage: performancediagnostics [-type=<all|backup|io|compute>] [-test-bucket=<name of bucket used to run backup]
 	[-backint-config-file=<path to backint config file>]	[-output-bucket=<name of bucket to upload the report] [-output-file-name=<diagnostics output name>]
-	[-output-file-path=<path to save output file generated>] [-h] [-loglevel=<debug|info|warn|error]>] [-log-path=<log-path>]` + "\n"
+	[-output-file-path=<path to save output file generated>] [-hyper-threading=<default|off|on] [-override-version=<version>]
+	[-print-diff=<true|false>] [-frequency=<frequency in seconds for compute>] [-total-points=<total data points for compute>]
+	[-h] [-loglevel=<debug|info|warn|error]>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for features.
@@ -178,9 +184,11 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&d.BackintConfigFile, "backint-config-file", "", "Sets the path to backint parameters file. Must be present if type includes backup operation. (optional)")
 	fs.StringVar(&d.OutputBucket, "output-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")
 	fs.StringVar(&d.OutputFileName, "output-file-name", "", "Sets the name for generated output file. (optional) Default: performance-diagnostics-<current_timestamp>")
-	fs.StringVar(&d.OutputFilePath, "output-file-path", "", "Sets the path to save the output file. (optional) Default: /tmp/google-cloud-sap-agent/")
+	fs.StringVar(&d.OutputFilePath, "output-file-path", "", fmt.Sprintf("Sets the path to save the output file. (optional) Default: %v", bundlePath))
 	fs.StringVar(&d.HyperThreading, "hyper-threading", "default", "Sets hyper threading settings for X4 machines")
 	fs.StringVar(&d.OverrideVersion, "override-version", "latest", "If specified, runs a specific version of configureinstance")
+	fs.IntVar(&d.Frequency, "frequency", minFrequency, fmt.Sprintf("Sets the frequency in seconds for HANA compute metrics collection. (optional) (min: %v) Default: %v", minFrequency, minFrequency))
+	fs.IntVar(&d.TotalDataPoints, "total-points", defaultTotalDataPoints, fmt.Sprintf("Sets the total data points for HANA compute metrics collection. (optional) (min: %v) Default: %v", minTotalDataPoints, defaultTotalDataPoints))
 	fs.BoolVar(&d.PrintDiff, "print-diff", false, "Prints all configuration diffs and log messages for configureinstance to stdout as JSON")
 	fs.StringVar(&d.LogLevel, "loglevel", "", "Sets the logging level for the agent configuration file. (optional) Default: info")
 	fs.StringVar(&d.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/performancediagnostics.log")
@@ -219,9 +227,6 @@ func (d *Diagnose) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, l
 		lp:               lp,
 		cp:               cp,
 		collectProcesses: computeresources.CollectProcessesForInstance,
-		// TODO: Fine tune frequency and data point default values.
-		frequency:       5,
-		totalDataPoints: 6,
 	}
 	return d.diagnosticsHandler(ctx, fs, opts)
 }
@@ -363,6 +368,19 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) er
 			return err
 		}
 	}
+	if typeValues["compute"] || typeValues["all"] {
+		// Only logging the error as the parameters are optional.
+		if d.Frequency < minFrequency {
+			err := fmt.Errorf("frequency must be at least %v seconds and hence using default value of %v", minFrequency, minFrequency)
+			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
+			d.Frequency = minFrequency
+		}
+		if d.TotalDataPoints < minTotalDataPoints {
+			err := fmt.Errorf("total data points must be at least %v and hence using default value of %v", minTotalDataPoints, defaultTotalDataPoints)
+			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
+			d.TotalDataPoints = defaultTotalDataPoints
+		}
+	}
 	if d.OutputFilePath == "" {
 		log.CtxLogger(ctx).Debugw("No path for bundle provided. Setting bundle path to default", "path", bundlePath)
 		d.OutputFilePath = bundlePath
@@ -454,7 +472,7 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	for i, ip := range instanceWiseHANAProcesses {
 		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for the %v processes in instance: %v", len(instanceWiseHANAProcesses[i]), hanaInstances[i].GetSapsid()))
 		instanceReport := fmt.Sprintf("\nInstance: %v\n", hanaInstances[i])
-		ptsm, metricsCollectionErr := collectMetrics(ctx, opts, hanaInstances[i], ip)
+		ptsm, metricsCollectionErr := d.collectMetrics(ctx, opts, hanaInstances[i], ip)
 		if metricsCollectionErr != nil {
 			err = metricsCollectionErr
 		}
@@ -551,23 +569,23 @@ func fetchAllProcesses(ctx context.Context, opts *options, HANAInstances []*sapp
 
 // initializeCollectMetrics initializes the map to store the
 // process-wise time-series metrics and params to collect metrics.
-func initializeCollectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, computeresources.Parameters) {
+func (d *Diagnose) initializeCollectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, computeresources.Parameters) {
 	// ptsm stores the process-wise time-series metrics.
 	ptsm := make(map[string]*processStat)
 
 	// Initialize ptsm to avoid key lookup errors.
 	for _, process := range processes {
-		// Metric arrays have fixed size of opts.totalDataPoints
+		// Metric arrays have fixed size of d.totalDataPoints
 		// to make it simple to identify missed process metrics
 		// after collectMetrics which is useful for final report.
 		ptsm[computeresources.FormatProcessLabel(process.Name, process.PID)] = &processStat{
 			processInfo: process,
-			cpuUsage:    make([]*computeresources.Metric, opts.totalDataPoints),
-			vms:         make([]*computeresources.Metric, opts.totalDataPoints),
-			rss:         make([]*computeresources.Metric, opts.totalDataPoints),
-			swap:        make([]*computeresources.Metric, opts.totalDataPoints),
-			deltaReads:  make([]*computeresources.Metric, opts.totalDataPoints),
-			deltaWrites: make([]*computeresources.Metric, opts.totalDataPoints),
+			cpuUsage:    make([]*computeresources.Metric, d.TotalDataPoints),
+			vms:         make([]*computeresources.Metric, d.TotalDataPoints),
+			rss:         make([]*computeresources.Metric, d.TotalDataPoints),
+			swap:        make([]*computeresources.Metric, d.TotalDataPoints),
+			deltaReads:  make([]*computeresources.Metric, d.TotalDataPoints),
+			deltaWrites: make([]*computeresources.Metric, d.TotalDataPoints),
 		}
 	}
 
@@ -579,7 +597,7 @@ func initializeCollectMetrics(ctx context.Context, opts *options, instance *sapp
 		Config: &cpb.Configuration{
 			CloudProperties: opts.cp,
 			CollectionConfiguration: &cpb.CollectionConfiguration{
-				ProcessMetricsFrequency: int64(opts.frequency),
+				ProcessMetricsFrequency: int64(d.Frequency),
 			},
 		},
 	}
@@ -589,12 +607,12 @@ func initializeCollectMetrics(ctx context.Context, opts *options, instance *sapp
 
 // collectMetrics collects the time-series CPU, Memory and
 // IOPS metrics for the given processes.
-func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, error) {
+func (d *Diagnose) collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInstance, processes []*computeresources.ProcessInfo) (map[string]*processStat, error) {
 	// ptsm stores the process-wise time-series metrics.
-	ptsm, params := initializeCollectMetrics(ctx, opts, instance, processes)
+	ptsm, params := d.initializeCollectMetrics(ctx, opts, instance, processes)
 
 	var err error
-	for itr := 0; itr < opts.totalDataPoints; itr++ {
+	for itr := 0; itr < d.TotalDataPoints; itr++ {
 		// Collect CPU Metrics.
 		cpuUsages, cpuErr := computeresources.CollectCPUPerProcess(ctx, params, processes)
 		if cpuErr != nil {
@@ -632,7 +650,7 @@ func collectMetrics(ctx context.Context, opts *options, instance *sappb.SAPInsta
 		select {
 		case <-ctx.Done():
 			return ptsm, context.Cause(ctx)
-		case <-time.After(time.Duration(opts.frequency) * time.Second):
+		case <-time.After(time.Duration(d.Frequency) * time.Second):
 		}
 	}
 	return ptsm, err

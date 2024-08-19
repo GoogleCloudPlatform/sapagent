@@ -408,7 +408,8 @@ func TestSetFlags(t *testing.T) {
 
 	flags := []string{
 		"type", "test-bucket", "backint-config-file", "output-bucket", "output-file-name",
-		"hyper-threading", "output-file-path", "loglevel", "help", "h", "log-path",
+		"hyper-threading", "output-file-path", "override-version", "frequency",
+		"total-points", "print-diff", "loglevel", "help", "h", "log-path",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -420,9 +421,11 @@ func TestSetFlags(t *testing.T) {
 
 func TestValidateParams(t *testing.T) {
 	tests := []struct {
-		name    string
-		d       *Diagnose
-		wantErr bool
+		name                string
+		d                   *Diagnose
+		wantErr             bool
+		wantFreq            int
+		wantTotalDataPoints int
 	}{
 		{
 			name: "InvalidType",
@@ -446,20 +449,65 @@ func TestValidateParams(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "InvalidFrequencyApplyDefaults",
+			d: &Diagnose{
+				Type:      "compute",
+				Frequency: minFrequency - 2,
+			},
+			wantFreq:            minFrequency,
+			wantTotalDataPoints: defaultTotalDataPoints,
+		},
+		{
+			name: "InvalidTotalDataPointsApplyDefaults",
+			d: &Diagnose{
+				Type:            "compute",
+				Frequency:       minFrequency + 1,
+				TotalDataPoints: minTotalDataPoints - 1,
+			},
+			wantFreq:            minFrequency + 1,
+			wantTotalDataPoints: defaultTotalDataPoints,
+		},
+		{
+			name: "InvalidFrequencyAndTotalDataPointsApplyDefaults",
+			d: &Diagnose{
+				Type:            "compute",
+				Frequency:       minFrequency - 1,
+				TotalDataPoints: minTotalDataPoints - 1,
+			},
+			wantFreq:            minFrequency,
+			wantTotalDataPoints: defaultTotalDataPoints,
+		},
+		{
+			name: "ValidFrequencyAndTotalDataPoints",
+			d: &Diagnose{
+				Type:            "compute",
+				Frequency:       minFrequency + 1,
+				TotalDataPoints: minTotalDataPoints + 1,
+			},
+			wantFreq:            minFrequency + 1,
+			wantTotalDataPoints: minTotalDataPoints + 1,
+		},
+		{
 			name: "ParamFilePresent",
 			d: &Diagnose{
 				Type:              "all",
 				BackintConfigFile: "/tmp/param_file.txt",
+				Frequency:         minFrequency + 2,
+				TotalDataPoints:   minTotalDataPoints + 2,
 			},
-			wantErr: false,
+			wantFreq:            minFrequency + 2,
+			wantTotalDataPoints: minTotalDataPoints + 2,
 		},
 		{
 			name: "TestBucketPresent",
 			d: &Diagnose{
-				Type:       "all",
-				TestBucket: "test_bucket",
+				Type:            "all",
+				TestBucket:      "test_bucket",
+				Frequency:       minFrequency + 4,
+				TotalDataPoints: minTotalDataPoints + 1,
 			},
-			wantErr: false,
+			wantFreq:            minFrequency + 4,
+			wantTotalDataPoints: minTotalDataPoints + 1,
 		},
 		{
 			name: "SuccessForIO",
@@ -468,7 +516,6 @@ func TestValidateParams(t *testing.T) {
 				OutputFilePath: "/tmp/path.txt",
 				OutputFileName: "test_bundle",
 			},
-			wantErr: false,
 		},
 		{
 			name: "SuccessForBackupAndIO",
@@ -478,14 +525,16 @@ func TestValidateParams(t *testing.T) {
 				OutputFilePath: "/tmp/path.txt",
 				OutputFileName: "test_bundle",
 			},
-			wantErr: false,
 		},
 		{
 			name: "SuccessForCompute",
 			d: &Diagnose{
-				Type: "compute",
+				Type:            "compute",
+				Frequency:       minFrequency + 1,
+				TotalDataPoints: minTotalDataPoints + 1,
 			},
-			wantErr: false,
+			wantFreq:            minFrequency + 1,
+			wantTotalDataPoints: minTotalDataPoints + 1,
 		},
 	}
 
@@ -496,6 +545,12 @@ func TestValidateParams(t *testing.T) {
 			gotErr := err != nil
 			if gotErr != tc.wantErr {
 				t.Errorf("validateParams(ctx) = %v, want error presence = %v", err, tc.wantErr)
+			}
+			if !gotErr && tc.d.Frequency != tc.wantFreq {
+				t.Errorf("validateParams(ctx), got frequency = %v, want = %v", tc.d.Frequency, tc.wantFreq)
+			}
+			if !gotErr && tc.d.TotalDataPoints != tc.wantTotalDataPoints {
+				t.Errorf("validateParams(ctx), got total data points = %v, want = %v", tc.d.TotalDataPoints, tc.wantTotalDataPoints)
 			}
 		})
 	}
@@ -2139,6 +2194,9 @@ func TestComputeData(t *testing.T) {
 		},
 		{
 			name: "FailToCreateComputeDirectory",
+			d: &Diagnose{
+				Type: "compute",
+			},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				cp:   defaultCloudProperties,
@@ -2163,6 +2221,9 @@ func TestComputeData(t *testing.T) {
 		},
 		{
 			name: "FailToOpenFileInComputeDirectory",
+			d: &Diagnose{
+				Type: "compute",
+			},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				cp:   defaultCloudProperties,
@@ -2189,6 +2250,9 @@ func TestComputeData(t *testing.T) {
 		},
 		{
 			name: "FailToWriteToComputeFile",
+			d: &Diagnose{
+				Type: "compute",
+			},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				cp:   defaultCloudProperties,
@@ -2217,6 +2281,9 @@ func TestComputeData(t *testing.T) {
 		},
 		{
 			name: "FailToAppendToComputeFile",
+			d: &Diagnose{
+				Type: "compute",
+			},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				cp:   defaultCloudProperties,
@@ -2245,6 +2312,10 @@ func TestComputeData(t *testing.T) {
 		},
 		{
 			name: "FailCPUMetricCollection",
+			d: &Diagnose{
+				Type:            "compute",
+				TotalDataPoints: 3,
+			},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				cp:   defaultCloudProperties,
@@ -2267,13 +2338,16 @@ func TestComputeData(t *testing.T) {
 						},
 					}
 				},
-				newProc:         newProcessWithContextHelperTest,
-				totalDataPoints: 3,
+				newProc: newProcessWithContextHelperTest,
 			},
 			wantErr: true,
 		},
 		{
 			name: "FailMemoryMetricCollection",
+			d: &Diagnose{
+				Type:            "compute",
+				TotalDataPoints: 3,
+			},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				cp:   defaultCloudProperties,
@@ -2296,13 +2370,16 @@ func TestComputeData(t *testing.T) {
 						},
 					}
 				},
-				newProc:         newProcessWithContextHelperTest,
-				totalDataPoints: 3,
+				newProc: newProcessWithContextHelperTest,
 			},
 			wantErr: true,
 		},
 		{
 			name: "FailDiskIOPSMetricCollection",
+			d: &Diagnose{
+				Type:            "compute",
+				TotalDataPoints: 3,
+			},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				cp:   defaultCloudProperties,
@@ -2325,8 +2402,7 @@ func TestComputeData(t *testing.T) {
 						},
 					}
 				},
-				newProc:         newProcessWithContextHelperTest,
-				totalDataPoints: 3,
+				newProc: newProcessWithContextHelperTest,
 			},
 			wantErr: true,
 		},
@@ -2352,7 +2428,8 @@ func TestComputeData(t *testing.T) {
 		{
 			name: "SuccessComputeMetrics",
 			d: &Diagnose{
-				Type: "compute",
+				Type:            "compute",
+				TotalDataPoints: 3,
 			},
 			flagSet: &flag.FlagSet{},
 			opts: &options{
@@ -2371,16 +2448,14 @@ func TestComputeData(t *testing.T) {
 						},
 					}
 				},
-				totalDataPoints: 3,
-				newProc:         newProcessWithContextHelperTest,
+				newProc: newProcessWithContextHelperTest,
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var d Diagnose
-			err := d.computeData(context.Background(), tc.flagSet, tc.opts)
+			err := tc.d.computeData(context.Background(), tc.flagSet, tc.opts)
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("computeData(%v, %v) = %v, want error presence: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
 			}
@@ -2472,6 +2547,7 @@ func TestFetchAllProcesses(t *testing.T) {
 func TestCollectMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
+		d         *Diagnose
 		opts      *options
 		instance  *sappb.SAPInstance
 		processes []*computeresources.ProcessInfo
@@ -2480,10 +2556,13 @@ func TestCollectMetrics(t *testing.T) {
 	}{
 		{
 			name: "SuccessCollectMetrics",
+			d: &Diagnose{
+				Type:            "compute",
+				TotalDataPoints: 2,
+			},
 			opts: &options{
-				exec:            fakeExecForSuccess,
-				totalDataPoints: 2,
-				newProc:         newProcessWithContextHelperTest,
+				exec:    fakeExecForSuccess,
+				newProc: newProcessWithContextHelperTest,
 			},
 			instance: &sappb.SAPInstance{
 				Sapsid:         "test-hana-1",
@@ -2500,9 +2579,12 @@ func TestCollectMetrics(t *testing.T) {
 		},
 		{
 			name: "FailCollectCPUMetrics",
+			d: &Diagnose{
+				Type:            "compute",
+				TotalDataPoints: 2,
+			},
 			opts: &options{
-				exec:            fakeExecForSuccess,
-				totalDataPoints: 2,
+				exec: fakeExecForSuccess,
 			},
 			instance: &sappb.SAPInstance{
 				Sapsid:         "test-hana-1",
@@ -2520,9 +2602,12 @@ func TestCollectMetrics(t *testing.T) {
 		},
 		{
 			name: "FailCollectMemoryMetrics",
+			d: &Diagnose{
+				Type:            "compute",
+				TotalDataPoints: 2,
+			},
 			opts: &options{
-				exec:            fakeExecForSuccess,
-				totalDataPoints: 2,
+				exec: fakeExecForSuccess,
 			},
 			instance: &sappb.SAPInstance{
 				Sapsid:         "test-hana-1",
@@ -2540,9 +2625,12 @@ func TestCollectMetrics(t *testing.T) {
 		},
 		{
 			name: "FailCollectIOPSMetrics",
+			d: &Diagnose{
+				Type:            "compute",
+				TotalDataPoints: 2,
+			},
 			opts: &options{
-				exec:            fakeExecForSuccess,
-				totalDataPoints: 2,
+				exec: fakeExecForSuccess,
 			},
 			instance: &sappb.SAPInstance{
 				Sapsid:         "test-hana-1",
@@ -2562,7 +2650,7 @@ func TestCollectMetrics(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			metrics, err := collectMetrics(context.Background(), tc.opts, tc.instance, tc.processes)
+			metrics, err := tc.d.collectMetrics(context.Background(), tc.opts, tc.instance, tc.processes)
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("collectMetrics(%v, %v, %v) returned error: %v, want error presence: %v", context.Background(), tc.opts, tc.instance, err, tc.wantErr)
 			}
@@ -2577,11 +2665,14 @@ func TestCollectMetrics(t *testing.T) {
 // round of metric collection and hence frequency should be greater
 // than cancelation timeout duration else the test will be flaky.
 func TestCollectMetricsContextCancellation(t *testing.T) {
+	d := &Diagnose{
+		Type:            "compute",
+		Frequency:       4,
+		TotalDataPoints: 2,
+	}
 	opts := &options{
-		exec:            fakeExecForSuccess,
-		frequency:       4,
-		totalDataPoints: 2,
-		newProc:         newProcessWithContextHelperTest,
+		exec:    fakeExecForSuccess,
+		newProc: newProcessWithContextHelperTest,
 	}
 	instance := &sappb.SAPInstance{
 		Sapsid:         "test-hana-1",
@@ -2600,7 +2691,7 @@ func TestCollectMetricsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	metrics, err := collectMetrics(ctx, opts, instance, processes)
+	metrics, err := d.collectMetrics(ctx, opts, instance, processes)
 	if err == nil {
 		t.Errorf("collectMetrics() returned unexpected error: %v, want error to be non-nil", err)
 	}
