@@ -82,6 +82,7 @@ type ConfigureInstance struct {
 	PrintDiff       bool   `json:"printDiff,string"`
 	Help            bool   `json:"help,string"`
 	LogPath         string `json:"log-path"`
+	TimeoutSec      int    `json:"timeoutSec"`
 
 	WriteFile   WriteFileFunc
 	ReadFile    ReadFileFunc
@@ -130,6 +131,7 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.HyperThreading, "hyperThreading", "on", "Sets hyper threading settings for X4 machines")
 	fs.StringVar(&c.OverrideVersion, "overrideVersion", "latest", "If specified, runs a specific version of configureinstance")
 	fs.StringVar(&c.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/configureinstance.log")
+	fs.IntVar(&c.TimeoutSec, "timeoutSec", 300, "The timeout in seconds for long-running command line executions")
 	fs.BoolVar(&c.Help, "h", false, "Displays help")
 }
 
