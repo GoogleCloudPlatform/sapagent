@@ -1,5 +1,5 @@
 /*
-Copyright 2024 Google LLC
+Copyright 2023 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package staginghanadiskrestore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"flag"
+	backoff "github.com/cenkalti/backoff/v4"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
@@ -35,6 +37,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
@@ -60,6 +63,12 @@ type (
 	// metricClientCreator provides testable replacement for monitoring.NewMetricClient API.
 	metricClientCreator func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error)
 
+	// gceServiceFunc provides testable replacement for gce.New API.
+	gceServiceFunc func(context.Context) (*gce.GCE, error)
+
+	// computeServiceFunc provides testable replacement for compute.Service API
+	computeServiceFunc func(context.Context) (*compute.Service, error)
+
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
 		GetInstance(project, zone, instance string) (*compute.Instance, error)
@@ -71,6 +80,16 @@ type (
 		AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error
 		DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
 		WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error
+	}
+
+	// ISGInterface is the testable equivalent for ISGService for ISG operations.
+	ISGInterface interface {
+		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
+		CreateISG(ctx context.Context, project, zone string, data []byte) error
+		DescribeISG(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
+		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, snapshotName, snapshotType, project, zone string) error
+		TruncateName(ctx context.Context, src, suffix string) string
+		NewService() error
 	}
 )
 
@@ -90,6 +109,7 @@ type Restorer struct {
 	DataDiskVG                                                 string
 	gceService                                                 gceInterface
 	computeService                                             *compute.Service
+	isgService                                                 ISGInterface
 	baseDataPath, baseLogPath                                  string
 	logicalDataPath, logicalLogPath                            string
 	physicalDataPath, physicalLogPath                          string
@@ -210,6 +230,10 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	}
 
 	if restoreFromGroupSnapshot {
+		r.isgService = &instantsnapshotgroup.ISGService{}
+		if err := r.isgService.NewService(); err != nil {
+			return fmt.Errorf("failed to create ISG service, err: %w", err)
+		}
 		r.isGroupSnapshot = true
 	}
 
@@ -220,11 +244,14 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 }
 
 // restoreHandler is the main handler for the restore subcommand.
-func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
+func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator gceServiceFunc, computeServiceCreator computeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
 	var err error
 	if err = r.validateParameters(runtime.GOOS, cp); err != nil {
 		log.Print(err.Error())
 		return subcommands.ExitUsageError
+	}
+	if r.isGroupSnapshot {
+		ctx = context.WithValue(ctx, instantsnapshotgroup.EnvKey("env"), "staging")
 	}
 
 	r.timeSeriesCreator, err = mcc(ctx)
@@ -351,18 +378,35 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 	} else {
 		disksDetached := []*ipb.Disk{}
 		for _, d := range r.disks {
-			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
-				log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
-				// Reattaching detached disks.
-				for _, disk := range disksDetached {
-					if err := r.gceService.AttachDisk(ctx, disk.DiskName, cp, r.Project, r.DataDiskZone); err != nil {
-						return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
+			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.DiskName, "physicalDataPath", r.physicalDataPath)
+			if r.isGroupSnapshot {
+				if err := r.detachDisk(ctx, d.DiskName, cp.GetInstanceName()); err != nil {
+					log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
+					// Reattaching detached disks.
+					for _, disk := range disksDetached {
+						if err := r.attachDisk(ctx, disk.DiskName, cp.GetInstanceName()); err != nil {
+							return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
+						}
 					}
-				}
 
-				// If detach fails, rescan the volume groups to ensure the directories are mounted.
-				hanabackup.RescanVolumeGroups(ctx)
-				return fmt.Errorf("failed to detach old data disk: %v", err)
+					// If detach fails, rescan the volume groups to ensure the directories are mounted.
+					hanabackup.RescanVolumeGroups(ctx)
+					return fmt.Errorf("failed to detach old data disk: %v", err)
+				}
+			} else {
+				if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
+					log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
+					// Reattaching detached disks.
+					for _, disk := range disksDetached {
+						if err := r.gceService.AttachDisk(ctx, disk.DiskName, cp, r.Project, r.DataDiskZone); err != nil {
+							return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
+						}
+					}
+
+					// If detach fails, rescan the volume groups to ensure the directories are mounted.
+					hanabackup.RescanVolumeGroups(ctx)
+					return fmt.Errorf("failed to detach old data disk: %v", err)
+				}
 			}
 			disksDetached = append(disksDetached, d)
 		}
@@ -434,7 +478,11 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 	if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 		for _, d := range r.disks {
-			r.gceService.AttachDisk(ctx, d.DiskName, cp, r.Project, r.DataDiskZone)
+			if r.isGroupSnapshot {
+				r.attachDisk(ctx, d.DiskName, cp.GetInstanceName())
+			} else {
+				r.gceService.AttachDisk(ctx, d.DiskName, cp, r.Project, r.DataDiskZone)
+			}
 		}
 		hanabackup.RescanVolumeGroups(ctx)
 		return err
@@ -459,8 +507,14 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 			r.DiskSizeGb = snapshot.DiskSizeGb
 		}
 	} else {
-		return fmt.Errorf("Staging ISGs not added yet")
-		// TODO: Update this when staging API is available.
+		ISGSnapshots, err := r.isgService.DescribeISG(ctx, r.Project, r.DataDiskZone, r.GroupSnapshot)
+		if err != nil {
+			return fmt.Errorf("failed to check if group-snapshot=%v is present: %v", r.GroupSnapshot, err)
+		}
+		if r.DiskSizeGb == 0 {
+			diskSizeGb, _ := strconv.ParseInt(ISGSnapshots[0].DiskSizeGb, 10, 64)
+			r.DiskSizeGb = diskSizeGb
+		}
 	}
 	disk := &compute.Disk{
 		Name:                        newDiskName,
@@ -561,8 +615,25 @@ func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execu
 // restoreFromGroupSnapshot creates several new HANA data disks from snapshots belonging
 // to given group snapshot and attaches them to the instance.
 func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
-	return fmt.Errorf("Staging ISGs not added yet")
-	// TODO: Update this when staging API is available.
+	ISGSnapshots, err := r.isgService.DescribeISG(ctx, r.Project, r.DataDiskZone, r.GroupSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to describe ISG: %v", err)
+	}
+	log.CtxLogger(ctx).Debugw("ISG", "isg", ISGSnapshots)
+
+	for _, is := range ISGSnapshots {
+		timestamp := time.Now().Unix()
+		standardSnapshotName := r.isgService.TruncateName(ctx, is.Name, "standard")
+
+		parts := strings.Split(is.SourceDisk, "/")
+		sourceDiskName := parts[len(parts)-1]
+		sourceDiskName = r.isgService.TruncateName(ctx, sourceDiskName, fmt.Sprintf("%d", timestamp))
+
+		if err := r.stagingRestoreFromSnapshot(ctx, exec, cp, snapshotKey, sourceDiskName, standardSnapshotName); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkPreConditions checks if the HANA data and log disks are on the same physical disk.
@@ -600,15 +671,17 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		}
 		r.DataDiskDeviceName = dev
 	} else {
-		for _, d := range r.disks {
-			_, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), d.GetDiskName())
-			if err != nil {
-				return fmt.Errorf("failed to verify if disk %v is attached to the instance", d.GetDiskName())
-			}
-			if !ok {
-				return fmt.Errorf("the disk data-disk-name=%v is not attached to the instance", d.GetDiskName())
-			}
-		}
+		// TODO: Update this when ISG APIs are in prod.
+		// Commenting this out for now as it is fails due to staging resources being inaccessible.
+		// for _, d := range r.disks {
+		// 	_, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), d.GetDiskName())
+		// 	if err != nil {
+		// 		return fmt.Errorf("failed to verify if disk %v is attached to the instance", d.GetDiskName())
+		// 	}
+		// 	if !ok {
+		// 		return fmt.Errorf("the disk data-disk-name=%v is not attached to the instance", d.GetDiskName())
+		// 	}
+		// }
 	}
 
 	// Verify the snapshot is present.
@@ -619,8 +692,10 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		}
 		r.extractLabels(ctx, snapshot)
 	} else {
-		return fmt.Errorf("Staging ISGs not added yet")
-		// TODO: Update this when staging API is available.
+		// TODO: Update this when ISG APIs are in prod.
+		// if _, err = r.isgService.DescribeISG(ctx, r.Project, r.DataDiskZone, r.GroupSnapshot); err != nil {
+		// 	return fmt.Errorf("failed to check if group-snapshot=%v is present: %v", r.GroupSnapshot, err)
+		// }
 	}
 
 	if r.NewDiskType == "" {
@@ -636,7 +711,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 			log.CtxLogger(ctx).Infow("New disk type will be same as the data-disk-name", "diskType", r.NewDiskType)
 		}
 	} else {
-		r.NewDiskType = fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.Project, r.DataDiskZone, r.NewDiskType)
+		r.NewDiskType = "https://www.googleapis.com/compute/staging_alpha/projects/bct-staging-sap/zones/us-central1-jq1/diskTypes/hyperdisk-balanced"
 	}
 	return nil
 }
@@ -758,4 +833,187 @@ func (r *Restorer) appendLabels(labels map[string]string) (map[string]string, er
 	}
 
 	return labels, nil
+}
+
+func (r *Restorer) stagingRestoreFromSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey, newDiskName, sourceSnapshot string) error {
+	snapshot, err := r.GetStandardSnapshot(ctx, sourceSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to get standard snapshot: %v", err)
+	}
+	if r.DiskSizeGb == 0 {
+		r.DiskSizeGb = snapshot.DiskSizeGb
+	}
+
+	_, err = r.CreateDisk(ctx, snapshotKey, newDiskName, sourceSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to create disk: %v", err)
+	}
+	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", sourceSnapshot)
+
+	if err := r.attachDisk(ctx, newDiskName, cp.GetInstanceName()); err != nil {
+		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
+	}
+
+	dev, ok, err := r.diskAttachedToInstance(ctx, cp.GetInstanceName(), newDiskName)
+	if err != nil {
+		return fmt.Errorf("failed to check if new disk %v is attached to the instance", newDiskName)
+	}
+	if !ok {
+		return fmt.Errorf("newly created disk %v is not attached to the instance", newDiskName)
+	}
+	// Introducing sleep to let symlinks for the new disk to be created.
+	time.Sleep(5 * time.Second)
+
+	if r.DataDiskVG != "" {
+		if err := r.renameLVM(ctx, exec, cp, dev, newDiskName); err != nil {
+			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
+			if err := r.detachDisk(ctx, newDiskName, cp.GetInstanceName()); err != nil {
+				log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", err)
+				return err
+			}
+			return err
+		}
+	}
+	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
+	return nil
+}
+
+func (r *Restorer) GetStandardSnapshot(ctx context.Context, sourceSnapshot string) (*compute.Snapshot, error) {
+	var snapshot *compute.Snapshot
+	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", r.Project, sourceSnapshot)
+	bodyBytes, err := r.isgService.GetResponse(ctx, "GET", baseURL, nil)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error", "err getting snapshot", err)
+		return nil, fmt.Errorf("failed to get snapshot, err: %w", err)
+	}
+	if err := json.Unmarshal([]byte(bodyBytes), &snapshot); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+	return snapshot, nil
+}
+
+func (r *Restorer) CreateDisk(ctx context.Context, snapshotKey, diskName, sourceSnapshot string) (*compute.Disk, error) {
+	disk := map[string]any{
+		"name":                        diskName,
+		"type":                        fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/diskTypes/hyperdisk-balanced", r.Project, r.DataDiskZone),
+		"zone":                        r.DataDiskZone,
+		"sourceSnapshot":              fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", r.Project, sourceSnapshot),
+		"sourceSnapshotEncryptionKey": &compute.CustomerEncryptionKey{RsaEncryptedKey: snapshotKey},
+	}
+	if r.DiskSizeGb > 0 {
+		disk["sizeGb"] = r.DiskSizeGb
+	}
+	if r.ProvisionedIops > 0 {
+		disk["provisionedIops"] = r.ProvisionedIops
+	}
+	if r.ProvisionedThroughput > 0 {
+		disk["provisionedThroughput"] = r.ProvisionedThroughput
+	}
+
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/disks", r.Project, r.DataDiskZone)
+	data, err := json.Marshal(disk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal json, err: %w", err)
+	}
+	bodyBytes, err := r.isgService.GetResponse(ctx, "POST", baseURL, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create disk, err: %w", err)
+	}
+	log.CtxLogger(ctx).Infow("Disk creating", "diskName", diskName, "bodyBytes", string(bodyBytes))
+	// time.Sleep(120 * time.Second)
+	if err := r.waitForDiskCreateCompletionWithRetry(ctx, diskName); err != nil {
+		return nil, fmt.Errorf("failed to create disk, err: %w", err)
+	}
+
+	return nil, nil
+}
+
+func (r *Restorer) detachDisk(ctx context.Context, diskName, instanceName string) error {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instances/%s/detachDisk", r.Project, r.DataDiskZone, instanceName)
+	reqBody := map[string]any{
+		"deviceName": diskName,
+	}
+	log.CtxLogger(ctx).Debugw("DetachDisk", "baseURL", baseURL, "reqBody", reqBody)
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json, err: %w", err)
+	}
+
+	bodyBytes, err := r.isgService.GetResponse(ctx, "POST", baseURL, data)
+	log.CtxLogger(ctx).Debugw("DetachDisk", "bodyBytes", string(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to detach disk, err: %w", err)
+	}
+	time.Sleep(20 * time.Second)
+	return nil
+}
+
+func (r *Restorer) attachDisk(ctx context.Context, diskName, instanceName string) error {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instances/%s/attachDisk", r.Project, r.DataDiskZone, instanceName)
+	reqBody := map[string]any{
+		"deviceName": diskName,
+		"source":     fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/disks/%s", r.Project, r.DataDiskZone, diskName),
+	}
+	log.CtxLogger(ctx).Debugw("AttachDisk", "baseURL", baseURL, "reqBody", reqBody)
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json, err: %w", err)
+	}
+
+	bodyBytes, err := r.isgService.GetResponse(ctx, "POST", baseURL, data)
+	log.CtxLogger(ctx).Debugw("AttachDisk", "bodyBytes", string(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to attach disk, err: %w", err)
+	}
+	time.Sleep(20 * time.Second)
+	return nil
+}
+
+func (r *Restorer) diskAttachedToInstance(ctx context.Context, instanceName, diskName string) (string, bool, error) {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instances/%s", r.Project, r.DataDiskZone, instanceName)
+	bodyBytes, err := r.isgService.GetResponse(ctx, "GET", baseURL, nil)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get instance, err: %w", err)
+	}
+
+	var instance *compute.Instance
+	if err := json.Unmarshal(bodyBytes, &instance); err != nil {
+		return "", false, fmt.Errorf("failed to unmarshal json, err: %w", err)
+	}
+	log.CtxLogger(ctx).Debugw("DiskAttachedToInstance", "instance", instance)
+	for _, disk := range instance.Disks {
+		log.CtxLogger(ctx).Debugw("Getting disk source", "diskSource", disk.Source)
+		if strings.Contains(disk.Source, diskName) {
+			return disk.DeviceName, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func (r *Restorer) diskExists(ctx context.Context, diskName string) error {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/disks/%s", r.Project, r.DataDiskZone, diskName)
+	bodyBytes, err := r.isgService.GetResponse(ctx, "GET", baseURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get disk, err: %w", err)
+	}
+	var response map[string]any
+	if err := json.Unmarshal(bodyBytes, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal json, err: %w", err)
+	}
+	if err := response["error"]; err != nil {
+		return fmt.Errorf("could not unmarshal, disk not found, err: %v", err)
+	}
+
+	if response["status"] != "READY" {
+		return fmt.Errorf("disk is not ready, err: %w", err)
+	}
+	return nil
+}
+
+func (r *Restorer) waitForDiskCreateCompletionWithRetry(ctx context.Context, diskName string) error {
+	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 300), ctx)
+	return backoff.Retry(func() error {
+		return r.diskExists(ctx, diskName)
+	}, bo)
 }

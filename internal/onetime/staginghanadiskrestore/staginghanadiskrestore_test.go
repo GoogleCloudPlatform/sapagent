@@ -31,6 +31,7 @@ import (
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
@@ -39,6 +40,44 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+type mockISGService struct {
+	newServiceErr error
+
+	createISGError error
+
+	describeISGResp []instantsnapshotgroup.ISItem
+	describeISGErr  error
+
+	getResponseResp []byte
+	getResponseErr  error
+
+	waitForSnapshotCreationCompletionWithRetryErr error
+}
+
+func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
+	return m.createISGError
+}
+
+func (m *mockISGService) DescribeISG(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
+	return m.describeISGResp, m.describeISGErr
+}
+
+func (m *mockISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
+	return m.getResponseResp, m.getResponseErr
+}
+
+func (m *mockISGService) WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, snapshotName, snapshotType, project, zone string) error {
+	return m.waitForSnapshotCreationCompletionWithRetryErr
+}
+
+func (m *mockISGService) TruncateName(ctx context.Context, src, suffix string) string {
+	return ""
+}
+
+func (m *mockISGService) NewService() error {
+	return nil
+}
 
 type fakeDiskMapper struct {
 	deviceName []string
@@ -339,8 +378,8 @@ func TestRestoreHandler(t *testing.T) {
 		name               string
 		restorer           Restorer
 		fakeMetricClient   metricClientCreator
-		fakeNewGCE         onetime.GCEServiceFunc
-		fakeComputeService onetime.ComputeServiceFunc
+		fakeNewGCE         gceServiceFunc
+		fakeComputeService computeServiceFunc
 		want               subcommands.ExitStatus
 	}{
 		{
@@ -645,6 +684,17 @@ func TestCheckPreConditions(t *testing.T) {
 			},
 			r: &Restorer{
 				disks: []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				isgService: &mockISGService{
+					describeISGResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+						{
+							Name: "test-isg-1",
+						},
+					},
+					describeISGErr: nil,
+				},
 				gceService: &fake.TestGCE{
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
@@ -682,7 +732,7 @@ func TestCheckPreConditions(t *testing.T) {
 				},
 				isGroupSnapshot: true,
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: nil,
 		},
 		{
 			name: "NewTypePresent",
@@ -696,6 +746,17 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				NewDiskType: "hyperdisk-extreme",
 				disks:       []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				isgService: &mockISGService{
+					describeISGResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+						{
+							Name: "test-isg-1",
+						},
+					},
+					describeISGErr: nil,
+				},
 				gceService: &fake.TestGCE{
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
@@ -733,7 +794,7 @@ func TestCheckPreConditions(t *testing.T) {
 				},
 				isGroupSnapshot: true,
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: nil,
 		},
 	}
 
@@ -823,6 +884,10 @@ func TestPrepare(t *testing.T) {
 				disks:           []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
 				gceService: &fake.TestGCE{
 					DetachDiskErr: cmpopts.AnyError,
+				},
+				isgService: &mockISGService{
+					getResponseResp: nil,
+					getResponseErr:  cmpopts.AnyError,
 				},
 			},
 			cp: defaultCloudProperties,
@@ -1182,6 +1247,10 @@ func TestGroupRestore(t *testing.T) {
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
 				gceService:    &fake.TestGCE{},
+				isgService: &mockISGService{
+					describeISGResp: []instantsnapshotgroup.ISItem{},
+					describeISGErr:  cmpopts.AnyError,
+				},
 			},
 			want: cmpopts.AnyError,
 		},
@@ -1190,6 +1259,19 @@ func TestGroupRestore(t *testing.T) {
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
 				gceService:    &fake.TestGCE{},
+				isgService: &mockISGService{
+					describeISGResp: []instantsnapshotgroup.ISItem{
+						{
+							Name:       "test-isg",
+							SourceDisk: "test-disk",
+						},
+						{
+							Name:       "test-isg-1",
+							SourceDisk: "test-disk-1",
+						},
+					},
+					describeISGErr: nil,
+				},
 			},
 			want: cmpopts.AnyError,
 		},
@@ -1219,6 +1301,10 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			name: "GetGroupSnapshotErr",
 			r: &Restorer{
 				gceService: &fake.TestGCE{},
+				isgService: &mockISGService{
+					describeISGResp: []instantsnapshotgroup.ISItem{},
+					describeISGErr:  cmpopts.AnyError,
+				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1234,6 +1320,10 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			name: "RestoreFromSnapshotErr",
 			r: &Restorer{
 				gceService: &fake.TestGCE{},
+				isgService: &mockISGService{
+					describeISGResp: []instantsnapshotgroup.ISItem{},
+					describeISGErr:  cmpopts.AnyError,
+				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1248,7 +1338,12 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 		{
 			name: "RestoreFromSnapshotSuccess",
 			r: &Restorer{
-				gceService: &fake.TestGCE{},
+				isGroupSnapshot: true,
+				gceService:      &fake.TestGCE{},
+				isgService: &mockISGService{
+					describeISGResp: []instantsnapshotgroup.ISItem{},
+					describeISGErr:  nil,
+				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1258,7 +1353,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			},
 			cp:          defaultCloudProperties,
 			snapshotKey: "test-snapshot-key",
-			want:        cmpopts.AnyError,
+			want:        nil,
 		},
 	}
 
