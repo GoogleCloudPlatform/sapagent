@@ -88,7 +88,6 @@ type (
 		CreateISG(ctx context.Context, project, zone string, data []byte) error
 		DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
 		DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error)
-		WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error
 		TruncateName(ctx context.Context, src, suffix string) string
 		NewService() error
 	}

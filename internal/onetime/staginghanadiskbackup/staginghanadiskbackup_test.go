@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -158,7 +159,9 @@ type mockISGService struct {
 	getResponseResp []byte
 	getResponseErr  error
 
-	waitForProcessCompletionWithRetryErr error
+	waitForISGUploadCompletionWithRetryErr        error
+	waitForStandardSnapshotCreationWithRetryErr   error
+	waitForStandardSnapshotCompletionWithRetryErr error
 }
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
@@ -181,12 +184,20 @@ func (m *mockISGService) DeleteISG(ctx context.Context, project, zone, isgName s
 	return m.deleteISGErr
 }
 
-func (m *mockISGService) WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error {
-	return m.waitForProcessCompletionWithRetryErr
-}
-
 func (m *mockISGService) NewService() error {
 	return nil
+}
+
+func (m *mockISGService) WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error {
+	return m.waitForISGUploadCompletionWithRetryErr
+}
+
+func (m *mockISGService) WaitForStandardSnapshotCreationWithRetry(ctx context.Context, baseURL string) error {
+	return m.waitForStandardSnapshotCreationWithRetryErr
+}
+
+func (m *mockISGService) WaitForStandardSnapshotCompletionWithRetry(ctx context.Context, baseURL string) error {
+	return m.waitForStandardSnapshotCompletionWithRetryErr
 }
 
 func TestSnapshotHandler(t *testing.T) {
@@ -1009,7 +1020,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "ConvertISGToSSGFailure",
+			name: "ConvertISGToSSFailure",
 			s: &Snapshot{
 				AbandonPrepared: true,
 				gceService: &fake.TestGCE{
@@ -1017,9 +1028,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				},
 				cgName: "test-cg-success",
 				isgService: &mockISGService{
-					createISGError:                nil,
-					describeStandardSnapshotsResp: nil,
-					describeStandardSnapshotsErr:  cmpopts.AnyError,
+					createISGError:               nil,
+					describeInstantSnapshotsResp: nil,
+					describeInstantSnapshotsErr:  cmpopts.AnyError,
 				},
 			},
 			createSnapshot: createDiskSnapshotFail,
@@ -1039,7 +1050,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError: nil,
-					describeStandardSnapshotsResp: []*compute.Snapshot{
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "test-isg",
 						},
@@ -1047,7 +1058,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 							Name: "test-isg-1",
 						},
 					},
-					describeStandardSnapshotsErr: nil,
+					describeInstantSnapshotsErr: nil,
 				},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
@@ -1074,16 +1085,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
-					createISGError: nil,
-					describeStandardSnapshotsResp: []*compute.Snapshot{
-						{
-							Name: "test-isg",
-						},
-						{
-							Name: "test-isg-1",
-						},
-					},
-					describeStandardSnapshotsErr: nil,
+					createISGError:               nil,
+					describeInstantSnapshotsResp: nil,
+					describeInstantSnapshotsErr:  nil,
 				},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
@@ -1304,11 +1308,11 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 	}
 }
 
-func TestConvertISGtoSSG(t *testing.T) {
+func TestConvertISGtoSS(t *testing.T) {
 	tests := []struct {
-		name string
-		s    *Snapshot
-		want error
+		name    string
+		s       *Snapshot
+		wantErr error
 	}{
 		{
 			name: "DescribeISGFailure",
@@ -1318,7 +1322,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 					describeInstantSnapshotsErr:  cmpopts.AnyError,
 				},
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "createBackupFailure",
@@ -1338,13 +1342,12 @@ func TestConvertISGtoSSG(t *testing.T) {
 					describeInstantSnapshotsErr: nil,
 				},
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "FreezeFS",
+			name: "Success",
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
-				FreezeFileSystem:  true,
 				isgService: &mockISGService{
 					getResponseResp: []byte("[]"),
 					getResponseErr:  nil,
@@ -1359,14 +1362,14 @@ func TestConvertISGtoSSG(t *testing.T) {
 					describeInstantSnapshotsErr: nil,
 				},
 			},
-			want: cmpopts.AnyError,
+			wantErr: nil,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.s.convertISGtoSSG(context.Background(), defaultCloudProperties)
-			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
+			_, gotErr := tc.s.convertISGtoSS(context.Background(), defaultCloudProperties)
+			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("stagingRunISGtoSSG() returned diff (-want +got):\n%s", diff)
 			}
 		})
@@ -1779,13 +1782,6 @@ func TestStagingCreateBackup(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "FreezeFS",
-			s: &Snapshot{
-				FreezeFileSystem: true,
-			},
-			want: cmpopts.AnyError,
-		},
-		{
 			name: "GetResponseFailure",
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
@@ -1801,9 +1797,9 @@ func TestStagingCreateBackup(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				isgService: &mockISGService{
-					getResponseResp:                      []byte("[]"),
-					getResponseErr:                       nil,
-					waitForProcessCompletionWithRetryErr: cmpopts.AnyError,
+					getResponseResp: []byte("[]"),
+					getResponseErr:  nil,
+					waitForStandardSnapshotCreationWithRetryErr: cmpopts.AnyError,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1813,9 +1809,9 @@ func TestStagingCreateBackup(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				isgService: &mockISGService{
-					getResponseResp:                      []byte("[]"),
-					getResponseErr:                       nil,
-					waitForProcessCompletionWithRetryErr: nil,
+					getResponseResp: []byte("[]"),
+					getResponseErr:  nil,
+					waitForStandardSnapshotCreationWithRetryErr: nil,
 				},
 			},
 			want: nil,
@@ -1824,9 +1820,111 @@ func TestStagingCreateBackup(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.s.stagingCreateBackup(context.Background(), "test-isg")
-			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
+			var wg sync.WaitGroup
+			wg.Add(1)
+			jobs := make(chan *instantsnapshotgroup.ISItem, 2)
+			jobs <- &instantsnapshotgroup.ISItem{
+				Name: "instant-snapshot-1",
+			}
+			close(jobs)
+			errors := make(chan error, 2)
+
+			tc.s.stagingCreateBackup(context.Background(), &wg, jobs, errors)
+			close(errors)
+
+			var gotErr error
+			if err, ok := <-errors; ok {
+				gotErr = err
+			}
+			if diff := cmp.Diff(tc.want, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("stagingCreateBackup() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCreateStandardSnapshotName(t *testing.T) {
+	tests := []struct {
+		name                string
+		instantSnapshotName string
+		want                string
+	}{
+		{
+			name:                "withoutTruncate",
+			instantSnapshotName: "instant-snapshot-name",
+			want:                "instant-snapshot-name-standard",
+		},
+		{
+			name:                "withTruncate",
+			instantSnapshotName: "instant-snapshot-name-12345678912345678912345678912345678912345",
+			want:                "instant-snapshot-name-12345678912345678912345678912345-standard",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := createStandardSnapshotName(tc.instantSnapshotName)
+			if got != tc.want {
+				t.Errorf("createStandardSnapshotName(%q) = %q, want: %q", tc.instantSnapshotName, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWaitForStandardSnapshotsUpload(t *testing.T) {
+	tests := []struct {
+		name             string
+		instantsnapshots []instantsnapshotgroup.ISItem
+		s                *Snapshot
+		want             []error
+	}{
+		{
+			name: "WaitForStandardSnapshotUploadFailure",
+			instantsnapshots: []instantsnapshotgroup.ISItem{
+				{
+					Name: "instant-snapshot-1",
+				},
+				{
+					Name: "instant-snapshot-2",
+				},
+			},
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				isgService: &mockISGService{
+					getResponseResp: []byte("[]"),
+					getResponseErr:  nil,
+					waitForStandardSnapshotCompletionWithRetryErr: cmpopts.AnyError,
+				},
+			},
+			want: []error{cmpopts.AnyError, cmpopts.AnyError},
+		},
+		{
+			name: "Success",
+			instantsnapshots: []instantsnapshotgroup.ISItem{
+				{
+					Name: "instant-snapshot-1",
+				},
+				{
+					Name: "instant-snapshot-2",
+				},
+			},
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				isgService: &mockISGService{
+					getResponseResp: []byte("[]"),
+					getResponseErr:  nil,
+					waitForStandardSnapshotCompletionWithRetryErr: nil,
+				},
+			},
+			want: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.waitForStandardSnapshotsUpload(context.Background(), tc.instantsnapshots)
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("waitForStandardSnapshotsUpload() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

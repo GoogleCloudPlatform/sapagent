@@ -29,6 +29,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"flag"
@@ -93,13 +94,15 @@ type (
 
 	// ISGInterface is the testable equivalent for ISGService for ISG operations.
 	ISGInterface interface {
+		NewService() error
 		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
 		CreateISG(ctx context.Context, project, zone string, data []byte) error
 		DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
 		DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error)
 		DeleteISG(ctx context.Context, project, zone, isgName string) error
-		WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error
-		NewService() error
+		WaitForStandardSnapshotCreationWithRetry(ctx context.Context, baseURL string) error
+		WaitForStandardSnapshotCompletionWithRetry(ctx context.Context, baseURL string) error
+		WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error
 	}
 )
 
@@ -171,16 +174,16 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snaps
 // Usage implements the subcommand interface for staginghanadiskbackup.
 func (*Snapshot) Usage() string {
 	return `Usage: staginghanadiskbackup -port=<port-number> -sid=<HANA-sid> -hana-db-user=<HANA DB User>
-	[-source-disk=<disk-name>] [-source-disk-zone=<disk-zone>] [-host=<hostname>]
-	[-project=<project-name>] [-password=<passwd> | -password-secret=<secret-name>]
-	[-hdbuserstore-key=<userstore-key>] [-abandon-prepared=<true|false>]
-	[-send-status-to-monitoring]=<true|false>] [-source-disk-key-file=<path-to-key-file>]
-	[-storage-location=<storage-location>] [-snapshot-description=<description>]
-	[-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>]
-	[-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
-	[-confirm-data-snapshot-after-create=<true|false>]
-	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
-	` + "\n"
+  [-source-disk=<disk-name>] [-source-disk-zone=<disk-zone>] [-host=<hostname>]
+  [-project=<project-name>] [-password=<passwd> | -password-secret=<secret-name>]
+  [-hdbuserstore-key=<userstore-key>] [-abandon-prepared=<true|false>]
+  [-send-status-to-monitoring]=<true|false>] [-source-disk-key-file=<path-to-key-file>]
+  [-storage-location=<storage-location>] [-snapshot-description=<description>]
+  [-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>]
+  [-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
+  [-confirm-data-snapshot-after-create=<true|false>]
+  [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
+  ` + "\n"
 }
 
 // SetFlags implements the subcommand interface for staginghanadiskbackup.
@@ -291,7 +294,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 		if len(s.disks) > 1 {
 			s.isgService = &instantsnapshotgroup.ISGService{}
 			if err := s.isgService.NewService(); err != nil {
-				errMessage := "ERROR: Failed to create ISG service"
+				errMessage := "ERROR: Failed to create Instant Snapshot Group service"
 				onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
 				return errMessage, subcommands.ExitFailure
 			}
@@ -485,12 +488,12 @@ func (s *Snapshot) createSnapshot(snapshot *compute.Snapshot) fakeDiskCreateSnap
 func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run queryFunc, createSnapshot diskSnapshotFunc, cp *ipb.CloudProperties) (err error) {
 	// TODO: Commenting this out for now until ISG APIs are in prod.
 	// for _, d := range s.disks {
-	// 	if err = s.isDiskAttachedToInstance(ctx, d, cp); err != nil {
-	// 		return err
-	// 	}
+	//  if err = s.isDiskAttachedToInstance(ctx, d, cp); err != nil {
+	//    return err
+	//  }
 	// }
 
-	log.CtxLogger(ctx).Info("Start run HANA Disk based backup workflow")
+	log.CtxLogger(ctx).Info("Start run HANA Striped Disk based backup workflow")
 	if err = s.abandonPreparedSnapshot(ctx, run); err != nil {
 		s.oteLogger.LogUsageError(usagemetrics.SnapshotDBNotReadyFailure)
 		return err
@@ -511,17 +514,36 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		freezeTime := time.Since(dbFreezeStartTime)
 		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", s.groupSnapshotName, freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	}
-
 	if err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error creating instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
 
-	if err = s.convertISGtoSSG(ctx, cp); err != nil {
+	var instantSnapshots []instantsnapshotgroup.ISItem
+	if instantSnapshots, err = s.convertISGtoSS(ctx, cp); err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error converting instant snapshots to %s, HANA snapshot %s is not successful", strings.ToLower(s.SnapshotType), snapshotID), err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
+	}
+
+	if s.ConfirmDataSnapshotAfterCreate {
+		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk standard snapshots are created but not yet uploaded.")
+		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
+			return err
+		}
+	}
+
+	onetime.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
+	if err := s.waitForStandardSnapshotsUpload(ctx, instantSnapshots); err != nil {
+		log.CtxLogger(ctx).Errorw("Error uploading disk snapshots", "error", err)
+		if s.ConfirmDataSnapshotAfterCreate {
+			onetime.LogErrorToFileAndConsole(
+				ctx, fmt.Sprintf("Error uploading disk snapshots, HANA snapshot %s is not successful", snapshotID), err[0],
+			)
+		}
+		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
+		return err[0]
 	}
 	if err = s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
 		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
@@ -530,8 +552,10 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 	}
 
 	log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
-	if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
-		return err
+	if !s.ConfirmDataSnapshotAfterCreate {
+		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -720,7 +744,9 @@ func (s *Snapshot) createNewHANASnapshot(ctx context.Context, run queryFunc) (sn
 
 func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	timestamp := time.Now().UTC().UnixMilli()
-	s.groupSnapshotName = s.cgName + fmt.Sprintf("-%d", timestamp)
+	if s.groupSnapshotName == "" {
+		s.groupSnapshotName = s.cgName + fmt.Sprintf("-%d", timestamp)
+	}
 	log.CtxLogger(ctx).Infow("Creating Instant snapshot group", "disks", s.disks, "disks zone", s.DiskZone, "groupSnapshotName", s.groupSnapshotName)
 
 	parts := strings.Split(s.DiskZone, "-")
@@ -761,33 +787,45 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 		return err
 	}
 	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.groupSnapshotName)
-	if err := s.isgService.WaitForProcessCompletionWithRetry(ctx, baseURL); err != nil {
+	if err := s.isgService.WaitForISGUploadCompletionWithRetry(ctx, baseURL); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Snapshot) convertISGtoSSG(ctx context.Context, cp *ipb.CloudProperties) error {
-	log.CtxLogger(ctx).Info("Converting ISG to SSG")
-	instantSnapshots, err := s.isgService.DescribeInstantSnapshots(ctx, s.Project, s.DiskZone, s.groupSnapshotName)
+func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) (instantSnapshots []instantsnapshotgroup.ISItem, err error) {
+	log.CtxLogger(ctx).Info("Converting Instant Snapshot Group to Standard Snapshots")
+	instantSnapshots, err = s.isgService.DescribeInstantSnapshots(ctx, s.Project, s.DiskZone, s.groupSnapshotName)
 	if err != nil {
-		return err
+		return instantSnapshots, err
 	}
 
-	for _, is := range instantSnapshots {
-		if err := s.stagingCreateBackup(ctx, is.Name); err != nil {
-			return err
-		}
-		if s.FreezeFileSystem {
-			if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-				onetime.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
-				return err
-			}
-			freezeTime := time.Since(dbFreezeStartTime)
-			defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", is.Name+"-standard", freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
-		}
+	errors := make(chan error, len(instantSnapshots))
+	jobs := make(chan *instantsnapshotgroup.ISItem, runtime.NumCPU())
+
+	var wg sync.WaitGroup
+	for range instantSnapshots {
+		wg.Add(1)
+		go s.stagingCreateBackup(ctx, &wg, jobs, errors)
 	}
-	return nil
+	for _, is := range instantSnapshots {
+		jobs <- &is
+	}
+
+	close(jobs)
+	wg.Wait()
+	close(errors)
+
+	var ok bool
+	if err, ok = <-errors; !ok {
+		return instantSnapshots, nil
+	}
+
+	log.CtxLogger(ctx).Error(err)
+	for err = range errors {
+		log.CtxLogger(ctx).Error(err)
+	}
+	return instantSnapshots, fmt.Errorf("Error converting Instant Snapshot Group to Standard snapshots, latest error: %w", err)
 }
 
 func (s *Snapshot) createDiskSnapshot(ctx context.Context, createSnapshot diskSnapshotFunc) (*compute.Operation, error) {
@@ -973,8 +1011,8 @@ func generateSHA(labels map[string]string) string {
 }
 
 // Following functions are for testing purposes only.
-func (s *Snapshot) stagingCreateBackup(ctx context.Context, instantSnapshotName string) error {
-	maxLength := 62
+func createStandardSnapshotName(instantSnapshotName string) string {
+	maxLength := 63
 	suffix := "-standard"
 
 	standardSnapshotName := instantSnapshotName
@@ -984,52 +1022,68 @@ func (s *Snapshot) stagingCreateBackup(ctx context.Context, instantSnapshotName 
 	}
 
 	standardSnapshotName += suffix
+	return standardSnapshotName
+}
 
-	standardSnapshot := map[string]any{
-		"name":                  standardSnapshotName,
-		"sourceInstantSnapshot": fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, instantSnapshotName),
-		"labels":                s.parseLabels(),
-		"description":           s.Description,
-	}
+func (s *Snapshot) stagingCreateBackup(ctx context.Context, wg *sync.WaitGroup, jobs chan *instantsnapshotgroup.ISItem, errors chan error) {
+	defer wg.Done()
+	for instantSnapshot := range jobs {
+		isName := instantSnapshot.Name
+		standardSnapshotName := createStandardSnapshotName(isName)
+		standardSnapshot := map[string]any{
+			"name":                  standardSnapshotName,
+			"sourceInstantSnapshot": fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, isName),
+			"labels":                s.parseLabels(),
+			"description":           s.Description,
+		}
 
-	// In case customer is taking a snapshot from an encrypted disk, the snapshot created from it also
-	// needs to be encrypted. For simplicity we support the use case in which disk encryption and
-	// snapshot encryption key are the same.
-	if s.DiskKeyFile != "" {
-		usagemetrics.Action(usagemetrics.EncryptedDiskSnapshot)
-		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
-		srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
+		// In case customer is taking a snapshot from an encrypted disk, the snapshot created from it also
+		// needs to be encrypted. For simplicity we support the use case in which disk encryption and
+		// snapshot encryption key are the same.
+		if s.DiskKeyFile != "" {
+			usagemetrics.Action(usagemetrics.EncryptedDiskSnapshot)
+			srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
+			srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
+			if err != nil {
+				errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+				usagemetrics.Error(usagemetrics.EncryptedDiskSnapshotFailure)
+				return
+			}
+			standardSnapshot["sourceDiskEncryptionKey"] = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+			standardSnapshot["snapshotEncryptionKey"] = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+		}
+
+		baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots", s.Project)
+		data, err := json.Marshal(standardSnapshot)
 		if err != nil {
-			usagemetrics.Error(usagemetrics.EncryptedDiskSnapshotFailure)
-			return err
+			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+			return
 		}
-		standardSnapshot["sourceDiskEncryptionKey"] = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
-		standardSnapshot["snapshotEncryptionKey"] = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
-	}
+		bodyBytes, err := s.isgService.GetResponse(ctx, "POST", baseURL, data)
+		log.CtxLogger(ctx).Debugw("bodyBytes", "bodyBytes", string(bodyBytes))
+		if err != nil {
+			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+			return
+		}
 
-	dbFreezeStartTime = time.Now()
-	if s.FreezeFileSystem {
-		if err := hanabackup.FreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-			return err
+		baseURL = fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", s.Project, standardSnapshotName)
+		if err := s.isgService.WaitForStandardSnapshotCreationWithRetry(ctx, baseURL); err != nil {
+			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+			return
 		}
 	}
+}
 
-	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots", s.Project)
-	data, err := json.Marshal(standardSnapshot)
-	if err != nil {
-		return fmt.Errorf("failed to marshal json, err: %w", err)
+func (s *Snapshot) waitForStandardSnapshotsUpload(ctx context.Context, instantSnapshots []instantsnapshotgroup.ISItem) []error {
+	var errors []error
+	for _, is := range instantSnapshots {
+		standardSnapshotName := createStandardSnapshotName(is.Name)
+		baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", s.Project, standardSnapshotName)
+		if err := s.isgService.WaitForStandardSnapshotCompletionWithRetry(ctx, baseURL); err != nil {
+			errors = append(errors, fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", is.Name, err))
+		}
 	}
-	bodyBytes, err := s.isgService.GetResponse(ctx, "POST", baseURL, data)
-	log.CtxLogger(ctx).Debugw("bodyBytes", "bodyBytes", string(bodyBytes))
-	if err != nil {
-		return fmt.Errorf("failed to create snapshot, err: %w", err)
-	}
-
-	baseURL = fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", s.Project, standardSnapshotName)
-	if err := s.isgService.WaitForProcessCompletionWithRetry(ctx, baseURL); err != nil {
-		return err
-	}
-	return nil
+	return errors
 }
 
 // readConsistencyGroup reads the consistency group (CG) from the resource policies of the disk.

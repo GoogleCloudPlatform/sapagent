@@ -54,8 +54,6 @@ type mockISGService struct {
 
 	getResponseResp []byte
 	getResponseErr  error
-
-	waitForProcessCompletionWithRetryErr error
 }
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
@@ -72,10 +70,6 @@ func (m *mockISGService) DescribeStandardSnapshots(ctx context.Context, project,
 
 func (m *mockISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
 	return m.getResponseResp, m.getResponseErr
-}
-
-func (m *mockISGService) WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error {
-	return m.waitForProcessCompletionWithRetryErr
 }
 
 func (m *mockISGService) TruncateName(ctx context.Context, src, suffix string) string {

@@ -155,6 +155,9 @@ func (r *Reader) ReadDiskMapping(ctx context.Context, config *configpb.Configura
 	if value := ctx.Value(instantsnapshotgroup.EnvKey("env")); value == "staging" {
 		baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instances/%s", projectID, zone, instanceID)
 		isgService := &instantsnapshotgroup.ISGService{}
+		if err := isgService.NewService(); err != nil {
+			return nil, nil, fmt.Errorf("failed to create Instant Snapshot Group service, err: %w", err)
+		}
 		bodyBytes, err := isgService.GetResponse(ctx, "GET", baseURL, nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get instance, err: %w", err)
