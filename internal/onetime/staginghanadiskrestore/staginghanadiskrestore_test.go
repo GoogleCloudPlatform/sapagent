@@ -46,29 +46,36 @@ type mockISGService struct {
 
 	createISGError error
 
-	describeISGResp []instantsnapshotgroup.ISItem
-	describeISGErr  error
+	describeInstantSnapshotsResp []instantsnapshotgroup.ISItem
+	describeInstantSnapshotsErr  error
+
+	describeStandardSnapshotsResp []*compute.Snapshot
+	describeStandardSnapshotsErr  error
 
 	getResponseResp []byte
 	getResponseErr  error
 
-	waitForSnapshotCreationCompletionWithRetryErr error
+	waitForProcessCompletionWithRetryErr error
 }
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
 	return m.createISGError
 }
 
-func (m *mockISGService) DescribeISG(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
-	return m.describeISGResp, m.describeISGErr
+func (m *mockISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
+	return m.describeInstantSnapshotsResp, m.describeInstantSnapshotsErr
+}
+
+func (m *mockISGService) DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error) {
+	return m.describeStandardSnapshotsResp, m.describeStandardSnapshotsErr
 }
 
 func (m *mockISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
 	return m.getResponseResp, m.getResponseErr
 }
 
-func (m *mockISGService) WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, snapshotName, snapshotType, project, zone string) error {
-	return m.waitForSnapshotCreationCompletionWithRetryErr
+func (m *mockISGService) WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error {
+	return m.waitForProcessCompletionWithRetryErr
 }
 
 func (m *mockISGService) TruncateName(ctx context.Context, src, suffix string) string {
@@ -685,7 +692,7 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				disks: []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
 				isgService: &mockISGService{
-					describeISGResp: []instantsnapshotgroup.ISItem{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
 						{
 							Name: "test-isg",
 						},
@@ -693,7 +700,7 @@ func TestCheckPreConditions(t *testing.T) {
 							Name: "test-isg-1",
 						},
 					},
-					describeISGErr: nil,
+					describeStandardSnapshotsErr: nil,
 				},
 				gceService: &fake.TestGCE{
 					GetInstanceResp: []*compute.Instance{{
@@ -747,7 +754,7 @@ func TestCheckPreConditions(t *testing.T) {
 				NewDiskType: "hyperdisk-extreme",
 				disks:       []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
 				isgService: &mockISGService{
-					describeISGResp: []instantsnapshotgroup.ISItem{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
 						{
 							Name: "test-isg",
 						},
@@ -755,7 +762,7 @@ func TestCheckPreConditions(t *testing.T) {
 							Name: "test-isg-1",
 						},
 					},
-					describeISGErr: nil,
+					describeStandardSnapshotsErr: nil,
 				},
 				gceService: &fake.TestGCE{
 					GetInstanceResp: []*compute.Instance{{
@@ -1248,8 +1255,8 @@ func TestGroupRestore(t *testing.T) {
 				GroupSnapshot: "test-group-snapshot",
 				gceService:    &fake.TestGCE{},
 				isgService: &mockISGService{
-					describeISGResp: []instantsnapshotgroup.ISItem{},
-					describeISGErr:  cmpopts.AnyError,
+					describeStandardSnapshotsResp: []*compute.Snapshot{},
+					describeStandardSnapshotsErr:  cmpopts.AnyError,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1260,7 +1267,7 @@ func TestGroupRestore(t *testing.T) {
 				GroupSnapshot: "test-group-snapshot",
 				gceService:    &fake.TestGCE{},
 				isgService: &mockISGService{
-					describeISGResp: []instantsnapshotgroup.ISItem{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
 						{
 							Name:       "test-isg",
 							SourceDisk: "test-disk",
@@ -1270,7 +1277,7 @@ func TestGroupRestore(t *testing.T) {
 							SourceDisk: "test-disk-1",
 						},
 					},
-					describeISGErr: nil,
+					describeStandardSnapshotsErr: nil,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1302,8 +1309,8 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			r: &Restorer{
 				gceService: &fake.TestGCE{},
 				isgService: &mockISGService{
-					describeISGResp: []instantsnapshotgroup.ISItem{},
-					describeISGErr:  cmpopts.AnyError,
+					describeStandardSnapshotsResp: []*compute.Snapshot{},
+					describeStandardSnapshotsErr:  cmpopts.AnyError,
 				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -1321,8 +1328,8 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			r: &Restorer{
 				gceService: &fake.TestGCE{},
 				isgService: &mockISGService{
-					describeISGResp: []instantsnapshotgroup.ISItem{},
-					describeISGErr:  cmpopts.AnyError,
+					describeStandardSnapshotsResp: []*compute.Snapshot{},
+					describeStandardSnapshotsErr:  cmpopts.AnyError,
 				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -1341,8 +1348,8 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 				isGroupSnapshot: true,
 				gceService:      &fake.TestGCE{},
 				isgService: &mockISGService{
-					describeISGResp: []instantsnapshotgroup.ISItem{},
-					describeISGErr:  nil,
+					describeStandardSnapshotsResp: []*compute.Snapshot{},
+					describeStandardSnapshotsErr:  nil,
 				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {

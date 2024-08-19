@@ -28,6 +28,7 @@ import (
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
+	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
@@ -145,19 +146,13 @@ func (s *ISGService) GetResponse(ctx context.Context, method string, baseURL str
 	return bodyBytes, err
 }
 
-// getStandardSnapshot returns the status of the creation of standard snapshot.
-func (s *ISGService) getSnapshot(ctx context.Context, snapshotName, snapshotType, project, zone string) (string, error) {
-	var baseURL string
-	if snapshotType == "standard" {
-		baseURL = fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", project, snapshotName)
-	} else {
-		baseURL = fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, snapshotName)
-	}
+// getProcessStatus  returns the status of the given process.
+func (s *ISGService) getProcessStatus(ctx context.Context, baseURL string) (string, error) {
 	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to get snapshot, err: %w", err)
+		return "", fmt.Errorf("failed to get process status, err: %w", err)
 	}
-	log.CtxLogger(ctx).Debugw("getSnapshot Response", "response", string(bodyBytes))
+	log.CtxLogger(ctx).Debugw("getProcessStatus Response", "response", string(bodyBytes))
 
 	var response map[string]any
 	if err := json.Unmarshal([]byte(bodyBytes), &response); err != nil {
@@ -209,9 +204,28 @@ func parseInstantSnapshotGroupURL(cgURL string) (string, string, error) {
 	return zone, cg, nil
 }
 
-// DescribeISG returns the list of instant snapshot names for a given group snapshot.
-func (s *ISGService) DescribeISG(ctx context.Context, project, zone, isgName string) ([]ISItem, error) {
-	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshots", project, zone)
+func (s *ISGService) isgExists(ctx context.Context, project, zone, isgName string) error {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
+	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get ISG, err: %w", err)
+	}
+	isg := &ISItem{}
+	if err := json.Unmarshal(bodyBytes, &isg); err != nil {
+		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+	if isg.Status != "DELETING" {
+		return fmt.Errorf("ISG deletion not started yet")
+	}
+	if isg != nil {
+		return fmt.Errorf("ISG not deleted yet")
+	}
+	return nil
+}
+
+// DescribeInstantSnapshots returns the list of instant snapshots for a given group snapshot.
+func (s *ISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isg string) ([]ISItem, error) {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots?filter=labels.goog-sapagent-isg='%s'", project, isg)
 	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list ISGs, err: %w", err)
@@ -227,7 +241,7 @@ func (s *ISGService) DescribeISG(ctx context.Context, project, zone, isgName str
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse ISG URL, err: %w", err)
 		}
-		if isZone == zone && isISG == isgName {
+		if isZone == zone && isISG == isg {
 			isItems = append(isItems, is)
 		}
 	}
@@ -236,25 +250,56 @@ func (s *ISGService) DescribeISG(ctx context.Context, project, zone, isgName str
 	return isItems, nil
 }
 
-// WaitForSnapshotCreationCompletion waits for the given snapshot creation operation to complete.
-func (s *ISGService) WaitForSnapshotCreationCompletion(ctx context.Context, snapshotName, snapshotType, project, zone string) error {
-	status, err := s.getSnapshot(ctx, snapshotName, snapshotType, project, zone)
+// DescribeStandardSnapshots returns the list of standard snapshots for a given group snapshot.
+func (s *ISGService) DescribeStandardSnapshots(ctx context.Context, project, zone, isg string) ([]*compute.Snapshot, error) {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots?filter=labels.goog-sapagent-isg='%s'", project, isg)
+	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ISGs, err: %w", err)
+	}
+
+	var snapshots []*compute.Snapshot
+	if err := json.Unmarshal(bodyBytes, &snapshots); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+	return snapshots, nil
+}
+
+// DeleteISG deletes the given instant snapshot group.
+func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName string) error {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
+	bodyBytes, err := s.GetResponse(ctx, "DELETE", baseURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to initiate deletion of ISG, err: %w", err)
+	}
+	log.CtxLogger(ctx).Debugw("DeleteISG Response", "response", string(bodyBytes))
+
+	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 300), ctx)
+	return backoff.Retry(func() error {
+		return s.isgExists(ctx, project, zone, isgName)
+	}, bo)
+}
+
+// WaitForProcessCompletion waits for the given snapshot creation operation to complete.
+func (s *ISGService) WaitForProcessCompletion(ctx context.Context, baseURL string) error {
+	status, err := s.getProcessStatus(ctx, baseURL)
 	if err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Infow("Snapshot creation status", "snapshot", snapshotName, "SnapshotStatus", status)
+	log.CtxLogger(ctx).Info("Process status:", status)
 	if status != "READY" {
-		return fmt.Errorf("snapshot creation is in progress, snapshot name: %s, status: %s", snapshotName, status)
+		return fmt.Errorf("Process is still in progress, status: %s", status)
 	}
 	return nil
 }
 
-// WaitForSnapshotCreationCompletionWithRetry waits for the given snapshot creation operation
+// WaitForProcessCompletionWithRetry waits for the given snapshot creation operation
 // to complete with exponential backoff.
-func (s *ISGService) WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, snapshotName, snapshotType, project, zone string) error {
+func (s *ISGService) WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error {
 	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 300), ctx)
 	return backoff.Retry(func() error {
-		return s.WaitForSnapshotCreationCompletion(ctx, snapshotName, snapshotType, project, zone)
+		return s.WaitForProcessCompletion(ctx, baseURL)
 	}, bo)
 }

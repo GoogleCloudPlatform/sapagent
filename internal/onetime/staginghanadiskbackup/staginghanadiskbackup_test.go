@@ -147,29 +147,42 @@ type mockISGService struct {
 
 	createISGError error
 
-	describeISGResp []instantsnapshotgroup.ISItem
-	describeISGErr  error
+	describeStandardSnapshotsResp []*compute.Snapshot
+	describeStandardSnapshotsErr  error
+
+	describeInstantSnapshotsResp []instantsnapshotgroup.ISItem
+	describeInstantSnapshotsErr  error
+
+	deleteISGErr error
 
 	getResponseResp []byte
 	getResponseErr  error
 
-	waitForSnapshotCreationCompletionWithRetryErr error
+	waitForProcessCompletionWithRetryErr error
 }
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
 	return m.createISGError
 }
 
-func (m *mockISGService) DescribeISG(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
-	return m.describeISGResp, m.describeISGErr
+func (m *mockISGService) DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error) {
+	return m.describeStandardSnapshotsResp, m.describeStandardSnapshotsErr
+}
+
+func (m *mockISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
+	return m.describeInstantSnapshotsResp, m.describeInstantSnapshotsErr
 }
 
 func (m *mockISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
 	return m.getResponseResp, m.getResponseErr
 }
 
-func (m *mockISGService) WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, snapshotName, snapshotType, project, zone string) error {
-	return m.waitForSnapshotCreationCompletionWithRetryErr
+func (m *mockISGService) DeleteISG(ctx context.Context, project, zone, isgName string) error {
+	return m.deleteISGErr
+}
+
+func (m *mockISGService) WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error {
+	return m.waitForProcessCompletionWithRetryErr
 }
 
 func (m *mockISGService) NewService() error {
@@ -537,13 +550,15 @@ func TestParseLabels(t *testing.T) {
 		{
 			name: "GroupSnapshot",
 			s: Snapshot{
-				groupSnapshot: true,
-				DiskZone:      "my-region-1",
-				cgName:        "my-cg",
-				Labels:        "label1=value1,label2=value2",
-				Disk:          "pd-1",
+				groupSnapshotName: "group-snapshot-name",
+				groupSnapshot:     true,
+				DiskZone:          "my-region-1",
+				cgName:            "my-cg",
+				Labels:            "label1=value1,label2=value2",
+				Disk:              "pd-1",
 			},
 			want: map[string]string{
+				"goog-sapagent-isg":       "group-snapshot-name",
 				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
 				"goog-sapagent-cgpath":    "my-region-my-cg",
 				"goog-sapagent-disk-name": "pd-1",
@@ -1002,9 +1017,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				},
 				cgName: "test-cg-success",
 				isgService: &mockISGService{
-					createISGError:  nil,
-					describeISGResp: nil,
-					describeISGErr:  cmpopts.AnyError,
+					createISGError:                nil,
+					describeStandardSnapshotsResp: nil,
+					describeStandardSnapshotsErr:  cmpopts.AnyError,
 				},
 			},
 			createSnapshot: createDiskSnapshotFail,
@@ -1024,7 +1039,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError: nil,
-					describeISGResp: []instantsnapshotgroup.ISItem{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
 						{
 							Name: "test-isg",
 						},
@@ -1032,7 +1047,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 							Name: "test-isg-1",
 						},
 					},
-					describeISGErr: nil,
+					describeStandardSnapshotsErr: nil,
 				},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
@@ -1060,7 +1075,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError: nil,
-					describeISGResp: []instantsnapshotgroup.ISItem{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
 						{
 							Name: "test-isg",
 						},
@@ -1068,7 +1083,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 							Name: "test-isg-1",
 						},
 					},
-					describeISGErr: nil,
+					describeStandardSnapshotsErr: nil,
 				},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
@@ -1299,8 +1314,8 @@ func TestConvertISGtoSSG(t *testing.T) {
 			name: "DescribeISGFailure",
 			s: &Snapshot{
 				isgService: &mockISGService{
-					describeISGResp: nil,
-					describeISGErr:  cmpopts.AnyError,
+					describeInstantSnapshotsResp: nil,
+					describeInstantSnapshotsErr:  cmpopts.AnyError,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1312,7 +1327,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 				isgService: &mockISGService{
 					getResponseResp: []byte("[]"),
 					getResponseErr:  cmpopts.AnyError,
-					describeISGResp: []instantsnapshotgroup.ISItem{
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "instant-snapshot-1",
 						},
@@ -1320,7 +1335,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 							Name: "instant-snapshot-2",
 						},
 					},
-					describeISGErr: nil,
+					describeInstantSnapshotsErr: nil,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1333,7 +1348,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 				isgService: &mockISGService{
 					getResponseResp: []byte("[]"),
 					getResponseErr:  nil,
-					describeISGResp: []instantsnapshotgroup.ISItem{
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "instant-snapshot-1",
 						},
@@ -1341,7 +1356,7 @@ func TestConvertISGtoSSG(t *testing.T) {
 							Name: "instant-snapshot-2",
 						},
 					},
-					describeISGErr: nil,
+					describeInstantSnapshotsErr: nil,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1683,12 +1698,14 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 		{
 			name: "GroupSnapshot",
 			s: &Snapshot{
-				groupSnapshot: true,
-				DiskZone:      "my-region-1",
-				cgName:        "my-cg",
-				Disk:          "my-disk",
+				groupSnapshotName: "group-snapshot-name",
+				groupSnapshot:     true,
+				DiskZone:          "my-region-1",
+				cgName:            "my-cg",
+				Disk:              "my-disk",
 			},
 			want: map[string]string{
+				"goog-sapagent-isg":       "group-snapshot-name",
 				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
 				"goog-sapagent-cgpath":    "my-region-my-cg",
 				"goog-sapagent-disk-name": "my-disk",
@@ -1784,9 +1801,9 @@ func TestStagingCreateBackup(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				isgService: &mockISGService{
-					getResponseResp: []byte("[]"),
-					getResponseErr:  nil,
-					waitForSnapshotCreationCompletionWithRetryErr: cmpopts.AnyError,
+					getResponseResp:                      []byte("[]"),
+					getResponseErr:                       nil,
+					waitForProcessCompletionWithRetryErr: cmpopts.AnyError,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1796,9 +1813,9 @@ func TestStagingCreateBackup(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				isgService: &mockISGService{
-					getResponseResp: []byte("[]"),
-					getResponseErr:  nil,
-					waitForSnapshotCreationCompletionWithRetryErr: nil,
+					getResponseResp:                      []byte("[]"),
+					getResponseErr:                       nil,
+					waitForProcessCompletionWithRetryErr: nil,
 				},
 			},
 			want: nil,

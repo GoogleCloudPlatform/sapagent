@@ -86,8 +86,9 @@ type (
 	ISGInterface interface {
 		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
 		CreateISG(ctx context.Context, project, zone string, data []byte) error
-		DescribeISG(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
-		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, snapshotName, snapshotType, project, zone string) error
+		DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
+		DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error)
+		WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error
 		TruncateName(ctx context.Context, src, suffix string) string
 		NewService() error
 	}
@@ -154,8 +155,8 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.Sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&r.DataDiskName, "data-disk-name", "", "Current disk name. (optional) Default: Disk backing up /hana/data")
 	fs.StringVar(&r.DataDiskZone, "data-disk-zone", "", "Current disk zone. (optional) Default: Same zone as current instance")
-	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
-	fs.StringVar(&r.GroupSnapshot, "backup-id", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
+	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot must be provided")
+	fs.StringVar(&r.GroupSnapshot, "group-snapshot", "", "Name of group snapshot to restore from. (optional) either source-snapshot or group-snapshot must be provided")
 	fs.StringVar(&r.NewdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
@@ -214,7 +215,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
-		return fmt.Errorf("either source-snapshot or backup-id must be provided, not both. Usage: %s", r.Usage())
+		return fmt.Errorf("either source-snapshot or group-snapshot must be provided, not both. Usage: %s", r.Usage())
 	} else if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
@@ -507,13 +508,12 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 			r.DiskSizeGb = snapshot.DiskSizeGb
 		}
 	} else {
-		ISGSnapshots, err := r.isgService.DescribeISG(ctx, r.Project, r.DataDiskZone, r.GroupSnapshot)
+		snapshots, err := r.isgService.DescribeStandardSnapshots(ctx, r.Project, r.DataDiskZone, r.GroupSnapshot)
 		if err != nil {
 			return fmt.Errorf("failed to check if group-snapshot=%v is present: %v", r.GroupSnapshot, err)
 		}
 		if r.DiskSizeGb == 0 {
-			diskSizeGb, _ := strconv.ParseInt(ISGSnapshots[0].DiskSizeGb, 10, 64)
-			r.DiskSizeGb = diskSizeGb
+			r.DiskSizeGb = snapshots[0].DiskSizeGb
 		}
 	}
 	disk := &compute.Disk{
@@ -615,21 +615,17 @@ func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execu
 // restoreFromGroupSnapshot creates several new HANA data disks from snapshots belonging
 // to given group snapshot and attaches them to the instance.
 func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
-	ISGSnapshots, err := r.isgService.DescribeISG(ctx, r.Project, r.DataDiskZone, r.GroupSnapshot)
+	snapshots, err := r.isgService.DescribeStandardSnapshots(ctx, r.Project, r.DataDiskZone, r.GroupSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to describe ISG: %v", err)
 	}
-	log.CtxLogger(ctx).Debugw("ISG", "isg", ISGSnapshots)
+	log.CtxLogger(ctx).Debugw("ISG", "isg", snapshots)
 
-	for _, is := range ISGSnapshots {
+	for _, snapshot := range snapshots {
 		timestamp := time.Now().Unix()
-		standardSnapshotName := r.isgService.TruncateName(ctx, is.Name, "standard")
+		sourceDiskName := r.isgService.TruncateName(ctx, snapshot.Name, fmt.Sprintf("%d", timestamp))
 
-		parts := strings.Split(is.SourceDisk, "/")
-		sourceDiskName := parts[len(parts)-1]
-		sourceDiskName = r.isgService.TruncateName(ctx, sourceDiskName, fmt.Sprintf("%d", timestamp))
-
-		if err := r.stagingRestoreFromSnapshot(ctx, exec, cp, snapshotKey, sourceDiskName, standardSnapshotName); err != nil {
+		if err := r.stagingRestoreFromSnapshot(ctx, exec, cp, snapshotKey, sourceDiskName, snapshot.Name); err != nil {
 			return err
 		}
 	}

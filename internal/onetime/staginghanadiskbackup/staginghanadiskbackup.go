@@ -95,8 +95,10 @@ type (
 	ISGInterface interface {
 		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
 		CreateISG(ctx context.Context, project, zone string, data []byte) error
-		DescribeISG(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
-		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, snapshotName, snapshotType, project, zone string) error
+		DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
+		DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error)
+		DeleteISG(ctx context.Context, project, zone, isgName string) error
+		WaitForProcessCompletionWithRetry(ctx context.Context, baseURL string) error
 		NewService() error
 	}
 )
@@ -521,6 +523,11 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
+	if err = s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
+		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
+		return err
+	}
 
 	log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
 	if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
@@ -753,7 +760,8 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	if err := s.isgService.CreateISG(ctx, s.Project, s.DiskZone, data); err != nil {
 		return err
 	}
-	if err := s.isgService.WaitForSnapshotCreationCompletionWithRetry(ctx, s.groupSnapshotName, "instantSnapshotGroup", s.Project, s.DiskZone); err != nil {
+	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.groupSnapshotName)
+	if err := s.isgService.WaitForProcessCompletionWithRetry(ctx, baseURL); err != nil {
 		return err
 	}
 	return nil
@@ -761,7 +769,7 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 
 func (s *Snapshot) convertISGtoSSG(ctx context.Context, cp *ipb.CloudProperties) error {
 	log.CtxLogger(ctx).Info("Converting ISG to SSG")
-	instantSnapshots, err := s.isgService.DescribeISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName)
+	instantSnapshots, err := s.isgService.DescribeInstantSnapshots(ctx, s.Project, s.DiskZone, s.groupSnapshotName)
 	if err != nil {
 		return err
 	}
@@ -937,6 +945,7 @@ func (s *Snapshot) createGroupBackupLabels() map[string]string {
 	region := strings.Join(parts[:len(parts)-1], "-")
 
 	labels["goog-sapagent-version"] = strings.ReplaceAll(configuration.AgentVersion, ".", "_")
+	labels["goog-sapagent-isg"] = s.groupSnapshotName
 	labels["goog-sapagent-cgpath"] = region + "-" + s.cgName
 	labels["goog-sapagent-disk-name"] = s.Disk
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
@@ -1016,7 +1025,8 @@ func (s *Snapshot) stagingCreateBackup(ctx context.Context, instantSnapshotName 
 		return fmt.Errorf("failed to create snapshot, err: %w", err)
 	}
 
-	if err := s.isgService.WaitForSnapshotCreationCompletionWithRetry(ctx, standardSnapshotName, "standard", s.Project, s.DiskZone); err != nil {
+	baseURL = fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", s.Project, standardSnapshotName)
+	if err := s.isgService.WaitForProcessCompletionWithRetry(ctx, baseURL); err != nil {
 		return err
 	}
 	return nil
