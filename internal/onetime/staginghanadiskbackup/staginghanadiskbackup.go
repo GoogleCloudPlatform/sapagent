@@ -295,7 +295,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator gceSer
 			s.isgService = &instantsnapshotgroup.ISGService{}
 			if err := s.isgService.NewService(); err != nil {
 				errMessage := "ERROR: Failed to create Instant Snapshot Group service"
-				onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 				return errMessage, subcommands.ExitFailure
 			}
 			if err := s.validateDisksBelongToCG(ctx); err != nil {
@@ -534,11 +534,11 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		}
 	}
 
-	onetime.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
 	if err := s.waitForStandardSnapshotsUpload(ctx, instantSnapshots); err != nil {
 		log.CtxLogger(ctx).Errorw("Error uploading disk snapshots", "error", err)
 		if s.ConfirmDataSnapshotAfterCreate {
-			onetime.LogErrorToFileAndConsole(
+			s.oteLogger.LogErrorToFileAndConsole(
 				ctx, fmt.Sprintf("Error uploading disk snapshots, HANA snapshot %s is not successful", snapshotID), err[0],
 			)
 		}
@@ -546,7 +546,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		return err[0]
 	}
 	if err = s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}

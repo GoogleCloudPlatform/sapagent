@@ -68,7 +68,7 @@ func TestDisableService(t *testing.T) {
 		},
 		{
 			name: "FailEnableAndDisable",
-			s:    Service{disable: true, enable: true},
+			s:    Service{Disable: true, Enable: true},
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -81,7 +81,7 @@ func TestDisableService(t *testing.T) {
 		},
 		{
 			name: "SuccessForDisable",
-			s:    Service{disable: true},
+			s:    Service{Disable: true},
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -94,7 +94,7 @@ func TestDisableService(t *testing.T) {
 		},
 		{
 			name: "FailureForDisable",
-			s:    Service{disable: true},
+			s:    Service{Disable: true},
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -130,7 +130,7 @@ func TestEnableeService(t *testing.T) {
 	}{
 		{
 			name: "SuccessForEnable",
-			s:    Service{enable: true},
+			s:    Service{Enable: true},
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -143,7 +143,7 @@ func TestEnableeService(t *testing.T) {
 		},
 		{
 			name: "FailureForEnable",
-			s:    Service{enable: true},
+			s:    Service{Enable: true},
 			args: []any{
 				"test",
 				log.Parameters{},

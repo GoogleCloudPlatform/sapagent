@@ -36,8 +36,12 @@ var (
 
 // Service has args for service subcommands.
 type Service struct {
-	help, disable, enable bool
-	logPath               string
+	// Exporting fields needed by external callers to Run.
+
+	Disable, Enable bool
+	help            bool
+	logPath         string
+	oteLogger       *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for the service OTE.
@@ -67,8 +71,8 @@ func (*Service) Usage() string {
 // SetFlags implements the subcommand interface for the service OTE.
 func (c *Service) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.help, "h", false, "Displays help")
-	fs.BoolVar(&c.disable, "disable", false, "Disables and stops the google-cloud-sap-agent systemd service")
-	fs.BoolVar(&c.enable, "enable", false, "Enables and starts the google-cloud-sap-agent systemd service")
+	fs.BoolVar(&c.Disable, "disable", false, "Disables and stops the google-cloud-sap-agent systemd service")
+	fs.BoolVar(&c.Enable, "enable", false, "Enables and starts the google-cloud-sap-agent systemd service")
 	fs.StringVar(&c.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/service.log")
 }
 
@@ -84,27 +88,33 @@ func (c *Service) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 	if !completed {
 		return exitStatus
 	}
-	if c.disable && c.enable {
-		fmt.Printf("-disable and -enable cannot be specified at the same time.\n%s\n", c.Usage())
+	return c.Run(ctx, onetime.CreateRunOptions(nil, false))
+}
+
+// Run performs the functionality specified by the service subcommand.
+func (c *Service) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
+	c.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
+	if c.Disable && c.Enable {
+		c.oteLogger.LogMessageToConsole(fmt.Sprintf("-disable and -enable cannot be specified at the same time.\n%s\n", c.Usage()))
 		log.CtxLogger(ctx).Errorf("-disable and -enable cannot be specified at the same time")
 		return subcommands.ExitUsageError
 	}
-	if !c.disable && !c.enable {
-		fmt.Printf("-disable or -enable must be specified.\n%s\n", c.Usage())
+	if !c.Disable && !c.Enable {
+		c.oteLogger.LogMessageToConsole(fmt.Sprintf("-disable or -enable must be specified.\n%s\n", c.Usage()))
 		log.CtxLogger(ctx).Errorf("-disable or -enable must be specified")
 		return subcommands.ExitUsageError
 	}
-	if c.disable {
+	if c.Disable {
 		if err := c.disableService(ctx); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Service disable: FAILED", err)
-			usagemetrics.Error(usagemetrics.ServiceDisableFailure)
+			c.oteLogger.LogErrorToFileAndConsole(ctx, "Service disable: FAILED", err)
+			c.oteLogger.LogUsageError(usagemetrics.ServiceDisableFailure)
 			return subcommands.ExitFailure
 		}
 	}
-	if c.enable {
+	if c.Enable {
 		if err := c.enableService(ctx); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "Service enable: FAILED", err)
-			usagemetrics.Error(usagemetrics.ServiceEnableFailure)
+			c.oteLogger.LogErrorToFileAndConsole(ctx, "Service enable: FAILED", err)
+			c.oteLogger.LogUsageError(usagemetrics.ServiceEnableFailure)
 			return subcommands.ExitFailure
 		}
 	}
@@ -112,14 +122,14 @@ func (c *Service) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 }
 
 func (c *Service) disableService(ctx context.Context) error {
-	onetime.LogMessageToFileAndConsole(ctx, "Service disable starting")
-	usagemetrics.Action(usagemetrics.ServiceDisableStarted)
+	c.oteLogger.LogMessageToFileAndConsole(ctx, "Service disable starting")
+	c.oteLogger.LogUsageAction(usagemetrics.ServiceDisableStarted)
 	result := executeCommand(ctx, commandlineexecutor.Params{
 		Executable: "sudo",
 		Args:       []string{"systemctl", "disable", "google-cloud-sap-agent"},
 	})
 	if result.Error != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Service dsiable failed", result.Error)
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "Service dsiable failed", result.Error)
 		return result.Error
 	}
 	result = executeCommand(ctx, commandlineexecutor.Params{
@@ -127,23 +137,23 @@ func (c *Service) disableService(ctx context.Context) error {
 		Args:       []string{"systemctl", "stop", "google-cloud-sap-agent"},
 	})
 	if result.Error != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Service stop failed", result.Error)
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "Service stop failed", result.Error)
 		return result.Error
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Service disable succeeded")
-	usagemetrics.Action(usagemetrics.ServiceDisableFinished)
+	c.oteLogger.LogMessageToFileAndConsole(ctx, "Service disable succeeded")
+	c.oteLogger.LogUsageAction(usagemetrics.ServiceDisableFinished)
 	return nil
 }
 
 func (c *Service) enableService(ctx context.Context) error {
-	onetime.LogMessageToFileAndConsole(ctx, "Service enable starting")
-	usagemetrics.Action(usagemetrics.ServiceEnableStarted)
+	c.oteLogger.LogMessageToFileAndConsole(ctx, "Service enable starting")
+	c.oteLogger.LogUsageAction(usagemetrics.ServiceEnableStarted)
 	result := executeCommand(ctx, commandlineexecutor.Params{
 		Executable: "sudo",
 		Args:       []string{"systemctl", "enable", "google-cloud-sap-agent"},
 	})
 	if result.Error != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Service enable failed", result.Error)
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "Service enable failed", result.Error)
 		return result.Error
 	}
 	result = executeCommand(ctx, commandlineexecutor.Params{
@@ -151,10 +161,10 @@ func (c *Service) enableService(ctx context.Context) error {
 		Args:       []string{"systemctl", "start", "google-cloud-sap-agent"},
 	})
 	if result.Error != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Service start failed", result.Error)
+		c.oteLogger.LogErrorToFileAndConsole(ctx, "Service start failed", result.Error)
 		return result.Error
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Service enable succeeded")
-	usagemetrics.Action(usagemetrics.ServiceEnableFinished)
+	c.oteLogger.LogMessageToFileAndConsole(ctx, "Service enable succeeded")
+	c.oteLogger.LogUsageAction(usagemetrics.ServiceEnableFinished)
 	return nil
 }
