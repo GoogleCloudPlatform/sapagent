@@ -283,6 +283,46 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			want:            subcommands.ExitFailure,
 			wantMsgFragment: "ReadFile failed",
 		},
+		{
+			name: "X4FailVersionNotSupported",
+			c: ConfigureInstance{
+				MachineType:     "x4-megamem-1920",
+				OverrideVersion: "not-supported",
+				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
+			},
+			want:            subcommands.ExitUsageError,
+			wantMsgFragment: "this version (not-supported) is not supported for this machine type (x4-megamem-1920)",
+		},
+		{
+			name: "X4Fail3_3",
+			c: ConfigureInstance{
+				MachineType:     "x4-megamem-1920",
+				OverrideVersion: overrideVersion33,
+				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
+			},
+			want:            subcommands.ExitFailure,
+			wantMsgFragment: "ReadFile failed",
+		},
+		{
+			name: "X4Fail3_4",
+			c: ConfigureInstance{
+				MachineType:     "x4-megamem-1920",
+				OverrideVersion: overrideVersion34,
+				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
+			},
+			want:            subcommands.ExitFailure,
+			wantMsgFragment: "ReadFile failed",
+		},
+		{
+			name: "X4Fail3_5",
+			c: ConfigureInstance{
+				MachineType:     "x4-megamem-1920",
+				OverrideVersion: overrideVersion35,
+				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
+			},
+			want:            subcommands.ExitFailure,
+			wantMsgFragment: "ReadFile failed",
+		},
 	}
 	for _, test := range tests {
 		test.c.oteLogger = onetime.CreateOTELogger(false)

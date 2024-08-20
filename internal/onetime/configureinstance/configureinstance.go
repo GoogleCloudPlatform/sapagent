@@ -54,6 +54,7 @@ const (
 	overrideVersionLatest = "latest"
 	overrideVersion33     = "3.3"
 	overrideVersion34     = "3.4"
+	overrideVersion35     = "3.5"
 
 	dateTimeFormat = "2006-01-02T15:04:05Z"
 
@@ -114,7 +115,7 @@ func (*ConfigureInstance) Usage() string {
                               	Possible values: ["on", "off"]
     [-printDiff=false]		If true, prints all configuration diffs and log messages to stdout as JSON
     [-overrideVersion="latest"]	If specified, runs a specific version of configureinstance.
-                               	Possible values: ["3.3", "3.4", "latest"]
+                               	Possible values: ["3.3", "3.4", "3.5", "latest"]
     [-log-path="/var/log/google-cloud-sap-agent/configureinstance.log"]			The full linux log path to write the log file (optional).
 		                            Default value is /var/log/google-cloud-sap-agent/configureinstance.log
 
@@ -223,6 +224,10 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 			}
 		case overrideVersion34:
 			if rebootRequired, err = c.configureX43_4(ctx); err != nil {
+				return subcommands.ExitFailure, err.Error()
+			}
+		case overrideVersion35:
+			if rebootRequired, err = c.configureX43_5(ctx); err != nil {
 				return subcommands.ExitFailure, err.Error()
 			}
 		default:
