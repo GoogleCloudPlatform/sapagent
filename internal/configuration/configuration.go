@@ -73,6 +73,11 @@ const (
 	WindowsConfigPath = `C:\Program Files\Google\google-cloud-sap-agent\conf\configuration.json`
 )
 
+// UserAgent provides the name of the configured user agent as a string.
+func UserAgent() string {
+	return fmt.Sprintf("sap-core-eng/%s/%s.%s", AgentName, AgentVersion, AgentBuildChange)
+}
+
 // Read just reads configuration from given file and parses it into config proto.
 func Read(path string, read ReadConfigFile) *cpb.Configuration {
 	content, err := read(path)

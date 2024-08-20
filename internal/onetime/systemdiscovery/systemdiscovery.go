@@ -25,6 +25,7 @@ import (
 	"os"
 
 	"flag"
+	logging "cloud.google.com/go/logging"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -55,6 +56,7 @@ type SystemDiscovery struct {
 	ConfigPath, LogLevel, LogPath string
 	help                          bool
 	IIOTEParams                   *onetime.InternallyInvokedOTE
+	oteLogger                     *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for systemdiscovery.
@@ -90,21 +92,6 @@ func (sd *SystemDiscovery) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	if sd.help {
 		return onetime.HelpCommand(f)
 	}
-
-	_, err := sd.SystemDiscoveryHandler(ctx, f, args...)
-	if err != nil {
-		log.CtxLogger(ctx).Errorf("Failed to initialize the SystemDiscovery OTE: %v", err)
-		return subcommands.ExitFailure
-	}
-
-	return subcommands.ExitSuccess
-}
-
-// SystemDiscoveryHandler implements the
-// execution logic of the systemdiscovery command.
-//
-// It is exported and made available to be used internally.
-func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.FlagSet, args ...any) (*system.Discovery, error) {
 	// Initialize the OTE.
 	lp, cp, _, ok := onetime.Init(ctx, onetime.InitOptions{
 		Name:     sd.Name(),
@@ -112,14 +99,41 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 		LogLevel: sd.LogLevel,
 		LogPath:  sd.LogPath,
 		IIOTE:    sd.IIOTEParams,
-		Fs:       fs,
+		Fs:       f,
 	}, args...)
 
 	if !ok {
-		return nil, fmt.Errorf("OTE initialization failed")
+		log.CtxLogger(ctx).Errorf("Failed to initialize the SystemDiscovery OTE: %v", fmt.Errorf("OTE initialization failed"))
+		return subcommands.ExitFailure
 	}
 
-	config, err := sd.prepareConfig(ctx, cp, args...)
+	_, status := sd.Run(ctx, lp.CloudLogName, onetime.CreateRunOptions(cp, false))
+	return status
+}
+
+// Run performs the functionality specified by the systemdiscovery subcommand.
+func (sd *SystemDiscovery) Run(ctx context.Context, logName string, runOpts *onetime.RunOptions) (*system.Discovery, subcommands.ExitStatus) {
+	sd.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
+	if logName == "" {
+		logName = "google-cloud-sap-agent"
+	}
+	cloudLoggingClient := log.CloudLoggingClientWithUserAgent(ctx, runOpts.CloudProperties.GetProjectId(), configuration.UserAgent())
+	discovery, err := sd.SystemDiscoveryHandler(ctx, cloudLoggingClient, runOpts.CloudProperties, logName)
+	if err != nil {
+		sd.oteLogger.LogErrorToFileAndConsole(ctx, "Encountered an error during handling of SystemDiscovery OTE", err)
+		return nil, subcommands.ExitFailure
+	}
+
+	return discovery, subcommands.ExitSuccess
+}
+
+// SystemDiscoveryHandler implements the
+// execution logic of the systemdiscovery command.
+//
+// It is exported and made available to be used internally.
+func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, cloudLoggingClient *logging.Client, cp *iipb.CloudProperties, logName string) (*system.Discovery, error) {
+
+	config, err := sd.prepareConfig(ctx, cp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare the configuration: %v", err)
 	}
@@ -133,7 +147,7 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 	log.CtxLogger(ctx).Infof("config: %v", config)
 
 	// Initialize params to default if they are not already set.
-	if err := sd.initDefaults(ctx, &lp, gce.NewGCEClient); err != nil {
+	if err := sd.initDefaults(ctx, cloudLoggingClient, gce.NewGCEClient, logName); err != nil {
 		return nil, fmt.Errorf("failed to initialize SystemDiscovery params: %v", err)
 	}
 
@@ -149,7 +163,7 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 
 	log.CtxLogger(ctx).Debugf("Discovery object: %v", discovery)
 
-	if ok = system.StartSAPSystemDiscovery(ctx, config, discovery); !ok {
+	if ok := system.StartSAPSystemDiscovery(ctx, config, discovery); !ok {
 		return nil, fmt.Errorf("failed to start the SAP system discovery")
 	}
 	log.CtxLogger(ctx).Infof("SAP Instances discovered: %v", discovery.GetSAPInstances())
@@ -160,7 +174,7 @@ func (sd *SystemDiscovery) SystemDiscoveryHandler(ctx context.Context, fs *flag.
 
 // initDefaults initializes the SystemDiscovery
 // params with default implementation if they aren't already.
-func (sd *SystemDiscovery) initDefaults(ctx context.Context, lp *log.Parameters, gceServiceCreator onetime.GCEServiceFunc) error {
+func (sd *SystemDiscovery) initDefaults(ctx context.Context, cloudLoggingClient *logging.Client, gceServiceCreator onetime.GCEServiceFunc, logName string) error {
 	if sd.AppsDiscovery == nil {
 		sd.AppsDiscovery = sapdiscovery.SAPApplications
 	}
@@ -180,8 +194,8 @@ func (sd *SystemDiscovery) initDefaults(ctx context.Context, lp *log.Parameters,
 	}
 
 	// Set the CloudLogInterface if CloudLoggingClient is set.
-	if lp.CloudLoggingClient != nil {
-		sd.CloudLogInterface = lp.CloudLoggingClient.Logger(lp.CloudLogName)
+	if cloudLoggingClient != nil {
+		sd.CloudLogInterface = cloudLoggingClient.Logger(logName)
 	}
 
 	// Initialize the GCE service for cloud discovery.
@@ -201,7 +215,7 @@ func (sd *SystemDiscovery) initDefaults(ctx context.Context, lp *log.Parameters,
 
 // prepareConfig sets up configuration.
 // for the SystemDiscovery OTE.
-func (sd *SystemDiscovery) prepareConfig(ctx context.Context, cp *iipb.CloudProperties, args ...any) (*cpb.Configuration, error) {
+func (sd *SystemDiscovery) prepareConfig(ctx context.Context, cp *iipb.CloudProperties) (*cpb.Configuration, error) {
 	config := configuration.ReadFromFile(sd.ConfigPath, os.ReadFile)
 
 	// If file not found in user provided path,

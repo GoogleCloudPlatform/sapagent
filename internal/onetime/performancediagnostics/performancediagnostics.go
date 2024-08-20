@@ -508,7 +508,7 @@ func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, o
 
 	onetime.LogMessageToFileAndConsole(ctx, "Executing system discovery OTE")
 	defer onetime.LogMessageToFileAndConsole(ctx, "Finished system discovery OTE")
-	discovery, err := systemDiscovery.SystemDiscoveryHandler(ctx, f)
+	discovery, err := systemDiscovery.SystemDiscoveryHandler(ctx, opts.lp.CloudLoggingClient, opts.cp, opts.lp.CloudLogName)
 	if err != nil {
 		return nil, err
 	}

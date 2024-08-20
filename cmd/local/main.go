@@ -146,8 +146,7 @@ func main() {
 			MachineType:      cp.MachineType,
 		}
 	}
-	ua := fmt.Sprintf("sap-core-eng/%s/%s.%s", configuration.AgentName, configuration.AgentVersion, configuration.AgentBuildChange)
-	lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, cloudProps.GetProjectId(), ua)
+	lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, cloudProps.GetProjectId(), configuration.UserAgent())
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
 	if lp.CloudLoggingClient != nil {

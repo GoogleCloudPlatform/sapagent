@@ -125,6 +125,8 @@ var (
 	defaultAppsDiscovery = func(context.Context) *sappb.SAPInstances {
 		return defaultSAPInstances
 	}
+
+	defaultCloudLoggingClient = &logging.Client{}
 )
 
 func createTestConfigFile(t *testing.T, configJSON string) *os.File {
@@ -248,7 +250,6 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 	tests := []struct {
 		name                string
 		sd                  *SystemDiscovery
-		args                []any
 		wantErr             bool
 		wantDiscoveryObject bool
 		wantSAPInstances    *sappb.SAPInstances
@@ -256,27 +257,18 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 		{
 			name:                "SuccessIIOTEModeWithoutConfigFile",
 			sd:                  createTestIIOTESystemDiscovery(t, ""),
-			args:                []any{},
 			wantDiscoveryObject: true,
 			wantSAPInstances:    defaultSAPInstances,
 		},
 		{
 			name:                "SuccessIIOTEModeWithConfigFile",
 			sd:                  createTestIIOTESystemDiscovery(t, createTestConfigFile(t, testConfigFileJSON).Name()),
-			args:                []any{},
 			wantDiscoveryObject: true,
 			wantSAPInstances:    defaultSAPInstances,
 		},
 		{
 			name:    "FailConfigFileNotFound",
 			sd:      createTestIIOTESystemDiscovery(t, createTestConfigFile(t, testConfigFileJSON).Name()+"sap"),
-			args:    []any{},
-			wantErr: true,
-		},
-		{
-			name:    "FailIIOTEParamsAndArgsNotPassed",
-			sd:      &SystemDiscovery{},
-			args:    []any{},
 			wantErr: true,
 		},
 		{
@@ -291,7 +283,6 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 					DiscoverCurrentHostResp: [][]string{{}},
 				},
 			},
-			args:                []any{},
 			wantDiscoveryObject: true,
 			wantSAPInstances:    &sappb.SAPInstances{},
 		},
@@ -300,7 +291,7 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			discovery, err := test.sd.SystemDiscoveryHandler(ctx, &flag.FlagSet{Usage: func() { return }}, test.args...)
+			discovery, err := test.sd.SystemDiscoveryHandler(ctx, defaultCloudLoggingClient, defaultCloudProperties, "")
 			if gotErr := err != nil; gotErr != test.wantErr {
 				t.Errorf("SystemDiscoveryHandler() returned an unexpected error: %v, want error presence = %v", err, test.wantErr)
 			}
@@ -387,7 +378,7 @@ func TestInitDefaults(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := test.sd.initDefaults(context.Background(), test.lp, test.fakeNewGCE)
+			err := test.sd.initDefaults(context.Background(), defaultCloudLoggingClient, test.fakeNewGCE, "")
 			if gotErr := err != nil; gotErr != test.wantErr {
 				t.Errorf("initDefaults() returned an unexpected error: %v, want error presence = %v", err, test.wantErr)
 			}
@@ -400,7 +391,6 @@ func TestPrepareConfig(t *testing.T) {
 		name                string
 		sd                  *SystemDiscovery
 		cp                  *iipb.CloudProperties
-		args                []any
 		wantErr             bool
 		wantCloudProperties *iipb.CloudProperties
 		wantAgentProperties *cpb.AgentProperties
@@ -410,7 +400,6 @@ func TestPrepareConfig(t *testing.T) {
 			name:                "SuccessNoConfigFile",
 			sd:                  &SystemDiscovery{},
 			cp:                  defaultCloudProperties,
-			args:                []any{},
 			wantCloudProperties: defaultCloudProperties,
 			wantAgentProperties: defaultAgentProperties,
 			wantDiscoveryConfig: defaultDiscoveryConfig,
@@ -421,7 +410,6 @@ func TestPrepareConfig(t *testing.T) {
 				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name(),
 			},
 			cp:                  defaultCloudProperties,
-			args:                []any{},
 			wantCloudProperties: defaultCloudProperties,
 			wantAgentProperties: defaultAgentProperties,
 			wantDiscoveryConfig: testDiscoveryConfig,
@@ -432,7 +420,6 @@ func TestPrepareConfig(t *testing.T) {
 				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name() + "sap",
 			},
 			cp:      defaultCloudProperties,
-			args:    []any{},
 			wantErr: true,
 		},
 		{
@@ -441,7 +428,6 @@ func TestPrepareConfig(t *testing.T) {
 				ConfigPath: createTestConfigFile(t, testInvalidConfigFileJSON).Name(),
 			},
 			cp:                  defaultCloudProperties,
-			args:                []any{},
 			wantCloudProperties: defaultCloudProperties,
 			wantAgentProperties: defaultAgentProperties,
 			wantDiscoveryConfig: defaultDiscoveryConfig,
@@ -456,7 +442,6 @@ func TestPrepareConfig(t *testing.T) {
 				InstanceName:     "default-instance",
 				NumericProjectId: "13102003",
 			},
-			args:    []any{},
 			wantErr: true,
 		},
 	}
@@ -464,7 +449,7 @@ func TestPrepareConfig(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotConfig, err := test.sd.prepareConfig(ctx, test.cp, test.args...)
+			gotConfig, err := test.sd.prepareConfig(ctx, test.cp)
 			if gotErr := err != nil; gotErr != test.wantErr {
 				t.Errorf("prepareConfig() = %v, want error presence = %v", err, test.wantErr)
 			}
