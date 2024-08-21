@@ -250,7 +250,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		failureMsgs = append(failureMsgs, errMessage)
 	} else {
-		msg := fmt.Sprintf("Zipped destination support bundle file HANA/Backint %s", fmt.Sprintf("%s.zip", destFilesPath))
+		msg := fmt.Sprintf("Zipped destination support bundle file HANA/Backint at %s", zipfile)
 		s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
 		successMsgs = append(successMsgs, msg)
 	}
