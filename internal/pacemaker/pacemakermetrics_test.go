@@ -288,65 +288,6 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 	}
 }
 
-func TestSetOSReleaseInfo(t *testing.T) {
-	defaultFileReader := ConfigFileReader(func(path string) (io.ReadCloser, error) {
-		file, err := testFS.Open(path)
-		var f io.ReadCloser = file
-		return f, err
-	})
-	tests := []struct {
-		name              string
-		configFileReader  ConfigFileReader
-		osReleaseFilePath string
-		wantOSVendorID    string
-		wantErr           error
-	}{
-		{
-			name:              "ConfigFileReaderNil",
-			configFileReader:  nil,
-			osReleaseFilePath: "test_data/os-release.txt",
-			wantOSVendorID:    "",
-			wantErr:           nil,
-		},
-		{
-			name:              "OSReleaseFilePathEmpty",
-			osReleaseFilePath: "",
-			configFileReader:  defaultFileReader,
-			wantOSVendorID:    "",
-			wantErr:           nil,
-		},
-		{
-			name:              "OSReleaseFilePathError",
-			osReleaseFilePath: "test_data/os.txt",
-			configFileReader:  defaultFileReader,
-			wantOSVendorID:    "",
-			wantErr:           cmpopts.AnyError,
-		},
-		{
-			name:              "Success",
-			osReleaseFilePath: "test_data/os-release.txt",
-			configFileReader:  defaultFileReader,
-			wantOSVendorID:    "debian",
-			wantErr:           nil,
-		},
-	}
-
-	ctx := context.Background()
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			gotOSVendorID, err := setOSReleaseInfo(ctx, tc.configFileReader, tc.osReleaseFilePath)
-
-			if gotOSVendorID != tc.wantOSVendorID {
-				t.Errorf("setOSReleaseInfo(%v, %v) = %v, want: %v", tc.configFileReader, tc.osReleaseFilePath, gotOSVendorID, tc.wantOSVendorID)
-			}
-			if !cmp.Equal(tc.wantErr, err, cmpopts.EquateErrors()) {
-				t.Errorf("setOSReleaseInfo(%v, %v) got error %v, want error %v", tc.configFileReader, tc.osReleaseFilePath, err, tc.wantErr)
-			}
-		})
-	}
-}
-
 func TestCheckAPIAccess(t *testing.T) {
 	tests := []struct {
 		name    string

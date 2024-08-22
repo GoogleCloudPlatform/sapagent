@@ -18,16 +18,14 @@ package workloadmanager
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strings"
 
-	"github.com/zieckey/goini"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/osinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -95,48 +93,10 @@ type Parameters struct {
 
 // Init runs additional setup that is a prerequisite for WLM metric collection.
 func (p *Parameters) Init(ctx context.Context) {
-	p.osVendorID, p.osVersion = setOSReleaseInfo(ctx, p.ConfigFileReader, p.OSReleaseFilePath)
+	osData, _ := osinfo.ReadData(ctx, osinfo.FileReadCloser(p.ConfigFileReader), p.OSReleaseFilePath)
+	p.osVendorID = osData.OSVendor
+	p.osVersion = osData.OSVersion
 	p.hanaInsightRules = readHANAInsightsRules()
-}
-
-// setOSReleaseInfo parses the OS release file and retrieves the values for the
-// osVendorID and osVersion.
-func setOSReleaseInfo(ctx context.Context, configFileReader ConfigFileReader, osReleaseFilePath string) (osVendorID, osVersion string) {
-	if configFileReader == nil || osReleaseFilePath == "" {
-		log.CtxLogger(ctx).Error("A ConfigFileReader and OSReleaseFilePath must be set")
-		return
-	}
-
-	file, err := configFileReader(osReleaseFilePath)
-	if err != nil {
-		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Could not read from %s", osReleaseFilePath), "error", err)
-		return
-	}
-	defer file.Close()
-
-	ini := goini.New()
-	if err := ini.ParseFrom(file, "\n", "="); err != nil {
-		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Failed to parse from %s", osReleaseFilePath), "error", err)
-		return
-	}
-
-	id, ok := ini.Get("ID")
-	if !ok {
-		log.CtxLogger(ctx).Warn(fmt.Sprintf("Could not read ID from %s", osReleaseFilePath))
-		id = ""
-	}
-	osVendorID = strings.ReplaceAll(strings.TrimSpace(id), `"`, "")
-
-	version, ok := ini.Get("VERSION")
-	if !ok {
-		log.CtxLogger(ctx).Warn(fmt.Sprintf("Could not read VERSION from %s", osReleaseFilePath))
-		version = ""
-	}
-	if vf := strings.Fields(version); len(vf) > 0 {
-		osVersion = strings.ReplaceAll(strings.TrimSpace(vf[0]), `"`, "")
-	}
-
-	return osVendorID, osVersion
 }
 
 // readHANAInsightsRules reads the HANA Insights rules.

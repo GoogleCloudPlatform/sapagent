@@ -25,10 +25,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zieckey/goini"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/osinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -67,45 +67,15 @@ type (
 	}
 )
 
-// setOSReleaseInfo parses the OS release file and retrieves the values for the
-// OSVendorID and osVersion.
-func setOSReleaseInfo(ctx context.Context, configFileReader ConfigFileReader, osReleaseFilePath string) (string, error) {
-	if configFileReader == nil || osReleaseFilePath == "" {
-		log.CtxLogger(ctx).Error("A ConfigFileReader and OSReleaseFilePath must be set")
-		return "", nil
-	}
-
-	file, err := configFileReader(osReleaseFilePath)
-	if err != nil {
-		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Could not read from %s", osReleaseFilePath), "error", err)
-		return "", err
-	}
-	defer file.Close()
-
-	ini := goini.New()
-	if err := ini.ParseFrom(file, "\n", "="); err != nil {
-		log.CtxLogger(ctx).Warnw(fmt.Sprintf("Failed to parse from %s", osReleaseFilePath), "error", err)
-		return "", err
-	}
-
-	id, ok := ini.Get("ID")
-	if !ok {
-		log.CtxLogger(ctx).Warn(fmt.Sprintf("Could not read ID from %s", osReleaseFilePath))
-		id = ""
-	}
-	OSVendorID := strings.ReplaceAll(strings.TrimSpace(id), `"`, "")
-
-	return OSVendorID, nil
-}
-
 // CollectPacemakerMetrics collects the pacemaker metrics as specified by the WorkloadValidation config.
 func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, map[string]string) {
 	if params.OSVendorID == "" {
 		var err error
-		params.OSVendorID, err = setOSReleaseInfo(ctx, params.ConfigFileReader, params.OSReleaseFilePath)
+		osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(params.ConfigFileReader), params.OSReleaseFilePath)
 		if err != nil {
 			log.CtxLogger(ctx).Debugw(fmt.Sprintf("Could not read OS release info from %s", params.OSReleaseFilePath), "error", err)
 		}
+		params.OSVendorID = osData.OSVendor
 	}
 
 	// Prune the configurable labels depending on what is defined in the workload config.
