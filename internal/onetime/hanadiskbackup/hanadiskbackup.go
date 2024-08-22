@@ -850,7 +850,7 @@ func (s *Snapshot) readConsistencyGroup(ctx context.Context, disk string) (strin
 	return "", fmt.Errorf("failed to find consistency group for disk %v", disk)
 }
 
-// cgPath returns the name of the compute group (CG) from the resource policies.
+// cgPath returns the name of the consistency group (CG) from the resource policies.
 func cgPath(policies []string) string {
 	// Example policy: https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg
 	for _, policyLink := range policies {

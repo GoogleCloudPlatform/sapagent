@@ -110,6 +110,7 @@ type Restorer struct {
 	gceService                                                 gceInterface
 	computeService                                             *compute.Service
 	isgService                                                 ISGInterface
+	cgName                                                     string
 	baseDataPath, baseLogPath                                  string
 	logicalDataPath, logicalLogPath                            string
 	physicalDataPath, physicalLogPath                          string
@@ -376,38 +377,36 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 			return fmt.Errorf("failed to detach old data disk: %v", err)
 		}
 	} else {
+		if err := r.validateDisksBelongToCG(ctx); err != nil {
+			return err
+		}
+
 		disksDetached := []*ipb.Disk{}
 		for _, d := range r.disks {
 			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.DiskName, "physicalDataPath", r.physicalDataPath)
-			if r.isGroupSnapshot {
-				if err := r.detachDisk(ctx, d.DiskName, cp.GetInstanceName()); err != nil {
-					log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
-					// Reattaching detached disks.
-					for _, disk := range disksDetached {
-						if err := r.attachDisk(ctx, disk.DiskName, cp.GetInstanceName()); err != nil {
-							return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
-						}
+			if err := r.detachDisk(ctx, d.DiskName, cp.GetInstanceName()); err != nil {
+				log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
+				// Reattaching detached disks.
+				for _, disk := range disksDetached {
+					if err := r.attachDisk(ctx, disk.DiskName, cp.GetInstanceName()); err != nil {
+						return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
 					}
-
-					// If detach fails, rescan the volume groups to ensure the directories are mounted.
-					hanabackup.RescanVolumeGroups(ctx)
-					return fmt.Errorf("failed to detach old data disk: %v", err)
 				}
-			} else {
-				if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
-					log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
-					// Reattaching detached disks.
-					for _, disk := range disksDetached {
-						if err := r.gceService.AttachDisk(ctx, disk.DiskName, cp, r.Project, r.DataDiskZone); err != nil {
-							return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
-						}
-					}
 
-					// If detach fails, rescan the volume groups to ensure the directories are mounted.
-					hanabackup.RescanVolumeGroups(ctx)
-					return fmt.Errorf("failed to detach old data disk: %v", err)
+				// If detach fails, rescan the volume groups to ensure the directories are mounted.
+				hanabackup.RescanVolumeGroups(ctx)
+				return fmt.Errorf("failed to detach old data disk: %v", err)
+			}
+			if err := r.modifyDiskInCG(ctx, d.DiskName, false); err != nil {
+				log.CtxLogger(ctx).Error("failed to remove old disk from CG: %v", err)
+				// Reattaching detached disks.
+				for _, disk := range disksDetached {
+					if err := r.attachDisk(ctx, disk.DiskName, cp.GetInstanceName()); err != nil {
+						return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
+					}
 				}
 			}
+
 			disksDetached = append(disksDetached, d)
 		}
 	}
@@ -869,6 +868,11 @@ func (r *Restorer) stagingRestoreFromSnapshot(ctx context.Context, exec commandl
 			return err
 		}
 	}
+
+	log.CtxLogger(ctx).Info("Adding newly attached disk to consistency group ", r.cgName)
+	if err := r.modifyDiskInCG(ctx, newDiskName, true); err != nil {
+		log.CtxLogger(ctx).Warnw("Failed to add newly attached disk to consistency group, please retry after restore succeeds", "err", err)
+	}
 	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
 	return nil
 }
@@ -915,7 +919,6 @@ func (r *Restorer) CreateDisk(ctx context.Context, snapshotKey, diskName, source
 		return nil, fmt.Errorf("failed to create disk, err: %w", err)
 	}
 	log.CtxLogger(ctx).Infow("Disk creating", "diskName", diskName, "bodyBytes", string(bodyBytes))
-	// time.Sleep(120 * time.Second)
 	if err := r.waitForDiskCreateCompletionWithRetry(ctx, diskName); err != nil {
 		return nil, fmt.Errorf("failed to create disk, err: %w", err)
 	}
@@ -1011,4 +1014,88 @@ func (r *Restorer) waitForDiskCreateCompletionWithRetry(ctx context.Context, dis
 	return backoff.Retry(func() error {
 		return r.diskExists(ctx, diskName)
 	}, bo)
+}
+
+func (r *Restorer) validateDisksBelongToCG(ctx context.Context) error {
+	disksTraversed := []string{}
+	for _, d := range r.disks {
+		var cg string
+		var err error
+
+		cg, err = r.readConsistencyGroup(ctx, d.DiskName)
+		if err != nil {
+			return err
+		}
+
+		if r.cgName != "" && cg != r.cgName {
+			return fmt.Errorf("all disks should belong to the same consistency group, however disk %s belongs to %s, while other disks %s belong to %s", d, cg, disksTraversed, r.cgName)
+		}
+		disksTraversed = append(disksTraversed, d.DiskName)
+		r.cgName = cg
+	}
+
+	return nil
+}
+
+// cgPath returns the name of the consistency group (CG) from the resource policies.
+func cgPath(policies []string) string {
+	// Example policy: https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg
+	for _, policyLink := range policies {
+		parts := strings.Split(policyLink, "/")
+		if len(parts) >= 10 && parts[9] == "resourcePolicies" {
+			return parts[10]
+		}
+	}
+	return ""
+}
+
+// TODO: Update this when ISG APIs are in prod.
+// readConsistencyGroup reads the consistency group (CG) from the resource policies of the disk.
+func (r *Restorer) readConsistencyGroup(ctx context.Context, diskName string) (string, error) {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/disks/%s", r.Project, r.DataDiskZone, diskName)
+	bodyBytes, err := r.isgService.GetResponse(ctx, "GET", baseURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to read consistency group of disk, err: %w", err)
+	}
+
+	var disk compute.Disk
+	if err := json.Unmarshal([]byte(bodyBytes), &disk); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+
+	if cgPath := cgPath(disk.ResourcePolicies); cgPath != "" {
+		log.CtxLogger(ctx).Infow("Found disk to conistency group mapping", "disk", disk, "cg", cgPath)
+		return cgPath, nil
+	}
+	return "", fmt.Errorf("failed to find consistency group for disk %v", disk)
+}
+
+func (r *Restorer) modifyDiskInCG(ctx context.Context, diskName string, add bool) error {
+	action := "addResourcePolicies"
+	if !add {
+		action = "removeResourcePolicies"
+	}
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/disks/%s/%s", r.Project, r.DataDiskZone, diskName, action)
+
+	parts := strings.Split(r.DataDiskZone, "-")
+	if len(parts) < 3 {
+		return fmt.Errorf("invalid zone, cannot fetch region from it: %s", r.DataDiskZone)
+	}
+	region := strings.Join(parts[:len(parts)-1], "-")
+	reqBody := map[string]any{
+		"resourcePolicies": fmt.Sprintf("projects/%s/regions/%s/resourcePolicies/%s", r.Project, region, r.cgName),
+	}
+
+	log.CtxLogger(ctx).Debugw(action, "baseURL", baseURL, "reqBody", reqBody)
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json, err: %w", err)
+	}
+
+	bodyBytes, err := r.isgService.GetResponse(ctx, "POST", baseURL, data)
+	if err != nil {
+		return fmt.Errorf("failed to modify consistency group, err: %w", err)
+	}
+	log.CtxLogger(ctx).Debugw(action, "bodyBytes", string(bodyBytes))
+	return nil
 }

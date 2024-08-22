@@ -52,8 +52,9 @@ type mockISGService struct {
 	describeStandardSnapshotsResp []*compute.Snapshot
 	describeStandardSnapshotsErr  error
 
-	getResponseResp []byte
-	getResponseErr  error
+	getResponseCallCount int
+	getResponseResp      [][]byte
+	getResponseErr       []error
 }
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
@@ -69,7 +70,8 @@ func (m *mockISGService) DescribeStandardSnapshots(ctx context.Context, project,
 }
 
 func (m *mockISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
-	return m.getResponseResp, m.getResponseErr
+	defer func() { m.getResponseCallCount++ }()
+	return m.getResponseResp[m.getResponseCallCount], m.getResponseErr[m.getResponseCallCount]
 }
 
 func (m *mockISGService) TruncateName(ctx context.Context, src, suffix string) string {
@@ -882,13 +884,27 @@ func TestPrepare(t *testing.T) {
 			name: "GroupSnapshotDetachDiskErr",
 			r: &Restorer{
 				isGroupSnapshot: true,
-				disks:           []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				disks: []*ipb.Disk{
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-1",
+					},
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-2",
+					},
+				},
 				gceService: &fake.TestGCE{
 					DetachDiskErr: cmpopts.AnyError,
 				},
 				isgService: &mockISGService{
-					getResponseResp: nil,
-					getResponseErr:  cmpopts.AnyError,
+					getResponseResp: [][]byte{
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+					},
+					getResponseErr: []error{cmpopts.AnyError, cmpopts.AnyError},
 				},
 			},
 			cp: defaultCloudProperties,
@@ -1272,6 +1288,8 @@ func TestGroupRestore(t *testing.T) {
 						},
 					},
 					describeStandardSnapshotsErr: nil,
+					getResponseResp:              [][]byte{[]byte{}},
+					getResponseErr:               []error{nil},
 				},
 			},
 			want: cmpopts.AnyError,
@@ -1706,6 +1724,262 @@ func TestAppendLabels(t *testing.T) {
 			}
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("appendLabels() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCGPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		policies []string
+		want     string
+	}{
+		{
+			name:     "Success",
+			policies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+			want:     "my-cg",
+		},
+		{
+			name:     "Failure1",
+			policies: []string{"https://www.googleapis.com/compute/my-region/resourcePolicies/my-cg"},
+			want:     "",
+		},
+		{
+			name:     "Failure2",
+			policies: []string{"https://www.googleapis.com/invlaid/text/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my"},
+			want:     "",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := cgPath(test.policies)
+			if got != test.want {
+				t.Errorf("cgName()=%v, want=%v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestReadConsistencyGroup(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		wantErr error
+		wantCG  string
+	}{
+		{
+			name: "Success",
+			r: &Restorer{
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+					},
+					getResponseErr: []error{nil},
+				},
+				DataDiskName: "disk-name",
+			},
+			wantErr: nil,
+			wantCG:  "my-cg",
+		},
+		{
+			name: "Failure",
+			r: &Restorer{
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{[]byte("")},
+					getResponseErr:  []error{cmpopts.AnyError},
+				},
+				DataDiskName: "disk-name",
+			},
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	ctx := context.Background()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotCG, gotErr := test.r.readConsistencyGroup(ctx, test.r.DataDiskName)
+			if diff := cmp.Diff(gotErr, test.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("readConsistencyGroup()=%v, want=%v, diff=%v", gotErr, test.wantErr, diff)
+			}
+			if gotCG != test.wantCG {
+				t.Errorf("readConsistencyGroup()=%v, want=%v", gotCG, test.wantCG)
+			}
+		})
+	}
+}
+
+func TestValidateDisksBelongToCG(t *testing.T) {
+	tests := []struct {
+		name  string
+		r     *Restorer
+		disks []*ipb.Disk
+		want  error
+	}{
+		{
+			name: "ReadDiskError",
+			r: &Restorer{
+				disks: []*ipb.Disk{
+					{
+						DiskName: "disk-name-1",
+					},
+					{
+						DiskName: "disk-name-2",
+					},
+				},
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{[]byte{}, []byte{}},
+					getResponseErr:  []error{cmpopts.AnyError, cmpopts.AnyError},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "NoCG",
+			r: &Restorer{
+				disks: []*ipb.Disk{
+					{
+						DiskName: "disk-name-1",
+					},
+					{
+						DiskName: "disk-name-2",
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{}, &compute.Disk{},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{[]byte(""), []byte("")},
+					getResponseErr:  []error{nil, nil},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "DisksBelongToDifferentCGs",
+			r: &Restorer{
+				disks: []*ipb.Disk{
+					{
+						DiskName: "disk-name-1",
+					},
+					{
+						DiskName: "disk-name-2",
+					},
+				},
+				// TODO: Update this with better testing when prod APIs are available.
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg-1"]}`),
+					},
+					getResponseErr: []error{nil, nil},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			// TODO: Update this with better testing when prod APIs are available.
+			name: "DisksBelongToSameCGs",
+			r: &Restorer{
+				disks: []*ipb.Disk{
+					{
+						DiskName: "disk-name-1",
+					},
+					{
+						DiskName: "disk-name-2",
+					},
+				},
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+					},
+					getResponseErr: []error{nil, nil},
+				},
+			},
+			want: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.r.validateDisksBelongToCG(ctx)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("validateDisksBelongToCG()=%v, want=%v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestModifyDiskInCGErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        *Restorer
+		diskName string
+		add      bool
+		wantErr  error
+	}{
+		{
+			name: "invalidZone",
+			r: &Restorer{
+				DataDiskZone: "invalid-zone",
+			},
+			diskName: "disk-name",
+			add:      true,
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "addDisk",
+			r: &Restorer{
+				DataDiskZone: "sample-zone-1",
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{[]byte("")},
+					getResponseErr:  []error{cmpopts.AnyError},
+				},
+			},
+			diskName: "disk-name",
+			add:      true,
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "removeDisk",
+			r: &Restorer{
+				DataDiskZone: "sample-zone-1",
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{[]byte("")},
+					getResponseErr:  []error{cmpopts.AnyError},
+				},
+			},
+			diskName: "disk-name",
+			add:      false,
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				DataDiskZone: "sample-zone-1",
+				isgService: &mockISGService{
+					getResponseResp: [][]byte{[]byte("")},
+					getResponseErr:  []error{nil},
+				},
+			},
+			diskName: "disk-name",
+			add:      true,
+			wantErr:  nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.r.modifyDiskInCG(ctx, tc.diskName, tc.add)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("modifyDiskInCG()=%v, want=%v", gotErr, tc.wantErr)
 			}
 		})
 	}
