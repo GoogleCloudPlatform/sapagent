@@ -40,9 +40,12 @@ const (
 // MigrateHMADashboards is a struct which implements subcommands interface.
 type (
 	MigrateHMADashboards struct {
-		project           string
+		// Exporting fields needed by external callers to Run.
+
+		Project           string
 		help              bool
 		logLevel, logPath string
+		oteLogger         *onetime.OTELogger
 	}
 
 	dashboardUpdatesResults struct {
@@ -77,7 +80,7 @@ func (*MigrateHMADashboards) Usage() string {
 
 // SetFlags implements the subcommand interface for MigrateHMADashboards.
 func (m *MigrateHMADashboards) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&m.project, "project", "", "GCP project. (required)")
+	fs.StringVar(&m.Project, "project", "", "GCP project. (required)")
 	fs.BoolVar(&m.help, "h", false, "Display help")
 	fs.StringVar(&m.logLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&m.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/migratehmadashboards.log")
@@ -96,23 +99,29 @@ func (m *MigrateHMADashboards) Execute(ctx context.Context, f *flag.FlagSet, arg
 		return exitStatus
 	}
 
+	return m.Run(ctx, onetime.CreateRunOptions(nil, false))
+}
+
+// Run performs the functionality specified by the migratehmadashboards subcommand.
+func (m *MigrateHMADashboards) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
+	m.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
 	dc, err := dashboard.NewDashboardsClient(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create dashboard client: error", err)
 		return subcommands.ExitFailure
 	}
-	return m.migrateHMADashboardHandler(ctx, f, dc)
+	return m.migrateHMADashboardHandler(ctx, dc)
 }
 
-func (m *MigrateHMADashboards) migrateHMADashboardHandler(ctx context.Context, fs *flag.FlagSet, dc dashboardsAPICaller) subcommands.ExitStatus {
-	dashboards := fetchDashboards(ctx, dc, m.project)
-	res := migrateHMADashboards(ctx, dc, dashboards, m.project)
-	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("HANA Monitoring Agent Dashboard Migration Results.\nDashboard-Name | New Dashboard-Name | Migration Result"))
+func (m *MigrateHMADashboards) migrateHMADashboardHandler(ctx context.Context, dc dashboardsAPICaller) subcommands.ExitStatus {
+	dashboards := fetchDashboards(ctx, dc, m.Project)
+	res := migrateHMADashboards(ctx, dc, dashboards, m.Project)
+	m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("HANA Monitoring Agent Dashboard Migration Results.\nDashboard-Name | New Dashboard-Name | Migration Result"))
 	for _, s := range res.successfulUpdates {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("%s | %s | successful", oldDashboardName(s), s))
+		m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("%s | %s | successful", oldDashboardName(s), s))
 	}
 	for _, s := range res.failedUpdates {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("%s | %s | failed", oldDashboardName(s), s))
+		m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("%s | %s | failed", oldDashboardName(s), s))
 	}
 	return subcommands.ExitSuccess
 }
