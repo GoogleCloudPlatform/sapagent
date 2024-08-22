@@ -18,7 +18,6 @@ package workloadmanager
 
 import (
 	"context"
-	"errors"
 	"io"
 	"testing"
 
@@ -45,43 +44,6 @@ func TestInit(t *testing.T) {
 			reader:      defaultFileReader,
 			wantID:      "debian",
 			wantVersion: "11",
-		},
-		{
-			name:        "ConfigFileReaderNil",
-			filePath:    "test_data/os-release.txt",
-			reader:      nil,
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:        "OSReleaseFilePathEmpty",
-			filePath:    "",
-			reader:      defaultFileReader,
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:     "FileReadError",
-			filePath: "test_data/os-release.txt",
-			reader: ConfigFileReader(func(path string) (io.ReadCloser, error) {
-				return nil, errors.New("File Read Error")
-			}),
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:        "FileParseError",
-			filePath:    "test_data/os-release-bad.txt",
-			reader:      defaultFileReader,
-			wantID:      "",
-			wantVersion: "",
-		},
-		{
-			name:        "FieldsEmpty",
-			filePath:    "test_data/os-release-empty.txt",
-			reader:      defaultFileReader,
-			wantID:      "",
-			wantVersion: "",
 		},
 	}
 

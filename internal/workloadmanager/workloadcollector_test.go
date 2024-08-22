@@ -101,7 +101,7 @@ var (
 	}
 	//go:embed test_data/metricoverride.yaml
 	sampleOverride string
-	//go:embed test_data/metricoverride.yaml test_data/os-release.txt test_data/os-release-bad.txt test_data/os-release-empty.txt
+	//go:embed test_data/metricoverride.yaml test_data/os-release.txt
 	testFS                  embed.FS
 	defaultBackOffIntervals = cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond)
 	DefaultTestReader       = ConfigFileReader(func(data string) (io.ReadCloser, error) {

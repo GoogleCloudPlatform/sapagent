@@ -18,6 +18,7 @@ package workloadmanager
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"golang.org/x/oauth2/google"
@@ -93,7 +94,10 @@ type Parameters struct {
 
 // Init runs additional setup that is a prerequisite for WLM metric collection.
 func (p *Parameters) Init(ctx context.Context) {
-	osData, _ := osinfo.ReadData(ctx, osinfo.FileReadCloser(p.ConfigFileReader), p.OSReleaseFilePath)
+	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(p.ConfigFileReader), p.OSReleaseFilePath)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw(fmt.Sprintf("Could not read OS release info from %s", p.OSReleaseFilePath), "error", err)
+	}
 	p.osVendorID = osData.OSVendor
 	p.osVersion = osData.OSVersion
 	p.hanaInsightRules = readHANAInsightsRules()

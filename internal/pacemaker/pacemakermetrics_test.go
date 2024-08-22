@@ -68,7 +68,7 @@ type (
 var (
 	//go:embed test_data/credentials.json
 	defaultCredentials string
-	//go:embed test_data/metricoverride.yaml test_data/os-release.txt test_data/os-release-bad.txt test_data/os-release-empty.txt
+	//go:embed test_data/metricoverride.yaml
 	testFS embed.FS
 
 	defaultPacemakerConfigNoCloudProperties = &cnfpb.Configuration{
