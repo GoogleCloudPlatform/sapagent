@@ -19,6 +19,7 @@ package version
 
 import (
 	"context"
+	"fmt"
 
 	"flag"
 	"github.com/google/subcommands"
@@ -44,7 +45,8 @@ func (v *Version) SetFlags(fs *flag.FlagSet) {}
 
 // Execute implements the subcommand interface for version.
 func (v *Version) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
-	_, exitStatus := v.Run(ctx, onetime.RunOptions{})
+	msg, exitStatus := v.Run(ctx, onetime.RunOptions{})
+	fmt.Println(msg)
 	return exitStatus
 }
 
