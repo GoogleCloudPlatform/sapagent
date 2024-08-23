@@ -31,6 +31,9 @@ var (
 	//go:embed google-x4.conf
 	googleX4Conf []byte
 
+	//go:embed tuned.conf
+	googleX4TunedConf []byte
+
 	systemConf       = []string{"DefaultTimeoutStartSec=300s", "DefaultTimeoutStopSec=300s", "DefaultTasksMax=infinity"}
 	logindConf       = []string{"UserTasksMax="}
 	modprobeConf     = []byte("blacklist idxd\nblacklist hpilo\nblacklist acpi_cpufreq\nblacklist qat_4xxx\nblacklist intel_qat\n")
@@ -91,7 +94,11 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("general X4 configurations completed, OS specific configurations failed: %v", err)
 	}
-	return rebootSLES || rebootSystemdSystem || rebootSystemdLogin || rebootModprobe || rebootGrub, nil
+	rebootRHEL, err := c.configureX4RHEL(ctx)
+	if err != nil {
+		return false, fmt.Errorf("general X4 configurations completed, OS specific configurations failed: %v", err)
+	}
+	return rebootSLES || rebootRHEL || rebootSystemdSystem || rebootSystemdLogin || rebootModprobe || rebootGrub, nil
 }
 
 // configureX4SLES checks and applies OS settings for X4 running on SLES.
@@ -200,6 +207,81 @@ func (c *ConfigureInstance) saptuneReapply(ctx context.Context, sapTuneReapply b
 	}
 	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
 		return fmt.Errorf("'saptune note apply google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
+	}
+	return nil
+}
+
+// configureX4RHEL checks and applies OS settings for X4 running on RHEL.
+// Returns true if tuned reapply needed to be run.
+func (c *ConfigureInstance) configureX4RHEL(ctx context.Context) (bool, error) {
+	osRelease, err := c.ReadFile("/etc/os-release")
+	if err != nil {
+		return false, err
+	}
+	if !strings.Contains(string(osRelease), "Red Hat Enterprise Linux") {
+		log.CtxLogger(ctx).Info("RHEL OS not detected, skiping specific configurations.")
+		return false, nil
+	}
+	log.CtxLogger(ctx).Info("RHEL OS detected, continuing with specific configurations.")
+
+	if err := c.tunedService(ctx); err != nil {
+		return false, err
+	}
+	tunedReapply, err := c.checkAndRegenerateFile(ctx, "/etc/tuned/google-x4/tuned.conf", googleX4TunedConf)
+	if err != nil {
+		return false, err
+	}
+	tunedActive := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "active"})
+	if !strings.Contains(tunedActive.StdOut, "google-x4") {
+		log.CtxLogger(ctx).Info("Active profile is not `google-x4`, Tuned re-apply required.")
+		tunedReapply = true
+	}
+	if err := c.tunedReapply(ctx, tunedReapply); err != nil {
+		return false, err
+	}
+
+	log.CtxLogger(ctx).Info("RHEL specific configurations complete.")
+	return tunedReapply, nil
+}
+
+// tunedService checks if tuned service is running. If it is not running,
+// it will attempt to enable and start it through systemctl.
+func (c *ConfigureInstance) tunedService(ctx context.Context) error {
+	tunedStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status tuned"})
+	if tunedStatus.ExitCode == 4 {
+		return fmt.Errorf("tuned service could not be found, ensure it is installed before running 'configureinstance', code: %d, stderr: %s", tunedStatus.ExitCode, tunedStatus.StdErr)
+	}
+	if tunedStatus.ExitCode != 0 {
+		log.CtxLogger(ctx).Info("Attempting to enable and start tuned.")
+		tunedEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable tuned"})
+		if tunedEnable.ExitCode != 0 {
+			return fmt.Errorf("tuned service could not be enabled, code: %d, stderr: %s", tunedEnable.ExitCode, tunedEnable.StdErr)
+		}
+		tunedStart := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "start tuned"})
+		if tunedStart.ExitCode != 0 {
+			return fmt.Errorf("tuned service could not be started, code: %d, stderr: %s", tunedStart.ExitCode, tunedStart.StdErr)
+		}
+	}
+	log.CtxLogger(ctx).Info("The tuned service is running.")
+	return nil
+}
+
+// tunedReapply executes Tuned re-apply by activating the google-x4 profile.
+func (c *ConfigureInstance) tunedReapply(ctx context.Context, tunedReapply bool) error {
+	if !tunedReapply {
+		log.CtxLogger(ctx).Info("Tuned re-apply is not required.")
+		return nil
+	}
+	if c.Check {
+		log.CtxLogger(ctx).Info("Run 'configureinstance -apply' to execute Tuned re-apply.")
+		return nil
+	}
+	log.CtxLogger(ctx).Info("Executing Tuned re-apply.")
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "profile google-x4", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
+		return fmt.Errorf("'tuned-adm profile google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
+	}
+	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "verify", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
+		return fmt.Errorf("'tuned-adm verify' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
 	}
 	return nil
 }
