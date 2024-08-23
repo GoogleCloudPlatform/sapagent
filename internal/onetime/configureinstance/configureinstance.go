@@ -166,13 +166,22 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	if c.ExecuteFunc == nil {
 		c.ExecuteFunc = commandlineexecutor.ExecuteCommand
 	}
+
 	status, msg := c.Run(ctx, onetime.CreateRunOptions(cloudProps, false))
-	switch {
-	case status == subcommands.ExitUsageError:
-		c.oteLogger.LogErrorToFileAndConsole(ctx, "ConfigureInstance Usage Error:", errors.New(msg))
-	case status == subcommands.ExitFailure:
-		c.oteLogger.LogErrorToFileAndConsole(ctx, "ConfigureInstance Failure:", errors.New(msg))
+	if msg != "" {
+		c.LogToBoth(ctx, msg)
+	}
+	if status == subcommands.ExitFailure {
 		c.oteLogger.LogUsageError(usagemetrics.ConfigureInstanceFailure)
+	}
+	c.LogToBoth(ctx, fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams)))
+	if c.PrintDiff {
+		if jsonDiffs, err := json.MarshalIndent(c.diffs, "", "  "); err != nil {
+			message := "ConfigureInstance failed to marshal diffs"
+			c.LogToBoth(ctx, message)
+		} else {
+			c.oteLogger.LogMessageToConsole(string(jsonDiffs))
+		}
 	}
 	return status
 }
@@ -190,13 +199,13 @@ func (c *ConfigureInstance) IsSupportedMachineType() bool {
 func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (subcommands.ExitStatus, string) {
 	c.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	if !c.Check && !c.Apply {
-		return subcommands.ExitUsageError, "-check or -apply must be specified"
+		return subcommands.ExitUsageError, "ConfigureInstance Usage Error: -check or -apply must be specified"
 	}
 	if c.Check && c.Apply {
-		return subcommands.ExitUsageError, "only one of -check or -apply must be specified"
+		return subcommands.ExitUsageError, "ConfigureInstance Usage Error: only one of -check or -apply must be specified"
 	}
 	if !slices.Contains([]string{hyperThreadingDefault, hyperThreadingOn, hyperThreadingOff}, c.HyperThreading) {
-		return subcommands.ExitUsageError, `hyperThreading must be one of ["on", "off"]`
+		return subcommands.ExitUsageError, `ConfigureInstance Usage Error: hyperThreading must be one of ["on", "off"]`
 	}
 	if c.MachineType == "" {
 		c.MachineType = opts.CloudProperties.GetMachineType()
@@ -239,10 +248,10 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 				return subcommands.ExitFailure, err.Error()
 			}
 		default:
-			return subcommands.ExitUsageError, fmt.Sprintf("this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.MachineType)
+			return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.MachineType)
 		}
 	default:
-		return subcommands.ExitUsageError, fmt.Sprintf("this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
+		return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
 	}
 
 	c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceFinished)
@@ -252,40 +261,21 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	if c.Apply {
 		c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceApplyFinished)
 	}
-	var messages []string
 	exitStatus := subcommands.ExitSuccess
 	if c.Apply || (c.Check && !rebootRequired) {
 		message := "ConfigureInstance: SUCCESS"
 		c.LogToBoth(ctx, message)
-		messages = append(messages, message)
 	}
 	if c.Apply && rebootRequired {
 		message := "\nPlease note that a reboot is required for the changes to take effect."
 		c.LogToBoth(ctx, message)
-		messages = append(messages, message)
 	}
 	if c.Check && rebootRequired {
 		message := "ConfigureInstance: Your system configuration doesn't match best practice for your instance type. Please run 'configureinstance -apply' to fix."
 		c.LogToBoth(ctx, message)
-		messages = append(messages, message)
 		exitStatus = subcommands.ExitFailure
 	}
-	message := fmt.Sprintf("\nDetailed logs are at %s", onetime.LogFilePath(c.Name(), c.IIOTEParams))
-	c.LogToBoth(ctx, message)
-	messages = append(messages, message)
-
-	if c.PrintDiff {
-		if jsonDiffs, err := json.MarshalIndent(c.diffs, "", "  "); err != nil {
-			message := "ConfigureInstance failed to marshal diffs"
-			c.LogToBoth(ctx, message)
-			messages = append(messages, message)
-		} else {
-			c.oteLogger.LogMessageToConsole(string(jsonDiffs))
-			messages = append(messages, string(jsonDiffs))
-		}
-	}
-	csvMessage := strings.Join(messages, ", ")
-	return exitStatus, csvMessage
+	return exitStatus, ""
 }
 
 // LogToBoth prints to the console and writes an INFO msg to the log file.

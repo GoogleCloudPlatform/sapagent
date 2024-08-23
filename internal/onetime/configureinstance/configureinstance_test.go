@@ -191,7 +191,24 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			},
 		},
 		{
-			name: "Success",
+			name: "FailReadFileX4",
+			want: subcommands.ExitFailure,
+			c: ConfigureInstance{
+				Apply:           true,
+				MachineType:     "x4-megamem-1920",
+				HyperThreading:  hyperThreadingOn,
+				OverrideVersion: overrideVersionLatest,
+				ReadFile:        defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				PrintDiff:       true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "SuccessX4",
 			want: subcommands.ExitSuccess,
 			c: ConfigureInstance{
 				Apply:           true,
@@ -269,7 +286,7 @@ func TestConfigureInstanceHandler(t *testing.T) {
 				Apply:           true,
 			},
 			want:            subcommands.ExitSuccess,
-			wantMsgFragment: "SUCCESS",
+			wantMsgFragment: "",
 		},
 		{
 			name: "x4SuccessCheck",
@@ -284,7 +301,7 @@ func TestConfigureInstanceHandler(t *testing.T) {
 				PrintDiff:       true,
 			},
 			want:            subcommands.ExitFailure,
-			wantMsgFragment: "doesn't match best practice",
+			wantMsgFragment: "",
 		},
 		{
 			name: "X4Fail",
