@@ -18,11 +18,13 @@ package instancemetadata
 
 import (
 	"context"
-	"runtime"
+	"embed"
+	"io"
 	"testing"
 
 	"flag"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -32,13 +34,24 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+var (
+	//go:embed test_data/os-release.txt
+	testFS embed.FS
+)
+
+func defaultReadCloser(path string) (io.ReadCloser, error) {
+	file, err := testFS.Open(path)
+	var f io.ReadCloser = file
+	return f, err
+}
+
 func TestSetFlags(t *testing.T) {
 	m := &InstanceMetadata{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	m.SetFlags(fs)
 
 	flags := []string{
-		"loglevel", "help", "h", "log-path",
+		"loglevel", "help", "h", "log-path", "os-release-path",
 	}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -76,14 +89,33 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Success",
-			m:    &InstanceMetadata{},
-			fs:   &flag.FlagSet{Usage: func() { return }},
+			m: &InstanceMetadata{
+				osReleasePath: "test_data/os-release.txt",
+				RC:            defaultReadCloser,
+			},
+			fs: &flag.FlagSet{Usage: func() { return }},
 			args: []any{
 				"test",
 				log.Parameters{},
 				&ipb.CloudProperties{},
 			},
 			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "Failure",
+			m: &InstanceMetadata{
+				osReleasePath: "test_data/os-release.txt",
+				RC: func(string) (io.ReadCloser, error) {
+					return nil, cmpopts.AnyError
+				},
+			},
+			fs: &flag.FlagSet{Usage: func() { return }},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+			want: subcommands.ExitFailure,
 		},
 	}
 
@@ -97,24 +129,65 @@ func TestExecute(t *testing.T) {
 	}
 }
 
+// checks the failure case only to cover lines
 func TestRun(t *testing.T) {
-	runOpts := onetime.CreateRunOptions(
-		&ipb.CloudProperties{
-			InstanceName: "test-instance",
-			Zone:         "us-central1-a",
+	tests := []struct {
+		name       string
+		m          *InstanceMetadata
+		opts       *onetime.RunOptions
+		want       *impb.Metadata
+		wantStatus subcommands.ExitStatus
+	}{
+		{
+			name: "Fail",
+			m: &InstanceMetadata{
+				osReleasePath: "test_data/os-release.txt",
+				RC: func(path string) (io.ReadCloser, error) {
+					return nil, cmpopts.AnyError
+				},
+			},
+			opts: onetime.CreateRunOptions(
+				&ipb.CloudProperties{
+					InstanceName: "test-instance",
+					Zone:         "us-central1-a",
+				},
+				false,
+			),
+			want:       nil,
+			wantStatus: subcommands.ExitFailure,
 		},
-		false,
-	)
-	m := &InstanceMetadata{}
-	want := &impb.Metadata{}
-	want.OsName = runtime.GOOS
-	want.AgentVersion = configuration.AgentVersion
-	want.AgentBuildChange = configuration.AgentBuildChange
-	got, status := m.Run(context.Background(), runOpts)
-	if status != subcommands.ExitSuccess {
-		t.Errorf("Run(%v)=%v, want %v", runOpts, status, subcommands.ExitSuccess)
+		{
+			name: "Success",
+			m: &InstanceMetadata{
+				osReleasePath: "test_data/os-release.txt",
+				RC:            defaultReadCloser,
+			},
+			opts: onetime.CreateRunOptions(
+				&ipb.CloudProperties{
+					InstanceName: "test-instance",
+					Zone:         "us-central1-a",
+				},
+				false,
+			),
+			want: &impb.Metadata{
+				OsName:           "linux",
+				OsVendor:         "debian",
+				OsVersion:        "11",
+				AgentVersion:     configuration.AgentVersion,
+				AgentBuildChange: configuration.AgentBuildChange,
+			},
+			wantStatus: subcommands.ExitSuccess,
+		},
 	}
-	if diff := cmp.Diff(got, want, protocmp.Transform()); diff != "" {
-		t.Errorf("Run(%v)=%v, want %v, diff %v", runOpts, got, want, diff)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, gotStatus := tc.m.Run(context.Background(), tc.opts)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("Run(%v, %v) returned an unexpected diff (-want +got): %v", tc.m, tc.opts, diff)
+			}
+			if diff := cmp.Diff(tc.wantStatus, gotStatus); diff != "" {
+				t.Errorf("Run(%v, %v) returned an unexpected diff (-want +got): %v", tc.m, tc.opts, diff)
+			}
+		})
 	}
 }
