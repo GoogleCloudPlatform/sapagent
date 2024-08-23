@@ -701,11 +701,22 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 			r.NewDiskType = d.Type
 			log.CtxLogger(ctx).Infow("New disk type will be same as the data-disk-name", "diskType", r.NewDiskType)
 		} else {
-			r.NewDiskType = r.disks[0].GetDeviceType()
-			log.CtxLogger(ctx).Infow("New disk type will be same as the data-disk-name", "diskType", r.NewDiskType)
+			baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%v/zones/%v/disks/%v", r.Project, r.DataDiskZone, r.disks[0].GetDiskName())
+			bodyBytes, err := r.isgService.GetResponse(ctx, "GET", baseURL, nil)
+			if err != nil {
+				log.CtxLogger(ctx).Errorw("Error", "err getting disk", err)
+				return fmt.Errorf("failed to get disk, err: %w", err)
+			}
+
+			var disk *compute.Disk
+			if err := json.Unmarshal([]byte(bodyBytes), &disk); err != nil {
+				return fmt.Errorf("failed to unmarshal response body, err: %w", err)
+			}
+			r.NewDiskType = disk.Type
+			log.CtxLogger(ctx).Infow("New disk type will be same as the disk type previously backing up /hana/data", "diskType", r.NewDiskType)
 		}
 	} else {
-		r.NewDiskType = "https://www.googleapis.com/compute/staging_alpha/projects/bct-staging-sap/zones/us-central1-jq1/diskTypes/hyperdisk-balanced"
+		r.NewDiskType = fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%v/zones/%v/diskTypes/%v", r.Project, r.DataDiskZone, r.NewDiskType)
 	}
 	return nil
 }
@@ -894,7 +905,7 @@ func (r *Restorer) GetStandardSnapshot(ctx context.Context, sourceSnapshot strin
 func (r *Restorer) CreateDisk(ctx context.Context, snapshotKey, diskName, sourceSnapshot string) (*compute.Disk, error) {
 	disk := map[string]any{
 		"name":                        diskName,
-		"type":                        fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/diskTypes/hyperdisk-balanced", r.Project, r.DataDiskZone),
+		"type":                        r.NewDiskType,
 		"zone":                        r.DataDiskZone,
 		"sourceSnapshot":              fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/global/snapshots/%s", r.Project, sourceSnapshot),
 		"sourceSnapshotEncryptionKey": &compute.CustomerEncryptionKey{RsaEncryptedKey: snapshotKey},

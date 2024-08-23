@@ -688,6 +688,8 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				disks: []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
 				isgService: &mockISGService{
+					getResponseResp: [][]byte{[]byte(`{"type": "https://www.googleapis.com/compute/staging_alpha/projects/bct-staging-sap/zones/us-central1-jq1/diskTypes/hyperdisk-extreme"}`)},
+					getResponseErr:  []error{nil},
 					describeStandardSnapshotsResp: []*compute.Snapshot{
 						{
 							Name: "test-isg",
