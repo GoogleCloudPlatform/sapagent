@@ -33,6 +33,7 @@ import (
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
@@ -155,7 +156,7 @@ func TestSynopsisForReliability(t *testing.T) {
 func TestSetFlagsForReliability(t *testing.T) {
 	r := Reliability{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"project", "o", "bucket", "service-account",  "h", "loglevel", "log-path"}
+	flags := []string{"project", "o", "bucket", "service-account", "h", "loglevel", "log-path"}
 	r.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -245,6 +246,7 @@ func TestReliabilityHandler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		test.r.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
 			got := test.r.reliabilityHandler(context.Background(), test.copier)
 			if got != test.want {

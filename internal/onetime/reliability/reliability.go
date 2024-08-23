@@ -85,6 +85,7 @@ type Reliability struct {
 	cmr        *cloudmetricreader.CloudMetricReader
 	bucket     *s.BucketHandle
 	cloudProps *ipb.CloudProperties
+	oteLogger  *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for reliability.
@@ -123,8 +124,14 @@ func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	if !completed {
 		return exitStatus
 	}
-	r.cloudProps = cloudProps
 
+	return r.Run(ctx, onetime.CreateRunOptions(cloudProps, false))
+}
+
+// Run performs the functionality specified by the reliability subcommand.
+func (r *Reliability) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
+	r.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
+	r.cloudProps = runOpts.CloudProperties
 	log.CtxLogger(ctx).Info("Reliability starting")
 	r.queries = defaultQueries
 	if r.projectID == "" {
@@ -153,7 +160,7 @@ func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 	mqc, err := monitoring.NewQueryClient(ctx, opts...)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create Cloud Monitoring query client", "error", err)
-		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		r.oteLogger.LogUsageError(usagemetrics.QueryClientCreateFailure)
 		return subcommands.ExitFailure
 	}
 	r.cmr = &cloudmetricreader.CloudMetricReader{
@@ -167,7 +174,7 @@ func (r *Reliability) Execute(ctx context.Context, f *flag.FlagSet, args ...any)
 // reliabilityHandler executes all queries, parses the time series,
 // writes CSV results and uploads them to a GCS bucket.
 func (r *Reliability) reliabilityHandler(ctx context.Context, copier storage.IOFileCopier) subcommands.ExitStatus {
-	usagemetrics.Action(usagemetrics.ReliabilityStarted)
+	r.oteLogger.LogUsageAction(usagemetrics.ReliabilityStarted)
 	if err := os.MkdirAll(r.outputFolder, os.ModePerm); err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to create output folder", "outputFolder", r.outputFolder, "err", err)
 		return subcommands.ExitFailure
@@ -177,35 +184,35 @@ func (r *Reliability) reliabilityHandler(ctx context.Context, copier storage.IOF
 		data, err := r.executeQuery(ctx, q.identifier, q.query)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to execute query", "query", q.query, "err", err)
-			usagemetrics.Error(usagemetrics.ReliabilityQueryFailure)
+			r.oteLogger.LogUsageError(usagemetrics.ReliabilityQueryFailure)
 			return subcommands.ExitFailure
 		}
 
 		results, err := r.parseData(ctx, q.headers, q.wantLabels, data)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to parse data", "query", q.query, "err", err)
-			usagemetrics.Error(usagemetrics.ReliabilityQueryFailure)
+			r.oteLogger.LogUsageError(usagemetrics.ReliabilityQueryFailure)
 			return subcommands.ExitFailure
 		}
 
 		fileName, err := r.writeResults(results, q.identifier)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to write results", "identifier", q.identifier, "query", q.query, "err", err)
-			usagemetrics.Error(usagemetrics.ReliabilityWriteFileFailure)
+			r.oteLogger.LogUsageError(usagemetrics.ReliabilityWriteFileFailure)
 			return subcommands.ExitFailure
 		}
 
 		if r.bucket != nil {
 			if err := r.uploadFile(ctx, fileName, copier); err != nil {
 				log.CtxLogger(ctx).Errorw("Failed to upload file", "fileName", fileName, "err", err)
-				usagemetrics.Error(usagemetrics.ReliabilityBucketUploadFailure)
+				r.oteLogger.LogUsageError(usagemetrics.ReliabilityBucketUploadFailure)
 				return subcommands.ExitFailure
 			}
 		}
 	}
 
 	log.CtxLogger(ctx).Info("Reliability finished")
-	usagemetrics.Action(usagemetrics.ReliabilityFinished)
+	r.oteLogger.LogUsageAction(usagemetrics.ReliabilityFinished)
 	return subcommands.ExitSuccess
 }
 

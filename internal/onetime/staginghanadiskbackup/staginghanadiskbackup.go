@@ -1041,12 +1041,12 @@ func (s *Snapshot) stagingCreateBackup(ctx context.Context, wg *sync.WaitGroup, 
 		// needs to be encrypted. For simplicity we support the use case in which disk encryption and
 		// snapshot encryption key are the same.
 		if s.DiskKeyFile != "" {
-			usagemetrics.Action(usagemetrics.EncryptedDiskSnapshot)
+			s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
 			srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
 			srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
 			if err != nil {
 				errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
-				usagemetrics.Error(usagemetrics.EncryptedDiskSnapshotFailure)
+				s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)
 				return
 			}
 			standardSnapshot["sourceDiskEncryptionKey"] = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
