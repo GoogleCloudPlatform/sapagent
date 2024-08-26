@@ -55,6 +55,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -105,6 +106,26 @@ func init() {
 	defer logger.Sync()
 	Logger = logger.Sugar()
 	loggerMap = make(map[string]*zap.SugaredLogger)
+}
+
+// OTEFilePath returns the log file path for the OTE invoked depending if it is invoked internally
+// or via command line.
+func OTEFilePath(agentName string, oteName string, osType string) string {
+	logName := agentName
+	if oteName != "" {
+		logName = fmt.Sprintf("%s-%s", agentName, oteName)
+	}
+	LogFileName := fmt.Sprintf("/var/log/%s.log", logName)
+	if osType == "windows" {
+		LogFileName = fmt.Sprintf(`C:\Program Files\Google\%s\logs\%s.log`, agentName, oteName)
+	}
+	return LogFileName
+}
+
+// DefaultOTEPath returns the default OTE path for the agent/command. {COMMAND} is a placeholder for
+// the command name.
+func DefaultOTEPath(agentName string, osType string) string {
+	return OTEFilePath(agentName, "{COMMAND}", osType)
 }
 
 // SetupLogging uses the agent configuration to set up the file Logger.
@@ -177,6 +198,13 @@ func SetupLoggingForTest() {
 	logfile = ""
 	defer logger.Sync() // flushes buffer, if any
 	Logger = logger.Sugar()
+}
+
+// SetupLoggingForOTE creates logging config for the agent's one time execution.
+func SetupLoggingForOTE(agentName, command string, params Parameters) Parameters {
+	params.CloudLogName = fmt.Sprintf("%s-%s", agentName, command)
+	SetupLogging(params)
+	return params
 }
 
 /*

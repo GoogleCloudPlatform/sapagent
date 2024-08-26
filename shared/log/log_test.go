@@ -116,3 +116,91 @@ func TestSetupLogging(t *testing.T) {
 		t.Errorf("TestSetupLogging() logFile is incorrect, got: %s, want: %s", got, wantLogFile)
 	}
 }
+
+func TestSetupLoggingForOTE(t *testing.T) {
+	tests := []struct {
+		name           string
+		agent          string
+		subCommandName string
+		want           string
+	}{
+		{
+			name:           "SetCloudLogName",
+			agent:          "test-agent",
+			subCommandName: "logusage",
+			want:           "test-agent-logusage",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lp := Parameters{}
+			gotparams := SetupLoggingForOTE(test.agent, test.subCommandName, lp)
+			if gotparams.CloudLogName != test.want {
+				t.Errorf("SetupLoggingForOTE(%s, %s) CloudLogName is incorrect, got: %s, want: %s", test.agent, test.subCommandName, gotparams.CloudLogName, test.want)
+			}
+		})
+	}
+}
+
+func TestDefaultOTEPath(t *testing.T) {
+	tests := []struct {
+		name   string
+		agent  string
+		osType string
+		want   string
+	}{
+		{
+			name:   "Windows",
+			agent:  "test-agent",
+			osType: "windows",
+			want:   `C:\Program Files\Google\test-agent\logs\{COMMAND}.log`,
+		},
+		{
+			name:   "Linux",
+			agent:  "test-agent",
+			osType: "linux",
+			want:   `/var/log/test-agent-{COMMAND}.log`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := DefaultOTEPath(test.agent, test.osType)
+			if got != test.want {
+				t.Errorf("DefaultOTEPath(%s, %s) Default path is incorrect, got: %s, want: %s", test.agent, test.osType, got, test.want)
+			}
+		})
+	}
+}
+
+func TestOTEFilePath(t *testing.T) {
+	tests := []struct {
+		name    string
+		agent   string
+		command string
+		osType  string
+		want    string
+	}{
+		{
+			name:    "Windows",
+			agent:   "test-agent",
+			command: "echo",
+			osType:  "windows",
+			want:    `C:\Program Files\Google\test-agent\logs\echo.log`,
+		},
+		{
+			name:    "Linux",
+			agent:   "test-agent",
+			command: "echo",
+			osType:  "linux",
+			want:    `/var/log/test-agent-echo.log`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := OTEFilePath(test.agent, test.command, test.osType)
+			if got != test.want {
+				t.Errorf("OTEFilePath(%s, %s, %s) Default path is incorrect, got: %s, want: %s", test.agent, test.command, test.osType, got, test.want)
+			}
+		})
+	}
+}
