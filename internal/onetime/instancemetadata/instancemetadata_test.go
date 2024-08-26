@@ -90,7 +90,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Success",
 			m: &InstanceMetadata{
-				osReleasePath: "test_data/os-release.txt",
+				OSReleasePath: "test_data/os-release.txt",
 				RC:            defaultReadCloser,
 			},
 			fs: &flag.FlagSet{Usage: func() { return }},
@@ -104,7 +104,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Failure",
 			m: &InstanceMetadata{
-				osReleasePath: "test_data/os-release.txt",
+				OSReleasePath: "test_data/os-release.txt",
 				RC: func(string) (io.ReadCloser, error) {
 					return nil, cmpopts.AnyError
 				},
@@ -136,12 +136,13 @@ func TestRun(t *testing.T) {
 		m          *InstanceMetadata
 		opts       *onetime.RunOptions
 		want       *impb.Metadata
+		wantMsg    string
 		wantStatus subcommands.ExitStatus
 	}{
 		{
 			name: "Fail",
 			m: &InstanceMetadata{
-				osReleasePath: "test_data/os-release.txt",
+				OSReleasePath: "",
 				RC: func(path string) (io.ReadCloser, error) {
 					return nil, cmpopts.AnyError
 				},
@@ -154,12 +155,13 @@ func TestRun(t *testing.T) {
 				false,
 			),
 			want:       nil,
+			wantMsg:    "could not read OS release info, error: both ConfigFileReader and OSReleaseFilePath must be set",
 			wantStatus: subcommands.ExitFailure,
 		},
 		{
 			name: "Success",
 			m: &InstanceMetadata{
-				osReleasePath: "test_data/os-release.txt",
+				OSReleasePath: "test_data/os-release.txt",
 				RC:            defaultReadCloser,
 			},
 			opts: onetime.CreateRunOptions(
@@ -181,8 +183,11 @@ func TestRun(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, gotStatus := tc.m.Run(context.Background(), tc.opts)
+			got, gotMsg, gotStatus := tc.m.Run(context.Background(), tc.opts)
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("Run(%v, %v) returned an unexpected diff (-want +got): %v", tc.m, tc.opts, diff)
+			}
+			if diff := cmp.Diff(tc.wantMsg, gotMsg); diff != "" {
 				t.Errorf("Run(%v, %v) returned an unexpected diff (-want +got): %v", tc.m, tc.opts, diff)
 			}
 			if diff := cmp.Diff(tc.wantStatus, gotStatus); diff != "" {

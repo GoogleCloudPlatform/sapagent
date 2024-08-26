@@ -37,12 +37,12 @@ import (
 type (
 	// InstanceMetadata stores the arguments for the instancemetadata subcommand.
 	InstanceMetadata struct {
-		logLevel      string
-		logPath       string
-		help          bool
-		osReleasePath string
-		oteLogger     *onetime.OTELogger
-		RC            ReadCloser
+		LogLevel      string             `json:"loglevel"`
+		LogPath       string             `json:"log-path"`
+		Help          bool               `json:"help,string"`
+		OSReleasePath string             `json:"os-release-path"`
+		oteLogger     *onetime.OTELogger `json:"-"`
+		RC            ReadCloser         `json:"-"`
 	}
 
 	// ReadCloser is function which takes the path of file and returns an io.ReadCloser interface and
@@ -63,27 +63,27 @@ func (*InstanceMetadata) Usage() string {
 
 // SetFlags implements the subcommand interface for instancemetadata.
 func (m *InstanceMetadata) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&m.help, "h", false, "Display help")
-	fs.BoolVar(&m.help, "help", false, "Display help")
-	fs.StringVar(&m.logLevel, "loglevel", "info", "Sets the logging level for a log file")
-	fs.StringVar(&m.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/instancemetadata.log")
-	fs.StringVar(&m.osReleasePath, "os-release-path", "/etc/os-release", "The path to file which contains OS release information, default value is /etc/os-release")
+	fs.BoolVar(&m.Help, "h", false, "Display help")
+	fs.BoolVar(&m.Help, "help", false, "Display help")
+	fs.StringVar(&m.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&m.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/instancemetadata.log")
+	fs.StringVar(&m.OSReleasePath, "os-release-path", "/etc/os-release", "The path to file which contains OS release information, default value is /etc/os-release")
 }
 
 // Execute implements the subcommand interface for instancemetadata.
 func (m *InstanceMetadata) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     m.Name(),
-		Help:     m.help,
-		LogLevel: m.logLevel,
-		LogPath:  m.logPath,
+		Help:     m.Help,
+		LogLevel: m.LogLevel,
+		LogPath:  m.LogPath,
 		Fs:       f,
 	}, args...)
 	if !completed {
 		return exitStatus
 	}
 
-	_, status := m.Run(ctx, onetime.CreateRunOptions(cp, false))
+	_, _, status := m.Run(ctx, onetime.CreateRunOptions(cp, false))
 	if status != subcommands.ExitSuccess {
 		m.oteLogger.LogMessageToFileAndConsole(ctx, "Failed to fetch instance metadata")
 	}
@@ -91,17 +91,17 @@ func (m *InstanceMetadata) Execute(ctx context.Context, f *flag.FlagSet, args ..
 }
 
 // Run executes the MetadataHandler and returns the response.
-func (m *InstanceMetadata) Run(ctx context.Context, opts *onetime.RunOptions) (*impb.Metadata, subcommands.ExitStatus) {
+func (m *InstanceMetadata) Run(ctx context.Context, opts *onetime.RunOptions) (*impb.Metadata, string, subcommands.ExitStatus) {
 	m.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
-	return m.metadataHandler(ctx, m.osReleasePath, m.RC)
+	return m.metadataHandler(ctx, m.OSReleasePath, m.RC)
 }
 
-func (m *InstanceMetadata) metadataHandler(ctx context.Context, path string, rc ReadCloser) (*impb.Metadata, subcommands.ExitStatus) {
+func (m *InstanceMetadata) metadataHandler(ctx context.Context, path string, rc ReadCloser) (*impb.Metadata, string, subcommands.ExitStatus) {
 	rc = readCloserHelper(rc, path)
 	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(rc), path)
 	if err != nil {
 		m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Could not read OS release info from %s", path))
-		return nil, subcommands.ExitFailure
+		return nil, fmt.Sprintf("could not read OS release info, error: %s", err.Error()), subcommands.ExitFailure
 	}
 	response := &impb.Metadata{
 		OsName:           osData.OSName,
@@ -111,7 +111,7 @@ func (m *InstanceMetadata) metadataHandler(ctx context.Context, path string, rc 
 		AgentBuildChange: configuration.AgentBuildChange,
 	}
 	m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Instance Metadata: %s", prototext.Format(response)))
-	return response, subcommands.ExitSuccess
+	return response, "", subcommands.ExitSuccess
 }
 
 func readCloserHelper(rc ReadCloser, path string) ReadCloser {

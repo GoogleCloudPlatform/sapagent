@@ -30,6 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/gcbdrbackuphandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/gcbdrdiscoveryhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/hanadiskbackuphandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/instancemetadatahandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/performancediagnosticshandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
@@ -71,6 +72,7 @@ var guestActionsHandlers = map[string]guestActionHandler{
 	"gcbdr-backup":           gcbdrbackuphandler.GCBDRBackupHandler,
 	"gcbdr-discovery":        gcbdrdiscoveryhandler.GCBDRDiscoveryHandler,
 	"hanadiskbackup":         hanadiskbackuphandler.HANADiskBackupHandler,
+	"instancemetadata":       instancemetadatahandler.InstanceMetadataHandler,
 	"performancediagnostics": performancediagnosticshandler.PerformanceDiagnosticsHandler,
 	"supportbundle":          supportbundlehandler.SupportBundleHandler,
 	"version":                versionhandler.VersionHandler,
