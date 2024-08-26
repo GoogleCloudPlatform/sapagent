@@ -443,10 +443,15 @@
     },
     {
         "name": "data_backup_state_queries",
-        "sql": "select STATE_NAME,UTC_END_TIME AS last_backup_time,BACKUP_ID from M_BACKUP_CATALOG where ENTRY_TYPE_NAME = 'complete data backup' ORDER BY LAST_BACKUP_TIME DESC LIMIT 1",
+        "sql": "select (CASE WHEN STATE_NAME = 'successful' THEN 1 ELSE 0 END), ENTRY_TYPE_NAME, UTC_END_TIME AS last_backup_time, BACKUP_ID from M_BACKUP_CATALOG where ENTRY_TYPE_NAME LIKE '%data backup%' ORDER BY LAST_BACKUP_TIME DESC LIMIT 1",
         "columns": [
             {
                 "name": "state_name",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "entry_type_name",
                 "metric_type": "METRIC_LABEL",
                 "value_type": "VALUE_STRING"
             },
