@@ -37,6 +37,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
 	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
@@ -90,6 +91,9 @@ var (
 		Zone:             "default-zone",
 		NumericProjectId: "13102003",
 	}
+
+	defaultOteLogger = onetime.CreateOTELogger(false)
+	defaultRunOpts   = onetime.CreateRunOptions(defaultCloudProperties, false)
 
 	defaultAppsDiscovery = func(context.Context) *sappb.SAPInstances {
 		return &sappb.SAPInstances{
@@ -540,8 +544,9 @@ func TestValidateParams(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.d.validateParams(ctx, &flag.FlagSet{Usage: func() { return }})
+			err := tc.d.validateParams(ctx)
 			gotErr := err != nil
 			if gotErr != tc.wantErr {
 				t.Errorf("validateParams(ctx) = %v, want error presence = %v", err, tc.wantErr)
@@ -741,6 +746,7 @@ func TestCheckRetention(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
 		t.Run(tc.name, func(t *testing.T) {
 			gotErr := tc.d.checkRetention(ctx, tc.client, tc.ctb, tc.config)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
@@ -804,7 +810,10 @@ func TestAddToBundle(t *testing.T) {
 					fmt.Printf("tc.fs.Create(%s) failed, failed to create temp file at oldPath: %v", path.oldPath, err)
 				}
 			}
-			gotErr := addToBundle(ctx, tc.paths, tc.fs)
+			d := &Diagnose{
+				oteLogger: defaultOteLogger,
+			}
+			gotErr := d.addToBundle(ctx, tc.paths, tc.fs)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("addToBundle(%v, %v) returned error: %v, want error: %v", tc.paths, tc.fs, gotErr, tc.wantErr)
 			}
@@ -1200,9 +1209,9 @@ func TestRunPerfDiag(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
 		t.Run(tc.name, func(t *testing.T) {
-			var d Diagnose
-			got := d.runPerfDiag(ctx, tc.opts)
+			got := tc.d.runPerfDiag(ctx, tc.opts)
 			if len(got) != tc.wantErrCnt {
 				t.Errorf("runPerfDiag(%v) returned an unexpected diff (-want +got): %d, %d", tc.opts, tc.wantErrCnt, got)
 			}
@@ -1250,7 +1259,9 @@ func TestRunFIOCommands(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var d Diagnose
+			d := &Diagnose{
+				oteLogger: defaultOteLogger,
+			}
 			got := d.runFIOCommands(ctx, tc.opts)
 			if len(got) != tc.wantCnt {
 				t.Errorf("runFIOCommands(%v) returned an unexpected diff (-want +got): %d %d", tc.opts, len(got), tc.wantCnt)
@@ -1441,7 +1452,10 @@ func TestRemoveDestinationFolder(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotErr := removeDestinationFolder(context.Background(), tc.path, tc.fu)
+			d := &Diagnose{
+				oteLogger: defaultOteLogger,
+			}
+			gotErr := d.removeDestinationFolder(context.Background(), tc.path, tc.fu)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("removeDestinationFolder(%q, %v) returned an unexpected diff (-want +got): %v", tc.path, tc.fu, diff)
 			}
@@ -1635,8 +1649,8 @@ func TestRunConfigureInstanceOTE(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			d := &Diagnose{HyperThreading: "default"}
-			if got := d.runConfigureInstanceOTE(context.Background(), &flag.FlagSet{}, test.opts); got != test.wantStatus {
+			d := &Diagnose{HyperThreading: "default", oteLogger: defaultOteLogger, runOpts: defaultRunOpts}
+			if got := d.runConfigureInstanceOTE(context.Background(), test.opts); got != test.wantStatus {
 				t.Errorf("Execute(%v) returned status: %v, want status: %v", test.opts, got, test.wantStatus)
 			}
 		})
@@ -1648,7 +1662,6 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 	tests := []struct {
 		name    string
 		d       *Diagnose
-		flagSet *flag.FlagSet
 		opts    *options
 		wantCnt int
 	}{
@@ -1658,7 +1671,6 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				HyperThreading: "default",
 				Type:           "io",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs:   fakeFileSystem(false),
@@ -1671,7 +1683,6 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				HyperThreading: "default",
 				Type:           "backup",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs:   fakeFileSystem(false),
@@ -1684,7 +1695,6 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				HyperThreading: "default",
 				Type:           "compute",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs:   fakeFileSystem(false),
@@ -1697,7 +1707,6 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				HyperThreading: "default",
 				Type:           "all",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs: &fake.FileSystem{
@@ -1718,7 +1727,6 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				HyperThreading: "default",
 				Type:           "all",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs: &fake.FileSystem{
@@ -1756,7 +1764,6 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				HyperThreading: "default",
 				Type:           "compute",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs: &fake.FileSystem{
@@ -1793,10 +1800,12 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
+		tc.d.runOpts = defaultRunOpts
 		t.Run(tc.name, func(t *testing.T) {
-			got := performDiagnosticsOps(ctx, tc.d, tc.flagSet, tc.opts)
+			got := tc.d.performDiagnosticsOps(ctx, tc.opts)
 			if len(got) != tc.wantCnt {
-				t.Errorf("performDiagnosticsOps(%v, %v, %v) returned an unexpected (-want +got): %v, %v", tc.d, tc.flagSet, tc.opts, tc.wantCnt, len(got))
+				t.Errorf("performDiagnosticsOps(%v, %v) returned an unexpected (-want +got): %v, %v", tc.d, tc.opts, tc.wantCnt, len(got))
 			}
 		})
 	}
@@ -1860,6 +1869,7 @@ func TestBackup(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.d.backup(ctx, tc.opts)
 			if len(got) != tc.wantCnt {
@@ -1871,11 +1881,10 @@ func TestBackup(t *testing.T) {
 
 func TestDiagnosticsHandler(t *testing.T) {
 	tests := []struct {
-		name    string
-		d       *Diagnose
-		flagSet *flag.FlagSet
-		opts    *options
-		want    subcommands.ExitStatus
+		name string
+		d    *Diagnose
+		opts *options
+		want subcommands.ExitStatus
 	}{
 		{
 			name: "InvalidParams",
@@ -1883,9 +1892,6 @@ func TestDiagnosticsHandler(t *testing.T) {
 				HyperThreading:    "default",
 				Type:              "backup,disk",
 				BackintConfigFile: "sampleFile",
-			},
-			flagSet: &flag.FlagSet{
-				Usage: func() { return },
 			},
 			opts: &options{
 				exec: fakeExecForSuccess,
@@ -1901,7 +1907,6 @@ func TestDiagnosticsHandler(t *testing.T) {
 				BackintConfigFile: "sampleFile",
 				TestBucket:        "sample",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs: &fake.FileSystem{
@@ -1923,7 +1928,6 @@ func TestDiagnosticsHandler(t *testing.T) {
 				BackintConfigFile: "sampleFile",
 				TestBucket:        "sample",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs: &fake.FileSystem{
@@ -1949,10 +1953,12 @@ func TestDiagnosticsHandler(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
+		tc.d.runOpts = defaultRunOpts
 		t.Run(tc.name, func(t *testing.T) {
-			_, got := tc.d.diagnosticsHandler(ctx, tc.flagSet, tc.opts)
+			_, got := tc.d.diagnosticsHandler(ctx, tc.opts)
 			if got != tc.want {
-				t.Errorf("diagnosticsHandler(%v, %v) returned an unexpected exit status: %v, want: %v", tc.flagSet, tc.opts, got, tc.want)
+				t.Errorf("diagnosticsHandler(%v) returned an unexpected exit status: %v, want: %v", tc.opts, got, tc.want)
 			}
 		})
 	}
@@ -2004,9 +2010,10 @@ func TestRunBackint(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
+		tc.d.runOpts = defaultRunOpts
 		t.Run(tc.name, func(t *testing.T) {
-			var d Diagnose
-			gotErr := d.runBackint(ctx, tc.opts)
+			gotErr := tc.d.runBackint(ctx, tc.opts)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("runBackint(%v) returned error: %v, want error: %v", tc.opts, gotErr, tc.wantErr)
 			}
@@ -2087,7 +2094,6 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 	tests := []struct {
 		name              string
 		d                 *Diagnose
-		flagSet           *flag.FlagSet
 		opts              *options
 		wantErr           bool
 		wantHANAInstances []*sappb.SAPInstance
@@ -2098,7 +2104,6 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 				HyperThreading: "default",
 				Type:           "compute",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs:   fakeFileSystem(false),
@@ -2110,7 +2115,6 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 			d: &Diagnose{
 				Type: "compute",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs:   fakeFileSystem(false),
@@ -2138,7 +2142,6 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 			d: &Diagnose{
 				Type: "compute",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs:   fakeFileSystem(false),
@@ -2155,14 +2158,15 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
+		tc.d.runOpts = defaultRunOpts
 		t.Run(tc.name, func(t *testing.T) {
-			var d Diagnose
-			gotHANAInstances, err := d.runSystemDiscoveryOTE(context.Background(), tc.flagSet, tc.opts)
+			gotHANAInstances, err := tc.d.runSystemDiscoveryOTE(context.Background(), tc.opts)
 			if gotErr := err != nil; gotErr != tc.wantErr {
-				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned error: %v, want error presence: %v", tc.flagSet, tc.opts, err, tc.wantErr)
+				t.Errorf("runSystemDiscoveryOTE(%v) returned error: %v, want error presence: %v", tc.opts, err, tc.wantErr)
 			}
 			if diff := cmp.Diff(gotHANAInstances, tc.wantHANAInstances, protocmp.Transform()); diff != "" {
-				t.Errorf("runSystemDiscoveryOTE(%v, %v) returned an unexpected diff (-want +got): %v", tc.flagSet, tc.opts, diff)
+				t.Errorf("runSystemDiscoveryOTE(%v) returned an unexpected diff (-want +got): %v", tc.opts, diff)
 			}
 		})
 	}
@@ -2172,7 +2176,6 @@ func TestComputeData(t *testing.T) {
 	tests := []struct {
 		name    string
 		d       *Diagnose
-		flagSet *flag.FlagSet
 		opts    *options
 		wantErr bool
 	}{
@@ -2181,7 +2184,6 @@ func TestComputeData(t *testing.T) {
 			d: &Diagnose{
 				Type: "compute",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec: fakeExecForSuccess,
 				fs:   fakeFileSystem(false),
@@ -2411,7 +2413,6 @@ func TestComputeData(t *testing.T) {
 			d: &Diagnose{
 				Type: "compute",
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec:          fakeExecForSuccess,
 				cp:            defaultCloudProperties,
@@ -2431,7 +2432,6 @@ func TestComputeData(t *testing.T) {
 				Type:            "compute",
 				TotalDataPoints: 3,
 			},
-			flagSet: &flag.FlagSet{},
 			opts: &options{
 				exec:          fakeExecForSuccess,
 				fs:            fakeFileSystem(true),
@@ -2454,10 +2454,12 @@ func TestComputeData(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc.d.oteLogger = defaultOteLogger
+		tc.d.runOpts = defaultRunOpts
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.d.computeData(context.Background(), tc.flagSet, tc.opts)
+			err := tc.d.computeData(context.Background(), tc.opts)
 			if gotErr := err != nil; gotErr != tc.wantErr {
-				t.Errorf("computeData(%v, %v) = %v, want error presence: %v", tc.flagSet, tc.opts, gotErr, tc.wantErr)
+				t.Errorf("computeData(%v) = %v, want error presence: %v", tc.opts, gotErr, tc.wantErr)
 			}
 		})
 	}

@@ -84,6 +84,9 @@ type Diagnose struct {
 	Frequency         int    `json:"frequency,string"`    // Collection frequency in seconds for compute data.
 	TotalDataPoints   int    `json:"total-points,string"` // Total data points to collect in time-series for compute data.
 	help              bool
+	oteLogger         *onetime.OTELogger
+	runOpts           *onetime.RunOptions
+	usageFunc         func()
 }
 
 // ReadConfigFile abstracts os.ReadFile function for testability.
@@ -212,40 +215,42 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 	if !completed {
 		return exitStatus
 	}
-
-	_, exitStatus = d.ExecuteAndGetMessage(ctx, fs, lp, cp)
+	d.usageFunc = fs.Usage
+	_, exitStatus = d.Run(ctx, lp, onetime.CreateRunOptions(cp, false))
 	return exitStatus
 }
 
-// ExecuteAndGetMessage executes the OTE and returns message and exit status.
-func (d *Diagnose) ExecuteAndGetMessage(ctx context.Context, fs *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
+// Run executes the OTE and returns message and exit status.
+func (d *Diagnose) Run(ctx context.Context, lp log.Parameters, runOpts *onetime.RunOptions) (string, subcommands.ExitStatus) {
+	d.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
+	d.runOpts = runOpts
 	opts := &options{
 		fs:               filesystem.Helper{},
 		client:           s.NewClient,
 		exec:             commandlineexecutor.ExecuteCommand,
 		z:                zipperHelper{},
 		lp:               lp,
-		cp:               cp,
+		cp:               runOpts.CloudProperties,
 		collectProcesses: computeresources.CollectProcessesForInstance,
 	}
-	return d.diagnosticsHandler(ctx, fs, opts)
+	return d.diagnosticsHandler(ctx, opts)
 }
 
 // diagnosticsHandler is the main handler for the performance diagnostics OTE subcommand.
-func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet, opts *options) (string, subcommands.ExitStatus) {
-	if err := d.validateParams(ctx, flagSet); err != nil {
+func (d *Diagnose) diagnosticsHandler(ctx context.Context, opts *options) (string, subcommands.ExitStatus) {
+	if err := d.validateParams(ctx); err != nil {
 		return err.Error(), subcommands.ExitUsageError
 	}
 
 	destFilesPath := path.Join(d.OutputFilePath, d.OutputFileName)
 	if err := opts.fs.MkdirAll(destFilesPath, 0770); err != nil {
 		errMessage := fmt.Sprintf("error while creating a new directory: %s", destFilesPath)
-		onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+		d.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Collecting Performance Diagnostics Report for Agent for SAP...")
-	usagemetrics.Action(usagemetrics.PerformanceDiagnostics)
-	errs := performDiagnosticsOps(ctx, d, flagSet, opts)
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting Performance Diagnostics Report for Agent for SAP...")
+	d.oteLogger.LogUsageAction(usagemetrics.PerformanceDiagnostics)
+	errs := d.performDiagnosticsOps(ctx, opts)
 
 	oteLog := moveFiles{
 		oldPath: fmt.Sprintf("/var/log/google-cloud-sap-agent/%s.log", d.Name()),
@@ -254,36 +259,36 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 	if d.LogPath != "" {
 		oteLog.oldPath = d.LogPath
 	}
-	if err := addToBundle(ctx, []moveFiles{oteLog}, opts.fs); err != nil {
+	if err := d.addToBundle(ctx, []moveFiles{oteLog}, opts.fs); err != nil {
 		errs = append(errs, fmt.Errorf("failure in adding performance diagnostics OTE to bundle, failed with error %v", err))
 	}
 
 	zipFile := fmt.Sprintf("%s/%s.zip", destFilesPath, d.OutputFileName)
 	if err := zipSource(destFilesPath, zipFile, opts.fs, opts.z); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while zipping destination folder %s", zipFile), err)
+		d.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while zipping destination folder %s", zipFile), err)
 		errs = append(errs, err)
 	} else {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", zipFile))
+		d.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Zipped destination performance diagnostics bundle at %s", zipFile))
 	}
 
 	if d.OutputBucket != "" {
 		if err := d.uploadZip(ctx, zipFile, storage.ConnectToBucket, getReadWriter, opts); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while uploading zip %s", zipFile), err)
+			d.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while uploading zip %s", zipFile), err)
 			errs = append(errs, fmt.Errorf("failure in uploading zip, failed with error %v", err))
 		} else {
-			if err := removeDestinationFolder(ctx, destFilesPath, opts.fs); err != nil {
-				onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while removing folder %s", destFilesPath), err)
+			if err := d.removeDestinationFolder(ctx, destFilesPath, opts.fs); err != nil {
+				d.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while removing folder %s", destFilesPath), err)
 				errs = append(errs, fmt.Errorf("failure in removing folder %s, failed with error %v", destFilesPath, err))
 			}
 		}
 	}
 	if len(errs) > 0 {
-		usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFailure)
-		onetime.LogMessageToFileAndConsole(ctx, "Performance Diagnostics Report collection ran into following errors\n")
+		d.oteLogger.LogUsageAction(usagemetrics.PerformanceDiagnosticsFailure)
+		d.oteLogger.LogMessageToFileAndConsole(ctx, "Performance Diagnostics Report collection ran into following errors\n")
 		var errMessages []string
 		for _, err := range errs {
 			errMessages = append(errMessages, err.Error())
-			onetime.LogErrorToFileAndConsole(ctx, "Error: ", err)
+			d.oteLogger.LogErrorToFileAndConsole(ctx, "Error: ", err)
 		}
 		message := strings.Join(errMessages, ", ")
 		return message, subcommands.ExitFailure
@@ -292,10 +297,10 @@ func (d *Diagnose) diagnosticsHandler(ctx context.Context, flagSet *flag.FlagSet
 }
 
 // performDiagnosticsOps performs the operations requested by the user.
-func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagSet, opts *options) []error {
+func (d *Diagnose) performDiagnosticsOps(ctx context.Context, opts *options) []error {
 	errs := []error{}
 	// ConfigureInstance OTE subcommand needs to be run in every case.
-	exitStatus := d.runConfigureInstanceOTE(ctx, flagSet, opts)
+	exitStatus := d.runConfigureInstanceOTE(ctx, opts)
 	if exitStatus != subcommands.ExitSuccess {
 		errs = append(errs, fmt.Errorf("failure in executing ConfigureInstance OTE, failed with exist status %d", exitStatus))
 	}
@@ -306,31 +311,31 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 		case "all":
 			// Perform all operations.
 			if err := d.backup(ctx, opts); len(err) > 0 {
-				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsBackupFailure)
+				d.oteLogger.LogUsageError(usagemetrics.PerformanceDiagnosticsBackupFailure)
 				errs = append(errs, err...)
 			}
 			if err := d.runFIOCommands(ctx, opts); len(err) > 0 {
-				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsFIOFailure)
+				d.oteLogger.LogUsageError(usagemetrics.PerformanceDiagnosticsFIOFailure)
 				errs = append(errs, err...)
 			}
-			if err := d.computeData(ctx, flagSet, opts); err != nil {
+			if err := d.computeData(ctx, opts); err != nil {
 				errs = append(errs, err)
 			}
 		case "backup":
 			// Perform backup operation.
 			if err := d.backup(ctx, opts); len(err) > 0 {
-				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsBackupFailure)
+				d.oteLogger.LogUsageError(usagemetrics.PerformanceDiagnosticsBackupFailure)
 				errs = append(errs, err...)
 			}
 		case "io":
 			// Perform IO Operation.
 			if err := d.runFIOCommands(ctx, opts); len(err) > 0 {
-				usagemetrics.Error(usagemetrics.PerformanceDiagnosticsFIOFailure)
+				d.oteLogger.LogUsageError(usagemetrics.PerformanceDiagnosticsFIOFailure)
 				errs = append(errs, err...)
 			}
 		case "compute":
 			// Perform System Discovery and collect compute metrics.
-			if err := d.computeData(ctx, flagSet, opts); err != nil {
+			if err := d.computeData(ctx, opts); err != nil {
 				errs = append(errs, err)
 			}
 		default:
@@ -341,7 +346,7 @@ func performDiagnosticsOps(ctx context.Context, d *Diagnose, flagSet *flag.FlagS
 }
 
 // validateParams checks if the parameters provided to the OTE subcommand are valid.
-func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) error {
+func (d *Diagnose) validateParams(ctx context.Context) error {
 	typeValues := map[string]bool{
 		"all":     false,
 		"backup":  false,
@@ -354,8 +359,10 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) er
 		tp = strings.TrimSpace(tp)
 		if _, ok := typeValues[tp]; !ok {
 			err := fmt.Errorf("invalid flag usage, incorrect value of type. Please check usage")
-			onetime.LogMessageToFileAndConsole(ctx, err.Error())
-			flagSet.Usage()
+			d.oteLogger.LogErrorToFileAndConsole(ctx, err.Error(), err)
+			if d.usageFunc != nil {
+				d.usageFunc()
+			}
 			return err
 		}
 		typeValues[tp] = true
@@ -364,7 +371,7 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) er
 	if typeValues["backup"] || typeValues["all"] {
 		if d.BackintConfigFile == "" && d.TestBucket == "" {
 			err := fmt.Errorf("test bucket cannot be empty to perform backup operation")
-			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
+			d.oteLogger.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
 			return err
 		}
 	}
@@ -372,12 +379,12 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) er
 		// Only logging the error as the parameters are optional.
 		if d.Frequency < minFrequency {
 			err := fmt.Errorf("frequency must be at least %v seconds and hence using default value of %v", minFrequency, minFrequency)
-			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
+			d.oteLogger.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
 			d.Frequency = minFrequency
 		}
 		if d.TotalDataPoints < minTotalDataPoints {
 			err := fmt.Errorf("total data points must be at least %v and hence using default value of %v", minTotalDataPoints, defaultTotalDataPoints)
-			onetime.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
+			d.oteLogger.LogErrorToFileAndConsole(ctx, "invalid flag usage", err)
 			d.TotalDataPoints = defaultTotalDataPoints
 		}
 	}
@@ -393,25 +400,24 @@ func (d *Diagnose) validateParams(ctx context.Context, flagSet *flag.FlagSet) er
 	return nil
 }
 
-func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet, opts *options) subcommands.ExitStatus {
-	ciOTEParams := &onetime.InternallyInvokedOTE{
-		Lp:        opts.lp,
-		Cp:        opts.cp,
-		InvokedBy: "performance-diagnostics-configure-instance",
-	}
+func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, opts *options) subcommands.ExitStatus {
 	ci := &configureinstance.ConfigureInstance{
 		Check:           true,
 		ExecuteFunc:     opts.exec,
 		HyperThreading:  d.HyperThreading,
 		OverrideVersion: d.OverrideVersion,
 		PrintDiff:       d.PrintDiff,
-		IIOTEParams:     ciOTEParams,
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Executing ConfigureInstance")
-	defer onetime.LogMessageToFileAndConsole(ctx, "Finished invoking ConfigureInstance")
-	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsConfigureInstance)
-	res := ci.Execute(ctx, f)
-	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.LogLevel))
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Executing ConfigureInstance")
+	defer d.oteLogger.LogMessageToFileAndConsole(ctx, "Finished invoking ConfigureInstance")
+	d.oteLogger.LogUsageAction(usagemetrics.PerformanceDiagnosticsConfigureInstance)
+	if !d.runOpts.DaemonMode {
+		onetime.SetupOneTimeLogging(opts.lp, "performance-diagnostics-configure-instance", log.StringLevelToZapcore(d.LogLevel))
+	}
+	res, _ := ci.Run(ctx, d.runOpts)
+	if !d.runOpts.DaemonMode {
+		onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.LogLevel))
+	}
 	ciPath := moveFiles{
 		oldPath: "/var/log/google-cloud-sap-agent/performance-diagnostics-configure-instance.log",
 		newPath: path.Join(d.OutputFilePath, d.OutputFileName, "performance-diagnostics-configure-instance.log"),
@@ -421,10 +427,10 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 	}
 	paths := []moveFiles{ciPath}
 	if res != subcommands.ExitSuccess {
-		onetime.LogMessageToFileAndConsole(ctx, "Error while executing ConfigureInstance OTE")
+		d.oteLogger.LogMessageToFileAndConsole(ctx, "Error while executing ConfigureInstance OTE")
 	}
-	if err := addToBundle(ctx, paths, opts.fs); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "Error while adding ConfigureInstance OTE logs to bundle", err)
+	if err := d.addToBundle(ctx, paths, opts.fs); err != nil {
+		d.oteLogger.LogErrorToFileAndConsole(ctx, "Error while adding ConfigureInstance OTE logs to bundle", err)
 		return subcommands.ExitFailure
 	}
 	return res
@@ -432,15 +438,15 @@ func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, f *flag.FlagSet,
 
 // computeData collects the compute metrics of the
 // HANA processes running in the HANA instances discovered.
-func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts *options) error {
+func (d *Diagnose) computeData(ctx context.Context, opts *options) error {
 	var err error
 
 	// Run system discovery OTE to get the HANA instances.
-	hanaInstances, err := d.runSystemDiscoveryOTE(ctx, flagSet, opts)
+	hanaInstances, err := d.runSystemDiscoveryOTE(ctx, opts)
 	if err != nil {
 		return err
 	}
-	onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found %d HANA instances: %v", len(hanaInstances), hanaInstances))
+	d.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Found %d HANA instances: %v", len(hanaInstances), hanaInstances))
 
 	// Collect HANA processes running in the HANA instances.
 	instanceWiseHANAProcesses, err := fetchAllProcesses(ctx, opts, hanaInstances)
@@ -470,14 +476,14 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 	// err from here is the most recent error encountered and
 	// its done this way to collect as many metrics as possible.
 	for i, ip := range instanceWiseHANAProcesses {
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for the %v processes in instance: %v", len(instanceWiseHANAProcesses[i]), hanaInstances[i].GetSapsid()))
+		d.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Collecting metrics for the %v processes in instance: %v", len(instanceWiseHANAProcesses[i]), hanaInstances[i].GetSapsid()))
 		instanceReport := fmt.Sprintf("\nInstance: %v\n", hanaInstances[i])
 		ptsm, metricsCollectionErr := d.collectMetrics(ctx, opts, hanaInstances[i], ip)
 		if metricsCollectionErr != nil {
 			err = metricsCollectionErr
 		}
 		instanceReport += fmt.Sprintf("%v\n", buildReport(ptsm))
-		onetime.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for the %v processes in instance: %v", len(instanceWiseHANAProcesses[i]), hanaInstances[i].GetSapsid()))
+		d.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Finished collecting metrics for the %v processes in instance: %v", len(instanceWiseHANAProcesses[i]), hanaInstances[i].GetSapsid()))
 		// Write report to the File.
 		if _, fileWriteErr := opts.fs.WriteStringToFile(f, instanceReport); fileWriteErr != nil {
 			err = fileWriteErr
@@ -489,13 +495,7 @@ func (d *Diagnose) computeData(ctx context.Context, flagSet *flag.FlagSet, opts 
 
 // runSystemDiscoveryOTE fetches the HANA instances by
 // invoking the system discovery OTE.
-func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, opts *options) ([]*sappb.SAPInstance, error) {
-	sdOTEParams := &onetime.InternallyInvokedOTE{
-		Lp:        opts.lp,
-		Cp:        opts.cp,
-		InvokedBy: d.Name(),
-	}
-
+func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, opts *options) ([]*sappb.SAPInstance, error) {
 	// Disabling cloud logging of system discovery data
 	// here as that's not the goal here.
 	systemDiscovery := &systemdiscovery.SystemDiscovery{
@@ -503,14 +503,13 @@ func (d *Diagnose) runSystemDiscoveryOTE(ctx context.Context, f *flag.FlagSet, o
 		CloudDiscoveryInterface: opts.cloudDiscoveryInterface,
 		AppsDiscovery:           opts.appsDiscovery,
 		ConfigPath:              "",
-		IIOTEParams:             sdOTEParams,
 	}
 
-	onetime.LogMessageToFileAndConsole(ctx, "Executing system discovery OTE")
-	defer onetime.LogMessageToFileAndConsole(ctx, "Finished system discovery OTE")
-	discovery, err := systemDiscovery.SystemDiscoveryHandler(ctx, opts.lp.CloudLoggingClient, opts.cp, opts.lp.CloudLogName)
-	if err != nil {
-		return nil, err
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Executing system discovery OTE")
+	defer d.oteLogger.LogMessageToFileAndConsole(ctx, "Finished system discovery OTE")
+	discovery, status := systemDiscovery.Run(ctx, d.runOpts)
+	if status != subcommands.ExitSuccess {
+		return nil, fmt.Errorf("system discovery did not succeed. subcommand exit status is: %v", status)
 	}
 
 	// Filter HANA instances from the SAPInstances discovered.
@@ -752,7 +751,7 @@ func listOperations(ctx context.Context, operations []string) map[string]struct{
 // backup performs the backup operation.
 func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 	var errs []error
-	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsBackup)
+	d.oteLogger.LogUsageAction(usagemetrics.PerformanceDiagnosticsBackup)
 	backupPath := path.Join(d.OutputFilePath, d.OutputFileName, "backup")
 	if err := opts.fs.MkdirAll(backupPath, 0770); err != nil {
 		errs = append(errs, err)
@@ -761,7 +760,7 @@ func (d *Diagnose) backup(ctx context.Context, opts *options) []error {
 
 	config, err := d.setBackintConfig(ctx, opts.fs, opts.fs.ReadFile)
 	if err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, "error while unmarshalling backint config, failed with error %v", err)
+		d.oteLogger.LogErrorToFileAndConsole(ctx, "error while unmarshalling backint config, failed with error %v", err)
 		errs = append(errs, err)
 		return errs
 	}
@@ -801,7 +800,7 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 		bucket = d.TestBucket
 	}
 	if bucket == "" {
-		onetime.LogErrorToFileAndConsole(ctx, "error determining bucket", fmt.Errorf("no bucket provided, either in param-file or as test-bucket"))
+		d.oteLogger.LogErrorToFileAndConsole(ctx, "error determining bucket", fmt.Errorf("no bucket provided, either in param-file or as test-bucket"))
 		return fmt.Errorf("no bucket provided, either in param-file or as test-bucket")
 	}
 
@@ -819,7 +818,7 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 	var ok bool
 	if bucketHandle, ok = ctb(ctx, connectParams); !ok {
 		err := errors.New("error establishing connection to bucket, please check the logs")
-		onetime.LogErrorToFileAndConsole(ctx, "failed connecting to bucket", err)
+		d.oteLogger.LogErrorToFileAndConsole(ctx, "failed connecting to bucket", err)
 		return err
 	}
 
@@ -830,7 +829,7 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 	}
 	if attrs.RetentionPolicy != nil {
 		err := errors.New("retention policy is set, backup operation will fail; please provide a bucket without retention policy")
-		onetime.LogErrorToFileAndConsole(ctx, "Error performing backup operation", err)
+		d.oteLogger.LogErrorToFileAndConsole(ctx, "Error performing backup operation", err)
 		return err
 	}
 	return nil
@@ -843,18 +842,18 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 		User:      "perf-diag-user",
 		ParamFile: d.BackintConfigFile,
 		OutFile:   path.Join(d.OutputFilePath, d.OutputFileName, "backup/backint-output.log"),
-		IIOTEParams: &onetime.InternallyInvokedOTE{
-			InvokedBy: "performance-diagnostics-backint",
-			Lp:        opts.lp,
-			Cp:        opts.cp,
-		},
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Running backint...")
-	defer onetime.LogMessageToFileAndConsole(ctx, "Finished running backint.")
-	res := backintParams.Execute(ctx, &flag.FlagSet{})
-	onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.LogLevel))
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Running backint...")
+	defer d.oteLogger.LogMessageToFileAndConsole(ctx, "Finished running backint.")
+	if !d.runOpts.DaemonMode {
+		onetime.SetupOneTimeLogging(opts.lp, "performance-diagnostics-backint", log.StringLevelToZapcore(d.LogLevel))
+	}
+	_, res := backintParams.Run(ctx, d.runOpts)
+	if !d.runOpts.DaemonMode {
+		onetime.SetupOneTimeLogging(opts.lp, d.Name(), log.StringLevelToZapcore(d.LogLevel))
+	}
 	if res != subcommands.ExitSuccess {
-		onetime.LogMessageToFileAndConsole(ctx, "Error while executing backint")
+		d.oteLogger.LogMessageToFileAndConsole(ctx, "Error while executing backint")
 	}
 
 	backintPath := moveFiles{
@@ -867,7 +866,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 	}
 	paths := []moveFiles{backintPath}
 
-	if err := addToBundle(ctx, paths, opts.fs); err != nil {
+	if err := d.addToBundle(ctx, paths, opts.fs); err != nil {
 		return err
 	}
 
@@ -882,7 +881,7 @@ func (d *Diagnose) runBackint(ctx context.Context, opts *options) error {
 // provided.
 func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 	var errs []error
-	onetime.LogMessageToFileAndConsole(ctx, "Running gsutil perfdiag...")
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Running gsutil perfdiag...")
 	targetPath := path.Join(d.OutputFilePath, d.OutputFileName)
 	targetBucket := d.TestBucket
 	if targetBucket == "" {
@@ -906,15 +905,15 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 			errs = append(errs, fmt.Errorf("error while executing gsutil perfdiag command %v", res.StdErr))
 		}
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Finished running gsutil perfdiag.")
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Finished running gsutil perfdiag.")
 	return errs
 }
 
 // runFIOCommands runs the FIO commands in order to simulate HANA IO operations.
 func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 	var errs []error
-	onetime.LogMessageToFileAndConsole(ctx, "Running FIO commands...")
-	usagemetrics.Action(usagemetrics.PerformanceDiagnosticsFIO)
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Running FIO commands...")
+	d.oteLogger.LogUsageAction(usagemetrics.PerformanceDiagnosticsFIO)
 	targetPath := path.Join(d.OutputFilePath, d.OutputFileName, "io")
 	if err := opts.fs.MkdirAll(targetPath, 0770); err != nil {
 		errs = append(errs, fmt.Errorf("error while creating a new directory: %s, error %s", targetPath, err.Error()))
@@ -938,7 +937,7 @@ func (d *Diagnose) runFIOCommands(ctx context.Context, opts *options) []error {
 			errs = append(errs, err)
 		}
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Finished running FIO commands.")
+	d.oteLogger.LogMessageToFileAndConsole(ctx, "Finished running FIO commands.")
 	return errs
 }
 
@@ -960,7 +959,7 @@ func execAndWriteToFile(ctx context.Context, opFile, targetPath string, params c
 }
 
 // addToBundle adds the files to performance diagnostics bundle.
-func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSystem) error {
+func (d *Diagnose) addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSystem) error {
 	var hasErrors bool
 	for _, p := range paths {
 		if p.oldPath == "" || p.newPath == "" {
@@ -981,7 +980,7 @@ func addToBundle(ctx context.Context, paths []moveFiles, fs filesystem.FileSyste
 		defer dstFD.Close()
 
 		if _, err := fs.Copy(dstFD, srcFD); err != nil {
-			onetime.LogErrorToFileAndConsole(ctx, "error while renaming file: %v", err)
+			d.oteLogger.LogErrorToFileAndConsole(ctx, "error while renaming file: %v", err)
 			hasErrors = true
 		}
 	}
@@ -1110,9 +1109,9 @@ func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper)
 }
 
 // removeDestinationFolder removes the destination folder.
-func removeDestinationFolder(ctx context.Context, path string, fu filesystem.FileSystem) error {
+func (d *Diagnose) removeDestinationFolder(ctx context.Context, path string, fu filesystem.FileSystem) error {
 	if err := fu.RemoveAll(path); err != nil {
-		onetime.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while removing folder %s", path), err)
+		d.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error while removing folder %s", path), err)
 		return err
 	}
 	return nil

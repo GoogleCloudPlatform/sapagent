@@ -19,9 +19,9 @@ package performancediagnosticshandler
 
 import (
 	"context"
-	"runtime"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -38,8 +38,7 @@ func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.Command, cp
 	usagemetrics.Action(usagemetrics.UAPPerformanceDiagnosticsCommand)
 	d := &performancediagnostics.Diagnose{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), d)
-	lp := log.Parameters{OSType: runtime.GOOS}
-	message, exitStatus := d.ExecuteAndGetMessage(ctx, nil, lp, cp)
+	message, exitStatus := d.Run(ctx, log.Parameters{}, onetime.CreateRunOptions(cp, true))
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   message,

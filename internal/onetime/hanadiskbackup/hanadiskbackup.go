@@ -274,7 +274,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 
 		if len(s.disks) > 1 {
 			errMessage := "ERROR: backup of striped HANA data disks are not currently supported, exiting"
-			onetime.LogErrorToFileAndConsole(ctx, errMessage, err)
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			return errMessage, subcommands.ExitFailure
 
 			// TODO: Uncomment this code once prod APIs for ISGs are available.

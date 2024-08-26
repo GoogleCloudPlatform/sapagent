@@ -291,7 +291,7 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			discovery, err := test.sd.SystemDiscoveryHandler(ctx, defaultCloudLoggingClient, defaultCloudProperties, "")
+			discovery, err := test.sd.systemDiscoveryHandler(ctx, defaultCloudLoggingClient, defaultCloudProperties)
 			if gotErr := err != nil; gotErr != test.wantErr {
 				t.Errorf("SystemDiscoveryHandler() returned an unexpected error: %v, want error presence = %v", err, test.wantErr)
 			}
@@ -378,7 +378,7 @@ func TestInitDefaults(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := test.sd.initDefaults(context.Background(), defaultCloudLoggingClient, test.fakeNewGCE, "")
+			err := test.sd.initDefaults(context.Background(), defaultCloudLoggingClient, test.fakeNewGCE)
 			if gotErr := err != nil; gotErr != test.wantErr {
 				t.Errorf("initDefaults() returned an unexpected error: %v, want error presence = %v", err, test.wantErr)
 			}
