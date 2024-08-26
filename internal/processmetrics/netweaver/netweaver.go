@@ -209,7 +209,7 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 			log.CtxLogger(ctx).Info("Process metrics context cancelled, exiting collectAndSend.")
 			return nil
 		default:
-			log.CtxLogger(ctx).Infow("Attempting collector retry", "attempt", attempt)
+			log.CtxLogger(ctx).Debugw("Attempting collector retry", "attempt", attempt)
 			var err error
 			res, err = p.Collect(ctx)
 			if err != nil {
