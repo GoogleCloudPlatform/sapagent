@@ -134,7 +134,7 @@ type WlmInterface interface {
 
 // CloudDiscoveryInterface is exported to be used by the system discovery OTE.
 type CloudDiscoveryInterface interface {
-	DiscoverComputeResources(context.Context, *spb.SapDiscovery_Resource, []string, *ipb.CloudProperties) []*spb.SapDiscovery_Resource
+	DiscoverComputeResources(context.Context, *spb.SapDiscovery_Resource, string, []string, *ipb.CloudProperties) []*spb.SapDiscovery_Resource
 }
 
 // HostDiscoveryInterface is exported to be used by the system discovery OTE.
@@ -341,18 +341,21 @@ func (d *Discovery) discoverOverrideSystem(ctx context.Context, overrideFile str
 
 func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudProperties, config *cpb.Configuration) []*spb.SapDiscovery {
 	instanceURI := fmt.Sprintf("projects/%s/zones/%s/instances/%s", cp.GetProjectId(), cp.GetZone(), cp.GetInstanceName())
-	log.CtxLogger(ctx).Info("Starting host discovery")
-	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)
-	log.CtxLogger(ctx).Debugw("Host Resource Names", "names", hostResourceNames)
 	log.CtxLogger(ctx).Debug("Discovering current host")
-	hostResources := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, nil, append([]string{instanceURI}, hostResourceNames...), cp)
-	log.CtxLogger(ctx).Debugw("Host Resources", "hostResources", hostResources)
+	hostInstanceResources := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, nil, "", []string{instanceURI}, cp)
+	log.CtxLogger(ctx).Debugw("Host Resources", "hostResources", hostInstanceResources)
 	var instanceResource *spb.SapDiscovery_Resource
-	// Find the instance resource
-	for _, r := range hostResources {
-		if strings.Contains(r.ResourceUri, cp.GetInstanceName()) {
+	var instanceSubnetwork string
+	// Find the instance resource and its subnetwork
+	for _, r := range hostInstanceResources {
+		if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE && strings.Contains(r.ResourceUri, cp.GetInstanceName()) {
 			log.CtxLogger(ctx).Debugf("Instance Resource: %v", r)
 			instanceResource = r
+		}
+		if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK {
+			instanceSubnetwork = r.ResourceUri
+		}
+		if instanceResource != nil && instanceSubnetwork != "" {
 			break
 		}
 	}
@@ -360,6 +363,14 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 		log.CtxLogger(ctx).Info("Discovering system from override file")
 		return d.discoverOverrideSystem(ctx, systemDiscoveryOverride, instanceResource)
 	}
+	log.CtxLogger(ctx).Info("Starting host discovery")
+	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)
+	log.CtxLogger(ctx).Debugw("Host Resource Names", "names", hostResourceNames)
+	log.CtxLogger(ctx).Infow("Discovering other host resources")
+	hostResources := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, hostResourceNames, cp)
+	hostResources = removeDuplicates(append(hostResources, hostInstanceResources...))
+	log.CtxLogger(ctx).Debugw("Host Resources", "hostResources", hostResources)
+
 	sapSystems := []*spb.SapDiscovery{}
 
 	log.CtxLogger(ctx).Info("Starting SAP Discovery")
@@ -372,7 +383,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 		system := &spb.SapDiscovery{}
 		if s.AppComponent != nil {
 			log.CtxLogger(ctx).Info("Discovering cloud resources for app")
-			appRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, s.AppHosts, cp)
+			appRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, s.AppHosts, cp)
 			log.CtxLogger(ctx).Debugf("App Resources: %v", appRes)
 			if s.AppOnHost {
 				appRes = append(appRes, hostResources...)
@@ -380,7 +391,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			}
 			if s.AppComponent.GetApplicationProperties().GetNfsUri() != "" {
 				log.CtxLogger(ctx).Info("Discovering cloud resources for app NFS")
-				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, []string{s.AppComponent.GetApplicationProperties().GetNfsUri()}, cp)
+				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, []string{s.AppComponent.GetApplicationProperties().GetNfsUri()}, cp)
 				if len(nfsRes) > 0 {
 					appRes = append(appRes, nfsRes...)
 					s.AppComponent.GetApplicationProperties().NfsUri = nfsRes[0].GetResourceUri()
@@ -388,7 +399,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			}
 			if s.AppComponent.GetApplicationProperties().GetAscsUri() != "" {
 				log.CtxLogger(ctx).Info("Discovering cloud resources for app ASCS")
-				ascsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, []string{s.AppComponent.GetApplicationProperties().GetAscsUri()}, cp)
+				ascsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, []string{s.AppComponent.GetApplicationProperties().GetAscsUri()}, cp)
 				if len(ascsRes) > 0 {
 					log.CtxLogger(ctx).Debugw("ASCS Resources", "res", ascsRes)
 					appRes = append(appRes, ascsRes...)
@@ -396,7 +407,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 				}
 			}
 			if len(s.AppComponent.GetHaHosts()) > 0 {
-				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, s.AppComponent.GetHaHosts(), cp)
+				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, s.AppComponent.GetHaHosts(), cp)
 				// Find the instances
 				var haURIs []string
 				for _, res := range haRes {
@@ -413,14 +424,14 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 		}
 		if s.DBComponent != nil {
 			log.CtxLogger(ctx).Info("Discovering cloud resources for database")
-			dbRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, s.DBHosts, cp)
+			dbRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, s.DBHosts, cp)
 			log.CtxLogger(ctx).Debugw("Database Resources", "res", dbRes)
 			if s.DBOnHost {
 				dbRes = append(dbRes, hostResources...)
 			}
 			if s.DBComponent.GetDatabaseProperties().GetSharedNfsUri() != "" {
 				log.CtxLogger(ctx).Debug("Discovering cloud resources for database NFS")
-				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, []string{s.DBComponent.GetDatabaseProperties().GetSharedNfsUri()}, cp)
+				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, []string{s.DBComponent.GetDatabaseProperties().GetSharedNfsUri()}, cp)
 				if len(nfsRes) > 0 {
 					dbRes = append(dbRes, nfsRes...)
 					s.DBComponent.GetDatabaseProperties().SharedNfsUri = nfsRes[0].GetResourceUri()
@@ -428,7 +439,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			}
 			if len(s.DBComponent.GetHaHosts()) > 0 {
 				log.CtxLogger(ctx).Debug("Discovering cloud resources for database HA")
-				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, s.DBComponent.GetHaHosts(), cp)
+				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, s.DBComponent.GetHaHosts(), cp)
 				// Find the instances
 				var haURIs []string
 				for _, res := range haRes {
@@ -455,7 +466,7 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 		if len(s.InstanceProperties) > 0 {
 			for _, iProp := range s.InstanceProperties {
 				log.CtxLogger(ctx).Debugw("Discovering instance properties", "props", iProp)
-				res := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, []string{iProp.VirtualHostname}, cp)
+				res := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, []string{iProp.VirtualHostname}, cp)
 				log.CtxLogger(ctx).Debugf("Discovered instance properties: %s", res)
 				if res == nil {
 					continue

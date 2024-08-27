@@ -158,7 +158,7 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 		},
 		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 		},
 		HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 			DiscoverCurrentHostResp: [][]string{{}},
@@ -193,7 +193,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
 			DiscoverCurrentHostResp: [][]string{{}},
@@ -225,22 +225,27 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:  defaultInstanceURI,
-			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
-				ResourceUri:  "some-shared-nfs-uri",
-			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:  defaultInstanceURI,
-			}}},
+			}}, {},
+				{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -331,7 +336,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-			}}, {{
+			}}, {}, {{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
@@ -351,6 +356,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -445,7 +454,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-			}}, {{
+			}}, {}, {{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
@@ -457,6 +466,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -520,19 +533,21 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-				}}, {{
+				}}, {}, {{
 					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-				}},
-				{},
-				{{
+				}}, {}, {{
 					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-ascs-uri",
 				}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -587,7 +602,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}},
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}, {}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
 			DiscoverCurrentHostResp: [][]string{{}},
@@ -624,7 +639,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
-			}, {
+			}}, {{
 				ResourceUri:      "some-host-resource",
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
@@ -636,7 +651,11 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
-				HostList: []string{defaultInstanceURI, "some-host-resource"},
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-host-resource"},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -687,7 +706,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
-			}, {
+			}}, {{
 				ResourceUri:      "some-host-resource",
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
@@ -699,7 +718,11 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
-				HostList: []string{defaultInstanceURI, "some-host-resource"},
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-host-resource"},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -758,7 +781,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
-			}, {
+			}}, {{
 				ResourceUri:      "some-host-resource",
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
@@ -774,7 +797,11 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
-				HostList: []string{defaultInstanceURI, "some-host-resource"},
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-host-resource"},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -859,7 +886,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
-			}, {
+			}}, {{
 				ResourceUri:      "some-host-resource",
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
@@ -875,7 +902,11 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
-				HostList: []string{defaultInstanceURI, "some-host-resource"},
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-host-resource"},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -944,7 +975,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
-			}, {
+			}}, {{
 				ResourceUri:      "some-host-resource",
 				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
@@ -960,7 +991,11 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
-				HostList: []string{defaultInstanceURI, "some-host-resource"},
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-host-resource"},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1031,7 +1066,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-			}}, {{
+			}}, {}, {{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
@@ -1047,6 +1082,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1123,7 +1162,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-			}}, {{
+			}}, {}, {{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
@@ -1147,6 +1186,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1240,7 +1283,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-			}}, {{
+			}}, {}, {{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
@@ -1268,6 +1311,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1398,7 +1445,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-			}}, {{
+			}}, {}, {{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
@@ -1434,6 +1481,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
 				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1736,7 +1787,7 @@ func TestRunDiscovery(t *testing.T) {
 				}}},
 			},
 			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}},
+				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}},
 			},
 			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
 				DiscoverCurrentHostResp: [][]string{{}},
@@ -1776,7 +1827,7 @@ func TestRunDiscovery(t *testing.T) {
 				}}},
 			},
 			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}},
+				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}},
 			},
 			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
 				DiscoverCurrentHostResp: [][]string{{}},
@@ -1841,7 +1892,7 @@ func TestRunDiscovery(t *testing.T) {
 				}}},
 			},
 			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {defaultInstanceResource}, {}, {}},
+				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}, {defaultInstanceResource}, {}, {}, {}},
 			},
 			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
 				DiscoverCurrentHostResp: [][]string{{}, {}},

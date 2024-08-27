@@ -31,13 +31,13 @@ import (
 type GetDiskArguments struct{ Project, Zone, DiskName string }
 
 // GetAddressByIPArguments is a struct to match arguments passed in to the GetAddressbyIP function for validation.
-type GetAddressByIPArguments struct{ Project, Region, Address string }
+type GetAddressByIPArguments struct{ Project, Region, Subnetwork, Address string }
 
 // GetForwardingRuleArguments is a struct to match arguments passed in to the GetForwardingRule function for validation.
 type GetForwardingRuleArguments struct{ Project, Location, Name string }
 
 // GetURIForIPArguments is a struct to match arguments passed in to the GetURIForIP function.
-type GetURIForIPArguments struct{ Project, IP string }
+type GetURIForIPArguments struct{ Project, Region, Subnetwork, IP string }
 
 // TestGCE implements GCE interfaces. A new TestGCE instance should be used per iteration of the test.
 type TestGCE struct {
@@ -184,7 +184,7 @@ func (g *TestGCE) GetAddress(project, location, name string) (*compute.Address, 
 }
 
 // GetAddressByIP fakes a call to the compute API to retrieve a list of addresses.
-func (g *TestGCE) GetAddressByIP(project, region, address string) (*compute.Address, error) {
+func (g *TestGCE) GetAddressByIP(project, region, subnetwork, address string) (*compute.Address, error) {
 	defer func() {
 		g.GetAddressByIPCallCount++
 		if g.GetAddressByIPCallCount >= len(g.GetAddressByIPResp) || g.GetAddressByIPCallCount >= len(g.GetAddressByIPErr) {
@@ -193,7 +193,7 @@ func (g *TestGCE) GetAddressByIP(project, region, address string) (*compute.Addr
 	}()
 	if g.GetAddressByIPArgs != nil && len(g.GetAddressByIPArgs) > 0 {
 		args := g.GetAddressByIPArgs[g.GetAddressByIPCallCount]
-		if args != nil && (args.Project != project || args.Region != region || args.Address != address) {
+		if args != nil && (args.Project != project || args.Region != region || args.Address != address || args.Subnetwork != subnetwork) {
 			g.T.Errorf("Mismatch in expected arguments for GetAddressByIP: \ngot: (%s, %s, %s)\nwant:  (%s, %s, %s)", project, region, address, args.Project, args.Region, args.Address)
 		}
 	}
@@ -277,7 +277,7 @@ func (g *TestGCE) GetInstanceByIP(project, ip string) (*compute.Instance, error)
 }
 
 // GetURIForIP fakes calls to compute APIs to locate an object URI related to the IP address provided.
-func (g *TestGCE) GetURIForIP(project, ip string) (string, error) {
+func (g *TestGCE) GetURIForIP(project, region, subnetwork, ip string) (string, error) {
 	defer func() {
 		g.GetURIForIPCallCount++
 		if g.GetURIForIPCallCount >= len(g.GetURIForIPResp) || g.GetURIForIPCallCount >= len(g.GetURIForIPErr) {

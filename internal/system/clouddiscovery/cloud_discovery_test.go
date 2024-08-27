@@ -236,7 +236,7 @@ func TestDiscoverComputeResources(t *testing.T) {
 				HostResolver: func(string) ([]string, error) { return []string{}, nil },
 				GceService:   test.gceService,
 			}
-			got := c.DiscoverComputeResources(context.Background(), test.parent, test.hostList, defaultCloudProperties)
+			got := c.DiscoverComputeResources(context.Background(), test.parent, "", test.hostList, defaultCloudProperties)
 			if diff := cmp.Diff(test.want, got, resourceListDiffOpts...); diff != "" {
 				t.Errorf("discoverComputeResources() returned unexpected diff (-want +got):\n%s", diff)
 			}
@@ -661,6 +661,7 @@ func TestDiscoverResource(t *testing.T) {
 			GetURIForIPErr:  []error{nil},
 			GetURIForIPArgs: []*fake.GetURIForIPArguments{{
 				Project: "parent-project",
+				Region:  "test-zone",
 				IP:      "1.2.3.4",
 			}},
 			GetDiskResp: []*compute.Disk{{SelfLink: "test-disk"}},
@@ -917,21 +918,27 @@ func TestDiscoverResourceForURI(t *testing.T) {
 			ResourceUri:  "test-forwarding-rule",
 		},
 		wantToDiscover: []toDiscover{{
-			name: "test-backend-service",
+			name:       "test-backend-service",
+			region:     "us-central1",
+			subnetwork: "test-subnetwork",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
 				ResourceUri:  "test-forwarding-rule",
 			},
 		}, {
-			name: "test-network",
+			name:       "test-network",
+			region:     "us-central1",
+			subnetwork: "test-subnetwork",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
 				ResourceUri:  "test-forwarding-rule",
 			},
 		}, {
-			name: "test-subnetwork",
+			name:       "test-subnetwork",
+			region:     "us-central1",
+			subnetwork: "test-subnetwork",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
@@ -967,14 +974,16 @@ func TestDiscoverResourceForURI(t *testing.T) {
 			ResourceUri:  "test-instance-group",
 		},
 		wantToDiscover: []toDiscover{{
-			name: "test-instance",
+			name:   "test-instance",
+			region: "us-central1",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 				ResourceUri:  "test-instance-group",
 			},
 		}, {
-			name: "test-instance2",
+			name:   "test-instance2",
+			region: "us-central1",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
@@ -1051,14 +1060,16 @@ func TestDiscoverResourceForURI(t *testing.T) {
 			ResourceUri:  "test-backend",
 		},
 		wantToDiscover: []toDiscover{{
-			name: "test-group",
+			name:   "test-group",
+			region: "test-region",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 				ResourceUri:  "test-backend",
 			},
 		}, {
-			name: "test-group2",
+			name:   "test-group2",
+			region: "test-region",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
@@ -1133,18 +1144,21 @@ func TestDiscoverAddress(t *testing.T) {
 			ResourceUri:  "some-address",
 		},
 		wantToDiscover: []toDiscover{{
-			name: "some-network",
+			name:   "some-network",
+			region: defaultRegion,
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 				ResourceUri:  "some-address",
-			}}, {
-			name: "some-subnet", parent: &spb.SapDiscovery_Resource{
+			},
+		}, {
+			name:   "some-subnet",
+			region: defaultRegion,
+			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 				ResourceUri:  "some-address",
-			}},
-		},
+			}}},
 	}, {
 		name:       "failure",
 		gceService: &fake.TestGCE{GetAddressResp: []*compute.Address{nil}, GetAddressErr: []error{cmpopts.AnyError}},
@@ -1358,21 +1372,27 @@ func TestDiscoverForwardingRule(t *testing.T) {
 			ResourceUri:  "some-forwarding-rule",
 		},
 		wantToDiscover: []toDiscover{{
-			name: "some-network",
+			name:       "some-network",
+			subnetwork: "some-subnet",
+			region:     defaultRegion,
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
 				ResourceUri:  "some-forwarding-rule",
 			},
 		}, {
-			name: "some-subnet",
+			name:       "some-subnet",
+			subnetwork: "some-subnet",
+			region:     defaultRegion,
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,
 				ResourceUri:  "some-forwarding-rule",
 			},
 		}, {
-			name: "some-backend-service",
+			name:       "some-backend-service",
+			subnetwork: "some-subnet",
+			region:     defaultRegion,
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FORWARDING_RULE,

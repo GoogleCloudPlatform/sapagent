@@ -1745,7 +1745,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -1782,7 +1782,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2120,7 +2120,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 				fs:   fakeFileSystem(false),
 				cp:   defaultCloudProperties,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				appsDiscovery: defaultAppsDiscovery,
 			},
@@ -2147,7 +2147,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 				fs:   fakeFileSystem(false),
 				cp:   defaultCloudProperties,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				appsDiscovery: func(context.Context) *sappb.SAPInstances {
 					return &sappb.SAPInstances{}
@@ -2189,7 +2189,7 @@ func TestComputeData(t *testing.T) {
 				fs:   fakeFileSystem(false),
 				cp:   nil,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 			},
 			wantErr: true,
@@ -2207,7 +2207,7 @@ func TestComputeData(t *testing.T) {
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2236,7 +2236,7 @@ func TestComputeData(t *testing.T) {
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2267,7 +2267,7 @@ func TestComputeData(t *testing.T) {
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2298,7 +2298,7 @@ func TestComputeData(t *testing.T) {
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2330,7 +2330,7 @@ func TestComputeData(t *testing.T) {
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2362,7 +2362,7 @@ func TestComputeData(t *testing.T) {
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2394,7 +2394,7 @@ func TestComputeData(t *testing.T) {
 				},
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
@@ -2418,7 +2418,7 @@ func TestComputeData(t *testing.T) {
 				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{}
@@ -2438,7 +2438,7 @@ func TestComputeData(t *testing.T) {
 				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{

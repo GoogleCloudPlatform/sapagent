@@ -122,8 +122,12 @@ func (g *GCE) GetAddress(project, location, name string) (*compute.Address, erro
 // GetAddressByIP attempts to find a ComputeAddress object with a given IP.
 // The string is assumed to be an exact match, so a full IPv4 address is expected.
 // A region should be supplied, or "" to search for a global address.
-func (g *GCE) GetAddressByIP(project, region, ip string) (*compute.Address, error) {
+func (g *GCE) GetAddressByIP(project, region, subnetwork, ip string) (*compute.Address, error) {
 	filter := fmt.Sprintf("(address eq %s)", ip)
+	if subnetwork != "" {
+		filter += fmt.Sprintf(` (subnetwork eq ".*%s.*")`, subnetwork)
+	}
+	log.Logger.Debugw("GetAddressByIP", "project", project, "region", region, "subnetwork", subnetwork, "ip", ip, "filter", filter)
 	if region == "" {
 		list, err := g.service.Addresses.AggregatedList(project).Filter(filter).Do()
 		if err != nil {
@@ -202,8 +206,9 @@ func (g *GCE) GetFilestoreByIP(project, location, ip string) (*file.ListInstance
 }
 
 // GetURIForIP attempts to locate the URI for any object that is related to the IP address provided.
-func (g *GCE) GetURIForIP(project, ip string) (string, error) {
-	addr, _ := g.GetAddressByIP(project, "", ip)
+func (g *GCE) GetURIForIP(project, ip, region, subnetwork string) (string, error) {
+	log.Logger.Debugw("GetURIForIP", "project", project, "ip", ip, "region", region, "subnetwork", subnetwork)
+	addr, _ := g.GetAddressByIP(project, "", subnetwork, ip)
 	if addr != nil {
 		return addr.SelfLink, nil
 	}

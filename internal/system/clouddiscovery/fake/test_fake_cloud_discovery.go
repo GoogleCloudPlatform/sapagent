@@ -29,9 +29,10 @@ import (
 
 // DiscoverComputeResourcesArgs encapsulates arguments sent to the DiscoverComputeResources function.
 type DiscoverComputeResourcesArgs struct {
-	Parent   *spb.SapDiscovery_Resource
-	HostList []string
-	CP       *ipb.CloudProperties
+	Parent     *spb.SapDiscovery_Resource
+	Subnetwork string
+	HostList   []string
+	CP         *ipb.CloudProperties
 }
 
 // CloudDiscovery implements a fake version of the public interface for CloudDiscovery.
@@ -43,7 +44,7 @@ type CloudDiscovery struct {
 }
 
 // DiscoverComputeResources is a fake implementation for the CloudDiscovery method.
-func (c *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parent *spb.SapDiscovery_Resource, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
+func (c *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parent *spb.SapDiscovery_Resource, subnetwork string, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
 	defer func() {
 		c.discoverComputeResourcesCallCount++
 	}()

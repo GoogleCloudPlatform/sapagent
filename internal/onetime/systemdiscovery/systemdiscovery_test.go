@@ -143,7 +143,7 @@ func createTestIIOTESystemDiscovery(t *testing.T, configPath string) *SystemDisc
 	return &SystemDiscovery{
 		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
 		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 		},
 		HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 			DiscoverCurrentHostResp: [][]string{{}},
@@ -193,7 +193,7 @@ func TestExecute(t *testing.T) {
 			sd: &SystemDiscovery{
 				CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 					DiscoverCurrentHostResp: [][]string{{}},
@@ -216,7 +216,7 @@ func TestExecute(t *testing.T) {
 			sd: &SystemDiscovery{
 				CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 					DiscoverCurrentHostResp: [][]string{{}},
@@ -277,7 +277,7 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 				IIOTEParams: defaultIIOTEParams,
 				ConfigPath:  createTestConfigFile(t, testConfigFileJSON).Name(),
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 					DiscoverCurrentHostResp: [][]string{{}},
@@ -320,7 +320,7 @@ func TestInitDefaults(t *testing.T) {
 			name: "HostDiscoveryInterfaceMissing",
 			sd: &SystemDiscovery{
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
 			},
@@ -330,7 +330,7 @@ func TestInitDefaults(t *testing.T) {
 			name: "SAPDiscoveryInterfaceMissing",
 			sd: &SystemDiscovery{
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 					DiscoverCurrentHostResp: [][]string{{}},
@@ -360,7 +360,7 @@ func TestInitDefaults(t *testing.T) {
 			name: "SetupCloudLogInterface",
 			sd: &SystemDiscovery{
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 					DiscoverCurrentHostResp: [][]string{{}},

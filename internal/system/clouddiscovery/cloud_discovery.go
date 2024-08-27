@@ -54,14 +54,14 @@ type gceInterface interface {
 	GetInstanceByIP(project, ip string) (*compute.Instance, error)
 	GetDisk(project, zone, name string) (*compute.Disk, error)
 	GetAddress(project, location, name string) (*compute.Address, error)
-	GetAddressByIP(project, region, ip string) (*compute.Address, error)
+	GetAddressByIP(project, region, subnetwork, ip string) (*compute.Address, error)
 	GetForwardingRule(project, location, name string) (*compute.ForwardingRule, error)
 	GetRegionalBackendService(project, region, name string) (*compute.BackendService, error)
 	GetInstanceGroup(project, zone, name string) (*compute.InstanceGroup, error)
 	ListInstanceGroupInstances(project, zone, name string) (*compute.InstanceGroupsListInstances, error)
 	GetFilestore(project, location, name string) (*file.Instance, error)
 	GetFilestoreByIP(project, location, ip string) (*file.ListInstancesResponse, error)
-	GetURIForIP(project, ip string) (string, error)
+	GetURIForIP(project, ip, region, subnetwok string) (string, error)
 	GetHealthCheck(projectID, name string) (*compute.HealthCheck, error)
 }
 
@@ -73,6 +73,14 @@ func extractFromURI(uri, field string) string {
 		}
 	}
 
+	return ""
+}
+
+func regionFromZone(zone string) string {
+	parts := strings.Split(zone, "-")
+	if len(parts) == 3 {
+		return parts[0] + "-" + parts[1]
+	}
 	return ""
 }
 
@@ -93,8 +101,10 @@ type CloudDiscovery struct {
 }
 
 type toDiscover struct {
-	name   string
-	parent *spb.SapDiscovery_Resource
+	name       string
+	region     string
+	subnetwork string
+	parent     *spb.SapDiscovery_Resource
 }
 
 type cacheEntry struct {
@@ -118,13 +128,22 @@ func (d *CloudDiscovery) configureDiscoveryFunctions() {
 
 // DiscoverComputeResources attempts to gather information about the provided hosts and any additional
 // resources that are identified as related from the cloud descriptions.
-func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentResource *spb.SapDiscovery_Resource, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
+func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentResource *spb.SapDiscovery_Resource, parentSubnetwork string, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
 	log.CtxLogger(ctx).Debugw("DiscoverComputeResources called", "parent", parentResource, "hostList", hostList)
 	var res []*spb.SapDiscovery_Resource
 	var uris []string
 	var discoverQueue []toDiscover
+	var region string
+	if cp.GetZone() != "" {
+		region = regionFromZone(cp.GetZone())
+	}
 	for _, h := range hostList {
-		discoverQueue = append(discoverQueue, toDiscover{h, parentResource})
+		discoverQueue = append(discoverQueue, toDiscover{
+			name:       h,
+			region:     region,
+			subnetwork: parentSubnetwork,
+			parent:     parentResource,
+		})
 	}
 	for len(discoverQueue) > 0 {
 		var h toDiscover
@@ -190,7 +209,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 		}
 		// h is a hostname or IP address
 		var err error
-		uri, err = d.GceService.GetURIForIP(project, addr)
+		uri, err = d.GceService.GetURIForIP(project, host.region, host.subnetwork, addr)
 		if err != nil {
 			log.CtxLogger(ctx).Infow("discoverResource URI error", "err", err, "addr", addr, "host", host.name)
 			return nil, nil, err
@@ -262,9 +281,22 @@ func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string)
 		UpdateTime:   timestamppb.Now(),
 	}
 
-	toAdd := []toDiscover{{ca.Subnetwork, ar}, {ca.Network, ar}}
+	toAdd := []toDiscover{{
+		name:   ca.Subnetwork,
+		region: region,
+		parent: ar,
+	}, {
+		name:   ca.Network,
+		region: region,
+		parent: ar,
+	}}
 	for _, u := range ca.Users {
-		toAdd = append(toAdd, toDiscover{u, ar})
+		toAdd = append(toAdd, toDiscover{
+			name:       u,
+			region:     region,
+			subnetwork: ca.Subnetwork,
+			parent:     ar,
+		})
 	}
 
 	return ar, toAdd, nil
@@ -273,6 +305,7 @@ func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string)
 func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	project := extractFromURI(instanceURI, projectsURIPart)
 	zone := extractFromURI(instanceURI, zonesURIPart)
+	region := regionFromZone(zone)
 	instanceName := extractFromURI(instanceURI, instancesURIPart)
 	ci, err := d.GceService.GetInstance(project, zone, instanceName)
 	if err != nil {
@@ -291,14 +324,30 @@ func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI strin
 
 	toAdd := []toDiscover{}
 	for _, disk := range ci.Disks {
-		toAdd = append(toAdd, toDiscover{disk.Source, ir})
+		toAdd = append(toAdd, toDiscover{
+			name:   disk.Source,
+			region: region,
+			parent: ir,
+		})
 	}
 
 	for _, net := range ci.NetworkInterfaces {
 		toAdd = append(toAdd,
-			toDiscover{net.Network, ir},
-			toDiscover{net.Subnetwork, ir},
-			toDiscover{net.NetworkIP, ir})
+			toDiscover{
+				name:   net.Network,
+				region: region,
+				parent: ir,
+			},
+			toDiscover{
+				name:   net.Subnetwork,
+				region: region,
+				parent: ir,
+			},
+			toDiscover{
+				name:   net.NetworkIP,
+				region: region,
+				parent: ir,
+			})
 	}
 
 	return ir, toAdd, nil
@@ -308,7 +357,6 @@ func (d *CloudDiscovery) discoverDisk(ctx context.Context, diskURI string) (*spb
 	diskName := extractFromURI(diskURI, disksURIPart)
 	diskZone := extractFromURI(diskURI, zonesURIPart)
 	projectID := extractFromURI(diskURI, projectsURIPart)
-
 	cd, err := d.GceService.GetDisk(projectID, diskZone, diskName)
 	if err != nil {
 		return nil, nil, err
@@ -337,9 +385,22 @@ func (d *CloudDiscovery) discoverForwardingRule(ctx context.Context, fwrURI stri
 		ResourceUri:  fwr.SelfLink,
 		UpdateTime:   timestamppb.Now(),
 	}
-	toAdd := []toDiscover{{fwr.BackendService, fr},
-		{fwr.Network, fr},
-		{fwr.Subnetwork, fr}}
+	toAdd := []toDiscover{{
+		name:       fwr.BackendService,
+		region:     region,
+		subnetwork: fwr.Subnetwork,
+		parent:     fr,
+	}, {
+		name:       fwr.Network,
+		region:     region,
+		subnetwork: fwr.Subnetwork,
+		parent:     fr,
+	}, {
+		name:       fwr.Subnetwork,
+		region:     region,
+		subnetwork: fwr.Subnetwork,
+		parent:     fr,
+	}}
 
 	return fr, toAdd, nil
 }
@@ -365,9 +426,16 @@ func (d *CloudDiscovery) discoverInstanceGroup(ctx context.Context, groupURI str
 	if err != nil {
 		return nil, nil, err
 	}
+
+	region := regionFromZone(zone)
 	toAdd := []toDiscover{}
 	for _, inst := range instances {
-		toAdd = append(toAdd, toDiscover{inst, igr})
+		toAdd = append(toAdd, toDiscover{
+			name:       inst,
+			region:     region,
+			subnetwork: ig.Subnetwork,
+			parent:     igr,
+		})
 	}
 	return igr, toAdd, nil
 }
@@ -438,11 +506,19 @@ func (d *CloudDiscovery) discoverBackendService(ctx context.Context, backendServ
 	toAdd := []toDiscover{}
 	for _, gs := range bes.Backends {
 		if gs.Group != "" {
-			toAdd = append(toAdd, toDiscover{gs.Group, bsr})
+			toAdd = append(toAdd, toDiscover{
+				name:   gs.Group,
+				region: region,
+				parent: bsr,
+			})
 		}
 	}
 	for _, hc := range bes.HealthChecks {
-		toAdd = append(toAdd, toDiscover{hc, bsr})
+		toAdd = append(toAdd, toDiscover{
+			name:   hc,
+			region: region,
+			parent: bsr,
+		})
 	}
 	return bsr, toAdd, nil
 }
