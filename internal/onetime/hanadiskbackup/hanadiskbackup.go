@@ -386,6 +386,13 @@ func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 			s.provisionedThroughput = d.GetProvisionedThroughput()
 		}
 	}
+
+	if s.SnapshotName == "" {
+		t := time.Now()
+		log.CtxLogger(ctx).Debug("disk: ", s.Disk)
+		s.SnapshotName = fmt.Sprintf("snapshot-%s-%d%02d%02d-%02d%02d%02d",
+			s.Disk, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+	}
 	return nil
 }
 
@@ -414,11 +421,6 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 	}
 	if s.DiskZone == "" {
 		s.DiskZone = cp.GetZone()
-	}
-	if s.SnapshotName == "" {
-		t := time.Now()
-		s.SnapshotName = fmt.Sprintf("snapshot-%s-%d%02d%02d-%02d%02d%02d",
-			s.Disk, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 	}
 	if s.Description == "" {
 		s.Description = fmt.Sprintf("Snapshot created by Agent for SAP for HANA sid: %q", s.Sid)

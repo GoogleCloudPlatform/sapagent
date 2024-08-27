@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -401,6 +402,7 @@ func TestReadDiskMapping(t *testing.T) {
 		{
 			name: "Failure",
 			snapshot: Snapshot{
+				SnapshotName: "snapshot",
 				gceService: &fake.TestGCE{
 					DiskAttachedToInstanceErr: cmpopts.AnyError,
 					GetInstanceResp: []*compute.Instance{{
@@ -423,6 +425,48 @@ func TestReadDiskMapping(t *testing.T) {
 		{
 			name: "Success",
 			snapshot: Snapshot{
+				SnapshotName: "sample-snapshot",
+				Disk: "disk-name",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "SuccessDefaultSnapshotName",
+			snapshot: Snapshot{
+				physicalDataPath: "unknown",
+				isg:              &ISG{},
 				gceService: &fake.TestGCE{
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
@@ -461,10 +505,18 @@ func TestReadDiskMapping(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			oldSnapshot := test.snapshot.SnapshotName
 			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.readDiskMapping(context.Background(), defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("readDiskMapping()=%v, want=%v", got, test.want)
+			}
+			if oldSnapshot == "" {
+				pattern := "^snapshot-disk-name-\\d{4}\\d{2}\\d{2}-\\d{2}\\d{2}\\d{2}$"
+				regex, _ := regexp.Compile(pattern)
+				if !regex.MatchString(test.snapshot.SnapshotName) {
+					t.Errorf("readDiskMapping(), default snapshot created does not match, got=%v, want=%v", test.snapshot.SnapshotName, pattern)
+				}
 			}
 		})
 	}
