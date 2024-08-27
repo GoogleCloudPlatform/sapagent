@@ -56,6 +56,7 @@ type HanaChangeDiskType struct {
 	help                                               bool
 	logLevel, logPath                                  string
 	IIOTEParams                                        *onetime.InternallyInvokedOTE
+	oteLogger                                          *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for hanachangedisktype.
@@ -115,8 +116,9 @@ func (c *HanaChangeDiskType) Execute(ctx context.Context, f *flag.FlagSet, args 
 		return exitStatus
 	}
 
+	c.oteLogger = onetime.CreateOTELogger(false)
 	if err := c.validateParams(runtime.GOOS, cp); err != nil {
-		log.Print(err.Error())
+		c.oteLogger.LogMessageToConsole(err.Error())
 		return subcommands.ExitUsageError
 	}
 	return c.changeDiskTypeHandler(ctx, f, lp, cp)
@@ -173,7 +175,7 @@ func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.
 		LogLevel:                        c.logLevel,
 		SkipDBSnapshotForChangeDiskType: c.skipDBSnapshotForChangeDiskType,
 	}
-	onetime.LogMessageToFileAndConsole(ctx, "Starting with Snapshot workflow")
+	c.oteLogger.LogMessageToFileAndConsole(ctx, "Starting with Snapshot workflow")
 	exitStatus := s.Execute(ctx, f)
 	if exitStatus != subcommands.ExitSuccess {
 		log.CtxLogger(ctx).Errorf("Failed to execute snapshot: %v", exitStatus)

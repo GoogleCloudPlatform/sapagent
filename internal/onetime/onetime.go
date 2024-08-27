@@ -153,19 +153,6 @@ func ConfigureUsageMetricsForOTE(cp *iipb.CloudProperties, name, version string)
 	}, cp)
 }
 
-// LogErrorToFileAndConsole prints out the error message to console and also to the log file.
-// TODO: Remove these once all OTEs use the OTElogger for logging.
-func LogErrorToFileAndConsole(ctx context.Context, msg string, err error) {
-	log.Print(msg + " " + err.Error() + "\n" + "Refer to log file at:" + log.GetLogFile())
-	log.CtxLogger(ctx).Errorw(msg, "error", err.Error())
-}
-
-// LogMessageToFileAndConsole prints out the console message and also to the log file.
-func LogMessageToFileAndConsole(ctx context.Context, msg string) {
-	fmt.Println(msg)
-	log.CtxLogger(ctx).Info(msg)
-}
-
 // SetupOneTimeLogging creates logging config for the agent's one time execution.
 func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zapcore.Level) log.Parameters {
 	// If the user did not override the log file name, use the default log file name.

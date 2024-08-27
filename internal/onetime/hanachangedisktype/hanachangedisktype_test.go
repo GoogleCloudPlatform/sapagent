@@ -48,6 +48,7 @@ var defaultChangeDiskType = &HanaChangeDiskType{
 	abandonPrepared:                 true,
 	forceStopHANA:                   true,
 	skipDBSnapshotForChangeDiskType: true,
+	oteLogger:                       onetime.CreateOTELogger(false),
 }
 
 var defaultCloudProperties = &ipb.CloudProperties{
