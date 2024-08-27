@@ -225,8 +225,9 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 
 	if exitStatus == 10 {
 		// Since this is a system with replication, as indicated by failing the "mode: none" check, the
-		// exit status of 10 indicates an error in the system.
-		exitStatus = 0
+		// exit status of 10 indicates an error in the system. Since we know it is not standalone, we
+		// will return 12 to indicate a replication state error.
+		exitStatus = 12
 	}
 
 	match := sitePattern.FindStringSubmatch(result.StdOut)

@@ -21,6 +21,8 @@ import (
 	_ "embed"
 	"errors"
 	"os"
+
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -321,15 +323,16 @@ func TestInstances(t *testing.T) {
 
 func TestReadReplicationConfig(t *testing.T) {
 	tests := []struct {
-		name          string
-		user          string
-		sid           string
-		instanceID    string
-		fakeExec      commandlineexecutor.Execute
-		wantMode      int
-		wantHAMembers []string
-		wantSite      *sapb.HANAReplicaSite
-		wantErr       error
+		name           string
+		user           string
+		sid            string
+		instanceID     string
+		fakeExec       commandlineexecutor.Execute
+		wantMode       int
+		wantHAMembers  []string
+		wantExitStatus int64
+		wantSite       *sapb.HANAReplicaSite
+		wantErr        error
 	}{{
 		name:       "HANAPrimary",
 		user:       "hdbadm",
@@ -655,11 +658,43 @@ func TestReadReplicationConfig(t *testing.T) {
 			}
 		},
 		wantMode: 2,
+	}, {
+		name:       "primaryWithNoReplication",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(_ context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+			if strings.Contains(p.ArgsToSplit, "systemReplicationStatus.py") {
+				return commandlineexecutor.Result{ExitCode: 10}
+			} else {
+				return commandlineexecutor.Result{
+					StdOut: `
+					System Replication State
+					~~~~~~~~~~~~~~~~~~~~~~~~
+					
+					online: true
+					
+					mode: primary
+					operation mode: primary
+					site id: 1
+					site name: sap-posdb00
+					
+					is source system: unknown
+					is secondary/consumer system: false
+					has secondaries/consumers attached: unknown
+					is a takeover active: false
+					is primary suspended: false
+					done.`,
+				}
+			}
+		},
+		wantMode:       1,
+		wantExitStatus: 12,
 	}}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMode, gotHAMembers, _, gotSite, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec)
+			gotMode, gotHAMembers, gotExitStatus, gotSite, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("readReplicationConfig(%s,%s,%s) error, got: %v want: %v.", test.user, test.sid, test.instanceID, err, test.wantErr)
@@ -672,6 +707,9 @@ func TestReadReplicationConfig(t *testing.T) {
 			}
 			if diff := cmp.Diff(test.wantSite, gotSite, cmpopts.SortSlices(func(a, b *sapb.HANAReplicaSite) bool { return a.Name < b.Name }), protocmp.Transform()); diff != "" {
 				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect site, diff (-want +got):\n%s.", test.user, test.sid, test.instanceID, diff)
+			}
+			if test.wantExitStatus != gotExitStatus {
+				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect exit status, got: %d want: %d.", test.user, test.sid, test.instanceID, gotExitStatus, test.wantExitStatus)
 			}
 		})
 	}
