@@ -477,10 +477,13 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 	if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 		for _, d := range r.disks {
-			if r.isGroupSnapshot {
-				r.attachDisk(ctx, d.DiskName, cp.GetInstanceName())
+			if attachDiskErr := r.attachDisk(ctx, d.DiskName, cp.GetInstanceName()); attachDiskErr != nil {
+				r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)
 			} else {
-				r.gceService.AttachDisk(ctx, d.DiskName, cp, r.Project, r.DataDiskZone)
+				if modifyCGErr := r.modifyDiskInCG(ctx, d.DiskName, true); modifyCGErr != nil {
+					log.CtxLogger(ctx).Warnw("failed to add old disk to consistency group", "disk", d.DiskName)
+					r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Adding old disk to consistency group failed,", modifyCGErr)
+				}
 			}
 		}
 		hanabackup.RescanVolumeGroups(ctx)

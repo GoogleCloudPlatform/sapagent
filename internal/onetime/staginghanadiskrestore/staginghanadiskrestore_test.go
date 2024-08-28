@@ -1274,6 +1274,50 @@ func TestGroupRestore(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "attachDiskErr",
+			r: &Restorer{
+				disks: []*ipb.Disk{
+					&ipb.Disk{
+						DiskName: "test-disk",
+					},
+				},
+				isgService: &mockISGService{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
+						{
+							Name:       "test-isg",
+							SourceDisk: "test-disk",
+						},
+					},
+					describeStandardSnapshotsErr: nil,
+					getResponseResp:              [][]byte{[]byte{}, []byte{}},
+					getResponseErr:               []error{cmpopts.AnyError, cmpopts.AnyError},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "modifyCGErr",
+			r: &Restorer{
+				disks: []*ipb.Disk{
+					&ipb.Disk{
+						DiskName: "test-disk",
+					},
+				},
+				isgService: &mockISGService{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
+						{
+							Name:       "test-isg",
+							SourceDisk: "test-disk",
+						},
+					},
+					describeStandardSnapshotsErr: nil,
+					getResponseResp:              [][]byte{[]byte{}, []byte{}, []byte{}},
+					getResponseErr:               []error{nil, nil, cmpopts.AnyError},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "Success",
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
