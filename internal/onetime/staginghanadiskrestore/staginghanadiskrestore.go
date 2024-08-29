@@ -323,6 +323,9 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 }
 
 func (r *Restorer) fetchVG(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute, physicalDataPath string) (string, error) {
+	if strings.Contains(physicalDataPath, "\n") {
+		physicalDataPath = strings.Split(physicalDataPath, "\n")[0]
+	}
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/pvs",
 		ArgsToSplit: physicalDataPath,
@@ -363,13 +366,12 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
+	vg, err := r.fetchVG(ctx, cp, exec, r.physicalDataPath)
+	if err != nil {
+		return err
+	}
+	r.DataDiskVG = vg
 	if !r.isGroupSnapshot {
-		vg, err := r.fetchVG(ctx, cp, exec, r.physicalDataPath)
-		if err != nil {
-			return err
-		}
-		r.DataDiskVG = vg
-
 		log.CtxLogger(ctx).Info("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
 		if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
@@ -383,7 +385,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 
 		disksDetached := []*ipb.Disk{}
 		for _, d := range r.disks {
-			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.DiskName, "physicalDataPath", r.physicalDataPath)
+			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.DiskName, "physicalDataPath", fmt.Sprintf("/dev/%s", d.GetMapping()))
 			if err := r.detachDisk(ctx, d.DiskName, cp.GetInstanceName()); err != nil {
 				log.CtxLogger(ctx).Error("failed to detach old data disk: %v", err)
 				// Reattaching detached disks.
@@ -622,11 +624,31 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 	}
 	log.CtxLogger(ctx).Debugw("ISG", "isg", snapshots)
 
+	var lastDiskName string
 	for _, snapshot := range snapshots {
 		timestamp := time.Now().Unix()
 		sourceDiskName := r.isgService.TruncateName(ctx, snapshot.Name, fmt.Sprintf("%d", timestamp))
+		lastDiskName = sourceDiskName
 
 		if err := r.stagingRestoreFromSnapshot(ctx, exec, cp, snapshotKey, sourceDiskName, snapshot.Name); err != nil {
+			return err
+		}
+	}
+
+	dev, ok, err := r.diskAttachedToInstance(ctx, cp.GetInstanceName(), lastDiskName)
+	if err != nil {
+		return fmt.Errorf("failed to check if new disk %v is attached to the instance", lastDiskName)
+	}
+	if !ok {
+		return fmt.Errorf("newly created disk %v is not attached to the instance", lastDiskName)
+	}
+	if r.DataDiskVG != "" {
+		if err := r.renameLVM(ctx, exec, cp, dev, lastDiskName); err != nil {
+			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
+			if err := r.detachDisk(ctx, lastDiskName, cp.GetInstanceName()); err != nil {
+				log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", err)
+				return err
+			}
 			return err
 		}
 	}
@@ -647,7 +669,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		r.logicalDataPath, "Data physical volume", r.physicalDataPath, "Log directory", r.baseLogPath,
 		"Log file system", r.logicalLogPath, "Log physical volume", r.physicalLogPath)
 
-	if r.physicalDataPath == r.physicalLogPath {
+	if strings.Contains(r.physicalDataPath, r.physicalLogPath) {
 		return fmt.Errorf("unsupported: HANA data and HANA log are on the same physical disk - %s", r.physicalDataPath)
 	}
 
@@ -783,7 +805,7 @@ func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties,
 	log.CtxLogger(ctx).Debugw("Reading disk mapping", "ip", instanceProperties)
 	for _, d := range instanceProperties.GetDisks() {
 		if strings.Contains(r.physicalDataPath, d.GetMapping()) {
-			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", r.physicalDataPath, "diskName", d.GetDiskName())
+			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", fmt.Sprintf("/dev/%s", d.GetMapping()), "diskName", d.GetDiskName())
 			if r.isGroupSnapshot {
 				r.disks = append(r.disks, d)
 				r.DataDiskZone = cp.GetZone()
@@ -862,7 +884,7 @@ func (r *Restorer) stagingRestoreFromSnapshot(ctx context.Context, exec commandl
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
 
-	dev, ok, err := r.diskAttachedToInstance(ctx, cp.GetInstanceName(), newDiskName)
+	_, ok, err := r.diskAttachedToInstance(ctx, cp.GetInstanceName(), newDiskName)
 	if err != nil {
 		return fmt.Errorf("failed to check if new disk %v is attached to the instance", newDiskName)
 	}
@@ -871,17 +893,6 @@ func (r *Restorer) stagingRestoreFromSnapshot(ctx context.Context, exec commandl
 	}
 	// Introducing sleep to let symlinks for the new disk to be created.
 	time.Sleep(5 * time.Second)
-
-	if r.DataDiskVG != "" {
-		if err := r.renameLVM(ctx, exec, cp, dev, newDiskName); err != nil {
-			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
-			if err := r.detachDisk(ctx, newDiskName, cp.GetInstanceName()); err != nil {
-				log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", err)
-				return err
-			}
-			return err
-		}
-	}
 
 	log.CtxLogger(ctx).Info("Adding newly attached disk to consistency group ", r.cgName)
 	if err := r.modifyDiskInCG(ctx, newDiskName, true); err != nil {
@@ -994,7 +1005,7 @@ func (r *Restorer) diskAttachedToInstance(ctx context.Context, instanceName, dis
 	}
 	log.CtxLogger(ctx).Debugw("DiskAttachedToInstance", "instance", instance)
 	for _, disk := range instance.Disks {
-		log.CtxLogger(ctx).Debugw("Getting disk source", "diskSource", disk.Source)
+		log.CtxLogger(ctx).Debugw("Getting disk source", "diskSource", disk.Source, "diskName", diskName)
 		if strings.Contains(disk.Source, diskName) {
 			return disk.DeviceName, true, nil
 		}

@@ -99,7 +99,7 @@ func TestMain(t *testing.M) {
 
 var (
 	defaultRestorer = Restorer{
-		Project:        "my-project",
+		Project:        "test-project",
 		Sid:            "my-sid",
 		HanaSidAdm:     "my-user",
 		DataDiskName:   "data-disk",
@@ -110,6 +110,89 @@ var (
 		disks:          []*ipb.Disk{&ipb.Disk{}},
 	}
 	defaultCloudProperties = &ipb.CloudProperties{ProjectId: "default-project"}
+	sampleSnapshot         = `{
+      "kind": "compute#snapshot",
+      "id": "123456789",
+      "creationTimestamp": "2024-08-26T22:33:27.527-07:00",
+      "name": "test-snapshot-standard",
+      "status": "READY",
+      "sourceDisk": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/test-disk",
+      "sourceDiskId": "123456789",
+      "diskSizeGb": "577",
+      "storageBytes": "99274113216",
+      "storageBytesStatus": "UP_TO_DATE",
+      "selfLink": "https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/self-snapshot-standard",
+      "selfLinkWithId": "https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/123456789",
+      "storageLocations": [
+        "us"
+      ],
+      "downloadBytes": "99274910732",
+      "sourceInstantSnapshot": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instantSnapshots/instant-snapshot",
+      "sourceInstantSnapshotId": "123456789",
+      "creationSizeBytes": "99274113216",
+      "enableConfidentialCompute": false
+    }`
+	sampleDisk = `{
+		"kind": "compute#disk",
+		"id": "123456789",
+		"creationTimestamp": "2024-08-26T22:43:10.437-07:00",
+		"name": "test-disk",
+		"sizeGb": "577",
+		"zone": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone",
+		"status": "READY",
+		"sourceSnapshot": "https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/test-snapshot-standard",
+		"sourceSnapshotId": "3760400430889229256",
+		"selfLink": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/self-test-disk",
+		"selfLinkWithId": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/123456789",
+		"type": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/diskTypes/hyperdisk-balanced",
+		"users": [
+			"https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instances/test-instance"
+		],
+		"physicalBlockSizeBytes": "4096",
+		"resourcePolicies": [
+			"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region/resourcePolicies/test-cg"
+		],
+		"provisionedIops": "6462",
+		"provisionedThroughput": "1006",
+		"enableConfidentialCompute": false,
+		"satisfiesPzi": false,
+		"accessMode": "READ_WRITE_SINGLE",
+		"locked": false
+	}`
+	sampleInstance = `{
+		"kind": "compute#instance",
+		"id": "123456789",
+		"creationTimestamp": "2024-08-19T06:03:39.276-07:00",
+		"name": "sample-instance",
+		"machineType": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/machineTypes/m1-ultramem-40",
+		"status": "RUNNING",
+		"zone": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone",
+		"disks": [
+			{
+				"kind": "compute#attachedDisk",
+				"type": "PERSISTENT",
+				"mode": "READ_WRITE",
+				"source": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/test-disk",
+				"deviceName": "test-disk",
+				"index": 2,
+				"boot": false,
+				"autoDelete": false,
+				"interface": "SCSI",
+				"diskSizeGb": "577"
+			}
+		],
+		"selfLink": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instances/sample-instance",
+		"selfLinkWithId": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instances/123456789",
+		"lastStartTimestamp": "2024-08-25T22:38:25.897-07:00",
+		"lastStopTimestamp": "2024-08-23T06:07:47.064-07:00",
+		"satisfiesPzi": false,
+		"resourceStatus": {
+			"scheduling": {},
+			"lastInstanceTerminationDetails": {
+				"terminationReason": "USER_TERMINATED"
+			}
+		}
+	}`
 )
 
 func TestValidateParameters(t *testing.T) {
@@ -128,7 +211,7 @@ func TestValidateParameters(t *testing.T) {
 		{
 			name: "ChangeDiskTypeWorkflow",
 			restorer: Restorer{
-				Project:                         "my-project",
+				Project:                         "test-project",
 				Sid:                             "my-sid",
 				HanaSidAdm:                      "my-user",
 				DataDiskName:                    "data-disk",
@@ -147,7 +230,7 @@ func TestValidateParameters(t *testing.T) {
 		},
 		{
 			name:     "Emptysid",
-			restorer: Restorer{Project: "my-project"},
+			restorer: Restorer{Project: "test-project"},
 			want:     cmpopts.AnyError,
 		},
 		{
@@ -187,7 +270,7 @@ func TestValidateParameters(t *testing.T) {
 		{
 			name: "EmptyDiskType",
 			restorer: Restorer{
-				Project:        "my-project",
+				Project:        "test-project",
 				Sid:            "my-sid",
 				HanaSidAdm:     "my-user",
 				DataDiskName:   "data-disk",
@@ -199,7 +282,7 @@ func TestValidateParameters(t *testing.T) {
 		{
 			name: "newDiskTypeSet",
 			restorer: Restorer{
-				Project:        "my-project",
+				Project:        "test-project",
 				Sid:            "my-sid",
 				HanaSidAdm:     "my-user",
 				DataDiskName:   "data-disk",
@@ -223,7 +306,7 @@ func TestValidateParameters(t *testing.T) {
 		{
 			name: "Emptyuser",
 			restorer: Restorer{
-				Project:        "my-project",
+				Project:        "test-project",
 				Sid:            "tst",
 				DataDiskName:   "data-disk",
 				DataDiskZone:   "data-zone",
@@ -272,7 +355,7 @@ func TestValidateParameters(t *testing.T) {
 		{
 			name: "InvalidNewDiskName",
 			restorer: Restorer{
-				Project:        "my-project",
+				Project:        "test-project",
 				Sid:            "tst",
 				HanaSidAdm:     "my-user",
 				DataDiskName:   "data-disk",
@@ -538,11 +621,23 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "DataAndLogOnSameDisk",
+			name: "DataAndLogOnSameDisk1",
 			cp:   defaultCloudProperties,
 			r:    &Restorer{},
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DataAndLogOnSameDisk2",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c\nd", nil
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
@@ -688,7 +783,7 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				disks: []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
 				isgService: &mockISGService{
-					getResponseResp: [][]byte{[]byte(`{"type": "https://www.googleapis.com/compute/staging_alpha/projects/bct-staging-sap/zones/us-central1-jq1/diskTypes/hyperdisk-extreme"}`)},
+					getResponseResp: [][]byte{[]byte(`{"type": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/diskTypes/hyperdisk-extreme"}`)},
 					getResponseErr:  []error{nil},
 					describeStandardSnapshotsResp: []*compute.Snapshot{
 						{
@@ -823,7 +918,7 @@ func TestPrepare(t *testing.T) {
 		want                   error
 	}{
 		{
-			name: "SingleSnapshotFetchVGErr",
+			name: "FetchVGErr",
 			r: &Restorer{
 				isGroupSnapshot: false,
 			},
@@ -903,8 +998,8 @@ func TestPrepare(t *testing.T) {
 				},
 				isgService: &mockISGService{
 					getResponseResp: [][]byte{
-						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
-						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"]}`),
 					},
 					getResponseErr: []error{cmpopts.AnyError, cmpopts.AnyError},
 				},
@@ -1184,7 +1279,7 @@ func TestFetchVG(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotVG, err := tc.r.fetchVG(ctx, tc.cp, tc.exec, "")
+			gotVG, err := tc.r.fetchVG(ctx, tc.cp, tc.exec, "/dev/sda\n/dev/sdb")
 			if gotVG != tc.wantVG {
 				t.Errorf("fetchVG() = %v, want %v", gotVG, tc.wantVG)
 			}
@@ -1401,19 +1496,119 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			want:        cmpopts.AnyError,
 		},
 		{
-			name: "RestoreFromSnapshotSuccess",
+			name: "DiskNotAttachedToInstance",
+			r: &Restorer{
+				isgService: &mockISGService{
+					describeStandardSnapshotsResp: []*compute.Snapshot{},
+					describeStandardSnapshotsErr:  nil,
+					getResponseResp:               [][]byte{[]byte{}},
+					getResponseErr:                []error{cmpopts.AnyError},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
+			cp:          defaultCloudProperties,
+			snapshotKey: "test-snapshot-key",
+			want:        cmpopts.AnyError,
+		},
+		{
+			name: "RenameLVMError",
 			r: &Restorer{
 				isGroupSnapshot: true,
 				gceService:      &fake.TestGCE{},
 				isgService: &mockISGService{
-					describeStandardSnapshotsResp: []*compute.Snapshot{},
-					describeStandardSnapshotsErr:  nil,
+					describeStandardSnapshotsResp: []*compute.Snapshot{
+						&compute.Snapshot{
+							Name:       "test-isg",
+							SourceDisk: "test-disk",
+						},
+						&compute.Snapshot{
+							Name:       "test-isg-1",
+							SourceDisk: "test-disk-1",
+						},
+					},
+					describeStandardSnapshotsErr: nil,
+					getResponseResp:              [][]byte{[]byte{}},
+					getResponseErr:               []error{nil},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
+			cp:          defaultCloudProperties,
+			snapshotKey: "test-snapshot-key",
+			want:        cmpopts.AnyError,
+		},
+		{
+			name: "RestoreFromSnapshotSuccess",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				isGroupSnapshot: true,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/test-disk",
+								DeviceName: "test-disk",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "test-disk",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "test-disk",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+				isgService: &mockISGService{
+					describeStandardSnapshotsResp: []*compute.Snapshot{
+						&compute.Snapshot{
+							Name:       "test-isg",
+							SourceDisk: "test-disk",
+						},
+					},
+					describeStandardSnapshotsErr: nil,
+					getResponseResp: [][]byte{
+						[]byte(sampleSnapshot),
+						[]byte{},
+						[]byte(sampleDisk),
+						[]byte{},
+						[]byte(sampleInstance),
+						[]byte(sampleInstance),
+					},
+					getResponseErr: []error{nil, nil, nil, nil, nil, nil},
 				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					ExitCode: 0,
 					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
 				}
 			},
 			cp:          defaultCloudProperties,
@@ -1541,6 +1736,7 @@ func TestRenameLVM(t *testing.T) {
 		{
 			name: "SameVG",
 			r: &Restorer{
+				physicalDataPath: "/dev/sdf\n/dev/sdg",
 				gceService: &fake.TestGCE{
 					IsDiskAttached:            true,
 					DiskAttachedToInstanceErr: nil,
@@ -1783,17 +1979,17 @@ func TestCGPath(t *testing.T) {
 	}{
 		{
 			name:     "Success",
-			policies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+			policies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
 			want:     "my-cg",
 		},
 		{
 			name:     "Failure1",
-			policies: []string{"https://www.googleapis.com/compute/my-region/resourcePolicies/my-cg"},
+			policies: []string{"https://www.googleapis.com/compute/test-zone/resourcePolicies/my-cg"},
 			want:     "",
 		},
 		{
 			name:     "Failure2",
-			policies: []string{"https://www.googleapis.com/invlaid/text/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my"},
+			policies: []string{"https://www.googleapis.com/invlaid/text/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my"},
 			want:     "",
 		},
 	}
@@ -1819,7 +2015,7 @@ func TestReadConsistencyGroup(t *testing.T) {
 			r: &Restorer{
 				isgService: &mockISGService{
 					getResponseResp: [][]byte{
-						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"]}`),
 					},
 					getResponseErr: []error{nil},
 				},
@@ -1918,8 +2114,8 @@ func TestValidateDisksBelongToCG(t *testing.T) {
 				// TODO: Update this with better testing when prod APIs are available.
 				isgService: &mockISGService{
 					getResponseResp: [][]byte{
-						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
-						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg-1"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg-1"]}`),
 					},
 					getResponseErr: []error{nil, nil},
 				},
@@ -1940,8 +2136,8 @@ func TestValidateDisksBelongToCG(t *testing.T) {
 				},
 				isgService: &mockISGService{
 					getResponseResp: [][]byte{
-						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
-						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"]}`),
+						[]byte(`{"resourcePolicies": ["https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"]}`),
 					},
 					getResponseErr: []error{nil, nil},
 				},
