@@ -240,7 +240,10 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 	procs, err = sc.GetProcessList(ctx, scc)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Error performing GetProcessList web method", log.Error(err))
-		return nil, err
+		labels := map[string]string{"instance_type": p.SAPInstance.GetKind().String()}
+		metric := createMetrics(p, nwServicePath, labels, now, systemAtLeastOneProcessNotGreen)
+		log.CtxLogger(ctx).Debugw("Sending default /nw/service metric", "metric", metric)
+		return []*mrpb.TimeSeries{metric}, err
 	}
 	metrics := collectServiceMetrics(ctx, p, procs, now)
 	return metrics, nil

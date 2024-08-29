@@ -525,11 +525,11 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		{
 			name: "SuccessWebmethod",
 			fakeClient: sapcontrolclienttest.Fake{Processes: []sapcontrolclient.OSProcess{
-				{Name: "hdbdaemon", Dispstatus: "SAPControl-GREEN", Pid: 9609},
-				{Name: "hdbcompileserver", Dispstatus: "SAPControl-GREEN", Pid: 9972},
-				{Name: "hdbindexserver", Dispstatus: "SAPControl-GREEN", Pid: 10013},
-				{Name: "hdbnameserver", Dispstatus: "SAPControl-GREEN", Pid: 9642},
-				{Name: "hdbpreprocessor", Dispstatus: "SAPControl-GREEN", Pid: 9975},
+				{Name: "msgserver", Dispstatus: "SAPControl-GREEN", Pid: 9609},
+				{Name: "enserver", Dispstatus: "SAPControl-GREEN", Pid: 9972},
+				{Name: "gwrd", Dispstatus: "SAPControl-GREEN", Pid: 10013},
+				{Name: "disp+work", Dispstatus: "SAPControl-GREEN", Pid: 9642},
+				{Name: "icman", Dispstatus: "SAPControl-GREEN", Pid: 9975},
 			},
 			},
 			wantMetricCount:    5,
@@ -538,7 +538,7 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 		{
 			name:               "FailureWebmethod",
 			fakeClient:         sapcontrolclienttest.Fake{ErrGetProcessList: cmpopts.AnyError},
-			wantMetricCount:    0,
+			wantMetricCount:    1,
 			instanceProperties: defaultAPIInstanceProperties,
 			wantErr:            cmpopts.AnyError,
 		},
@@ -571,10 +571,10 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 }
 
 func TestCollect(t *testing.T) {
-	// Production API returns no metrics in unit test setup.
+	// Production API returns only nw/service metric in unit tests.
 	metrics, _ := defaultInstanceProperties.Collect(context.Background())
-	if len(metrics) != 0 {
-		t.Errorf("Collect() metric count mismatch, got: %v want: 0.", len(metrics))
+	if len(metrics) != 1 {
+		t.Errorf("Collect() metric count mismatch, got: %v want: 1.", len(metrics))
 	}
 }
 
