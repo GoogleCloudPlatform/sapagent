@@ -59,6 +59,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	logging "cloud.google.com/go/logging"
@@ -87,6 +88,7 @@ type (
 		OSType             string
 		Level              zapcore.Level
 		LogFileName        string
+		LogFilePath        string
 		CloudLogName       string
 	}
 	cloudWriter struct {
@@ -110,22 +112,34 @@ func init() {
 
 // OTEFilePath returns the log file path for the OTE invoked depending if it is invoked internally
 // or via command line.
-func OTEFilePath(agentName string, oteName string, osType string) string {
+func OTEFilePath(agentName string, oteName string, osType string, logFilePath string) string {
 	logName := agentName
 	if oteName != "" {
 		logName = fmt.Sprintf("%s-%s", agentName, oteName)
 	}
 	LogFileName := fmt.Sprintf("/var/log/%s.log", logName)
+	if osType != "windows" && logFilePath != "" {
+		if !strings.HasSuffix(logFilePath, `/`) {
+			logFilePath = logFilePath + `/`
+		}
+		LogFileName = fmt.Sprintf("%s%s.log", logFilePath, logName)
+	}
 	if osType == "windows" {
-		LogFileName = fmt.Sprintf(`C:\Program Files\Google\%s\logs\%s.log`, agentName, oteName)
+		LogFileName = fmt.Sprintf(`C:\Program Files\Google\%s\logs\%s.log`, agentName, logName)
+		if logFilePath != "" {
+			if !strings.HasSuffix(logFilePath, `\`) {
+				logFilePath = logFilePath + `\`
+			}
+			LogFileName = fmt.Sprintf(`%s%s.log`, logFilePath, logName)
+		}
 	}
 	return LogFileName
 }
 
 // DefaultOTEPath returns the default OTE path for the agent/command. {COMMAND} is a placeholder for
 // the command name.
-func DefaultOTEPath(agentName string, osType string) string {
-	return OTEFilePath(agentName, "{COMMAND}", osType)
+func DefaultOTEPath(agentName string, osType string, logFilePath string) string {
+	return OTEFilePath(agentName, "{COMMAND}", osType, logFilePath)
 }
 
 // SetupLogging uses the agent configuration to set up the file Logger.

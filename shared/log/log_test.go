@@ -144,27 +144,58 @@ func TestSetupLoggingForOTE(t *testing.T) {
 
 func TestDefaultOTEPath(t *testing.T) {
 	tests := []struct {
-		name   string
-		agent  string
-		osType string
-		want   string
+		name        string
+		agent       string
+		osType      string
+		logFilePath string
+		want        string
 	}{
 		{
-			name:   "Windows",
-			agent:  "test-agent",
-			osType: "windows",
-			want:   `C:\Program Files\Google\test-agent\logs\{COMMAND}.log`,
+			name:        "Windows",
+			agent:       "test-agent",
+			osType:      "windows",
+			logFilePath: ``,
+			want:        `C:\Program Files\Google\test-agent\logs\test-agent-{COMMAND}.log`,
 		},
 		{
-			name:   "Linux",
-			agent:  "test-agent",
-			osType: "linux",
-			want:   `/var/log/test-agent-{COMMAND}.log`,
+			name:        "WindowsWithPath",
+			agent:       "test-agent",
+			osType:      "windows",
+			logFilePath: `C:\tmp\`,
+			want:        `C:\tmp\test-agent-{COMMAND}.log`,
+		},
+		{
+			name:        "WindowsWithPathNoSlash",
+			agent:       "test-agent",
+			osType:      "windows",
+			logFilePath: `C:\tmp`,
+			want:        `C:\tmp\test-agent-{COMMAND}.log`,
+		},
+		{
+			name:        "Linux",
+			agent:       "test-agent",
+			osType:      "linux",
+			logFilePath: ``,
+			want:        `/var/log/test-agent-{COMMAND}.log`,
+		},
+		{
+			name:        "LinuxWithPath",
+			agent:       "test-agent",
+			osType:      "linux",
+			logFilePath: `/tmp/`,
+			want:        `/tmp/test-agent-{COMMAND}.log`,
+		},
+		{
+			name:        "LinuxWithPathNoSlash",
+			agent:       "test-agent",
+			osType:      "linux",
+			logFilePath: `/tmp`,
+			want:        `/tmp/test-agent-{COMMAND}.log`,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := DefaultOTEPath(test.agent, test.osType)
+			got := DefaultOTEPath(test.agent, test.osType, test.logFilePath)
 			if got != test.want {
 				t.Errorf("DefaultOTEPath(%s, %s) Default path is incorrect, got: %s, want: %s", test.agent, test.osType, got, test.want)
 			}
@@ -174,30 +205,65 @@ func TestDefaultOTEPath(t *testing.T) {
 
 func TestOTEFilePath(t *testing.T) {
 	tests := []struct {
-		name    string
-		agent   string
-		command string
-		osType  string
-		want    string
+		name        string
+		agent       string
+		command     string
+		osType      string
+		logFilePath string
+		want        string
 	}{
 		{
-			name:    "Windows",
-			agent:   "test-agent",
-			command: "echo",
-			osType:  "windows",
-			want:    `C:\Program Files\Google\test-agent\logs\echo.log`,
+			name:        "Windows",
+			agent:       "test-agent",
+			command:     "echo",
+			osType:      "windows",
+			logFilePath: ``,
+			want:        `C:\Program Files\Google\test-agent\logs\test-agent-echo.log`,
 		},
 		{
-			name:    "Linux",
-			agent:   "test-agent",
-			command: "echo",
-			osType:  "linux",
-			want:    `/var/log/test-agent-echo.log`,
+			name:        "WindowsWithPath",
+			agent:       "test-agent",
+			command:     "echo",
+			osType:      "windows",
+			logFilePath: `C:\tmp\`,
+			want:        `C:\tmp\test-agent-echo.log`,
+		},
+		{
+			name:        "WindowsWithPathNoSlash",
+			agent:       "test-agent",
+			command:     "echo",
+			osType:      "windows",
+			logFilePath: `C:\tmp`,
+			want:        `C:\tmp\test-agent-echo.log`,
+		},
+		{
+			name:        "Linux",
+			agent:       "test-agent",
+			command:     "echo",
+			osType:      "linux",
+			logFilePath: ``,
+			want:        `/var/log/test-agent-echo.log`,
+		},
+		{
+			name:        "LinuxWithPath",
+			agent:       "test-agent",
+			command:     "echo",
+			osType:      "linux",
+			logFilePath: `/tmp/`,
+			want:        `/tmp/test-agent-echo.log`,
+		},
+		{
+			name:        "LinuxWithPathNoSlash",
+			agent:       "test-agent",
+			command:     "echo",
+			osType:      "linux",
+			logFilePath: `/tmp`,
+			want:        `/tmp/test-agent-echo.log`,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := OTEFilePath(test.agent, test.command, test.osType)
+			got := OTEFilePath(test.agent, test.command, test.osType, test.logFilePath)
 			if got != test.want {
 				t.Errorf("OTEFilePath(%s, %s, %s) Default path is incorrect, got: %s, want: %s", test.agent, test.command, test.osType, got, test.want)
 			}
