@@ -277,7 +277,7 @@ func (g *TestGCE) GetInstanceByIP(project, ip string) (*compute.Instance, error)
 }
 
 // GetURIForIP fakes calls to compute APIs to locate an object URI related to the IP address provided.
-func (g *TestGCE) GetURIForIP(project, region, subnetwork, ip string) (string, error) {
+func (g *TestGCE) GetURIForIP(project, ip, region, subnetwork string) (string, error) {
 	defer func() {
 		g.GetURIForIPCallCount++
 		if g.GetURIForIPCallCount >= len(g.GetURIForIPResp) || g.GetURIForIPCallCount >= len(g.GetURIForIPErr) {
@@ -286,8 +286,14 @@ func (g *TestGCE) GetURIForIP(project, region, subnetwork, ip string) (string, e
 	}()
 	if g.GetURIForIPArgs != nil && len(g.GetURIForIPArgs) > g.GetURIForIPCallCount {
 		args := g.GetURIForIPArgs[g.GetURIForIPCallCount]
-		if args != nil && (args.Project != project || args.IP != ip) {
-			g.T.Errorf("Mismatch in expected arguments for GetURIForIP: \ngot: (%s, %s)\nwant:  (%s, %s)", project, ip, args.Project, args.IP)
+		gotArgs := &GetURIForIPArguments{
+			Project:    project,
+			Region:     region,
+			Subnetwork: subnetwork,
+			IP:         ip,
+		}
+		if args != nil && *args != *gotArgs {
+			g.T.Errorf("Mismatch in expected arguments for GetURIForIP: \ngot: (%v)\nwant:  (%v)", gotArgs, args)
 		}
 	}
 	return g.GetURIForIPResp[g.GetURIForIPCallCount], g.GetURIForIPErr[g.GetURIForIPCallCount]

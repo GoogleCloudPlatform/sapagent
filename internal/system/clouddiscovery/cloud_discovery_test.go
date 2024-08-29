@@ -655,13 +655,13 @@ func TestDiscoverResource(t *testing.T) {
 			parent: &spb.SapDiscovery_Resource{
 				ResourceUri: "projects/parent-project/zones/test-zone/instances/test-instance",
 			}},
+		project:  "other-project",
 		resolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
 		gceService: &fake.TestGCE{
 			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/disks/test-disk"},
 			GetURIForIPErr:  []error{nil},
 			GetURIForIPArgs: []*fake.GetURIForIPArguments{{
 				Project: "parent-project",
-				Region:  "test-zone",
 				IP:      "1.2.3.4",
 			}},
 			GetDiskResp: []*compute.Disk{{SelfLink: "test-disk"}},
@@ -705,12 +705,39 @@ func TestDiscoverResource(t *testing.T) {
 			GetFilestoreErr:  []error{cmpopts.AnyError},
 		},
 		wantErr: cmpopts.AnyError,
+	}, {
+		name: "usesSubnetwork",
+		host: toDiscover{
+			name:       "projects/test-project/zones/test-zone/filestores/test-filestore",
+			subnetwork: "test-subnetwork",
+		},
+		project:  "test-project",
+		resolver: func(string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		gceService: &fake.TestGCE{
+			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/disks/test-disk"},
+			GetURIForIPErr:  []error{nil},
+			GetURIForIPArgs: []*fake.GetURIForIPArguments{{
+				Project:    "test-project",
+				Subnetwork: "test-subnetwork",
+				IP:         "1.2.3.4",
+			}},
+			GetDiskResp: []*compute.Disk{{SelfLink: "test-disk"}},
+			GetDiskErr:  []error{nil},
+		},
+		want: &spb.SapDiscovery_Resource{
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+			ResourceUri:  "test-disk",
+		},
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			c := CloudDiscovery{
 				GceService:   test.gceService,
 				HostResolver: test.resolver,
+			}
+			if test.gceService != nil {
+				test.gceService.T = t
 			}
 			got, gotToDiscover, err := c.discoverResource(context.Background(), test.host, test.project)
 			if diff := cmp.Diff(test.want, got, resourceDiffOpts...); diff != "" {
