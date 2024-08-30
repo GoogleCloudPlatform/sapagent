@@ -198,7 +198,7 @@ func TestConfigureX4SLES3_5(t *testing.T) {
 		{
 			name: "FailedSaptuneReapply",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf3_5)}),
 				ExecuteFunc: defaultExecute([]int{4, 0, 0, 4}, []string{"", "", "", ""}),
 			},
 			want:    false,
@@ -207,7 +207,7 @@ func TestConfigureX4SLES3_5(t *testing.T) {
 		{
 			name: "Success",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf)}),
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX4Conf3_5)}),
 				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", ""}),
 			},
 			want:    true,
