@@ -70,6 +70,9 @@ type (
 		AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error
 		DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
 		WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error
+		ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error)
+		AddResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
+		RemoveResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
 	}
 )
 
@@ -89,6 +92,7 @@ type Restorer struct {
 	DataDiskVG                                                 string
 	gceService                                                 gceInterface
 	computeService                                             *compute.Service
+	cgName                                                     string
 	baseDataPath, baseLogPath                                  string
 	logicalDataPath, logicalLogPath                            string
 	physicalDataPath, physicalLogPath                          string
@@ -391,21 +395,17 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
 func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey, newDiskName, sourceSnapshot string) error {
-	if !r.isGroupSnapshot {
-		if r.computeService == nil {
-			return fmt.Errorf("compute service is nil")
-		}
-		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
-		if err != nil {
-			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
-		}
-		if r.DiskSizeGb == 0 {
-			r.DiskSizeGb = snapshot.DiskSizeGb
-		}
-	} else {
-		return fmt.Errorf("GroupSnapshot not supported yet")
-		// TODO: Update this when prod API is available.
+	if r.computeService == nil {
+		return fmt.Errorf("compute service is nil")
 	}
+	snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
+	if err != nil {
+		return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
+	}
+	if r.DiskSizeGb == 0 {
+		r.DiskSizeGb = snapshot.DiskSizeGb
+	}
+
 	disk := &compute.Disk{
 		Name:                        newDiskName,
 		Type:                        r.NewDiskType,
@@ -438,7 +438,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
 
-	dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
+	_, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
 	if err != nil {
 		return fmt.Errorf("failed to check if new disk %v is attached to the instance", newDiskName)
 	}
@@ -448,17 +448,6 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	// Introducing sleep to let symlinks for the new disk to be created.
 	time.Sleep(5 * time.Second)
 
-	if r.DataDiskVG != "" {
-		if err := r.renameLVM(ctx, exec, cp, dev, newDiskName); err != nil {
-			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
-			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
-			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, newDiskName, dev); err != nil {
-				log.CtxLogger(ctx).Infof("Failed to detach newly attached restored disk: %v", err)
-				return err
-			}
-			return err
-		}
-	}
 	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
 	return nil
 }

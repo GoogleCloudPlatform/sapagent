@@ -119,6 +119,15 @@ type TestGCE struct {
 
 	AttachDiskErr error
 	DetachDiskErr error
+
+	SnapshotList    *compute.SnapshotList
+	SnapshotListErr error
+
+	AddResourcePoliciesOp  *compute.Operation
+	AddResourcePoliciesErr error
+
+	RemoveResourcePoliciesOp  *compute.Operation
+	RemoveResourcePoliciesErr error
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -360,4 +369,19 @@ func (g *TestGCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, proje
 // WaitForDiskOpCompletionWithRetry fakes calls to the cloud APIs to wait for a disk operation to complete.
 func (g *TestGCE) WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error {
 	return g.DiskOpErr
+}
+
+// ListSnapshots fakes calls to the cloud APIs to list snapshots.
+func (g *TestGCE) ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error) {
+	return g.SnapshotList, g.SnapshotListErr
+}
+
+// AddResourcePolicies fakes calls to the cloud APIs to add resource policies to a disk.
+func (g *TestGCE) AddResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error) {
+	return g.AddResourcePoliciesOp, g.AddResourcePoliciesErr
+}
+
+// RemoveResourcePolicies fakes calls to the cloud APIs to remove resource policies from a disk.
+func (g *TestGCE) RemoveResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error) {
+	return g.RemoveResourcePoliciesOp, g.RemoveResourcePoliciesErr
 }

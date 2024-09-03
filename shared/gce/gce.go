@@ -380,3 +380,33 @@ func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, 
 	}
 	return nil
 }
+
+// ListSnapshots lists the snapshots for a given project.
+func (g *GCE) ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error) {
+	snapshotService := compute.NewSnapshotsService(g.service)
+	snapshotList, err := snapshotService.List(project).Do()
+	if err != nil {
+		return nil, fmt.Errorf("could not list snapshots for given project, error: %v", err)
+	}
+	return snapshotList, nil
+}
+
+// AddResourcePolicies adds the given resource policies of a disk.
+func (g *GCE) AddResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error) {
+	disksService := compute.NewDisksService(g.service)
+	op, err := disksService.AddResourcePolicies(project, zone, diskName, &compute.DisksAddResourcePoliciesRequest{ResourcePolicies: resourcePolicies}).Do()
+	if err != nil {
+		return nil, err
+	}
+	return op, nil
+}
+
+// RemoveResourcePolicies removes the given resource policies of a disk.
+func (g *GCE) RemoveResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error) {
+	disksService := compute.NewDisksService(g.service)
+	op, err := disksService.RemoveResourcePolicies(project, zone, diskName, &compute.DisksRemoveResourcePoliciesRequest{ResourcePolicies: resourcePolicies}).Do()
+	if err != nil {
+		return nil, err
+	}
+	return op, nil
+}
