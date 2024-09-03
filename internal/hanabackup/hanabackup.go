@@ -146,9 +146,6 @@ func CheckDataDir(ctx context.Context, exec commandlineexecutor.Execute) (dataPa
 	if physicalDataPath, err = ParsePhysicalPath(ctx, logicalDataPath, exec); err != nil {
 		return dataPath, logicalDataPath, "", err
 	}
-	if err := CheckDataDeviceForStripes(ctx, logicalDataPath, exec); err != nil {
-		return dataPath, logicalDataPath, physicalDataPath, err
-	}
 	return dataPath, logicalDataPath, physicalDataPath, nil
 }
 
@@ -169,15 +166,20 @@ func CheckLogDir(ctx context.Context, exec commandlineexecutor.Execute) (baseLog
 }
 
 // CheckDataDeviceForStripes checks if the data device is striped.
-func CheckDataDeviceForStripes(ctx context.Context, logicalDataPath string, exec commandlineexecutor.Execute) error {
+func CheckDataDeviceForStripes(ctx context.Context, logicalDataPath string, exec commandlineexecutor.Execute) (bool, error) {
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/bin/sh",
 		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", logicalDataPath),
 	})
-	// TODO: Update this when ISG APIs are in prod.
 	log.CtxLogger(ctx).Debugf("CheckDataDeviceForStripes", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	return nil
+	if result.Error != nil {
+		return false, fmt.Errorf("failure checking if data device is striped, stderr: %s, err: %s", result.StdErr, result.Error)
+	} else if result.ExitCode == 0 {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // ReadDataDirMountPath reads the data directory mount path.

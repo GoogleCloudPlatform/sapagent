@@ -51,6 +51,9 @@ import (
 )
 
 type (
+	// checkDataDirFunc provides testable replacement for hanabackup.CheckDataDir
+	checkDataDirFunc func(ctx context.Context, exec commandlineexecutor.Execute) (dataPath string, logicalDataPath string, physicalDataPath string, err error)
+
 	// queryFunc provides testable replacement to the SQL API.
 	queryFunc func(context.Context, *databaseconnector.DBHandle, string) (string, error)
 
@@ -136,7 +139,6 @@ type Snapshot struct {
 	SendToMonitoring                       bool   `json:"send-metrics-to-monitoring,string"`
 	FreezeFileSystem                       bool   `json:"freeze-file-system,string"`
 	ConfirmDataSnapshotAfterCreate         bool   `json:"confirm-data-snapshot-after-create,string"`
-	isg                                    *ISG
 	groupSnapshotName                      string
 	disks                                  []string
 	db                                     *databaseconnector.DBHandle
@@ -176,7 +178,7 @@ func (*Snapshot) Usage() string {
 	[-hdbuserstore-key=<userstore-key>] [-abandon-prepared=<true|false>]
 	[-send-status-to-monitoring]=<true|false>] [-source-disk-key-file=<path-to-key-file>]
 	[-storage-location=<storage-location>] [-snapshot-description=<description>]
-	[-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>]
+	[-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>] [-group-snapshot-name=<group-snapshot-name>]
 	[-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
 	[-confirm-data-snapshot-after-create=<true|false>]
 	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
@@ -210,6 +212,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level")
 	fs.StringVar(&s.Labels, "labels", "", "Labels to be added to the disk snapshot")
+	fs.StringVar(&s.groupSnapshotName, "group-snapshot-name", "", "Group Snapshot name override.(optional - defaults to '<consistency-group-name>-yyyymmdd-hhmmss'.)")
 }
 
 // Execute implements the subcommand interface for hanadiskbackup.
@@ -243,7 +246,6 @@ func (s *Snapshot) Run(ctx context.Context, opts *onetime.RunOptions) (string, s
 		return errMessage, subcommands.ExitUsageError
 	}
 
-	s.isg = &ISG{}
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		errMessage := "ERROR: Failed to create Cloud Monitoring metric client"
@@ -252,14 +254,14 @@ func (s *Snapshot) Run(ctx context.Context, opts *onetime.RunOptions) (string, s
 	}
 	s.timeSeriesCreator = mc
 
-	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, opts.CloudProperties)
+	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, hanabackup.CheckDataDir, opts.CloudProperties)
 	if exitStatus != subcommands.ExitSuccess {
 		return message, subcommands.ExitFailure
 	}
 	return message, subcommands.ExitSuccess
 }
 
-func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
+func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, checkDataDir checkDataDirFunc, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
 	var err error
 	s.status = false
 
@@ -272,7 +274,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		return errMessage, subcommands.ExitFailure
 	}
 
-	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = hanabackup.CheckDataDir(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = checkDataDir(ctx, commandlineexecutor.ExecuteCommand); err != nil {
 		errMessage := "ERROR: Failed to check preconditions"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
@@ -287,11 +289,27 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		}
 
 		if len(s.disks) > 1 {
-			errMessage := "ERROR: backup of striped HANA data disks are not currently supported, exiting"
-			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-			return errMessage, subcommands.ExitFailure
-
-			// TODO: Uncomment this code once prod APIs for ISGs are available.
+			if ok, err := hanabackup.CheckDataDeviceForStripes(ctx, s.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+				errMessage := "ERROR: Failed to check if data device is striped"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
+			} else if !ok {
+				errMessage := "ERROR: Multiple disks are backing up /hana/data but data device is not striped"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
+			}
+			s.isgService = &instantsnapshotgroup.ISGService{}
+			if err := s.isgService.NewService(); err != nil {
+				errMessage := "ERROR: Failed to create Instant Snapshot Group service"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
+			}
+			if err := s.validateDisksBelongToCG(ctx); err != nil {
+				errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
+			}
+			s.groupSnapshot = true
 		}
 		log.CtxLogger(ctx).Infow("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgName, "groupSnapshot", s.groupSnapshot)
 	}
@@ -365,11 +383,10 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 }
 
 func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties) error {
-	var instance *compute.Instance
 	var err error
 
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, s.gceService)
-	if instance, s.instanceProperties, err = instanceInfoReader.ReadDiskMapping(ctx, &cpb.Configuration{CloudProperties: cp}); err != nil {
+	if _, s.instanceProperties, err = instanceInfoReader.ReadDiskMapping(ctx, &cpb.Configuration{CloudProperties: cp}); err != nil {
 		return err
 	}
 
@@ -380,7 +397,6 @@ func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 			s.Disk = d.GetDiskName()
 			s.DiskZone = cp.GetZone()
 			s.disks = append(s.disks, d.GetDiskName())
-			s.isg.Disks = instance.Disks
 			s.provisionedIops = d.GetProvisionedIops()
 			s.provisionedThroughput = d.GetProvisionedThroughput()
 		}

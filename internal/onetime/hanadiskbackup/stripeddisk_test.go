@@ -76,7 +76,7 @@ func (m *mockISGService) DeleteISG(ctx context.Context, project, zone, isgName s
 }
 
 func (m *mockISGService) NewService() error {
-	return nil
+	return m.newServiceErr
 }
 
 func (m *mockISGService) WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error {

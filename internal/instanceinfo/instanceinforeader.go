@@ -19,14 +19,12 @@ package instanceinfo
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	compute "google.golang.org/api/compute/v1"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
@@ -150,27 +148,9 @@ func (r *Reader) ReadDiskMapping(ctx context.Context, config *configpb.Configura
 	projectID, zone, instanceID := cp.GetProjectId(), cp.GetZone(), cp.GetInstanceId()
 	var instance *compute.Instance
 	var err error
-	log.CtxLogger(ctx).Debugw("Environment value", "value", ctx.Value("env"))
-	// TODO: Remove this code once the prod ISG APIs are available.
-	if value := ctx.Value(instantsnapshotgroup.EnvKey("env")); value == "staging" {
-		baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instances/%s", projectID, zone, instanceID)
-		isgService := &instantsnapshotgroup.ISGService{}
-		if err := isgService.NewService(); err != nil {
-			return nil, nil, fmt.Errorf("failed to create Instant Snapshot Group service, err: %w", err)
-		}
-		bodyBytes, err := isgService.GetResponse(ctx, "GET", baseURL, nil)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get instance, err: %w", err)
-		}
-
-		if err = json.Unmarshal([]byte(bodyBytes), &instance); err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
-		}
-	} else {
-		instance, err = r.gceService.GetInstance(projectID, zone, instanceID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not get instance info from the Compute API, error: %v", err)
-		}
+	instance, err = r.gceService.GetInstance(projectID, zone, instanceID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get instance info from the Compute API, error: %v", err)
 	}
 
 	builder := instancepb.InstanceProperties{

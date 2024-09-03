@@ -235,26 +235,39 @@ func TestReadKey(t *testing.T) {
 
 func TestCheckDataDeviceForStripes(t *testing.T) {
 	tests := []struct {
-		name     string
-		fakeExec commandlineexecutor.Execute
-		want     error
+		name        string
+		fakeExec    commandlineexecutor.Execute
+		wantStriped bool
+		wantErr     error
 	}{
 		{
-			name:     "StripesPresent",
-			fakeExec: fakeCommandExecute("", "", nil),
-			want:     nil,
+			name:        "StripesErr",
+			fakeExec:    fakeCommandExecuteWithExitCode("", "", 1, &exec.ExitError{}),
+			wantStriped: false,
+			wantErr:     cmpopts.AnyError,
 		},
 		{
-			name:     "StripesNotPresent",
-			fakeExec: fakeCommandExecute("", "exit code:1", &exec.ExitError{}),
+			name:        "StripesPresent",
+			fakeExec:    fakeCommandExecuteWithExitCode("", "", 0, nil),
+			wantStriped: true,
+			wantErr:     nil,
+		},
+		{
+			name:        "StripesNotPresent",
+			fakeExec:    fakeCommandExecuteWithExitCode("", "", 1, nil),
+			wantStriped: false,
+			wantErr:     nil,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := CheckDataDeviceForStripes(context.Background(), "", test.fakeExec)
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("checkDataDeviceForStripes() = %v, want %v", got, test.want)
+			gotStriped, gotErr := CheckDataDeviceForStripes(context.Background(), "", test.fakeExec)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("checkDataDeviceForStripes() = %v, want %v", gotErr, test.wantErr)
+			}
+			if gotStriped != test.wantStriped {
+				t.Errorf("checkDataDeviceForStripes() = %v, want %v", gotStriped, test.wantStriped)
 			}
 		})
 	}

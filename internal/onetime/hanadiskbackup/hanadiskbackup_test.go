@@ -150,26 +150,43 @@ func TestSnapshotHandler(t *testing.T) {
 		snapshot           Snapshot
 		fakeNewGCE         onetime.GCEServiceFunc
 		fakeComputeService onetime.ComputeServiceFunc
+		checkDataDir       checkDataDirFunc
 		want               subcommands.ExitStatus
 	}{
 		{
 			name:       "GCEServiceCreationFailure",
 			snapshot:   defaultSnapshot,
 			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return nil, cmpopts.AnyError },
-			want:       subcommands.ExitFailure,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", cmpopts.AnyError
+			},
+			want: subcommands.ExitFailure,
 		},
 		{
 			name:               "ComputeServiceCreationFailure",
 			snapshot:           defaultSnapshot,
 			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return nil, cmpopts.AnyError },
-			want:               subcommands.ExitFailure,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", nil
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name:               "CheckDataDirFailure",
+			snapshot:           defaultSnapshot,
+			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", cmpopts.AnyError
+			},
+			want: subcommands.ExitFailure,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.snapshot.oteLogger = defaultOTELogger
-			_, got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties)
+			_, got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, test.checkDataDir, defaultCloudProperties)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
 			}
@@ -250,7 +267,6 @@ func TestReadDiskMapping(t *testing.T) {
 			name: "SuccessDefaultSnapshotName",
 			snapshot: Snapshot{
 				physicalDataPath: "unknown",
-				isg:              &ISG{},
 				gceService: &fake.TestGCE{
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
