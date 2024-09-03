@@ -338,7 +338,7 @@ func queryAndSendOnce(ctx context.Context, db *database, query *cpb.Query, param
 	if err != nil {
 		return 0, 0, err
 	}
-	log.CtxLogger(ctx).Infow("Successfuly executed: ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort(), "response time", responseTime)
+	log.CtxLogger(ctx).Infow("Successfully executed: ", "query", query.GetName(), "host", db.instance.GetHost(), "user", db.instance.GetUser(), "port", db.instance.GetPort(), "response time", responseTime)
 	var metrics []*mrpb.TimeSeries
 	if params.Config.GetHanaMonitoringConfiguration().GetSendQueryResponseTime() {
 		metrics = append(metrics, createQueryResponseTimeMetric(ctx, db.instance.GetName(), db.instance.GetSid(), query, params, responseTime, tspb.Now()))
