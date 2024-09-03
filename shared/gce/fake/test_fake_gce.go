@@ -120,6 +120,9 @@ type TestGCE struct {
 	AttachDiskErr error
 	DetachDiskErr error
 
+	CreateStandardSnapshotOp  *compute.Operation
+	CreateStandardSnapshotErr error
+
 	SnapshotList    *compute.SnapshotList
 	SnapshotListErr error
 
@@ -372,6 +375,11 @@ func (g *TestGCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, proje
 // WaitForDiskOpCompletionWithRetry fakes calls to the cloud APIs to wait for a disk operation to complete.
 func (g *TestGCE) WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error {
 	return g.DiskOpErr
+}
+
+// CreateStandardSnapshot fakes calls to the cloud APIs to create a standard snapshot.
+func (g *TestGCE) CreateStandardSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error) {
+	return g.CreateStandardSnapshotOp, g.CreateStandardSnapshotErr
 }
 
 // ListSnapshots fakes calls to the cloud APIs to list snapshots.

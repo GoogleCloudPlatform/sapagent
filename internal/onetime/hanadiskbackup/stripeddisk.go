@@ -20,24 +20,28 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
-func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run queryFunc, createSnapshot diskSnapshotFunc, cp *ipb.CloudProperties) (err error) {
+func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run queryFunc, cp *ipb.CloudProperties) (err error) {
 	for _, d := range s.disks {
 		if err = s.isDiskAttachedToInstance(ctx, d, cp); err != nil {
 			return err
@@ -65,31 +69,72 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		freezeTime := time.Since(dbFreezeStartTime)
 		defer s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/dbfreezetime", s.groupSnapshotName, freezeTime, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	}
-
 	if err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error creating instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
 
-	if err = s.convertISGtoSSG(ctx, cp, createSnapshot); err != nil {
+	var ssOps []*standardSnapshotOp
+	if ssOps, err = s.convertISGtoSS(ctx, cp); err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error converting instant snapshots to %s, HANA snapshot %s is not successful", strings.ToLower(s.SnapshotType), snapshotID), err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
 
-	log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
-	if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
+	if s.ConfirmDataSnapshotAfterCreate {
+		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk standard snapshots are created but not yet uploaded.")
+		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
 		return err
+	}
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
+	for _, ssOp := range ssOps {
+		if err := s.gceService.WaitForSnapshotUploadCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
+			log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
+			if s.ConfirmDataSnapshotAfterCreate {
+				s.oteLogger.LogErrorToFileAndConsole(
+					ctx, fmt.Sprintf("Error uploading disk snapshot, HANA snapshot %s is not successful", snapshotID), err,
+				)
+			}
+			s.diskSnapshotFailureHandler(ctx, run, snapshotID)
+			return err
+		}
+	}
+
+	log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
+	if !s.ConfirmDataSnapshotAfterCreate {
+		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
 func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
-	timestamp := time.Now().UTC().UnixMilli()
-	s.groupSnapshotName = s.cgPath + fmt.Sprintf("-%d", timestamp)
+	if s.groupSnapshotName == "" {
+		timestamp := time.Now().UTC().UnixMilli()
+		s.groupSnapshotName = s.cgName + fmt.Sprintf("-%d", timestamp)
+	}
 	log.CtxLogger(ctx).Infow("Creating Instant snapshot group", "disks", s.disks, "disks zone", s.DiskZone, "groupSnapshotName", s.groupSnapshotName)
+
+	parts := strings.Split(s.DiskZone, "-")
+	if len(parts) < 3 {
+		return fmt.Errorf("invalid zone, cannot fetch region from it: %s", s.DiskZone)
+	}
+	region := strings.Join(parts[:len(parts)-1], "-")
+
+	groupSnapshot := map[string]any{
+		"name":                   s.groupSnapshotName,
+		"sourceConsistencyGroup": fmt.Sprintf("projects/%s/regions/%s/resourcePolicies/%s", s.Project, region, s.cgName),
+		"description":            s.Description,
+	}
 
 	if s.DiskKeyFile != "" {
 		s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
@@ -99,7 +144,7 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 			s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)
 			return err
 		}
-		s.isg.EncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+		groupSnapshot["sourceDiskEncryptionKey"] = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
 	}
 
 	dbFreezeStartTime = time.Now()
@@ -109,20 +154,110 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 		}
 	}
 
-	if s.gceService == nil {
-		return fmt.Errorf("gceService needed to convert Instant Snapshot Group")
+	data, err := json.Marshal(groupSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json, err: %w", err)
 	}
-	return fmt.Errorf("GroupSnapshot not supported yet")
-
-	// TODO: Update this when prod API is available.
+	if err := s.isgService.CreateISG(ctx, s.Project, s.DiskZone, data); err != nil {
+		return err
+	}
+	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.groupSnapshotName)
+	if err := s.isgService.WaitForISGUploadCompletionWithRetry(ctx, baseURL); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *Snapshot) convertISGtoSSG(ctx context.Context, cp *ipb.CloudProperties, createSnapshot diskSnapshotFunc) error {
-	if s.gceService == nil {
-		return fmt.Errorf("gceService needed to proceed")
+func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) ([]*standardSnapshotOp, error) {
+	log.CtxLogger(ctx).Info("Converting Instant Snapshot Group to Standard Snapshots")
+	instantSnapshots, err := s.isgService.DescribeInstantSnapshots(ctx, s.Project, s.DiskZone, s.groupSnapshotName)
+	if err != nil {
+		return nil, err
 	}
-	return fmt.Errorf("GroupSnapshot not supported yet")
-	// TODO: Update this when prod API is available.
+
+	errors := make(chan error, len(instantSnapshots))
+	jobs := make(chan *instantsnapshotgroup.ISItem, runtime.NumCPU())
+	ssOps := []*standardSnapshotOp{}
+
+	var wg sync.WaitGroup
+	for range instantSnapshots {
+		wg.Add(1)
+		go s.createGroupBackup(ctx, &wg, jobs, &ssOps, errors)
+	}
+	for _, is := range instantSnapshots {
+		jobs <- &is
+	}
+
+	close(jobs)
+	wg.Wait()
+	close(errors)
+
+	var ok bool
+	if err, ok = <-errors; !ok {
+		return ssOps, nil
+	}
+
+	log.CtxLogger(ctx).Error(err)
+	for err = range errors {
+		log.CtxLogger(ctx).Error(err)
+	}
+	return nil, fmt.Errorf("Error converting Instant Snapshot Group to Standard snapshots, latest error: %w", err)
+}
+
+func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, jobs chan *instantsnapshotgroup.ISItem, ssOps *[]*standardSnapshotOp, errors chan error) {
+	defer wg.Done()
+	for instantSnapshot := range jobs {
+		isName := instantSnapshot.Name
+		standardSnapshotName := createStandardSnapshotName(isName)
+		standardSnapshot := &compute.Snapshot{
+			Name:                  standardSnapshotName,
+			SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, isName),
+			Labels:                s.parseLabels(),
+			Description:           s.Description,
+		}
+
+		// In case customer is taking a snapshot from an encrypted disk, the snapshot created from it also
+		// needs to be encrypted. For simplicity we support the use case in which disk encryption and
+		// snapshot encryption key are the same.
+		if s.DiskKeyFile != "" {
+			s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
+			srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
+			srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
+			if err != nil {
+				errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+				s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)
+				return
+			}
+			standardSnapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+			standardSnapshot.SnapshotEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+		}
+
+		op, err := s.gceService.CreateStandardSnapshot(ctx, s.Project, standardSnapshot)
+		if err != nil {
+			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+			return
+		}
+
+		if err := s.gceService.WaitForSnapshotCreationCompletionWithRetry(ctx, op, s.Project, s.DiskZone, standardSnapshotName); err != nil {
+			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+			return
+		}
+		*ssOps = append(*ssOps, &standardSnapshotOp{op: op, name: standardSnapshotName})
+	}
+}
+
+func createStandardSnapshotName(instantSnapshotName string) string {
+	maxLength := 63
+	suffix := "-standard"
+
+	standardSnapshotName := instantSnapshotName
+	snapshotNameMaxLength := maxLength - len(suffix)
+	if len(instantSnapshotName) > snapshotNameMaxLength {
+		standardSnapshotName = instantSnapshotName[:snapshotNameMaxLength]
+	}
+
+	standardSnapshotName += suffix
+	return standardSnapshotName
 }
 
 // validateDisksBelongToCG validates that the disks belong to the same consistency group.
@@ -134,11 +269,11 @@ func (s *Snapshot) validateDisksBelongToCG(ctx context.Context) error {
 			return err
 		}
 
-		if s.cgPath != "" && cg != s.cgPath {
-			return fmt.Errorf("all disks should belong to the same consistency group, however disk %s belongs to %s, while other disks %s belong to %s", d, cg, disksTraversed, s.cgPath)
+		if s.cgName != "" && cg != s.cgName {
+			return fmt.Errorf("all disks should belong to the same consistency group, however disk %s belongs to %s, while other disks %s belong to %s", d, cg, disksTraversed, s.cgName)
 		}
 		disksTraversed = append(disksTraversed, d)
-		s.cgPath = cg
+		s.cgName = cg
 	}
 
 	return nil
@@ -181,8 +316,12 @@ func (s *Snapshot) createGroupBackupLabels() map[string]string {
 		}
 		return labels
 	}
-	labels["goog-sapagent-version"] = configuration.AgentVersion
-	labels["goog-sapagent-cgpath"] = s.cgPath
+	parts := strings.Split(s.DiskZone, "-")
+	region := strings.Join(parts[:len(parts)-1], "-")
+
+	labels["goog-sapagent-version"] = strings.ReplaceAll(configuration.AgentVersion, ".", "_")
+	labels["goog-sapagent-isg"] = s.groupSnapshotName
+	labels["goog-sapagent-cgpath"] = region + "-" + s.cgName
 	labels["goog-sapagent-disk-name"] = s.Disk
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)

@@ -37,6 +37,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
@@ -76,6 +77,23 @@ type (
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
+		CreateStandardSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error)
+	}
+
+	// ISGInterface is the testable equivalent for ISGService for ISG operations.
+	ISGInterface interface {
+		NewService() error
+		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
+		CreateISG(ctx context.Context, project, zone string, data []byte) error
+		DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
+		DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error)
+		DeleteISG(ctx context.Context, project, zone, isgName string) error
+		WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error
+	}
+
+	standardSnapshotOp struct {
+		op   *compute.Operation
+		name string
 	}
 )
 
@@ -124,6 +142,7 @@ type Snapshot struct {
 	db                                     *databaseconnector.DBHandle
 	gceService                             gceInterface
 	computeService                         *compute.Service
+	isgService                             ISGInterface
 	status                                 bool
 	timeSeriesCreator                      cloudmonitoring.TimeSeriesCreator
 	help                                   bool
@@ -137,7 +156,7 @@ type Snapshot struct {
 	Labels                                 string                        `json:"labels"`
 	IIOTEParams                            *onetime.InternallyInvokedOTE `json:"-"`
 	instanceProperties                     *ipb.InstanceProperties
-	cgPath                                 string
+	cgName                                 string
 	groupSnapshot                          bool
 	provisionedIops, provisionedThroughput int64
 	oteLogger                              *onetime.OTELogger
@@ -274,7 +293,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 
 			// TODO: Uncomment this code once prod APIs for ISGs are available.
 		}
-		log.CtxLogger(ctx).Infow("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgPath, "groupSnapshot", s.groupSnapshot)
+		log.CtxLogger(ctx).Infow("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgName, "groupSnapshot", s.groupSnapshot)
 	}
 
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)
@@ -317,7 +336,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 			return errMessage, subcommands.ExitFailure
 		}
 	} else if s.groupSnapshot {
-		if err := s.runWorkflowForInstantSnapshotGroups(ctx, runQuery, s.createSnapshot, cp); err != nil {
+		if err := s.runWorkflowForInstantSnapshotGroups(ctx, runQuery, cp); err != nil {
 			errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			return errMessage, subcommands.ExitFailure

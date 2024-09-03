@@ -228,7 +228,7 @@ func (s *ISGService) isgExists(ctx context.Context, project, zone, isgName strin
 
 // DescribeInstantSnapshots returns the list of instant snapshots for a given group snapshot.
 func (s *ISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isg string) ([]ISItem, error) {
-	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshots", project, zone)
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshots", project, zone)
 	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instant snapshots for given group snapshot, err: %w", err)
@@ -272,7 +272,7 @@ func (s *ISGService) DescribeStandardSnapshots(ctx context.Context, project, zon
 
 // DeleteISG deletes the given instant snapshot group.
 func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName string) error {
-	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
 	bodyBytes, err := s.GetResponse(ctx, "DELETE", baseURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to initiate deletion of Instant Snapshot Group, err: %w", err)

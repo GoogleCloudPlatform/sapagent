@@ -19,6 +19,7 @@ package hanadiskbackup
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -26,21 +27,72 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
 )
 
+// TODO: Replace mocks with real implementations using httptest
+type mockISGService struct {
+	newServiceErr error
+
+	createISGError error
+
+	describeStandardSnapshotsResp []*compute.Snapshot
+	describeStandardSnapshotsErr  error
+
+	describeInstantSnapshotsResp []instantsnapshotgroup.ISItem
+	describeInstantSnapshotsErr  error
+
+	deleteISGErr error
+
+	getResponseResp []byte
+	getResponseErr  error
+
+	waitForISGUploadCompletionWithRetryErr        error
+	waitForStandardSnapshotCreationWithRetryErr   error
+	waitForStandardSnapshotCompletionWithRetryErr error
+}
+
+func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
+	return m.createISGError
+}
+
+func (m *mockISGService) DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error) {
+	return m.describeStandardSnapshotsResp, m.describeStandardSnapshotsErr
+}
+
+func (m *mockISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
+	return m.describeInstantSnapshotsResp, m.describeInstantSnapshotsErr
+}
+
+func (m *mockISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
+	return m.getResponseResp, m.getResponseErr
+}
+
+func (m *mockISGService) DeleteISG(ctx context.Context, project, zone, isgName string) error {
+	return m.deleteISGErr
+}
+
+func (m *mockISGService) NewService() error {
+	return nil
+}
+
+func (m *mockISGService) WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error {
+	return m.waitForISGUploadCompletionWithRetryErr
+}
+
 func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 	tests := []struct {
-		name           string
-		s              *Snapshot
-		run            queryFunc
-		createSnapshot diskSnapshotFunc
-		cp             *ipb.CloudProperties
-		wantErr        error
+		name    string
+		s       *Snapshot
+		run     queryFunc
+		cp      *ipb.CloudProperties
+		wantErr error
 	}{
 		{
-			name: "CheckValidDiskFailure",
+			name: "DiskAttachErr",
 			s: &Snapshot{
 				disks: []string{"pd-1", "pd-2"},
 				gceService: &fake.TestGCE{
@@ -49,10 +101,13 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					DiskAttachedToInstanceErr:        cmpopts.AnyError,
 				},
 			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "InvalidDisk",
+			name: "DiskAttachFalse",
 			s: &Snapshot{
 				disks: []string{"pd-1", "pd-2"},
 				gceService: &fake.TestGCE{
@@ -61,15 +116,21 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   false,
 				},
 			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "AbandonSnapshotFailure",
 			s: &Snapshot{
 				AbandonPrepared: true,
-				gceService:      &fake.TestGCE{IsDiskAttached: true},
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
 			},
-			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "", cmpopts.AnyError
 			},
@@ -79,14 +140,17 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			name: "CreateHANASnapshotFailure",
 			s: &Snapshot{
 				AbandonPrepared: true,
-				gceService:      &fake.TestGCE{IsDiskAttached: true},
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
 			},
-			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
 					return "", cmpopts.AnyError
 				}
-				return "", nil
+				return "1234", nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -94,10 +158,17 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			name: "CreateInstantSnapshotGroupFailure",
 			s: &Snapshot{
 				AbandonPrepared: true,
-				gceService:      &fake.TestGCE{IsDiskAttached: true},
-				cgPath:          "test-cg-failure",
+				DiskZone:        "invalid-zone",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
+				cgName: "test-cg-failure",
+				isgService: &mockISGService{
+					createISGError: cmpopts.AnyError,
+				},
 			},
-			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
@@ -108,25 +179,39 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			s: &Snapshot{
 				FreezeFileSystem: true,
 				AbandonPrepared:  true,
-				gceService:       &fake.TestGCE{IsDiskAttached: true},
-				cgPath:           "test-cg-success",
+				DiskZone:         "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
+				cgName: "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+				},
 			},
-			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "ConvertISGToSSGFailure",
+			name: "ConvertISGToSSFailure",
 			s: &Snapshot{
 				AbandonPrepared: true,
+				DiskZone:        "europe-west1-b",
 				gceService: &fake.TestGCE{
-					IsDiskAttached: true,
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
 				},
-				cgPath: "test-cg-success",
+				cgName: "test-cg-success",
+				isgService: &mockISGService{
+					createISGError:               nil,
+					describeInstantSnapshotsResp: nil,
+					describeInstantSnapshotsErr:  cmpopts.AnyError,
+				},
 			},
-			createSnapshot: createDiskSnapshotFail,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
@@ -135,14 +220,143 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 		{
 			name: "MarkSnapshotAsSuccessfulFailure",
 			s: &Snapshot{
-				AbandonPrepared: true,
+				AbandonPrepared:                true,
+				DiskZone:                       "europe-west1-b",
+				ConfirmDataSnapshotAfterCreate: true,
 				gceService: &fake.TestGCE{
-					IsDiskAttached: true,
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     nil,
 				},
 				computeService: &compute.Service{},
-				cgPath:         "test-cg-success",
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+						{
+							Name: "test-isg-1",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+				},
 			},
-			createSnapshot: createDiskSnapshotSuccess,
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID") {
+					return "", cmpopts.AnyError
+				}
+				return "", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DeleteISGFailure",
+			s: &Snapshot{
+				AbandonPrepared:                true,
+				DiskZone:                       "europe-west1-b",
+				ConfirmDataSnapshotAfterCreate: true,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     nil,
+				},
+				computeService: &compute.Service{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+						{
+							Name: "test-isg-1",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+					deleteISGErr:                cmpopts.AnyError,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SnapshotUploadFailure",
+			s: &Snapshot{
+				AbandonPrepared:                true,
+				DiskZone:                       "europe-west1-b",
+				ConfirmDataSnapshotAfterCreate: true,
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     nil,
+					UploadCompletionErr:       cmpopts.AnyError,
+				},
+				computeService: &compute.Service{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+					deleteISGErr:                nil,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "MarkSnapshotFailureAfterDelete",
+			s: &Snapshot{
+				AbandonPrepared: true,
+				DiskZone:        "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     nil,
+					UploadCompletionErr:       nil,
+				},
+				computeService: &compute.Service{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+					deleteISGErr:                nil,
+				},
+			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID") {
 					return "", cmpopts.AnyError
@@ -154,32 +368,46 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 		{
 			name: "RunWorkflowForInstantSnapshotGroupsSuccess",
 			s: &Snapshot{
-				disks:           []string{"pd-1", "pd-2"},
 				AbandonPrepared: true,
+				DiskZone:        "europe-west1-b",
 				gceService: &fake.TestGCE{
-					DiskAttachedToInstanceDeviceName: "pd-1",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
-					CreationCompletionErr:            nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     nil,
+					UploadCompletionErr:       nil,
 				},
 				computeService: &compute.Service{},
-				cgPath:         "test-cg-success",
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+					deleteISGErr:                nil,
+				},
 			},
-			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: nil,
 		},
 	}
 
 	ctx := context.Background()
 	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
-			tc.s.oteLogger = defaultOTELogger
-			gotErr := tc.s.runWorkflowForInstantSnapshotGroups(ctx, tc.run, tc.createSnapshot, tc.cp)
+			gotErr := tc.s.runWorkflowForInstantSnapshotGroups(ctx, tc.run, tc.cp)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("runWorkflowForInstantSnapshotGroups(%v, %v, %v) returned diff (-want +got):\n%s", tc.run, tc.createSnapshot, tc.cp, diff)
+				t.Errorf("runWorkflowForInstantSnapshotGroups(%v, %v) returned diff (-want +got):\n%s", tc.run, tc.cp, diff)
 			}
 		})
 	}
@@ -192,10 +420,17 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 		want error
 	}{
 		{
+			name: "InvalidZone",
+			s: &Snapshot{
+				DiskZone: "invalid-zone",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "ReadDiskKeyFile",
 			s: &Snapshot{
-				isg:         &ISG{},
-				cgPath:      "test-snapshot-success",
+				DiskZone:    "europe-west1-b",
+				cgName:      "test-snapshot-success",
 				DiskKeyFile: "/test/disk/key.json",
 			},
 			want: cmpopts.AnyError,
@@ -203,44 +438,41 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 		{
 			name: "FreezeFS",
 			s: &Snapshot{
-				isg:              &ISG{},
-				cgPath:           "test-snapshot-success",
-				FreezeFileSystem: true,
-			},
-			want: cmpopts.AnyError,
-		},
-		{
-			name: "emptyGCEService",
-			s: &Snapshot{
-				cgPath: "test-snapshot-success",
+				groupSnapshotName: "test-group-snapshot",
+				DiskZone:          "europe-west1-b",
+				cgName:            "test-snapshot-success",
+				FreezeFileSystem:  true,
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "createISGFailure",
 			s: &Snapshot{
-				isg:        &ISG{},
-				cgPath:     "test-snapshot-failure",
-				gceService: &fake.TestGCE{},
+				DiskZone: "europe-west1-b",
+				cgName:   "test-snapshot-failure",
+				isgService: &mockISGService{
+					createISGError: cmpopts.AnyError,
+				},
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "createISGSuccess",
 			s: &Snapshot{
-				isg: &ISG{
-					Disks: []*compute.AttachedDisk{},
+				groupSnapshotName: "test-group-snapshot",
+				DiskZone:          "europe-west1-b",
+				cgName:            "test-snapshot-success",
+				isgService: &mockISGService{
+					createISGError: nil,
 				},
-				cgPath:     "test-snapshot-success",
-				gceService: &fake.TestGCE{},
 			},
-			want: cmpopts.AnyError,
+			want: nil,
 		},
 	}
 
 	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
-			tc.s.oteLogger = defaultOTELogger
 			got := tc.s.createInstantSnapshotGroup(context.Background())
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("createInstantGroupSnapshot() returned diff (-want +got):\n%s", diff)
@@ -249,68 +481,157 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 	}
 }
 
-func TestConvertISGtoSSG(t *testing.T) {
+func TestConvertISGtoSS(t *testing.T) {
 	tests := []struct {
-		name           string
-		s              *Snapshot
-		cp             *ipb.CloudProperties
-		createSnapshot diskSnapshotFunc
-		wantErr        error
+		name    string
+		s       *Snapshot
+		wantErr error
 	}{
-		{
-			name:    "emptyGCEService",
-			s:       &Snapshot{},
-			wantErr: cmpopts.AnyError,
-		},
 		{
 			name: "DescribeISGFailure",
 			s: &Snapshot{
-				gceService: &fake.TestGCE{},
+				isgService: &mockISGService{
+					describeInstantSnapshotsResp: nil,
+					describeInstantSnapshotsErr:  cmpopts.AnyError,
+				},
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "createBackupError",
+			name: "createGroupBackupFailure",
 			s: &Snapshot{
-				isg:        &ISG{},
-				gceService: &fake.TestGCE{CreationCompletionErr: nil},
+				groupSnapshotName: "group-snapshot-name",
+				gceService: &fake.TestGCE{
+					CreateStandardSnapshotOp:  nil,
+					CreateStandardSnapshotErr: cmpopts.AnyError,
+				},
+				isgService: &mockISGService{
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "instant-snapshot-1",
+						},
+						{
+							Name: "instant-snapshot-2",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+				},
 			},
-			cp:             defaultCloudProperties,
-			createSnapshot: createDiskSnapshotFail,
-			wantErr:        cmpopts.AnyError,
-		},
-		{
-			name: "freezeFS",
-			s: &Snapshot{
-				FreezeFileSystem: true,
-				isg:              &ISG{},
-				computeService:   &compute.Service{},
-				gceService:       &fake.TestGCE{CreationCompletionErr: nil},
-			},
-			cp:             defaultCloudProperties,
-			createSnapshot: createDiskSnapshotSuccess,
-			wantErr:        cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "Success",
 			s: &Snapshot{
-				isg:            &ISG{},
-				computeService: &compute.Service{},
-				gceService:     &fake.TestGCE{CreationCompletionErr: nil},
+				groupSnapshotName: "group-snapshot-name",
+				gceService: &fake.TestGCE{
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     nil,
+				},
+				isgService: &mockISGService{
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "instant-snapshot-1",
+						},
+						{
+							Name: "instant-snapshot-2",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+				},
 			},
-			cp:             defaultCloudProperties,
-			createSnapshot: createDiskSnapshotSuccess,
-			wantErr:        cmpopts.AnyError,
+			wantErr: nil,
 		},
 	}
 
-	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.s.oteLogger = defaultOTELogger
-			gotErr := tc.s.convertISGtoSSG(ctx, tc.cp, tc.createSnapshot)
+			_, gotErr := tc.s.convertISGtoSS(context.Background(), defaultCloudProperties)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("convertIS() returned diff (-want +got):\n%s", diff)
+				t.Errorf("stagingRunISGtoSSG() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCreateGroupBackup(t *testing.T) {
+	tests := []struct {
+		name string
+		s    *Snapshot
+		want error
+	}{
+		{
+			name: "DiskKeyFileProvided",
+			s: &Snapshot{
+				DiskKeyFile: "/test/disk/key.json",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "CreateSnapshotFailure",
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				gceService: &fake.TestGCE{
+					CreateStandardSnapshotOp:  nil,
+					CreateStandardSnapshotErr: cmpopts.AnyError,
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "WaitForSnapshotCreationFailure",
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				gceService: &fake.TestGCE{
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     cmpopts.AnyError,
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				gceService: &fake.TestGCE{
+					CreateStandardSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateStandardSnapshotErr: nil,
+					CreationCompletionErr:     nil,
+				},
+			},
+			want: nil,
+		},
+	}
+
+	var ssOps []*standardSnapshotOp
+	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
+		t.Run(tc.name, func(t *testing.T) {
+			var wg sync.WaitGroup
+			wg.Add(1)
+			jobs := make(chan *instantsnapshotgroup.ISItem, 2)
+			jobs <- &instantsnapshotgroup.ISItem{
+				Name: "instant-snapshot-1",
+			}
+			close(jobs)
+			errors := make(chan error, 2)
+
+			tc.s.createGroupBackup(context.Background(), &wg, jobs, &ssOps, errors)
+			close(errors)
+
+			var gotErr error
+			if err, ok := <-errors; ok {
+				gotErr = err
+			}
+			if diff := cmp.Diff(tc.want, gotErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("stagingCreateBackup() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -392,7 +713,6 @@ func TestValidateDisksBelongToCG(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.validateDisksBelongToCG(ctx)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateDisksBelongToCG()=%v, want=%v", got, test.want)
@@ -541,7 +861,7 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 		{
 			name: "DiskSnapshot",
 			s: &Snapshot{
-				cgPath:                "my-region-my-cg",
+				cgName:                "my-region-my-cg",
 				Disk:                  "my-disk",
 				provisionedIops:       10000,
 				provisionedThroughput: 1000000000,
@@ -554,12 +874,15 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 		{
 			name: "GroupSnapshot",
 			s: &Snapshot{
-				groupSnapshot: true,
-				cgPath:        "my-region-my-cg",
-				Disk:          "my-disk",
+				groupSnapshotName: "group-snapshot-name",
+				groupSnapshot:     true,
+				DiskZone:          "my-region-1",
+				cgName:            "my-cg",
+				Disk:              "my-disk",
 			},
 			want: map[string]string{
-				"goog-sapagent-version":   configuration.AgentVersion,
+				"goog-sapagent-isg":       "group-snapshot-name",
+				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
 				"goog-sapagent-cgpath":    "my-region-my-cg",
 				"goog-sapagent-disk-name": "my-disk",
 			},
@@ -568,7 +891,6 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.s.oteLogger = defaultOTELogger
 			got := tc.s.createGroupBackupLabels()
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
@@ -614,6 +936,34 @@ func TestGenerateSHA(t *testing.T) {
 			got := generateSHA(tc.labels)
 			if got != tc.want {
 				t.Errorf("generateSHA(%v) = %q, want: %q", tc.labels, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreateStandardSnapshotName(t *testing.T) {
+	tests := []struct {
+		name                string
+		instantSnapshotName string
+		want                string
+	}{
+		{
+			name:                "withoutTruncate",
+			instantSnapshotName: "instant-snapshot-name",
+			want:                "instant-snapshot-name-standard",
+		},
+		{
+			name:                "withTruncate",
+			instantSnapshotName: "instant-snapshot-name-12345678912345678912345678912345678912345",
+			want:                "instant-snapshot-name-12345678912345678912345678912345-standard",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := createStandardSnapshotName(tc.instantSnapshotName)
+			if got != tc.want {
+				t.Errorf("createStandardSnapshotName(%q) = %q, want: %q", tc.instantSnapshotName, got, tc.want)
 			}
 		})
 	}

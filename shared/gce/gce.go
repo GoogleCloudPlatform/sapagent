@@ -381,6 +381,16 @@ func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, 
 	return nil
 }
 
+// CreateStandardSnapshot creates a new standard snapshot.
+func (g *GCE) CreateStandardSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error) {
+	snapshotsService := compute.NewSnapshotsService(g.service)
+	op, err := snapshotsService.Insert(project, snapshotReq).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create standard snapshot: %v", err)
+	}
+	return op, nil
+}
+
 // ListSnapshots lists the snapshots for a given project.
 func (g *GCE) ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error) {
 	snapshotService := compute.NewSnapshotsService(g.service)
