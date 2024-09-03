@@ -50,16 +50,6 @@ func defaultWriteFile(numNil int) func(string, []byte, os.FileMode) error {
 	}
 }
 
-func defaultMkdirAll(numNil int) func(string, os.FileMode) error {
-	return func(string, os.FileMode) error {
-		if numNil > 0 {
-			numNil--
-			return nil
-		}
-		return cmpopts.AnyError
-	}
-}
-
 // The following funcs will return the specified exit code and std
 // out each run. Note: The slices should be equal length.
 func defaultReadFile(errors []error, contents []string) func(string) ([]byte, error) {
@@ -218,7 +208,6 @@ func TestExecuteConfigureInstance(t *testing.T) {
 				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
 				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
 				WriteFile:       defaultWriteFile(5),
-				MkdirAll:        defaultMkdirAll(5),
 			},
 			args: []any{
 				"test",
@@ -282,7 +271,6 @@ func TestConfigureInstanceHandler(t *testing.T) {
 				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
 				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
 				WriteFile:       defaultWriteFile(5),
-				MkdirAll:        defaultMkdirAll(5),
 				Apply:           true,
 			},
 			want:            subcommands.ExitSuccess,
@@ -296,7 +284,6 @@ func TestConfigureInstanceHandler(t *testing.T) {
 				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
 				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
 				WriteFile:       defaultWriteFile(5),
-				MkdirAll:        defaultMkdirAll(5),
 				Check:           true,
 				PrintDiff:       true,
 			},
@@ -390,7 +377,6 @@ func TestRemoveLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:  defaultReadFile([]error{nil}, []string{"#key=value"}),
 				WriteFile: verifyWrite(""),
-				MkdirAll:  defaultMkdirAll(1),
 				Apply:     true,
 			},
 			removeLines:     []string{"key="},
@@ -402,7 +388,6 @@ func TestRemoveLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				WriteFile:   verifyWrite(`#key="val test=1"`),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -415,7 +400,6 @@ func TestRemoveLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
 				WriteFile:   verifyWrite("#key1=value1\n#key2=value2"),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -428,7 +412,6 @@ func TestRemoveLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
 				WriteFile:   verifyWrite("#key1=value1\nkey2=value2"),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -441,7 +424,6 @@ func TestRemoveLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:  defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				WriteFile: verifyWrite(`key="val test=1"`),
-				MkdirAll:  defaultMkdirAll(1),
 				Apply:     true,
 			},
 			removeLines:     []string{"another_key"},
@@ -453,22 +435,8 @@ func TestRemoveLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				WriteFile:   defaultWriteFile(0),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
-			},
-			removeLines:     []string{"key"},
-			wantRegenerated: false,
-			wantErr:         cmpopts.AnyError,
-		},
-		{
-			name: "FailedToMkdirAll",
-			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
-				MkdirAll:    defaultMkdirAll(0),
-				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
-				Apply:       true,
-				PrintDiff:   true,
 			},
 			removeLines:     []string{"key"},
 			wantRegenerated: false,
@@ -479,7 +447,6 @@ func TestRemoveLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				WriteFile:   verifyWrite(`key="val test=1"`),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
 				Apply:       true,
 			},
@@ -533,7 +500,6 @@ func TestRemoveValues(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
 				WriteFile:   verifyWrite("#key="),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -546,7 +512,6 @@ func TestRemoveValues(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key="value test=1"`}),
 				WriteFile:   verifyWrite(`key="value"`),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -559,7 +524,6 @@ func TestRemoveValues(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"key1=value1\nkey2=value2"}),
 				WriteFile:   verifyWrite("key1=value1\nkey2="),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -572,7 +536,6 @@ func TestRemoveValues(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:  defaultReadFile([]error{nil}, []string{`key=value`}),
 				WriteFile: verifyWrite(`key=value`),
-				MkdirAll:  defaultMkdirAll(1),
 				Apply:     true,
 			},
 			removeLines:     []string{"another_key=another_value"},
@@ -584,7 +547,6 @@ func TestRemoveValues(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key=value`}),
 				WriteFile:   defaultWriteFile(0),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -636,7 +598,6 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
 				WriteFile:   defaultWriteFile(0),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -648,7 +609,6 @@ func TestCheckAndRegenerateFile(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"key=wrong_value"}),
 				WriteFile:   verifyWrite("key=value"),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -699,7 +659,6 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"#key=value"}),
 				WriteFile:   verifyWrite("key=value"),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -712,7 +671,6 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{"key=1"}),
 				WriteFile:   verifyWrite("key=2"),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -735,7 +693,6 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				WriteFile:   verifyWrite(`key="val test=2 new=3"`),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -748,7 +705,6 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				WriteFile:   verifyWrite(`key="val test=1"` + "\n" + `another_key=value` + "\n"),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -761,7 +717,6 @@ func TestCheckAndRegenerateLines(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil}, []string{`key="val test=1"`}),
 				WriteFile:   defaultWriteFile(0),
-				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
