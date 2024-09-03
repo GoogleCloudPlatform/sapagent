@@ -447,8 +447,9 @@
         "columns": [
             {
                 "name": "state_name",
-                "metric_type": "METRIC_LABEL",
-                "value_type": "VALUE_STRING"
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "backups/data"
             },
             {
                 "name": "entry_type_name",
@@ -462,9 +463,8 @@
             },
             {
                 "name": "backup_id",
-                "metric_type": "METRIC_GAUGE",
-                "value_type": "VALUE_INT64",
-                "name_override": "backups/data"
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
             }
         ]
     },
