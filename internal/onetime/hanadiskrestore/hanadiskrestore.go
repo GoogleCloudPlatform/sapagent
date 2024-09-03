@@ -73,6 +73,7 @@ type (
 		ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error)
 		AddResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
 		RemoveResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
+		SetLabels(ctx context.Context, project, zone, diskName, labelFingerprint string, labels map[string]string) (*compute.Operation, error)
 	}
 )
 
@@ -299,6 +300,9 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 }
 
 func (r *Restorer) fetchVG(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute, physicalDataPath string) (string, error) {
+	if strings.Contains(physicalDataPath, "\n") {
+		physicalDataPath = strings.Split(physicalDataPath, "\n")[0]
+	}
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/pvs",
 		ArgsToSplit: physicalDataPath,
@@ -339,13 +343,12 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
+	vg, err := r.fetchVG(ctx, cp, exec, r.physicalDataPath)
+	if err != nil {
+		return err
+	}
+	r.DataDiskVG = vg
 	if !r.isGroupSnapshot {
-		vg, err := r.fetchVG(ctx, cp, exec, r.physicalDataPath)
-		if err != nil {
-			return err
-		}
-		r.DataDiskVG = vg
-
 		log.CtxLogger(ctx).Info("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
 		if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
@@ -353,8 +356,13 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 			return fmt.Errorf("failed to detach old data disk: %v", err)
 		}
 	} else {
+		if err := r.validateDisksBelongToCG(ctx); err != nil {
+			return err
+		}
+
 		disksDetached := []*ipb.Disk{}
 		for _, d := range r.disks {
+			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.DiskName, "physicalDataPath", fmt.Sprintf("/dev/%s", d.GetMapping()))
 			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
 				log.CtxLogger(ctx).Errorf("failed to detach old data disk: %v", err)
 				// Reattaching detached disks.
@@ -368,6 +376,10 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 				hanabackup.RescanVolumeGroups(ctx)
 				return fmt.Errorf("failed to detach old data disk: %v", err)
 			}
+			if err := r.modifyDiskInCG(ctx, d.DiskName, false); err != nil {
+				log.CtxLogger(ctx).Errorf("failed to modify disk in consistency group: %v", err)
+			}
+
 			disksDetached = append(disksDetached, d)
 		}
 	}
@@ -505,7 +517,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		r.logicalDataPath, "Data physical volume", r.physicalDataPath, "Log directory", r.baseLogPath,
 		"Log file system", r.logicalLogPath, "Log physical volume", r.physicalLogPath)
 
-	if r.physicalDataPath == r.physicalLogPath {
+	if strings.Contains(r.physicalDataPath, r.physicalLogPath) {
 		return fmt.Errorf("unsupported: HANA data and HANA log are on the same physical disk - %s", r.physicalDataPath)
 	}
 
@@ -539,14 +551,30 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 
 	// Verify the snapshot is present.
 	if !r.isGroupSnapshot {
+		if r.computeService == nil {
+			return fmt.Errorf("compute service is nil")
+		}
 		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
 		if err != nil {
 			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
 		}
 		r.extractLabels(ctx, snapshot)
 	} else {
-		return fmt.Errorf("GroupSnapshot not supported yet")
-		// TODO: Update this when prod API is available.
+		snapshotList, err := r.gceService.ListSnapshots(ctx, r.Project)
+		if err != nil {
+			return fmt.Errorf("failed to list snapshots: %v", err)
+		}
+
+		var numOfSnapshots int
+		for _, snapshot := range snapshotList.Items {
+			if snapshot.Labels["isg"] == r.GroupSnapshot {
+				r.extractLabels(ctx, snapshot)
+				numOfSnapshots++
+			}
+		}
+		if numOfSnapshots != len(r.disks) {
+			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), numOfSnapshots)
+		}
 	}
 
 	if r.NewDiskType == "" {
@@ -558,7 +586,11 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 			r.NewDiskType = d.Type
 			log.CtxLogger(ctx).Infow("New disk type will be same as the data-disk-name", "diskType", r.NewDiskType)
 		} else {
-			r.NewDiskType = r.disks[0].GetDeviceType()
+			disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, r.disks[0].GetDiskName())
+			if err != nil {
+				return fmt.Errorf("failed to read data disk type: %v", err)
+			}
+			r.NewDiskType = disk.Type
 			log.CtxLogger(ctx).Infow("New disk type will be same as the data-disk-name", "diskType", r.NewDiskType)
 		}
 	} else {
@@ -626,7 +658,7 @@ func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties,
 	log.CtxLogger(ctx).Debugw("Reading disk mapping", "ip", instanceProperties)
 	for _, d := range instanceProperties.GetDisks() {
 		if strings.Contains(r.physicalDataPath, d.GetMapping()) {
-			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", r.physicalDataPath, "diskName", d.GetDiskName())
+			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", fmt.Sprintf("/dev/%s", d.GetMapping()), "diskName", d.GetDiskName())
 			if r.isGroupSnapshot {
 				r.disks = append(r.disks, d)
 				r.DataDiskZone = cp.GetZone()
@@ -646,7 +678,7 @@ func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties,
 // appendLabelsToDetachedDisk appends and sets labels to the detached disk.
 func (r *Restorer) appendLabelsToDetachedDisk(ctx context.Context, diskName string) (err error) {
 	var disk *compute.Disk
-	if disk, err = r.computeService.Disks.Get(r.Project, r.DataDiskZone, diskName).Do(); err != nil {
+	if disk, err = r.gceService.GetDisk(r.Project, r.DataDiskZone, diskName); err != nil {
 		return fmt.Errorf("failed to get disk: %v", err)
 	}
 	labelFingerprint := disk.LabelFingerprint
@@ -655,22 +687,20 @@ func (r *Restorer) appendLabelsToDetachedDisk(ctx context.Context, diskName stri
 		return err
 	}
 
-	setLabelRequest := &compute.ZoneSetLabelsRequest{
-		LabelFingerprint: labelFingerprint,
-		Labels:           labels,
-	}
-
-	op, err := r.computeService.Disks.SetLabels(r.Project, r.DataDiskZone, diskName, setLabelRequest).Do()
+	op, err := r.gceService.SetLabels(ctx, r.Project, r.DataDiskZone, diskName, labelFingerprint, labels)
 	if err != nil {
-		return fmt.Errorf("failed to append labels on detached disk: %v", err)
+		return fmt.Errorf("failed to set labels on detached disk: %v", err)
 	}
-	if err = r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
-		return fmt.Errorf("failed to append labels on detached disk: %v", err)
+	if err := r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
+		return fmt.Errorf("failed to set labels on detached disk: %v", err)
 	}
 	return nil
 }
 
 func (r *Restorer) appendLabels(labels map[string]string) (map[string]string, error) {
+	if labels == nil {
+		labels = map[string]string{}
+	}
 	pairs := strings.Split(strings.ReplaceAll(r.labelsOnDetachedDisk, " ", ""), ",")
 
 	for _, pair := range pairs {

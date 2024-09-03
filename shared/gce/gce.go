@@ -410,3 +410,16 @@ func (g *GCE) RemoveResourcePolicies(ctx context.Context, project, zone, diskNam
 	}
 	return op, nil
 }
+
+// SetLabels sets the labels for a given disk.
+func (g *GCE) SetLabels(ctx context.Context, project, zone, diskName, labelFingerprint string, labels map[string]string) (*compute.Operation, error) {
+	disksService := compute.NewDisksService(g.service)
+	op, err := disksService.SetLabels(project, zone, diskName, &compute.ZoneSetLabelsRequest{
+		Labels:           labels,
+		LabelFingerprint: labelFingerprint,
+	}).Do()
+	if err != nil {
+		return nil, err
+	}
+	return op, nil
+}

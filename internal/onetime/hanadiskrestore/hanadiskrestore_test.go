@@ -68,6 +68,34 @@ var (
 		disks:          []*ipb.Disk{&ipb.Disk{}},
 	}
 	defaultCloudProperties = &ipb.CloudProperties{ProjectId: "default-project"}
+	defaultGetInstanceResp = []*compute.Instance{{
+		MachineType:       "test-machine-type",
+		CpuPlatform:       "test-cpu-platform",
+		CreationTimestamp: "test-creation-timestamp",
+		Disks: []*compute.AttachedDisk{
+			{
+				Source:     "/some/path/disk-name",
+				DeviceName: "disk-device-name",
+				Type:       "PERSISTENT",
+			},
+		},
+	}}
+	defaultListDisksResp = []*compute.DiskList{
+		{
+			Items: []*compute.Disk{
+				{
+					Name:                  "disk-name",
+					Type:                  "/some/path/device-type",
+					ProvisionedIops:       100,
+					ProvisionedThroughput: 1000,
+				},
+				{
+					Name: "disk-device-name",
+					Type: "/some/path/device-type",
+				},
+			},
+		},
+	}
 )
 
 func TestValidateParameters(t *testing.T) {
@@ -496,7 +524,7 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "DataAndLogOnSameDisk",
+			name: "DataAndLogOnSameDisk1",
 			cp:   defaultCloudProperties,
 			r:    &Restorer{},
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
@@ -508,30 +536,31 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "DataAndLogOnSameDisk2",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c\nd", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "ReadDiskMappingErr",
 			cp:   defaultCloudProperties,
 			r: &Restorer{
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{cmpopts.AnyError},
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{cmpopts.AnyError},
 				},
 			},
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
-				return "b", "a", "c", nil
+				return "b", "a", "d", nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -542,7 +571,7 @@ func TestCheckPreConditions(t *testing.T) {
 				return "a", "b", "c", nil
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
-				return "b", "a", "c", nil
+				return "b", "a", "d", nil
 			},
 			r: &Restorer{
 				DataDiskName:    "test-disk-name",
@@ -560,7 +589,7 @@ func TestCheckPreConditions(t *testing.T) {
 				return "a", "b", "c", nil
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
-				return "b", "a", "c", nil
+				return "b", "a", "d", nil
 			},
 			r: &Restorer{
 				DataDiskName:   "test-disk-name",
@@ -568,7 +597,7 @@ func TestCheckPreConditions(t *testing.T) {
 				SourceSnapshot: "test-snapshot",
 				gceService: &fake.TestGCE{
 					IsDiskAttached:            false,
-					DiskAttachedToInstanceErr: cmpopts.AnyError,
+					DiskAttachedToInstanceErr: nil,
 				},
 				isGroupSnapshot: false,
 			},
@@ -581,12 +610,16 @@ func TestCheckPreConditions(t *testing.T) {
 				return "a", "b", "c", nil
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
-				return "b", "a", "c", nil
+				return "b", "a", "d", nil
 			},
 			r: &Restorer{
 				GroupSnapshot: "test-snapshot",
 				disks:         defaultRestorer.disks,
 				gceService: &fake.TestGCE{
+					GetInstanceResp:           defaultGetInstanceResp,
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+					GetInstanceErr:            []error{nil},
 					IsDiskAttached:            false,
 					DiskAttachedToInstanceErr: cmpopts.AnyError,
 				},
@@ -601,16 +634,42 @@ func TestCheckPreConditions(t *testing.T) {
 				return "a", "b", "c", nil
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
-				return "b", "a", "c", nil
+				return "b", "a", "d", nil
 			},
 			r: &Restorer{
 				GroupSnapshot: "test-snapshot",
 				disks:         defaultRestorer.disks,
 				gceService: &fake.TestGCE{
+					GetInstanceResp:           defaultGetInstanceResp,
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+					GetInstanceErr:            []error{nil},
 					IsDiskAttached:            false,
-					DiskAttachedToInstanceErr: cmpopts.AnyError,
+					DiskAttachedToInstanceErr: nil,
 				},
 				isGroupSnapshot: true,
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SourceSnapshotAbsent",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName:   "test-disk-name",
+				DataDiskZone:   "test-zone",
+				SourceSnapshot: "test-snapshot",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+				isGroupSnapshot: false,
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -621,11 +680,17 @@ func TestCheckPreConditions(t *testing.T) {
 				return "a", "b", "c", nil
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
-				return "b", "a", "c", nil
+				return "b", "a", "d", nil
 			},
 			r: &Restorer{
 				disks: defaultRestorer.disks,
 				gceService: &fake.TestGCE{
+					GetInstanceResp:                  defaultGetInstanceResp,
+					ListDisksResp:                    defaultListDisksResp,
+					ListDisksErr:                     []error{nil},
+					GetInstanceErr:                   []error{nil},
+					SnapshotList:                     nil,
+					SnapshotListErr:                  cmpopts.AnyError,
 					DiskAttachedToInstanceDeviceName: "test-device-name",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
@@ -635,7 +700,73 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "EmptyNewTypeGroupSnapshot",
+			name: "numOfSnapshotsNotEqualToNumOfDisks",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				disks: defaultRestorer.disks,
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{},
+					},
+					SnapshotListErr:                  nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+				},
+				isGroupSnapshot: true,
+				GroupSnapshot:   "test-group-snapshot",
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "groupSnapshotPresent",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				disks: defaultRestorer.disks,
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Name:       "test-snapshot",
+								SourceDisk: "test-disk",
+								Labels: map[string]string{
+									"isg": "test-group-snapshot",
+								},
+							},
+						},
+					},
+					SnapshotListErr:                  cmpopts.AnyError,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+				},
+				isGroupSnapshot: true,
+				GroupSnapshot:   "test-group-snapshot",
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "EmptyNewTypeGroupSnapshotErr",
 			cp:   defaultCloudProperties,
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
@@ -644,45 +775,77 @@ func TestCheckPreConditions(t *testing.T) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
-				disks: []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				disks:         []*ipb.Disk{&ipb.Disk{DiskName: "test-disk-name", DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				GroupSnapshot: "test-group-snapshot",
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
 							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
+								Name:       "test-snapshot",
+								SourceDisk: "test-disk",
+								Labels: map[string]string{
+									"isg": "test-group-snapshot",
 								},
 							},
 						},
 					},
-					ListDisksErr:                     []error{nil},
-					GetInstanceErr:                   []error{nil},
+					SnapshotListErr:                  nil,
 					DiskAttachedToInstanceDeviceName: "test-device-name",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
+					GetDiskResp:                      []*compute.Disk{{}},
+					GetDiskErr:                       []error{cmpopts.AnyError},
 				},
 				isGroupSnapshot: true,
 			},
 			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "EmptyNewTypeGroupSnapshotNoErr",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "a", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				disks:         []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				GroupSnapshot: "test-group-snapshot",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Name:       "test-snapshot",
+								SourceDisk: "test-disk",
+								Labels: map[string]string{
+									"isg": "test-group-snapshot",
+								},
+							},
+						},
+					},
+					SnapshotListErr:                  nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name: "test-disk",
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+				isGroupSnapshot: true,
+			},
+			wantErr: nil,
 		},
 		{
 			name: "NewTypePresent",
@@ -694,46 +857,33 @@ func TestCheckPreConditions(t *testing.T) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
-				NewDiskType: "hyperdisk-extreme",
-				disks:       []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				NewDiskType:   "hyperdisk-extreme",
+				disks:         []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				GroupSnapshot: "test-group-snapshot",
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
 							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
+								Name:       "test-snapshot",
+								SourceDisk: "test-disk",
+								Labels: map[string]string{
+									"isg": "test-group-snapshot",
 								},
 							},
 						},
 					},
-					ListDisksErr:                     []error{nil},
-					GetInstanceErr:                   []error{nil},
+					SnapshotListErr:                  nil,
 					DiskAttachedToInstanceDeviceName: "test-device-name",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 				},
 				isGroupSnapshot: true,
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: nil,
 		},
 	}
 
@@ -757,7 +907,7 @@ func TestPrepare(t *testing.T) {
 		want                   error
 	}{
 		{
-			name: "SingleSnapshotFetchVGErr",
+			name: "FetchVGErr",
 			r: &Restorer{
 				isGroupSnapshot: false,
 			},
@@ -817,11 +967,68 @@ func TestPrepare(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "GroupSnapshotValidateCGErr",
+			r: &Restorer{
+				disks: []*ipb.Disk{
+					{
+						DiskName: "disk-name-1",
+					},
+					{
+						DiskName: "disk-name-2",
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg-1"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				isGroupSnapshot: true,
+			},
+			cp: defaultCloudProperties,
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "GroupSnapshotDetachDiskErr",
 			r: &Restorer{
 				isGroupSnapshot: true,
-				disks:           []*ipb.Disk{&ipb.Disk{DeviceName: "pd-balanced", Type: "PERSISTENT"}},
+				disks: []*ipb.Disk{
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-1",
+					},
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-2",
+					},
+				},
 				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr:    []error{nil, nil},
 					DetachDiskErr: cmpopts.AnyError,
 				},
 			},
@@ -831,10 +1038,101 @@ func TestPrepare(t *testing.T) {
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					ExitCode: 0, StdErr: "success", Error: nil,
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
 				}
 			},
 			want: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotModifyCGErr",
+			r: &Restorer{
+				isGroupSnapshot: true,
+				disks: []*ipb.Disk{
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-1",
+					},
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-2",
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr:    []error{nil, nil},
+					DetachDiskErr: nil,
+				},
+				DataDiskZone: "invalid-zone",
+			},
+			cp: defaultCloudProperties,
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: nil,
+		},
+		{
+			name: "GroupSnapshotSuccess",
+			r: &Restorer{
+				isGroupSnapshot: true,
+				disks: []*ipb.Disk{
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-1",
+					},
+					{
+						DeviceName: "pd-balanced",
+						Type:       "PERSISTENT",
+						DiskName:   "disk-name-2",
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr:             []error{nil, nil},
+					DetachDiskErr:          nil,
+					AddResourcePoliciesOp:  &compute.Operation{Status: "DONE"},
+					AddResourcePoliciesErr: nil,
+					DiskOpErr:              nil,
+				},
+				DataDiskZone: "valid-zone-1",
+			},
+			cp: defaultCloudProperties,
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: nil,
 		},
 	}
 
@@ -859,36 +1157,10 @@ func TestReadDiskMapping(t *testing.T) {
 			name: "Failure",
 			restorer: &Restorer{
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{cmpopts.AnyError},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{cmpopts.AnyError},
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{cmpopts.AnyError},
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{cmpopts.AnyError},
 				},
 			},
 			want: cmpopts.AnyError,
@@ -900,36 +1172,10 @@ func TestReadDiskMapping(t *testing.T) {
 			},
 			restorer: &Restorer{
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil},
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{nil},
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
 				},
 				isGroupSnapshot:  true,
 				physicalDataPath: "disk-device-name",
@@ -944,38 +1190,10 @@ func TestReadDiskMapping(t *testing.T) {
 			},
 			restorer: &Restorer{
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-									Zone:                  "test-zone",
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-									Zone: "test-zone",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil},
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{nil},
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
 				},
 				DataDiskName:     "test-data-disk-name-1",
 				physicalDataPath: "disk-device-name",
@@ -989,36 +1207,10 @@ func TestReadDiskMapping(t *testing.T) {
 			},
 			restorer: &Restorer{
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil},
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{nil},
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
 				},
 				physicalDataPath: "disk-device-name",
 			},
@@ -1100,7 +1292,7 @@ func TestFetchVG(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotVG, err := tc.r.fetchVG(ctx, tc.cp, tc.exec, "")
+			gotVG, err := tc.r.fetchVG(ctx, tc.cp, tc.exec, "/dev/sda\n/dev/sdb")
 			if gotVG != tc.wantVG {
 				t.Errorf("fetchVG() = %v, want %v", gotVG, tc.wantVG)
 			}
@@ -1126,36 +1318,10 @@ func TestRenameLVM(t *testing.T) {
 				gceService: &fake.TestGCE{
 					IsDiskAttached:            true,
 					DiskAttachedToInstanceErr: nil,
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{cmpopts.AnyError},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{cmpopts.AnyError},
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{cmpopts.AnyError},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{cmpopts.AnyError},
 				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -1174,36 +1340,10 @@ func TestRenameLVM(t *testing.T) {
 				gceService: &fake.TestGCE{
 					IsDiskAttached:            true,
 					DiskAttachedToInstanceErr: nil,
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil},
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{nil},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
 				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -1222,36 +1362,10 @@ func TestRenameLVM(t *testing.T) {
 				gceService: &fake.TestGCE{
 					IsDiskAttached:            true,
 					DiskAttachedToInstanceErr: nil,
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil},
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{nil},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
 				},
 				DataDiskVG: "my_vg",
 			},
@@ -1272,36 +1386,10 @@ func TestRenameLVM(t *testing.T) {
 				gceService: &fake.TestGCE{
 					IsDiskAttached:            true,
 					DiskAttachedToInstanceErr: nil,
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil},
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{nil},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
 				},
 				DataDiskVG: "vg_1",
 			},
@@ -1403,6 +1491,112 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			got := tc.r.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAppendLabelsToDetachedDisk(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        *Restorer
+		diskName string
+		wantErr  error
+	}{
+		{
+			name: "getDiskErr",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{cmpopts.AnyError},
+				},
+			},
+			diskName: "test-disk-name",
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "appendLabelsErr",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							LabelFingerprint: "test-label-fingerprint",
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+				labelsOnDetachedDisk: "key1, key2=value2",
+			},
+			diskName: "test-disk-name",
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "setLabelsErr",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							Labels:           map[string]string{"sample-key": "sample-value"},
+							LabelFingerprint: "test-label-fingerprint",
+						},
+					},
+					GetDiskErr:   []error{nil},
+					SetLabelsOp:  &compute.Operation{Status: "DONE"},
+					SetLabelsErr: cmpopts.AnyError,
+				},
+				labelsOnDetachedDisk: "key1=value1, key2=value2",
+			},
+			diskName: "test-disk-name",
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "diskOpErr",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							Labels:           map[string]string{"sample-key": "sample-value"},
+							LabelFingerprint: "test-label-fingerprint",
+						},
+					},
+					GetDiskErr:   []error{nil},
+					SetLabelsOp:  &compute.Operation{Status: "DONE"},
+					SetLabelsErr: nil,
+					DiskOpErr:    cmpopts.AnyError,
+				},
+				labelsOnDetachedDisk: "key1=value1, key2=value2",
+			},
+			diskName: "test-disk-name",
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							LabelFingerprint: "test-label-fingerprint",
+						},
+					},
+					GetDiskErr:   []error{nil},
+					SetLabelsOp:  &compute.Operation{Status: "DONE"},
+					SetLabelsErr: nil,
+					DiskOpErr:    nil,
+				},
+				labelsOnDetachedDisk: "key1=value1, key2=value2",
+			},
+			diskName: "test-disk-name",
+			wantErr:  nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.r.appendLabelsToDetachedDisk(ctx, tc.diskName)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("appendLabelsToDetachedDisk() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
