@@ -225,7 +225,6 @@ func TestApplyDefaults(t *testing.T) {
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
-					CollectReliabilityMetrics: &wpb.BoolValue{Value: false},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
 					EnableDiscovery:                &wpb.BoolValue{Value: true},
@@ -243,7 +242,6 @@ func TestApplyDefaults(t *testing.T) {
 				LogToCloud:                 &wpb.BoolValue{Value: false},
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{},
-					CollectReliabilityMetrics:              &wpb.BoolValue{Value: false},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
 					EnableDiscovery:                &wpb.BoolValue{Value: false},
@@ -266,7 +264,6 @@ func TestApplyDefaults(t *testing.T) {
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
-					CollectReliabilityMetrics: &wpb.BoolValue{Value: false},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
 					EnableDiscovery:                &wpb.BoolValue{Value: false},
@@ -359,7 +356,6 @@ func TestApplyDefaults(t *testing.T) {
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
-					CollectReliabilityMetrics: &wpb.BoolValue{Value: false},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
 					EnableDiscovery:                &wpb.BoolValue{Value: false},
@@ -426,7 +422,6 @@ func TestApplyDefaults(t *testing.T) {
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
-					CollectReliabilityMetrics: &wpb.BoolValue{Value: false},
 				},
 				DiscoveryConfiguration: defaultDiscoveryProps,
 				SupportConfiguration:   &cpb.SupportConfiguration{},
@@ -485,7 +480,6 @@ func TestApplyDefaults(t *testing.T) {
 						FetchLatestConfig:       &wpb.BoolValue{Value: true},
 						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
 					},
-					CollectReliabilityMetrics: &wpb.BoolValue{Value: false},
 				},
 				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
 					EnableDiscovery:                &wpb.BoolValue{Value: false},
@@ -1243,18 +1237,18 @@ func TestLogLevelToZapcore(t *testing.T) {
 }
 
 func TestValidateAgentConfiguration(t *testing.T) {
-	tests := []struct{
-		name string
+	tests := []struct {
+		name   string
 		config *cpb.Configuration
-		want bool
+		want   bool
 	}{
 		{
 			name: "hana_metrics_config_hdbuserstore_key_and_hana_db_user_password",
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					HanaMetricsConfig: &cpb.HANAMetricsConfig{
-						HanaDbUser: "user",
-						HanaDbPassword: "password",
+						HanaDbUser:      "user",
+						HanaDbPassword:  "password",
 						HdbuserstoreKey: "userstore_key",
 					},
 				},
@@ -1266,9 +1260,9 @@ func TestValidateAgentConfiguration(t *testing.T) {
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					HanaMetricsConfig: &cpb.HANAMetricsConfig{
-						HanaDbUser: "user",
+						HanaDbUser:               "user",
 						HanaDbPasswordSecretName: "secret_name",
-						HdbuserstoreKey: "userstore_key",
+						HdbuserstoreKey:          "userstore_key",
 					},
 				},
 			},
@@ -1279,8 +1273,8 @@ func TestValidateAgentConfiguration(t *testing.T) {
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					HanaMetricsConfig: &cpb.HANAMetricsConfig{
-						HanaDbUser: "user",
-						HanaDbPassword: "password",
+						HanaDbUser:               "user",
+						HanaDbPassword:           "password",
 						HanaDbPasswordSecretName: "secret_name",
 					},
 				},
@@ -1292,8 +1286,8 @@ func TestValidateAgentConfiguration(t *testing.T) {
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
-						HanaDbUser: "user",
-						HanaDbPassword: "password",
+						HanaDbUser:      "user",
+						HanaDbPassword:  "password",
 						HdbuserstoreKey: "userstore_key",
 					},
 				},
@@ -1305,9 +1299,9 @@ func TestValidateAgentConfiguration(t *testing.T) {
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
-						HanaDbUser: "user",
+						HanaDbUser:               "user",
 						HanaDbPasswordSecretName: "secret_name",
-						HdbuserstoreKey: "userstore_key",
+						HdbuserstoreKey:          "userstore_key",
 					},
 				},
 			},
@@ -1318,8 +1312,8 @@ func TestValidateAgentConfiguration(t *testing.T) {
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
-						HanaDbUser: "user",
-						HanaDbPassword: "password",
+						HanaDbUser:               "user",
+						HanaDbPassword:           "password",
 						HanaDbPasswordSecretName: "secret_name",
 					},
 				},
@@ -1327,7 +1321,7 @@ func TestValidateAgentConfiguration(t *testing.T) {
 			want: false,
 		},
 	}
-	
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := validateAgentConfiguration(test.config)

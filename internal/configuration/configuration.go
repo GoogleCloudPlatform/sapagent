@@ -186,7 +186,6 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	cc := configFromFile
 	if cc == nil {
 		cc = &cpb.CollectionConfiguration{}
-		cc.CollectReliabilityMetrics = &wpb.BoolValue{Value: false}
 	}
 	
 	if cc.GetCollectWorkloadValidationMetrics() == nil {
@@ -203,9 +202,6 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 	}
 	if cc.GetCollectProcessMetrics() && cc.GetSlowProcessMetricsFrequency() <= 0 {
 		cc.SlowProcessMetricsFrequency = 30
-	}
-	if cc.GetCollectReliabilityMetrics().GetValue() && cc.GetReliabilityMetricsFrequency() <= 0 {
-		cc.ReliabilityMetricsFrequency = 60
 	}
 	if cc.GetCollectAgentMetrics() && cc.GetAgentMetricsFrequency() <= 0 {
 		cc.AgentMetricsFrequency = 60
