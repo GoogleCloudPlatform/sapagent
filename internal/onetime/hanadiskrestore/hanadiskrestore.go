@@ -138,8 +138,8 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.Sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&r.DataDiskName, "data-disk-name", "", "Current disk name. (optional) Default: Disk backing up /hana/data")
 	fs.StringVar(&r.DataDiskZone, "data-disk-zone", "", "Current disk zone. (optional) Default: Same zone as current instance")
-	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
-	fs.StringVar(&r.GroupSnapshot, "backup-id", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or backup-id must be provided")
+	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot must be provided")
+	fs.StringVar(&r.GroupSnapshot, "group-snapshot", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or group-snapshot must be provided")
 	fs.StringVar(&r.NewdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
@@ -198,7 +198,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
-		return fmt.Errorf("either source-snapshot or backup-id must be provided, not both. Usage: %s", r.Usage())
+		return fmt.Errorf("either source-snapshot or group-snapshot must be provided, not both. Usage: %s", r.Usage())
 	} else if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
@@ -410,9 +410,10 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	if r.computeService == nil {
 		return fmt.Errorf("compute service is nil")
 	}
-	snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
+
+	snapshot, err := r.computeService.Snapshots.Get(r.Project, sourceSnapshot).Do()
 	if err != nil {
-		return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
+		return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", sourceSnapshot, err)
 	}
 	if r.DiskSizeGb == 0 {
 		r.DiskSizeGb = snapshot.DiskSizeGb
@@ -434,7 +435,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	if r.ProvisionedThroughput > 0 {
 		disk.ProvisionedThroughput = r.ProvisionedThroughput
 	}
-	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", r.SourceSnapshot)
+	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", sourceSnapshot)
 
 	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
@@ -567,7 +568,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 
 		var numOfSnapshots int
 		for _, snapshot := range snapshotList.Items {
-			if snapshot.Labels["isg"] == r.GroupSnapshot {
+			if snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot {
 				r.extractLabels(ctx, snapshot)
 				numOfSnapshots++
 			}
@@ -672,6 +673,7 @@ func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties,
 			}
 		}
 	}
+	log.CtxLogger(ctx).Debugw("Found disk(s) backing up /hana/data", "disks", r.disks)
 	return nil
 }
 

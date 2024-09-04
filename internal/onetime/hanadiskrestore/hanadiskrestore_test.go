@@ -827,7 +827,7 @@ func TestCheckPreConditions(t *testing.T) {
 								Name:       "test-snapshot",
 								SourceDisk: "test-disk",
 								Labels: map[string]string{
-									"isg": "test-group-snapshot",
+									"goog-sapagent-isg": "test-group-snapshot",
 								},
 							},
 						},
@@ -871,7 +871,7 @@ func TestCheckPreConditions(t *testing.T) {
 								Name:       "test-snapshot",
 								SourceDisk: "test-disk",
 								Labels: map[string]string{
-									"isg": "test-group-snapshot",
+									"goog-sapagent-isg": "test-group-snapshot",
 								},
 							},
 						},
@@ -1430,7 +1430,7 @@ func TestSynopsisForRestorer(t *testing.T) {
 func TestSetFlagsForSnapshot(t *testing.T) {
 	snapshot := Restorer{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana"}
+	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana", "group-snapshot"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
