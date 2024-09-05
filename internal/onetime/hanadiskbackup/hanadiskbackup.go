@@ -80,6 +80,7 @@ type (
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
+		WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		CreateStandardSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error)
 	}
 

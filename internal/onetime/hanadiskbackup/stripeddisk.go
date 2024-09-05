@@ -95,7 +95,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 	}
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
 	for _, ssOp := range ssOps {
-		if err := s.gceService.WaitForSnapshotUploadCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
+		if err := s.gceService.WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
 			log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
 			if s.ConfirmDataSnapshotAfterCreate {
 				s.oteLogger.LogErrorToFileAndConsole(
@@ -161,7 +161,7 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	if err := s.isgService.CreateISG(ctx, s.Project, s.DiskZone, data); err != nil {
 		return err
 	}
-	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.groupSnapshotName)
+	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.groupSnapshotName)
 	if err := s.isgService.WaitForISGUploadCompletionWithRetry(ctx, baseURL); err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func cgPath(policies []string) string {
 	for _, policyLink := range policies {
 		parts := strings.Split(policyLink, "/")
 		if len(parts) >= 10 && parts[9] == "resourcePolicies" {
-			return parts[8] + "-" + parts[10]
+			return parts[10]
 		}
 	}
 	return ""

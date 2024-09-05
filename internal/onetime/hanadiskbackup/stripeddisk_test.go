@@ -306,9 +306,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					CreateStandardSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     nil,
-					UploadCompletionErr:       cmpopts.AnyError,
+					CreateStandardSnapshotErr:            nil,
+					CreationCompletionErr:                nil,
+					InstantToStandardUploadCompletionErr: cmpopts.AnyError,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -340,9 +340,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					CreateStandardSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     nil,
-					UploadCompletionErr:       nil,
+					CreateStandardSnapshotErr:            nil,
+					CreationCompletionErr:                nil,
+					InstantToStandardUploadCompletionErr: nil,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -377,9 +377,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					CreateStandardSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     nil,
-					UploadCompletionErr:       nil,
+					CreateStandardSnapshotErr:            nil,
+					CreationCompletionErr:                nil,
+					InstantToStandardUploadCompletionErr: nil,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -772,7 +772,7 @@ func TestReadConsistencyGroup(t *testing.T) {
 				Disk: "disk-name",
 			},
 			wantErr: nil,
-			wantCG:  "my-region-my-cg",
+			wantCG:  "my-cg",
 		},
 		{
 			name: "Failure",
@@ -829,7 +829,7 @@ func TestCGPath(t *testing.T) {
 		{
 			name:     "Success",
 			policies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
-			want:     "my-region-my-cg",
+			want:     "my-cg",
 		},
 		{
 			name:     "Failure1",
@@ -846,7 +846,7 @@ func TestCGPath(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := cgPath(test.policies)
 			if got != test.want {
-				t.Errorf("cgPath()=%v, want=%v", got, test.want)
+				t.Errorf("cgName()=%v, want=%v", got, test.want)
 			}
 		})
 	}

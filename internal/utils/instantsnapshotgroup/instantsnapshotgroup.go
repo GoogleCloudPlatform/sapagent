@@ -166,7 +166,7 @@ func (s *ISGService) getProcessStatus(ctx context.Context, baseURL string) (stri
 
 // CreateISG creates an instant snapshot group.
 func (s *ISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
-	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
+	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
 	log.CtxLogger(ctx).Debugw("CreateISG", "baseURL", baseURL, "data", string(data))
 	bodyBytes, err := s.GetResponse(ctx, "POST", baseURL, data)
 	if err != nil {
@@ -204,8 +204,8 @@ func parseInstantSnapshotGroupURL(cgURL string) (string, string, error) {
 	return zone, cg, nil
 }
 
-func (s *ISGService) isgExists(ctx context.Context, project, zone, isgName string) error {
-	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/staging_alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
+func (s *ISGService) isgExists(ctx context.Context, project, zone, opName string) error {
+	baseURL := fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/operations/%s", project, zone, opName)
 	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
 	log.CtxLogger(ctx).Debugw("isgExists", "bodyBytes", string(bodyBytes))
 	if err != nil {
@@ -279,10 +279,15 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 	}
 	log.CtxLogger(ctx).Debugw("DeleteISG Response", "response", string(bodyBytes))
 
+	op := compute.Operation{}
+	if err := json.Unmarshal(bodyBytes, &op); err != nil {
+		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+
 	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 300), ctx)
 	return backoff.Retry(func() error {
-		return s.isgExists(ctx, project, zone, isgName)
+		return s.isgExists(ctx, project, zone, op.Name)
 	}, bo)
 }
 

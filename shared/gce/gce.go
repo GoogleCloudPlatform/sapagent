@@ -433,3 +433,36 @@ func (g *GCE) SetLabels(ctx context.Context, project, zone, diskName, labelFinge
 	}
 	return op, nil
 }
+
+// waitForGlobalUploadCompletion waits for the given snapshot upload operation to complete.
+func (g *GCE) waitForGlobalUploadCompletion(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	gos := compute.NewGlobalOperationsService(g.service)
+	tracker, err := gos.Wait(project, op.Name).Do()
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name, "error", err)
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Operation in progress", "Name", op.Name, "percentage", tracker.Progress, "status", tracker.Status)
+	if tracker.Status != "DONE" {
+		return fmt.Errorf("compute operation is not DONE yet")
+	}
+
+	ss, err := g.service.Snapshots.Get(project, snapshotName).Do()
+	if err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Snapshot upload status", "snapshot", snapshotName, "SnapshotStatus", ss.Status, "OperationStatus", op.Status)
+
+	if ss.Status == "READY" {
+		return nil
+	}
+	return fmt.Errorf("snapshot %s not READY yet, snapshotStatus: %s, operationStatus: %s", snapshotName, ss.Status, op.Status)
+}
+
+// WaitForInstantToStandardSnapshotUploadCompletionWithRetry waits for the given compute operation to complete.
+// We sleep for 30s between retries a total 480 times => max_wait_duration = 30*480 = 4 Hours
+func (g *GCE) WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	constantBackoff := backoff.NewConstantBackOff(30 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 480), ctx)
+	return backoff.Retry(func() error { return g.waitForGlobalUploadCompletion(ctx, op, project, diskZone, snapshotName) }, bo)
+}

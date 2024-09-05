@@ -365,7 +365,6 @@ func TestParseLabels(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.s.oteLogger = defaultOTELogger
 			got := test.s.parseLabels()
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
@@ -1002,7 +1001,7 @@ func TestSetFlagsForSnapshot(t *testing.T) {
 	snapshot := Snapshot{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"project", "host", "port", "sid", "hana-db-user", "password", "password-secret",
-		"hdbuserstore-key", "snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file",
+		"hdbuserstore-key", "snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file", "group-snapshot-name",
 		"snapshot-description", "send-metrics-to-monitoring", "storage-location", "confirm-data-snapshot-after-create"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {

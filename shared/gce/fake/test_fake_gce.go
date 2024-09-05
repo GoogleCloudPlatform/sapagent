@@ -134,6 +134,8 @@ type TestGCE struct {
 
 	SetLabelsOp  *compute.Operation
 	SetLabelsErr error
+
+	InstantToStandardUploadCompletionErr error
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -400,4 +402,8 @@ func (g *TestGCE) RemoveResourcePolicies(ctx context.Context, project, zone, dis
 // SetLabels fakes calls to the cloud APIs to set labels on a disk.
 func (g *TestGCE) SetLabels(ctx context.Context, project, zone, diskName, labelFingerprint string, labels map[string]string) (*compute.Operation, error) {
 	return g.SetLabelsOp, g.SetLabelsErr
+}
+
+func (g *TestGCE) WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	return g.InstantToStandardUploadCompletionErr
 }
