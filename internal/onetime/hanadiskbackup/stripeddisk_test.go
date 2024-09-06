@@ -946,23 +946,26 @@ func TestCreateStandardSnapshotName(t *testing.T) {
 	tests := []struct {
 		name                string
 		instantSnapshotName string
+		timestamp           string
 		want                string
 	}{
 		{
 			name:                "withoutTruncate",
 			instantSnapshotName: "instant-snapshot-name",
-			want:                "instant-snapshot-name-standard",
+			timestamp:           "1725602379036",
+			want:                "instant-snapshot-name-1725602379036-standard",
 		},
 		{
 			name:                "withTruncate",
 			instantSnapshotName: "instant-snapshot-name-12345678912345678912345678912345678912345",
-			want:                "instant-snapshot-name-12345678912345678912345678912345-standard",
+			timestamp:           "1725602379036",
+			want:                "instant-snapshot-name-123456789123456789-1725602379036-standard",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := createStandardSnapshotName(tc.instantSnapshotName)
+			got := createStandardSnapshotName(tc.instantSnapshotName, tc.timestamp)
 			if got != tc.want {
 				t.Errorf("createStandardSnapshotName(%q) = %q, want: %q", tc.instantSnapshotName, got, tc.want)
 			}

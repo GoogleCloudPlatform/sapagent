@@ -209,7 +209,8 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, mu
 	defer wg.Done()
 	for instantSnapshot := range jobs {
 		isName := instantSnapshot.Name
-		standardSnapshotName := createStandardSnapshotName(isName)
+		timestamp := time.Now().UTC().UnixMilli()
+		standardSnapshotName := createStandardSnapshotName(isName, fmt.Sprintf("%d", timestamp))
 		standardSnapshot := &compute.Snapshot{
 			Name:                  standardSnapshotName,
 			SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, isName),
@@ -249,9 +250,9 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, mu
 	}
 }
 
-func createStandardSnapshotName(instantSnapshotName string) string {
+func createStandardSnapshotName(instantSnapshotName string, timestamp string) string {
 	maxLength := 63
-	suffix := "-standard"
+	suffix := fmt.Sprintf("-%s-standard", timestamp)
 
 	standardSnapshotName := instantSnapshotName
 	snapshotNameMaxLength := maxLength - len(suffix)
