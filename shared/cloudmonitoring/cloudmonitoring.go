@@ -32,7 +32,7 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
-// timeSeriesKey is a struct which holds the information which can uniquely identify each timeseries
+// timeSeriesKey is a struct which holds the information which can uniquely identify each time series
 // and can be used as a Map key since every field is comparable.
 type timeSeriesKey struct {
 	MetricType        string
@@ -92,9 +92,9 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 	err := backoff.Retry(func() error {
 		if err := client.CreateTimeSeries(ctx, req); err != nil {
 			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.CtxLogger(ctx).Errorw("Error in CreateTimeSeries, Permission denied - Enable the Monitoring Metrics Writer IAM role for the Service Account", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Warnw("Error in CreateTimeSeries, Permission denied - Enable the Monitoring Metrics Writer IAM role for the Service Account", "attempt", attempt, "error", err)
 			} else {
-				log.CtxLogger(ctx).Errorw("Error in CreateTimeSeries", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Warnw("Error in CreateTimeSeries", "attempt", attempt, "error", err)
 			}
 			attempt++
 			return err
@@ -125,9 +125,9 @@ func QueryTimeSeriesWithRetry(ctx context.Context, client TimeSeriesQuerier, req
 		res, err = client.QueryTimeSeries(ctx, req)
 		if err != nil {
 			if strings.Contains(err.Error(), "PermissionDenied") {
-				log.CtxLogger(ctx).Errorw("Error in QueryTimeSeries, Permission denied - Enable the Monitoring Viewer IAM role for the Service Account", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Warnw("Error in QueryTimeSeries, Permission denied - Enable the Monitoring Viewer IAM role for the Service Account", "attempt", attempt, "error", err)
 			} else {
-				log.CtxLogger(ctx).Errorw("Error in QueryTimeSeries", "attempt", attempt, "error", err)
+				log.CtxLogger(ctx).Warnw("Error in QueryTimeSeries", "attempt", attempt, "error", err)
 			}
 			attempt++
 		}
@@ -176,7 +176,7 @@ func flattenLabels(labels map[string]string) string {
 	return strings.Join(metricLabels, ",")
 }
 
-// prepareKey creates the key which can be used to group a timeseries
+// prepareKey creates the key which can be used to group a time series
 // based on MetricType, MetricKind, MetricLabels, MonitoredResource and ResourceLabels.
 func prepareKey(t *mrpb.TimeSeries) timeSeriesKey {
 	mtype := t.GetMetric().GetType()

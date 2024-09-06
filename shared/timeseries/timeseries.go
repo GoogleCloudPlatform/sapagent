@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package timeseries has cloudmonitoring timeseries related helper functions.
+// Package timeseries has cloud monitoring timeseries related helper functions.
 package timeseries
 
 import (
@@ -64,7 +64,7 @@ func ConvertCloudProperties(cp *ipb.CloudProperties) *CloudProperties {
 	}
 }
 
-// BuildInt builds a cloudmonitoring timeseries with Int64 point.
+// BuildInt builds a cloud monitoring timeseries with Int64 point.
 func BuildInt(p Params) *mrpb.TimeSeries {
 	ts := buildTimeSeries(p)
 	if p.StartTime == nil {
@@ -84,7 +84,7 @@ func BuildInt(p Params) *mrpb.TimeSeries {
 	return ts
 }
 
-// BuildBool builds a cloudmonitoring timeseries with boolean point.
+// BuildBool builds a cloud monitoring timeseries with boolean point.
 func BuildBool(p Params) *mrpb.TimeSeries {
 	ts := buildTimeSeries(p)
 	if p.StartTime == nil {
@@ -104,7 +104,7 @@ func BuildBool(p Params) *mrpb.TimeSeries {
 	return ts
 }
 
-// BuildFloat64 builds a cloudmonitoring timeseries with float64 point.
+// BuildFloat64 builds a cloud monitoring timeseries with float64 point.
 func BuildFloat64(p Params) *mrpb.TimeSeries {
 	ts := buildTimeSeries(p)
 	if p.StartTime == nil {
