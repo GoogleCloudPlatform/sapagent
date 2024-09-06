@@ -100,7 +100,7 @@ func CloudPropertiesWithRetry(bo backoff.BackOff) *instancepb.CloudProperties {
 		var err error
 		cp, err = requestCloudProperties()
 		if err != nil {
-			log.Logger.Errorw("Error in requestCloudProperties", "attempt", attempt, "error", err)
+			log.Logger.Warnw("Error in requestCloudProperties", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -124,7 +124,7 @@ func ReadCloudPropertiesWithRetry(bo backoff.BackOff) *CloudProperties {
 		var err error
 		cp, err = requestProperties()
 		if err != nil {
-			log.Logger.Errorw("Error in requestCloudProperties", "attempt", attempt, "error", err)
+			log.Logger.Warnw("Error in requestCloudProperties", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
@@ -148,7 +148,7 @@ func DiskTypeWithRetry(bo backoff.BackOff, disk string) string {
 		var err error
 		diskType, err = requestDiskType(disk)
 		if err != nil {
-			log.Logger.Errorw("Error in requestDiskType", "attempt", attempt, "error", err)
+			log.Logger.Warnw("Error in requestDiskType", "attempt", attempt, "error", err)
 			attempt++
 		}
 		return err
