@@ -180,9 +180,10 @@ func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) 
 	ssOps := []*standardSnapshotOp{}
 
 	var wg sync.WaitGroup
+	mu := &sync.Mutex{}
 	for range instantSnapshots {
 		wg.Add(1)
-		go s.createGroupBackup(ctx, &wg, jobs, &ssOps, errors)
+		go s.createGroupBackup(ctx, &wg, mu, jobs, &ssOps, errors)
 	}
 	for _, is := range instantSnapshots {
 		jobs <- &is
@@ -204,7 +205,7 @@ func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) 
 	return nil, fmt.Errorf("Error converting Instant Snapshot Group to Standard snapshots, latest error: %w", err)
 }
 
-func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, jobs chan *instantsnapshotgroup.ISItem, ssOps *[]*standardSnapshotOp, errors chan error) {
+func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, mu *sync.Mutex, jobs chan *instantsnapshotgroup.ISItem, ssOps *[]*standardSnapshotOp, errors chan error) {
 	defer wg.Done()
 	for instantSnapshot := range jobs {
 		isName := instantSnapshot.Name
@@ -242,7 +243,9 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, jo
 			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
 			return
 		}
+		mu.Lock()
 		*ssOps = append(*ssOps, &standardSnapshotOp{op: op, name: standardSnapshotName})
+		mu.Unlock()
 	}
 }
 

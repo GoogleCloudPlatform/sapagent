@@ -615,6 +615,7 @@ func TestCreateGroupBackup(t *testing.T) {
 		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
 			var wg sync.WaitGroup
+			mu := &sync.Mutex{}
 			wg.Add(1)
 			jobs := make(chan *instantsnapshotgroup.ISItem, 2)
 			jobs <- &instantsnapshotgroup.ISItem{
@@ -623,7 +624,7 @@ func TestCreateGroupBackup(t *testing.T) {
 			close(jobs)
 			errors := make(chan error, 2)
 
-			tc.s.createGroupBackup(context.Background(), &wg, jobs, &ssOps, errors)
+			tc.s.createGroupBackup(context.Background(), &wg, mu, jobs, &ssOps, errors)
 			close(errors)
 
 			var gotErr error
@@ -631,7 +632,7 @@ func TestCreateGroupBackup(t *testing.T) {
 				gotErr = err
 			}
 			if diff := cmp.Diff(tc.want, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("stagingCreateBackup() returned diff (-want +got):\n%s", diff)
+				t.Errorf("createGroupBackup() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
