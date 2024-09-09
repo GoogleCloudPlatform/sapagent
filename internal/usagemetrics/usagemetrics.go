@@ -115,6 +115,7 @@ const (
 	HDBUserstoreKeyFailure                         = 74 //	HDBUserstoreKeyQueryFailure
 	ServiceDisableFailure                          = 75 //	ServiceDisableFailure
 	ServiceEnableFailure                           = 76 //	ServiceEnableFailure
+	GCBDRBackupFailure                             = 77 //	GCBDRBackupFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -189,6 +190,8 @@ const (
 	UAPPerformanceDiagnosticsCommand        = 65 //	UAPPerformanceDiagnosticsCommand
 	UAPSupportBundleCommand                 = 66 //	UAPSupportBundleCommand
 	UAPVersionCommand                       = 67 //	UAPVersionCommand
+	GCBDRBackupStarted                      = 68 //	GCBDRBackupRunning
+	GCBDRBackupFinished                     = 69 //	GCBDRBackupFinished
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")

@@ -250,6 +250,9 @@ func TestErrorConstants(t *testing.T) {
 	if ServiceEnableFailure != 76 {
 		t.Errorf("ServiceEnableFailure = %v, want 76", ServiceEnableFailure)
 	}
+	if GCBDRBackupFailure != 77 {
+		t.Errorf("GCBDRBackupFailure = %v, want 77", GCBDRBackupFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -456,5 +459,11 @@ func TestActionConstants(t *testing.T) {
 	}
 	if UAPVersionCommand != 67 {
 		t.Errorf("UAPVersionCommand = %v, want 67", UAPVersionCommand)
+	}
+	if GCBDRBackupStarted != 68 {
+		t.Errorf("GCBDRBackupStarted = %v, want 68", GCBDRBackupStarted)
+	}
+	if GCBDRBackupFinished != 69 {
+		t.Errorf("GCBDRBackupFinished = %v, want 69", GCBDRBackupFinished)
 	}
 }

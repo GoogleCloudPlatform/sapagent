@@ -29,6 +29,7 @@ import (
 	"github.com/google/safetext/shsprintf"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrbackup"
@@ -143,10 +144,14 @@ func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute, runO
 		errMessage := fmt.Sprintf("invalid operation type: %s", b.OperationType)
 		return nil, errMessage, subcommands.ExitUsageError
 	}
+	b.oteLogger.LogUsageAction(usagemetrics.GCBDRBackupStarted)
 	message, exitStatus := handler(ctx, exec)
 	response := &bpb.BackupResponse{}
 	if exitStatus == subcommands.ExitSuccess {
 		response.Status = &wpb.BoolValue{Value: true}
+		b.oteLogger.LogUsageAction(usagemetrics.GCBDRBackupFinished)
+	} else if exitStatus == subcommands.ExitFailure {
+		b.oteLogger.LogUsageError(usagemetrics.GCBDRBackupFailure)
 	}
 	return response, message, exitStatus
 }
