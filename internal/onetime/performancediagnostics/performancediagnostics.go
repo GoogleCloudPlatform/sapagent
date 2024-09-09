@@ -302,7 +302,7 @@ func (d *Diagnose) performDiagnosticsOps(ctx context.Context, opts *options) []e
 	// ConfigureInstance OTE subcommand needs to be run in every case.
 	exitStatus := d.runConfigureInstanceOTE(ctx, opts)
 	if exitStatus != subcommands.ExitSuccess {
-		errs = append(errs, fmt.Errorf("failure in executing ConfigureInstance OTE, failed with exist status %d", exitStatus))
+		errs = append(errs, fmt.Errorf("failure in executing ConfigureInstance OTE, failed with exit status %d", exitStatus))
 	}
 	// Performance diagnostics operations.
 	ops := listOperations(ctx, strings.Split(d.Type, ","))
