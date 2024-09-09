@@ -77,6 +77,8 @@ type (
 		ListZoneOperations(project, zone, filter string, maxResults int64) (*compute.OperationList, error)
 		GetDisk(project, zone, name string) (*compute.Disk, error)
 		ListDisks(project, zone, filter string) (*compute.DiskList, error)
+		ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error)
+
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
@@ -313,6 +315,23 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 			s.groupSnapshot = true
 		}
 		log.CtxLogger(ctx).Infow("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgName, "groupSnapshot", s.groupSnapshot)
+	}
+
+	if s.groupSnapshotName != "" {
+		snapshotList, err := s.gceService.ListSnapshots(ctx, s.Project)
+		if err != nil {
+			errMessage := "ERROR: Failed to check if group snapshot exists"
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
+		}
+
+		for _, snapshot := range snapshotList.Items {
+			if snapshot.Labels["goog-sapagent-isg"] == s.groupSnapshotName {
+				errMessage := "ERROR: Group snapshot with given name already exists"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
+			}
+		}
 	}
 
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)

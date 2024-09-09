@@ -1020,7 +1020,20 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 		want     error
 	}{
 		{
+			name: "EmptySourceSnapshot",
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
+					return "", cmpopts.AnyError
+				}
+				return "", nil
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "CreateSnapshotFailure",
+			snapshot: Snapshot{
+				groupSnapshotName: "sample-group-snapshot",
+			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {
 					return "", cmpopts.AnyError

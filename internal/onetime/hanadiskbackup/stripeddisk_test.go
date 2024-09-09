@@ -952,14 +952,14 @@ func TestCreateStandardSnapshotName(t *testing.T) {
 		{
 			name:                "withoutTruncate",
 			instantSnapshotName: "instant-snapshot-name",
-			timestamp:           "1725602379036",
-			want:                "instant-snapshot-name-1725602379036-standard",
+			timestamp:           "1725745441298732387",
+			want:                "instant-snapshot-name-1725745441298732387-standard",
 		},
 		{
 			name:                "withTruncate",
 			instantSnapshotName: "instant-snapshot-name-12345678912345678912345678912345678912345",
-			timestamp:           "1725602379036",
-			want:                "instant-snapshot-name-123456789123456789-1725602379036-standard",
+			timestamp:           "1725745441298732387",
+			want:                "instant-snapshot-name-123456789123-1725745441298732387-standard",
 		},
 	}
 

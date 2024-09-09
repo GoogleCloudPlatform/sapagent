@@ -79,20 +79,22 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 	if ssOps, err = s.convertISGtoSS(ctx, cp); err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error converting instant snapshots to %s, HANA snapshot %s is not successful", strings.ToLower(s.SnapshotType), snapshotID), err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
+		if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+			s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
+		}
 		return err
 	}
 
 	if s.ConfirmDataSnapshotAfterCreate {
 		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk standard snapshots are created but not yet uploaded.")
 		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
+			if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+				s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
+			}
 			return err
 		}
 	}
 
-	if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
-		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
-		return err
-	}
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
 	for _, ssOp := range ssOps {
 		if err := s.gceService.WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
@@ -103,8 +105,16 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 				)
 			}
 			s.diskSnapshotFailureHandler(ctx, run, snapshotID)
+
+			if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+				s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
+			}
 			return err
 		}
+	}
+	if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting instant snapshot group, HANA snapshot %s is not successful", snapshotID), err)
+		return err
 	}
 
 	log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
@@ -209,7 +219,7 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, mu
 	defer wg.Done()
 	for instantSnapshot := range jobs {
 		isName := instantSnapshot.Name
-		timestamp := time.Now().UTC().UnixMilli()
+		timestamp := time.Now().UTC().UnixNano()
 		standardSnapshotName := createStandardSnapshotName(isName, fmt.Sprintf("%d", timestamp))
 		standardSnapshot := &compute.Snapshot{
 			Name:                  standardSnapshotName,
