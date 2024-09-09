@@ -39,9 +39,6 @@ type mockISGService struct {
 
 	createISGError error
 
-	describeStandardSnapshotsResp []*compute.Snapshot
-	describeStandardSnapshotsErr  error
-
 	describeInstantSnapshotsResp []instantsnapshotgroup.ISItem
 	describeInstantSnapshotsErr  error
 
@@ -50,17 +47,11 @@ type mockISGService struct {
 	getResponseResp []byte
 	getResponseErr  error
 
-	waitForISGUploadCompletionWithRetryErr        error
-	waitForStandardSnapshotCreationWithRetryErr   error
-	waitForStandardSnapshotCompletionWithRetryErr error
+	waitForISGUploadCompletionWithRetryErr error
 }
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
 	return m.createISGError
-}
-
-func (m *mockISGService) DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error) {
-	return m.describeStandardSnapshotsResp, m.describeStandardSnapshotsErr
 }
 
 func (m *mockISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
@@ -550,7 +541,7 @@ func TestConvertISGtoSS(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, gotErr := tc.s.convertISGtoSS(context.Background(), defaultCloudProperties)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("stagingRunISGtoSSG() returned diff (-want +got):\n%s", diff)
+				t.Errorf("ConvertISGtoSS() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

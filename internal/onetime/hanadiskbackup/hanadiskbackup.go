@@ -89,10 +89,8 @@ type (
 	// ISGInterface is the testable equivalent for ISGService for ISG operations.
 	ISGInterface interface {
 		NewService() error
-		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
 		CreateISG(ctx context.Context, project, zone string, data []byte) error
 		DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
-		DescribeStandardSnapshots(ctx context.Context, project, zone, isgName string) ([]*compute.Snapshot, error)
 		DeleteISG(ctx context.Context, project, zone, isgName string) error
 		WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error
 	}
@@ -328,7 +326,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		for _, snapshot := range snapshotList.Items {
 			if snapshot.Labels["goog-sapagent-isg"] == s.groupSnapshotName {
 				errMessage := "ERROR: Group snapshot with given name already exists"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("group snapshot with given name already exists"))
 				return errMessage, subcommands.ExitFailure
 			}
 		}
