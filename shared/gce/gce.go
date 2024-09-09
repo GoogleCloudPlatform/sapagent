@@ -394,11 +394,29 @@ func (g *GCE) CreateStandardSnapshot(ctx context.Context, project string, snapsh
 // ListSnapshots lists the snapshots for a given project.
 func (g *GCE) ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error) {
 	snapshotService := compute.NewSnapshotsService(g.service)
-	snapshotList, err := snapshotService.List(project).Do()
-	if err != nil {
-		return nil, fmt.Errorf("could not list snapshots for given project, error: %v", err)
+	finalSnapshotList := &compute.SnapshotList{}
+	pageToken := ""
+
+	for {
+		snapshotListCall := snapshotService.List(project)
+		if pageToken != "" {
+			snapshotListCall = snapshotListCall.PageToken(pageToken)
+		}
+
+		snapshotList, err := snapshotListCall.Do()
+		if err != nil {
+			return nil, err
+		}
+
+		finalSnapshotList.Items = append(finalSnapshotList.Items, snapshotList.Items...)
+
+		pageToken = snapshotList.NextPageToken
+		if pageToken == "" {
+			break
+		}
 	}
-	return snapshotList, nil
+
+	return finalSnapshotList, nil
 }
 
 // AddResourcePolicies adds the given resource policies of a disk.
