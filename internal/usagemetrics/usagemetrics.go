@@ -192,6 +192,12 @@ const (
 	UAPVersionCommand                       = 67 //	UAPVersionCommand
 	GCBDRBackupStarted                      = 68 //	GCBDRBackupRunning
 	GCBDRBackupFinished                     = 69 //	GCBDRBackupFinished
+	HANADiskGroupBackupStarted              = 70 //	HANADiskGroupBackupStarted
+	HANADiskGroupBackupSucceeded            = 71 //	HANADiskGroupBackupSucceeded
+	HANADiskBackupSucceeded                 = 72 //	HANADiskBackupSucceeded
+	HANADiskGroupRestoreStarted             = 73 //	HANADiskGroupRestoreStarted
+	HANADiskGroupRestoreSucceeded           = 74 //	HANADiskGroupRestoreSucceeded
+	HANADiskRestoreSucceeded                = 75 //	HANADiskRestoreSucceeded
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")

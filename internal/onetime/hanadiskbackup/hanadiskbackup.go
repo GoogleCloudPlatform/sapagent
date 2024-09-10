@@ -290,6 +290,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		}
 
 		if len(s.disks) > 1 {
+			s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupStarted)
 			if ok, err := hanabackup.CheckDataDeviceForStripes(ctx, s.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 				errMessage := "ERROR: Failed to check if data device is striped"
 				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
@@ -390,9 +391,11 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		snapshotName = s.groupSnapshotName
 		successMessage = fmt.Sprintf("SUCCESS: HANA backup and group disk snapshot creation successful. Group Backup Name: %s", snapshotName)
 		s.oteLogger.LogMessageToConsole(successMessage)
+		s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupSucceeded)
 	} else {
 		successMessage = fmt.Sprintf("SUCCESS: HANA backup and disk snapshot creation successful. Snapshot Name: %s", snapshotName)
 		s.oteLogger.LogMessageToConsole(successMessage)
+		s.oteLogger.LogUsageAction(usagemetrics.HANADiskBackupSucceeded)
 	}
 
 	s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", snapshotName, workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)

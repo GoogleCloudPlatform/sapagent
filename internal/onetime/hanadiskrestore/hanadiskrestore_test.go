@@ -1138,6 +1138,7 @@ func TestPrepare(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.r.oteLogger = onetime.CreateOTELogger(true)
 			got := test.r.prepare(context.Background(), test.cp, test.waitForIndexServerStop, test.exec)
 			if diff := cmp.Diff(got, test.want, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("prepare() returned diff (-want +got):\n%s", diff)

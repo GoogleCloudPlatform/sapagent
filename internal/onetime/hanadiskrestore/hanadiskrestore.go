@@ -275,10 +275,12 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 		if err := r.diskRestore(ctx, commandlineexecutor.ExecuteCommand, cp); err != nil {
 			return subcommands.ExitFailure
 		}
+		r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestoreSucceeded)
 	} else {
 		if err := r.groupRestore(ctx, cp); err != nil {
 			return subcommands.ExitFailure
 		}
+		r.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupRestoreSucceeded)
 	}
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
@@ -356,6 +358,8 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 			return fmt.Errorf("failed to detach old data disk: %v", err)
 		}
 	} else {
+		r.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupRestoreStarted)
+
 		if err := r.validateDisksBelongToCG(ctx); err != nil {
 			return err
 		}

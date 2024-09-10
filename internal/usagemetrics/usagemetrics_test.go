@@ -466,4 +466,22 @@ func TestActionConstants(t *testing.T) {
 	if GCBDRBackupFinished != 69 {
 		t.Errorf("GCBDRBackupFinished = %v, want 69", GCBDRBackupFinished)
 	}
+	if HANADiskGroupBackupStarted != 70 {
+		t.Errorf("HANADiskGroupBackupStarted = %v, want 68", HANADiskGroupBackupStarted)
+	}
+	if HANADiskGroupBackupSucceeded != 71 {
+		t.Errorf("HANADiskGroupBackupSucceeded = %v, want 69", HANADiskGroupBackupSucceeded)
+	}
+	if HANADiskBackupSucceeded != 72 {
+		t.Errorf("HANADiskBackupSucceeded = %v, want 70", HANADiskBackupSucceeded)
+	}
+	if HANADiskGroupRestoreStarted != 73 {
+		t.Errorf("HANADiskGroupRestoreStarted = %v, want 71", HANADiskGroupRestoreStarted)
+	}
+	if HANADiskGroupRestoreSucceeded != 74 {
+		t.Errorf("HANADiskGroupRestoreSucceeded = %v, want 72", HANADiskGroupRestoreSucceeded)
+	}
+	if HANADiskRestoreSucceeded != 75 {
+		t.Errorf("HANADiskRestoreSucceeded = %v, want 73", HANADiskRestoreSucceeded)
+	}
 }
