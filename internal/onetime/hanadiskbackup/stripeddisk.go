@@ -196,6 +196,7 @@ func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) 
 		go s.createGroupBackup(ctx, &wg, mu, jobs, &ssOps, errors)
 	}
 	for _, is := range instantSnapshots {
+		log.CtxLogger(ctx).Debugw("Adding instantsnapshot to job queue", "instantSnapshot", is)
 		jobs <- &is
 	}
 
@@ -218,6 +219,7 @@ func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) 
 func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, mu *sync.Mutex, jobs chan *instantsnapshotgroup.ISItem, ssOps *[]*standardSnapshotOp, errors chan error) {
 	defer wg.Done()
 	for instantSnapshot := range jobs {
+		log.CtxLogger(ctx).Debugw("Reading instantsnapshot from job queue", "instantSnapshot", instantSnapshot)
 		isName := instantSnapshot.Name
 		timestamp := time.Now().UTC().UnixNano()
 		standardSnapshotName := createStandardSnapshotName(isName, fmt.Sprintf("%d", timestamp))
@@ -244,6 +246,7 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, mu
 			standardSnapshot.SnapshotEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
 		}
 
+		log.CtxLogger(ctx).Debugw("Creating standard snapshot", "standardSnapshot", standardSnapshot)
 		op, err := s.gceService.CreateStandardSnapshot(ctx, s.Project, standardSnapshot)
 		if err != nil {
 			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
