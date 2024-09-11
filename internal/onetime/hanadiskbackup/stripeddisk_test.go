@@ -19,7 +19,6 @@ package hanadiskbackup
 import (
 	"context"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -526,9 +525,6 @@ func TestConvertISGtoSS(t *testing.T) {
 						{
 							Name: "instant-snapshot-1",
 						},
-						{
-							Name: "instant-snapshot-2",
-						},
 					},
 					describeInstantSnapshotsErr: nil,
 				},
@@ -605,23 +601,8 @@ func TestCreateGroupBackup(t *testing.T) {
 	for _, tc := range tests {
 		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
-			var wg sync.WaitGroup
-			mu := &sync.Mutex{}
-			wg.Add(1)
-			jobs := make(chan *instantsnapshotgroup.ISItem, 2)
-			jobs <- &instantsnapshotgroup.ISItem{
-				Name: "instant-snapshot-1",
-			}
-			close(jobs)
-			errors := make(chan error, 2)
+			gotErr := tc.s.createGroupBackup(context.Background(), instantsnapshotgroup.ISItem{}, &ssOps)
 
-			tc.s.createGroupBackup(context.Background(), &wg, mu, jobs, &ssOps, errors)
-			close(errors)
-
-			var gotErr error
-			if err, ok := <-errors; ok {
-				gotErr = err
-			}
 			if diff := cmp.Diff(tc.want, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("createGroupBackup() returned diff (-want +got):\n%s", diff)
 			}

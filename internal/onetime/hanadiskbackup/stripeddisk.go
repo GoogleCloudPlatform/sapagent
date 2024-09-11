@@ -23,11 +23,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
@@ -185,82 +183,63 @@ func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) 
 		return nil, err
 	}
 
-	errors := make(chan error, len(instantSnapshots))
-	jobs := make(chan *instantsnapshotgroup.ISItem, runtime.NumCPU())
+	errors := []error{}
 	ssOps := []*standardSnapshotOp{}
-
-	var wg sync.WaitGroup
-	mu := &sync.Mutex{}
-	for range instantSnapshots {
-		wg.Add(1)
-		go s.createGroupBackup(ctx, &wg, mu, jobs, &ssOps, errors)
-	}
 	for _, is := range instantSnapshots {
-		log.CtxLogger(ctx).Debugw("Adding instantsnapshot to job queue", "instantSnapshot", is)
-		jobs <- &is
+		if err := s.createGroupBackup(ctx, is, &ssOps); err != nil {
+			errors = append(errors, err)
+		}
 	}
-
-	close(jobs)
-	wg.Wait()
-	close(errors)
-
-	var ok bool
-	if err, ok = <-errors; !ok {
+	if len(errors) == 0 {
 		return ssOps, nil
 	}
 
-	log.CtxLogger(ctx).Error(err)
-	for err = range errors {
-		log.CtxLogger(ctx).Error(err)
+	for _, err := range errors {
+		if err != nil {
+			log.CtxLogger(ctx).Errorw("Error converting Instant Snapshot Group to Standard Snapshots", "error", err)
+		}
 	}
-	return nil, fmt.Errorf("Error converting Instant Snapshot Group to Standard snapshots, latest error: %w", err)
+	return nil, fmt.Errorf("Error converting Instant Snapshot Group to Standard snapshots, latest error: %w", errors[0])
 }
 
-func (s *Snapshot) createGroupBackup(ctx context.Context, wg *sync.WaitGroup, mu *sync.Mutex, jobs chan *instantsnapshotgroup.ISItem, ssOps *[]*standardSnapshotOp, errors chan error) {
-	defer wg.Done()
-	for instantSnapshot := range jobs {
-		log.CtxLogger(ctx).Debugw("Reading instantsnapshot from job queue", "instantSnapshot", instantSnapshot)
-		isName := instantSnapshot.Name
-		timestamp := time.Now().UTC().UnixNano()
-		standardSnapshotName := createStandardSnapshotName(isName, fmt.Sprintf("%d", timestamp))
-		standardSnapshot := &compute.Snapshot{
-			Name:                  standardSnapshotName,
-			SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, isName),
-			Labels:                s.parseLabels(),
-			Description:           s.Description,
-		}
-
-		// In case customer is taking a snapshot from an encrypted disk, the snapshot created from it also
-		// needs to be encrypted. For simplicity we support the use case in which disk encryption and
-		// snapshot encryption key are the same.
-		if s.DiskKeyFile != "" {
-			s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
-			srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
-			srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
-			if err != nil {
-				errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
-				s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)
-				return
-			}
-			standardSnapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
-			standardSnapshot.SnapshotEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
-		}
-
-		log.CtxLogger(ctx).Debugw("Creating standard snapshot", "standardSnapshot", standardSnapshot)
-		op, err := s.gceService.CreateStandardSnapshot(ctx, s.Project, standardSnapshot)
-		if err != nil {
-			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
-			return
-		}
-
-		if err := s.gceService.WaitForSnapshotCreationCompletionWithRetry(ctx, op, s.Project, s.DiskZone, standardSnapshotName); err != nil {
-			errors <- fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
-			return
-		}
-		mu.Lock()
-		*ssOps = append(*ssOps, &standardSnapshotOp{op: op, name: standardSnapshotName})
-		mu.Unlock()
+func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instantsnapshotgroup.ISItem, ssOps *[]*standardSnapshotOp) error {
+	log.CtxLogger(ctx).Debugw("Converting instant snapshot to standard snapshot", "instantSnapshot", instantSnapshot)
+	isName := instantSnapshot.Name
+	timestamp := time.Now().UTC().UnixNano()
+	standardSnapshotName := createStandardSnapshotName(isName, fmt.Sprintf("%d", timestamp))
+	standardSnapshot := &compute.Snapshot{
+		Name:                  standardSnapshotName,
+		SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, isName),
+		Labels:                s.parseLabels(),
+		Description:           s.Description,
 	}
+
+	// In case customer is taking a snapshot from an encrypted disk, the snapshot created from it also
+	// needs to be encrypted. For simplicity we support the use case in which disk encryption and
+	// snapshot encryption key are the same.
+	if s.DiskKeyFile != "" {
+		s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
+		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
+		srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
+		if err != nil {
+			s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)
+			return fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+		}
+		standardSnapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+		standardSnapshot.SnapshotEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+	}
+
+	log.CtxLogger(ctx).Debugw("Creating standard snapshot", "standardSnapshot", standardSnapshot)
+	op, err := s.gceService.CreateStandardSnapshot(ctx, s.Project, standardSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+	}
+
+	if err := s.gceService.WaitForSnapshotCreationCompletionWithRetry(ctx, op, s.Project, s.DiskZone, standardSnapshotName); err != nil {
+		return fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+	}
+	*ssOps = append(*ssOps, &standardSnapshotOp{op: op, name: standardSnapshotName})
+	return nil
 }
 
 func createStandardSnapshotName(instantSnapshotName string, timestamp string) string {
