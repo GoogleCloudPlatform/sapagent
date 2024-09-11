@@ -236,6 +236,7 @@ func TestDiscoveryHandler(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var d Discovery
+			d.oteLogger = onetime.CreateOTELogger(false)
 			got, gotStatus := d.discoveryHandler(ctx, tc.exec, tc.fsh)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("discoveryHandler(%v, %v) returned an unexpected diff (-want +got): %v", tc.exec, tc.fsh, diff)

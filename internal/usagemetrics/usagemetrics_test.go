@@ -253,6 +253,9 @@ func TestErrorConstants(t *testing.T) {
 	if GCBDRBackupFailure != 77 {
 		t.Errorf("GCBDRBackupFailure = %v, want 77", GCBDRBackupFailure)
 	}
+	if GCBDRDiscoveryFailure != 78 {
+		t.Errorf("GCBDRDiscoveryFailure = %v, want 78", GCBDRDiscoveryFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -467,21 +470,27 @@ func TestActionConstants(t *testing.T) {
 		t.Errorf("GCBDRBackupFinished = %v, want 69", GCBDRBackupFinished)
 	}
 	if HANADiskGroupBackupStarted != 70 {
-		t.Errorf("HANADiskGroupBackupStarted = %v, want 68", HANADiskGroupBackupStarted)
+		t.Errorf("HANADiskGroupBackupStarted = %v, want 70", HANADiskGroupBackupStarted)
 	}
 	if HANADiskGroupBackupSucceeded != 71 {
-		t.Errorf("HANADiskGroupBackupSucceeded = %v, want 69", HANADiskGroupBackupSucceeded)
+		t.Errorf("HANADiskGroupBackupSucceeded = %v, want 71", HANADiskGroupBackupSucceeded)
 	}
 	if HANADiskBackupSucceeded != 72 {
-		t.Errorf("HANADiskBackupSucceeded = %v, want 70", HANADiskBackupSucceeded)
+		t.Errorf("HANADiskBackupSucceeded = %v, want 72", HANADiskBackupSucceeded)
 	}
 	if HANADiskGroupRestoreStarted != 73 {
-		t.Errorf("HANADiskGroupRestoreStarted = %v, want 71", HANADiskGroupRestoreStarted)
+		t.Errorf("HANADiskGroupRestoreStarted = %v, want 73", HANADiskGroupRestoreStarted)
 	}
 	if HANADiskGroupRestoreSucceeded != 74 {
-		t.Errorf("HANADiskGroupRestoreSucceeded = %v, want 72", HANADiskGroupRestoreSucceeded)
+		t.Errorf("HANADiskGroupRestoreSucceeded = %v, want 74", HANADiskGroupRestoreSucceeded)
 	}
 	if HANADiskRestoreSucceeded != 75 {
-		t.Errorf("HANADiskRestoreSucceeded = %v, want 73", HANADiskRestoreSucceeded)
+		t.Errorf("HANADiskRestoreSucceeded = %v, want 75", HANADiskRestoreSucceeded)
+	}
+	if GCBDRDiscoveryStarted != 77 {
+		t.Errorf("GCBDRDiscoveryStarted = %v, want 77", GCBDRDiscoveryStarted)
+	}
+	if GCBDRDiscoveryFinished != 78 {
+		t.Errorf("GCBDRDiscoveryFinished = %v, want 78", GCBDRDiscoveryFinished)
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	hdpb "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrhanadiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
@@ -141,6 +142,7 @@ type Discovery struct {
 	FSH               filesystem.FileSystem
 	help              bool
 	logLevel, logPath string
+	oteLogger         *onetime.OTELogger
 }
 
 // Name implements the subcommand interface for Discovery.
@@ -176,12 +178,17 @@ func (d *Discovery) Execute(ctx context.Context, f *flag.FlagSet, args ...any) s
 		return exitStatus
 	}
 
+	d.oteLogger = onetime.CreateOTELogger(false)
 	_, exitStatus = d.discoveryHandler(ctx, commandlineexecutor.ExecuteCommand, d.FSH)
+	if exitStatus == subcommands.ExitFailure {
+		d.oteLogger.LogUsageError(usagemetrics.GCBDRDiscoveryFailure)
+	}
 	return exitStatus
 }
 
 func (d *Discovery) discoveryHandler(ctx context.Context, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*Applications, subcommands.ExitStatus) {
 	log.CtxLogger(ctx).Info("Starting HANA DB discovery using GCBDR CoreAPP script")
+	d.oteLogger.LogUsageAction(usagemetrics.GCBDRDiscoveryStarted)
 	args := commandlineexecutor.Params{
 		Executable:  "/bin/bash",
 		ArgsToSplit: "/act/custom_apps/discoverySAP.sh",
@@ -203,15 +210,20 @@ func (d *Discovery) discoveryHandler(ctx context.Context, exec commandlineexecut
 		return nil, subcommands.ExitFailure
 	}
 	log.CtxLogger(ctx).Info("HANA Applications discovered %v", apps.Application)
+	d.oteLogger.LogUsageAction(usagemetrics.GCBDRDiscoveryFinished)
 	return apps, subcommands.ExitSuccess
 }
 
 // Run provides the Daemon mode invocation for gcbdr discovery, returning the
 // list of HANA discovery applications.
 func (d *Discovery) Run(ctx context.Context, opts *onetime.RunOptions, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*hdpb.ApplicationsList, subcommands.ExitStatus) {
+	d.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	apps, exitStatus := d.discoveryHandler(ctx, exec, fsh)
 	if exitStatus != subcommands.ExitSuccess {
 		log.CtxLogger(ctx).Errorf("Failed to get HANA discovery applications: %v", exitStatus)
+		if exitStatus == subcommands.ExitFailure {
+			d.oteLogger.LogUsageError(usagemetrics.GCBDRDiscoveryFailure)
+		}
 		return nil, exitStatus
 	}
 	result := constructApplicationsProto(apps)
