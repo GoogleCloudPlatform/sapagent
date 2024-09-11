@@ -63,6 +63,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -229,6 +230,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFu
 		usagemetrics.Started()
 		go usagemetrics.LogRunningDaily()
 		d.startGuestActions(cancel)
+		d.startConfigPollerRoutine(cancel)
 	}
 	d.startServices(ctx, cancel, runtime.GOOS, restarting)
 	return subcommands.ExitSuccess
@@ -595,6 +597,75 @@ func waitForShutdown(ctx context.Context, ch <-chan os.Signal, cancel context.Ca
 	usagemetrics.Stopped()
 	time.Sleep(3 * time.Second)
 	log.Logger.Info("Shutting down...")
+}
+
+func (d *Daemon) pollConfigFile(ctx context.Context, cancel context.CancelFunc) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	prev, err := d.lastModifiedTime(ctx)
+	shutdownch := make(chan os.Signal, 1)
+	signal.Notify(shutdownch, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Failed to get last modified time for config file", "error", err)
+		return
+	}
+	for {
+		select {
+		case <-shutdownch:
+			log.CtxLogger(ctx).Info("Shutdown signal observed, exiting the config poller")
+			return
+		case <-ticker.C:
+			log.CtxLogger(ctx).Debug("Polling config file")
+			res, err := d.lastModifiedTime(ctx)
+			if err != nil {
+				log.Logger.Errorw("Failed to get last modified time for config file", "error", err)
+				continue
+			}
+			if res.After(prev) {
+				log.CtxLogger(ctx).Infow("Config file changed, restarting daemon", "configFile", d.configFilePath)
+				cancel = d.Restart(cancel)
+				prev = res
+			}
+		}
+	}
+}
+
+func (d *Daemon) lastModifiedTime(ctx context.Context) (time.Time, error) {
+	path := d.configFilePath
+	if len(path) == 0 {
+		switch runtime.GOOS {
+		case "linux":
+			path = configuration.LinuxConfigPath
+		case "windows":
+			path = configuration.WindowsConfigPath
+		}
+	}
+	res, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return res.ModTime(), nil
+}
+
+func (d *Daemon) startConfigPollerRoutine(cancel context.CancelFunc) {
+	// TODO: Remove the experimental metrics check once config poller implementation is complete.
+	if d.config == nil || d.config.GetCollectionConfiguration() == nil || !d.config.GetCollectionConfiguration().GetCollectExperimentalMetrics() {
+		log.Logger.Debug("Not starting config poller...")
+		return
+	}
+	pollConfigFileRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, arg any) {
+			if cancelFunc, ok := arg.(context.CancelFunc); ok {
+				d.pollConfigFile(ctx, cancelFunc)
+			}
+		},
+		RoutineArg:          cancel,
+		UsageLogger:         *usagemetrics.Logger,
+		ExpectedMinDuration: 1 * time.Second,
+	}
+	configPollerCtx := log.SetCtx(context.Background(), "context", "ConfigPoller")
+	usagemetrics.Action(usagemetrics.ConfigPollerStarted)
+	pollConfigFileRoutine.StartRoutine(configPollerCtx)
 }
 
 // Restart restarts the daemon services and makes Daemon implement Restarter.

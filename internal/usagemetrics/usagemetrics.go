@@ -199,6 +199,7 @@ const (
 	HANADiskGroupRestoreStarted             = 73 //	HANADiskGroupRestoreStarted
 	HANADiskGroupRestoreSucceeded           = 74 //	HANADiskGroupRestoreSucceeded
 	HANADiskRestoreSucceeded                = 75 //	HANADiskRestoreSucceeded
+	ConfigPollerStarted                     = 76 //	ConfigPollerStarted
 	GCBDRDiscoveryStarted                   = 77 //	GCBDRDiscoveryStarted
 	GCBDRDiscoveryFinished                  = 78 //	GCBDRDiscoveryFinished
 )

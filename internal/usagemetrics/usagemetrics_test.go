@@ -487,6 +487,9 @@ func TestActionConstants(t *testing.T) {
 	if HANADiskRestoreSucceeded != 75 {
 		t.Errorf("HANADiskRestoreSucceeded = %v, want 75", HANADiskRestoreSucceeded)
 	}
+	if ConfigPollerStarted != 76 {
+		t.Errorf("ConfigPollerStarted = %v, want 76", ConfigPollerStarted)
+	}
 	if GCBDRDiscoveryStarted != 77 {
 		t.Errorf("GCBDRDiscoveryStarted = %v, want 77", GCBDRDiscoveryStarted)
 	}
