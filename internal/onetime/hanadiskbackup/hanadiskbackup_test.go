@@ -473,24 +473,38 @@ func TestExecuteSnapshot(t *testing.T) {
 	}
 }
 
+var snapshotComparer = cmp.Comparer(func(a, b Snapshot) bool {
+	validSnapshotName := false
+	// This succeeds when user overrides the snapshot name.
+	if a.SnapshotName != "" && a.SnapshotName == b.SnapshotName {
+		validSnapshotName = true
+	}
+	// This succeeds when user does not override the snapshot name.
+	if strings.HasPrefix(a.SnapshotName, "snapshot-") || strings.HasPrefix(b.SnapshotName, "snapshot-") {
+		validSnapshotName = true
+	}
+	return validSnapshotName && a.Sid == b.Sid
+})
+
 func TestValidateParameters(t *testing.T) {
 	tests := []struct {
-		name     string
-		snapshot Snapshot
-		os       string
-		want     error
+		name         string
+		snapshot     Snapshot
+		os           string
+		wantErr      error
+		wantSnapshot Snapshot
 	}{
 		{
-			name: "WindowsUnSupported",
-			os:   "windows",
-			want: cmpopts.AnyError,
+			name:    "WindowsUnSupported",
+			os:      "windows",
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyPort",
 			snapshot: Snapshot{
 				Port: "",
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "ChangeDiskTypeWorkflow",
@@ -505,7 +519,11 @@ func TestValidateParameters(t *testing.T) {
 				PasswordSecret:                  "secret",
 				SkipDBSnapshotForChangeDiskType: true,
 			},
-			want: nil,
+			wantErr: nil,
+			wantSnapshot: Snapshot{
+				Sid:          "HDB",
+				SnapshotName: "snapshot-pd-1-time-stamp",
+			},
 		},
 		{
 			name: "EmptySID",
@@ -513,7 +531,7 @@ func TestValidateParameters(t *testing.T) {
 				Port: "123",
 				Sid:  "",
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyUser",
@@ -522,7 +540,7 @@ func TestValidateParameters(t *testing.T) {
 				Sid:        "HDB",
 				HanaDBUser: "",
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDisk",
@@ -533,7 +551,7 @@ func TestValidateParameters(t *testing.T) {
 				HanaDBUser: "system",
 				Disk:       "",
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDiskZone",
@@ -545,7 +563,7 @@ func TestValidateParameters(t *testing.T) {
 				Disk:       "pd-1",
 				DiskZone:   "",
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyPasswordAndSecret",
@@ -559,7 +577,10 @@ func TestValidateParameters(t *testing.T) {
 				Password:       "",
 				PasswordSecret: "",
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
+			wantSnapshot: Snapshot{
+				Sid: "HDB",
+			},
 		},
 		{
 			name: "EmptyPortAndInstanceID",
@@ -573,7 +594,7 @@ func TestValidateParameters(t *testing.T) {
 				DiskZone:       "us-east1-a",
 				PasswordSecret: "secret",
 			},
-			want: cmpopts.AnyError,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "Emptyhost",
@@ -585,6 +606,10 @@ func TestValidateParameters(t *testing.T) {
 				Disk:           "pd-1",
 				DiskZone:       "us-east1-a",
 				PasswordSecret: "secret",
+			},
+			wantSnapshot: Snapshot{
+				Sid:          "HDB",
+				SnapshotName: "snapshot-time-stamp",
 			},
 		},
 		{
@@ -598,15 +623,40 @@ func TestValidateParameters(t *testing.T) {
 				DiskZone:       "us-east1-a",
 				PasswordSecret: "secret",
 			},
+			wantSnapshot: Snapshot{
+				Sid:          "HDB",
+				SnapshotName: "snapshot-time-stamp",
+			},
 		},
 		{
 			name: "HDBUserstoreConfig",
 			snapshot: Snapshot{
 				Sid:             "HDB",
 				HDBUserstoreKey: "hdbuserstore-key",
-				Project:         "",
 				Disk:            "pd-1",
 				DiskZone:        "us-east1-a",
+			},
+			wantSnapshot: Snapshot{
+				Sid:             "HDB",
+				HDBUserstoreKey: "hdbuserstore-key",
+				Disk:            "pd-1",
+				DiskZone:        "us-east1-a",
+				SnapshotName:    "snapshot-pd-1-time-stamp",
+			},
+		},
+		{
+			name: "EmptySnapshotNameEmptyDisk",
+			snapshot: Snapshot{
+				Port:           "123",
+				Sid:            "HDB",
+				Project:        "",
+				HanaDBUser:     "system",
+				DiskZone:       "us-east1-a",
+				PasswordSecret: "secret",
+			},
+			wantSnapshot: Snapshot{
+				Sid:          "HDB",
+				SnapshotName: "snapshot-time-stamp",
 			},
 		},
 	}
@@ -614,8 +664,11 @@ func TestValidateParameters(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.validateParameters(test.os, defaultCloudProperties)
-			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("validateParameters(snapshot=%v, os=%v)=%v, want=%v", test.snapshot, test.os, got, test.want)
+			if !cmp.Equal(got, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("validateParameters(snapshot=%v, os=%v)=%v, want=%v", test.snapshot, test.os, got, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantSnapshot, test.snapshot, snapshotComparer); test.wantErr == nil && diff != "" {
+				t.Errorf("validateParameters(snapshot=%v, os=%v) returned diff (-want +got):\n%s", test.snapshot, test.os, diff)
 			}
 		})
 	}

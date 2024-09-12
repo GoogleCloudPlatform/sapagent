@@ -462,6 +462,12 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 		s.Description = fmt.Sprintf("Snapshot created by Agent for SAP for HANA sid: %q", s.Sid)
 	}
 	s.Port = s.portValue()
+
+	if s.SnapshotName == "" && s.Disk != "" {
+		t := time.Now()
+		s.SnapshotName = fmt.Sprintf("snapshot-%s-%d%02d%02d-%02d%02d%02d",
+			s.Disk, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+	}
 	log.Logger.Debug("Parameter validation successful.")
 	return nil
 }
