@@ -256,6 +256,9 @@ func TestErrorConstants(t *testing.T) {
 	if GCBDRDiscoveryFailure != 78 {
 		t.Errorf("GCBDRDiscoveryFailure = %v, want 78", GCBDRDiscoveryFailure)
 	}
+	if HANAInsightsOTEFailure != 79 {
+		t.Errorf("HANAInsightsOTEFailure = %v, want 79", HANAInsightsOTEFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -495,5 +498,11 @@ func TestActionConstants(t *testing.T) {
 	}
 	if GCBDRDiscoveryFinished != 78 {
 		t.Errorf("GCBDRDiscoveryFinished = %v, want 78", GCBDRDiscoveryFinished)
+	}
+	if HANAInsightsOTEStarted != 79 {
+		t.Errorf("HANAInsightsOTEStarted = %v, want 79", HANAInsightsOTEStarted)
+	}
+	if HANAInsightsOTEFinished != 80 {
+		t.Errorf("HANAInsightsOTEFinished = %v, want 80", HANAInsightsOTEFinished)
 	}
 }

@@ -104,7 +104,11 @@ func (h *HANAInsights) Execute(ctx context.Context, f *flag.FlagSet, args ...any
 // Run executes the command and returns the status.
 func (h *HANAInsights) Run(ctx context.Context, runOpts *onetime.RunOptions, args ...any) subcommands.ExitStatus {
 	h.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
-	return h.hanaInsightsHandler(ctx, gce.NewGCEClient, os.WriteFile, os.MkdirAll)
+	exitStatus := h.hanaInsightsHandler(ctx, gce.NewGCEClient, os.WriteFile, os.MkdirAll)
+	if exitStatus == subcommands.ExitFailure {
+		h.oteLogger.LogUsageError(usagemetrics.HANAInsightsOTEFailure)
+	}
+	return exitStatus
 }
 
 func (h *HANAInsights) validateParameters(os string) error {
@@ -128,6 +132,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		return subcommands.ExitUsageError
 	}
 
+	h.oteLogger.LogUsageAction(usagemetrics.HANAInsightsOTEStarted)
 	h.gceService, err = gceServiceCreator(ctx)
 	if err != nil {
 		h.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create GCE service", err)
@@ -169,6 +174,7 @@ func (h *HANAInsights) hanaInsightsHandler(ctx context.Context, gceServiceCreato
 		log.CtxLogger(ctx).Errorw("ERROR: Failed to generate local HANA insights", "error", err)
 		return subcommands.ExitFailure
 	}
+	h.oteLogger.LogUsageAction(usagemetrics.HANAInsightsOTEFinished)
 	return subcommands.ExitSuccess
 }
 
