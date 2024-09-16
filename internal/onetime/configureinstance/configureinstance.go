@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -44,6 +45,9 @@ type (
 
 	// ReadFileFunc provides a testable replacement for os.ReadFile.
 	ReadFileFunc func(string) ([]byte, error)
+
+	// MkdirAllFunc provides a testable replacement for os.MkDirAll.
+	MkdirAllFunc func(string, os.FileMode) error
 )
 
 const (
@@ -87,6 +91,7 @@ type ConfigureInstance struct {
 
 	WriteFile   WriteFileFunc
 	ReadFile    ReadFileFunc
+	MkdirAll    MkdirAllFunc
 	ExecuteFunc commandlineexecutor.Execute
 	IIOTEParams *onetime.InternallyInvokedOTE
 	diffs       []diff
@@ -154,6 +159,9 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	}
 	if c.ReadFile == nil {
 		c.ReadFile = os.ReadFile
+	}
+	if c.MkdirAll == nil {
+		c.MkdirAll = os.MkdirAll
 	}
 	if c.ExecuteFunc == nil {
 		c.ExecuteFunc = commandlineexecutor.ExecuteCommand
@@ -281,8 +289,12 @@ func (c *ConfigureInstance) LogToBoth(ctx context.Context, msg string) {
 }
 
 // backupAndWriteFile stores a backup of the file with a timestamp and writes
-// the new contents to the file.
+// the new contents to the file, creating any directories that don't exist.
 func (c *ConfigureInstance) backupAndWriteFile(ctx context.Context, filePath string, data []byte, perm os.FileMode) error {
+	if err := c.MkdirAll(path.Dir(filePath), perm); err != nil {
+		c.LogToBoth(ctx, fmt.Sprintf("Failed to create directories %s: %v", path.Dir(filePath), err))
+		return err
+	}
 	backup := fmt.Sprintf("%s-old-%s", filePath, time.Now().Format(dateTimeFormat))
 	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "cp", ArgsToSplit: fmt.Sprintf("%s %s", filePath, backup)}); res.ExitCode != 0 {
 		log.CtxLogger(ctx).Infof("'cp %s %s' failed, continuing with write, code: %d, stderr: %s", filePath, backup, res.ExitCode, res.StdErr)

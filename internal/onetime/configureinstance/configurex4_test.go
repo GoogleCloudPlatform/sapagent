@@ -46,6 +46,7 @@ func TestConfigureX4(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", ""}),
 				WriteFile:   defaultWriteFile(1),
+				MkdirAll:    defaultMkdirAll(1),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -57,6 +58,7 @@ func TestConfigureX4(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", ""}),
 				WriteFile:   defaultWriteFile(2),
+				MkdirAll:    defaultMkdirAll(2),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -68,6 +70,7 @@ func TestConfigureX4(t *testing.T) {
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
 				WriteFile:   defaultWriteFile(3),
+				MkdirAll:    defaultMkdirAll(3),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 				Apply:       true,
 			},
@@ -80,6 +83,7 @@ func TestConfigureX4(t *testing.T) {
 				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil}, []string{"Name=RHEL", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
 				WriteFile:   defaultWriteFile(4),
+				MkdirAll:    defaultMkdirAll(4),
 				Apply:       true,
 			},
 			want:    false,
@@ -91,6 +95,7 @@ func TestConfigureX4(t *testing.T) {
 				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
 				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
 				WriteFile:      defaultWriteFile(5),
+				MkdirAll:       defaultMkdirAll(5),
 				Apply:          true,
 				MachineType:    "x4-megamem-1920",
 				HyperThreading: hyperThreadingOn,
@@ -104,6 +109,7 @@ func TestConfigureX4(t *testing.T) {
 				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", ""}),
 				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
 				WriteFile:      defaultWriteFile(5),
+				MkdirAll:       defaultMkdirAll(5),
 				Apply:          true,
 				HyperThreading: hyperThreadingOn,
 			},
@@ -116,6 +122,7 @@ func TestConfigureX4(t *testing.T) {
 				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
 				WriteFile:   defaultWriteFile(5),
+				MkdirAll:    defaultMkdirAll(5),
 				Apply:       true,
 			},
 			want:    true,
@@ -127,6 +134,7 @@ func TestConfigureX4(t *testing.T) {
 				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
 				WriteFile:   defaultWriteFile(5),
+				MkdirAll:    defaultMkdirAll(5),
 				Check:       true,
 			},
 			want:    true,
@@ -391,6 +399,190 @@ func TestSaptuneReapply(t *testing.T) {
 			gotErr := tc.c.saptuneReapply(context.Background(), tc.sapTuneReapply)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("saptuneReapply(%v) returned error: %v, want error: %v", tc.sapTuneReapply, gotErr, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestConfigureX4RHEL(t *testing.T) {
+	tests := []struct {
+		name    string
+		c       ConfigureInstance
+		want    bool
+		wantErr error
+	}{
+		{
+			name: "FailedToReadReleaseFile",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NotRHELMachine",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{"Name=SLES"}),
+			},
+			want:    false,
+			wantErr: nil,
+		},
+		{
+			name: "FailedTunedService",
+			c: ConfigureInstance{
+				ReadFile:    defaultReadFile([]error{nil}, []string{`NAME="Red Hat Enterprise Linux"`}),
+				ExecuteFunc: defaultExecute([]int{4}, []string{""}),
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToWriteTunedConf",
+			c: ConfigureInstance{
+				ReadFile:    defaultReadFile([]error{nil, fmt.Errorf("failed to read")}, []string{`NAME="Red Hat Enterprise Linux"`, ""}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailedTunedReapply",
+			c: ConfigureInstance{
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{`NAME="Red Hat Enterprise Linux"`, string(googleX4TunedConf)}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 1}, []string{"", "", "", ""}),
+				WriteFile:   defaultWriteFile(1),
+				MkdirAll:    defaultMkdirAll(1),
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			c: ConfigureInstance{
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{`NAME="Red Hat Enterprise Linux"`, string(googleX4Conf)}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0}, []string{"", "", "", ""}),
+				WriteFile:   defaultWriteFile(1),
+				MkdirAll:    defaultMkdirAll(1),
+			},
+			want:    true,
+			wantErr: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, gotErr := tc.c.configureX4RHEL(context.Background())
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("configureX4RHEL(%v) returned error: %v, want error: %v", tc.c, gotErr, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("configureX4RHEL(%v) = %v, want: %v", tc.c, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTunedService(t *testing.T) {
+	tests := []struct {
+		name string
+		c    ConfigureInstance
+		want error
+	}{
+		{
+			name: "ServiceNotFound",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{4}, []string{""}),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "ServiceFailedToEnable",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{1, 1}, []string{"", ""}),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "ServiceFailedToStart",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{1, 0, 1}, []string{"", "", ""}),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "ServiceStartedAfterStopped",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{1, 0, 0}, []string{"", "", ""}),
+			},
+			want: nil,
+		},
+		{
+			name: "ServiceAlreadyRunning",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+			},
+			want: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.c.tunedService(context.Background())
+			if !cmp.Equal(got, tc.want, cmpopts.EquateErrors()) {
+				t.Errorf("tunedService(%#v) = %v, want: %v", tc.c, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTunedReapply(t *testing.T) {
+	tests := []struct {
+		name         string
+		tunedReapply bool
+		c            ConfigureInstance
+		wantErr      error
+	}{
+		{
+			name:         "ReapplyNotRequired",
+			tunedReapply: false,
+		},
+		{
+			name:         "CheckMode",
+			tunedReapply: true,
+			c: ConfigureInstance{
+				Check: true,
+			},
+		},
+		{
+			name:         "FailProfile",
+			tunedReapply: true,
+			c: ConfigureInstance{
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:         "FailVerify",
+			tunedReapply: true,
+			c: ConfigureInstance{
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:         "Success",
+			tunedReapply: true,
+			c: ConfigureInstance{
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.c.tunedReapply(context.Background(), tc.tunedReapply)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("tunedReapply(%v) returned error: %v, want error: %v", tc.tunedReapply, gotErr, tc.wantErr)
 			}
 		})
 	}
