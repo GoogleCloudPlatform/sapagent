@@ -145,6 +145,17 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	d.createLogDir()
 	log.SetupLogging(d.lp)
 	ctx, cancel := context.WithCancel(ctx)
+	d.config = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
+	if d.config.GetBareMetal() && d.config.GetCloudProperties() == nil {
+		log.Logger.Error("Bare metal instance detected without cloud properties set. Manually set cloud properties in the configuration file to continue.")
+		usagemetrics.Error(usagemetrics.BareMetalCloudPropertiesNotSet)
+		os.Exit(0)
+	}
+	d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
+	d.lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, d.config.GetCloudProperties().GetProjectId(), configuration.UserAgent())
+	if d.lp.CloudLoggingClient != nil {
+		defer d.lp.CloudLoggingClient.Close()
+	}
 	return d.startdaemonHandler(ctx, cancel, false)
 }
 
@@ -189,21 +200,12 @@ func (d *Daemon) createLogDir() {
 // startdaemonHandler starts up the main daemon for SAP Agent.
 func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFunc, restarting bool) subcommands.ExitStatus {
 	// Daemon mode operation
-	d.config = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
-	if d.config.GetBareMetal() && d.config.GetCloudProperties() == nil {
-		log.Logger.Error("Bare metal instance detected without cloud properties set. Manually set cloud properties in the configuration file to continue.")
-		usagemetrics.Error(usagemetrics.BareMetalCloudPropertiesNotSet)
-		os.Exit(0)
+	if restarting {
+		d.config = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
+		d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 	}
-
-	d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 	d.lp.LogToCloud = d.config.GetLogToCloud().GetValue()
 	d.lp.Level = configuration.LogLevelToZapcore(d.config.GetLogLevel())
-
-	d.lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, d.config.GetCloudProperties().GetProjectId(), configuration.UserAgent())
-	if d.lp.CloudLoggingClient != nil {
-		defer d.lp.CloudLoggingClient.Close()
-	}
 	log.SetupLogging(d.lp)
 
 	log.Logger.Infow("Agent version currently running", "version", configuration.AgentVersion)
