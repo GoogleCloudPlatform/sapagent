@@ -51,7 +51,7 @@ type (
 		httpClient  httpClient
 		tokenGetter defaultTokenGetter
 		baseURL     string
-		maxRetries  uint64
+		backoff     backoff.BackOff
 	}
 
 	// ISResponse is the response for IS.
@@ -84,6 +84,10 @@ type (
 		SourceInstantSnapshotGroupID string            `json:"sourceInstantSnapshotGroupId"`
 	}
 
+	errorResponse struct {
+		Err googleapi.Error `json:"error"`
+	}
+
 	httpClient interface {
 		Do(req *http.Request) (*http.Response, error)
 	}
@@ -106,11 +110,24 @@ var (
 	}
 )
 
+func setupBackoff() backoff.BackOff {
+	b := &backoff.ExponentialBackOff{
+		InitialInterval:     2 * time.Second,
+		RandomizationFactor: 0,
+		Multiplier:          2,
+		MaxInterval:         1 * time.Hour,
+		MaxElapsedTime:      30 * time.Minute,
+		Clock:               backoff.SystemClock,
+	}
+	b.Reset()
+	return b
+}
+
 // NewService initializes the ISGService with a new http client.
 func (s *ISGService) NewService() error {
 	s.httpClient = defaultNewClient(10*time.Minute, defaultTransport())
 	s.tokenGetter = google.DefaultTokenSource
-	s.maxRetries = 300
+	s.backoff = setupBackoff()
 	return nil
 }
 
@@ -145,10 +162,23 @@ func (s *ISGService) GetResponse(ctx context.Context, method string, baseURL str
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+
+	var genericResponse map[string]any
+	if err := json.Unmarshal(bodyBytes, &genericResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
 	}
-	return bodyBytes, err
+	if genericResponse["error"] != nil {
+		var googleapiErr errorResponse
+		if err := json.Unmarshal([]byte(bodyBytes), &googleapiErr); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal googleapi error, err: %w", err)
+		}
+
+		log.CtxLogger(ctx).Errorw("getresponse error", "error", googleapiErr)
+		if googleapiErr.Err.Code != http.StatusOK {
+			return nil, fmt.Errorf("%s", googleapiErr.Err.Message)
+		}
+	}
+	return bodyBytes, nil
 }
 
 // getProcessStatus  returns the status of the given process.
@@ -174,12 +204,23 @@ func (s *ISGService) CreateISG(ctx context.Context, project, zone string, data [
 	if s.baseURL == "" {
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
 	}
-	bodyBytes, err := s.GetResponse(ctx, "POST", s.baseURL, data)
-	log.CtxLogger(ctx).Debugw("CreateISG", "baseURL", s.baseURL, "data", string(data), "response", string(bodyBytes))
-	if err != nil {
+
+	var bodyBytes []byte
+	var err error
+	if err = backoff.Retry(func() error {
+		var getResponseErr error
+		bodyBytes, getResponseErr = s.GetResponse(ctx, "POST", s.baseURL, data)
+		if getResponseErr != nil {
+			return getResponseErr
+		}
+
+		return nil
+	}, s.backoff); err != nil {
 		s.baseURL = ""
-		return fmt.Errorf("failed to create Instant Snapshot Group, err: %w", err)
+		return fmt.Errorf("failed to initiate creation of group snapshot, err: %w", err)
 	}
+
+	log.CtxLogger(ctx).Debugw("CreateISG", "baseURL", s.baseURL, "data", string(data), "response", string(bodyBytes))
 	s.baseURL = ""
 	bodyString := string(bodyBytes) // Convert to string
 	log.CtxLogger(ctx).Debugw("CreateISG Response", "response", bodyString)
@@ -208,7 +249,7 @@ func (s *ISGService) isgExists(ctx context.Context, project, zone, opName string
 	log.CtxLogger(ctx).Debugw("isgExists", "baseURL", s.baseURL, "bodyBytes", string(bodyBytes))
 	if err != nil {
 		s.baseURL = ""
-		return fmt.Errorf("failed to get Instant Snapshot Group, err: %w", err)
+		return fmt.Errorf("failed to delete Instant Snapshot Group, err: %w", err)
 	}
 	s.baseURL = ""
 
@@ -264,9 +305,17 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 	if s.baseURL == "" {
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
 	}
-	bodyBytes, err := s.GetResponse(ctx, "DELETE", s.baseURL, nil)
-	log.CtxLogger(ctx).Debugw("DeleteISG", "baseURL", s.baseURL, "bodyBytes", string(bodyBytes))
-	if err != nil {
+
+	var bodyBytes []byte
+	if err := backoff.Retry(func() error {
+		var getResponseErr error
+		bodyBytes, getResponseErr = s.GetResponse(ctx, "DELETE", s.baseURL, nil)
+		if getResponseErr != nil {
+			return getResponseErr
+		}
+
+		return nil
+	}, s.backoff); err != nil {
 		s.baseURL = ""
 		return fmt.Errorf("failed to initiate deletion of Instant Snapshot Group, err: %w", err)
 	}
@@ -278,11 +327,9 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
 	}
 
-	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
 	return backoff.Retry(func() error {
 		return s.isgExists(ctx, project, zone, op.Name)
-	}, bo)
+	}, s.backoff)
 }
 
 func (s *ISGService) waitForISGUploadCompletion(ctx context.Context, baseURL string) error {
@@ -300,9 +347,7 @@ func (s *ISGService) waitForISGUploadCompletion(ctx context.Context, baseURL str
 // WaitForISGUploadCompletionWithRetry waits for the given snapshot creation operation
 // to complete with constant backoff retries.
 func (s *ISGService) WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error {
-	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
-	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
 	return backoff.Retry(func() error {
 		return s.waitForISGUploadCompletion(ctx, baseURL)
-	}, bo)
+	}, s.backoff)
 }
