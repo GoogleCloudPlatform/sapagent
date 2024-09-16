@@ -73,8 +73,8 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		return err
 	}
 
-	var ssOps []*standardSnapshotOp
-	if ssOps, err = s.convertISGtoSS(ctx, cp); err != nil {
+	var ssOps []*snapshotOp
+	if ssOps, err = s.convertISGInstantSnapshots(ctx, cp); err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error converting instant snapshots to %s, HANA snapshot %s is not successful", strings.ToLower(s.SnapshotType), snapshotID), err)
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
@@ -84,7 +84,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 	}
 
 	if s.ConfirmDataSnapshotAfterCreate {
-		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk standard snapshots are created but not yet uploaded.")
+		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk snapshots are created but not yet uploaded.")
 		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
 			if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
 				s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
@@ -95,7 +95,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
 	for _, ssOp := range ssOps {
-		if err := s.gceService.WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
+		if err := s.gceService.WaitForInstantSnapshotConversionCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
 			log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
 			if s.ConfirmDataSnapshotAfterCreate {
 				s.oteLogger.LogErrorToFileAndConsole(
@@ -176,15 +176,15 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	return nil
 }
 
-func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) ([]*standardSnapshotOp, error) {
-	log.CtxLogger(ctx).Info("Converting Instant Snapshot Group to Standard Snapshots")
+func (s *Snapshot) convertISGInstantSnapshots(ctx context.Context, cp *ipb.CloudProperties) ([]*snapshotOp, error) {
+	log.CtxLogger(ctx).Info(fmt.Sprintf("Converting Instant Snapshot Group to %s snapshots", strings.ToLower(s.SnapshotType)))
 	instantSnapshots, err := s.isgService.DescribeInstantSnapshots(ctx, s.Project, s.DiskZone, s.groupSnapshotName)
 	if err != nil {
 		return nil, err
 	}
 
 	errors := []error{}
-	ssOps := []*standardSnapshotOp{}
+	ssOps := []*snapshotOp{}
 	for _, is := range instantSnapshots {
 		if err := s.createGroupBackup(ctx, is, &ssOps); err != nil {
 			errors = append(errors, err)
@@ -196,22 +196,23 @@ func (s *Snapshot) convertISGtoSS(ctx context.Context, cp *ipb.CloudProperties) 
 
 	for _, err := range errors {
 		if err != nil {
-			log.CtxLogger(ctx).Errorw("Error converting Instant Snapshot Group to Standard Snapshots", "error", err)
+			log.CtxLogger(ctx).Errorw(fmt.Sprintf("Error converting Instant Snapshot Group to %s snapshots", strings.ToLower(s.SnapshotType)), "error", err)
 		}
 	}
-	return nil, fmt.Errorf("Error converting Instant Snapshot Group to Standard snapshots, latest error: %w", errors[0])
+	return nil, fmt.Errorf("Error converting Instant Snapshot Group to %s snapshots, latest error: %w", strings.ToLower(s.SnapshotType), errors[0])
 }
 
-func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instantsnapshotgroup.ISItem, ssOps *[]*standardSnapshotOp) error {
-	log.CtxLogger(ctx).Debugw("Converting instant snapshot to standard snapshot", "instantSnapshot", instantSnapshot)
+func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instantsnapshotgroup.ISItem, ssOps *[]*snapshotOp) error {
+	log.CtxLogger(ctx).Debugw(fmt.Sprintf("Converting instant snapshot to %s snapshot", strings.ToLower(s.SnapshotType)), "instantSnapshot", instantSnapshot)
 	isName := instantSnapshot.Name
 	timestamp := time.Now().UTC().UnixNano()
-	standardSnapshotName := createStandardSnapshotName(isName, fmt.Sprintf("%d", timestamp))
-	standardSnapshot := &compute.Snapshot{
-		Name:                  standardSnapshotName,
+	snapshotName := s.createSnapshotName(isName, fmt.Sprintf("%d", timestamp))
+	snapshot := &compute.Snapshot{
+		Name:                  snapshotName,
 		SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, isName),
 		Labels:                s.parseLabels(),
 		Description:           s.Description,
+		SnapshotType:          strings.ToUpper(s.SnapshotType),
 	}
 
 	// In case customer is taking a snapshot from an encrypted disk, the snapshot created from it also
@@ -223,37 +224,37 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instan
 		srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
 		if err != nil {
 			s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)
-			return fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+			return fmt.Errorf("failed to create %s snapshot for instant snapshot %s: %w", strings.ToLower(s.SnapshotType), isName, err)
 		}
-		standardSnapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
-		standardSnapshot.SnapshotEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+		snapshot.SourceDiskEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
+		snapshot.SnapshotEncryptionKey = &compute.CustomerEncryptionKey{RsaEncryptedKey: srcDiskKey}
 	}
 
-	log.CtxLogger(ctx).Debugw("Creating standard snapshot", "standardSnapshot", standardSnapshot)
-	op, err := s.gceService.CreateStandardSnapshot(ctx, s.Project, standardSnapshot)
+	log.CtxLogger(ctx).Debugw(fmt.Sprintf("Creating %s snapshot", strings.ToLower(s.SnapshotType)), "snapshot", snapshot)
+	op, err := s.gceService.CreateSnapshot(ctx, s.Project, snapshot)
 	if err != nil {
-		return fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+		return fmt.Errorf("failed to create %s snapshot for instant snapshot %s: %w", strings.ToLower(s.SnapshotType), isName, err)
 	}
 
-	if err := s.gceService.WaitForSnapshotCreationCompletionWithRetry(ctx, op, s.Project, s.DiskZone, standardSnapshotName); err != nil {
-		return fmt.Errorf("failed to create standard snapshot for instant snapshot %s: %w", isName, err)
+	if err := s.gceService.WaitForSnapshotCreationCompletionWithRetry(ctx, op, s.Project, s.DiskZone, snapshotName); err != nil {
+		return fmt.Errorf("failed to create %s snapshot for instant snapshot %s: %w", strings.ToLower(s.SnapshotType), isName, err)
 	}
-	*ssOps = append(*ssOps, &standardSnapshotOp{op: op, name: standardSnapshotName})
+	*ssOps = append(*ssOps, &snapshotOp{op: op, name: snapshotName})
 	return nil
 }
 
-func createStandardSnapshotName(instantSnapshotName string, timestamp string) string {
+func (s *Snapshot) createSnapshotName(instantSnapshotName string, timestamp string) string {
 	maxLength := 63
-	suffix := fmt.Sprintf("-%s-standard", timestamp)
+	suffix := fmt.Sprintf("-%s-%s", timestamp, strings.ToLower(s.SnapshotType))
 
-	standardSnapshotName := instantSnapshotName
+	snapshotName := instantSnapshotName
 	snapshotNameMaxLength := maxLength - len(suffix)
 	if len(instantSnapshotName) > snapshotNameMaxLength {
-		standardSnapshotName = instantSnapshotName[:snapshotNameMaxLength]
+		snapshotName = instantSnapshotName[:snapshotNameMaxLength]
 	}
 
-	standardSnapshotName += suffix
-	return standardSnapshotName
+	snapshotName += suffix
+	return snapshotName
 }
 
 // validateDisksBelongToCG validates that the disks belong to the same consistency group.

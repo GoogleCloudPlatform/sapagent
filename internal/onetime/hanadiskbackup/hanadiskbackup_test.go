@@ -518,6 +518,7 @@ func TestValidateParameters(t *testing.T) {
 				Password:                        "password",
 				PasswordSecret:                  "secret",
 				SkipDBSnapshotForChangeDiskType: true,
+				SnapshotType:                    "STANDARD",
 			},
 			wantErr: nil,
 			wantSnapshot: Snapshot{
@@ -528,40 +529,44 @@ func TestValidateParameters(t *testing.T) {
 		{
 			name: "EmptySID",
 			snapshot: Snapshot{
-				Port: "123",
-				Sid:  "",
+				Port:         "123",
+				Sid:          "",
+				SnapshotType: "STANDARD",
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyUser",
 			snapshot: Snapshot{
-				Port:       "123",
-				Sid:        "HDB",
-				HanaDBUser: "",
+				Port:         "123",
+				Sid:          "HDB",
+				HanaDBUser:   "",
+				SnapshotType: "STANDARD",
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDisk",
 			snapshot: Snapshot{
-				Host:       "localhost",
-				Port:       "123",
-				Sid:        "HDB",
-				HanaDBUser: "system",
-				Disk:       "",
+				Host:         "localhost",
+				Port:         "123",
+				Sid:          "HDB",
+				HanaDBUser:   "system",
+				Disk:         "",
+				SnapshotType: "STANDARD",
 			},
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "EmptyDiskZone",
 			snapshot: Snapshot{
-				Host:       "localhost",
-				Port:       "123",
-				Sid:        "HDB",
-				HanaDBUser: "system",
-				Disk:       "pd-1",
-				DiskZone:   "",
+				Host:         "localhost",
+				Port:         "123",
+				Sid:          "HDB",
+				HanaDBUser:   "system",
+				Disk:         "pd-1",
+				DiskZone:     "",
+				SnapshotType: "STANDARD",
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -576,6 +581,7 @@ func TestValidateParameters(t *testing.T) {
 				DiskZone:       "us-east1-a",
 				Password:       "",
 				PasswordSecret: "",
+				SnapshotType:   "STANDARD",
 			},
 			wantErr: cmpopts.AnyError,
 			wantSnapshot: Snapshot{
@@ -593,6 +599,7 @@ func TestValidateParameters(t *testing.T) {
 				Disk:           "pd-1",
 				DiskZone:       "us-east1-a",
 				PasswordSecret: "secret",
+				SnapshotType:   "ARCHIVE",
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -606,6 +613,7 @@ func TestValidateParameters(t *testing.T) {
 				Disk:           "pd-1",
 				DiskZone:       "us-east1-a",
 				PasswordSecret: "secret",
+				SnapshotType:   "STANDARD",
 			},
 			wantSnapshot: Snapshot{
 				Sid:          "HDB",
@@ -622,6 +630,7 @@ func TestValidateParameters(t *testing.T) {
 				Disk:           "pd-1",
 				DiskZone:       "us-east1-a",
 				PasswordSecret: "secret",
+				SnapshotType:   "ARCHIVE",
 			},
 			wantSnapshot: Snapshot{
 				Sid:          "HDB",
@@ -635,6 +644,7 @@ func TestValidateParameters(t *testing.T) {
 				HDBUserstoreKey: "hdbuserstore-key",
 				Disk:            "pd-1",
 				DiskZone:        "us-east1-a",
+				SnapshotType:    "STANDARD",
 			},
 			wantSnapshot: Snapshot{
 				Sid:             "HDB",
@@ -653,11 +663,25 @@ func TestValidateParameters(t *testing.T) {
 				HanaDBUser:     "system",
 				DiskZone:       "us-east1-a",
 				PasswordSecret: "secret",
+				SnapshotType:   "STANDARD",
 			},
 			wantSnapshot: Snapshot{
 				Sid:          "HDB",
 				SnapshotName: "snapshot-time-stamp",
 			},
+		},
+		{
+			name: "InvalidSnapshotType",
+			snapshot: Snapshot{
+				Port:           "123",
+				Sid:            "HDB",
+				Project:        "",
+				HanaDBUser:     "system",
+				DiskZone:       "us-east1-a",
+				PasswordSecret: "secret",
+				SnapshotType:   "invalid",
+			},
+			wantErr: cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
@@ -681,6 +705,7 @@ func TestDefaults(t *testing.T) {
 		Project:        "",
 		HanaDBUser:     "system",
 		PasswordSecret: "secret",
+		SnapshotType:   "STANDARD",
 	}
 	got := s.validateParameters("linux", defaultCloudProperties)
 	if !cmp.Equal(got, nil, cmpopts.EquateErrors()) {

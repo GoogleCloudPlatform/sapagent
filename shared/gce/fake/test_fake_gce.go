@@ -120,8 +120,8 @@ type TestGCE struct {
 	AttachDiskErr error
 	DetachDiskErr error
 
-	CreateStandardSnapshotOp  *compute.Operation
-	CreateStandardSnapshotErr error
+	CreateSnapshotOp  *compute.Operation
+	CreateSnapshotErr error
 
 	SnapshotList    *compute.SnapshotList
 	SnapshotListErr error
@@ -135,7 +135,7 @@ type TestGCE struct {
 	SetLabelsOp  *compute.Operation
 	SetLabelsErr error
 
-	InstantToStandardUploadCompletionErr error
+	InstantSnapshotConversionCompletionErr error
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -379,9 +379,9 @@ func (g *TestGCE) WaitForDiskOpCompletionWithRetry(ctx context.Context, op *comp
 	return g.DiskOpErr
 }
 
-// CreateStandardSnapshot fakes calls to the cloud APIs to create a standard snapshot.
-func (g *TestGCE) CreateStandardSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error) {
-	return g.CreateStandardSnapshotOp, g.CreateStandardSnapshotErr
+// CreateSnapshot fakes calls to the cloud APIs to create a standard snapshot.
+func (g *TestGCE) CreateSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error) {
+	return g.CreateSnapshotOp, g.CreateSnapshotErr
 }
 
 // ListSnapshots fakes calls to the cloud APIs to list snapshots.
@@ -404,6 +404,6 @@ func (g *TestGCE) SetLabels(ctx context.Context, project, zone, diskName, labelF
 	return g.SetLabelsOp, g.SetLabelsErr
 }
 
-func (g *TestGCE) WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
-	return g.InstantToStandardUploadCompletionErr
+func (g *TestGCE) WaitForInstantSnapshotConversionCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+	return g.InstantSnapshotConversionCompletionErr
 }

@@ -82,8 +82,8 @@ type (
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		WaitForSnapshotCreationCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
-		WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
-		CreateStandardSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error)
+		WaitForInstantSnapshotConversionCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
+		CreateSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error)
 	}
 
 	// ISGInterface is the testable equivalent for ISGService for ISG operations.
@@ -95,7 +95,7 @@ type (
 		WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error
 	}
 
-	standardSnapshotOp struct {
+	snapshotOp struct {
 		op   *compute.Operation
 		name string
 	}
@@ -451,6 +451,10 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 		case s.Password == "" && s.PasswordSecret == "":
 			return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + s.Usage())
 		}
+	}
+
+	if s.SnapshotType != "STANDARD" && s.SnapshotType != "ARCHIVE" {
+		return fmt.Errorf("invalid snapshot type, only STANDARD and ARCHIVE are supported")
 	}
 	if s.Project == "" {
 		s.Project = cp.GetProjectId()

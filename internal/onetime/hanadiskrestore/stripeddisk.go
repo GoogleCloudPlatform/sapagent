@@ -200,11 +200,11 @@ func cgPath(policies []string) string {
 func truncateName(ctx context.Context, src, suffix string) string {
 	const maxLength = 63
 
-	standardSnapshotName := src
+	snapshotName := src
 	snapshotNameMaxLength := maxLength - (len(suffix) + 1)
 	if len(src) > snapshotNameMaxLength {
-		standardSnapshotName = src[:snapshotNameMaxLength]
+		snapshotName = src[:snapshotNameMaxLength]
 	}
 
-	return standardSnapshotName + "-" + suffix
+	return snapshotName + "-" + suffix
 }

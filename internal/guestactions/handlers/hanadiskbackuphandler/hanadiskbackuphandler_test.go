@@ -52,6 +52,7 @@ func TestHANADiskBackupHandler(t *testing.T) {
 							"hdbuserstore-key": "test-hdbuserstore-key",
 							"project":          "test-project",
 							"source-disk-zone": "test-zone",
+							"snapshot-type":    "STANDARD",
 						},
 					},
 				},

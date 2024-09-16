@@ -381,12 +381,12 @@ func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, 
 	return nil
 }
 
-// CreateStandardSnapshot creates a new standard snapshot.
-func (g *GCE) CreateStandardSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error) {
+// CreateSnapshot creates a new standard snapshot.
+func (g *GCE) CreateSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error) {
 	snapshotsService := compute.NewSnapshotsService(g.service)
 	op, err := snapshotsService.Insert(project, snapshotReq).Do()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create standard snapshot: %v", err)
+		return nil, fmt.Errorf("failed to create snapshot: %v", err)
 	}
 	return op, nil
 }
@@ -477,9 +477,9 @@ func (g *GCE) waitForGlobalUploadCompletion(ctx context.Context, op *compute.Ope
 	return fmt.Errorf("snapshot %s not READY yet, snapshotStatus: %s, operationStatus: %s", snapshotName, ss.Status, op.Status)
 }
 
-// WaitForInstantToStandardSnapshotUploadCompletionWithRetry waits for the given compute operation to complete.
+// WaitForInstantSnapshotConversionCompletionWithRetry waits for the given compute operation to complete.
 // We sleep for 30s between retries a total 480 times => max_wait_duration = 30*480 = 4 Hours
-func (g *GCE) WaitForInstantToStandardSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
+func (g *GCE) WaitForInstantSnapshotConversionCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
 	constantBackoff := backoff.NewConstantBackOff(30 * time.Second)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 480), ctx)
 	return backoff.Retry(func() error { return g.waitForGlobalUploadCompletion(ctx, op, project, diskZone, snapshotName) }, bo)

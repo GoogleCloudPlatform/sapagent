@@ -217,11 +217,11 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "pd-1",
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     nil,
+					CreateSnapshotErr:     nil,
+					CreationCompletionErr: nil,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -256,11 +256,11 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "pd-1",
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     nil,
+					CreateSnapshotErr:     nil,
+					CreationCompletionErr: nil,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -293,12 +293,12 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "pd-1",
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr:            nil,
-					CreationCompletionErr:                nil,
-					InstantToStandardUploadCompletionErr: cmpopts.AnyError,
+					CreateSnapshotErr:                      nil,
+					CreationCompletionErr:                  nil,
+					InstantSnapshotConversionCompletionErr: cmpopts.AnyError,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -327,12 +327,12 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "pd-1",
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr:            nil,
-					CreationCompletionErr:                nil,
-					InstantToStandardUploadCompletionErr: nil,
+					CreateSnapshotErr:                      nil,
+					CreationCompletionErr:                  nil,
+					InstantSnapshotConversionCompletionErr: nil,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -364,12 +364,12 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "pd-1",
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr:            nil,
-					CreationCompletionErr:                nil,
-					InstantToStandardUploadCompletionErr: nil,
+					CreateSnapshotErr:                      nil,
+					CreationCompletionErr:                  nil,
+					InstantSnapshotConversionCompletionErr: nil,
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -492,8 +492,8 @@ func TestConvertISGtoSS(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
-					CreateStandardSnapshotOp:  nil,
-					CreateStandardSnapshotErr: cmpopts.AnyError,
+					CreateSnapshotOp:  nil,
+					CreateSnapshotErr: cmpopts.AnyError,
 				},
 				isgService: &mockISGService{
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
@@ -514,11 +514,11 @@ func TestConvertISGtoSS(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     nil,
+					CreateSnapshotErr:     nil,
+					CreationCompletionErr: nil,
 				},
 				isgService: &mockISGService{
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
@@ -535,7 +535,7 @@ func TestConvertISGtoSS(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, gotErr := tc.s.convertISGtoSS(context.Background(), defaultCloudProperties)
+			_, gotErr := tc.s.convertISGInstantSnapshots(context.Background(), defaultCloudProperties)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("ConvertISGtoSS() returned diff (-want +got):\n%s", diff)
 			}
@@ -561,8 +561,8 @@ func TestCreateGroupBackup(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
-					CreateStandardSnapshotOp:  nil,
-					CreateStandardSnapshotErr: cmpopts.AnyError,
+					CreateSnapshotOp:  nil,
+					CreateSnapshotErr: cmpopts.AnyError,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -572,11 +572,11 @@ func TestCreateGroupBackup(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     cmpopts.AnyError,
+					CreateSnapshotErr:     nil,
+					CreationCompletionErr: cmpopts.AnyError,
 				},
 			},
 			want: cmpopts.AnyError,
@@ -586,18 +586,18 @@ func TestCreateGroupBackup(t *testing.T) {
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
-					CreateStandardSnapshotOp: &compute.Operation{
+					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
 					},
-					CreateStandardSnapshotErr: nil,
-					CreationCompletionErr:     nil,
+					CreateSnapshotErr:     nil,
+					CreationCompletionErr: nil,
 				},
 			},
 			want: nil,
 		},
 	}
 
-	var ssOps []*standardSnapshotOp
+	var ssOps []*snapshotOp
 	for _, tc := range tests {
 		tc.s.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
@@ -914,32 +914,39 @@ func TestGenerateSHA(t *testing.T) {
 	}
 }
 
-func TestCreateStandardSnapshotName(t *testing.T) {
+func TestCreateSnapshotName(t *testing.T) {
 	tests := []struct {
 		name                string
+		s                   *Snapshot
 		instantSnapshotName string
 		timestamp           string
 		want                string
 	}{
 		{
-			name:                "withoutTruncate",
+			name: "withoutTruncate",
+			s: &Snapshot{
+				SnapshotType: "STANDARD",
+			},
 			instantSnapshotName: "instant-snapshot-name",
 			timestamp:           "1725745441298732387",
 			want:                "instant-snapshot-name-1725745441298732387-standard",
 		},
 		{
-			name:                "withTruncate",
+			name: "withTruncate",
+			s: &Snapshot{
+				SnapshotType: "ARCHIVE",
+			},
 			instantSnapshotName: "instant-snapshot-name-12345678912345678912345678912345678912345",
 			timestamp:           "1725745441298732387",
-			want:                "instant-snapshot-name-123456789123-1725745441298732387-standard",
+			want:                "instant-snapshot-name-1234567891234-1725745441298732387-archive",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := createStandardSnapshotName(tc.instantSnapshotName, tc.timestamp)
+			got := tc.s.createSnapshotName(tc.instantSnapshotName, tc.timestamp)
 			if got != tc.want {
-				t.Errorf("createStandardSnapshotName(%q) = %q, want: %q", tc.instantSnapshotName, got, tc.want)
+				t.Errorf("CreateSnapshotName(%q) = %q, want: %q", tc.instantSnapshotName, got, tc.want)
 			}
 		})
 	}
