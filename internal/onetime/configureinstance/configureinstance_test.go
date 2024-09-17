@@ -860,3 +860,55 @@ func TestRegenerateLine(t *testing.T) {
 		})
 	}
 }
+
+func TestSetDefaults(t *testing.T) {
+	tests := []struct {
+		name string
+		c    ConfigureInstance
+		want ConfigureInstance
+	}{
+		{
+			name: "EmptyStruct",
+			c:    ConfigureInstance{},
+			want: ConfigureInstance{
+				HyperThreading:  hyperThreadingOn,
+				OverrideVersion: overrideVersionLatest,
+				TimeoutSec:      300,
+			},
+		},
+		{
+			name: "NilValuesStruct",
+			c: ConfigureInstance{
+				HyperThreading:  "",
+				OverrideVersion: "",
+				TimeoutSec:      0,
+			},
+			want: ConfigureInstance{
+				HyperThreading:  hyperThreadingOn,
+				OverrideVersion: overrideVersionLatest,
+				TimeoutSec:      300,
+			},
+		},
+		{
+			name: "AlreadySet",
+			c: ConfigureInstance{
+				HyperThreading:  "already_set",
+				OverrideVersion: "already_set",
+				TimeoutSec:      123,
+			},
+			want: ConfigureInstance{
+				HyperThreading:  "already_set",
+				OverrideVersion: "already_set",
+				TimeoutSec:      123,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.c.setDefaults()
+			if !cmp.Equal(tc.want, tc.c, cmpopts.IgnoreUnexported(ConfigureInstance{})) {
+				t.Errorf("setDefaults() yielded %v, want: %v", tc.c, tc.want)
+			}
+		})
+	}
+}

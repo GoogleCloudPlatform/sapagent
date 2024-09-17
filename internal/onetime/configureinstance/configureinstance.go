@@ -210,10 +210,24 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (
 	if c.MachineType == "" {
 		c.MachineType = opts.CloudProperties.GetMachineType()
 	}
+	c.setDefaults()
 	if c.OverrideVersion != overrideVersionLatest {
 		log.CtxLogger(ctx).Warnf(`overrideVersion set to %q. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes.`, c.OverrideVersion)
 	}
 	return c.configureInstanceHandler(ctx)
+}
+
+// setDefaults sets default values. These will not be set by the flag defaults if coming from guestactions.
+func (c *ConfigureInstance) setDefaults() {
+	if c.HyperThreading == "" {
+		c.HyperThreading = hyperThreadingOn
+	}
+	if c.OverrideVersion == "" {
+		c.OverrideVersion = overrideVersionLatest
+	}
+	if c.TimeoutSec == 0 {
+		c.TimeoutSec = 300
+	}
 }
 
 // configureInstanceHandler checks and applies OS settings
