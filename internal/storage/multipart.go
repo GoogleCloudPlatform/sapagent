@@ -37,6 +37,7 @@ import (
 
 const (
 	defaultClientEndpoint = "storage.googleapis.com"
+	tokenScope            = "https://www.googleapis.com/auth/cloud-platform"
 )
 
 var (
@@ -338,21 +339,23 @@ func checkResponse(resp *http.Response) error {
 	return fmt.Errorf("%s; x-guploader-uploadid=%s", errStr, debugID)
 }
 
-// token fetches a token with default or service account credentials.
+// token fetches a token with default, service account or workload identity
+// federation credentials.
 func token(ctx context.Context, serviceAccount string, tokenGetter DefaultTokenGetter, jsonCredentialsGetter JSONCredentialsGetter) (*oauth2.Token, error) {
 	if serviceAccount != "" {
 		serviceAccountBytes, err := os.ReadFile(serviceAccount)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read service account file, err: %w", err)
 		}
-		cred, err := jsonCredentialsGetter(ctx, serviceAccountBytes, "https://www.googleapis.com/auth/cloud-platform")
+		cred, err := jsonCredentialsGetter(ctx, serviceAccountBytes, tokenScope)
 		if err != nil {
 			return nil, err
 		}
 		return cred.TokenSource.Token()
 	}
 
-	tokenSource, err := tokenGetter(ctx)
+	// TODO: Use token functions from go oauth2 libraries.
+	tokenSource, err := tokenGetter(ctx, tokenScope)
 	if err != nil {
 		return nil, err
 	}
