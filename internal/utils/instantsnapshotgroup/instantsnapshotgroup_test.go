@@ -576,8 +576,11 @@ func TestParseInstantSnapshotGroupURL(t *testing.T) {
 
 func TestDescribeInstantSnapshots(t *testing.T) {
 	describeInstantSnapshotsHTTPHandlerFunc := func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/test/error":
+		pageToken := r.URL.Query().Get("pageToken")
+		fmt.Println("page token is: ", pageToken)
+
+		switch {
+		case r.URL.Path == "/test/error":
 			hj, _ := w.(http.Hijacker)
 			conn, _, err := hj.Hijack()
 			if err != nil {
@@ -585,15 +588,38 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 				return
 			}
 			conn.Close()
-		case "/test/invalid_json":
+		case r.URL.Path == "/test/invalid_json":
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"status": "INVALID"`))
-		case "/test/parse_isg_failure":
+		case r.URL.Path == "/test/parse_isg_failure":
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"items": {"sourceInstantSnapshotGroup": "https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region"}}`))
-		case "/test/success":
+		case r.URL.Path == "/test/success":
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"items": [{"sourceInstantSnapshotGroup": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instantSnapshotGroups/test-isg"}]}`))
+		case r.URL.Path == "/test/failure_with_page_token" && pageToken == "test-failure-page-token":
+			hj, _ := w.(http.Hijacker)
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			conn.Close()
+		case r.URL.Path == "/test/failure_with_page_token":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"items": [{"sourceInstantSnapshotGroup": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instantSnapshotGroups/test-isg"}], "nextPageToken": "test-failure-page-token"}`))
+		case r.URL.Path == "/test/unmarshal_failure_with_page_token" && pageToken == "test-unmarshal-page-token":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status": "INVALID"`))
+		case r.URL.Path == "/test/unmarshal_failure_with_page_token":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"items": [{"sourceInstantSnapshotGroup": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instantSnapshotGroups/test-isg"}], "nextPageToken": "test-unmarshal-page-token"}`))
+		case r.URL.Path == "/test/success_with_page_token" && pageToken == "test-success-page-token":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"items": [{"sourceInstantSnapshotGroup": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instantSnapshotGroups/test-isg"}]}`))
+		case r.URL.Path == "/test/success_with_page_token":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"items": [{"sourceInstantSnapshotGroup": "https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instantSnapshotGroups/test-isg"}], "nextPageToken": "test-success-page-token"}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -667,9 +693,66 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "Success",
+			name: "SuccessWithNoPageToken",
 			s: &ISGService{
 				baseURL:    ts.URL + "/test/success",
+				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+					return &mockToken{
+						token: &oauth2.Token{
+							AccessToken: "access-token",
+						},
+						err: nil,
+					}, nil
+				},
+			},
+			project: "test-project",
+			zone:    "test-zone",
+			isg:     "test-isg",
+			wantErr: nil,
+		},
+		{
+			name: "FailureWithPageToken",
+			s: &ISGService{
+				baseURL:    ts.URL + "/test/failure_with_page_token",
+				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+					return &mockToken{
+						token: &oauth2.Token{
+							AccessToken: "access-token",
+						},
+						err: nil,
+					}, nil
+				},
+			},
+			project: "test-project",
+			zone:    "test-zone",
+			isg:     "test-isg",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailureWithPageTokenUnmarshal",
+			s: &ISGService{
+				baseURL:    ts.URL + "/test/unmarshal_failure_with_page_token",
+				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+					return &mockToken{
+						token: &oauth2.Token{
+							AccessToken: "access-token",
+						},
+						err: nil,
+					}, nil
+				},
+			},
+			project: "test-project",
+			zone:    "test-zone",
+			isg:     "test-isg",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessWithPageToken",
+			s: &ISGService{
+				baseURL:    ts.URL + "/test/success_with_page_token",
 				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
 				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{

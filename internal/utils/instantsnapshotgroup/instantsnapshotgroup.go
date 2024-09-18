@@ -56,10 +56,11 @@ type (
 
 	// ISResponse is the response for IS.
 	ISResponse struct {
-		Kind     string   `json:"kind"`
-		ID       string   `json:"id"`
-		Items    []ISItem `json:"items"`
-		SelfLink string   `json:"selfLink"`
+		Kind          string   `json:"kind"`
+		ID            string   `json:"id"`
+		NextPageToken string   `json:"nextPageToken"`
+		Items         []ISItem `json:"items"`
+		SelfLink      string   `json:"selfLink"`
 	}
 
 	// ISItem is the item for IS.
@@ -141,7 +142,7 @@ func token(ctx context.Context, tokenGetter defaultTokenGetter) (*oauth2.Token, 
 
 // GetResponse creates a new request with given method, url and data and returns the response.
 func (s *ISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
-	log.CtxLogger(ctx).Infow("GetResponse", "method", method, "baseURL", baseURL, "data", string(data))
+	log.CtxLogger(ctx).Debugw("GetResponse", "method", method, "baseURL", baseURL, "data", string(data))
 	req, err := http.NewRequest(method, baseURL, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request, err: %w", err)
@@ -272,8 +273,9 @@ func (s *ISGService) DescribeInstantSnapshots(ctx context.Context, project, zone
 	if s.baseURL == "" {
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshots", project, zone)
 	}
-	bodyBytes, err := s.GetResponse(ctx, "GET", s.baseURL, nil)
-	log.CtxLogger(ctx).Debugw("DescribeInstantSnapshots", "baseURL", s.baseURL, "bodyBytes", string(bodyBytes))
+	baseURL := s.baseURL
+	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
+	log.CtxLogger(ctx).Debugw("DescribeInstantSnapshots", "baseURL", baseURL, "bodyBytes", string(bodyBytes))
 	if err != nil {
 		s.baseURL = ""
 		return nil, fmt.Errorf("failed to list instant snapshots for given group snapshot, err: %w", err)
@@ -282,17 +284,36 @@ func (s *ISGService) DescribeInstantSnapshots(ctx context.Context, project, zone
 
 	var isItems []ISItem
 	var isResp ISResponse
+
 	if err := json.Unmarshal(bodyBytes, &isResp); err != nil {
 		return nil, err
 	}
-	log.CtxLogger(ctx).Debugw("Instant Snapshot Response", "instantSnapshots", isResp.Items)
-	for _, is := range isResp.Items {
-		isZone, isISG, err := parseInstantSnapshotGroupURL(is.SourceInstantSnapshotGroup)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse Instant Snapshot Group URL, err: %w", err)
+
+	pageToken := ""
+	for {
+		for _, is := range isResp.Items {
+			isZone, isISG, err := parseInstantSnapshotGroupURL(is.SourceInstantSnapshotGroup)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse Instant Snapshot Group URL, err: %w", err)
+			}
+			if isZone == zone && isISG == isg {
+				isItems = append(isItems, is)
+			}
 		}
-		if isZone == zone && isISG == isg {
-			isItems = append(isItems, is)
+
+		if isResp.NextPageToken != "" {
+			pageToken = isResp.NextPageToken
+		} else {
+			break
+		}
+		isResp = ISResponse{}
+
+		bodyBytes, err := s.GetResponse(ctx, "GET", baseURL+"?pageToken="+pageToken, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list instant snapshots for given group snapshot, err: %w", err)
+		}
+		if err := json.Unmarshal(bodyBytes, &isResp); err != nil {
+			return nil, err
 		}
 	}
 
