@@ -469,6 +469,33 @@
         ]
     },
     {
+        "name": "data_snapshot_state_queries",
+        "sql": "select (CASE WHEN STATE_NAME = 'successful' THEN 1 ELSE 0 END), ENTRY_TYPE_NAME, UTC_END_TIME AS last_snapshot_time, BACKUP_ID from M_BACKUP_CATALOG where ENTRY_TYPE_NAME LIKE '%data snapshot%' ORDER BY LAST_SNAPSHOT_TIME DESC LIMIT 1",
+        "columns": [
+            {
+                "name": "state_name",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "backups/snapshot"
+            },
+            {
+                "name": "entry_type_name",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "last_snapshot_time",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "backup_id",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            }
+        ]
+    },
+    {
         "name": "log_backup_state_queries",
         "sql": "WITH RecentLogBackups AS ( SELECT TOP 20 * FROM M_BACKUP_CATALOG WHERE ENTRY_TYPE_NAME = 'log backup' ) SELECT IFNULL(SUM(CASE WHEN STATE_NAME = 'successful' THEN 1 ELSE 0 END), 0) AS successful_backups, IFNULL(SUM(CASE WHEN STATE_NAME = 'failed' THEN 1 ELSE 0 END), 0) AS failed_backups FROM RecentLogBackups;",
         "columns": [
