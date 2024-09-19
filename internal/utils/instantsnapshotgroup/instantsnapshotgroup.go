@@ -132,8 +132,10 @@ func (s *ISGService) NewService() error {
 	return nil
 }
 
+// token fetches a token with default or workload identity federation credentials.
 func token(ctx context.Context, tokenGetter defaultTokenGetter) (*oauth2.Token, error) {
-	tokenSource, err := tokenGetter(ctx)
+	tokenScope := "https://www.googleapis.com/auth/cloud-platform"
+	tokenSource, err := tokenGetter(ctx, tokenScope)
 	if err != nil {
 		return nil, err
 	}
