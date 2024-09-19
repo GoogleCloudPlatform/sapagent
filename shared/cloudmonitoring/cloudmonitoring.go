@@ -225,8 +225,7 @@ func SendTimeSeries(ctx context.Context, timeSeries []*mrpb.TimeSeries, timeSeri
 
 // sendBatch sends one batch of metrics to cloud monitoring using an API call with retries. Returns an error in case of failures.
 func sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, timeSeriesCreator TimeSeriesCreator, bo *BackOffIntervals, projectID string) error {
-	log.CtxLogger(ctx).Infow("Sending batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries))
-
+	log.CtxLogger(ctx).Debugw("Sending a batch of metrics to cloud monitoring.", "numberofmetrics", len(batchTimeSeries), "metrics", batchTimeSeries)
 	req := &mpb.CreateTimeSeriesRequest{
 		Name:       fmt.Sprintf("projects/%s", projectID),
 		TimeSeries: pruneBatch(batchTimeSeries),
