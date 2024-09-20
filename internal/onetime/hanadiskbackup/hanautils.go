@@ -34,6 +34,7 @@ func (s *Snapshot) markSnapshotAsSuccessful(ctx context.Context, run queryFunc, 
 		s.oteLogger.LogUsageError(usagemetrics.DiskSnapshotDoneDBNotComplete)
 		return err
 	}
+	s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("HANA snapshot - %s marked as SUCCESSFUL with comment - %s", snapshotID, snapshotName))
 	return nil
 }
 
