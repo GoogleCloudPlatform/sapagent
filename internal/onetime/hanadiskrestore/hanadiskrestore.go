@@ -130,7 +130,14 @@ func (*Restorer) Usage() string {
   [-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
   [-send-metrics-to-monitoring]=<true|false>
   [csek-key-file]=<path-to-key-file>]
-  [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
+  [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
+
+	For single disk restore:
+	hanadiskrestore -sid=<HANA SID> -source-snapshot=<snapshot-name> -data-disk-name=<disk-name> -data-disk-zone=<disk-zone>
+
+	For multi-disk restore:
+	hanadiskrestore -sid=<HANA SID> -group-snapshot=<group-snapshot-name>
+	` + "\n"
 }
 
 // SetFlags implements the subcommand interface for hanadiskrestore.

@@ -183,6 +183,16 @@ func (*Snapshot) Usage() string {
 	[-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
 	[-confirm-data-snapshot-after-create=<true|false>]
 	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
+
+	Authentication Flag Combinations:
+	1. -hana-db-user=<HANA DB User> [-password=<passwd> | -password-secret=<secret-name>] -host=<hostname> -port=<port-number>
+	2. -hdbuserstore-key=<userstore-key>
+
+	For single disk backup:
+	hanadiskbackup -sid=<HANA SID> [Authentication Flags] -snapshot-name=<snapshot-name> -source-disk=<disk-name> -source-disk-zone=<disk-zone> -source-disk-key-file=<path-to-key-file>
+
+	For multi-disk backup:
+	hanadiskbackup -sid=<HANA SID> [Authentication Flags] -group-snapshot-name=<group-snapshot-name> -snapshot-type=<snapshot-type>
 	` + "\n"
 }
 
@@ -198,7 +208,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Disk, "source-disk", "", "name of the disk from which you want to create a snapshot (optional). Default: disk used to store /hana/data/")
 	fs.StringVar(&s.DiskZone, "source-disk-zone", "", "zone of the disk from which you want to create a snapshot. (optional) Default: Same zone as current instance")
 	fs.BoolVar(&s.FreezeFileSystem, "freeze-file-system", false, "Freeze file system. (optional) Default: false")
-	fs.StringVar(&s.Host, "host", "localhost", "HANA host. (optional)")
+	fs.StringVar(&s.Host, "host", "localhost", "HANA host. (optional) Default: localhost")
 	fs.StringVar(&s.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.BoolVar(&s.AbandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
 	fs.BoolVar(&s.SkipDBSnapshotForChangeDiskType, "skip-db-snapshot-for-change-disk-type", false, "Skip DB snapshot for change disk type, (optional) Default: false")
