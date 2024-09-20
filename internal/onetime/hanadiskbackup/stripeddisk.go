@@ -127,8 +127,9 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 
 func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	if s.groupSnapshotName == "" {
-		timestamp := time.Now().UTC().UnixMilli()
-		s.groupSnapshotName = s.cgName + fmt.Sprintf("-%d", timestamp)
+		t := time.Now()
+		s.groupSnapshotName = fmt.Sprintf("%s-%d%02d%02d-%02d%02d%02d",
+			s.cgName, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
 	}
 	log.CtxLogger(ctx).Infow("Creating Instant snapshot group", "disks", s.disks, "disks zone", s.DiskZone, "groupSnapshotName", s.groupSnapshotName)
 
