@@ -180,6 +180,9 @@ message SapDiscovery {
 
       // App server instances on the host
       repeated AppInstance app_instances = 5;
+
+      // Instance is part of a DR site.
+      bool is_dr_site = 6;
     }
 
     // A set of properties only applying to instance type resources.
