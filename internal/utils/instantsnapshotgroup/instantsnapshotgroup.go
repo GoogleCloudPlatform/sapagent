@@ -51,7 +51,8 @@ type (
 		httpClient  httpClient
 		tokenGetter defaultTokenGetter
 		baseURL     string
-		backoff     backoff.BackOff
+		backoff     *backoff.ExponentialBackOff
+		maxRetries  int
 	}
 
 	// ISResponse is the response for IS.
@@ -111,7 +112,7 @@ var (
 	}
 )
 
-func setupBackoff() backoff.BackOff {
+func setupBackoff() *backoff.ExponentialBackOff {
 	b := &backoff.ExponentialBackOff{
 		InitialInterval:     2 * time.Second,
 		RandomizationFactor: 0,
@@ -129,6 +130,7 @@ func (s *ISGService) NewService() error {
 	s.httpClient = defaultNewClient(10*time.Minute, defaultTransport())
 	s.tokenGetter = google.DefaultTokenSource
 	s.backoff = setupBackoff()
+	s.maxRetries = 3
 	return nil
 }
 
@@ -208,17 +210,32 @@ func (s *ISGService) CreateISG(ctx context.Context, project, zone string, data [
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
 	}
 
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+	bo.Reset()
+
+	var i int
 	var bodyBytes []byte
 	var err error
 	if err = backoff.Retry(func() error {
 		var getResponseErr error
 		bodyBytes, getResponseErr = s.GetResponse(ctx, "POST", s.baseURL, data)
 		if getResponseErr != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(getResponseErr)
+			}
 			return getResponseErr
 		}
 
 		return nil
-	}, s.backoff); err != nil {
+	}, bo); err != nil {
 		s.baseURL = ""
 		return fmt.Errorf("failed to initiate creation of group snapshot, err: %w", err)
 	}
@@ -329,16 +346,31 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
 	}
 
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+	bo.Reset()
+
+	var i int
 	var bodyBytes []byte
 	if err := backoff.Retry(func() error {
 		var getResponseErr error
 		bodyBytes, getResponseErr = s.GetResponse(ctx, "DELETE", s.baseURL, nil)
 		if getResponseErr != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(getResponseErr)
+			}
 			return getResponseErr
 		}
 
 		return nil
-	}, s.backoff); err != nil {
+	}, bo); err != nil {
 		s.baseURL = ""
 		return fmt.Errorf("failed to initiate deletion of Instant Snapshot Group, err: %w", err)
 	}
@@ -350,9 +382,19 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
 	}
 
+	bo.Reset()
+	i = 0
 	return backoff.Retry(func() error {
-		return s.isgExists(ctx, project, zone, op.Name)
-	}, s.backoff)
+		if err := s.isgExists(ctx, project, zone, op.Name); err != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(s.isgExists(ctx, project, zone, op.Name))
+			}
+			return err
+		}
+
+		return nil
+	}, bo)
 }
 
 func (s *ISGService) waitForISGUploadCompletion(ctx context.Context, baseURL string) error {
@@ -370,7 +412,26 @@ func (s *ISGService) waitForISGUploadCompletion(ctx context.Context, baseURL str
 // WaitForISGUploadCompletionWithRetry waits for the given snapshot creation operation
 // to complete with constant backoff retries.
 func (s *ISGService) WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error {
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+	bo.Reset()
+
+	var i int
 	return backoff.Retry(func() error {
-		return s.waitForISGUploadCompletion(ctx, baseURL)
-	}, s.backoff)
+		if err := s.waitForISGUploadCompletion(ctx, baseURL); err != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(err)
+			}
+			return err
+		}
+
+		return nil
+	}, bo)
 }

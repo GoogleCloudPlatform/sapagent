@@ -47,10 +47,17 @@ func (m *mockToken) Token() (*oauth2.Token, error) {
 	return m.token, m.err
 }
 
-var constantBackoff = func() backoff.BackOff {
-	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
-	return backoff.WithMaxRetries(constantBackoff, 1)
-}()
+var exponentialBackoff = func() *backoff.ExponentialBackOff {
+	expBackoff := &backoff.ExponentialBackOff{
+		InitialInterval:     2 * time.Second,
+		RandomizationFactor: 0,
+		Multiplier:          2,
+		MaxInterval:         6 * time.Second,
+		MaxElapsedTime:      10 * time.Second,
+		Clock:               backoff.SystemClock,
+	}
+	return expBackoff
+}
 
 func TestSetupBackoff(t *testing.T) {
 	var b backoff.BackOff
@@ -156,6 +163,7 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 						err:   cmpopts.AnyError,
 					}, cmpopts.AnyError
 				},
+				maxRetries: 3,
 			},
 			method:  "GET",
 			baseURL: ts.URL + "/test/error",
@@ -173,6 +181,7 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			method:  "GET",
 			baseURL: ts.URL + "/test/error",
@@ -190,6 +199,7 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			baseURL: ts.URL + "/test/success",
 			wantErr: nil,
@@ -253,6 +263,7 @@ func TestGetProcessStatus(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			baseURL:    ts.URL + "/test/error",
 			wantStatus: "",
@@ -270,6 +281,7 @@ func TestGetProcessStatus(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			baseURL:    ts.URL + "/test/invalid_json",
 			wantStatus: "",
@@ -287,6 +299,7 @@ func TestGetProcessStatus(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			baseURL:    ts.URL + "/test/no_status",
 			wantStatus: "",
@@ -358,7 +371,7 @@ func TestCreateISGErrors(t *testing.T) {
 			name: "RequestError",
 			s: &ISGService{
 				baseURL:    ts.URL + "/test/error",
-				backoff:    constantBackoff,
+				backoff:    exponentialBackoff(),
 				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
 				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
@@ -368,6 +381,7 @@ func TestCreateISGErrors(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -378,7 +392,7 @@ func TestCreateISGErrors(t *testing.T) {
 			name: "Success",
 			s: &ISGService{
 				baseURL:    ts.URL + "/test/success",
-				backoff:    constantBackoff,
+				backoff:    exponentialBackoff(),
 				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
 				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
@@ -456,6 +470,7 @@ func TestIsgExistsErrors(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -475,6 +490,7 @@ func TestIsgExistsErrors(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -494,6 +510,7 @@ func TestIsgExistsErrors(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -648,6 +665,7 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -667,6 +685,7 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -686,6 +705,7 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -705,6 +725,7 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -724,6 +745,7 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -743,6 +765,7 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -817,7 +840,7 @@ func TestDeleteISGErrors(t *testing.T) {
 			name: "RequestError",
 			s: &ISGService{
 				baseURL:    ts.URL + "/test/error",
-				backoff:    constantBackoff,
+				backoff:    exponentialBackoff(),
 				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
 				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
@@ -827,6 +850,7 @@ func TestDeleteISGErrors(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -837,7 +861,7 @@ func TestDeleteISGErrors(t *testing.T) {
 			name: "InvalidJSON",
 			s: &ISGService{
 				baseURL:    ts.URL + "/test/invalid_json",
-				backoff:    constantBackoff,
+				backoff:    exponentialBackoff(),
 				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
 				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
@@ -847,6 +871,7 @@ func TestDeleteISGErrors(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			project: "test-project",
 			zone:    "test-zone",
@@ -892,7 +917,7 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 		{
 			name: "Error",
 			s: &ISGService{
-				backoff:    constantBackoff,
+				backoff:    exponentialBackoff(),
 				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
 				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
@@ -902,6 +927,7 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 						err: nil,
 					}, nil
 				},
+				maxRetries: 3,
 			},
 			baseURL: ts.URL + "/test/error",
 			wantErr: cmpopts.AnyError,
@@ -909,7 +935,7 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 		{
 			name: "Success",
 			s: &ISGService{
-				backoff:    constantBackoff,
+				backoff:    exponentialBackoff(),
 				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
 				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
