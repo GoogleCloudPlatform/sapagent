@@ -246,7 +246,7 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 func requestProperties() (*CloudProperties, error) {
 	body, err := get(cloudPropertiesURI, "recursive=true")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get cloud properties from metadata server: %v", err)
 	}
 	resBodyJSON := &metadataServerResponse{}
 	if err = json.Unmarshal(body, resBodyJSON); err != nil {
