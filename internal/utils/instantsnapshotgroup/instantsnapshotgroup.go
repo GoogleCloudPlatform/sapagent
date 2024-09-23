@@ -277,12 +277,14 @@ func (s *ISGService) isgExists(ctx context.Context, project, zone, opName string
 	if err := json.Unmarshal(bodyBytes, &op); err != nil {
 		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
 	}
-	log.CtxLogger(ctx).Debugw("Operation", "status", op.Status, "op", op)
-	if op.Status == "DELETING" {
-		return fmt.Errorf("Instant Snapshot Group deletion in progress")
+	if op.Error != nil {
+		log.CtxLogger(ctx).Errorw("isgExists Error", "op", op)
+		return fmt.Errorf("failed to delete Instant Snapshot Group, err: %s", op.Error.Errors[0].Message)
 	}
-	if op.Status == "READY" {
-		return nil
+
+	log.CtxLogger(ctx).Debugw("Operation", "status", op.Status, "op", op)
+	if op.Status != "DONE" {
+		return fmt.Errorf("Instant Snapshot Group deletion in progress")
 	}
 	return nil
 }
@@ -380,6 +382,11 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 	op := compute.Operation{}
 	if err := json.Unmarshal(bodyBytes, &op); err != nil {
 		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+
+	if op.Error != nil {
+		log.CtxLogger(ctx).Errorw("DeleteISG Error", "op.Error", op.Error)
+		return fmt.Errorf("failed to delete Instant Snapshot Group, err: %s", op.Error.Errors[0].Message)
 	}
 
 	bo.Reset()

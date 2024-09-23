@@ -439,9 +439,12 @@ func TestIsgExistsErrors(t *testing.T) {
 		case "/test/deleting_status":
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"status": "DELETING"}`))
+		case "/test/operation_err":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status": "DONE", "error": {"errors": [{"message": "test-error"}]}}`))
 		case "/test/success":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status": "RUNNING"}`))
+			w.Write([]byte(`{"status": "DONE"}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

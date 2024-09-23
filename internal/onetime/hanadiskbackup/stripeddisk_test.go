@@ -281,7 +281,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "1234", nil
 			},
-			wantErr: cmpopts.AnyError,
+			wantErr: nil,
 		},
 		{
 			name: "SnapshotUploadFailure",
