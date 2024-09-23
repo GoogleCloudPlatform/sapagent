@@ -177,7 +177,7 @@ func (*Snapshot) Usage() string {
 	[-source-disk=<disk-name>] [-source-disk-zone=<disk-zone>] [-host=<hostname>]
 	[-project=<project-name>] [-password=<passwd> | -password-secret=<secret-name>]
 	[-hdbuserstore-key=<userstore-key>] [-abandon-prepared=<true|false>]
-	[-send-status-to-monitoring]=<true|false>] [-source-disk-key-file=<path-to-key-file>]
+	[-send-metrics-to-monitoring]=<true|false>] [-source-disk-key-file=<path-to-key-file>]
 	[-storage-location=<storage-location>] [-snapshot-description=<description>]
 	[-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>] [-group-snapshot-name=<group-snapshot-name>]
 	[-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
