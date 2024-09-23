@@ -182,6 +182,7 @@ func (*Snapshot) Usage() string {
 	[-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>] [-group-snapshot-name=<group-snapshot-name>]
 	[-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
 	[-confirm-data-snapshot-after-create=<true|false>]
+	[-instance-id=<instance-id>]
 	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
 
 	Authentication Flag Combinations:

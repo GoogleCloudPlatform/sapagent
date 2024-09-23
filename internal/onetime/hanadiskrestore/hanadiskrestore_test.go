@@ -1431,7 +1431,7 @@ func TestSynopsisForRestorer(t *testing.T) {
 func TestSetFlagsForSnapshot(t *testing.T) {
 	snapshot := Restorer{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana", "group-snapshot"}
+	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana", "group-snapshot-name"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

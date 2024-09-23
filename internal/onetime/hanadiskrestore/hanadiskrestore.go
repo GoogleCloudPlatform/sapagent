@@ -125,18 +125,18 @@ func (*Restorer) Synopsis() string {
 func (*Restorer) Usage() string {
 	return `Usage: hanadiskrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
   -data-disk-name=<disk-name> -data-disk-zone=<disk-zone> -new-disk-name=<name-less-than-63-chars>
+	[-group-snapshot-name=<group-snapshot-name>] [labels-on-detached-disk="key1=value1,key2=value2"]
   [-project=<project-name>] [-new-disk-type=<Type of the new disk>] [-force-stop-hana=<true|false>]
   [-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
   [-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
-  [-send-metrics-to-monitoring]=<true|false>
-  [csek-key-file]=<path-to-key-file>]
+  [-send-metrics-to-monitoring]=<true|false> [csek-key-file]=<path-to-key-file>]
   [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
 
 	For single disk restore:
 	hanadiskrestore -sid=<HANA SID> -source-snapshot=<snapshot-name> -data-disk-name=<disk-name> -data-disk-zone=<disk-zone>
 
 	For multi-disk restore:
-	hanadiskrestore -sid=<HANA SID> -group-snapshot=<group-snapshot-name>
+	hanadiskrestore -sid=<HANA SID> -group-snapshot-name=<group-snapshot-name>
 	` + "\n"
 }
 
@@ -145,8 +145,8 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.Sid, "sid", "", "HANA sid. (required)")
 	fs.StringVar(&r.DataDiskName, "data-disk-name", "", "Current disk name. (optional) Default: Disk backing up /hana/data")
 	fs.StringVar(&r.DataDiskZone, "data-disk-zone", "", "Current disk zone. (optional) Default: Same zone as current instance")
-	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot must be provided")
-	fs.StringVar(&r.GroupSnapshot, "group-snapshot", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or group-snapshot must be provided")
+	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
+	fs.StringVar(&r.GroupSnapshot, "group-snapshot-name", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
 	fs.StringVar(&r.NewdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
@@ -205,7 +205,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
-		return fmt.Errorf("either source-snapshot or group-snapshot must be provided, not both. Usage: %s", r.Usage())
+		return fmt.Errorf("either source-snapshot or group-snapshot-name must be provided, not both. Usage: %s", r.Usage())
 	} else if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
