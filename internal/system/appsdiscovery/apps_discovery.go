@@ -1223,6 +1223,7 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 		log.CtxLogger(ctx).Infow("Error executing HDB version command", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", "", res.Error
 	}
+	log.CtxLogger(ctx).Debugw("HDB version output", "stdOut", res.StdOut)
 
 	match := hanaVersionRegex.FindStringSubmatch(res.StdOut)
 	if len(match) < 2 {
@@ -1238,6 +1239,7 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 
 	version := fmt.Sprintf("HANA %d.%d Rev %d", majorVersion, minorVersion, revision)
 	s := fmt.Sprintf("%d.%d SPS%02d Rev%d.%02d", majorVersion, minorVersion, int(revision/10), revision, revisionMinor)
+	log.CtxLogger(ctx).Debugw("HANA version", "version", version, "s", s)
 	return version, s, nil
 }
 
