@@ -220,7 +220,7 @@ func TestMessageHandler(t *testing.T) {
 								AgentCommand: &gpb.AgentCommand{Command: "version"},
 							},
 						},
-						Stdout:   fmt.Sprintf("Google Cloud Agent for SAP version %s.%s", configuration.AgentVersion, configuration.AgentBuildChange),
+						Stdout:   fmt.Sprintf("Google Cloud Agent for SAP version %s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
 						Stderr:   "",
 						ExitCode: 0,
 					},

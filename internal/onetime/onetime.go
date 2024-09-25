@@ -177,10 +177,10 @@ func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zap
 func NewComputeService(ctx context.Context) (cs *compute.Service, err error) {
 	client, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
 	if err != nil {
-		return nil, fmt.Errorf("failure creating compute HTTP client" + err.Error())
+		return nil, fmt.Errorf("%s", "failure creating compute HTTP client" + err.Error())
 	}
 	if cs, err = compute.NewService(ctx, option.WithHTTPClient(client)); err != nil {
-		return nil, fmt.Errorf("failure creating compute service" + err.Error())
+		return nil, fmt.Errorf("%s", "failure creating compute service" + err.Error())
 	}
 	return cs, nil
 }
@@ -194,7 +194,7 @@ func HelpCommand(f *flag.FlagSet) subcommands.ExitStatus {
 
 // GetAgentVersion returns the current version of the agent as a string.
 func GetAgentVersion() string {
-	return fmt.Sprintf("Google Cloud Agent for SAP version %s.%s", configuration.AgentVersion, configuration.AgentBuildChange)
+	return fmt.Sprintf("Google Cloud Agent for SAP version %s-%s", configuration.AgentVersion, configuration.AgentBuildChange)
 }
 
 // PrintAgentVersion prints the current version of the agent to stdout.
