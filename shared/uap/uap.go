@@ -150,21 +150,14 @@ func CommunicateWithUAP(ctx context.Context, endpoint string, channel string, me
 	// Reset backoff once we successfully connected.
 	eBackoff.Reset()
 
-	// Establish a way for the method to be interrupted for unit testing purposes.
-	done := false
-	go func() {
-		select {
-		case <-ctx.Done():
-			log.CtxLogger(ctx).Info("Context is done. Setting done to true.")
-			done = true
-		}
-	}()
-
 	var lastErr error
 	for {
-		if done {
-			log.CtxLogger(ctx).Info("Done is true. Returning.")
+		// Return most recent error if context is cancelled. Useful for unit testing purposes.
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("Context is done. Returning.")
 			return lastErr
+		default:
 		}
 		// listen for messages
 		msg := listenForMessages(ctx, conn, endpoint, channel)
