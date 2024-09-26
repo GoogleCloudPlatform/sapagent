@@ -45,6 +45,7 @@ type timeSeriesKey struct {
 // BackOffIntervals holds the initial intervals for the different back off mechanisms.
 type BackOffIntervals struct {
 	LongExponential, ShortConstant time.Duration
+	Retries                        uint64
 }
 
 // Defaults for the different back off intervals.
@@ -60,6 +61,7 @@ func NewBackOffIntervals(longExponential, shortConstant time.Duration) *BackOffI
 	return &BackOffIntervals{
 		LongExponential: longExponential,
 		ShortConstant:   shortConstant,
+		Retries:         2,
 	}
 }
 
@@ -68,6 +70,16 @@ func NewDefaultBackOffIntervals() *BackOffIntervals {
 	return &BackOffIntervals{
 		LongExponential: DefaultLongExponentialBackOffInterval,
 		ShortConstant:   DefaultShortConstantBackOffInterval,
+		Retries:         2,
+	}
+}
+
+// NoBackOff is a constructor for the back off intervals with no backoff.
+func NoBackOff() *BackOffIntervals {
+	return &BackOffIntervals{
+		LongExponential: 0,
+		ShortConstant:   0,
+		Retries:         0,
 	}
 }
 
@@ -100,7 +112,7 @@ func CreateTimeSeriesWithRetry(ctx context.Context, client TimeSeriesCreator, re
 			return err
 		}
 		return nil
-	}, ShortConstantBackOffPolicy(ctx, bo.ShortConstant, 2))
+	}, ShortConstantBackOffPolicy(ctx, bo.ShortConstant, bo.Retries))
 
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("CreateTimeSeries retry limit exceeded", "request", req)
@@ -231,7 +243,10 @@ func sendBatch(ctx context.Context, batchTimeSeries []*mrpb.TimeSeries, timeSeri
 		TimeSeries: pruneBatch(batchTimeSeries),
 	}
 
-	return CreateTimeSeriesWithRetry(ctx, timeSeriesCreator, req, bo)
+	if bo != nil && bo.Retries > 0 {
+		return CreateTimeSeriesWithRetry(ctx, timeSeriesCreator, req, bo)
+	}
+	return timeSeriesCreator.CreateTimeSeries(ctx, req)
 }
 
 func pruneBatch(batchTimeSeries []*mrpb.TimeSeries) []*mrpb.TimeSeries {
