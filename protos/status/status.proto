@@ -1,0 +1,60 @@
+/*
+Copyright 2024 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+syntax = "proto3";
+
+package sapagent.protos.status;
+
+import "google/protobuf/wrappers.proto";
+
+
+
+message AgentStatus {
+  string installed_version = 1;
+  string available_version = 2;
+  bool systemd_service_enabled = 3;
+  bool systemd_service_running = 4;
+  string configuration_file_path = 5;
+  bool configuration_valid = 6;
+  string configuration_error_message = 7;
+  repeated ServiceStatus services = 8;
+  repeated Reference references = 9;
+}
+
+message ServiceStatus {
+  string name = 1;
+  bool enabled = 2;
+  bool fully_functional = 3;
+  string error_message = 4;
+  repeated IAMRole iam_roles = 5;
+  repeated ConfigValue config_values = 6;
+}
+
+message IAMRole {
+  string name = 1;
+  string role = 2;
+  bool granted = 3;
+}
+
+message ConfigValue {
+  string name = 1;
+  string value = 2;
+  bool is_default = 3;
+}
+
+message Reference {
+  string name = 1;
+  string url = 2;
+}
