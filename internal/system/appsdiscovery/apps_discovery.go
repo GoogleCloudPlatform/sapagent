@@ -1214,9 +1214,8 @@ func (d *SapDiscovery) discoverHANAVersion(ctx context.Context, app *sappb.SAPIn
 	sidAdm := fmt.Sprintf("%sadm", sidLower)
 	path := fmt.Sprintf("/usr/sap/%s/HDB%s/HDB", sidUpper, app.GetInstanceNumber())
 	p := commandlineexecutor.Params{
-		Executable: path,
-		Args:       []string{"version"},
-		User:       sidAdm,
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", sidAdm, path, "version"},
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {

@@ -1847,13 +1847,13 @@ func TestDiscoverHANA(t *testing.T) {
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			switch params.Executable {
 			case "sudo":
+				if strings.Contains(params.Args[3], "HDB") {
+					return defaultHANAVersionResult
+				}
 				return landscapeSingleNodeResult
 			case "df":
 				return hanaMountResult
 			default:
-				if strings.Contains(params.Executable, "HDB") {
-					return defaultHANAVersionResult
-				}
 			}
 			return commandlineexecutor.Result{
 				Error:    errors.New("Unexpected command"),
@@ -1900,13 +1900,13 @@ func TestDiscoverHANA(t *testing.T) {
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			switch params.Executable {
 			case "sudo":
+				if strings.Contains(params.Args[3], "HDB") {
+					return defaultHANAVersionResult
+				}
 				return landscapeMultipleNodesResult
 			case "df":
 				return hanaMountResult
 			default:
-				if strings.Contains(params.Executable, "HDB") {
-					return defaultHANAVersionResult
-				}
 			}
 			return commandlineexecutor.Result{
 				Error:    errors.New("Unexpected command"),
@@ -1953,13 +1953,13 @@ func TestDiscoverHANA(t *testing.T) {
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			switch params.Executable {
 			case "sudo":
+				if strings.Contains(params.Args[3], "HDB") {
+					return defaultHANAVersionResult
+				}
 				return landscapeSingleNodeResult
 			case "df":
 				return hanaMountResult
 			default:
-				if strings.Contains(params.Executable, "HDB") {
-					return defaultHANAVersionResult
-				}
 			}
 			return commandlineexecutor.Result{
 				Error:    errors.New("Unexpected command"),
@@ -2033,13 +2033,13 @@ func TestDiscoverHANA(t *testing.T) {
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			switch params.Executable {
 			case "sudo":
+				if strings.Contains(params.Args[3], "HDB") {
+					return defaultHANAVersionResult
+				}
 				return landscapeMultipleNodesResult
 			case "df":
 				return hanaMountResult
 			default:
-				if strings.Contains(params.Executable, "HDB") {
-					return defaultHANAVersionResult
-				}
 			}
 			return commandlineexecutor.Result{
 				Error:    errors.New("Unexpected command"),
@@ -2390,8 +2390,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
-				Executable: "/usr/sap/ABC/HDB00/HDB",
-				User:       "abcadm",
+				// HDB Version
+				Executable: "sudo",
 			}},
 			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
 		},
@@ -2710,15 +2710,15 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "df",
 			}, {
-				Executable: "/usr/sap/ABC/HDB00/HDB",
-				User:       "abcadm",
+				// HDB Version
+				Executable: "sudo",
 			}, {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
 			}, {
-				Executable: "/usr/sap/DEF/HDB00/HDB",
-				User:       "defadm",
+				// HDB Version
+				Executable: "sudo",
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult,
@@ -2824,9 +2824,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
-				Executable: "/usr/sap/DEH/HDB00/HDB",
-				Args:       []string{"version"},
-				User:       "dehadm",
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "dehadm", "/usr/sap/DEH/HDB00/HDB", "version"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
@@ -2937,9 +2936,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
-				Executable: "/usr/sap/DEH/HDB00/HDB",
-				Args:       []string{"version"},
-				User:       "dehadm",
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "dehadm", "/usr/sap/DEH/HDB00/HDB", "version"},
 			}, {
 				Executable: "grep",
 				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
@@ -3100,9 +3098,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "df",
 				Args:       []string{"-h"},
 			}, {
-				Executable: "/usr/sap/DB2/HDB00/HDB",
-				Args:       []string{"version"},
-				User:       "db2adm",
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "db2adm", "/usr/sap/DB2/HDB00/HDB", "version"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
