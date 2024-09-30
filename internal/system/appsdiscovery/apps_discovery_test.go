@@ -1034,7 +1034,23 @@ func TestDiscoverASCS(t *testing.T) {
 					StdOut: "some extra line\nrdisp/mshost = ",
 				}
 			},
-			want: "",
+			wantErr: cmpopts.AnyError,
+		}, {
+			name: "commentInProfile",
+			execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "#rdisp/mshost = some-other-ascs\nrdisp/mshost = some-test-ascs",
+				}
+			},
+			want: "some-test-ascs",
+		}, {
+			name: "nonHostnameInProfile",
+			execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "some extra line\nrdisp/mshost = not actually a host name",
+				}
+			},
+			wantErr: cmpopts.AnyError,
 		}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

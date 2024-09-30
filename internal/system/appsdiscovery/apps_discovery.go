@@ -46,6 +46,7 @@ var (
 	netweaverKernelRegex      = regexp.MustCompile(`kernel release\s+([0-9]+)`)
 	netweaverPatchNumberRegex = regexp.MustCompile(`patch number\s+([0-9]+)`)
 	sapDbHostRegex            = regexp.MustCompile(`SAPDBHOST\s+=\s+(.*)`)
+	hostnameRegex             = regexp.MustCompile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
 )
 
 const (
@@ -1110,12 +1111,20 @@ func (d *SapDiscovery) discoverASCS(ctx context.Context, sid string) (string, er
 
 	lines := strings.Split(res.StdOut, "\n")
 	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			// Commented line, skip
+			continue
+		}
 		parts := strings.Split(line, "=")
 		if len(parts) < 2 {
 			continue
 		}
 
-		return strings.TrimSpace(parts[1]), nil
+		part := strings.TrimSpace(parts[1])
+		if !hostnameRegex.MatchString(part) {
+			continue
+		}
+		return part, nil
 	}
 
 	return "", errors.New("no ASCS found in default profile")
