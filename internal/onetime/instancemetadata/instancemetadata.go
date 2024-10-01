@@ -42,12 +42,19 @@ type (
 		Help          bool               `json:"help,string"`
 		OSReleasePath string             `json:"os-release-path"`
 		oteLogger     *onetime.OTELogger `json:"-"`
-		RC            ReadCloser         `json:"-"`
+		// RC is a field of type ReadCloser, a custom implementation can be provided if needed else the
+		// default implementation will be used.
+		RC ReadCloser `json:"-"`
 	}
 
 	// ReadCloser is function which takes the path of file and returns an io.ReadCloser interface and
 	// an  error.
 	ReadCloser func(path string) (io.ReadCloser, error)
+)
+
+const (
+	osReleasePath   = "/etc/os-release"
+	defaultLogLevel = "info"
 )
 
 // Name implements the subcommand interface for instancemetadata.
@@ -65,9 +72,9 @@ func (*InstanceMetadata) Usage() string {
 func (m *InstanceMetadata) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&m.Help, "h", false, "Display help")
 	fs.BoolVar(&m.Help, "help", false, "Display help")
-	fs.StringVar(&m.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
+	fs.StringVar(&m.LogLevel, "loglevel", defaultLogLevel, "Sets the logging level for a log file")
 	fs.StringVar(&m.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/instancemetadata.log")
-	fs.StringVar(&m.OSReleasePath, "os-release-path", "/etc/os-release", "The path to file which contains OS release information, default value is /etc/os-release")
+	fs.StringVar(&m.OSReleasePath, "os-release-path", osReleasePath, "The path to file which contains OS release information, default value is /etc/os-release")
 }
 
 // Execute implements the subcommand interface for instancemetadata.
@@ -93,14 +100,27 @@ func (m *InstanceMetadata) Execute(ctx context.Context, f *flag.FlagSet, args ..
 // Run executes the MetadataHandler and returns the response.
 func (m *InstanceMetadata) Run(ctx context.Context, opts *onetime.RunOptions) (*impb.Metadata, string, subcommands.ExitStatus) {
 	m.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
-	return m.metadataHandler(ctx, m.OSReleasePath, m.RC)
+	m.setDefaults()
+	return m.metadataHandler(ctx)
 }
 
-func (m *InstanceMetadata) metadataHandler(ctx context.Context, path string, rc ReadCloser) (*impb.Metadata, string, subcommands.ExitStatus) {
-	rc = readCloserHelper(rc, path)
-	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(rc), path)
+func (m *InstanceMetadata) setDefaults() {
+	if m.OSReleasePath == "" {
+		m.OSReleasePath = osReleasePath
+	}
+	if m.RC == nil {
+		m.RC = func(path string) (io.ReadCloser, error) {
+			file, err := os.Open(path)
+			var f io.ReadCloser = file
+			return f, err
+		}
+	}
+}
+
+func (m *InstanceMetadata) metadataHandler(ctx context.Context) (*impb.Metadata, string, subcommands.ExitStatus) {
+	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(m.RC), m.OSReleasePath)
 	if err != nil {
-		m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Could not read OS release info from %s", path))
+		m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Could not read OS release info from %s", m.OSReleasePath))
 		return nil, fmt.Sprintf("could not read OS release info, error: %s", err.Error()), subcommands.ExitFailure
 	}
 	response := &impb.Metadata{
@@ -112,15 +132,4 @@ func (m *InstanceMetadata) metadataHandler(ctx context.Context, path string, rc 
 	}
 	m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Instance Metadata: %s", prototext.Format(response)))
 	return response, "", subcommands.ExitSuccess
-}
-
-func readCloserHelper(rc ReadCloser, path string) ReadCloser {
-	if rc == nil {
-		return func(path string) (io.ReadCloser, error) {
-			file, err := os.Open(path)
-			var f io.ReadCloser = file
-			return f, err
-		}
-	}
-	return rc
 }

@@ -37,9 +37,14 @@ const RestartAgent = false
 
 // InstanceMetadataHandler is the handler for instancemetadata command.
 func InstanceMetadataHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+	return instanceMetadataHandlerHelper(ctx, command, cp, nil)
+}
+
+func instanceMetadataHandlerHelper(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties, frc instancemetadata.ReadCloser) (*gpb.CommandResult, bool) {
 	log.CtxLogger(ctx).Debugw("Instance metadata handler called.", "command", prototext.Format(command))
 	im := &instancemetadata.InstanceMetadata{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), im)
+	im.RC = frc
 	instanceMetaDataResponse, msg, exitStatus := im.Run(ctx, onetime.CreateRunOptions(cp, true))
 	anyInstanceMetaDataResponse, err := apb.New(instanceMetaDataResponse)
 	if err != nil {

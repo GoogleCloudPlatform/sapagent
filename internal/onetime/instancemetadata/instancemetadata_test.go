@@ -155,7 +155,7 @@ func TestRun(t *testing.T) {
 				false,
 			),
 			want:       nil,
-			wantMsg:    "could not read OS release info, error: both ConfigFileReader and OSReleaseFilePath must be set",
+			wantMsg:    "could not read OS release info, error: any error",
 			wantStatus: subcommands.ExitFailure,
 		},
 		{
@@ -196,3 +196,34 @@ func TestRun(t *testing.T) {
 		})
 	}
 }
+
+func TestUsage(t *testing.T) {
+	im := &InstanceMetadata{}
+	got := im.Usage()
+	want := "Usage: instancemetadata [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>] [-h]\n"
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Usage() returned an unexpected diff (-want +got): %v", diff)
+	}
+}
+
+func TestSynopsis(t *testing.T) {
+	im := &InstanceMetadata{}
+	got := im.Synopsis()
+	want := "fetch the metadata of the instance"
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Synopsis() returned an unexpected diff (-want +got): %v", diff)
+	}
+}
+
+func TestSetDefaults(t *testing.T) {
+	im := &InstanceMetadata{}
+	im.setDefaults()
+	if im.OSReleasePath == "" {
+		t.Errorf("setDefaults() OSReleasePath not set")
+	}
+	if im.RC == nil {
+		t.Errorf("setDefaults() RC not set")
+	}
+}
+
+

@@ -18,12 +18,15 @@ package instancemetadatahandler
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"testing"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/instancemetadata"
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	impb "github.com/GoogleCloudPlatform/sapagent/protos/instancemetadata"
@@ -34,11 +37,16 @@ func emptyAnyInstanceMetadataResponse() *apb.Any {
 	return anyInstanceMetadataResponse
 }
 
-func TestInstanceMetadataHandler(t *testing.T) {
+func fakeReadCloserError(path string) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("error while reading file")
+}
+
+func TestInstanceMetadataHandlerHelper(t *testing.T) {
 	tests := []struct {
 		name        string
 		command     *gpb.Command
 		cp          *ipb.CloudProperties
+		trc         instancemetadata.ReadCloser
 		want        *gpb.CommandResult
 		wantRestart bool
 	}{
@@ -52,7 +60,8 @@ func TestInstanceMetadataHandler(t *testing.T) {
 					},
 				},
 			},
-			cp: &ipb.CloudProperties{},
+			cp:  &ipb.CloudProperties{},
+			trc: fakeReadCloserError,
 			want: &gpb.CommandResult{
 				Command: &gpb.Command{
 					CommandType: &gpb.Command_AgentCommand{
@@ -62,7 +71,7 @@ func TestInstanceMetadataHandler(t *testing.T) {
 					},
 				},
 				Payload:  emptyAnyInstanceMetadataResponse(),
-				Stdout:   "could not read OS release info, error: both ConfigFileReader and OSReleaseFilePath must be set",
+				Stdout:   "could not read OS release info, error: error while reading file",
 				ExitCode: int32(subcommands.ExitFailure),
 			},
 			wantRestart: false,
@@ -73,7 +82,7 @@ func TestInstanceMetadataHandler(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, gotRestart := InstanceMetadataHandler(ctx, tc.command, tc.cp)
+			got, gotRestart := instanceMetadataHandlerHelper(ctx, tc.command, tc.cp, tc.trc)
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("InstanceMetadataHandler(%v, %v) returned an unexpected diff (-want +got): %v", tc.command, tc.cp, diff)
 			}
