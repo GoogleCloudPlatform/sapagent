@@ -22,7 +22,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fatihcolor/color"
+	"github.com/fatih/color"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
 )
 
