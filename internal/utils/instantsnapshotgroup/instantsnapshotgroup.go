@@ -130,7 +130,7 @@ func (s *ISGService) NewService() error {
 	s.httpClient = defaultNewClient(10*time.Minute, defaultTransport())
 	s.tokenGetter = google.DefaultTokenSource
 	s.backoff = setupBackoff()
-	s.maxRetries = 3
+	s.maxRetries = 8
 	return nil
 }
 
