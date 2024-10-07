@@ -84,6 +84,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"pcmk_delay_max":                   true,
 		"pcmk_monitor_retries":             true,
 		"pcmk_reboot_timeout":              true,
+		"gcpstonith_configured":            true,
 		"location_preference_set":          true,
 		"migration_threshold":              true,
 		"resource_stickiness":              true,
@@ -354,6 +355,7 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, in
 	serviceAccountJSONFile := ""
 	properties := c.GetCloudProperties()
 
+	l["gcpstonith_configured"] = "false"
 	for _, primitive := range primitives {
 		idNode := primitive.ID
 		classNode := primitive.Class
@@ -370,6 +372,9 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, in
 
 		if typeNode != "fence_gce" && !strings.HasSuffix(attribute.ID, properties.GetInstanceName()+"-instance_attributes") {
 			continue
+		}
+		if typeNode == "external/gcpstonith" {
+			l["gcpstonith_configured"] = "true"
 		}
 		serviceAccountJSONFile = iteratePrimitiveChild(l, attribute, classNode, typeNode, idNode, returnMap, properties.GetInstanceName())
 		if serviceAccountJSONFile != "" {

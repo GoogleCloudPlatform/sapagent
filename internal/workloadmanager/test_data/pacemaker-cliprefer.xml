@@ -32,7 +32,7 @@ limitations under the License.
       </cluster_property_set>
     </crm_config>
     <nodes>
-      <node id="1" uname="instance-name-1">
+      <node id="1" uname="test-instance-name">
         <instance_attributes id="nodes-1">
           <nvpair id="nodes-1-hana_has_op_mode" name="hana_has_op_mode" value="logreplay"/>
           <nvpair id="nodes-1-lpa_has_lpt" name="lpa_has_lpt" value="1646252774"/>
@@ -56,18 +56,18 @@ limitations under the License.
       </node>
     </nodes>
     <resources>
-      <primitive id="STONITH-instance-name-1" class="stonith" type="external/gcpstonith">
+      <primitive id="STONITH-test-instance-name" class="stonith" type="external/gcpstonith">
         <operations>
-          <op name="monitor" interval="300s" timeout="120s" id="STONITH-instance-name-1-monitor-300s"/>
-          <op name="start" interval="0" timeout="60s" id="STONITH-instance-name-1-start-0"/>
+          <op name="monitor" interval="300s" timeout="120s" id="STONITH-test-instance-name-monitor-300s"/>
+          <op name="start" interval="0" timeout="60s" id="STONITH-test-instance-name-start-0"/>
         </operations>
-        <instance_attributes id="STONITH-instance-name-1-instance_attributes">
-          <nvpair name="instance_name" value="instance-name-1" id="STONITH-instance-name-1-instance_attributes-instance_name"/>
-          <nvpair name="gcloud_path" value="/usr/bin/gcloud" id="STONITH-instance-name-1-instance_attributes-gcloud_path"/>
-          <nvpair name="logging" value="yes" id="STONITH-instance-name-1-instance_attributes-logging"/>
-          <nvpair name="pcmk_reboot_timeout" value="300" id="STONITH-instance-name-1-instance_attributes-pcmk_reboot_timeout"/>
-          <nvpair name="pcmk_monitor_retries" value="4" id="STONITH-sinstance-name-1-instance_attributes-pcmk_monitor_retries"/>
-          <nvpair name="pcmk_delay_max" value="30" id="STONITH-instance-name-1-instance_attributes-pcmk_delay_max"/>
+        <instance_attributes id="STONITH-test-instance-name-instance_attributes">
+          <nvpair name="instance_name" value="test-instance-name" id="STONITH-test-instance-name-instance_attributes-instance_name"/>
+          <nvpair name="gcloud_path" value="/usr/bin/gcloud" id="STONITH-test-instance-name-instance_attributes-gcloud_path"/>
+          <nvpair name="logging" value="yes" id="STONITH-test-instance-name-instance_attributes-logging"/>
+          <nvpair name="pcmk_reboot_timeout" value="300" id="STONITH-test-instance-name-instance_attributes-pcmk_reboot_timeout"/>
+          <nvpair name="pcmk_monitor_retries" value="4" id="STONITH-test-instance-name-instance_attributes-pcmk_monitor_retries"/>
+          <nvpair name="pcmk_delay_max" value="30" id="STONITH-test-instance-name-instance_attributes-pcmk_delay_max"/>
         </instance_attributes>
       </primitive>
       <primitive id="STONITH-sles-ha2" class="stonith" type="external/gcpstonith">

@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 9,
+    "version": 10,
     "validation_system": {
       "system_metrics": [
         {
@@ -816,6 +816,13 @@
               "label": "pcmk_reboot_timeout"
             },
             "value": "PCMK_REBOOT_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "gcpstonith_configured"
+            },
+            "value": "GCPSTONITH_CONFIGURED"
           }
         ],
         "rsc_location_metrics": [
