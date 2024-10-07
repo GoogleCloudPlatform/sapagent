@@ -16,6 +16,7 @@ require (
   github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15
   github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
+  github.com/fatih/color v1.17.0
   github.com/fsouza/fake-gcs-server v1.45.2
   github.com/gammazero/workerpool v1.1.3
   github.com/go-yaml/yaml v2.1.0+incompatible
@@ -60,6 +61,8 @@ require (
   github.com/gorilla/handlers v1.5.1 // indirect
   github.com/gorilla/mux v1.8.0 // indirect
   github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+  github.com/mattn/go-colorable v0.1.13 // indirect
+  github.com/mattn/go-isatty v0.0.20 // indirect
   github.com/pkg/xattr v0.4.9 // indirect
   github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
   github.com/sirupsen/logrus v1.9.2 // indirect

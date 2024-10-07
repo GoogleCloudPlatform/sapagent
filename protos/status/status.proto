@@ -31,6 +31,7 @@ message AgentStatus {
   string configuration_error_message = 7;
   repeated ServiceStatus services = 8;
   repeated Reference references = 9;
+  string agent_name = 10;
 }
 
 message ServiceStatus {
