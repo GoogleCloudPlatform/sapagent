@@ -90,6 +90,7 @@ type (
 	ISGInterface interface {
 		NewService() error
 		CreateISG(ctx context.Context, project, zone string, data []byte) error
+		ListInstantSnapshotGroups(ctx context.Context, project, zone string) ([]instantsnapshotgroup.ISGItem, error)
 		DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error)
 		DeleteISG(ctx context.Context, project, zone, isgName string) error
 		WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error

@@ -38,6 +38,9 @@ type mockISGService struct {
 
 	createISGError error
 
+	listInstantSnapshotGroupsResp []instantsnapshotgroup.ISGItem
+	listInstantSnapshotGroupsErr  error
+
 	describeInstantSnapshotsResp []instantsnapshotgroup.ISItem
 	describeInstantSnapshotsErr  error
 
@@ -51,6 +54,10 @@ type mockISGService struct {
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
 	return m.createISGError
+}
+
+func (m *mockISGService) ListInstantSnapshotGroups(ctx context.Context, project, zone string) ([]instantsnapshotgroup.ISGItem, error) {
+	return m.listInstantSnapshotGroupsResp, m.listInstantSnapshotGroupsErr
 }
 
 func (m *mockISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isgName string) ([]instantsnapshotgroup.ISItem, error) {
@@ -73,6 +80,70 @@ func (m *mockISGService) WaitForISGUploadCompletionWithRetry(ctx context.Context
 	return m.waitForISGUploadCompletionWithRetryErr
 }
 
+func TestDeleteStaleISGs(t *testing.T) {
+	tests := []struct {
+		name string
+		s    *Snapshot
+		want error
+	}{
+		{
+			name: "ListInstantSnapshotGroupsFailure",
+			s: &Snapshot{
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsErr: cmpopts.AnyError,
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "DeleteISGFailure",
+			s: &Snapshot{
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
+						{
+							Name:   "test-isg",
+							Status: "READY",
+						},
+						{
+							Name:   "test-isg-1",
+							Status: "READY",
+						},
+					},
+					listInstantSnapshotGroupsErr: nil,
+					deleteISGErr:                 cmpopts.AnyError,
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "DeleteISGSuccess",
+			s: &Snapshot{
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
+						{
+							Name: "test-isg",
+						},
+					},
+					listInstantSnapshotGroupsErr: nil,
+					deleteISGErr:                 nil,
+				},
+			},
+			want: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		tc.s.oteLogger = onetime.CreateOTELogger(false)
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.deleteStaleISGs(ctx)
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("deleteStaleISGs() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -90,6 +161,10 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   false,
 					DiskAttachedToInstanceErr:        cmpopts.AnyError,
 				},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
+				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "", cmpopts.AnyError
@@ -104,6 +179,10 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					DiskAttachedToInstanceDeviceName: "pd-1",
 					DiskAttachedToInstanceErr:        nil,
 					IsDiskAttached:                   false,
+				},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -120,6 +199,10 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "pd-1",
 				},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
+				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				return "", cmpopts.AnyError
@@ -134,6 +217,10 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -156,7 +243,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				},
 				cgName: "test-cg-failure",
 				isgService: &mockISGService{
-					createISGError: cmpopts.AnyError,
+					createISGError:                cmpopts.AnyError,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -177,7 +266,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				},
 				cgName: "test-cg-success",
 				isgService: &mockISGService{
-					createISGError: nil,
+					createISGError:                nil,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -197,9 +288,11 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				},
 				cgName: "test-cg-success",
 				isgService: &mockISGService{
-					createISGError:               nil,
-					describeInstantSnapshotsResp: nil,
-					describeInstantSnapshotsErr:  cmpopts.AnyError,
+					createISGError:                nil,
+					describeInstantSnapshotsResp:  nil,
+					describeInstantSnapshotsErr:   cmpopts.AnyError,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -226,7 +319,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
-					createISGError: nil,
+					createISGError:                nil,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "test-isg",
@@ -265,7 +360,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
-					createISGError: nil,
+					createISGError:                nil,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "test-isg",
@@ -303,7 +400,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
-					createISGError: nil,
+					createISGError:                nil,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "test-isg",
@@ -337,7 +436,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
-					createISGError: nil,
+					createISGError:                nil,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "test-isg",
@@ -374,7 +475,9 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
-					createISGError: nil,
+					createISGError:                nil,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
 						{
 							Name: "test-isg",

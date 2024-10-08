@@ -86,6 +86,29 @@ type (
 		SourceInstantSnapshotGroupID string            `json:"sourceInstantSnapshotGroupId"`
 	}
 
+	// ISGResponse is the response for ISG.
+	ISGResponse struct {
+		Kind     string    `json:"kind"`
+		ID       string    `json:"id"`
+		Items    []ISGItem `json:"items"`
+		SelfLink string    `json:"selfLink"`
+		Etag     string    `json:"etag"`
+	}
+
+	// ISGItem is the item for ISG.
+	ISGItem struct {
+		Kind                   string `json:"kind"`
+		Name                   string `json:"name"`
+		Description            string `json:"description"`
+		ID                     string `json:"id"`
+		Status                 string `json:"status"`
+		CreationTimestamp      string `json:"creationTimestamp"`
+		Zone                   string `json:"zone"`
+		SelfLink               string `json:"selfLink"`
+		SelfLinkWithID         string `json:"selfLinkWithId"`
+		SourceConsistencyGroup string `json:"sourceConsistencyGroup"`
+	}
+
 	errorResponse struct {
 		Err googleapi.Error `json:"error"`
 	}
@@ -246,6 +269,29 @@ func (s *ISGService) CreateISG(ctx context.Context, project, zone string, data [
 	log.CtxLogger(ctx).Debugw("CreateISG Response", "response", bodyString)
 
 	return nil
+}
+
+// ListInstantSnapshotGroups returns the list of instant snapshot groups for a given project and zone.
+func (s *ISGService) ListInstantSnapshotGroups(ctx context.Context, project, zone string) ([]ISGItem, error) {
+	if s.baseURL == "" {
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
+	}
+	baseURL := s.baseURL
+	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
+	log.CtxLogger(ctx).Debugw("ListInstantSnapshotGroups", "baseURL", baseURL, "bodyBytes", string(bodyBytes))
+	if err != nil {
+		s.baseURL = ""
+		return nil, fmt.Errorf("failed to list instant snapshot groups, err: %w", err)
+	}
+	s.baseURL = ""
+
+	var isgResp ISGResponse
+	if err := json.Unmarshal(bodyBytes, &isgResp); err != nil {
+		return nil, err
+	}
+
+	log.CtxLogger(ctx).Debugw("ISGResp", "isgResp.Items", isgResp.Items)
+	return isgResp.Items, nil
 }
 
 // parseInstantSnapshotGroupURL parses the URL of instant snapshot group and returns the zone and

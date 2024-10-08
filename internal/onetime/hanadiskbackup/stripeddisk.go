@@ -39,7 +39,33 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
+func (s *Snapshot) deleteStaleISGs(ctx context.Context) error {
+	log.CtxLogger(ctx).Debug("Deleting stale instant snapshot groups")
+	isgList, err := s.isgService.ListInstantSnapshotGroups(ctx, s.Project, s.DiskZone)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error listing instant snapshot groups", "error", err)
+		return err
+	}
+
+	var deleteErr error
+	for _, isg := range isgList {
+		if isg.Status != "READY" {
+			log.CtxLogger(ctx).Debugw("Instant snapshot group is not ready, skipping deletion", "ISG Name", isg.Name)
+			continue
+		}
+		if err = s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, isg.Name); err != nil {
+			deleteErr = err
+			log.CtxLogger(ctx).Errorw("Error deleting instant snapshot group", "error", err)
+		}
+	}
+	return deleteErr
+}
+
 func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run queryFunc, cp *ipb.CloudProperties) (err error) {
+	if err := s.deleteStaleISGs(ctx); err != nil {
+		log.CtxLogger(ctx).Errorw("Error deleting stale instant snapshot groups", "error", err)
+	}
+
 	for _, d := range s.disks {
 		if err = s.isDiskAttachedToInstance(ctx, d, cp); err != nil {
 			return err

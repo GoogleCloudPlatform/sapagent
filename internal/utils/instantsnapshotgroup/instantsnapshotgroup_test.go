@@ -422,6 +422,117 @@ func TestCreateISGErrors(t *testing.T) {
 	}
 }
 
+func TestListInstantSnapshotGroups(t *testing.T) {
+	listInstantSnapshotGroupsHTTPHandlerFunc := func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/test/error":
+			hj, _ := w.(http.Hijacker)
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			conn.Close()
+		case "/test/invalid_json":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"key": "success_value"`))
+		case "/test/success":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"items": [{"name": "test-isg", "sourceConsistencyGroup": "https://www.googleapis.com/compute/alpha/projects/test-project/regions/test-region/resourcePolicies/cg-1"}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}
+	ts := httptest.NewServer(http.HandlerFunc(listInstantSnapshotGroupsHTTPHandlerFunc))
+	defer ts.Close()
+
+	tests := []struct {
+		name      string
+		s         *ISGService
+		project   string
+		zone      string
+		wantItems []ISGItem
+		wantErr   error
+	}{
+		{
+			name: "Error",
+			s: &ISGService{
+				baseURL:    ts.URL + "/test/error",
+				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+					return &mockToken{
+						token: &oauth2.Token{
+							AccessToken: "access-token",
+						},
+						err: nil,
+					}, nil
+				},
+			},
+			project:   "test-project",
+			zone:      "test-zone",
+			wantItems: nil,
+			wantErr:   cmpopts.AnyError,
+		},
+		{
+			name: "InvalidJSON",
+			s: &ISGService{
+				baseURL:    ts.URL + "/test/invalid_json",
+				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+					return &mockToken{
+						token: &oauth2.Token{
+							AccessToken: "access-token",
+						},
+						err: nil,
+					}, nil
+				},
+			},
+			project:   "test-project",
+			zone:      "test-zone",
+			wantItems: nil,
+			wantErr:   cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &ISGService{
+				baseURL:    ts.URL + "/test/success",
+				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+					return &mockToken{
+						token: &oauth2.Token{
+							AccessToken: "access-token",
+						},
+						err: nil,
+					}, nil
+				},
+			},
+			project: "test-project",
+			zone:    "test-zone",
+			wantItems: []ISGItem{
+				{
+					Name:                   "test-isg",
+					SourceConsistencyGroup: "https://www.googleapis.com/compute/alpha/projects/test-project/regions/test-region/resourcePolicies/cg-1",
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.s.ListInstantSnapshotGroups(ctx, tc.project, tc.zone)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("ListInstantSnapshotGroups(%v, %v) returned diff (-want +got):\n%s", tc.project, tc.zone, diff)
+			}
+			if diff := cmp.Diff(tc.wantItems, got, cmpopts.EquateComparable(ISGItem{})); diff != "" {
+				t.Errorf("ListInstantSnapshotGroups(%v, %v) returned diff (-want +got):\n%s", tc.project, tc.zone, diff)
+			}
+		})
+	}
+}
+
 func TestIsgExistsErrors(t *testing.T) {
 	isgExistsHTTPHandlerFunc := func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
