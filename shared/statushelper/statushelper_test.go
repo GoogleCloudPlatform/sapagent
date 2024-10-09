@@ -20,18 +20,244 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/fatih/color"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
-func TestGetCurrentAndLatestVersion(t *testing.T) {
-	// Implement unit tests for GetCurrentAndLatestVersion.
+type fakeExecutor struct {
+	commandlineexecutor.Execute
+	commandlineexecutor.Exists
+
+	// fakeCommandRes maps commands to their results.
+	fakeCommandRes map[string]commandlineexecutor.Result
 }
 
-func TestCheckIAMRoles(t *testing.T) {
-	// Implement unit tests for CheckIAMRoles.
+func (e *fakeExecutor) ExecuteCommand(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+	for cmd, res := range e.fakeCommandRes {
+		if strings.Contains(params.ArgsToSplit, cmd) {
+			return res
+		}
+	}
+	return commandlineexecutor.Result{Error: fmt.Errorf("cannot run command")}
+}
+
+func (e *fakeExecutor) CommandExists(cmd string) bool {
+	if _, ok := e.fakeCommandRes[cmd]; ok {
+		return true
+	}
+	return false
+}
+
+func TestPackageVersionLinux(t *testing.T) {
+	tests := []struct {
+		name        string
+		packageName string
+		fakeCommand string
+		fakeRes     commandlineexecutor.Result
+		wantLatest  string
+		wantErr     error
+	}{
+		{
+			name:        "YumSuccess",
+			packageName: "foo",
+			fakeCommand: "yum",
+			fakeRes: commandlineexecutor.Result{
+				StdOut: "3.5-671008012 ",
+			},
+			wantLatest: "3.5-671008012",
+		},
+		{
+			name:        "YumFailure",
+			packageName: "foo",
+			fakeCommand: "yum",
+			fakeRes: commandlineexecutor.Result{
+				ExitCode: 1,
+				Error:    fmt.Errorf("could not refresh repositories"),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:        "ZypperSuccess",
+			packageName: "foo",
+			fakeCommand: "zypper",
+			fakeRes: commandlineexecutor.Result{
+				StdOut: "3.5-671008012",
+			},
+			wantLatest: "3.5-671008012",
+		},
+		{
+			name:        "ZypperFailure",
+			packageName: "foo",
+			fakeCommand: "zypper",
+			fakeRes: commandlineexecutor.Result{
+				ExitCode: 1,
+				Error:    fmt.Errorf("could not refresh repositories"),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:        "NoSupportedPackageManager",
+			packageName: "foo",
+			wantErr:     cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exec := &fakeExecutor{fakeCommandRes: map[string]commandlineexecutor.Result{test.fakeCommand: test.fakeRes}}
+			gotLatest, gotErr := packageVersionLinux(context.Background(), test.packageName, exec.ExecuteCommand, exec.CommandExists)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("packageVersionLinux(%s) returned err: %v, wantErr: %v", test.packageName, gotErr, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantLatest, gotLatest); diff != "" {
+				t.Errorf("packageVersionLinux(%s) returned unexpected diff (-want +got):\n%s", test.packageName, diff)
+			}
+		})
+	}
+}
+
+func TestAgentEnabledAndRunningLinux(t *testing.T) {
+	tests := []struct {
+		name        string
+		serviceName string
+		fakeCommand map[string]commandlineexecutor.Result
+		wantEnabled bool
+		wantRunning bool
+		wantErr     error
+	}{
+		{
+			name:        "ServiceEnabledAndRunning",
+			serviceName: "foo",
+			fakeCommand: map[string]commandlineexecutor.Result{
+				"is-enabled": commandlineexecutor.Result{
+					StdOut:   "enabled",
+					ExitCode: 0,
+				},
+				"is-active": commandlineexecutor.Result{
+					StdOut:   "active",
+					ExitCode: 0,
+				},
+			},
+			wantEnabled: true,
+			wantRunning: true,
+		},
+		{
+			name:        "ServiceEnabledButNotRunning",
+			serviceName: "foo",
+			fakeCommand: map[string]commandlineexecutor.Result{
+				"is-enabled": commandlineexecutor.Result{
+					StdOut:   "enabled",
+					ExitCode: 0,
+				},
+				"is-active": commandlineexecutor.Result{
+					StdOut:   "inactive",
+					ExitCode: 1,
+				},
+			},
+			wantEnabled: true,
+			wantRunning: false,
+		},
+		{
+			name:        "ServiceNotEnabledButRunning",
+			serviceName: "foo",
+			fakeCommand: map[string]commandlineexecutor.Result{
+				"is-enabled": commandlineexecutor.Result{
+					StdOut:   "disabled",
+					ExitCode: 0,
+				},
+				"is-active": commandlineexecutor.Result{
+					StdOut:   "active",
+					ExitCode: 0,
+				},
+			},
+			wantEnabled: false,
+			wantRunning: true,
+		},
+		{
+			name:        "ServiceNotEnabledAndNotRunning",
+			serviceName: "foo",
+			fakeCommand: map[string]commandlineexecutor.Result{
+				"is-enabled": commandlineexecutor.Result{
+					StdOut:   "disabled",
+					ExitCode: 0,
+				},
+				"is-active": commandlineexecutor.Result{
+					StdOut:   "inactive",
+					ExitCode: 1,
+				},
+			},
+			wantEnabled: false,
+			wantRunning: false,
+		},
+		{
+			name:        "ServiceNotEnabledAndNotRunningDifferentOutput",
+			serviceName: "foo",
+			fakeCommand: map[string]commandlineexecutor.Result{
+				"is-enabled": commandlineexecutor.Result{
+					StdOut:   "not enabled",
+					ExitCode: 1,
+				},
+				"is-active": commandlineexecutor.Result{
+					StdOut:   "inactive",
+					ExitCode: 1,
+				},
+			},
+			wantEnabled: false,
+			wantRunning: false,
+		},
+		{
+			name:        "ErrorCheckingEnabledStatus",
+			serviceName: "foo",
+			fakeCommand: map[string]commandlineexecutor.Result{
+				"is-enabled": commandlineexecutor.Result{
+					StdErr: "error checking enabled status",
+					Error:  fmt.Errorf("error checking enabled status"),
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:        "ErrorCheckingRunningStatus",
+			serviceName: "foo",
+			fakeCommand: map[string]commandlineexecutor.Result{
+				"is-enabled": commandlineexecutor.Result{
+					StdOut:   "enabled",
+					ExitCode: 0,
+				},
+				"is-active": commandlineexecutor.Result{
+					StdErr: "error checking running status",
+					Error:  fmt.Errorf("error checking running status"),
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exec := &fakeExecutor{
+				fakeCommandRes: test.fakeCommand,
+			}
+			gotEnabled, gotRunning, err := agentEnabledAndRunningLinux(context.Background(), test.serviceName, exec.ExecuteCommand)
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("agentEnabledAndRunningLinux(%s) returned err: %v, wantErr: %v", test.serviceName, err, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantEnabled, gotEnabled); diff != "" {
+				t.Errorf("agentEnabledAndRunningLinux(%s) returned unexpected enabled status diff (-want +got):\n%s", test.serviceName, diff)
+			}
+			if diff := cmp.Diff(test.wantRunning, gotRunning); diff != "" {
+				t.Errorf("agentEnabledAndRunningLinux(%s) returned unexpected running status diff (-want +got):\n%s", test.serviceName, diff)
+			}
+		})
+	}
 }
 
 func TestPrintStatus(t *testing.T) {
@@ -284,25 +510,23 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Monkey patch the print functions to check the output.
-			var buf bytes.Buffer
-			writeToBuf := func(format string, args ...any) {
-				buf.WriteString(fmt.Sprintf(format, args...))
-			}
-			defer func(infoOld func(format string, a ...any), successOld func(format string, a ...any), failureOld func(format string, a ...any), faintOld func(format string, a ...any), hyperlinkOld func(format string, a ...any)) {
-				info = infoOld
-				success = successOld
-				failure = failureOld
-				faint = faintOld
-				hyperlink = hyperlinkOld
-			}(info, success, failure, faint, hyperlink)
-			info = writeToBuf
-			success = writeToBuf
-			failure = writeToBuf
-			faint = writeToBuf
-			hyperlink = writeToBuf
-
+			// Monkey patch stdout to check the output.
+			defer func(oldStdout *os.File) {
+				os.Stdout = oldStdout
+				color.Output = oldStdout
+			}(os.Stdout)
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+			color.Output = w
 			PrintStatus(context.Background(), tc.status)
+
+			w.Close()
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+
+			// NOTE: The //third_party/golang/fatihcolor/color package does some
+			// helpful tricks to detect it's not able to support colors in the go
+			// test environment so the text here has no special characters
 			got := buf.String()
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("PrintStatus(%v) had unexpected diff (-want +got):\n%s", tc.status, diff)
