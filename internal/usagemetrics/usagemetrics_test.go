@@ -259,6 +259,9 @@ func TestErrorConstants(t *testing.T) {
 	if HANAInsightsOTEFailure != 79 {
 		t.Errorf("HANAInsightsOTEFailure = %v, want 79", HANAInsightsOTEFailure)
 	}
+	if MultipartUploadFailure != 80 {
+		t.Errorf("MultipartUploadFailure = %v, want 80", MultipartUploadFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -504,5 +507,11 @@ func TestActionConstants(t *testing.T) {
 	}
 	if HANAInsightsOTEFinished != 80 {
 		t.Errorf("HANAInsightsOTEFinished = %v, want 80", HANAInsightsOTEFinished)
+	}
+	if MultipartUploadStarted != 81 {
+		t.Errorf("MultipartUploadStarted = %v, want 81", MultipartUploadStarted)
+	}
+	if MultipartUploadFinished != 82 {
+		t.Errorf("MultipartUploadFinished = %v, want 82", MultipartUploadFinished)
 	}
 }

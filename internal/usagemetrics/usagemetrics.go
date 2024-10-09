@@ -118,6 +118,7 @@ const (
 	GCBDRBackupFailure                             = 77 //	GCBDRBackupFailure
 	GCBDRDiscoveryFailure                          = 78 //	GCBDRDiscoveryFailure
 	HANAInsightsOTEFailure                         = 79 //	HANAInsightsOTEFailure
+	MultipartUploadFailure                         = 80 //	MultipartUploadFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -205,6 +206,8 @@ const (
 	GCBDRDiscoveryFinished                  = 78 //	GCBDRDiscoveryFinished
 	HANAInsightsOTEStarted                  = 79 //	HANAInsightsOTEStarted
 	HANAInsightsOTEFinished                 = 80 //	HANAInsightsOTEFinished
+	MultipartUploadStarted                  = 81 //	MultipartUploadStarted
+	MultipartUploadFinished                 = 82 //	MultipartUploadFinished
 )
 
 // LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")

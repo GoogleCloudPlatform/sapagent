@@ -46,6 +46,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/maintenance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/migratehmadashboards"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/multipartupload"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/readmetrics"
@@ -92,6 +93,7 @@ func registerSubCommands() {
 		&maintenance.Mode{},
 		&migratehanamonitoring.MigrateHANAMonitoring{},
 		&migratehmadashboards.MigrateHMADashboards{},
+		&multipartupload.MultipartUpload{},
 		&performancediagnostics.Diagnose{},
 		&readmetrics.ReadMetrics{},
 		&reliability.Reliability{},
