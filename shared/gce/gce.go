@@ -300,6 +300,14 @@ func (g *GCE) waitForUploadCompletion(ctx context.Context, op *compute.Operation
 	if tracker.Status != "DONE" {
 		return fmt.Errorf("compute operation is not DONE yet")
 	}
+	if tracker.Error != nil {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name, "error", tracker.Error)
+		return fmt.Errorf("compute operation failed with error: %v", tracker.Error)
+	}
+	if tracker.HttpErrorMessage != "" {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name, "errorStatusCode", tracker.HttpErrorStatusCode, "error", tracker.HttpErrorMessage)
+		return fmt.Errorf("compute operation failed with error: %v", tracker.HttpErrorMessage)
+	}
 
 	ss, err := g.service.Snapshots.Get(project, snapshotName).Do()
 	if err != nil {
@@ -331,6 +339,14 @@ func (g *GCE) waitForDiskOpCompletion(ctx context.Context, op *compute.Operation
 	log.CtxLogger(ctx).Infow("Operation in progress", "Name", op.Name, "percentage", tracker.Progress, "status", tracker.Status)
 	if tracker.Status != "DONE" {
 		return fmt.Errorf("compute operation is not DONE yet")
+	}
+	if tracker.Error != nil {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name, "error", tracker.Error)
+		return fmt.Errorf("compute operation failed with error: %v", tracker.Error)
+	}
+	if tracker.HttpErrorMessage != "" {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name, "errorStatusCode", tracker.HttpErrorStatusCode, "error", tracker.HttpErrorMessage)
+		return fmt.Errorf("compute operation failed with error: %v", tracker.HttpErrorMessage)
 	}
 	return nil
 }
@@ -463,6 +479,14 @@ func (g *GCE) waitForGlobalUploadCompletion(ctx context.Context, op *compute.Ope
 	log.CtxLogger(ctx).Infow("Operation in progress", "Name", op.Name, "percentage", tracker.Progress, "status", tracker.Status)
 	if tracker.Status != "DONE" {
 		return fmt.Errorf("compute operation is not DONE yet")
+	}
+	if tracker.Error != nil {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name, "error", tracker.Error)
+		return fmt.Errorf("compute operation failed with error: %v", tracker.Error)
+	}
+	if tracker.HttpErrorMessage != "" {
+		log.CtxLogger(ctx).Errorw("Error in operation", "operation", op.Name, "errorStatusCode", tracker.HttpErrorStatusCode, "error", tracker.HttpErrorMessage)
+		return fmt.Errorf("compute operation failed with error: %v", tracker.HttpErrorMessage)
 	}
 
 	ss, err := g.service.Snapshots.Get(project, snapshotName).Do()
