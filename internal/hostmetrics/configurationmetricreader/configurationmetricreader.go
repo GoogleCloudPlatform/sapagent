@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 /*
-Package configurationmetricreader contains utlity functions that build collections of protocol
+Package configurationmetricreader contains utility functions that build collections of protocol
 buffers that store various configuration metrics
 */
 package configurationmetricreader

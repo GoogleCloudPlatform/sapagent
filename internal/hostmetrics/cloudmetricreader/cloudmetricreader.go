@@ -288,6 +288,7 @@ func (r *CloudMetricReader) queryTimeSeriesData(ctx context.Context, metrics []s
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("The QueryTimeSeries request for metrics has failed", "metrics", metrics, "error", err)
 	}
+	log.CtxLogger(ctx).Debugw("Number of time series data entries returned", "count", len(data))
 	return data
 }
 
