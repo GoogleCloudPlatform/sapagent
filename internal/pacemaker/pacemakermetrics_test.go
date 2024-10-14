@@ -235,14 +235,12 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 
 func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"gcpstonith_configured": "false",
-		"pcmk_delay_max":        "instance-name-1=45",
+		"pcmk_delay_max": "instance-name-1=45",
 	}
 }
 
 func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"gcpstonith_configured":          "false",
 		"pcmk_delay_max":                 "instance-name-1=45",
 		"fence_agent_compute_api_access": "false",
 		"fence_agent_logging_api_access": "false",
@@ -260,29 +258,6 @@ func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists 
 
 func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"fence_agent":                      "gcpstonith",
-		"gcpstonith_configured":            "true",
-		"pcmk_delay_max":                   "test-instance-name=30",
-		"pcmk_monitor_retries":             "4",
-		"pcmk_reboot_timeout":              "300",
-		"migration_threshold":              "5000",
-		"fence_agent_compute_api_access":   "false",
-		"fence_agent_logging_api_access":   "false",
-		"location_preference_set":          locationPref,
-		"maintenance_mode_active":          "true",
-		"resource_stickiness":              "1000",
-		"saphana_demote_timeout":           "3600",
-		"saphana_promote_timeout":          "3600",
-		"saphana_start_timeout":            "3600",
-		"saphana_stop_timeout":             "3600",
-		"saphanatopology_monitor_interval": "10",
-		"saphanatopology_monitor_timeout":  "600",
-	}
-}
-
-func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
-	return map[string]string{
-		"gcpstonith_configured":            "false",
 		"pcmk_delay_max":                   "instance-name-1=30",
 		"migration_threshold":              "5000",
 		"fence_agent_compute_api_access":   "false",
@@ -305,7 +280,6 @@ func wantNoPropertiesPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists
 
 func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"gcpstonith_configured":          "false",
 		"pcmk_delay_max":                 "instance-name-1=45",
 		"fence_agent_compute_api_access": "true",
 		"fence_agent_logging_api_access": "true",
@@ -843,7 +817,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
 			},
-			wantLabels: map[string]string{"gcpstonith_configured": "false"},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesNoMatch",
@@ -861,7 +835,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
 			},
-			wantLabels: map[string]string{"gcpstonith_configured": "false"},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesBasicMatch1",
@@ -884,7 +858,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path",
 			},
-			wantLabels: map[string]string{"gcpstonith_configured": "false"},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesBasicMatch2",
@@ -914,7 +888,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path2",
 			},
-			wantLabels: map[string]string{"gcpstonith_configured": "false"},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "pcmkDelayMaxSingleValue",
@@ -964,8 +938,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"gcpstonith_configured": "false",
-				"pcmk_delay_max":        "instance-name-4=30",
+				"pcmk_delay_max": "instance-name-4=30",
 			},
 		},
 		{
@@ -998,35 +971,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"gcpstonith_configured": "false",
-				"pcmk_delay_max":        "instance-name-1=60,instance-name-2=30",
-			},
-		},
-		{
-			name:      "gcpstonith_configured",
-			c:         defaultConfiguration,
-			instances: []string{"test-instance-name", "instance-name-2"},
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "external/gcpstonith",
-					ID:        "GCPSTONITH-test-instance-name",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "GCPSTONITH-test-instance-name-instance_attributes",
-					},
-				},
-				{
-					ClassType: "external/gcpstonith",
-					ID:        "GCPSTONITH-instance-name-2",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "GCPSTONITH-test-instance-name-instance_attributes",
-					},
-				},
-			},
-			want: map[string]string{
-				"serviceAccountJsonFile": "",
-			},
-			wantLabels: map[string]string{
-				"gcpstonith_configured": "true",
+				"pcmk_delay_max": "instance-name-1=60,instance-name-2=30",
 			},
 		},
 	}
@@ -1452,7 +1397,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			fileReader:          defaultFileReader,
 			tokenGetter:         defaultToxenGetter,
 			wantPacemakerExists: float64(1.0),
-			wantPacemakerLabels: wantClonePacemakerMetrics,
+			wantPacemakerLabels: wantCLIPreferPacemakerMetrics,
 			locationPref:        "false",
 		},
 		{
