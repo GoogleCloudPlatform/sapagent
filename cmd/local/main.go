@@ -53,6 +53,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/reliability"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/service"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/status"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/systemdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
@@ -100,6 +101,7 @@ func registerSubCommands() {
 		&remotevalidation.RemoteValidation{},
 		&service.Service{},
 		&startdaemon.Daemon{},
+		&status.Status{},
 		&supportbundle.SupportBundle{},
 		&systemdiscovery.SystemDiscovery{},
 		&validate.Validate{},
