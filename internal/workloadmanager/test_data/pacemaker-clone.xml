@@ -25,19 +25,19 @@ limitations under the License.
         <nvpair id="cib-bootstrap-options-cluster-name" name="cluster-name" value="hacluster"/>
       </cluster_property_set>
       <cluster_property_set id="SAPHanaSR">
-        <nvpair id="SAPHanaSR-hana_har_site_srHook_rhel-ha1" name="hana_har_site_srHook_rhel-ha1" value="SOK"/>
+        <nvpair id="SAPHanaSR-hana_har_site_srHook_test-instance-name" name="hana_har_site_srHook_test-instance-name" value="SOK"/>
         <nvpair id="SAPHanaSR-hana_har_site_srHook_rhel-ha2" name="hana_har_site_srHook_rhel-ha2" value="PRIM"/>
       </cluster_property_set>
     </crm_config>
     <nodes>
-      <node id="1" uname="instance-name-1">
+      <node id="1" uname="test-instance-name">
         <instance_attributes id="nodes-1">
           <nvpair id="nodes-1-hana_har_op_mode" name="hana_har_op_mode" value="logreplay"/>
           <nvpair id="nodes-1-lpa_har_lpt" name="lpa_har_lpt" value="30"/>
-          <nvpair id="nodes-1-hana_har_vhost" name="hana_har_vhost" value="rhel-ha1"/>
+          <nvpair id="nodes-1-hana_har_vhost" name="hana_har_vhost" value="test-instance-name"/>
           <nvpair id="nodes-1-hana_har_srmode" name="hana_har_srmode" value="syncmem"/>
           <nvpair id="nodes-1-hana_har_remoteHost" name="hana_har_remoteHost" value="rhel-ha2"/>
-          <nvpair id="nodes-1-hana_har_site" name="hana_har_site" value="rhel-ha1"/>
+          <nvpair id="nodes-1-hana_har_site" name="hana_har_site" value="test-instance-name"/>
           <nvpair id="nodes-1-standby" name="standby" value="off"/>
         </instance_attributes>
       </node>
@@ -48,25 +48,25 @@ limitations under the License.
           <nvpair id="nodes-2-hana_har_vhost" name="hana_har_vhost" value="rhel-ha2"/>
           <nvpair id="nodes-2-hana_har_site" name="hana_har_site" value="rhel-ha2"/>
           <nvpair id="nodes-2-hana_har_srmode" name="hana_har_srmode" value="syncmem"/>
-          <nvpair id="nodes-2-hana_har_remoteHost" name="hana_har_remoteHost" value="rhel-ha1"/>
+          <nvpair id="nodes-2-hana_har_remoteHost" name="hana_har_remoteHost" value="test-instance-name"/>
           <nvpair id="nodes-2-standby" name="standby" value="off"/>
         </instance_attributes>
       </node>
     </nodes>
     <resources>
-      <primitive class="stonith" id="STONITH-instance-name-1" type="fence_gce">
-        <instance_attributes id="STONITH-instance-name-1-instance_attributes">
-          <nvpair id="STONITH-instance-name-1-instance_attributes-instance_name"name="instance_name" value="instance-name-1"/>
-          <nvpair id="STONITH-instance-name-1-instance_attributes-pcmk_delay_max" name="pcmk_delay_max" value="30"/>
-          <nvpair id="STONITH-instance-name-1-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
-          <nvpair id="STONITH-instance-name-1-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
-          <nvpair id="STONITH-instance-name-1-instance_attributes-port" name="port" value="rhel-ha1"/>
-          <nvpair id="STONITH-instance-name-1-instance_attributes-project" name="project" value="core-connect-dev"/>
-          <nvpair id="STONITH-instance-name-1-instance_attributes-zone" name="zone" value="us-east4-a"/>
+      <primitive class="stonith" id="STONITH-test-instance-name" type="fence_gce">
+        <instance_attributes id="STONITH-test-instance-name-instance_attributes">
+          <nvpair id="STONITH-test-instance-name-instance_attributes-instance_name"name="instance_name" value="test-instance-name"/>
+          <nvpair id="STONITH-test-instance-name-instance_attributes-pcmk_delay_max" name="pcmk_delay_max" value="30"/>
+          <nvpair id="STONITH-test-instance-name-instance_attributes-pcmk_monitor_retries" name="pcmk_monitor_retries" value="4"/>
+          <nvpair id="STONITH-test-instance-name-instance_attributes-pcmk_reboot_timeout" name="pcmk_reboot_timeout" value="300"/>
+          <nvpair id="STONITH-test-instance-name-instance_attributes-port" name="port" value="test-instance-name"/>
+          <nvpair id="STONITH-test-instance-name-instance_attributes-project" name="project" value="core-connect-dev"/>
+          <nvpair id="STONITH-test-instance-name-instance_attributes-zone" name="zone" value="us-east4-a"/>
         </instance_attributes>
         <operations>
-          <op id="STONITH-instance-name-1-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
-          <op id="STONITH-instance-name-1-start-interval-0" interval="0" name="start" timeout="60s"/>
+          <op id="STONITH-test-instance-name-monitor-interval-300s" interval="300s" name="monitor" timeout="120s"/>
+          <op id="STONITH-test-instance-name-start-interval-0" interval="0" name="start" timeout="60s"/>
         </operations>
       </primitive>
       <primitive class="stonith" id="STONITH-rhel-ha2" type="fence_gce">
@@ -156,7 +156,7 @@ limitations under the License.
       </clone>
     </resources>
     <constraints>
-      <rsc_location id="location-STONITH-rhel-ha1-rhel-ha1--INFINITY" node="rhel-ha1" rsc="STONITH-rhel-ha1" score="-INFINITY"/>
+      <rsc_location id="location-STONITH-test-instance-name-test-instance-name--INFINITY" node="test-instance-name" rsc="STONITH-test-instance-name" score="-INFINITY"/>
       <rsc_location id="location-STONITH-rhel-ha2-rhel-ha2--INFINITY" node="rhel-ha2" rsc="STONITH-rhel-ha2" score="-INFINITY"/>
       <rsc_order first="SAPHanaTopology_HAR_00-clone" first-action="start" id="order-SAPHanaTopology_HAR_00-clone-SAPHana_HAR_00-clone-mandatory" symmetrical="false" then="SAPHana_HAR_00-clone" then-action="start"/>
       <rsc_colocation id="colocation-g-primary-SAPHana_HAR_00-clone-4000" rsc="g-primary" rsc-role="Started" score="4000" with-rsc="SAPHana_HAR_00-clone" with-rsc-role="Master"/>
@@ -174,7 +174,7 @@ limitations under the License.
     </op_defaults>
   </configuration>
   <status>
-    <node_state id="1" uname="rhel-ha1" in_ccm="true" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
+    <node_state id="1" uname="test-instance-name" in_ccm="true" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
       <transient_attributes id="1">
         <instance_attributes id="status-1">
           <nvpair id="status-1-master-SAPHana_HAR_00" name="master-SAPHana_HAR_00" value="100"/>
@@ -189,11 +189,11 @@ limitations under the License.
       <lrm id="1">
         <lrm_resources>
           <lrm_resource id="SAPHanaTopology_HAR_00" type="SAPHanaTopology" class="ocf" provider="heartbeat">
-            <lrm_rsc_op id="SAPHanaTopology_HAR_00_last_0" operation_key="SAPHanaTopology_HAR_00_start_0" operation="start" crm-debug-origin="build_active_RAs" crm_feature_set="3.7.1" transition-key="20:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" transition-magic="0:0;20:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" exit-reason="" on_node="rhel-ha1" call-id="29" rc-code="0" op-status="0" interval="0" last-rc-change="1646251172" last-run="1646251172" exec-time="2719" queue-time="0" op-digest="95c004370528dbb0f6836ddb16bb73ac" op-force-restart="" op-restart-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
-            <lrm_rsc_op id="SAPHanaTopology_HAR_00_monitor_10000" operation_key="SAPHanaTopology_HAR_00_monitor_10000" operation="monitor" crm-debug-origin="build_active_RAs" crm_feature_set="3.7.1" transition-key="21:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" transition-magic="0:0;21:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" exit-reason="" on_node="rhel-ha1" call-id="31" rc-code="0" op-status="0" interval="10000" last-rc-change="1646251175" exec-time="3548" queue-time="0" op-digest="0cbdbe857df192f74d644a9b362527d1"/>
+            <lrm_rsc_op id="SAPHanaTopology_HAR_00_last_0" operation_key="SAPHanaTopology_HAR_00_start_0" operation="start" crm-debug-origin="build_active_RAs" crm_feature_set="3.7.1" transition-key="20:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" transition-magic="0:0;20:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" exit-reason="" on_node="test-instance-name" call-id="29" rc-code="0" op-status="0" interval="0" last-rc-change="1646251172" last-run="1646251172" exec-time="2719" queue-time="0" op-digest="95c004370528dbb0f6836ddb16bb73ac" op-force-restart="" op-restart-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+            <lrm_rsc_op id="SAPHanaTopology_HAR_00_monitor_10000" operation_key="SAPHanaTopology_HAR_00_monitor_10000" operation="monitor" crm-debug-origin="build_active_RAs" crm_feature_set="3.7.1" transition-key="21:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" transition-magic="0:0;21:21:0:207d703b-956f-494c-b2bc-d07cf0a366bb" exit-reason="" on_node="test-instance-name" call-id="31" rc-code="0" op-status="0" interval="10000" last-rc-change="1646251175" exec-time="3548" queue-time="0" op-digest="0cbdbe857df192f74d644a9b362527d1"/>
           </lrm_resource>
           <lrm_resource id="SAPHana_HAR_00" type="SAPHana" class="ocf" provider="heartbeat">
-            <lrm_rsc_op id="SAPHana_HAR_00_last_0" operation_key="SAPHana_HAR_00_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="30:88437:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;30:88437:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha1" call-id="60" rc-code="0" op-status="0" interval="0" last-rc-change="1651697218" last-run="1651697218" exec-time="1986" queue-time="0" op-digest="6531e8b20586c0f3cf25a58a6b3d6032" op-force-restart="  INSTANCE_PROFILE  " op-restart-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+            <lrm_rsc_op id="SAPHana_HAR_00_last_0" operation_key="SAPHana_HAR_00_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="30:88437:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;30:88437:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="test-instance-name" call-id="60" rc-code="0" op-status="0" interval="0" last-rc-change="1651697218" last-run="1651697218" exec-time="1986" queue-time="0" op-digest="6531e8b20586c0f3cf25a58a6b3d6032" op-force-restart="  INSTANCE_PROFILE  " op-restart-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
           </lrm_resource>
         </lrm_resources>
       </lrm>
@@ -201,9 +201,9 @@ limitations under the License.
     <node_state id="2" uname="rhel-ha2" in_ccm="true" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
       <lrm id="2">
         <lrm_resources>
-          <lrm_resource id="STONITH-rhel-ha1" type="fence_gce" class="stonith">
-            <lrm_rsc_op id="STONITH-rhel-ha1_last_0" operation_key="STONITH-rhel-ha1_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="6:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;6:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha2" call-id="28" rc-code="0" op-status="0" interval="0" last-rc-change="1646253318" last-run="1646253318" exec-time="914" queue-time="0" op-digest="f451ebcf5bef089b57c909be03bb6504"/>
-            <lrm_rsc_op id="STONITH-rhel-ha1_monitor_300000" operation_key="STONITH-rhel-ha1_monitor_300000" operation="monitor" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="7:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;7:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha2" call-id="30" rc-code="0" op-status="0" interval="300000" last-rc-change="1646253319" exec-time="998" queue-time="0" op-digest="c0012f0aeca5d95f97a2dbcc8610cd9b"/>
+          <lrm_resource id="STONITH-test-instance-name" type="fence_gce" class="stonith">
+            <lrm_rsc_op id="STONITH-test-instance-name_last_0" operation_key="STONITH-test-instance-name_start_0" operation="start" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="6:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;6:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha2" call-id="28" rc-code="0" op-status="0" interval="0" last-rc-change="1646253318" last-run="1646253318" exec-time="914" queue-time="0" op-digest="f451ebcf5bef089b57c909be03bb6504"/>
+            <lrm_rsc_op id="STONITH-test-instance-name_monitor_300000" operation_key="STONITH-test-instance-name_monitor_300000" operation="monitor" crm-debug-origin="do_update_resource" crm_feature_set="3.7.1" transition-key="7:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" transition-magic="0:0;7:9:0:30691068-39b0-4d9e-8342-ce26705d7a80" exit-reason="" on_node="rhel-ha2" call-id="30" rc-code="0" op-status="0" interval="300000" last-rc-change="1646253319" exec-time="998" queue-time="0" op-digest="c0012f0aeca5d95f97a2dbcc8610cd9b"/>
           </lrm_resource>
         </lrm_resources>
       </lrm>
