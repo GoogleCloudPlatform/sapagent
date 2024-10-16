@@ -323,7 +323,7 @@ func (c *ConfigureInstance) backupAndWriteFile(ctx context.Context, filePath str
 // it is not removed.
 func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, removeLines []string) (bool, error) {
 	fileLines, err := c.ReadFile(filePath)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
 	regenerate := false
@@ -362,7 +362,7 @@ func (c *ConfigureInstance) removeLines(ctx context.Context, filePath string, re
 // where the value will be removed from the key.
 func (c *ConfigureInstance) removeValues(ctx context.Context, filePath string, removeLines []string) (bool, error) {
 	fileLines, err := c.ReadFile(filePath)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
 	regenerate := false
@@ -432,7 +432,7 @@ func (c *ConfigureInstance) checkAndRegenerateFile(ctx context.Context, filePath
 // or multiple values for one key: 'key="value1 value2 value3"'.
 func (c *ConfigureInstance) checkAndRegenerateLines(ctx context.Context, filePath string, wantLines []string) (bool, error) {
 	fileLines, err := c.ReadFile(filePath)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
 	regenerate := false

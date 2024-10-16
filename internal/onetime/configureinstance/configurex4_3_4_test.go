@@ -35,7 +35,7 @@ func TestConfigureX43_4(t *testing.T) {
 		{
 			name: "Megamem1920FailedToReadReleaseFile",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				ReadFile:    defaultReadFile([]error{fmt.Errorf("failed to read")}, []string{""}),
 				MachineType: "x4-megamem-1920",
 			},
 			want:    false,
@@ -164,7 +164,7 @@ func TestConfigureX4SLES3_4(t *testing.T) {
 		{
 			name: "FailedToReadReleaseFile",
 			c: ConfigureInstance{
-				ReadFile: defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				ReadFile: defaultReadFile([]error{fmt.Errorf("failed to read")}, []string{""}),
 			},
 			want:    false,
 			wantErr: cmpopts.AnyError,
