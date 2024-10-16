@@ -351,10 +351,11 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 		}
 	} else {
 		metricevents.AddEvent(ctx, metricevents.Parameters{
-			Path:    pmNWAvailabilityPath,
-			Message: "NetWeaver Availability",
-			Labels:  appendLabels(p, nil),
-			Value:   strconv.FormatInt(availabilityValue, 10),
+			Path:       pmNWAvailabilityPath,
+			Message:    "NetWeaver Availability",
+			Labels:     appendLabels(p, nil),
+			Value:      strconv.FormatInt(availabilityValue, 10),
+			Identifier: p.SAPInstance.GetInstanceNumber(),
 		})
 		metrics = append(metrics, createMetrics(p, pmNWAvailabilityPath, nil, now, availabilityValue))
 	}
