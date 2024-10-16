@@ -235,13 +235,19 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 
 func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"pcmk_delay_max": "instance-name-1=45",
+		"fence_agent":          "fence_gce",
+		"pcmk_delay_max":       "test-instance-name=45",
+		"pcmk_monitor_retries": "5",
+		"pcmk_reboot_timeout":  "200",
 	}
 }
 
 func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"pcmk_delay_max":                 "instance-name-1=45",
+		"fence_agent":                    "fence_gce",
+		"pcmk_delay_max":                 "test-instance-name=45",
+		"pcmk_monitor_retries":           "5",
+		"pcmk_reboot_timeout":            "200",
 		"fence_agent_compute_api_access": "false",
 		"fence_agent_logging_api_access": "false",
 		"location_preference_set":        locationPref,
@@ -258,7 +264,31 @@ func wantCustomWorkloadConfigMetrics(ts *timestamppb.Timestamp, pacemakerExists 
 
 func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"pcmk_delay_max":                   "instance-name-1=30",
+		"fence_agent":                      "gcpstonith",
+		"pcmk_delay_max":                   "test-instance-name=30",
+		"pcmk_monitor_retries":             "4",
+		"pcmk_reboot_timeout":              "300",
+		"migration_threshold":              "5000",
+		"fence_agent_compute_api_access":   "false",
+		"fence_agent_logging_api_access":   "false",
+		"location_preference_set":          locationPref,
+		"maintenance_mode_active":          "true",
+		"resource_stickiness":              "1000",
+		"saphana_demote_timeout":           "3600",
+		"saphana_promote_timeout":          "3600",
+		"saphana_start_timeout":            "3600",
+		"saphana_stop_timeout":             "3600",
+		"saphanatopology_monitor_interval": "10",
+		"saphanatopology_monitor_timeout":  "600",
+	}
+}
+
+func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
+	return map[string]string{
+		"fence_agent":                      "fence_gce",
+		"pcmk_delay_max":                   "rhel-ha1=30",
+		"pcmk_monitor_retries":             "4",
+		"pcmk_reboot_timeout":              "300",
 		"migration_threshold":              "5000",
 		"fence_agent_compute_api_access":   "false",
 		"fence_agent_logging_api_access":   "false",
@@ -280,7 +310,10 @@ func wantNoPropertiesPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists
 
 func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"pcmk_delay_max":                 "instance-name-1=45",
+		"fence_agent":                    "fence_gce",
+		"pcmk_delay_max":                 "test-instance-name=45",
+		"pcmk_monitor_retries":           "5",
+		"pcmk_reboot_timeout":            "200",
 		"fence_agent_compute_api_access": "true",
 		"fence_agent_logging_api_access": "true",
 		"location_preference_set":        locationPref,
@@ -1391,13 +1424,27 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 					StdErr: "",
 				}
 			},
-			exists:              defaultExists,
-			config:              defaultConfiguration,
+			exists: defaultExists,
+			config: &cnfpb.Configuration{
+				CloudProperties: &iipb.CloudProperties{
+					InstanceName: "rhel-ha1",
+					InstanceId:   "test-instance-id",
+					Zone:         "test-region-zone",
+					ProjectId:    "test-project-id",
+				},
+				AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
+				CollectionConfiguration: &cnfpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: wpb.Bool(true),
+				},
+				SupportConfiguration: &cnfpb.SupportConfiguration{
+					SendWorkloadValidationMetricsToCloudMonitoring: &wpb.BoolValue{Value: true},
+				},
+			},
 			workloadConfig:      collectionDefinition.GetWorkloadValidation(),
 			fileReader:          defaultFileReader,
 			tokenGetter:         defaultToxenGetter,
 			wantPacemakerExists: float64(1.0),
-			wantPacemakerLabels: wantCLIPreferPacemakerMetrics,
+			wantPacemakerLabels: wantClonePacemakerMetrics,
 			locationPref:        "false",
 		},
 		{

@@ -29,10 +29,6 @@ var (
 	pacemakerXML string
 	//go:embed test_data/pacemaker-serviceaccount.xml
 	pacemakerServiceAccountXML string
-	//go:embed test_data/pacemaker-notype.xml
-	pacemakerNoTypeXML string
-	//go:embed test_data/pacemaker-fencegce.xml
-	pacemakerFenceGCEXML string
 	//go:embed test_data/pacemaker-clone.xml
 	pacemakerCloneXML string
 	//go:embed test_data/pacemaker-cliprefer.xml
