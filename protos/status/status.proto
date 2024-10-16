@@ -24,10 +24,10 @@ import "google/protobuf/wrappers.proto";
 message AgentStatus {
   string installed_version = 1;
   string available_version = 2;
-  bool systemd_service_enabled = 3;
-  bool systemd_service_running = 4;
+  State systemd_service_enabled = 3;
+  State systemd_service_running = 4;
   string configuration_file_path = 5;
-  bool configuration_valid = 6;
+  State configuration_valid = 6;
   string configuration_error_message = 7;
   repeated ServiceStatus services = 8;
   repeated Reference references = 9;
@@ -46,7 +46,7 @@ message ServiceStatus {
 message IAMRole {
   string name = 1;
   string role = 2;
-  bool granted = 3;
+  State granted = 3;
 }
 
 message ConfigValue {
@@ -58,4 +58,11 @@ message ConfigValue {
 message Reference {
   string name = 1;
   string url = 2;
+}
+
+enum State {
+  UNSPECIFIED_STATE = 0;
+  SUCCESS_STATE = 1;
+  FAILURE_STATE = 2;
+  ERROR_STATE = 3;
 }

@@ -275,10 +275,10 @@ func TestPrintStatus(t *testing.T) {
 Agent Status:
     Installed Version: 
     Available Version: 
-    Systemd Service Enabled: False
-    Systemd Service Running: False
+    Systemd Service Enabled: Error: could not determine status
+    Systemd Service Running: Error: could not determine status
     Configuration File: 
-    Configuration Valid: False
+    Configuration Valid: Error: could not determine status
         
 
 
@@ -290,10 +290,10 @@ Agent Status:
 				AgentName:                 "Agent for SAP",
 				InstalledVersion:          "3.6",
 				AvailableVersion:          "3.6",
-				SystemdServiceEnabled:     true,
-				SystemdServiceRunning:     true,
+				SystemdServiceEnabled:     spb.State_SUCCESS_STATE,
+				SystemdServiceRunning:     spb.State_SUCCESS_STATE,
 				ConfigurationFilePath:     "/etc/google-cloud-sap-agent/configuration.json",
-				ConfigurationValid:        true,
+				ConfigurationValid:        spb.State_SUCCESS_STATE,
 				ConfigurationErrorMessage: "error: proto: (line 6:44): invalid value for bool field value: 2",
 				Services: []*spb.ServiceStatus{
 					{
@@ -305,12 +305,12 @@ Agent Status:
 							{
 								Name:    "Compute Viewer",
 								Role:    "roles/compute.viewer",
-								Granted: true,
+								Granted: spb.State_SUCCESS_STATE,
 							},
 							{
 								Name:    "Monitoring Viewer",
 								Role:    "roles/monitoring.viewer",
-								Granted: true,
+								Granted: spb.State_SUCCESS_STATE,
 							},
 						},
 						ConfigValues: []*spb.ConfigValue{
@@ -401,10 +401,10 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 				AgentName:                 "Agent for SAP",
 				InstalledVersion:          "3.5",
 				AvailableVersion:          "3.6",
-				SystemdServiceEnabled:     false,
-				SystemdServiceRunning:     false,
+				SystemdServiceEnabled:     spb.State_FAILURE_STATE,
+				SystemdServiceRunning:     spb.State_FAILURE_STATE,
 				ConfigurationFilePath:     "/etc/google-cloud-sap-agent/configuration.json",
-				ConfigurationValid:        false,
+				ConfigurationValid:        spb.State_FAILURE_STATE,
 				ConfigurationErrorMessage: "error: proto: (line 6:44): invalid value for bool field value: 2",
 				Services: []*spb.ServiceStatus{
 					{
@@ -416,12 +416,12 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 							{
 								Name:    "Compute Viewer",
 								Role:    "roles/compute.viewer",
-								Granted: true,
+								Granted: spb.State_SUCCESS_STATE,
 							},
 							{
 								Name:    "Monitoring Viewer",
 								Role:    "roles/monitoring.viewer",
-								Granted: false,
+								Granted: spb.State_ERROR_STATE,
 							},
 						},
 						ConfigValues: []*spb.ConfigValue{
@@ -490,7 +490,7 @@ Agent Status:
 Process Metrics: Enabled
     Status: Error: Cannot write to Cloud Monitoring, check IAM permissions
     Compute Viewer (roles/compute.viewer): True
-    Monitoring Viewer (roles/monitoring.viewer): False
+    Monitoring Viewer (roles/monitoring.viewer): Error: could not determine status
     collect_process_metrics: True (configuration file)
     process_metrics_frequency: nil (default)
 --------------------------------------------------------------------------------

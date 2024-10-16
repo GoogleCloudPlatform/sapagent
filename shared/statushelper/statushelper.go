@@ -209,11 +209,11 @@ func PrintStatus(ctx context.Context, status *spb.AgentStatus) {
 	printColor(info, "    Available Version: ")
 	printColor(versionColor, "%s\n", status.AvailableVersion)
 
-	printBool(ctx, "    Systemd Service Enabled", status.SystemdServiceEnabled)
-	printBool(ctx, "    Systemd Service Running", status.SystemdServiceRunning)
+	printState(ctx, "    Systemd Service Enabled", status.SystemdServiceEnabled)
+	printState(ctx, "    Systemd Service Running", status.SystemdServiceRunning)
 	printColor(info, "    Configuration File: %s\n", status.ConfigurationFilePath)
-	printBool(ctx, "    Configuration Valid", status.ConfigurationValid)
-	if !status.ConfigurationValid {
+	printState(ctx, "    Configuration Valid", status.ConfigurationValid)
+	if status.ConfigurationValid != spb.State_SUCCESS_STATE {
 		printColor(failure, "        %s\n", status.ConfigurationErrorMessage)
 	}
 
@@ -224,15 +224,16 @@ func PrintStatus(ctx context.Context, status *spb.AgentStatus) {
 	printColor(info, "\n\n")
 }
 
-// printBool prints a boolean value with appropriate formatting and coloring.
-//
-// Assumes that true is success and false is failure.
-func printBool(ctx context.Context, name string, value bool) {
+// printState prints a valid/invalid/error state with formatting and coloring.
+func printState(ctx context.Context, name string, state spb.State) {
 	printColor(info, "%s: ", name)
-	if value {
+	switch state {
+	case spb.State_SUCCESS_STATE:
 		printColor(success, "True\n")
-	} else {
+	case spb.State_FAILURE_STATE:
 		printColor(failure, "False\n")
+	default:
+		printColor(failure, "Error: could not determine status\n")
 	}
 }
 
@@ -255,7 +256,7 @@ func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 	}
 
 	for _, iamRole := range status.IamRoles {
-		printBool(ctx, fmt.Sprintf("    %s (%s)", iamRole.Name, iamRole.Role), iamRole.Granted)
+		printState(ctx, fmt.Sprintf("    %s (%s)", iamRole.Name, iamRole.Role), iamRole.Granted)
 	}
 
 	for _, configValue := range status.ConfigValues {
