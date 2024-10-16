@@ -291,7 +291,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	}
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
-	r.oteLogger.LogMessageToFileAndConsole(ctx, "SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/disk-snapshot-backup-recovery#recover_to_specific_point-in-time for next steps.")
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/perform-disk-snapshot-backup-recovery#recovery_db_for_scaleup for next steps.")
 	if r.labelsOnDetachedDisk != "" {
 		if !r.isGroupSnapshot {
 			if err := r.appendLabelsToDetachedDisk(ctx, r.DataDiskName); err != nil {
