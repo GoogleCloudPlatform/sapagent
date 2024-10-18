@@ -32,7 +32,7 @@ jobs:
 
     - name: Notify on failure
       if: ${{ failure() }}
-      uses: cinotify/github-action@v1.1.0
+      uses: cinotify/github-action@main
       with:
         to: 'sapagent-github-dev@google.com'
         subject: '[Failure] GitHub Agent for SAP build failure'
