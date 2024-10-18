@@ -70,13 +70,13 @@ func printColor(code colorCode, str string, a ...any) {
 }
 
 // FetchLatestVersion returns latest version of the agent package from the
-// OS package manager. Assumes that the package name is same as the repo name.
-func FetchLatestVersion(ctx context.Context, packageName string, osType string) (string, error) {
+// OS package manager.
+func FetchLatestVersion(ctx context.Context, packageName string, repoName string, osType string) (string, error) {
 	switch osType {
 	case osLinux:
-		return packageVersionLinux(ctx, packageName, commandlineexecutor.ExecuteCommand, commandlineexecutor.CommandExists)
+		return packageVersionLinux(ctx, repoName, packageName, commandlineexecutor.ExecuteCommand, commandlineexecutor.CommandExists)
 	case osWindows:
-		return packageVersionWindows(ctx, packageName, commandlineexecutor.ExecuteCommand, commandlineexecutor.CommandExists)
+		return packageVersionWindows(ctx, repoName, packageName, commandlineexecutor.ExecuteCommand, commandlineexecutor.CommandExists)
 	default:
 		return "", fmt.Errorf("unsupported OS: %s", osType)
 	}
@@ -150,7 +150,7 @@ func CheckIAMRoles(ctx context.Context, projectID string, requiredRoles []string
 
 // packageVersionLinux returns the latest version of the agent package
 // available on the linux OS's package manager.
-func packageVersionLinux(ctx context.Context, packageName string, exec commandlineexecutor.Execute, exists commandlineexecutor.Exists) (string, error) {
+func packageVersionLinux(ctx context.Context, packageName string, repoName string, exec commandlineexecutor.Execute, exists commandlineexecutor.Exists) (string, error) {
 	var cmd string
 	// Refresh metadata for only the package repo and fetch the latest version.
 	// Package managers update all metadata while running any command -  we want
@@ -158,13 +158,13 @@ func packageVersionLinux(ctx context.Context, packageName string, exec commandli
 	// runtime.
 	switch {
 	case exists("yum"):
-		yumCmd, err := shsprintf.Sprintf("sudo yum --disablerepo \"*\" --enablerepo \"%s\" --noplugins --quiet list updates | grep %s | awk \"/%s/ {print \\$2}\"", packageName, packageName, packageName)
+		yumCmd, err := shsprintf.Sprintf("sudo yum --disablerepo \"*\" --enablerepo \"%s\" --noplugins --quiet list updates | grep %s | awk \"/%s/ {print \\$2}\"", repoName, packageName, packageName)
 		if err != nil {
 			return "", fmt.Errorf("failed to get package via yum: %v", err)
 		}
 		cmd = yumCmd
 	case exists("zypper"):
-		zypperCmd, err := shsprintf.Sprintf("sudo zypper --quiet refresh %s && sudo zypper --non-interactive --no-refresh info %s  | awk \"/Version/ {print \\$3}\"", packageName, packageName)
+		zypperCmd, err := shsprintf.Sprintf("sudo zypper --quiet refresh %s && sudo zypper --non-interactive --no-refresh info %s  | awk \"/Version/ {print \\$3}\"", repoName, packageName)
 		if err != nil {
 			return "", fmt.Errorf("failed to get package viz zypper: %v", err)
 		}
@@ -187,7 +187,7 @@ func packageVersionLinux(ctx context.Context, packageName string, exec commandli
 
 // packageVersionWindows returns the latest version of the agent package
 // available on the windows OS's package manager.
-func packageVersionWindows(ctx context.Context, packageName string, exec commandlineexecutor.Execute, exists commandlineexecutor.Exists) (string, error) {
+func packageVersionWindows(ctx context.Context, packageName string, repoName string, exec commandlineexecutor.Execute, exists commandlineexecutor.Exists) (string, error) {
 	// TODO: Implement service status check for windows
 	return "", fmt.Errorf("packageVersionWindows is not yet implemented")
 }

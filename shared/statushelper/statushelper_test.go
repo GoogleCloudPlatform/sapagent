@@ -60,6 +60,7 @@ func TestPackageVersionLinux(t *testing.T) {
 	tests := []struct {
 		name        string
 		packageName string
+		repoName    string
 		fakeCommand string
 		fakeRes     commandlineexecutor.Result
 		wantLatest  string
@@ -68,6 +69,7 @@ func TestPackageVersionLinux(t *testing.T) {
 		{
 			name:        "YumSuccess",
 			packageName: "foo",
+			repoName:    "repo",
 			fakeCommand: "yum",
 			fakeRes: commandlineexecutor.Result{
 				StdOut: "3.5-671008012 ",
@@ -77,6 +79,7 @@ func TestPackageVersionLinux(t *testing.T) {
 		{
 			name:        "YumFailure",
 			packageName: "foo",
+			repoName:    "repo",
 			fakeCommand: "yum",
 			fakeRes: commandlineexecutor.Result{
 				ExitCode: 1,
@@ -87,6 +90,7 @@ func TestPackageVersionLinux(t *testing.T) {
 		{
 			name:        "ZypperSuccess",
 			packageName: "foo",
+			repoName:    "repo",
 			fakeCommand: "zypper",
 			fakeRes: commandlineexecutor.Result{
 				StdOut: "3.5-671008012",
@@ -96,6 +100,7 @@ func TestPackageVersionLinux(t *testing.T) {
 		{
 			name:        "ZypperFailure",
 			packageName: "foo",
+			repoName:    "repo",
 			fakeCommand: "zypper",
 			fakeRes: commandlineexecutor.Result{
 				ExitCode: 1,
@@ -106,6 +111,7 @@ func TestPackageVersionLinux(t *testing.T) {
 		{
 			name:        "NoSupportedPackageManager",
 			packageName: "foo",
+			repoName:    "repo",
 			wantErr:     cmpopts.AnyError,
 		},
 	}
@@ -113,12 +119,12 @@ func TestPackageVersionLinux(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			exec := &fakeExecutor{fakeCommandRes: map[string]commandlineexecutor.Result{test.fakeCommand: test.fakeRes}}
-			gotLatest, gotErr := packageVersionLinux(context.Background(), test.packageName, exec.ExecuteCommand, exec.CommandExists)
+			gotLatest, gotErr := packageVersionLinux(context.Background(), test.packageName, test.repoName, exec.ExecuteCommand, exec.CommandExists)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("packageVersionLinux(%s) returned err: %v, wantErr: %v", test.packageName, gotErr, test.wantErr)
+				t.Errorf("packageVersionLinux(%s, %s) returned err: %v, wantErr: %v", test.packageName, test.repoName, gotErr, test.wantErr)
 			}
 			if diff := cmp.Diff(test.wantLatest, gotLatest); diff != "" {
-				t.Errorf("packageVersionLinux(%s) returned unexpected diff (-want +got):\n%s", test.packageName, diff)
+				t.Errorf("packageVersionLinux(%s, %s) returned unexpected diff (-want +got):\n%s", test.packageName, test.repoName, diff)
 			}
 		})
 	}
