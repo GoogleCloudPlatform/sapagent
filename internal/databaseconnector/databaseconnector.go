@@ -58,7 +58,7 @@ type (
 		PingSpec       *PingSpec // Allows for testing a connection to a database.
 	}
 
-	pingImpl func(ctx context.Context, db *sql.DB) error
+	pingImpl func(ctx context.Context, db *DBHandle) error
 
 	// PingSpec is a struct which holds values for establishing an open connection to a database.
 	PingSpec struct {
@@ -98,14 +98,41 @@ type (
 )
 
 // CreateDBHandle creates a DB handle to the database that queries using either the go-hdb driver or hdbsql command-line.
-func CreateDBHandle(ctx context.Context, p Params) (handle *DBHandle, err error) {
+func CreateDBHandle(ctx context.Context, p Params) (db *DBHandle, err error) {
 	// we want to use go-hdb for username:password authorizations and hdbsql command-line for hdbuserstore key authorization.
 	if p.HDBUserKey != "" {
 		log.CtxLogger(ctx).Debug("Using hdbsql command-line")
-		return NewCMDDBHandle(p)
+		db, err = NewCMDDBHandle(p)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		log.CtxLogger(ctx).Debug("Using go-hdb driver")
+		db, err = NewGoDBHandle(ctx, p)
+		if err != nil {
+			return nil, err
+		}
 	}
-	log.CtxLogger(ctx).Debug("Using go-hdb driver")
-	return NewGoDBHandle(ctx, p)
+	if p.PingSpec == nil {
+		log.CtxLogger(ctx).Debug("Database connection successful")
+		return db, nil
+	}
+
+	maxNumberOfPings := p.PingSpec.MaxRetries + 1
+	for i := 0; i < maxNumberOfPings; i++ {
+		pingFunc := db.Ping
+		if p.PingSpec.pingImpl != nil {
+			pingFunc = func(ctx context.Context) error {
+				return p.PingSpec.pingImpl(ctx, db)
+			}
+		}
+		if err = pingFunc(ctx); err == nil { // If NO error.
+			log.CtxLogger(ctx).Debugw("Database connection established successfully", "attempts", i+1)
+			return db, nil
+		}
+		time.Sleep(p.PingSpec.Timeout)
+	}
+	return nil, err
 }
 
 // Database Handle Functions for Querying and handling results
@@ -133,33 +160,10 @@ func NewGoDBHandle(ctx context.Context, p Params) (handle *DBHandle, err error) 
 	if err != nil {
 		return nil, err
 	}
-
-	if p.PingSpec == nil {
-		log.CtxLogger(ctx).Debug("Database connection successful")
-		return &DBHandle{
-			useCMD:      false,
-			goHDBHandle: db,
-		}, nil
-	}
-
-	maxNumberOfPings := p.PingSpec.MaxRetries + 1
-	for i := 0; i < maxNumberOfPings; i++ {
-		pingFunc := db.PingContext
-		if p.PingSpec.pingImpl != nil {
-			pingFunc = func(ctx context.Context) error {
-				return p.PingSpec.pingImpl(ctx, db)
-			}
-		}
-		if err = pingFunc(ctx); err == nil { // If NO error.
-			log.CtxLogger(ctx).Debugw("Database connection established successfully", "attempts", i+1)
-			return &DBHandle{
-				useCMD:      false,
-				goHDBHandle: db,
-			}, nil
-		}
-		time.Sleep(p.PingSpec.Timeout)
-	}
-	return nil, err
+	return &DBHandle{
+		useCMD:      false,
+		goHDBHandle: db,
+	}, nil
 }
 
 // NewCMDDBHandle instantiates a command-line database handle.
@@ -230,6 +234,18 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 		cmdDBResult:      resultRows,
 		cmdDBResultIndex: -1,
 	}, nil
+}
+
+// Ping pings the database via the goHDB driver or command-line accordingly.
+func (db *DBHandle) Ping(ctx context.Context) error {
+	if !db.useCMD {
+		// Ping via go HDB Driver.
+		return db.goHDBHandle.PingContext(ctx)
+	}
+	// Ping via hdbsql command-line - run a dummy query.
+	dummyQuery := "SELECT * FROM DUMMY"
+	_, err := db.Query(ctx, dummyQuery, commandlineexecutor.ExecuteCommand)
+	return err
 }
 
 // Next iterates to the next row of result. Returns false if no more rows remain or the next row could not be read.

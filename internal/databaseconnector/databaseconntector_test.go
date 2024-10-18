@@ -18,8 +18,8 @@ package databaseconnector
 
 import (
 	"context"
-	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -358,24 +358,36 @@ func TestReadRow(t *testing.T) {
 	}
 }
 
-func TestNewGoDBHandleWithPing(t *testing.T) {
+func TestCreateDBHandleWithPing(t *testing.T) {
 	type ContextKey string
 	pingError := errors.New("ping error")
 	const curCount ContextKey = "CurrentCount"
-	alwaysFail := func(ctx context.Context, db *sql.DB) error {
+	alwaysFail := func(ctx context.Context, db *DBHandle) error {
 		return pingError
 	}
-	alwaysPass := func(ctx context.Context, db *sql.DB) error {
+	alwaysPass := func(ctx context.Context, db *DBHandle) error {
 		return nil
 	}
-	passAfterCount := func(count int) func(ctx context.Context, db *sql.DB) error {
-		return func(ctx context.Context, db *sql.DB) error {
+	passAfterCount := func(count int) func(ctx context.Context, db *DBHandle) error {
+		return func(ctx context.Context, db *DBHandle) error {
 			curCount := ctx.Value(curCount).(int)
 			if curCount >= count {
 				return nil
 			}
 			return pingError
 		}
+	}
+	allParams := map[string]Params{
+		"GoHDB": Params{
+			Username: "foo",
+			Password: "bar",
+			Host:     "localhost",
+			Port:     "30015",
+		},
+		"CMDDB": Params{
+			SID:        "TST",
+			HDBUserKey: "testHDBUserKey",
+		},
 	}
 	tests := []struct {
 		name            string
@@ -426,33 +438,31 @@ func TestNewGoDBHandleWithPing(t *testing.T) {
 			wantErr:         nil,
 		},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			numPingCalls := 0
-			params := Params{
-				Username: "foo",
-				Password: "bar",
-				Host:     "localhost",
-				Port:     "30015",
-			}
-			if tc.spec != nil {
-				params.PingSpec = &PingSpec{
-					MaxRetries: tc.spec.MaxRetries,
-					pingImpl: func(ctx context.Context, db *sql.DB) error {
-						numPingCalls++
-						ctx = context.WithValue(ctx, curCount, numPingCalls)
-						return tc.spec.pingImpl(ctx, db)
-					},
+	for paramType, paramVal := range allParams {
+		for _, tc := range tests {
+			testName := fmt.Sprintf("%s%s", tc.name, paramType)
+			t.Run(testName, func(t *testing.T) {
+				testParams := paramVal
+				numPingCalls := 0
+				if tc.spec != nil {
+					testParams.PingSpec = &PingSpec{
+						MaxRetries: tc.spec.MaxRetries,
+						pingImpl: func(ctx context.Context, db *DBHandle) error {
+							numPingCalls++
+							ctx = context.WithValue(ctx, curCount, numPingCalls)
+							return tc.spec.pingImpl(ctx, db)
+						},
+					}
 				}
-			}
-			_, err := NewGoDBHandle(context.Background(), params)
-			if numPingCalls != tc.wantedPingCalls {
-				t.Errorf("NewGoDBHandle ping invocations = %d, want %d", numPingCalls, tc.wantedPingCalls)
-			}
-			if !cmp.Equal(tc.wantErr, err, cmpopts.EquateErrors()) {
-				t.Errorf("NewGoDBHandle() error = %v, want %v", err, tc.wantErr)
-			}
-		})
+				_, err := CreateDBHandle(context.Background(), testParams)
+				if numPingCalls != tc.wantedPingCalls {
+					t.Errorf("CreateDBHandle() ping invocations = %d, want %d", numPingCalls, tc.wantedPingCalls)
+				}
+				if !cmp.Equal(tc.wantErr, err, cmpopts.EquateErrors()) {
+					t.Errorf("CreateDBHandle() error = %v, want %v", err, tc.wantErr)
+				}
+			})
+		}
 	}
 }
 
