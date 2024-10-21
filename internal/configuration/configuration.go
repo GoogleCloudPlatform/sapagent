@@ -79,12 +79,12 @@ func UserAgent() string {
 }
 
 // Read just reads configuration from given file and parses it into config proto.
-func Read(path string, read ReadConfigFile) *cpb.Configuration {
+func Read(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 	content, err := read(path)
 	if err != nil || len(content) == 0 {
 		log.Logger.Errorw("Could not read from configuration file", "file", path, "error", err)
 		usagemetrics.Error(usagemetrics.ConfigFileReadFailure)
-		return nil
+		return nil, err
 	}
 
 	config := &cpb.Configuration{}
@@ -94,13 +94,13 @@ func Read(path string, read ReadConfigFile) *cpb.Configuration {
 		log.Logger.Errorw("Invalid content in the configuration file", "file", path, "content", string(content))
 		log.Logger.Errorf("Configuration JSON at '%s' has error: %v. Only hostmetrics will be started. Please fix the JSON and restart the agent", path, err)
 	}
-	return config
+	return config, err
 }
 
 // ReadFromFile reads the final configuration from the given file. Besides parsing the file,
 // it consists of the final HANA Monitoring configuration after parsing all the enabled
 // HANA Monitoring queries, by applying overrides wherever necessary, into a proto.
-func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
+func ReadFromFile(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 	p := path
 	if len(p) == 0 {
 		p = LinuxConfigPath
@@ -109,15 +109,15 @@ func ReadFromFile(path string, read ReadConfigFile) *cpb.Configuration {
 		}
 	}
 
-	config := Read(p, read)
+	config, err := Read(p, read)
 	if config == nil {
-		return nil
+		return nil, err
 	}
 
 	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
 	validateAgentConfiguration(config)
-	return config
+	return config, err
 }
 
 // LogLevelToZapcore returns the zapcore equivalent of the configuration log level.

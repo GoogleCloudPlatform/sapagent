@@ -179,7 +179,7 @@ func packageVersionLinux(ctx context.Context, packageName string, repoName strin
 	})
 
 	if result.Error != nil || result.StdOut == "" {
-		return "", fmt.Errorf("failed to fetch latest version: %v", result.Error)
+		return "", fmt.Errorf("failed to fetch latest version: %#v", result)
 	}
 
 	return strings.TrimSpace(result.StdOut), nil

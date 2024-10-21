@@ -145,7 +145,7 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	d.createLogDir()
 	log.SetupLogging(d.lp)
 	ctx, cancel := context.WithCancel(ctx)
-	d.config = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
+	d.config, _ = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
 	if d.config.GetBareMetal() && d.config.GetCloudProperties() == nil {
 		log.Logger.Error("Bare metal instance detected without cloud properties set. Manually set cloud properties in the configuration file to continue.")
 		usagemetrics.Error(usagemetrics.BareMetalCloudPropertiesNotSet)
@@ -201,7 +201,7 @@ func (d *Daemon) createLogDir() {
 func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFunc, restarting bool) subcommands.ExitStatus {
 	// Daemon mode operation
 	if restarting {
-		d.config = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
+		d.config, _ = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
 		d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 	}
 	d.lp.LogToCloud = d.config.GetLogToCloud().GetValue()

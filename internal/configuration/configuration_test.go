@@ -194,7 +194,7 @@ func TestReadFromFile(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			defaultHMQueriesContent = sampleHANAMonitoringConfigQueriesJSON
-			got := ReadFromFile(test.path, test.readFunc)
+			got, _ := ReadFromFile(test.path, test.readFunc)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("ReadFromFile() for path: %s\n(-want +got):\n%s", test.path, diff)
 			}

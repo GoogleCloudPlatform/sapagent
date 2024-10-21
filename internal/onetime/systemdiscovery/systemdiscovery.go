@@ -211,7 +211,7 @@ func (sd *SystemDiscovery) initDefaults(ctx context.Context, cloudLoggingClient 
 // prepareConfig sets up configuration.
 // for the SystemDiscovery OTE.
 func (sd *SystemDiscovery) prepareConfig(ctx context.Context, cp *iipb.CloudProperties) (*cpb.Configuration, error) {
-	config := configuration.ReadFromFile(sd.ConfigPath, os.ReadFile)
+	config, _ := configuration.ReadFromFile(sd.ConfigPath, os.ReadFile)
 
 	// If file not found in user provided path,
 	// return an error.

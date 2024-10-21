@@ -1353,7 +1353,7 @@ func TestModifyConfig(t *testing.T) {
 				return
 			}
 
-			gotConfig := configuration.Read(test.c.Path, os.ReadFile)
+			gotConfig, _ := configuration.Read(test.c.Path, os.ReadFile)
 			if diff := cmp.Diff(test.newConfig, gotConfig, protocmp.Transform(),
 				cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 				t.Errorf("modifyConfig(%v) returned an unexpected diff (-want +got): %v", test.c.Path, diff)

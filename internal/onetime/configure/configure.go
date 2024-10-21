@@ -227,7 +227,7 @@ func setStatus(ctx context.Context, config *cpb.Configuration) map[string]bool {
 
 // showFeatures displays the status of all features.
 func (c *Configure) showFeatures(ctx context.Context) (string, subcommands.ExitStatus) {
-	config := configuration.Read(c.Path, os.ReadFile)
+	config, _ := configuration.Read(c.Path, os.ReadFile)
 	if config == nil {
 		c.oteLogger.LogMessageToFileAndConsole(ctx, "Unable to read configuration.json")
 		return "Unable to read configuration.json", subcommands.ExitFailure
@@ -267,7 +267,7 @@ func (c *Configure) showFeatures(ctx context.Context) (string, subcommands.ExitS
 // modifyConfig takes user input and enables/disables features in configuration.json and restarts the agent.
 func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadConfigFile) (string, subcommands.ExitStatus) {
 	log.Logger.Infow("Beginning execution of features command")
-	config := configuration.Read(c.Path, read)
+	config, _ := configuration.Read(c.Path, read)
 	if config == nil {
 		c.oteLogger.LogMessageToFileAndConsole(ctx, "Unable to read configuration.json")
 		return "Unable to read configuration.json", subcommands.ExitFailure

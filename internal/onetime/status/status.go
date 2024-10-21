@@ -21,13 +21,19 @@ package status
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime"
 
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/statushelper"
 
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
 )
 
@@ -65,21 +71,25 @@ var serviceChecks = []serviceCheck{
 
 // Status stores the status subcommand parameters.
 type Status struct {
+	ConfigFilePath string
+
 	verbose           bool
 	help              bool
 	logLevel, logPath string
 	oteLogger         *onetime.OTELogger
+	cloudProps        *iipb.CloudProperties
+	readFile          configuration.ReadConfigFile
 }
 
 // Name implements the subcommand interface for status.
 func (*Status) Name() string { return "status" }
 
 // Synopsis implements the subcommand interface for status.
-func (*Status) Synopsis() string { return "get the status of the agent its services" }
+func (*Status) Synopsis() string { return "get the status of the agent and its services" }
 
 // Usage implements the subcommand interface for status.
 func (*Status) Usage() string {
-	return `status [-v]
+	return `status [-config <path-to-config-file>] [-v]
 
   Get the status of the agent and its services.
   `
@@ -87,7 +97,10 @@ func (*Status) Usage() string {
 
 // SetFlags implements the subcommand interface for status.
 func (s *Status) SetFlags(fs *flag.FlagSet) {
-	fs.BoolVar(&s.verbose, "v", false, "display verbose status information")
+	fs.StringVar(&s.ConfigFilePath, "config", "", "Configuration path override")
+	fs.StringVar(&s.ConfigFilePath, "c", "", "Configuration path override")
+	fs.BoolVar(&s.verbose, "v", false, "Display verbose status information")
+	fs.BoolVar(&s.help, "h", false, "Display help")
 }
 
 // Execute implements the subcommand interface for status.
@@ -103,19 +116,22 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	if !completed {
 		return exitStatus
 	}
+	s.cloudProps = cp
 
 	// Run the status checks.
-	_, exitStatus = s.Run(ctx, onetime.CreateRunOptions(cp, false))
+	agentStatus, exitStatus := s.Run(ctx, onetime.CreateRunOptions(cp, false))
 	if exitStatus == subcommands.ExitFailure {
 		// Collect support bundle if there's an error.
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
 	}
+	statushelper.PrintStatus(ctx, agentStatus)
 	return exitStatus
 }
 
 // Run executes the command and returns the status.
 func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentStatus, subcommands.ExitStatus) {
 	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
+	s.readFile = os.ReadFile
 	status, err := s.statusHandler(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
@@ -126,8 +142,39 @@ func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentS
 
 // statusHandler executes the status checks and returns the results as the AgentStatus proto.
 func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
-	// This will be implemented in subsequent CLs for this functionality.
-	return nil, fmt.Errorf("statusHandler is not yet implemented")
+	agentStatus, config := s.agentStatus(ctx)
+
+	// TODO: Remove this once we have the functional checks.
+	log.CtxLogger(ctx).Debugw("agentStatus", "agentStatus", agentStatus, "config", config)
+
+	return agentStatus, nil
+}
+
+func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Configuration) {
+	agentStatus := &spb.AgentStatus{
+		AgentName:        agentPackageName,
+		InstalledVersion: fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
+	}
+
+	path := s.ConfigFilePath
+	if len(path) == 0 {
+		switch runtime.GOOS {
+		case "linux":
+			path = configuration.LinuxConfigPath
+		case "windows":
+			path = configuration.WindowsConfigPath
+		}
+	}
+	agentStatus.ConfigurationFilePath = path
+	config, err := configuration.Read(path, s.readFile)
+	agentStatus.ConfigurationValid = spb.State_SUCCESS_STATE
+	if err != nil {
+		agentStatus.ConfigurationValid = spb.State_FAILURE_STATE
+		agentStatus.ConfigurationErrorMessage = err.Error()
+	}
+	config = configuration.ApplyDefaults(config, s.cloudProps)
+
+	return agentStatus, config
 }
 
 // RunChecks runs the status checks for an agent service.
