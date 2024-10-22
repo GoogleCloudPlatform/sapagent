@@ -904,7 +904,8 @@
             },
             "value": "LOGGING_API_ACCESS"
           }
-        ]
+        ],
+        "ascs_metrics": []
       },
       "cib_bootstrap_option_metrics": [
         {
