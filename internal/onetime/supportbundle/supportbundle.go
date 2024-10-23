@@ -98,6 +98,7 @@ const (
 	agentOnetimeFilesPath = `/var/log/google-cloud-sap-agent/`
 	systemDBErrorsFile    = `_SYSTEM_DB_BACKUP_ERROR.txt`
 	journalCTLLogs        = `_JOURNAL_CTL_LOGS.txt`
+	varLogMessagesFile    = `_VAR_LOG_MESSAGES.txt`
 	hanaVersionFile       = `_HANA_VERSION.txt`
 	tenantDBErrorsFile    = `_TENANT_DB_BACKUP_ERROR.txt`
 	backintErrorsFile     = `_BACKINT_ERROR.txt`
@@ -213,6 +214,9 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		}
 		if isError := s.extractJournalCTLLogs(ctx, destFilesPath, s.Hostname, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting journalctl logs")
+		}
+		if isError := s.copyVarLogMessagesToBundle(ctx, destFilesPath, s.Hostname, fs); isError {
+			failureMsgs = append(failureMsgs, "Error while copying var log messages to bundle")
 		}
 		if isError := s.extractHANAVersion(ctx, destFilesPath, s.Sid, s.Hostname, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting HANA version")
@@ -544,6 +548,30 @@ func (s *SupportBundle) extractJournalCTLLogs(ctx context.Context, destFilesPath
 		hasErrors = true
 	}
 	return hasErrors
+}
+
+// copies /var/log/messages file to the support bundle. It returns true if there is an error.
+func (s *SupportBundle) copyVarLogMessagesToBundle(ctx context.Context, destFilesPath, hostname string, fu filesystem.FileSystem) bool {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Copying /var/log/messages file to the support bundle...")
+	logFile := fmt.Sprintf("%smessages", linuxLogFilesPath)
+	srcFile, err := fu.Open(logFile)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while opening file: %s", logFile), err)
+		return true
+	}
+	defer srcFile.Close()
+	destFilePath := fmt.Sprintf("%s/%s%s", destFilesPath, hostname, varLogMessagesFile)
+	destFile, err := fu.OpenFile(destFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while opening file: %s", destFilePath), err)
+		return true
+	}
+	defer destFile.Close()
+	if _, err := fu.Copy(destFile, srcFile); err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while copying file: /var/log/messages", err)
+		return true
+	}
+	return false
 }
 
 // extractSystemDBErrors extracts the errors from system DB backup logs.

@@ -552,7 +552,7 @@ func TestSOSReportHandler(t *testing.T) {
 			exec:           fakeExec,
 			fs:             mockedfilesystem{reqErr: os.ErrInvalid},
 			z:              mockedZipper{},
-			wantMessage:    "Error while extracting system DB errors, Error while extracting tenant DB errors, Error while extracting journalctl logs, Error while extracting HANA version, Error while fetching package info, Error while fetching OS processes, Error while fetching systemd services, Error while copying file: /etc/google-cloud-sap-agent/configuration.json, Error while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
+			wantMessage:    "Error while extracting system DB errors, Error while extracting tenant DB errors, Error while extracting journalctl logs, Error while copying var log messages to bundle, Error while extracting HANA version, Error while fetching package info, Error while fetching OS processes, Error while fetching systemd services, Error while copying file: /etc/google-cloud-sap-agent/configuration.json, Error while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
 			wantExitStatus: subcommands.ExitFailure,
 		},
 		{
@@ -818,6 +818,78 @@ func TestExtractJournalCTLLogs(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if got := sosr.extractJournalCTLLogs(context.Background(), test.destFile, test.hostname, test.exec, test.fs); got != test.want {
 				t.Errorf("extractJournalCTLLogs() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestExtractVarLogMessages(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
+	tests := []struct {
+		name     string
+		destFile string
+		hostname string
+		fs       filesystem.FileSystem
+		want     bool
+	}{
+		{
+			name:     "HasErrorsInOpen",
+			destFile: "failure",
+			hostname: "sampleHost",
+			fs: &fake.FileSystem{
+				OpenResp: []*os.File{nil},
+				OpenErr:  []error{os.ErrInvalid},
+			},
+			want: true,
+		},
+		{
+			name:     "HasErrorsInOpenFile",
+			destFile: "sampleFile",
+			hostname: "sampleHost",
+			fs: &fake.FileSystem{
+				OpenResp:     []*os.File{&os.File{}},
+				OpenErr:      []error{nil},
+				OpenFileResp: []*os.File{nil},
+				OpenFileErr:  []error{os.ErrInvalid},
+			},
+			want: true,
+		},
+		{
+			name:     "HasErrorInCopy",
+			destFile: "sampleFile",
+			hostname: "sampleHost",
+			fs: &fake.FileSystem{
+				OpenResp:     []*os.File{&os.File{}},
+				OpenErr:      []error{nil},
+				OpenFileResp: []*os.File{&os.File{}},
+				OpenFileErr:  []error{nil},
+				CopyResp:     []int64{0},
+				CopyErr:      []error{os.ErrInvalid},
+			},
+			want: true,
+		},
+		{
+			name:     "NoErrors",
+			destFile: "sampleFile",
+			hostname: "sampleHost",
+			fs: &fake.FileSystem{
+				OpenResp:     []*os.File{&os.File{}},
+				OpenErr:      []error{nil},
+				OpenFileResp: []*os.File{&os.File{}},
+				OpenFileErr:  []error{nil},
+				CopyResp:     []int64{100},
+				CopyErr:      []error{nil},
+			},
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sosr.copyVarLogMessagesToBundle(context.Background(), test.destFile, test.hostname, test.fs); got != test.want {
+				t.Errorf("copyVarLogMessagesToBundle() = %v, want %v", got, test.want)
 			}
 		})
 	}
