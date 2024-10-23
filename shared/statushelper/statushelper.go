@@ -105,8 +105,8 @@ func agentEnabledAndRunningLinux(ctx context.Context, serviceName string, exec c
 		Executable:  "sudo",
 		ArgsToSplit: fmt.Sprintf("systemctl is-enabled %s", serviceName),
 	})
-	if result.Error != nil {
-		return false, false, fmt.Errorf("could not get the agent service enabled status: %s", result.StdErr)
+	if result.StdErr != "" {
+		return false, false, fmt.Errorf("could not get the agent service enabled status: %#v", result)
 	}
 
 	isEnabled = false
@@ -122,8 +122,8 @@ func agentEnabledAndRunningLinux(ctx context.Context, serviceName string, exec c
 		Executable:  "sudo",
 		ArgsToSplit: fmt.Sprintf("systemctl is-active %s", serviceName),
 	})
-	if result.Error != nil {
-		return false, false, fmt.Errorf("could not get the agent service active status: %s", result.StdErr)
+	if result.StdErr != "" {
+		return false, false, fmt.Errorf("could not get the agent service active status: %#v", result)
 	}
 
 	isRunning = false

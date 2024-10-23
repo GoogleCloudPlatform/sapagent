@@ -53,7 +53,10 @@ type (
 	}
 )
 
-const agentPackageName = "google-cloud-sap-agent"
+const (
+	agentPackageName        = "google-cloud-sap-agent"
+	fetchLatestVersionError = "Error: could not fetch latest version"
+)
 
 // serviceChecks stores the check params for each agent service check.
 // TOOD(b/362288235): Add checks for all services.
@@ -154,6 +157,29 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	agentStatus := &spb.AgentStatus{
 		AgentName:        agentPackageName,
 		InstalledVersion: fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
+	}
+
+	var err error
+	agentStatus.AvailableVersion, err = statushelper.FetchLatestVersion(ctx, agentPackageName, agentPackageName, runtime.GOOS)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not fetch latest version", "error", err)
+		agentStatus.AvailableVersion = fetchLatestVersionError
+	}
+
+	enabled, running, err := statushelper.CheckAgentEnabledAndRunning(ctx, agentPackageName, runtime.GOOS)
+	agentStatus.SystemdServiceEnabled = spb.State_FAILURE_STATE
+	agentStatus.SystemdServiceRunning = spb.State_FAILURE_STATE
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not check agent enabled and running", "error", err)
+		agentStatus.SystemdServiceEnabled = spb.State_ERROR_STATE
+		agentStatus.SystemdServiceRunning = spb.State_ERROR_STATE
+	} else {
+		if enabled {
+			agentStatus.SystemdServiceEnabled = spb.State_SUCCESS_STATE
+		}
+		if running {
+			agentStatus.SystemdServiceRunning = spb.State_SUCCESS_STATE
+		}
 	}
 
 	path := s.ConfigFilePath

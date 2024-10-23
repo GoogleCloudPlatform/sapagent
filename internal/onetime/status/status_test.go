@@ -128,6 +128,9 @@ func TestStatusHandler(t *testing.T) {
 			want: &spb.AgentStatus{
 				AgentName:             agentPackageName,
 				InstalledVersion:      fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
+				AvailableVersion:      fetchLatestVersionError,
+				SystemdServiceEnabled: spb.State_ERROR_STATE,
+				SystemdServiceRunning: spb.State_ERROR_STATE,
 				ConfigurationFilePath: configuration.LinuxConfigPath,
 				ConfigurationValid:    spb.State_SUCCESS_STATE,
 			},
