@@ -216,18 +216,18 @@ func (d *Diagnose) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) s
 		return exitStatus
 	}
 	d.usageFunc = fs.Usage
-	_, exitStatus = d.Run(ctx, lp, onetime.CreateRunOptions(cp, false))
+	_, exitStatus = d.Run(ctx, lp, onetime.CreateRunOptions(cp, false), commandlineexecutor.ExecuteCommand)
 	return exitStatus
 }
 
 // Run executes the OTE and returns message and exit status.
-func (d *Diagnose) Run(ctx context.Context, lp log.Parameters, runOpts *onetime.RunOptions) (string, subcommands.ExitStatus) {
+func (d *Diagnose) Run(ctx context.Context, lp log.Parameters, runOpts *onetime.RunOptions, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	d.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
 	d.runOpts = runOpts
 	opts := &options{
 		fs:               filesystem.Helper{},
 		client:           s.NewClient,
-		exec:             commandlineexecutor.ExecuteCommand,
+		exec:             exec,
 		z:                zipperHelper{},
 		lp:               lp,
 		cp:               runOpts.CloudProperties,

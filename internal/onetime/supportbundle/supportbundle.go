@@ -60,6 +60,7 @@ type (
 		LogPath                string                        `json:"log-path"`
 		oteLogger              *onetime.OTELogger
 	}
+	// zipperHelper is a testable struct for zipper.
 	zipperHelper struct{}
 
 	// uploader interface provides abstraction for ease of testing.
@@ -153,14 +154,14 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 		return exitStatus
 	}
 
-	_, exitStatus = s.Run(ctx, onetime.CreateRunOptions(cp, false))
+	_, exitStatus = s.Run(ctx, onetime.CreateRunOptions(cp, false), commandlineexecutor.ExecuteCommand)
 	return exitStatus
 }
 
 // Run executes the command and returns the message and exit status.
-func (s *SupportBundle) Run(ctx context.Context, opts *onetime.RunOptions) (string, subcommands.ExitStatus) {
+func (s *SupportBundle) Run(ctx context.Context, opts *onetime.RunOptions, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
-	return s.supportBundleHandler(ctx, destFilePathPrefix, commandlineexecutor.ExecuteCommand, filesystem.Helper{}, zipperHelper{})
+	return s.supportBundleHandler(ctx, destFilePathPrefix, exec, filesystem.Helper{}, zipperHelper{})
 }
 
 // CollectAgentSupport collects the agent support bundle on the local machine.

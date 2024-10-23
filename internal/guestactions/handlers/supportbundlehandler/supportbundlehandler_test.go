@@ -21,11 +21,15 @@ import (
 	"testing"
 
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 )
 
 func TestSupportBundleHandler(t *testing.T) {
+	fakeExec := func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{ExitCode: 0}
+	}
 	tests := []struct {
 		name           string
 		command        *gpb.Command
@@ -49,9 +53,9 @@ func TestSupportBundleHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, _ := SupportBundleHandler(context.Background(), tc.command, nil)
+			res, _ := runCommand(context.Background(), tc.command, nil, fakeExec)
 			if res.ExitCode != int32(tc.wantExitStatus) {
-				t.Errorf("SupportBundleHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
+				t.Errorf("runCommand(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}
 		})
 	}

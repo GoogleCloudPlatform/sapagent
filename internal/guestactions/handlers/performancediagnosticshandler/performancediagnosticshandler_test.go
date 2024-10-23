@@ -21,11 +21,15 @@ import (
 	"testing"
 
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 )
 
 func TestPerformanceDiagnosticsHandler(t *testing.T) {
+	fakeExec := func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{ExitCode: 0}
+	}
 	tests := []struct {
 		name           string
 		command        *gpb.Command
@@ -48,9 +52,9 @@ func TestPerformanceDiagnosticsHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, _ := PerformanceDiagnosticsHandler(context.Background(), tc.command, nil)
+			res, _ := runCommand(context.Background(), tc.command, nil, fakeExec)
 			if res.ExitCode != int32(tc.wantExitStatus) {
-				t.Errorf("PerformanceDiagnosticsHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
+				t.Errorf("runCommand(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}
 		})
 	}

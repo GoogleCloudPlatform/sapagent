@@ -412,7 +412,7 @@ func TestRun(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.sosr.oteLogger = defaultOTELogger
-			_, exitStatus := test.sosr.Run(context.Background(), defaultRunOptions)
+			_, exitStatus := test.sosr.Run(context.Background(), defaultRunOptions, fakeExec)
 			if exitStatus != test.wantExitStatus {
 				t.Errorf("ExecuteAndGetMessage(%v) = %v; want: %v", test.sosr, exitStatus, test.wantExitStatus)
 			}
