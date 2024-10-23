@@ -305,7 +305,7 @@ Agent Status:
 					{
 						Name:            "Process Metrics",
 						Enabled:         true,
-						FullyFunctional: true,
+						FullyFunctional: spb.State_SUCCESS_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						IamRoles: []*spb.IAMRole{
 							{
@@ -335,7 +335,7 @@ Agent Status:
 					{
 						Name:            "Host Metrics",
 						Enabled:         true,
-						FullyFunctional: true,
+						FullyFunctional: spb.State_SUCCESS_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						ConfigValues: []*spb.ConfigValue{
 							{
@@ -348,7 +348,7 @@ Agent Status:
 					{
 						Name:            "Backint",
 						Enabled:         false,
-						FullyFunctional: false,
+						FullyFunctional: spb.State_FAILURE_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						ConfigValues: []*spb.ConfigValue{
 							{
@@ -416,7 +416,7 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 					{
 						Name:            "Process Metrics",
 						Enabled:         true,
-						FullyFunctional: false,
+						FullyFunctional: spb.State_FAILURE_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						IamRoles: []*spb.IAMRole{
 							{
@@ -446,8 +446,7 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 					{
 						Name:            "Host Metrics",
 						Enabled:         true,
-						FullyFunctional: true,
-						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
+						FullyFunctional: spb.State_UNSPECIFIED_STATE,
 						ConfigValues: []*spb.ConfigValue{
 							{
 								Name:      "Hello",
@@ -459,7 +458,7 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 					{
 						Name:            "Backint",
 						Enabled:         false,
-						FullyFunctional: false,
+						FullyFunctional: spb.State_FAILURE_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						ConfigValues: []*spb.ConfigValue{
 							{
@@ -501,7 +500,7 @@ Process Metrics: Enabled
     process_metrics_frequency: nil (default)
 --------------------------------------------------------------------------------
 Host Metrics: Enabled
-    Status: Fully Functional
+    Status: Error: could not determine status
     Hello: World (default)
 --------------------------------------------------------------------------------
 Backint: Disabled

@@ -37,7 +37,7 @@ message AgentStatus {
 message ServiceStatus {
   string name = 1;
   bool enabled = 2;
-  bool fully_functional = 3;
+  State fully_functional = 3;
   string error_message = 4;
   repeated IAMRole iam_roles = 5;
   repeated ConfigValue config_values = 6;

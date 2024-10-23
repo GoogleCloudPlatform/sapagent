@@ -201,26 +201,26 @@ func PrintStatus(ctx context.Context, status *spb.AgentStatus) {
 	printColor(info, "--------------------------------------------------------------------------------\n")
 	printColor(info, "Agent Status:\n")
 	versionColor := success
-	if status.InstalledVersion != status.AvailableVersion {
+	if status.GetInstalledVersion() != status.GetAvailableVersion() {
 		versionColor = failure
 	}
 	printColor(info, "    Installed Version: ")
-	printColor(versionColor, "%s\n", status.InstalledVersion)
+	printColor(versionColor, "%s\n", status.GetInstalledVersion())
 	printColor(info, "    Available Version: ")
-	printColor(versionColor, "%s\n", status.AvailableVersion)
+	printColor(versionColor, "%s\n", status.GetAvailableVersion())
 
-	printState(ctx, "    Systemd Service Enabled", status.SystemdServiceEnabled)
-	printState(ctx, "    Systemd Service Running", status.SystemdServiceRunning)
-	printColor(info, "    Configuration File: %s\n", status.ConfigurationFilePath)
-	printState(ctx, "    Configuration Valid", status.ConfigurationValid)
-	if status.ConfigurationValid != spb.State_SUCCESS_STATE {
-		printColor(failure, "        %s\n", status.ConfigurationErrorMessage)
+	printState(ctx, "    Systemd Service Enabled", status.GetSystemdServiceEnabled())
+	printState(ctx, "    Systemd Service Running", status.GetSystemdServiceRunning())
+	printColor(info, "    Configuration File: %s\n", status.GetConfigurationFilePath())
+	printState(ctx, "    Configuration Valid", status.GetConfigurationValid())
+	if status.GetConfigurationValid() != spb.State_SUCCESS_STATE {
+		printColor(failure, "        %s\n", status.GetConfigurationErrorMessage())
 	}
 
-	for _, service := range status.Services {
+	for _, service := range status.GetServices() {
 		printServiceStatus(ctx, service)
 	}
-	printReferences(ctx, status.References)
+	printReferences(ctx, status.GetReferences())
 	printColor(info, "\n\n")
 }
 
@@ -241,33 +241,36 @@ func printState(ctx context.Context, name string, state spb.State) {
 // appropriate formatting and coloring.
 func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 	printColor(info, "--------------------------------------------------------------------------------\n")
-	if !status.Enabled {
-		printColor(faint, "%s: Disabled\n", status.Name)
+	if !status.GetEnabled() {
+		printColor(faint, "%s: Disabled\n", status.GetName())
 		return
 	}
-	printColor(info, "%s: ", status.Name)
+	printColor(info, "%s: ", status.GetName())
 	printColor(success, "Enabled\n")
 
 	printColor(info, "    Status: ")
-	if status.FullyFunctional {
+	if status.GetFullyFunctional() == spb.State_SUCCESS_STATE {
 		printColor(success, "Fully Functional\n")
 	} else {
-		printColor(failure, "Error: %s\n", status.ErrorMessage)
+		if status.GetErrorMessage() == "" {
+			status.ErrorMessage = "could not determine status"
+		}
+		printColor(failure, "Error: %s\n", status.GetErrorMessage())
 	}
 
-	for _, iamRole := range status.IamRoles {
-		printState(ctx, fmt.Sprintf("    %s (%s)", iamRole.Name, iamRole.Role), iamRole.Granted)
+	for _, iamRole := range status.GetIamRoles() {
+		printState(ctx, fmt.Sprintf("    %s (%s)", iamRole.GetName(), iamRole.GetRole()), iamRole.GetGranted())
 	}
 
-	for _, configValue := range status.ConfigValues {
+	for _, configValue := range status.GetConfigValues() {
 		defaultString := "default"
-		if !configValue.IsDefault {
+		if !configValue.GetIsDefault() {
 			defaultString = "configuration file"
 		}
-		if configValue.Value == "" {
-			printColor(info, "    %s: nil (%s)\n", configValue.Name, defaultString)
+		if configValue.GetValue() == "" {
+			printColor(info, "    %s: nil (%s)\n", configValue.GetName(), defaultString)
 		} else {
-			printColor(info, "    %s: %s (%s)\n", configValue.Name, configValue.Value, defaultString)
+			printColor(info, "    %s: %s (%s)\n", configValue.GetName(), configValue.GetValue(), defaultString)
 		}
 	}
 }
@@ -279,7 +282,7 @@ func printReferences(ctx context.Context, references []*spb.Reference) {
 	printColor(info, "--------------------------------------------------------------------------------\n")
 	printColor(info, "References:\n")
 	for _, reference := range references {
-		printColor(info, "%s: ", reference.Name)
-		printColor(hyperlink, "%s\n", reference.Url)
+		printColor(info, "%s: ", reference.GetName())
+		printColor(hyperlink, "%s\n", reference.GetUrl())
 	}
 }
