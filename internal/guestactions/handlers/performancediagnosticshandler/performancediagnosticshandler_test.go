@@ -21,9 +21,9 @@ import (
 	"testing"
 
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 
 	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
 
 func TestPerformanceDiagnosticsHandler(t *testing.T) {
@@ -41,13 +41,13 @@ func TestPerformanceDiagnosticsHandler(t *testing.T) {
 				CommandType: &gpb.Command_AgentCommand{
 					AgentCommand: &gpb.AgentCommand{
 						Parameters: map[string]string{
-							"type":        "backup",
+							"type":        "fake-type",
 							"test-bucket": "test-bucket",
 						},
 					},
 				},
 			},
-			wantExitStatus: subcommands.ExitFailure,
+			wantExitStatus: subcommands.ExitUsageError,
 		},
 	}
 	for _, tc := range tests {
