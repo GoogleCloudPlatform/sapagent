@@ -29,10 +29,11 @@ import (
 	"flag"
 	s "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 )
 
 // OpenFileFunc provides a testable replacement for os.OpenFile.
@@ -127,6 +128,7 @@ func (m *MultipartUpload) Run(ctx context.Context, runOpts *onetime.RunOptions) 
 		BucketName:       m.bucketName,
 		StorageClient:    m.client,
 		VerifyConnection: true,
+		UserAgent:        configuration.StorageAgentName(),
 	})
 	if !ok {
 		m.oteLogger.LogErrorToFileAndConsole(ctx, "MultipartUpload failed:", fmt.Errorf("failed to connect to bucket %s", m.bucketName))

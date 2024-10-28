@@ -35,13 +35,14 @@ import (
 	"flag"
 	st "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 )
 
 type (
@@ -325,6 +326,7 @@ func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName
 		BucketName:       s.ResultBucket,
 		UserAgentSuffix:  "Support Bundle",
 		VerifyConnection: true,
+		UserAgent:        configuration.StorageAgentName(),
 	}
 	bucketHandle, ok := ctb(ctx, connectParams)
 	if !ok {

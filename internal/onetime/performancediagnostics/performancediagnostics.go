@@ -38,19 +38,20 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
+	cfg "github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/systemdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
-	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 
 	s "cloud.google.com/go/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
@@ -812,6 +813,7 @@ func (d *Diagnose) checkRetention(ctx context.Context, client storage.Client, ct
 		VerifyConnection: true,
 		MaxRetries:       config.GetRetries(),
 		Endpoint:         config.GetClientEndpoint(),
+		UserAgent:        cfg.StorageAgentName(),
 	}
 
 	var bucketHandle attributes
@@ -1140,6 +1142,7 @@ func (d *Diagnose) uploadZip(ctx context.Context, destFilesPath string, ctb stor
 		VerifyConnection: true,
 		MaxRetries:       opts.config.GetRetries(),
 		Endpoint:         opts.config.GetClientEndpoint(),
+		UserAgent:        cfg.StorageAgentName(),
 	}
 	bucketHandle, ok := ctb(ctx, connectParams)
 	if !ok {

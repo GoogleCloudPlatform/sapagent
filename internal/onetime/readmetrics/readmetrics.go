@@ -31,12 +31,13 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
 
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -134,6 +135,7 @@ func (r *ReadMetrics) Run(ctx context.Context, runOpts *onetime.RunOptions, args
 			ServiceAccount:  r.serviceAccount,
 			BucketName:      r.bucketName,
 			UserAgentSuffix: userAgent,
+			UserAgent:       configuration.StorageAgentName(),
 		}
 		var ok bool
 		if r.bucket, ok = storage.ConnectToBucket(ctx, connectParams); !ok {

@@ -31,10 +31,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/diagnose"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/inquire"
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/restore"
+	cfg "github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
-	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
@@ -170,6 +171,7 @@ func (b *Backint) backintHandler(ctx context.Context, cloudProps *ipb.CloudPrope
 		VerifyConnection: true,
 		MaxRetries:       config.GetRetries(),
 		Endpoint:         config.GetClientEndpoint(),
+		UserAgent:        cfg.StorageAgentName(),
 	}
 	if _, ok := storage.ConnectToBucket(ctx, connectParams); !ok {
 		return "Failed to connect to bucket", subcommands.ExitFailure

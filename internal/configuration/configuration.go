@@ -78,6 +78,11 @@ func UserAgent() string {
 	return fmt.Sprintf("sap-core-eng/%s/%s.%s", AgentName, AgentVersion, AgentBuildChange)
 }
 
+// StorageAgentName provides the name of the configured user agent for GCS as a string.
+func StorageAgentName() string {
+	return fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", AgentVersion)
+}
+
 // Read just reads configuration from given file and parses it into config proto.
 func Read(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 	content, err := read(path)

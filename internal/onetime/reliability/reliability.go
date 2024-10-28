@@ -32,12 +32,13 @@ import (
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -145,6 +146,7 @@ func (r *Reliability) Run(ctx context.Context, runOpts *onetime.RunOptions) subc
 			ServiceAccount:  r.serviceAccount,
 			BucketName:      r.bucketName,
 			UserAgentSuffix: userAgent,
+			UserAgent:       configuration.StorageAgentName(),
 		}
 		var ok bool
 		if r.bucket, ok = storage.ConnectToBucket(ctx, connectParams); !ok {

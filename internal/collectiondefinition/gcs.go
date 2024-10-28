@@ -24,9 +24,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/storage"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -72,7 +73,12 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 	bucketName := bucketEnvMap[opts.Env]
 	// Do not verify the connection to the Cloud Storage bucket.
 	// Public access is enabled for the downloaded files.
-	bh, ok := storage.ConnectToBucket(ctx, &storage.ConnectParameters{StorageClient: opts.Client, BucketName: bucketName})
+	connectParams := &storage.ConnectParameters{
+		StorageClient: opts.Client,
+		BucketName:    bucketName,
+		UserAgent:     configuration.StorageAgentName(),
+	}
+	bh, ok := storage.ConnectToBucket(ctx, connectParams)
 	if !ok {
 		return nil
 	}
@@ -90,12 +96,13 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 	defer os.Remove(cdJSON.Name())
 	defer cdJSON.Close()
 	rw1 := storage.ReadWriter{
-		Writer:       cdJSON,
-		BucketHandle: bh,
-		Copier:       io.Copy,
-		BucketName:   bucketName,
-		ObjectName:   "sapagent/collection-definition/collection_definition.json",
-		MaxRetries:   1,
+		Writer:                        cdJSON,
+		BucketHandle:                  bh,
+		Copier:                        io.Copy,
+		BucketName:                    bucketName,
+		ObjectName:                    "sapagent/collection-definition/collection_definition.json",
+		MaxRetries:                    1,
+		ParallelDownloadConnectParams: connectParams,
 	}
 	if _, err = rw1.Download(ctx); err != nil {
 		log.CtxLogger(ctx).Warnw("Could not download from cloud storage", "objectName", rw1.ObjectName, "error", err)
@@ -111,12 +118,13 @@ func fetchFromGCS(ctx context.Context, opts FetchOptions) *cdpb.CollectionDefini
 	defer os.Remove(cdSignature.Name())
 	defer cdSignature.Close()
 	rw2 := storage.ReadWriter{
-		Writer:       cdSignature,
-		BucketHandle: bh,
-		Copier:       io.Copy,
-		BucketName:   bucketName,
-		ObjectName:   "sapagent/collection-definition/collection_definition.signature",
-		MaxRetries:   1,
+		Writer:                        cdSignature,
+		BucketHandle:                  bh,
+		Copier:                        io.Copy,
+		BucketName:                    bucketName,
+		ObjectName:                    "sapagent/collection-definition/collection_definition.signature",
+		MaxRetries:                    1,
+		ParallelDownloadConnectParams: connectParams,
 	}
 	if _, err = rw2.Download(ctx); err != nil {
 		log.CtxLogger(ctx).Warnw("Could not download from cloud storage", "objectName", rw2.ObjectName, "error", err)

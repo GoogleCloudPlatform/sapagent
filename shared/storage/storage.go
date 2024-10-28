@@ -36,7 +36,6 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"golang.org/x/oauth2/google"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -195,6 +194,7 @@ type ConnectParameters struct {
 	Endpoint         string
 	VerifyConnection bool
 	MaxRetries       int64
+	UserAgent        string
 }
 
 // ConnectToBucket creates the storage client with custom retry logic and
@@ -204,12 +204,11 @@ type ConnectParameters struct {
 // verifyConnection requires bucket read access to list the bucket's objects.
 func ConnectToBucket(ctx context.Context, p *ConnectParameters) (*storage.BucketHandle, bool) {
 	var opts []option.ClientOption
-	userAgent := fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", configuration.AgentVersion)
 	if p.UserAgentSuffix != "" {
-		userAgent = fmt.Sprintf("%s %s)", strings.TrimSuffix(userAgent, ")"), p.UserAgentSuffix)
+		p.UserAgent = fmt.Sprintf("%s %s)", strings.TrimSuffix(p.UserAgent, ")"), p.UserAgentSuffix)
 	}
-	log.CtxLogger(ctx).Debugw("Setting User-Agent header", "userAgent", userAgent)
-	opts = append(opts, option.WithUserAgent(userAgent))
+	log.CtxLogger(ctx).Debugw("Setting User-Agent header", "userAgent", p.UserAgent)
+	opts = append(opts, option.WithUserAgent(p.UserAgent))
 	if p.ServiceAccount != "" {
 		opts = append(opts, option.WithCredentialsFile(p.ServiceAccount))
 	}
