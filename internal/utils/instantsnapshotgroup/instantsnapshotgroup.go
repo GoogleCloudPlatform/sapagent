@@ -168,6 +168,7 @@ func token(ctx context.Context, tokenGetter defaultTokenGetter) (*oauth2.Token, 
 }
 
 // GetResponse creates a new request with given method, url and data and returns the response.
+// TODO: Use the common rest package instead.
 func (s *ISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
 	log.CtxLogger(ctx).Debugw("GetResponse", "method", method, "baseURL", baseURL, "data", string(data))
 	req, err := http.NewRequest(method, baseURL, bytes.NewBuffer(data))

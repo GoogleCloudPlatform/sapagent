@@ -9,6 +9,7 @@ replace github.com/GoogleCloudPlatform/sapagent/shared => ./shared
 replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
 require (
+  cloud.google.com/go/aiplatform v1.58.2
   cloud.google.com/go/logging v1.9.0
   cloud.google.com/go/monitoring v1.17.1
   cloud.google.com/go/secretmanager v1.11.5
