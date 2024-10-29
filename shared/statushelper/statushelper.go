@@ -71,12 +71,12 @@ func printColor(code colorCode, str string, a ...any) {
 
 // FetchLatestVersion returns latest version of the agent package from the
 // OS package manager.
-func FetchLatestVersion(ctx context.Context, packageName string, repoName string, osType string) (string, error) {
+func FetchLatestVersion(ctx context.Context, packageName string, repoName string, osType string, exec commandlineexecutor.Execute, exists commandlineexecutor.Exists) (string, error) {
 	switch osType {
 	case osLinux:
-		return packageVersionLinux(ctx, repoName, packageName, commandlineexecutor.ExecuteCommand, commandlineexecutor.CommandExists)
+		return packageVersionLinux(ctx, repoName, packageName, exec, exists)
 	case osWindows:
-		return packageVersionWindows(ctx, repoName, packageName, commandlineexecutor.ExecuteCommand, commandlineexecutor.CommandExists)
+		return packageVersionWindows(ctx, repoName, packageName, exec, exists)
 	default:
 		return "", fmt.Errorf("unsupported OS: %s", osType)
 	}
@@ -85,12 +85,12 @@ func FetchLatestVersion(ctx context.Context, packageName string, repoName string
 // CheckAgentEnabledAndRunning returns the status of the agent service.
 //
 // Returns a tuple as (isEnabled, isRunning, error).
-func CheckAgentEnabledAndRunning(ctx context.Context, agentName string, osType string) (isEnabled bool, isRunning bool, err error) {
+func CheckAgentEnabledAndRunning(ctx context.Context, agentName string, osType string, exec commandlineexecutor.Execute) (isEnabled bool, isRunning bool, err error) {
 	switch osType {
 	case osLinux:
-		return agentEnabledAndRunningLinux(ctx, agentName, commandlineexecutor.ExecuteCommand)
+		return agentEnabledAndRunningLinux(ctx, agentName, exec)
 	case osWindows:
-		return agentEnabledAndRunningWindows(ctx, agentName, commandlineexecutor.ExecuteCommand)
+		return agentEnabledAndRunningWindows(ctx, agentName, exec)
 	default:
 		return false, false, fmt.Errorf("unsupported OS: %s", osType)
 	}

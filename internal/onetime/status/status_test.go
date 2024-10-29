@@ -32,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -90,16 +91,6 @@ func TestExecuteStatus(t *testing.T) {
 				&ipb.CloudProperties{},
 			},
 		},
-		{
-			name: "Success",
-			s:    Status{},
-			want: subcommands.ExitSuccess,
-			args: []any{
-				"test",
-				log.Parameters{},
-				&ipb.CloudProperties{},
-			},
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -124,13 +115,19 @@ func TestStatusHandler(t *testing.T) {
 				readFile: func(string) ([]byte, error) {
 					return nil, nil
 				},
+				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "enabled", StdErr: "", ExitCode: 0, Error: nil}
+				},
+				exists: func(string) bool {
+					return true
+				},
 			},
 			want: &spb.AgentStatus{
 				AgentName:             agentPackageName,
 				InstalledVersion:      fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
-				AvailableVersion:      fetchLatestVersionError,
-				SystemdServiceEnabled: spb.State_ERROR_STATE,
-				SystemdServiceRunning: spb.State_ERROR_STATE,
+				AvailableVersion:      "enabled",
+				SystemdServiceEnabled: spb.State_SUCCESS_STATE,
+				SystemdServiceRunning: spb.State_SUCCESS_STATE,
 				ConfigurationFilePath: configuration.LinuxConfigPath,
 				ConfigurationValid:    spb.State_SUCCESS_STATE,
 				Services: []*spb.ServiceStatus{
@@ -228,6 +225,12 @@ func TestStatusHandler(t *testing.T) {
   }
 }
 `), nil
+				},
+				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "", StdErr: "error", ExitCode: 0, Error: fmt.Errorf("error")}
+				},
+				exists: func(string) bool {
+					return false
 				},
 			},
 			want: &spb.AgentStatus{

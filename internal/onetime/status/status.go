@@ -29,6 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
+	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/statushelper"
 
@@ -52,6 +53,8 @@ type Status struct {
 	oteLogger         *onetime.OTELogger
 	cloudProps        *iipb.CloudProperties
 	readFile          configuration.ReadConfigFile
+	exec              commandlineexecutor.Execute
+	exists            commandlineexecutor.Exists
 }
 
 // Name implements the subcommand interface for status.
@@ -105,6 +108,8 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentStatus, subcommands.ExitStatus) {
 	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	s.readFile = os.ReadFile
+	s.exec = commandlineexecutor.ExecuteCommand
+	s.exists = commandlineexecutor.CommandExists
 	status, err := s.statusHandler(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
@@ -136,13 +141,13 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	}
 
 	var err error
-	agentStatus.AvailableVersion, err = statushelper.FetchLatestVersion(ctx, agentPackageName, agentPackageName, runtime.GOOS)
+	agentStatus.AvailableVersion, err = statushelper.FetchLatestVersion(ctx, agentPackageName, agentPackageName, runtime.GOOS, s.exec, s.exists)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not fetch latest version", "error", err)
 		agentStatus.AvailableVersion = fetchLatestVersionError
 	}
 
-	enabled, running, err := statushelper.CheckAgentEnabledAndRunning(ctx, agentPackageName, runtime.GOOS)
+	enabled, running, err := statushelper.CheckAgentEnabledAndRunning(ctx, agentPackageName, runtime.GOOS, s.exec)
 	agentStatus.SystemdServiceEnabled = spb.State_FAILURE_STATE
 	agentStatus.SystemdServiceRunning = spb.State_FAILURE_STATE
 	if err != nil {
