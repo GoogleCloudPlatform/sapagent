@@ -37,40 +37,10 @@ import (
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
 )
 
-type (
-	// operatingConfig defines the operating configuration of a workflow.
-	operatingConfig map[string]any
-
-	// functionalCheck defines the functions that smoke test a workflow.
-	functionalCheck func(context.Context, operatingConfig) (bool, string, error)
-
-	// serviceCheck captures the info needed to run checks for a service.
-	serviceCheck struct {
-		Name            string
-		IAMRoles        []string
-		Config          operatingConfig
-		FunctionalCheck functionalCheck
-	}
-)
-
 const (
 	agentPackageName        = "google-cloud-sap-agent"
 	fetchLatestVersionError = "Error: could not fetch latest version"
 )
-
-// serviceChecks stores the check params for each agent service check.
-// TOOD(b/362288235): Add checks for all services.
-var serviceChecks = []serviceCheck{
-	{
-		Name: "Process Metrics",
-		IAMRoles: []string{
-			"roles/compute.viewer",
-			"roles/monitoring.viewer",
-			"roles/monitoring.metricWriter",
-		},
-		FunctionalCheck: processMetricsCheck,
-	},
-}
 
 // Status stores the status subcommand parameters.
 type Status struct {
@@ -146,13 +116,19 @@ func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentS
 // statusHandler executes the status checks and returns the results as the AgentStatus proto.
 func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
 	agentStatus, config := s.agentStatus(ctx)
-
-	// TODO: Remove this once we have the functional checks.
-	log.CtxLogger(ctx).Debugw("agentStatus", "agentStatus", agentStatus, "config", config)
+	agentStatus.Services = append(agentStatus.Services, s.hostMetricsStatus(ctx, config))
+	agentStatus.Services = append(agentStatus.Services, s.processMetricsStatus(ctx, config))
+	agentStatus.Services = append(agentStatus.Services, s.hanaMonitoringMetricsStatus(ctx, config))
+	agentStatus.Services = append(agentStatus.Services, s.systemDiscoveryStatus(ctx, config))
+	agentStatus.Services = append(agentStatus.Services, s.backintStatus(ctx, config))
+	agentStatus.Services = append(agentStatus.Services, s.diskSnapshotStatus(ctx, config))
+	agentStatus.Services = append(agentStatus.Services, s.workloadManagerStatus(ctx, config))
 
 	return agentStatus, nil
 }
 
+// agentStatus returns the agent version, enabled/running, config path, and the
+// configuration as parsed by the agent.
 func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Configuration) {
 	agentStatus := &spb.AgentStatus{
 		AgentName:        agentPackageName,
@@ -203,17 +179,118 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	return agentStatus, config
 }
 
-// RunChecks runs the status checks for an agent service.
-//
-// Assumes the agent service is enabled - we do not need to perform these
-// checks otherwise.
-func (fc *serviceCheck) RunChecks(ctx context.Context) (*spb.ServiceStatus, error) {
-	return nil, fmt.Errorf("RunChecks is not yet implemented")
+func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	status := &spb.ServiceStatus{
+		Name:    "Host Metrics",
+		Enabled: config.GetProvideSapHostAgentMetrics().GetValue(),
+		IamRoles: []*spb.IAMRole{
+			{Name: "Example compute viewer", Role: "roles/compute.viewer"},
+		},
+		ConfigValues: []*spb.ConfigValue{
+			configValue("provide_sap_host_agent_metrics", config.GetProvideSapHostAgentMetrics().GetValue(), true),
+		},
+	}
+
+	return status
 }
 
-// Below implement functional checks for each agent service.
+func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	status := &spb.ServiceStatus{
+		Name:     "Process Metrics",
+		Enabled:  config.GetCollectionConfiguration().GetCollectProcessMetrics(),
+		IamRoles: []*spb.IAMRole{},
+		ConfigValues: []*spb.ConfigValue{
+			configValue("collect_process_metrics", config.GetCollectionConfiguration().GetCollectProcessMetrics(), false),
+			configValue("process_metrics_frequency", config.GetCollectionConfiguration().GetProcessMetricsFrequency(), 5),
+			configValue("process_metrics_to_skip", config.GetCollectionConfiguration().GetProcessMetricsToSkip(), []string{}),
+			configValue("slow_process_metrics_frequency", config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency(), 30),
+		},
+	}
 
-// processMetricsCheck implements the functional check for process metrics.
-func processMetricsCheck(ctx context.Context, config operatingConfig) (bool, string, error) {
-	return false, "", fmt.Errorf("processMetricsCheck is not yet implemented")
+	return status
+}
+
+func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	status := &spb.ServiceStatus{
+		Name:     "HANA Monitoring Metrics",
+		Enabled:  config.GetHanaMonitoringConfiguration().GetEnabled(),
+		IamRoles: []*spb.IAMRole{},
+		ConfigValues: []*spb.ConfigValue{
+			configValue("connection_timeout", config.GetHanaMonitoringConfiguration().GetConnectionTimeout().GetSeconds(), 120),
+			configValue("enabled", config.GetHanaMonitoringConfiguration().GetEnabled(), false),
+			configValue("execution_threads", config.GetHanaMonitoringConfiguration().GetExecutionThreads(), 10),
+			configValue("max_connect_retries", config.GetHanaMonitoringConfiguration().GetMaxConnectRetries().GetValue(), 1),
+			configValue("query_timeout_sec", config.GetHanaMonitoringConfiguration().GetQueryTimeoutSec(), 300),
+			configValue("sample_interval_sec", config.GetHanaMonitoringConfiguration().GetSampleIntervalSec(), 300),
+			configValue("send_query_response_time", config.GetHanaMonitoringConfiguration().GetSendQueryResponseTime(), false),
+		},
+	}
+	// TODO: Do we need to include instances and queries in configuration?
+
+	return status
+}
+
+func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	status := &spb.ServiceStatus{
+		Name:     "System Discovery",
+		Enabled:  config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(),
+		IamRoles: []*spb.IAMRole{},
+		ConfigValues: []*spb.ConfigValue{
+			configValue("enable_discovery", config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(), true),
+			configValue("enable_workload_discovery", config.GetDiscoveryConfiguration().GetEnableWorkloadDiscovery().GetValue(), true),
+			configValue("sap_instances_update_frequency", config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().GetSeconds(), 60),
+			configValue("system_discovery_update_frequency", config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().GetSeconds(), 4*60*60),
+		},
+	}
+
+	return status
+}
+
+func (s *Status) backintStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	status := &spb.ServiceStatus{
+		Name:     "Backint",
+		Enabled:  false,
+		IamRoles: []*spb.IAMRole{},
+		// TODO: Add config values.
+		ConfigValues: []*spb.ConfigValue{},
+	}
+
+	return status
+}
+
+func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	status := &spb.ServiceStatus{
+		Name:     "Disk Snapshot",
+		Enabled:  false,
+		IamRoles: []*spb.IAMRole{},
+		// TODO: Add config values.
+		ConfigValues: []*spb.ConfigValue{},
+	}
+
+	return status
+}
+
+func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	status := &spb.ServiceStatus{
+		Name:     "Workload Manager",
+		Enabled:  config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(),
+		IamRoles: []*spb.IAMRole{},
+		ConfigValues: []*spb.ConfigValue{
+			configValue("collect_workload_validation_metrics", config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(), true),
+			configValue("config_target_environment", config.GetCollectionConfiguration().GetWorkloadValidationCollectionDefinition().GetConfigTargetEnvironment(), cpb.TargetEnvironment_PRODUCTION),
+			configValue("fetch_latest_config", config.GetCollectionConfiguration().GetWorkloadValidationCollectionDefinition().GetFetchLatestConfig().GetValue(), true),
+			configValue("workload_validation_db_metrics_frequency", config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsFrequency(), 3600),
+			configValue("workload_validation_metrics_frequency", config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency(), 300),
+		},
+	}
+
+	return status
+}
+
+func configValue(name string, value any, defaultValue any) *spb.ConfigValue {
+	return &spb.ConfigValue{
+		Name:      name,
+		Value:     fmt.Sprint(value),
+		IsDefault: fmt.Sprint(value) == fmt.Sprint(defaultValue),
+	}
 }

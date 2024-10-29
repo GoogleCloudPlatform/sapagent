@@ -383,14 +383,17 @@ Agent Status:
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Fully Functional
-    Compute Viewer (roles/compute.viewer): True
-    Monitoring Viewer (roles/monitoring.viewer): True
-    collect_process_metrics: True (default)
-    process_metrics_frequency: 5 (default)
+    IAM Roles:
+        Compute Viewer (roles/compute.viewer): True
+        Monitoring Viewer (roles/monitoring.viewer): True
+    Configuration:
+        collect_process_metrics: True (default)
+        process_metrics_frequency: 5 (default)
 --------------------------------------------------------------------------------
 Host Metrics: Enabled
     Status: Fully Functional
-    Hello: World (default)
+    Configuration:
+        Hello: World (default)
 --------------------------------------------------------------------------------
 Backint: Disabled
 --------------------------------------------------------------------------------
@@ -494,14 +497,17 @@ Agent Status:
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Error: Cannot write to Cloud Monitoring, check IAM permissions
-    Compute Viewer (roles/compute.viewer): True
-    Monitoring Viewer (roles/monitoring.viewer): Error: could not determine status
-    collect_process_metrics: True (configuration file)
-    process_metrics_frequency: nil (default)
+    IAM Roles:
+        Compute Viewer (roles/compute.viewer): True
+        Monitoring Viewer (roles/monitoring.viewer): Error: could not determine status
+    Configuration:
+        collect_process_metrics: True (configuration file)
+        process_metrics_frequency: nil (default)
 --------------------------------------------------------------------------------
 Host Metrics: Enabled
     Status: Error: could not determine status
-    Hello: World (default)
+    Configuration:
+        Hello: World (default)
 --------------------------------------------------------------------------------
 Backint: Disabled
 --------------------------------------------------------------------------------

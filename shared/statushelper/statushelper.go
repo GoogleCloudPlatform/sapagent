@@ -258,19 +258,25 @@ func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 		printColor(failure, "Error: %s\n", status.GetErrorMessage())
 	}
 
+	if len(status.GetIamRoles()) > 0 {
+		printColor(info, "    IAM Roles:\n")
+	}
 	for _, iamRole := range status.GetIamRoles() {
-		printState(ctx, fmt.Sprintf("    %s (%s)", iamRole.GetName(), iamRole.GetRole()), iamRole.GetGranted())
+		printState(ctx, fmt.Sprintf("        %s (%s)", iamRole.GetName(), iamRole.GetRole()), iamRole.GetGranted())
 	}
 
+	if len(status.GetConfigValues()) > 0 {
+		printColor(info, "    Configuration:\n")
+	}
 	for _, configValue := range status.GetConfigValues() {
 		defaultString := "default"
 		if !configValue.GetIsDefault() {
 			defaultString = "configuration file"
 		}
 		if configValue.GetValue() == "" {
-			printColor(info, "    %s: nil (%s)\n", configValue.GetName(), defaultString)
+			printColor(info, "        %s: nil (%s)\n", configValue.GetName(), defaultString)
 		} else {
-			printColor(info, "    %s: %s (%s)\n", configValue.GetName(), configValue.GetValue(), defaultString)
+			printColor(info, "        %s: %s (%s)\n", configValue.GetName(), configValue.GetValue(), defaultString)
 		}
 	}
 }
