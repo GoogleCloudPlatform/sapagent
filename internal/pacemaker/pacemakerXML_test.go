@@ -295,21 +295,51 @@ var (
 						},
 					},
 				},
-				Group: Group{
-					ID: "g-primary",
-					Primitives: []PrimitiveClass{
-						{
-							ID:        "rsc_vip_int-primary",
-							Class:     "ocf",
-							Provider:  "heartbeat",
-							ClassType: "IPaddr2",
-							InstanceAttributes: ClusterPropertySet{
-								ID:      "rsc_vip_int-primary-instance_attributes",
-								NVPairs: []NVPair{{ID: "rsc_vip_int-primary-instance_attributes-ip", Value: "10.150.1.10", Name: "ip"}},
+				Groups: []Group{
+					{
+						ID: "g-primary",
+						Primitives: []PrimitiveClass{
+							{
+								ID:        "rsc_vip_int-primary",
+								Class:     "ocf",
+								Provider:  "heartbeat",
+								ClassType: "IPaddr2",
+								InstanceAttributes: ClusterPropertySet{
+									ID:      "rsc_vip_int-primary-instance_attributes",
+									NVPairs: []NVPair{{ID: "rsc_vip_int-primary-instance_attributes-ip", Value: "10.150.1.10", Name: "ip"}},
+								},
+								MetaAttributes: ClusterPropertySet{
+									ID:      "rsc_vip_int-primary-meta_attributes",
+									NVPairs: []NVPair{{ID: "rsc_vip_int-primary-meta_attributes-failure-timeout", Value: "60", Name: "failure-timeout"}},
+								},
+								Operations: []Op{
+									{
+										Name: "monitor", Interval: "3600s", Timeout: "60s", ID: "rsc_vip_int-primary-monitor-3600s",
+									},
+								},
 							},
-							Operations: []Op{
-								{
-									Name: "monitor", Interval: "3600s", Timeout: "60s", ID: "rsc_vip_int-primary-monitor-3600s",
+						},
+					},
+					{
+						ID: "g-secondary",
+						Primitives: []PrimitiveClass{
+							{
+								ID:        "rsc_vip_int-secondary",
+								Class:     "ocf",
+								Provider:  "heartbeat",
+								ClassType: "IPaddr2",
+								InstanceAttributes: ClusterPropertySet{
+									ID:      "rsc_vip_int-secondary-instance_attributes",
+									NVPairs: []NVPair{{ID: "rsc_vip_int-secondary-instance_attributes-ip", Value: "10.150.1.11", Name: "ip"}},
+								},
+								MetaAttributes: ClusterPropertySet{
+									ID:      "rsc_vip_int-secondary-meta_attributes",
+									NVPairs: []NVPair{{ID: "rsc_vip_int-secondary-meta_attributes-failure-timeout", Value: "60", Name: "failure-timeout"}},
+								},
+								Operations: []Op{
+									{
+										Name: "monitor", Interval: "3600s", Timeout: "60s", ID: "rsc_vip_int-secondary-monitor-3600s",
+									},
 								},
 							},
 						},

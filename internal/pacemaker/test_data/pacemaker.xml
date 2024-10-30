@@ -75,8 +75,24 @@ limitations under the License.
           <instance_attributes id="rsc_vip_int-primary-instance_attributes">
             <nvpair name="ip" value="10.150.1.10" id="rsc_vip_int-primary-instance_attributes-ip"/>
           </instance_attributes>
+          <meta_attributes id="rsc_vip_int-primary-meta_attributes">
+            <nvpair name="failure-timeout" value="60" id="rsc_vip_int-primary-meta_attributes-failure-timeout"/>
+          </meta_attributes>
           <operations>
             <op name="monitor" interval="3600s" timeout="60s" id="rsc_vip_int-primary-monitor-3600s"/>
+          </operations>
+        </primitive>
+      </group>
+      <group id="g-secondary">
+        <primitive id="rsc_vip_int-secondary" class="ocf" provider="heartbeat" type="IPaddr2">
+          <instance_attributes id="rsc_vip_int-secondary-instance_attributes">
+            <nvpair name="ip" value="10.150.1.11" id="rsc_vip_int-secondary-instance_attributes-ip"/>
+          </instance_attributes>
+          <meta_attributes id="rsc_vip_int-secondary-meta_attributes">
+            <nvpair name="failure-timeout" value="60" id="rsc_vip_int-secondary-meta_attributes-failure-timeout"/>
+          </meta_attributes>
+          <operations>
+            <op name="monitor" interval="3600s" timeout="60s" id="rsc_vip_int-secondary-monitor-3600s"/>
           </operations>
         </primitive>
       </group>

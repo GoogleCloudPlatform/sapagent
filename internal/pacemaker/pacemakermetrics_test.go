@@ -252,6 +252,8 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"fence_agent_logging_api_access": "false",
 		"location_preference_set":        locationPref,
 		"maintenance_mode_active":        "true",
+		"ascs_instance":                  "",
+		"enqueue_server":                 "",
 	}
 }
 
@@ -280,6 +282,8 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"saphana_stop_timeout":             "3600",
 		"saphanatopology_monitor_interval": "10",
 		"saphanatopology_monitor_timeout":  "600",
+		"ascs_instance":                    "",
+		"enqueue_server":                   "",
 	}
 }
 
@@ -301,6 +305,11 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"saphana_stop_timeout":             "3600",
 		"saphanatopology_monitor_interval": "10",
 		"saphanatopology_monitor_timeout":  "600",
+		"ascs_instance":                    "",
+		"enqueue_server":                   "",
+		"ascs_failure_timeout":             "60",
+		"ascs_migration_threshold":         "3",
+		"ascs_resource_stickiness":         "5000",
 	}
 }
 
@@ -318,6 +327,8 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"fence_agent_logging_api_access": "true",
 		"location_preference_set":        locationPref,
 		"maintenance_mode_active":        "true",
+		"ascs_instance":                  "",
+		"enqueue_server":                 "",
 	}
 }
 
@@ -1663,6 +1674,311 @@ func TestPacemakerHanaTopology(t *testing.T) {
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("pacemakerHanaTopology() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCollectASCSInstance(t *testing.T) {
+	tests := []struct {
+		name   string
+		exists commandlineexecutor.Exists
+		exec   commandlineexecutor.Execute
+		want   string
+	}{
+		{
+			name:   "CommandLineToolNotExists",
+			exists: func(string) bool { return false },
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
+  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
+  * Resource Group: ers_resource_group (unmanaged):
+    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
+  * Resource Group: ascs_resource_group (unmanaged):
+    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
+`,
+				}
+			},
+			want: "",
+		},
+		{
+			name:   "CommandLineStatusError",
+			exists: defaultExists,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					Error: errors.New("Something went wrong"),
+				}
+			},
+			want: "",
+		},
+		{
+			name:   "ASCSResourceGroupNotFound",
+			exists: defaultExists,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
+  * Resource Group: ers_resource_group (unmanaged):
+    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
+`,
+				}
+			},
+			want: "",
+		},
+		{
+			name:   "ASCSInstanceNotFound",
+			exists: defaultExists,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
+  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
+  * Resource Group: ascs_resource_group (unmanaged):
+    * fs_ascs_POS       (ocf::heartbeat:Filesystem):     Started sap-posascs11 (unmanaged)
+    * gcp_ascs_healthcheck      (ocf::heartbeat:anything):       Started sap-posascs11 (unmanaged)
+    * gcp_ipaddr2_ascs  (ocf::heartbeat:IPaddr2):        Started sap-posascs11 (unmanaged)
+  * Resource Group: ers_resource_group (unmanaged):
+    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
+`,
+				}
+			},
+			want: "",
+		},
+		{
+			name:   "ASCSInstanceParseError",
+			exists: defaultExists,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
+  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
+  * Resource Group: ascs_resource_group (unmanaged):
+    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Stopped sap-posascs11 (unmanaged)
+  * Resource Group: ers_resource_group (unmanaged):
+    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
+`,
+				}
+			},
+			want: "",
+		},
+		{
+			name:   "ASCSInstanceFound",
+			exists: defaultExists,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
+  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
+  * Resource Group: ers_resource_group (unmanaged):
+    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
+  * Resource Group: ascs_resource_group (unmanaged):
+    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
+`,
+				}
+			},
+			want: "sap-posascs11",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			collectASCSInstance(context.Background(), got, test.exists, test.exec)
+			if got["ascs_instance"] != test.want {
+				t.Errorf("collectASCSInstance() got %v, want %v", got["ascs_instance"], test.want)
+			}
+		})
+	}
+}
+
+func TestCollectEnqueueServer(t *testing.T) {
+	tests := []struct {
+		name string
+		exec commandlineexecutor.Execute
+		want string
+	}{
+		{
+			name: "sapservicesError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "sapservices") {
+					return commandlineexecutor.Result{
+						Error: errors.New("Something went wrong"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "enq/serverhost = alidascs11",
+				}
+			},
+			want: "",
+		},
+		{
+			name: "sapservicesParseError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "sapservices") {
+					return commandlineexecutor.Result{
+						StdOut: `
+#systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs11
+systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/profile/POS_ERS12_aliders11
+`,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "enq/serverhost = alidascs11",
+				}
+			},
+			want: "",
+		},
+		{
+			name: "serverhostError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "serverhost") {
+					return commandlineexecutor.Result{
+						Error: errors.New("Something went wrong"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs11",
+				}
+			},
+			want: "",
+		},
+		{
+			name: "serverhostParseError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "serverhost") {
+					return commandlineexecutor.Result{}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs1",
+				}
+			},
+			want: "",
+		},
+		{
+			name: "ENSA",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "serverhost") {
+					return commandlineexecutor.Result{
+						StdOut: "enque/serverhost = alidascs11",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs1",
+				}
+			},
+			want: "ENSA",
+		},
+		{
+			name: "ENSA2",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "serverhost") {
+					return commandlineexecutor.Result{
+						StdOut: "enq/serverhost = alidascs11",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs1",
+				}
+			},
+			want: "ENSA2",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			collectEnqueueServer(context.Background(), got, test.exec)
+			if got["enqueue_server"] != test.want {
+				t.Errorf("collectEnqueueServer() got %v, want %v", got["enqueue_server"], test.want)
+			}
+		})
+	}
+}
+
+func TestSetASCSConfigMetrics(t *testing.T) {
+	tests := []struct {
+		name  string
+		group Group
+		want  map[string]string
+	}{
+		{
+			name:  "ZeroValueGroup",
+			group: Group{},
+			want:  map[string]string{},
+		},
+		{
+			name: "NoSAPInstanceType",
+			group: Group{
+				Primitives: []PrimitiveClass{
+					PrimitiveClass{
+						ClassType: "NotSAPInstance",
+						MetaAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "failure-timeout", Value: "60"},
+								{Name: "migration-threshold", Value: "3"},
+								{Name: "resource-stickiness", Value: "5000"},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "MetadataKeyMismatch",
+			group: Group{
+				Primitives: []PrimitiveClass{
+					PrimitiveClass{
+						ClassType: "SAPInstance",
+						MetaAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "not-failure-timeout", Value: "60"},
+								{Name: "not-migration-threshold", Value: "3"},
+								{Name: "not-resource-stickiness", Value: "5000"},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "Success",
+			group: Group{
+				Primitives: []PrimitiveClass{
+					PrimitiveClass{
+						ClassType: "SAPInstance",
+						MetaAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "failure-timeout", Value: "60"},
+								{Name: "migration-threshold", Value: "3"},
+								{Name: "resource-stickiness", Value: "5000"},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"ascs_failure_timeout":     "60",
+				"ascs_migration_threshold": "3",
+				"ascs_resource_stickiness": "5000",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			setASCSConfigMetrics(got, test.group)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("setASCSConfigMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

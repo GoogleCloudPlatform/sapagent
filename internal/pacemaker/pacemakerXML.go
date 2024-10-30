@@ -58,7 +58,7 @@ Resources stores metadata defining the node structure of the current CIB object 
 */
 type Resources struct {
 	Primitives []PrimitiveClass `xml:"primitive"`
-	Group      Group            `xml:"group"`
+	Groups     []Group          `xml:"group"`
 	Clone      Clone            `xml:"clone"`
 	Master     Clone            `xml:"master"`
 }
@@ -148,6 +148,7 @@ type PrimitiveClass struct {
 	ClassType          string             `xml:"type,attr"`
 	Provider           string             `xml:"provider,attr"`
 	InstanceAttributes ClusterPropertySet `xml:"instance_attributes"`
+	MetaAttributes     ClusterPropertySet `xml:"meta_attributes"`
 	Operations         []Op               `xml:"operations>op"`
 }
 

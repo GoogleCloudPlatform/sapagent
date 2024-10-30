@@ -906,7 +906,48 @@
             "value": "LOGGING_API_ACCESS"
           }
         ],
-        "ascs_metrics": []
+        "ascs_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_instance",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_INSTANCE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "enqueue_server",
+              "min_version": "3.7"
+            },
+            "value": "ENQUEUE_SERVER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_failure_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_FAILURE_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_migration_threshold",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_MIGRATION_THRESHOLD"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_resource_stickiness",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_RESOURCE_STICKINESS"
+          }
+        ]
       },
       "cib_bootstrap_option_metrics": [
         {

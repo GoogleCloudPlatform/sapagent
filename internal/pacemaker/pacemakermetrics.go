@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,6 +35,11 @@ import (
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+)
+
+var (
+	ascsInstanceRegex = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
+	sapstartsrvRegex  = regexp.MustCompile("sapstartsrv pf=/sapmnt/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/")
 )
 
 type (
@@ -97,6 +103,11 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"maintenance_mode_active":          true,
 		"saphanatopology_monitor_interval": true,
 		"saphanatopology_monitor_timeout":  true,
+		"ascs_instance":                    true,
+		"enqueue_server":                   true,
+		"ascs_failure_timeout":             true,
+		"ascs_migration_threshold":         true,
+		"ascs_resource_stickiness":         true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -116,6 +127,9 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
 	for _, m := range pacemaker.GetCibBootstrapOptionMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+	for _, m := range pconfig.GetAscsMetrics() {
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
 
@@ -204,6 +218,10 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	pacemakerHanaTopology(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHanaTopology"))
 	pacemakerHanaTopology(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHanaTopology"))
 
+	collectASCSInstance(ctx, l, params.Exists, params.Execute)
+	collectEnqueueServer(ctx, l, params.Execute)
+	setASCSConfigMetrics(l, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ascs"))
+
 	return 1.0, l
 }
 
@@ -226,6 +244,16 @@ func filterPrimitiveOpsByType(primitives []PrimitiveClass, primitiveType string)
 		}
 	}
 	return ops
+}
+
+// filterGroupsByID returns the first Group object with an ID that matches the given prefix.
+func filterGroupsByID(groups []Group, idPrefix string) Group {
+	for _, group := range groups {
+		if strings.HasPrefix(group.ID, idPrefix) {
+			return group
+		}
+	}
+	return Group{}
 }
 
 // setPacemakerHanaOperations sets the pacemaker hana operations labels for the metric validation
@@ -505,4 +533,113 @@ func getBearerToken(ctx context.Context, serviceAccountJSONFile string, fileRead
 		token, err = getJSONBearerToken(ctx, serviceAccountJSONFile, fileReader, credGetter)
 	}
 	return token, err
+}
+
+// collectASCSInstance determines the VM instance serving as the ASCS resource group.
+func collectASCSInstance(ctx context.Context, l map[string]string, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
+	l["ascs_instance"] = ""
+
+	var command string
+	switch {
+	case exists("crm"):
+		command = "crm"
+	case exists("pcs"):
+		command = "pcs"
+	default:
+		log.CtxLogger(ctx).Debug("Could not determine Pacemaker command-line tool. Skipping ascs_instance metric collection.")
+		return
+	}
+
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable: command,
+		Args:       []string{"status"},
+	})
+	if result.Error != nil {
+		log.CtxLogger(ctx).Debugw(fmt.Sprintf("Failed to get %s status. Skipping ascs_instance metric collection.", command), "error", result.Error)
+	}
+
+	inASCSResourceGroup := false
+	lines := strings.Split(result.StdOut, "\n")
+Loop:
+	for _, line := range lines {
+		switch {
+		case strings.Contains(line, "Resource Group: ascs"):
+			inASCSResourceGroup = true
+		case inASCSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
+			match := ascsInstanceRegex.FindStringSubmatch(line)
+			if len(match) != 2 {
+				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ASCS instance name.", command), "line", line)
+				break Loop
+			}
+			l["ascs_instance"] = match[1]
+			break Loop
+		case inASCSResourceGroup && strings.Contains(line, "Resource Group:"):
+			break Loop
+		}
+	}
+}
+
+// collectEnqueueServer determines the enqueue server (ENSA or ENSA2) in use by the Pacemaker cluster.
+func collectEnqueueServer(ctx context.Context, l map[string]string, exec commandlineexecutor.Execute) {
+	l["enqueue_server"] = ""
+
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: "'pf=' /usr/sap/sapservices",
+	})
+	if result.Error != nil {
+		log.CtxLogger(ctx).Debugw("Could not grep /usr/sap/sapservices. Skipping enqueue_server metric collection.", "error", result.Error)
+		return
+	}
+
+	var sapsid string
+	lines := strings.Split(strings.TrimSuffix(result.StdOut, "\n"), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		match := sapstartsrvRegex.FindStringSubmatch(line)
+		if len(match) == 2 {
+			sapsid = match[1]
+			break
+		}
+	}
+	if sapsid == "" {
+		log.CtxLogger(ctx).Debug("Could not determine SAP SID from /usr/sap/sapservices. Skipping enqueue_server metric collection.")
+		return
+	}
+
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: fmt.Sprintf("-E '^(enq|enque)/serverhost' /sapmnt/%s/profile/DEFAULT.PFL", sapsid),
+	})
+	switch {
+	case result.Error != nil:
+		log.CtxLogger(ctx).Debugw("Could not grep DEFAULT.PFL. Skipping enqueue_server metric collection.", "error", result.Error)
+	case strings.Contains(result.StdOut, "enq/serverhost"):
+		l["enqueue_server"] = "ENSA2"
+	case strings.Contains(result.StdOut, "enque/serverhost"):
+		l["enqueue_server"] = "ENSA"
+	}
+}
+
+// setASCSMetrics sets the metrics collected from the ASCS resource group.
+func setASCSConfigMetrics(l map[string]string, group Group) {
+	metaAttributesKeys := map[string]bool{
+		"failure-timeout":     true,
+		"migration-threshold": true,
+		"resource-stickiness": true,
+	}
+
+	for _, primitive := range group.Primitives {
+		if primitive.ClassType != "SAPInstance" {
+			continue
+		}
+		for _, nvPair := range primitive.MetaAttributes.NVPairs {
+			if _, ok := metaAttributesKeys[nvPair.Name]; ok {
+				key := "ascs_" + strings.ReplaceAll(nvPair.Name, "-", "_")
+				l[key] = nvPair.Value
+			}
+		}
+	}
 }

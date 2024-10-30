@@ -83,24 +83,50 @@ limitations under the License.
           <op id="STONITH-rhel-ha2-start-interval-0" interval="0" name="start" timeout="60s"/>
         </operations>
       </primitive>
-      <group id="g-primary">
-        <primitive class="service" id="rsc_healthcheck_HAR" type="haproxy">
+      <group id="ascs_ip_group">
+        <primitive class="ocf" id="ascs_PRD" provider="heartbeat" type="SAPInstance">
+          <instance_attributes id="ascs_PRD-instance_attributes">
+            <nvpair id="ascs_PRD-instance_attributes-AUTOMATIC_RECOVER" name="AUTOMATIC_RECOVER" value="false"/>
+            <nvpair id="ascs_PRD-instance_attributes-InstanceName" name="InstanceName" value="PRD_ASCS01"/>
+            <nvpair id="ascs_PRD-instance_attributes-START_PROFILE" name="START_PROFILE" value="/sapmnt/PRD/profile/PRD_ASCS01_alidascs11"/>
+          </instance_attributes>
+          <meta_attributes id="ascs_PRD-meta_attributes">
+            <nvpair id="ascs_PRD-meta_attributes-failure-timeout" name="failure-timeout" value="60"/>
+            <nvpair id="ascs_PRD-meta_attributes-migration-threshold" name="migration-threshold" value="3"/>
+            <nvpair id="ascs_PRD-meta_attributes-resource-stickiness" name="resource-stickiness" value="5000"/>
+          </meta_attributes>
           <operations>
-            <op id="rsc_healthcheck_HAR-monitor-interval-10s" interval="10s" name="monitor" timeout="20s"/>
-            <op id="rsc_healthcheck_HAR-start-interval-0s" interval="0s" name="start" timeout="100"/>
-            <op id="rsc_healthcheck_HAR-stop-interval-0s" interval="0s" name="stop" timeout="100"/>
+            <op id="ascs_PRD-demote-interval-0s" interval="0s" name="demote" timeout="320s"/>
+            <op id="ascs_PRD-methods-interval-0s" interval="0s" name="methods" timeout="5s"/>
+            <op id="ascs_PRD-monitor-interval-20" interval="20" name="monitor" on-fail="restart" timeout="60"/>
+            <op id="ascs_PRD-promote-interval-0s" interval="0s" name="promote" timeout="320s"/>
+            <op id="ascs_PRD-reload-interval-0s" interval="0s" name="reload" timeout="320s"/>
+            <op id="ascs_PRD-start-interval-0" interval="0" name="start" timeout="600"/>
+            <op id="ascs_PRD-stop-interval-0" interval="0" name="stop" timeout="600"/>
           </operations>
         </primitive>
-        <primitive class="ocf" id="rsc_vip_HAR_00" provider="heartbeat" type="IPaddr2">
-          <instance_attributes id="rsc_vip_HAR_00-instance_attributes">
-            <nvpair id="rsc_vip_HAR_00-instance_attributes-cidr_netmask" name="cidr_netmask" value="32"/>
-            <nvpair id="rsc_vip_HAR_00-instance_attributes-ip" name="ip" value="10.150.1.20"/>
-            <nvpair id="rsc_vip_HAR_00-instance_attributes-nic" name="nic" value="eth0"/>
+      </group>
+      <group id="ers_ip_group">
+        <primitive class="ocf" id="ers_PRD" provider="heartbeat" type="SAPInstance">
+          <instance_attributes id="ers_PRD-instance_attributes">
+            <nvpair id="ers_PRD-instance_attributes-AUTOMATIC_RECOVER" name="AUTOMATIC_RECOVER" value="false"/>
+            <nvpair id="ers_PRD-instance_attributes-IS_ERS" name="IS_ERS" value="true"/>
+            <nvpair id="ers_PRD-instance_attributes-InstanceName" name="InstanceName" value="PRD_ERS02"/>
+            <nvpair id="ers_PRD-instance_attributes-START_PROFILE" name="START_PROFILE" value="/sapmnt/PRD/profile/PRD_ERS02_aliders11"/>
           </instance_attributes>
+          <meta_attributes id="ers_PRD-meta_attributes">
+            <nvpair id="ers_PRD-meta_attributes-failure-timeout" name="failure-timeout" value="30"/>
+            <nvpair id="ers_PRD-meta_attributes-migration-threshold" name="migration-threshold" value="5"/>
+            <nvpair id="ers_PRD-meta_attributes-resource-stickiness" name="resource-stickiness" value="1"/>
+          </meta_attributes>
           <operations>
-            <op id="rsc_vip_HAR_00-monitor-interval-3600s" interval="3600s" name="monitor" timeout="60s"/>
-            <op id="rsc_vip_HAR_00-start-interval-0s" interval="0s" name="start" timeout="20s"/>
-            <op id="rsc_vip_HAR_00-stop-interval-0s" interval="0s" name="stop" timeout="20s"/>
+            <op id="ers_PRD-demote-interval-0s" interval="0s" name="demote" timeout="320s"/>
+            <op id="ers_PRD-methods-interval-0s" interval="0s" name="methods" timeout="5s"/>
+            <op id="ers_PRD-monitor-interval-20" interval="20" name="monitor" on-fail="restart" timeout="60"/>
+            <op id="ers_PRD-promote-interval-0s" interval="0s" name="promote" timeout="320s"/>
+            <op id="ers_PRD-reload-interval-0s" interval="0s" name="reload" timeout="320s"/>
+            <op id="ers_PRD-start-interval-0" interval="0" name="start" timeout="600"/>
+            <op id="ers_PRD-stop-interval-0" interval="0" name="stop" timeout="600"/>
           </operations>
         </primitive>
       </group>
