@@ -21,17 +21,16 @@ package aianalyze
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"flag"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/rest"
 
@@ -82,23 +81,16 @@ type (
 
 	// AiAnalyzer has args for ai analyze collection one time mode.
 	AiAnalyzer struct {
-		Sid               string                        `json:"sid"`
-		InstanceNumber    string                        `json:"instance-number"`
-		InstanceName      string                        `json:"instance-name"`
-		SupportBundlePath string                        `json:"support-bundle-path"`
-		Project           string                        `json:"project"`
-		Region            string                        `json:"region"`
-		BeforeEventWindow int                           `json:"before-event-window"`
-		AfterEventWindow  int                           `json:"after-event-window"`
-		Timestamp         string                        `json:"timestamp"`
-		Help              bool                          `json:"help,string"`
-		LogPath           string                        `json:"log-path"`
-		LogLevel          string                        `json:"loglevel"`
-		IIOTEParams       *onetime.InternallyInvokedOTE `json:"-"`
-		logparserPath     string
-		oteLogger         *onetime.OTELogger
-		fs                filesystem.FileSystem
-		rest              RestService
+		Sid          string                        `json:"sid"`
+		InstanceName string                        `json:"instance-name"`
+		Project      string                        `json:"project"`
+		Region       string                        `json:"region"`
+		Help         bool                          `json:"help,string"`
+		LogPath      string                        `json:"log-path"`
+		LogLevel     string                        `json:"loglevel"`
+		IIOTEParams  *onetime.InternallyInvokedOTE `json:"-"`
+		oteLogger    *onetime.OTELogger
+		rest         RestService
 	}
 
 	// RestService is the interface for rest.Rest.
@@ -107,20 +99,13 @@ type (
 		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
 	}
 
+	errorResponse struct {
+		Err googleapi.Error `json:"error"`
+	}
+
 	httpClient interface {
 		Do(req *http.Request) (*http.Response, error)
 	}
-
-	// httpGet abstracts the http.Get function for testing purposes.
-	httpGet func(url string) (*http.Response, error)
-)
-
-var (
-	//go:embed guides/analysis_guide.txt
-	analysisGuide string
-
-	//go:embed guides/decision_tree.txt
-	decisionTree string
 )
 
 // Name implements the subcommand interface for collecting support analyzer report collection for support team.
@@ -135,23 +120,13 @@ func (*AiAnalyzer) Synopsis() string {
 
 // Usage implements the subcommand interface for support analyzer report collection for support team.
 func (*AiAnalyzer) Usage() string {
-	return `Usage: aianalyze [-sid=<sid>] [-instance-number=<instance-number>]
-	[-instance-name=<instance-name>] [-support-bundle-path=<support-bundle-path>]
-	[-before-event-window=<before-event-window>] [-after-event-window=<after-event-window>]
-	[-timestamp=<timestamp>] [-bucket=<bucket>]
-	[-h] [-loglevel=<debug|info|warn|error>]
+	return `Usage: aianalyze [-sid=<SAP System Identifier>] [-h] [-loglevel=<debug|info|warn|error>]
 	Example: aianalyze -sid="DEH"` + "\n"
 }
 
 // SetFlags implements the subcommand interface for support analyzer report collection.
 func (a *AiAnalyzer) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&a.Sid, "sid", "", "SAP System Identifier - (required for event analysis)")
-	fs.StringVar(&a.InstanceNumber, "instance-number", "", "SAP Instance Number - (required for event analysis)")
-	fs.StringVar(&a.InstanceName, "instance-name", "", "SAP Instance Name - (required for event analysis)")
-	fs.StringVar(&a.SupportBundlePath, "support-bundle-path", "", "Path to the support bundle. (required)")
-	fs.IntVar(&a.BeforeEventWindow, "before-event-window", 4500, "Window before event of concern for further analysis. (optional) Default: 4500")
-	fs.IntVar(&a.AfterEventWindow, "after-event-window", 1800, "Window after event of concern for further analysis. (optional) Default: 1800")
-	fs.StringVar(&a.Timestamp, "timestamp", "", "Timestamp of the event of concern. (optional, but required for event analysis)")
+	fs.StringVar(&a.Sid, "sid", "", "SAP System Identifier - required for collecting HANA traces")
 	fs.BoolVar(&a.Help, "h", false, "Displays help")
 	fs.StringVar(&a.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&a.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/supportbundle.log")
@@ -184,13 +159,13 @@ func (a *AiAnalyzer) Run(ctx context.Context, opts *onetime.RunOptions) (string,
 
 func (a *AiAnalyzer) supportAnalyzerHandler(ctx context.Context, opts *onetime.RunOptions) (string, subcommands.ExitStatus) {
 	if err := a.validateParameters(ctx, opts.CloudProperties); err != nil {
-		log.CtxLogger(ctx).Errorw("Error while validating parameters", "err", err)
+		a.oteLogger.LogErrorToFileAndConsole(ctx, "Error while validating parameters", err)
 		return "Error while validating parameters", subcommands.ExitUsageError
 	}
 	a.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting Support Analyzer Report for Agent for SAP...")
 
 	if err := a.getOverview(ctx); err != nil {
-		log.CtxLogger(ctx).Errorw("Error while getting overview", "err", err)
+		a.oteLogger.LogErrorToFileAndConsole(ctx, "Error while getting overview", err)
 		return "Error while getting overview", subcommands.ExitFailure
 	}
 	return "Support Analyzer Report collected successfully", subcommands.ExitSuccess
@@ -263,25 +238,12 @@ func (a *AiAnalyzer) generateContentREST(ctx context.Context, data []byte) ([]ge
 // validateParameters validates the parameters for support analyzer collection.
 // It also sets the default values for the parameters if they are not provided.
 func (a *AiAnalyzer) validateParameters(ctx context.Context, cp *ipb.CloudProperties) error {
+	a.rest = &rest.Rest{}
+	a.rest.NewRest()
 	if a.Sid == "" {
 		return fmt.Errorf("no SID passed, SID is required")
 	}
-	if a.InstanceNumber == "" {
-		return fmt.Errorf("no instance number passed, instance number is required")
-	}
-	if a.SupportBundlePath == "" {
-		return fmt.Errorf("no support bundle path provided, -support-bundle-path is required")
-	}
 
-	a.rest = &rest.Rest{}
-	a.rest.NewRest()
-	a.fs = filesystem.Helper{}
-
-	a.logparserPath = "/tmp/logparser.py"
-
-	if a.InstanceName == "" {
-		a.InstanceName = cp.GetInstanceName()
-	}
 	if a.Project == "" {
 		a.Project = cp.GetProjectId()
 	}
