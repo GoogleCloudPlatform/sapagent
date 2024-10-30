@@ -27,8 +27,9 @@ import (
 )
 
 var (
-	events map[string]eventData
-	mu     sync.Mutex
+	events         map[string]eventData
+	mu             sync.Mutex
+	logDelayEvents map[string]eventData
 )
 
 type eventData struct {
@@ -56,18 +57,42 @@ type Parameters struct {
 func AddEvent(ctx context.Context, p Parameters) bool {
 	mu.Lock()
 	defer mu.Unlock()
-
 	if events == nil {
 		events = make(map[string]eventData)
 	}
+	if logDelayEvents == nil {
+		logDelayEvents = make(map[string]eventData)
+	}
+
 	key := p.Path + p.Identifier
 	stateChange := false
 	if event, exists := events[key]; exists && event.lastValue != p.Value {
 		stateChange = true
-		// NOTE: This log message has specific keys used in querying Cloud Logging.
-		// Never change these keys since it would have downstream effects.
-		log.CtxLogger(ctx).Infow(p.Message, "metricEvent", true, "metric", p.Path, "previousValue", event.lastValue, "currentValue", p.Value, "previousLabels", event.labels, "currentLabels", p.Labels, "lastUpdated", event.lastUpdated)
+		// Some metric paths are sent multiple times - one for each service.
+		// To avoid logging the same event multiple times, we will group labels
+		// that share the same path and value and log after a short delay.
+		logDelayKey := p.Path + p.Value
+		if logEvent, exists := logDelayEvents[logDelayKey]; exists {
+			for k, v := range event.labels {
+				if logEvent.labels[k] != v {
+					logEvent.labels[k] += ", " + v
+				}
+			}
+		} else {
+			logDelayEvents[logDelayKey] = event
+			time.AfterFunc(time.Minute, func() {
+				// Lock the mutex as this runs in a separate goroutine.
+				mu.Lock()
+				defer mu.Unlock()
+				logEvent := logDelayEvents[logDelayKey]
+				// NOTE: This log message has specific keys used in querying Cloud Logging.
+				// Never change these keys since it would have downstream effects.
+				log.CtxLogger(ctx).Infow(p.Message, "metricEvent", true, "metric", p.Path, "previousValue", logEvent.lastValue, "currentValue", p.Value, "previousLabels", p.Labels, "currentLabels", logEvent.labels, "lastUpdated", logEvent.lastUpdated)
+				delete(logDelayEvents, logDelayKey)
+			})
+		}
 	}
+
 	events[key] = eventData{
 		labels:      p.Labels,
 		lastValue:   p.Value,
