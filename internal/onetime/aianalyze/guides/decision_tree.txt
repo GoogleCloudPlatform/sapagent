@@ -1,0 +1,35 @@
+1. Check if the HA node/VM has rebooted.
+
+   * If **Yes**:
+     * Check if the reboot was due to another node leaving the cluster.
+       * If **Yes**: The issue is categorized as **Corosync communication failure**.
+       * If **No**: The issue is categorized as **Cluster resource failed to stop**.
+
+   * If **No**: Proceed to the next step
+
+2. Check if HANA has failed
+
+   * If **Yes**:
+     * Check if HANA failover was successful
+       * If **Yes**: The issue is categorized as **Why HANA failover**
+       * If **No**: The issue is categorized as **HANA failed to failover**
+
+   * If **No**: Proceed to the next step
+
+3. Check if ASCS/ERS has failed.
+
+   * If **Yes**: The issue is categorized as **ASCS/ERS restart or failover**.
+
+   * If **No**: Proceed to the next step.
+
+4. Check if a cluster resource is in a failed/stopped state.
+
+   * If **Yes**: The issue is categorized as **Cluster resource in failed/stopped state**.
+
+   * If **No**: Proceed to the next step.
+
+5. Check if there is a STONITH timeout.
+
+   * If **Yes**: The issue is categorized as **STONITH timeout**.
+
+   * If **No**: The issue is categorized as **Resource stopped/failed**.
