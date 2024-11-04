@@ -39,13 +39,12 @@ message ServiceStatus {
   bool enabled = 2;
   State fully_functional = 3;
   string error_message = 4;
-  repeated IAMRole iam_roles = 5;
+  repeated IAMPermission iam_permissions = 5;
   repeated ConfigValue config_values = 6;
 }
 
-message IAMRole {
+message IAMPermission {
   string name = 1;
-  string role = 2;
   State granted = 3;
 }
 

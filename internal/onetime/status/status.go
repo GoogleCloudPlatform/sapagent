@@ -188,8 +188,8 @@ func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuratio
 	status := &spb.ServiceStatus{
 		Name:    "Host Metrics",
 		Enabled: config.GetProvideSapHostAgentMetrics().GetValue(),
-		IamRoles: []*spb.IAMRole{
-			{Name: "Example compute viewer", Role: "roles/compute.viewer"},
+		IamPermissions: []*spb.IAMPermission{
+			{Name: "example.compute.viewer"},
 		},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("provide_sap_host_agent_metrics", config.GetProvideSapHostAgentMetrics().GetValue(), true),
@@ -201,9 +201,9 @@ func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuratio
 
 func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:     "Process Metrics",
-		Enabled:  config.GetCollectionConfiguration().GetCollectProcessMetrics(),
-		IamRoles: []*spb.IAMRole{},
+		Name:           "Process Metrics",
+		Enabled:        config.GetCollectionConfiguration().GetCollectProcessMetrics(),
+		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_process_metrics", config.GetCollectionConfiguration().GetCollectProcessMetrics(), false),
 			configValue("process_metrics_frequency", config.GetCollectionConfiguration().GetProcessMetricsFrequency(), 5),
@@ -217,9 +217,9 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 
 func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:     "HANA Monitoring Metrics",
-		Enabled:  config.GetHanaMonitoringConfiguration().GetEnabled(),
-		IamRoles: []*spb.IAMRole{},
+		Name:           "HANA Monitoring Metrics",
+		Enabled:        config.GetHanaMonitoringConfiguration().GetEnabled(),
+		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("connection_timeout", config.GetHanaMonitoringConfiguration().GetConnectionTimeout().GetSeconds(), 120),
 			configValue("enabled", config.GetHanaMonitoringConfiguration().GetEnabled(), false),
@@ -237,9 +237,9 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 
 func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:     "System Discovery",
-		Enabled:  config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(),
-		IamRoles: []*spb.IAMRole{},
+		Name:           "System Discovery",
+		Enabled:        config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(),
+		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("enable_discovery", config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(), true),
 			configValue("enable_workload_discovery", config.GetDiscoveryConfiguration().GetEnableWorkloadDiscovery().GetValue(), true),
@@ -253,9 +253,9 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 
 func (s *Status) backintStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:     "Backint",
-		Enabled:  false,
-		IamRoles: []*spb.IAMRole{},
+		Name:           "Backint",
+		Enabled:        false,
+		IamPermissions: []*spb.IAMPermission{},
 		// TODO: Add config values.
 		ConfigValues: []*spb.ConfigValue{},
 	}
@@ -265,9 +265,9 @@ func (s *Status) backintStatus(ctx context.Context, config *cpb.Configuration) *
 
 func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:     "Disk Snapshot",
-		Enabled:  false,
-		IamRoles: []*spb.IAMRole{},
+		Name:           "Disk Snapshot",
+		Enabled:        false,
+		IamPermissions: []*spb.IAMPermission{},
 		// TODO: Add config values.
 		ConfigValues: []*spb.ConfigValue{},
 	}
@@ -277,9 +277,9 @@ func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configurati
 
 func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:     "Workload Manager",
-		Enabled:  config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(),
-		IamRoles: []*spb.IAMRole{},
+		Name:           "Workload Manager",
+		Enabled:        config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(),
+		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_workload_validation_metrics", config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(), true),
 			configValue("config_target_environment", config.GetCollectionConfiguration().GetWorkloadValidationCollectionDefinition().GetConfigTargetEnvironment(), cpb.TargetEnvironment_PRODUCTION),

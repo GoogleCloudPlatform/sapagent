@@ -440,15 +440,13 @@ Agent Status:
 						Enabled:         true,
 						FullyFunctional: spb.State_SUCCESS_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
-						IamRoles: []*spb.IAMRole{
+						IamPermissions: []*spb.IAMPermission{
 							{
-								Name:    "Compute Viewer",
-								Role:    "roles/compute.viewer",
+								Name:    "example.compute.viewer",
 								Granted: spb.State_SUCCESS_STATE,
 							},
 							{
-								Name:    "Monitoring Viewer",
-								Role:    "roles/monitoring.viewer",
+								Name:    "example.monitoring.viewer",
 								Granted: spb.State_SUCCESS_STATE,
 							},
 						},
@@ -516,9 +514,9 @@ Agent Status:
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Fully Functional
-    IAM Roles:
-        Compute Viewer (roles/compute.viewer): True
-        Monitoring Viewer (roles/monitoring.viewer): True
+    IAM Permissions:
+        example.compute.viewer: True
+        example.monitoring.viewer: True
     Configuration:
         collect_process_metrics: True (default)
         process_metrics_frequency: 5 (default)
@@ -554,15 +552,13 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 						Enabled:         true,
 						FullyFunctional: spb.State_FAILURE_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
-						IamRoles: []*spb.IAMRole{
+						IamPermissions: []*spb.IAMPermission{
 							{
-								Name:    "Compute Viewer",
-								Role:    "roles/compute.viewer",
+								Name:    "example.compute.viewer",
 								Granted: spb.State_SUCCESS_STATE,
 							},
 							{
-								Name:    "Monitoring Viewer",
-								Role:    "roles/monitoring.viewer",
+								Name:    "example.monitoring.viewer",
 								Granted: spb.State_ERROR_STATE,
 							},
 						},
@@ -630,9 +626,9 @@ Agent Status:
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Error: Cannot write to Cloud Monitoring, check IAM permissions
-    IAM Roles:
-        Compute Viewer (roles/compute.viewer): True
-        Monitoring Viewer (roles/monitoring.viewer): Error: could not determine status
+    IAM Permissions:
+        example.compute.viewer: True
+        example.monitoring.viewer: Error: could not determine status
     Configuration:
         collect_process_metrics: True (configuration file)
         process_metrics_frequency: nil (default)

@@ -134,17 +134,17 @@ func TestStatusHandler(t *testing.T) {
 					{
 						Name:    "Host Metrics",
 						Enabled: true,
-						IamRoles: []*spb.IAMRole{
-							{Name: "Example compute viewer", Role: "roles/compute.viewer"},
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "example.compute.viewer"},
 						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
 						},
 					},
 					{
-						Name:     "Process Metrics",
-						Enabled:  false,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "Process Metrics",
+						Enabled:        false,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_process_metrics", Value: "false", IsDefault: true},
 							{Name: "process_metrics_frequency", Value: "0", IsDefault: false},
@@ -153,9 +153,9 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:     "HANA Monitoring Metrics",
-						Enabled:  false,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "HANA Monitoring Metrics",
+						Enabled:        false,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "connection_timeout", Value: "0", IsDefault: false},
 							{Name: "enabled", Value: "false", IsDefault: true},
@@ -167,9 +167,9 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:     "System Discovery",
-						Enabled:  true,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "System Discovery",
+						Enabled:        true,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
 							{Name: "enable_workload_discovery", Value: "true", IsDefault: true},
@@ -178,21 +178,21 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:         "Backint",
-						Enabled:      false,
-						IamRoles:     []*spb.IAMRole{},
-						ConfigValues: []*spb.ConfigValue{},
+						Name:           "Backint",
+						Enabled:        false,
+						IamPermissions: []*spb.IAMPermission{},
+						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
-						Name:         "Disk Snapshot",
-						Enabled:      false,
-						IamRoles:     []*spb.IAMRole{},
-						ConfigValues: []*spb.ConfigValue{},
+						Name:           "Disk Snapshot",
+						Enabled:        false,
+						IamPermissions: []*spb.IAMPermission{},
+						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
-						Name:     "Workload Manager",
-						Enabled:  true,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "Workload Manager",
+						Enabled:        true,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
 							{Name: "config_target_environment", Value: "PRODUCTION", IsDefault: true},
@@ -245,17 +245,17 @@ func TestStatusHandler(t *testing.T) {
 					{
 						Name:    "Host Metrics",
 						Enabled: true,
-						IamRoles: []*spb.IAMRole{
-							{Name: "Example compute viewer", Role: "roles/compute.viewer"},
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "example.compute.viewer"},
 						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
 						},
 					},
 					{
-						Name:     "Process Metrics",
-						Enabled:  true,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "Process Metrics",
+						Enabled:        true,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_process_metrics", Value: "true", IsDefault: false},
 							{Name: "process_metrics_frequency", Value: "5", IsDefault: true},
@@ -264,9 +264,9 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:     "HANA Monitoring Metrics",
-						Enabled:  true,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "HANA Monitoring Metrics",
+						Enabled:        true,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "connection_timeout", Value: "120", IsDefault: true},
 							{Name: "enabled", Value: "true", IsDefault: false},
@@ -278,9 +278,9 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:     "System Discovery",
-						Enabled:  true,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "System Discovery",
+						Enabled:        true,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
 							{Name: "enable_workload_discovery", Value: "true", IsDefault: true},
@@ -289,21 +289,21 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:         "Backint",
-						Enabled:      false,
-						IamRoles:     []*spb.IAMRole{},
-						ConfigValues: []*spb.ConfigValue{},
+						Name:           "Backint",
+						Enabled:        false,
+						IamPermissions: []*spb.IAMPermission{},
+						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
-						Name:         "Disk Snapshot",
-						Enabled:      false,
-						IamRoles:     []*spb.IAMRole{},
-						ConfigValues: []*spb.ConfigValue{},
+						Name:           "Disk Snapshot",
+						Enabled:        false,
+						IamPermissions: []*spb.IAMPermission{},
+						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
-						Name:     "Workload Manager",
-						Enabled:  true,
-						IamRoles: []*spb.IAMRole{},
+						Name:           "Workload Manager",
+						Enabled:        true,
+						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
 							{Name: "config_target_environment", Value: "PRODUCTION", IsDefault: true},

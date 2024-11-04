@@ -258,11 +258,11 @@ func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 		printColor(failure, "Error: %s\n", status.GetErrorMessage())
 	}
 
-	if len(status.GetIamRoles()) > 0 {
-		printColor(info, "    IAM Roles:\n")
+	if len(status.GetIamPermissions()) > 0 {
+		printColor(info, "    IAM Permissions:\n")
 	}
-	for _, iamRole := range status.GetIamRoles() {
-		printState(ctx, fmt.Sprintf("        %s (%s)", iamRole.GetName(), iamRole.GetRole()), iamRole.GetGranted())
+	for _, iamPermission := range status.GetIamPermissions() {
+		printState(ctx, fmt.Sprintf("        %s", iamPermission.GetName()), iamPermission.GetGranted())
 	}
 
 	if len(status.GetConfigValues()) > 0 {
