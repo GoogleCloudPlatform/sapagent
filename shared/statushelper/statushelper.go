@@ -21,6 +21,7 @@ package statushelper
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/google/safetext/shsprintf"
@@ -259,10 +260,27 @@ func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 	}
 
 	if len(status.GetIamPermissions()) > 0 {
-		printColor(info, "    IAM Permissions:\n")
-	}
-	for _, iamPermission := range status.GetIamPermissions() {
-		printState(ctx, fmt.Sprintf("        %s", iamPermission.GetName()), iamPermission.GetGranted())
+		printColor(info, "    IAM Permissions: ")
+		var deniedPermissions []*spb.IAMPermission
+		for _, permission := range status.GetIamPermissions() {
+			if permission.GetGranted() != spb.State_SUCCESS_STATE {
+				deniedPermissions = append(deniedPermissions, permission)
+			}
+		}
+		if len(deniedPermissions) == 0 {
+			printColor(success, "All granted\n")
+		} else {
+			printColor(failure, "%d not granted (output limited to 5)\n", len(deniedPermissions))
+		}
+		sort.Slice(deniedPermissions, func(i, j int) bool {
+			return deniedPermissions[i].GetGranted() < deniedPermissions[j].GetGranted()
+		})
+		for i, permission := range deniedPermissions {
+			if i >= 5 {
+				break
+			}
+			printState(ctx, fmt.Sprintf("        %s", permission.GetName()), permission.GetGranted())
+		}
 	}
 
 	if len(status.GetConfigValues()) > 0 {

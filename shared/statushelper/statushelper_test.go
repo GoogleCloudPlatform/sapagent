@@ -514,9 +514,7 @@ Agent Status:
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Fully Functional
-    IAM Permissions:
-        example.compute.viewer: True
-        example.monitoring.viewer: True
+    IAM Permissions: All granted
     Configuration:
         collect_process_metrics: True (default)
         process_metrics_frequency: 5 (default)
@@ -553,14 +551,13 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 						FullyFunctional: spb.State_FAILURE_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						IamPermissions: []*spb.IAMPermission{
-							{
-								Name:    "example.compute.viewer",
-								Granted: spb.State_SUCCESS_STATE,
-							},
-							{
-								Name:    "example.monitoring.viewer",
-								Granted: spb.State_ERROR_STATE,
-							},
+							{Name: "example.compute.viewer", Granted: spb.State_SUCCESS_STATE},
+							{Name: "example.monitoring.viewer", Granted: spb.State_ERROR_STATE},
+							{Name: "example.failed", Granted: spb.State_FAILURE_STATE},
+							{Name: "example.failed", Granted: spb.State_FAILURE_STATE},
+							{Name: "example.failed", Granted: spb.State_FAILURE_STATE},
+							{Name: "example.failed", Granted: spb.State_FAILURE_STATE},
+							{Name: "example.failed", Granted: spb.State_ERROR_STATE},
 						},
 						ConfigValues: []*spb.ConfigValue{
 							{
@@ -626,8 +623,11 @@ Agent Status:
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Error: Cannot write to Cloud Monitoring, check IAM permissions
-    IAM Permissions:
-        example.compute.viewer: True
+    IAM Permissions: 6 not granted (output limited to 5)
+        example.failed: False
+        example.failed: False
+        example.failed: False
+        example.failed: False
         example.monitoring.viewer: Error: could not determine status
     Configuration:
         collect_process_metrics: True (configuration file)

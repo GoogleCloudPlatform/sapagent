@@ -100,6 +100,7 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		// Collect support bundle if there's an error.
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
 	}
+	log.CtxLogger(ctx).Infow("Agent Status", "status", agentStatus)
 	statushelper.PrintStatus(ctx, agentStatus)
 	return exitStatus
 }
