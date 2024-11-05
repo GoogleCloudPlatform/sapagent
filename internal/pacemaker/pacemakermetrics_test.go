@@ -1813,7 +1813,7 @@ func TestCollectEnqueueServer(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: "enq/serverhost = alidascs11",
+					StdOut: "enq/replicatorhost = aliders11",
 				}
 			},
 			want: "",
@@ -1830,17 +1830,18 @@ systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/pr
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: "enq/serverhost = alidascs11",
+					StdOut: "enq/replicatorhost = aliders11",
 				}
 			},
 			want: "",
 		},
 		{
-			name: "serverhostError",
+			name: "replicatorError",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "serverhost") {
+				if strings.Contains(params.ArgsToSplit, "enq/replicator") {
 					return commandlineexecutor.Result{
-						Error: errors.New("Something went wrong"),
+						Error:    errors.New("Something went wrong"),
+						ExitCode: 2,
 					}
 				}
 				return commandlineexecutor.Result{
@@ -1850,37 +1851,26 @@ systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/pr
 			want: "",
 		},
 		{
-			name: "serverhostParseError",
+			name: "ENSA1",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "serverhost") {
-					return commandlineexecutor.Result{}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs1",
-				}
-			},
-			want: "",
-		},
-		{
-			name: "ENSA",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "serverhost") {
+				if strings.Contains(params.ArgsToSplit, "enq/replicator") {
 					return commandlineexecutor.Result{
-						StdOut: "enque/serverhost = alidascs11",
+						ExitCode: 1,
 					}
 				}
 				return commandlineexecutor.Result{
 					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs1",
 				}
 			},
-			want: "ENSA",
+			want: "ENSA1",
 		},
 		{
 			name: "ENSA2",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "serverhost") {
+				if strings.Contains(params.ArgsToSplit, "enq/replicator") {
 					return commandlineexecutor.Result{
-						StdOut: "enq/serverhost = alidascs11",
+						StdOut:   "enq/replicatorhost = aliders11",
+						ExitCode: 0,
 					}
 				}
 				return commandlineexecutor.Result{

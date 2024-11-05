@@ -611,15 +611,15 @@ func collectEnqueueServer(ctx context.Context, l map[string]string, exec command
 
 	result = exec(ctx, commandlineexecutor.Params{
 		Executable:  "grep",
-		ArgsToSplit: fmt.Sprintf("-E '^(enq|enque)/serverhost' /sapmnt/%s/profile/DEFAULT.PFL", sapsid),
+		ArgsToSplit: fmt.Sprintf("'^enq/replicator' /sapmnt/%s/profile/DEFAULT.PFL", sapsid),
 	})
 	switch {
-	case result.Error != nil:
-		log.CtxLogger(ctx).Debugw("Could not grep DEFAULT.PFL. Skipping enqueue_server metric collection.", "error", result.Error)
-	case strings.Contains(result.StdOut, "enq/serverhost"):
+	case result.Error == nil && result.ExitCode == 0: // Pattern found
 		l["enqueue_server"] = "ENSA2"
-	case strings.Contains(result.StdOut, "enque/serverhost"):
-		l["enqueue_server"] = "ENSA"
+	case result.ExitCode == 1: // Pattern not found
+		l["enqueue_server"] = "ENSA1"
+	default: // File not found
+		log.CtxLogger(ctx).Debugw("Could not grep DEFAULT.PFL. Skipping enqueue_server metric collection.", "error", result.Error)
 	}
 }
 
