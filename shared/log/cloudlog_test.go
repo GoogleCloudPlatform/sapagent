@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"go.uber.org/zap/zapcore"
 )
 

@@ -21,8 +21,8 @@ import (
 	"context"
 	"testing"
 
-	compute "google.golang.org/api/compute/v1"
-	file "google.golang.org/api/file/v1"
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/file/v1"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )

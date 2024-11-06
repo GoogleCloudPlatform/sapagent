@@ -19,6 +19,8 @@ package sapagent.protos.gcbdrbackup;
 
 import "google/protobuf/wrappers.proto";
 
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrbackup";
+
 message BackupResponse {
   google.protobuf.BoolValue status = 1;
   string job_id = 2;

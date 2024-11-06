@@ -19,7 +19,7 @@ package cloud.partners.sap.system;
 
 import "google/protobuf/timestamp.proto";
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/system";
 
 // The schema of SAP system discovery data.
 message SapDiscovery {

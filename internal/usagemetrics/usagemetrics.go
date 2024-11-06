@@ -210,7 +210,6 @@ const (
 	MultipartUploadFinished                 = 82 //	MultipartUploadFinished
 )
 
-// LINT.ThenChange("//depot/github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics/usagemetrics_test.go")
 // projectNumbers contains known project numbers for test instances.
 var projectExclusionList = []string{
 	"922508251869",

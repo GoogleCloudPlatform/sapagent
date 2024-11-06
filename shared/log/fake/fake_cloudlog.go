@@ -20,7 +20,7 @@ package fake
 import (
 	"testing"
 
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )

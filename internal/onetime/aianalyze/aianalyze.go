@@ -34,7 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/rest"
 
-	cpb "cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
+	cpb "cloud.google.com/go/aiplatform/apiv1beta1/aiplatformpb"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 

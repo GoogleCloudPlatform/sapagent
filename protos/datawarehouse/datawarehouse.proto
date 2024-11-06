@@ -19,9 +19,9 @@ syntax = "proto3";
 package cloud.partners.sap.datawarehouse;
 
 import "google/protobuf/timestamp.proto";
-import "system/system.proto";
+import "protos/system/system.proto";
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse";
 
 // Request for sending the data insights.
 message WriteInsightRequest {

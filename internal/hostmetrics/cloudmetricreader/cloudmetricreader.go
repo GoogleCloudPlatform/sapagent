@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/googleapis/gax-go/v2"
 	"google.golang.org/api/iterator"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"

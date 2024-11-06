@@ -62,7 +62,7 @@ import (
 	"strings"
 	"sync"
 
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

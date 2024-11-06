@@ -24,7 +24,7 @@ import (
 	"os"
 
 	"flag"
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 	"golang.org/x/oauth2/google"
 	"github.com/google/subcommands"

@@ -20,9 +20,9 @@ package sapagent.protos.configuration;
 import "google/protobuf/duration.proto";
 import "google/protobuf/wrappers.proto";
 
-import "instanceinfo/instanceinfo.proto";
+import "protos/instanceinfo/instanceinfo.proto";
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/configuration";
 
 message Configuration {
   enum LogLevel {

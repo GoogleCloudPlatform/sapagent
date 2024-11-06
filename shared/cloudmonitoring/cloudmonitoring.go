@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 

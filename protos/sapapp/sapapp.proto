@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.sapapp;
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/sapapp";
 
 enum InstanceType {
   INSTANCE_TYPE_UNDEFINED = 0;

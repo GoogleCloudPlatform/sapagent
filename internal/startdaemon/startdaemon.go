@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"flag"
-	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"cloud.google.com/go/monitoring/apiv3/v2"
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
 	"golang.org/x/oauth2/google"

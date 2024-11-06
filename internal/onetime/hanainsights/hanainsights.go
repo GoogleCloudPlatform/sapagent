@@ -33,7 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )

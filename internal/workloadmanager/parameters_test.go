@@ -21,7 +21,7 @@ import (
 	"io"
 	"testing"
 
-	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
 )
 
 func TestInit(t *testing.T) {

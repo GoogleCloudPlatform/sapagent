@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.stats;
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/stats";
 
 message DiskStatsCollection {
   repeated DiskStats disk_stats = 1;

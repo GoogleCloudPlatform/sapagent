@@ -28,7 +28,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"google.golang.org/protobuf/encoding/protojson"

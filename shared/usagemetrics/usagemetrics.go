@@ -26,7 +26,7 @@ import (
 	"sync"
 	"time"
 
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 	"golang.org/x/oauth2/google"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )

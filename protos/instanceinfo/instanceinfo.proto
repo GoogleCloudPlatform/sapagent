@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.instanceinfo;
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo";
 
 message CloudProperties {
   string project_id = 1;

@@ -18,6 +18,7 @@ syntax = "proto3";
 package sapagent.protos.events;
 
 option java_multiple_files = true;
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/events";
 
 message Rule {
   string name = 1;  // Optional - rule name
@@ -35,8 +36,8 @@ message Rule {
 
   // We can send same event to multiple targets.
   repeated EventTarget target = 6;
-  int64 frequency_sec = 7;     // Event source polling frequency in seconds.
-  bool force_trigger = 8;  // Optional - for internal testing
+  int64 frequency_sec = 7;  // Event source polling frequency in seconds.
+  bool force_trigger = 8;   // Optional - for internal testing
 }
 
 message EventSource {

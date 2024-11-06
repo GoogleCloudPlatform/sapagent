@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"

@@ -31,7 +31,7 @@ import (
 	"strconv"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"

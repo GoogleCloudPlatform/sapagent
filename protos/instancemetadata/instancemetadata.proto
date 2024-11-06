@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.instancemetadata;
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/instancemetadata";
 
 message Metadata {
   string os_name = 1;

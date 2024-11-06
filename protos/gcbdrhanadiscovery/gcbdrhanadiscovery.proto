@@ -17,6 +17,8 @@ syntax = "proto3";
 
 package sapagent.protos.gcbdrhanadiscovery;
 
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrhanadiscovery";
+
 message ApplicationsList {
   repeated Application apps = 1;
 }

@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"time"
 
-	client "github.com/GoogleCloudPlatform/agentcommunication_client"
-	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/GoogleCloudPlatform/agentcommunication_client"
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"

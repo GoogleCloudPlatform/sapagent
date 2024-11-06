@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"flag"
-	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"cloud.google.com/go/monitoring/apiv3/v2"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"

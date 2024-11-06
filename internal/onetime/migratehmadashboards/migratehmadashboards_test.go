@@ -29,7 +29,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 
-	dashboard "cloud.google.com/go/monitoring/dashboard/apiv1"
+	"cloud.google.com/go/monitoring/dashboard/apiv1"
 	dashboardpb "cloud.google.com/go/monitoring/dashboard/apiv1/dashboardpb"
 )
 

@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.configurablemetrics;
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics";
 
 enum OSVendor {
   OS_VENDOR_UNSPECIFIED = 0;

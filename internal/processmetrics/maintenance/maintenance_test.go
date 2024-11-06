@@ -23,7 +23,7 @@ import (
 	"time"
 
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/googleapis/gax-go/v2"

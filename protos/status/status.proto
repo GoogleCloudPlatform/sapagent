@@ -17,9 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.status;
 
-import "google/protobuf/wrappers.proto";
-
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/status";
 
 message AgentStatus {
   string installed_version = 1;

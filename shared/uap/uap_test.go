@@ -24,7 +24,7 @@ import (
 	"time"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
-	client "github.com/GoogleCloudPlatform/agentcommunication_client"
+	"github.com/GoogleCloudPlatform/agentcommunication_client"
 	acpb "github.com/GoogleCloudPlatform/agentcommunication_client/gapic/agentcommunicationpb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"

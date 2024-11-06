@@ -17,9 +17,9 @@ syntax = "proto3";
 
 package sapagent.protos.collectiondefinition;
 
-import "wlmvalidation/wlmvalidation.proto";
+import "protos/wlmvalidation/wlmvalidation.proto";
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition";
 
 message CollectionDefinition {
   wlmvalidation.WorkloadValidation workload_validation = 1;

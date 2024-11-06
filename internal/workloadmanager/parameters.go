@@ -33,7 +33,7 @@ import (
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"

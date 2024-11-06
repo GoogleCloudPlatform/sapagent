@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
-	compute "google.golang.org/api/compute/v1"
+	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"

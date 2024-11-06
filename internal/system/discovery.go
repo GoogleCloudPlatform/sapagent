@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
-	logging "cloud.google.com/go/logging"
+	"github.com/cenkalti/backoff/v4"
+	"cloud.google.com/go/logging"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"

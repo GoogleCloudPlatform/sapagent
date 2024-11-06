@@ -21,7 +21,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	compute "google.golang.org/api/compute/v0.alpha"
+	"google.golang.org/api/compute/v0.alpha"
 )
 
 // GCEAlpha is a wrapper for Google Compute Engine services.

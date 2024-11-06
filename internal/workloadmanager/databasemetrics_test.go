@@ -25,7 +25,7 @@ import (
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"

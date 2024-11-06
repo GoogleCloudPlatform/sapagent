@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package sapagent.protos.yamlpbtest;
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/yamlpbtest";
 
 enum TestEnum {
   VAL_UNSPECIFIED = 0;

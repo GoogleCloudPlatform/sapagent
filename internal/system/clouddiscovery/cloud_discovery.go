@@ -25,8 +25,8 @@ import (
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"golang.org/x/exp/slices"
-	compute "google.golang.org/api/compute/v1"
-	file "google.golang.org/api/file/v1"
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/file/v1"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"

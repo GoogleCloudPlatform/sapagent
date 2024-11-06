@@ -18,9 +18,9 @@ syntax = "proto3";
 package sapagent.protos.hanamonitoringmigration;
 
 
-import "instanceinfo/instanceinfo.proto";
+import "protos/instanceinfo/instanceinfo.proto";
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/hanamonitoringmigration";
 
 message HANAMonitoringConfiguration {
   AgentConfig agent = 1;

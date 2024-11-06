@@ -19,7 +19,7 @@ package sapagent.protos.metrics;
 
 import "google/protobuf/descriptor.proto";
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/metrics";
 
 extend google.protobuf.EnumValueOptions {
   string xml_name = 460533978;

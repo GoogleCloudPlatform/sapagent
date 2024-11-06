@@ -21,7 +21,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	compute "google.golang.org/api/compute/v0.beta"
+	"google.golang.org/api/compute/v0.beta"
 )
 
 // GCEBeta is a wrapper for Google Compute Engine services.

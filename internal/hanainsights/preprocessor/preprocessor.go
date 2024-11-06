@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights/rule"
+	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 

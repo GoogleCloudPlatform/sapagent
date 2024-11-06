@@ -20,7 +20,7 @@ import (
 	"net"
 	"strings"
 
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 )
 
 // InterfaceName is the name of a network interface, e.g. "lo"

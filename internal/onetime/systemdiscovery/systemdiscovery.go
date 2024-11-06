@@ -25,7 +25,7 @@ import (
 	"os"
 
 	"flag"
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"

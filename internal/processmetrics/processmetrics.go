@@ -39,7 +39,7 @@ import (
 	"sync"
 	"time"
 
-	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"cloud.google.com/go/monitoring/apiv3/v2"
 	"golang.org/x/exp/slices"
 	"google.golang.org/api/option"
 	"github.com/shirou/gopsutil/v3/process"

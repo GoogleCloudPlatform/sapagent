@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"google.golang.org/api/option"
 	"go.uber.org/zap/zapcore"
 )

@@ -29,7 +29,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 
-	cpb "cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
+	cpb "cloud.google.com/go/aiplatform/apiv1beta1/aiplatformpb"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 

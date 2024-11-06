@@ -28,7 +28,7 @@ import (
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"

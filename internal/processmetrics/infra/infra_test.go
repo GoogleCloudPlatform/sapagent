@@ -26,10 +26,10 @@ import (
 	"time"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	compute "google.golang.org/api/compute/v0.beta"
+	"google.golang.org/api/compute/v0.beta"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta/fakegcebeta"

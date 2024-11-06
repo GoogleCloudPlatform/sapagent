@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"flag"
-	logging "cloud.google.com/go/logging"
+	"cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"

@@ -26,7 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
-	compute "google.golang.org/api/compute/v0.alpha"
+	"google.golang.org/api/compute/v0.alpha"
 	"google.golang.org/api/googleapi"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fakehttp"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"

@@ -27,8 +27,8 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
-	backoff "github.com/cenkalti/backoff/v4"
-	compute "google.golang.org/api/compute/v0.beta"
+	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/api/compute/v0.beta"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"

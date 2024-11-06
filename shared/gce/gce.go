@@ -23,12 +23,12 @@ import (
 	"strings"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"github.com/cenkalti/backoff/v4"
+	"cloud.google.com/go/secretmanager/apiv1"
 	"github.com/pkg/errors"
 	smpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
-	compute "google.golang.org/api/compute/v1"
-	file "google.golang.org/api/file/v1"
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/file/v1"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )

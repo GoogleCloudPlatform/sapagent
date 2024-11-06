@@ -17,9 +17,9 @@ syntax = "proto3";
 
 package sapagent.protos.wlmvalidation;
 
-import "configurablemetrics/configurablemetrics.proto";
+import "protos/configurablemetrics/configurablemetrics.proto";
 
-
+option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation";
 
 enum SapValidationType {
   SAP_VALIDATION_TYPE_UNSPECIFIED = 0;
