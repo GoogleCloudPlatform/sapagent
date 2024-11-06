@@ -68,6 +68,8 @@ import (
 
 const cn = "google_cloud_sap_agent"
 
+// Testing presubmit checks for GitHub Action build
+
 // Registering "help" as a flag makes "-help" and "--help" return help messages.
 var (
 	_ = flag.Bool("h", false, "Should we display a help message")
