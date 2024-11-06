@@ -677,7 +677,7 @@ func (p *Properties) collectAndSendReliabilityMetrics(ctx context.Context, bo *c
 	for {
 		select {
 		case <-ctx.Done():
-			log.CtxLogger(ctx).Info("Process metrics context cancelled, exiting collectAndSend.")
+			log.CtxLogger(ctx).Info("Reliability metrics context cancelled, exiting collectAndSend.")
 			return lastErr
 		case <-heartbeatTicker.C:
 			p.HeartbeatSpec.Beat()
