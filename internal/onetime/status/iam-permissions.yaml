@@ -1,0 +1,139 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This file contains the list of permissions required by the SAP Agent.
+# The IAM permissions used by each agent functionalities are listed here.
+# The permissions are grouped by functionality and then by entity type, which
+# can be a Project or a GCP Resource (Instance, Bucket, Snapshot, etc).
+
+---
+features:
+  -
+    name: HANA_MONITORING
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - monitoring.metricDescriptors.list
+          - monitoring.timeSeries.create
+          - monitoring.metricDescriptors.create
+          - monitoring.metricDescriptors.get
+
+  -
+    name: PROCESS_METRICS
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - monitoring.metricDescriptors.create
+          - monitoring.metricDescriptors.get
+          - monitoring.metricDescriptors.list
+          - monitoring.timeSeries.create
+
+  -
+    name: CLOUD_LOGGING
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - logging.logEntries.create
+
+  -
+    name: HOST_METRICS
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - compute.instances.list
+          - monitoring.metricDescriptors.get
+          - monitoring.metricDescriptors.list
+      -
+        type: Instance
+        permissions:
+          - compute.instances.get
+  -
+    name: BACKINT
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - storage.objects.list
+          - storage.objects.create
+      -
+        type: Bucket
+        permissions:
+          - storage.objects.get
+          - storage.objects.update
+          - storage.objects.delete
+  -
+    name: BACKINT_MULTIPART
+    permissionsList:
+      -
+        type: Bucket
+        permissions:
+          - storage.multipartUploads.create
+          - storage.multipartUploads.abort
+
+  -
+    name: DISKBACKUP
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - compute.disks.create
+          - compute.disks.createSnapshot
+          - compute.disks.get
+          - compute.disks.setLabels
+          - compute.disks.use
+          - compute.globalOperations.get
+          - compute.instances.attachDisk
+          - compute.instances.detachDisk
+          - compute.instances.get
+          - compute.snapshots.create
+          - compute.snapshots.get
+          - compute.snapshots.setLabels
+          - compute.snapshots.useReadOnly
+          - compute.zoneOperations.get
+  -
+    name: DISKBACKUP_STRIPED
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - compute.disks.addResourcePolicies
+          - compute.disks.create
+          - compute.disks.get
+          - compute.disks.list
+          - compute.disks.removeResourcePolicies
+          - compute.disks.use
+          - compute.disks.useReadOnly
+          - compute.globalOperations.get
+          - compute.instances.attachDisk
+          - compute.instances.detachDisk
+          - compute.instances.get
+          - compute.instantSnapshotGroups.create
+          - compute.instantSnapshotGroups.delete
+          - compute.instantSnapshotGroups.get
+          - compute.instantSnapshotGroups.list
+          - compute.instantSnapshots.list
+          - compute.instantSnapshots.useReadOnly
+          - compute.resourcePolicies.create
+          - compute.resourcePolicies.use
+          - compute.resourcePolicies.useReadOnly
+          - compute.snapshots.create
+          - compute.snapshots.get
+          - compute.snapshots.list
+          - compute.snapshots.setLabels
+          - compute.snapshots.useReadOnly
+          - compute.zoneOperations.get
