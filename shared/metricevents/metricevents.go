@@ -20,6 +20,9 @@ package metricevents
 
 import (
 	"context"
+	"slices"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,6 +88,12 @@ func AddEvent(ctx context.Context, p Parameters) bool {
 				mu.Lock()
 				defer mu.Unlock()
 				logEvent := logDelayEvents[logDelayKey]
+				// Sort and remove duplicate labels.
+				for k, labels := range logEvent.labels {
+					labelSlice := strings.Split(labels, ", ")
+					sort.Strings(labelSlice)
+					logEvent.labels[k] = strings.Join(slices.Compact(labelSlice), ", ")
+				}
 				// NOTE: This log message has specific keys used in querying Cloud Logging.
 				// Never change these keys since it would have downstream effects.
 				log.CtxLogger(ctx).Infow(p.Message, "metricEvent", true, "metric", p.Path, "previousValue", logEvent.lastValue, "currentValue", p.Value, "previousLabels", p.Labels, "currentLabels", logEvent.labels, "lastUpdated", logEvent.lastUpdated)
