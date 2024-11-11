@@ -28,6 +28,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/oauth2"
+	"github.com/GoogleCloudPlatform/sapagent/shared/rest"
 )
 
 type (
@@ -59,6 +60,28 @@ var exponentialBackoff = func() *backoff.ExponentialBackOff {
 	return expBackoff
 }
 
+func TestNewService(t *testing.T) {
+	tests := []struct {
+		name string
+		want error
+	}{
+		{
+			name: "Success",
+			want: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &ISGService{}
+			got := s.NewService()
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("NewService() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestSetupBackoff(t *testing.T) {
 	var b backoff.BackOff
 	b = &backoff.ExponentialBackOff{
@@ -72,48 +95,6 @@ func TestSetupBackoff(t *testing.T) {
 	gotB := setupBackoff()
 	if diff := cmp.Diff(b, gotB, cmpopts.IgnoreUnexported(backoff.ExponentialBackOff{})); diff != "" {
 		t.Errorf("setupBackoff() returned diff (-want +got):\n%s", diff)
-	}
-}
-
-func TestToken(t *testing.T) {
-	tests := []struct {
-		name        string
-		tokenGetter defaultTokenGetter
-		wantErr     error
-	}{
-		{
-			name: "ErrorToken",
-			tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-				return &mockToken{
-					token: nil,
-					err:   cmpopts.AnyError,
-				}, cmpopts.AnyError
-			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name: "Success",
-			tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-				return &mockToken{
-					token: &oauth2.Token{
-						AccessToken: "access-token",
-					},
-					err: nil,
-				}, nil
-			},
-			wantErr: nil,
-		},
-	}
-
-	ctx := context.Background()
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := token(ctx, tc.tokenGetter)
-			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("token(%v) returned diff (-want +got):\n%s", tc.tokenGetter, diff)
-			}
-		})
 	}
 }
 
@@ -131,6 +112,9 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 				return
 			}
 			conn.Close()
+		case "/test/error1":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"error":{"code":404,"message":"Resource not found","errors":[{"reason":"notFound","message":"The requested resource was not found"}]}}`)
 		case "/test/illegal_bytes":
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, []byte{0xFE, 0x0F})
@@ -148,20 +132,34 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:    "RequestCreationFailure",
-			method:  "INVALID",
+			name:   "RequestCreationFailure",
+			method: "INVALID",
+			s: &ISGService{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: nil,
+							err:   cmpopts.AnyError,
+						}, cmpopts.AnyError
+					},
+				},
+				maxRetries: 3,
+			},
 			baseURL: fmt.Sprintf("%c", 0x7f),
 			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "TokenErr",
 			s: &ISGService{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: nil,
-						err:   cmpopts.AnyError,
-					}, cmpopts.AnyError
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: nil,
+							err:   cmpopts.AnyError,
+						}, cmpopts.AnyError
+					},
 				},
 				maxRetries: 3,
 			},
@@ -172,14 +170,16 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 		{
 			name: "RequestError",
 			s: &ISGService{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -188,16 +188,38 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "GoogleAPIError",
+			s: &ISGService{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+				maxRetries: 3,
+			},
+			method:  "GET",
+			baseURL: ts.URL + "/test/error1",
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "Success",
 			s: &ISGService{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -254,14 +276,16 @@ func TestGetProcessStatus(t *testing.T) {
 		{
 			name: "InvalidRequest",
 			s: &ISGService{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -272,14 +296,16 @@ func TestGetProcessStatus(t *testing.T) {
 		{
 			name: "InvalidJSON",
 			s: &ISGService{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -290,14 +316,16 @@ func TestGetProcessStatus(t *testing.T) {
 		{
 			name: "NoStatus",
 			s: &ISGService{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -308,14 +336,16 @@ func TestGetProcessStatus(t *testing.T) {
 		{
 			name: "Success",
 			s: &ISGService{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			baseURL:    ts.URL + "/test/success",
@@ -370,16 +400,18 @@ func TestCreateISGErrors(t *testing.T) {
 		{
 			name: "RequestError",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/error",
-				backoff:    exponentialBackoff(),
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/error",
+				backoff: exponentialBackoff(),
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -391,16 +423,18 @@ func TestCreateISGErrors(t *testing.T) {
 		{
 			name: "Success",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/success",
-				backoff:    exponentialBackoff(),
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/success",
+				backoff: exponentialBackoff(),
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			project: "test-project",
@@ -457,15 +491,17 @@ func TestListInstantSnapshotGroups(t *testing.T) {
 		{
 			name: "Error",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/error",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/error",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			project:   "test-project",
@@ -476,15 +512,17 @@ func TestListInstantSnapshotGroups(t *testing.T) {
 		{
 			name: "InvalidJSON",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/invalid_json",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/invalid_json",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			project:   "test-project",
@@ -495,15 +533,17 @@ func TestListInstantSnapshotGroups(t *testing.T) {
 		{
 			name: "Success",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/success",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/success",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			project: "test-project",
@@ -574,15 +614,17 @@ func TestIsgExistsErrors(t *testing.T) {
 		{
 			name: "RequestError",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/error",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/error",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -594,15 +636,17 @@ func TestIsgExistsErrors(t *testing.T) {
 		{
 			name: "InvalidJSON",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/invalid_json",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/invalid_json",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -614,15 +658,17 @@ func TestIsgExistsErrors(t *testing.T) {
 		{
 			name: "DeletingStatus",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/deleting_status",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/deleting_status",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -634,15 +680,17 @@ func TestIsgExistsErrors(t *testing.T) {
 		{
 			name: "Success",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/success",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/success",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			project: "test-project",
@@ -769,15 +817,17 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 		{
 			name: "RequestError",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/error",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/error",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -789,15 +839,17 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 		{
 			name: "InvalidJSON",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/invalid_json",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/invalid_json",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -809,15 +861,17 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 		{
 			name: "ParseISGFailure",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/parse_isg_failure",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/parse_isg_failure",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -829,15 +883,17 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 		{
 			name: "SuccessWithNoPageToken",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/success",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/success",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -849,15 +905,17 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 		{
 			name: "FailureWithPageToken",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/failure_with_page_token",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/failure_with_page_token",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -869,15 +927,17 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 		{
 			name: "FailureWithPageTokenUnmarshal",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/unmarshal_failure_with_page_token",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/unmarshal_failure_with_page_token",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -889,15 +949,17 @@ func TestDescribeInstantSnapshots(t *testing.T) {
 		{
 			name: "SuccessWithPageToken",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/success_with_page_token",
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/success_with_page_token",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			project: "test-project",
@@ -953,16 +1015,18 @@ func TestDeleteISGErrors(t *testing.T) {
 		{
 			name: "RequestError",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/error",
-				backoff:    exponentialBackoff(),
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/error",
+				backoff: exponentialBackoff(),
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -974,16 +1038,18 @@ func TestDeleteISGErrors(t *testing.T) {
 		{
 			name: "InvalidJSON",
 			s: &ISGService{
-				baseURL:    ts.URL + "/test/invalid_json",
-				backoff:    exponentialBackoff(),
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				baseURL: ts.URL + "/test/invalid_json",
+				backoff: exponentialBackoff(),
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -1031,15 +1097,17 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 		{
 			name: "Error",
 			s: &ISGService{
-				backoff:    exponentialBackoff(),
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				backoff: exponentialBackoff(),
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 				maxRetries: 3,
 			},
@@ -1049,15 +1117,17 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 		{
 			name: "Success",
 			s: &ISGService{
-				backoff:    exponentialBackoff(),
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-					return &mockToken{
-						token: &oauth2.Token{
-							AccessToken: "access-token",
-						},
-						err: nil,
-					}, nil
+				backoff: exponentialBackoff(),
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
 				},
 			},
 			baseURL: ts.URL + "/test/success",

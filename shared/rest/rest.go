@@ -41,8 +41,11 @@ type (
 
 	// Rest is a struct for making REST API calls.
 	Rest struct {
-		httpClient  httpClient
-		tokenGetter defaultTokenGetter
+		// HTTPClient abstracts the http client for testing purposes.
+		HTTPClient httpClient
+
+		// tokenGetter abstracts getting default oauth2 access token for testing purposes.
+		TokenGetter defaultTokenGetter
 	}
 )
 
@@ -65,8 +68,8 @@ var (
 
 // NewRest initializes the Rest with a new http client.
 func (r *Rest) NewRest() {
-	r.httpClient = defaultNewClient(10*time.Minute, defaultTransport())
-	r.tokenGetter = google.DefaultTokenSource
+	r.HTTPClient = defaultNewClient(10*time.Minute, defaultTransport())
+	r.TokenGetter = google.DefaultTokenSource
 }
 
 // token fetches a token with default or workload identity federation credentials.
@@ -87,7 +90,7 @@ func (r *Rest) GetResponse(ctx context.Context, method string, baseURL string, d
 		return nil, fmt.Errorf("failed to create request, err: %w", err)
 	}
 
-	token, err := token(ctx, r.tokenGetter)
+	token, err := token(ctx, r.TokenGetter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token, err: %w", err)
 	}
@@ -95,7 +98,7 @@ func (r *Rest) GetResponse(ctx context.Context, method string, baseURL string, d
 	req.Header.Add("Content-Type", "application/json")
 	token.SetAuthHeader(req)
 
-	resp, err := r.httpClient.Do(req)
+	resp, err := r.HTTPClient.Do(req)
 	defer googleapi.CloseBody(resp)
 	if err != nil {
 		return nil, err

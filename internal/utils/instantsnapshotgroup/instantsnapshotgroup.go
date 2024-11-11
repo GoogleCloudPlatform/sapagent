@@ -18,11 +18,9 @@ limitations under the License.
 package instantsnapshotgroup
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -33,6 +31,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/shared/rest"
 )
 
 type (
@@ -48,11 +47,10 @@ type (
 	// ISGService is a temporary interface representing the expected behavior of Instant Snapshot Groups.
 	// It will be replaced by a concrete struct when the full implementation is available.
 	ISGService struct {
-		httpClient  httpClient
-		tokenGetter defaultTokenGetter
-		baseURL     string
-		backoff     *backoff.ExponentialBackOff
-		maxRetries  int
+		rest       *rest.Rest
+		baseURL    string
+		backoff    *backoff.ExponentialBackOff
+		maxRetries int
 	}
 
 	// ISResponse is the response for IS.
@@ -150,55 +148,29 @@ func setupBackoff() *backoff.ExponentialBackOff {
 
 // NewService initializes the ISGService with a new http client.
 func (s *ISGService) NewService() error {
-	s.httpClient = defaultNewClient(10*time.Minute, defaultTransport())
-	s.tokenGetter = google.DefaultTokenSource
 	s.backoff = setupBackoff()
 	s.maxRetries = 8
+
+	s.rest = &rest.Rest{}
+	s.rest.NewRest()
+
 	return nil
 }
 
-// token fetches a token with default or workload identity federation credentials.
-func token(ctx context.Context, tokenGetter defaultTokenGetter) (*oauth2.Token, error) {
-	tokenScope := "https://www.googleapis.com/auth/cloud-platform"
-	tokenSource, err := tokenGetter(ctx, tokenScope)
+// GetResponse is a wrapper around rest.GetResponse.
+func (s *ISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) (bodyBytes []byte, err error) {
+	bodyBytes, err = s.rest.GetResponse(ctx, method, baseURL, data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get response, err: %w", err)
 	}
-	return tokenSource.Token()
-}
-
-// GetResponse creates a new request with given method, url and data and returns the response.
-// TODO: Use the common rest package instead.
-func (s *ISGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error) {
-	log.CtxLogger(ctx).Debugw("GetResponse", "method", method, "baseURL", baseURL, "data", string(data))
-	req, err := http.NewRequest(method, baseURL, bytes.NewBuffer(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request, err: %w", err)
-	}
-
-	token, err := token(ctx, s.tokenGetter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get token, err: %w", err)
-	}
-	req.Header.Add("Authorization", "Bearer "+token.AccessToken)
-	req.Header.Add("Content-Type", "application/json")
-	token.SetAuthHeader(req)
-
-	resp, err := s.httpClient.Do(req)
-	defer googleapi.CloseBody(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
 
 	var genericResponse map[string]any
-	if err := json.Unmarshal(bodyBytes, &genericResponse); err != nil {
+	if err = json.Unmarshal(bodyBytes, &genericResponse); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
 	}
 	if genericResponse["error"] != nil {
 		var googleapiErr errorResponse
-		if err := json.Unmarshal([]byte(bodyBytes), &googleapiErr); err != nil {
+		if err = json.Unmarshal([]byte(bodyBytes), &googleapiErr); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal googleapi error, err: %w", err)
 		}
 

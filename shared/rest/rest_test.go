@@ -121,8 +121,8 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 		{
 			name: "TokenErr",
 			r: &Rest{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+				HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
 						token: nil,
 						err:   cmpopts.AnyError,
@@ -136,8 +136,8 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 		{
 			name: "RequestError",
 			r: &Rest{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+				HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
 						token: &oauth2.Token{
 							AccessToken: "access-token",
@@ -153,8 +153,8 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 		{
 			name: "Success",
 			r: &Rest{
-				httpClient: defaultNewClient(10*time.Minute, defaultTransport()),
-				tokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+				HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 					return &mockToken{
 						token: &oauth2.Token{
 							AccessToken: "access-token",
