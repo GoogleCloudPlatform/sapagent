@@ -126,6 +126,11 @@ func Start(ctx context.Context, params Parameters) bool {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		return false
 	}
+	if len(cfg.GetHanaInstances()) == 0 {
+		log.CtxLogger(ctx).Info("HANA Monitoring enabled but no HANA instances defined, not starting HANA Monitoring.")
+		usagemetrics.Error(usagemetrics.MalformedConfigFile)
+		return false
+	}
 	// Log usagemetric if any one of the HANA instances has hdbuserstore key configured.
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
 		if i.GetHdbuserstoreKey() != "" {
