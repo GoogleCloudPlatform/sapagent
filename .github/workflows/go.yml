@@ -63,7 +63,7 @@ jobs:
       run: go test -v ./...
 
     - name: Notify on failure
-      if: ${{ failure() }}
+      if: ${{ failure() && contains(github.ref, 'main') }}
       uses: cinotify/github-action@main
       with:
         to: 'sapagent-github-dev@google.com'
