@@ -311,8 +311,9 @@ to return a consolidated map of metric labels.
 */
 func metricLabels(p *InstanceProperties, extraLabels map[string]string) map[string]string {
 	defaultLabels := map[string]string{
-		"sid":  p.SAPInstance.GetSapsid(),
-		"type": p.SAPInstance.GetType().String(),
+		"sid":           p.SAPInstance.GetSapsid(),
+		"type":          p.SAPInstance.GetType().String(),
+		"instance_name": p.Config.CloudProperties.InstanceName,
 	}
 	for k, v := range extraLabels {
 		defaultLabels[k] = v

@@ -47,9 +47,10 @@ func TestMain(t *testing.M) {
 var defaultInstanceProperties = &InstanceProperties{
 	Config: &cgpb.Configuration{
 		CloudProperties: &ipb.CloudProperties{
-			ProjectId:  "test-project",
-			Zone:       "test-zone",
-			InstanceId: "test-instance",
+			ProjectId:    "test-project",
+			Zone:         "test-zone",
+			InstanceId:   "test-instance",
+			InstanceName: "test-instance",
 		},
 	},
 	PMBackoffPolicy: defaultBOPolicy(context.Background()),
@@ -101,9 +102,10 @@ func TestCollectNodeState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/nodes",
 						Labels: map[string]string{
-							"sid":  "",
-							"type": "INSTANCE_TYPE_UNDEFINED",
-							"node": "test-instance-1",
+							"sid":           "",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -122,9 +124,10 @@ func TestCollectNodeState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/nodes",
 						Labels: map[string]string{
-							"sid":  "",
-							"type": "INSTANCE_TYPE_UNDEFINED",
-							"node": "test-instance-2",
+							"sid":           "",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -158,9 +161,10 @@ func TestCollectNodeState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/nodes",
 						Labels: map[string]string{
-							"sid":  "",
-							"type": "INSTANCE_TYPE_UNDEFINED",
-							"node": "test-instance-1",
+							"sid":           "",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -179,9 +183,10 @@ func TestCollectNodeState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/nodes",
 						Labels: map[string]string{
-							"sid":  "",
-							"type": "INSTANCE_TYPE_UNDEFINED",
-							"node": "test-instance-2",
+							"sid":           "",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -200,9 +205,10 @@ func TestCollectNodeState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/nodes",
 						Labels: map[string]string{
-							"sid":  "",
-							"type": "INSTANCE_TYPE_UNDEFINED",
-							"node": "test-instance-3",
+							"sid":           "",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-3",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -323,10 +329,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource1",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-1",
+							"sid":           "",
+							"resource":      "resource1",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -345,10 +352,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource2",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-2",
+							"sid":           "",
+							"resource":      "resource2",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -367,10 +375,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource3",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-1",
+							"sid":           "",
+							"resource":      "resource3",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -389,10 +398,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource4",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-2",
+							"sid":           "",
+							"resource":      "resource4",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -439,10 +449,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource1",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-1",
+							"sid":           "",
+							"resource":      "resource1",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -461,10 +472,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource2",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-2",
+							"sid":           "",
+							"resource":      "resource2",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -483,10 +495,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource3",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-3",
+							"sid":           "",
+							"resource":      "resource3",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-3",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -528,10 +541,11 @@ func TestCollectResourceState(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/resources",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource1",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-1",
+							"sid":           "",
+							"resource":      "resource1",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -630,16 +644,18 @@ func TestMetricLabels(t *testing.T) {
 				"node": "test-instance-1",
 			},
 			want: map[string]string{
-				"sid":  "TST",
-				"type": "HANA",
-				"node": "test-instance-1",
+				"sid":           "TST",
+				"type":          "HANA",
+				"node":          "test-instance-1",
+				"instance_name": "test-instance",
 			},
 		},
 		{
 			name: "NoExtraLabels",
 			want: map[string]string{
-				"sid":  "TST",
-				"type": "HANA",
+				"sid":           "TST",
+				"type":          "HANA",
+				"instance_name": "test-instance",
 			},
 		},
 	}
@@ -649,6 +665,7 @@ func TestMetricLabels(t *testing.T) {
 			Sapsid: "TST",
 			Type:   sapb.InstanceType_HANA,
 		},
+		Config: defaultInstanceProperties.Config,
 	}
 
 	for _, test := range tests {
@@ -720,10 +737,11 @@ func TestCollectFailCount(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/failcounts",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource-1",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-1",
+							"sid":           "",
+							"resource":      "resource-1",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -763,10 +781,11 @@ func TestCollectFailCount(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/failcounts",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource-1",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-1",
+							"sid":           "",
+							"resource":      "resource-1",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -785,10 +804,11 @@ func TestCollectFailCount(t *testing.T) {
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/cluster/failcounts",
 						Labels: map[string]string{
-							"sid":      "",
-							"resource": "resource-2",
-							"type":     "INSTANCE_TYPE_UNDEFINED",
-							"node":     "test-instance-2",
+							"sid":           "",
+							"resource":      "resource-2",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
 						},
 					},
 					MetricKind: metricpb.MetricDescriptor_GAUGE,

@@ -483,7 +483,7 @@ func TestCollectServiceMetrics(t *testing.T) {
 }
 
 func TestNWServiceMetricLabelCount(t *testing.T) {
-	// NOTE: metricLabels applies two labels by default
+	// NOTE: metricLabels applies three labels by default
 	tests := []struct {
 		name        string
 		extraLabels map[string]string
@@ -492,7 +492,7 @@ func TestNWServiceMetricLabelCount(t *testing.T) {
 		{
 			name:        "DefaultLabels",
 			extraLabels: map[string]string{},
-			wantLabels:  2,
+			wantLabels:  3,
 		},
 		{
 			name: "TwoExtraLabels",
@@ -500,7 +500,7 @@ func TestNWServiceMetricLabelCount(t *testing.T) {
 				"a": "test",
 				"b": "test_2",
 			},
-			wantLabels: 4,
+			wantLabels: 5,
 		},
 	}
 	for _, test := range tests {
@@ -1389,11 +1389,12 @@ tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS12 pf=/usr/sap/TST
 			Metric: &mpb.Metric{
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
-					"app":         "false",
-					"ascs":        "true",
-					"ers":         "false",
-					"instance_nr": "00",
-					"sid":         "TST",
+					"app":           "false",
+					"ascs":          "true",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
 				},
 			},
 		},
@@ -1410,11 +1411,12 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapTST_ASCS12 pf=/usr/sap/T
 			Metric: &mpb.Metric{
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
-					"ers":         "true",
-					"ascs":        "false",
-					"app":         "false",
-					"instance_nr": "00",
-					"sid":         "TST",
+					"ers":           "true",
+					"ascs":          "false",
+					"app":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
 				},
 			},
 		},
@@ -1431,11 +1433,12 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 jstart.sapTST_ASCS12 pf=/usr/sap
 			Metric: &mpb.Metric{
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
-					"app":         "true",
-					"ascs":        "false",
-					"ers":         "false",
-					"instance_nr": "00",
-					"sid":         "TST",
+					"app":           "true",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
 				},
 			},
 		},
@@ -1452,11 +1455,12 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 dw.sapTST_ASCS12 pf=/usr/sap/TST
 			Metric: &mpb.Metric{
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
-					"app":         "true",
-					"ascs":        "false",
-					"ers":         "false",
-					"instance_nr": "00",
-					"sid":         "TST",
+					"app":           "true",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
 				},
 			},
 		},
@@ -1474,11 +1478,12 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 ms.sapTST_ASCS12 pf=/usr/sap/TST
 			Metric: &mpb.Metric{
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
-					"app":         "false",
-					"ascs":        "false",
-					"ers":         "false",
-					"instance_nr": "00",
-					"sid":         "TST",
+					"app":           "false",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
 				},
 			},
 		},
@@ -1496,11 +1501,12 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS12 pf=/usr/sap/TS
 			Metric: &mpb.Metric{
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
-					"app":         "false",
-					"ascs":        "false",
-					"ers":         "false",
-					"instance_nr": "00",
-					"sid":         "TST",
+					"app":           "false",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
 				},
 			},
 		},
