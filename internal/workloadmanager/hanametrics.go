@@ -467,7 +467,7 @@ func fetchLastBackupTimestamps(ctx context.Context, dbTenant hanaDBTenant, exec 
 		return full, delta, snapshot, err
 	}
 	if len(backups) == 0 {
-		log.CtxLogger(ctx).Debugw("No successful HANA backups found for tenant: %s", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No successful HANA backups found", "tenant", dbTenant.tenantName)
 		return full, delta, snapshot, nil
 	}
 	backupTypeMap, err := fetchBackupThreadIDs(ctx, dirPath, exec)
@@ -475,7 +475,7 @@ func fetchLastBackupTimestamps(ctx context.Context, dbTenant hanaDBTenant, exec 
 		return full, delta, snapshot, err
 	}
 	if len(backupTypeMap) == 0 {
-		log.CtxLogger(ctx).Debugw("No HANA backup commands found for tenant: %s", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No HANA backup commands found", "tenant", dbTenant.tenantName)
 		return full, delta, snapshot, nil
 	}
 
@@ -500,13 +500,13 @@ func fetchLastBackupTimestamps(ctx context.Context, dbTenant hanaDBTenant, exec 
 	}
 
 	if full.IsZero() {
-		log.CtxLogger(ctx).Debugw("No full backup found for tenant: %s", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No full backup found", "tenant", dbTenant.tenantName)
 	}
 	if delta.IsZero() {
-		log.CtxLogger(ctx).Debugw("No delta backup found for tenant: %s", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No delta backup found", "tenant", dbTenant.tenantName)
 	}
 	if snapshot.IsZero() {
-		log.CtxLogger(ctx).Debugw("No snapshot backup found for tenant: %s", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No snapshot backup found", "tenant", dbTenant.tenantName)
 	}
 	return full, delta, snapshot, nil
 }
