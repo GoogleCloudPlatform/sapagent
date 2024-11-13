@@ -607,8 +607,7 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 		{
 			name: "SuccessHANAAvailability",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
-				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath}},
-				CloudProperties:         defaultConfig.GetCloudProperties()},
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath}}},
 				SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true},
 			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
@@ -623,7 +622,6 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 			name: "SkipMetrics",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath, pmHANAAvailabilityPath}},
-				CloudProperties:         defaultConfig.GetCloudProperties(),
 			}, SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true, pmHANAAvailabilityPath: true}},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -645,7 +643,6 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 			name: "SkipMetricsHAReplication",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath, pmHANAAvailabilityPath}},
-				CloudProperties:         defaultConfig.GetCloudProperties(),
 			}, SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true, pmHAReplicationPath: true}},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -666,8 +663,7 @@ func TestCollectHANAAvailabilityMetrics(t *testing.T) {
 		{
 			name: "SuccessHANAAvailabilityReliability",
 			ip: &InstanceProperties{SAPInstance: defaultSAPInstance, ReliabilityMetric: true, Config: &cpb.Configuration{
-				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath}},
-				CloudProperties:         defaultConfig.GetCloudProperties()},
+				CollectionConfiguration: &cpb.CollectionConfiguration{ProcessMetricsToSkip: []string{pmHAAvailabilityPath}}},
 				SkippedMetrics: map[string]bool{pmHAAvailabilityPath: true},
 			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
@@ -786,7 +782,7 @@ func TestContains(t *testing.T) {
 
 func TestCollectWithRetry(t *testing.T) {
 	c := context.Background()
-	p := &InstanceProperties{SAPInstance: defaultSAPInstance, Config: defaultConfig, PMBackoffPolicy: defaultBOPolicy(c)}
+	p := &InstanceProperties{SAPInstance: defaultSAPInstance, Config: &cpb.Configuration{}, PMBackoffPolicy: defaultBOPolicy(c)}
 	got, _ := p.CollectWithRetry(c)
 	want := 2
 	if len(got) != want {

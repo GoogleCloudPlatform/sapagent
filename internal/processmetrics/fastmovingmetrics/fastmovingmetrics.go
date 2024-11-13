@@ -395,9 +395,8 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 // to return a consolidated map of metric labels.
 func appendLabels(p *InstanceProperties, extraLabels map[string]string) map[string]string {
 	defaultLabels := map[string]string{
-		"sid":           p.SAPInstance.GetSapsid(),
-		"instance_nr":   p.SAPInstance.GetInstanceNumber(),
-		"instance_name": p.Config.CloudProperties.InstanceName,
+		"sid":         p.SAPInstance.GetSapsid(),
+		"instance_nr": p.SAPInstance.GetInstanceNumber(),
 	}
 	for k, v := range extraLabels {
 		defaultLabels[k] = v
