@@ -136,6 +136,14 @@ type TestGCE struct {
 	SetLabelsErr error
 
 	InstantSnapshotConversionCompletionErr error
+
+	GetNetworkResp      []*compute.Network
+	GetNetworkErr       []error
+	GetNetworkCallCount int
+
+	GetSubnetworkResp      []*compute.Subnetwork
+	GetSubnetworkErr       []error
+	GetSubnetworkCallCount int
 }
 
 // GetInstance fakes a call to the compute API to retrieve a GCE Instance.
@@ -404,6 +412,29 @@ func (g *TestGCE) SetLabels(ctx context.Context, project, zone, diskName, labelF
 	return g.SetLabelsOp, g.SetLabelsErr
 }
 
+// WaitForInstantSnapshotConversionCompletionWithRetry fakes calls to the cloud APIs to wait for an instant snapshot conversion operation to complete.
 func (g *TestGCE) WaitForInstantSnapshotConversionCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error {
 	return g.InstantSnapshotConversionCompletionErr
+}
+
+// GetNetwork fakes calls to the cloud APIs to get a network.
+func (g *TestGCE) GetNetwork(name, project string) (*compute.Network, error) {
+	defer func() {
+		g.GetNetworkCallCount++
+		if g.GetNetworkCallCount >= len(g.GetNetworkResp) || g.GetNetworkCallCount >= len(g.GetNetworkErr) {
+			g.GetNetworkCallCount = 0
+		}
+	}()
+	return g.GetNetworkResp[g.GetNetworkCallCount], g.GetNetworkErr[g.GetNetworkCallCount]
+}
+
+// GetSubnetwork fakes calls to the cloud APIs to get a subnetwork.
+func (g *TestGCE) GetSubnetwork(name, project, region string) (*compute.Subnetwork, error) {
+	defer func() {
+		g.GetSubnetworkCallCount++
+		if g.GetSubnetworkCallCount >= len(g.GetSubnetworkResp) || g.GetSubnetworkCallCount >= len(g.GetSubnetworkErr) {
+			g.GetSubnetworkCallCount = 0
+		}
+	}()
+	return g.GetSubnetworkResp[g.GetSubnetworkCallCount], g.GetSubnetworkErr[g.GetSubnetworkCallCount]
 }

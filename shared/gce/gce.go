@@ -508,3 +508,13 @@ func (g *GCE) WaitForInstantSnapshotConversionCompletionWithRetry(ctx context.Co
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 480), ctx)
 	return backoff.Retry(func() error { return g.waitForGlobalUploadCompletion(ctx, op, project, diskZone, snapshotName) }, bo)
 }
+
+// GetNetwork retrieves the network with the given name and project.
+func (g *GCE) GetNetwork(name, project string) (*compute.Network, error) {
+	return g.service.Networks.Get(project, name).Do()
+}
+
+// GetSubnetwork retrieves the subnetwork with the given name, project, and region.
+func (g *GCE) GetSubnetwork(name, project, region string) (*compute.Subnetwork, error) {
+	return g.service.Subnetworks.Get(project, region, name).Do()
+}

@@ -20,6 +20,7 @@ package clouddiscovery
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -63,6 +64,8 @@ type gceInterface interface {
 	GetFilestoreByIP(project, location, ip string) (*file.ListInstancesResponse, error)
 	GetURIForIP(project, ip, region, subnetwok string) (string, error)
 	GetHealthCheck(projectID, name string) (*compute.HealthCheck, error)
+	GetNetwork(name, project string) (*compute.Network, error)
+	GetSubnetwork(name, project, region string) (*compute.Subnetwork, error)
 }
 
 func extractFromURI(uri, field string) string {
@@ -98,13 +101,27 @@ type CloudDiscovery struct {
 	HostResolver       func(string) ([]string, error)
 	discoveryFunctions map[string]func(context.Context, string) (*spb.SapDiscovery_Resource, []toDiscover, error)
 	resourceCache      map[string]cacheEntry
+	networks           map[string]*CloudNetwork
+}
+
+// CloudSubnetwork represents a Cloud Subnetwork.
+type CloudSubnetwork struct {
+	name, region string
+	ipRange      *net.IPNet
+	network      *CloudNetwork
+}
+
+// CloudNetwork represents a Cloud Network.
+type CloudNetwork struct {
+	name, project string
+	subnets       []*CloudSubnetwork
 }
 
 type toDiscover struct {
-	name       string
-	region     string
-	subnetwork string
-	parent     *spb.SapDiscovery_Resource
+	name    string
+	region  string
+	network string
+	parent  *spb.SapDiscovery_Resource
 }
 
 type cacheEntry struct {
@@ -128,7 +145,7 @@ func (d *CloudDiscovery) configureDiscoveryFunctions() {
 
 // DiscoverComputeResources attempts to gather information about the provided hosts and any additional
 // resources that are identified as related from the cloud descriptions.
-func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentResource *spb.SapDiscovery_Resource, parentSubnetwork string, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
+func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentResource *spb.SapDiscovery_Resource, parentNetwork string, hostList []string, cp *ipb.CloudProperties) []*spb.SapDiscovery_Resource {
 	log.CtxLogger(ctx).Debugw("DiscoverComputeResources called", "parent", parentResource, "hostList", hostList)
 	var res []*spb.SapDiscovery_Resource
 	var uris []string
@@ -139,10 +156,10 @@ func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentRes
 	}
 	for _, h := range hostList {
 		discoverQueue = append(discoverQueue, toDiscover{
-			name:       h,
-			region:     region,
-			subnetwork: parentSubnetwork,
-			parent:     parentResource,
+			name:    h,
+			region:  region,
+			network: parentNetwork,
+			parent:  parentResource,
 		})
 	}
 	for len(discoverQueue) > 0 {
@@ -190,8 +207,9 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 	var addr string
 	addrs, _ := d.HostResolver(host.name)
 	log.CtxLogger(ctx).Debugw("discoverResource addresses", "addrs", addrs)
-	// An error may just mean that
+
 	if len(addrs) > 0 {
+		uri = ""
 		addr = addrs[0]
 
 		// Check cache for this address
@@ -209,7 +227,33 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 		}
 
 		var err error
-		uri, err = d.GceService.GetURIForIP(project, addr, host.region, host.subnetwork)
+		if host.network != "" {
+			log.CtxLogger(ctx).Debugw("discoverResource host network", "network", host.network)
+			ip := net.ParseIP(addr)
+			// Find the right subnetwork that the address might belong to
+			cloudNet := d.networks[host.network]
+			if cloudNet == nil {
+				log.CtxLogger(ctx).Debugw("discoverResource host network not found, discovering", "network", host.network)
+				d.discoverNetwork(ctx, host.network)
+				cloudNet = d.networks[host.network]
+			}
+			log.CtxLogger(ctx).Debugw("discoverResource host network subnets", "subnets", cloudNet.subnets)
+			for _, s := range cloudNet.subnets {
+				log.CtxLogger(ctx).Debugw("discoverResource host network subnets ipRange", "ipRange", s.ipRange)
+				if s.ipRange.Contains(ip) {
+					log.CtxLogger(ctx).Debugw("discoverResource host network subnets ipRange contains", "ipRange", s.ipRange, "ip", addr, "subnet", s.name)
+					uri, err = d.GceService.GetURIForIP(project, addr, host.region, s.name)
+					if err != nil {
+						log.CtxLogger(ctx).Infow("discoverResource URI in network error", "err", err, "addr", addr, "host", host.name)
+					}
+					break
+				}
+			}
+		}
+
+		if uri == "" {
+			uri, err = d.GceService.GetURIForIP(project, addr, host.region, "")
+		}
 		if err != nil {
 			log.CtxLogger(ctx).Infow("discoverResource URI error", "err", err, "addr", addr, "host", host.name)
 			return nil, nil, err
@@ -292,10 +336,10 @@ func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string)
 	}}
 	for _, u := range ca.Users {
 		toAdd = append(toAdd, toDiscover{
-			name:       u,
-			region:     region,
-			subnetwork: ca.Subnetwork,
-			parent:     ar,
+			name:    u,
+			region:  region,
+			network: ca.Network,
+			parent:  ar,
 		})
 	}
 
@@ -386,20 +430,20 @@ func (d *CloudDiscovery) discoverForwardingRule(ctx context.Context, fwrURI stri
 		UpdateTime:   timestamppb.Now(),
 	}
 	toAdd := []toDiscover{{
-		name:       fwr.BackendService,
-		region:     region,
-		subnetwork: fwr.Subnetwork,
-		parent:     fr,
+		name:    fwr.BackendService,
+		region:  region,
+		network: fwr.Network,
+		parent:  fr,
 	}, {
-		name:       fwr.Network,
-		region:     region,
-		subnetwork: fwr.Subnetwork,
-		parent:     fr,
+		name:    fwr.Network,
+		region:  region,
+		network: fwr.Network,
+		parent:  fr,
 	}, {
-		name:       fwr.Subnetwork,
-		region:     region,
-		subnetwork: fwr.Subnetwork,
-		parent:     fr,
+		name:    fwr.Subnetwork,
+		region:  region,
+		network: fwr.Network,
+		parent:  fr,
 	}}
 
 	return fr, toAdd, nil
@@ -431,10 +475,10 @@ func (d *CloudDiscovery) discoverInstanceGroup(ctx context.Context, groupURI str
 	toAdd := []toDiscover{}
 	for _, inst := range instances {
 		toAdd = append(toAdd, toDiscover{
-			name:       inst,
-			region:     region,
-			subnetwork: ig.Subnetwork,
-			parent:     igr,
+			name:    inst,
+			region:  region,
+			network: ig.Network,
+			parent:  igr,
 		})
 	}
 	return igr, toAdd, nil
@@ -524,12 +568,58 @@ func (d *CloudDiscovery) discoverBackendService(ctx context.Context, backendServ
 }
 
 func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
-	return &spb.SapDiscovery_Resource{
+	log.CtxLogger(ctx).Debugw("discoverNetwork", "networkURI", networkURI)
+	if d.networks == nil {
+		d.networks = make(map[string]*CloudNetwork)
+	}
+	cloudNet, ok := d.networks[networkURI]
+	if !ok {
+		cloudNet = &CloudNetwork{
+			name:    extractFromURI(networkURI, networksURIPart),
+			project: extractFromURI(networkURI, projectsURIPart),
+		}
+	}
+
+	cn, err := d.GceService.GetNetwork(extractFromURI(networkURI, networksURIPart), extractFromURI(networkURI, projectsURIPart))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	nr := &spb.SapDiscovery_Resource{
 		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_NETWORK,
 		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
-		ResourceUri:  networkURI,
+		ResourceUri:  cn.SelfLink,
 		UpdateTime:   timestamppb.Now(),
-	}, nil, nil
+	}
+
+	cloudNet.subnets = []*CloudSubnetwork{}
+	for _, s := range cn.Subnetworks {
+		log.CtxLogger(ctx).Debugw("discoverNetwork subnetwork", "subnetwork", s)
+		cs, err := d.GceService.GetSubnetwork(extractFromURI(s, subnetworksURIPart),
+			extractFromURI(s, projectsURIPart),
+			extractFromURI(s, regionsURIPart))
+		if err != nil {
+			log.CtxLogger(ctx).Infow("discoverNetwork subnetwork error", "err", err, "subnetwork", s)
+			continue
+		}
+		log.CtxLogger(ctx).Debugw("discoverNetwork subnetwork", "subnetwork", cs)
+		_, ipRange, err := net.ParseCIDR(cs.IpCidrRange)
+		if err != nil {
+			log.CtxLogger(ctx).Infow("discoverNetwork ipRange error", "err", err, "ipRange", cs.IpCidrRange)
+			continue
+		}
+		cloudNet.subnets = append(cloudNet.subnets, &CloudSubnetwork{
+			name:    cs.Name,
+			region:  cs.Region,
+			ipRange: ipRange,
+			network: cloudNet,
+		})
+		nr.RelatedResources = append(nr.RelatedResources, cs.SelfLink)
+	}
+	d.networks[networkURI] = cloudNet
+	log.CtxLogger(ctx).Debugw("discoverNetwork result", "nr", nr, "cloudNet", cloudNet)
+
+	return nr, nil, nil
 }
 
 func (d *CloudDiscovery) discoverSubnetwork(ctx context.Context, subnetworkURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
