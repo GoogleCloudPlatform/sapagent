@@ -252,7 +252,7 @@ func TestStart(t *testing.T) {
 							&configpb.Query{SampleIntervalSec: 5},
 						},
 						HanaInstances: []*configpb.HANAInstance{
-							&configpb.HANAInstance{Password: "fakePassword", Sid: "fakeSID"},
+							&configpb.HANAInstance{Sid: "fakeSID", HdbuserstoreKey: "fakeKey"},
 						},
 					},
 				},
@@ -316,6 +316,82 @@ func TestStart(t *testing.T) {
 			if got != test.want {
 				t.Errorf("Start(%#v) = %t, want: %t", test.params, got, test.want)
 			}
+		})
+	}
+}
+
+func TestCreateWorkerPool(t *testing.T) {
+	tests := []struct {
+		name   string
+		params Parameters
+	}{
+		{
+			name: "ContextCancelled",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*configpb.Query{
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName"},
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName2"},
+						},
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{User: "fakeUser1", Password: "fakePassword", QueriesToRun: &configpb.QueriesToRun{
+								RunAll:     false,
+								QueryNames: []string{"fakeQueryName", "InvalidQueryName"},
+							}},
+							&configpb.HANAInstance{User: "fakeUser2", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser3", Password: "fakePassword"}},
+					},
+				},
+				ConnectionRetryInterval: 15 * time.Second,
+			},
+		},
+		{
+			name: "AllDBsConnected",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*configpb.Query{
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName"},
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName2"},
+						},
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{User: "fakeUser1", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser2", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser3", Password: "fakePassword"}},
+					},
+				},
+				ConnectionRetryInterval: 5 * time.Second,
+			},
+		},
+		{
+			name: "NoDBsConnected",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						Enabled: true,
+						Queries: []*configpb.Query{
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName"},
+							&configpb.Query{SampleIntervalSec: 5, Name: "fakeQueryName2"},
+						},
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{User: "fakeUser1", Host: "fakeHost1", Port: "fakePort1", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser2", Host: "fakeHost2", Port: "fakePort2", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser3", Host: "fakeHost3", Port: "fakePort3", Password: "fakePassword"}},
+					},
+				},
+				ConnectionRetryInterval: 5 * time.Second,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			t.Cleanup(cancel)
+			createWorkerPool(ctx, test.params)
 		})
 	}
 }
@@ -524,10 +600,11 @@ func TestConnectToDatabases(t *testing.T) {
 	// For go-hdb driver: Connecting to a database with empty user, host and port arguments will still be able to validate the driver and create a Database Handle.
 	// For command-line based access: Connecting to a database needs the SID and HDBUserstore key.
 	tests := []struct {
-		name    string
-		params  Parameters
-		want    int
-		wantErr error
+		name         string
+		params       Parameters
+		connectedDBs map[string]bool
+		want         int
+		wantErr      error
 	}{
 		{
 			name: "ConnectValidatesDriver",
@@ -535,13 +612,29 @@ func TestConnectToDatabases(t *testing.T) {
 				Config: &configpb.Configuration{
 					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 						HanaInstances: []*configpb.HANAInstance{
-							&configpb.HANAInstance{Password: "fakePassword"},
-							&configpb.HANAInstance{Password: "fakePassword"},
-							&configpb.HANAInstance{Password: "fakePassword"}},
+							&configpb.HANAInstance{User: "fakeUser1", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser2", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser3", Password: "fakePassword"}},
 					},
 				},
 			},
-			want: 3,
+			connectedDBs: make(map[string]bool),
+			want:         3,
+		},
+		{
+			name: "AlreadyConnected",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{User: "fakeUser1", Host: "fakeHost1", Port: "fakePort1", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser2", Host: "fakeHost2", Port: "fakePort2", Password: "fakePassword"},
+							&configpb.HANAInstance{User: "fakeUser3", Host: "fakeHost3", Port: "fakePort3", Password: "fakePassword"}},
+					},
+				},
+			},
+			connectedDBs: map[string]bool{"fakeHost1:fakeUser1:fakePort1": true, "fakeHost2:fakeUser2:fakePort2": true, "fakeHost3:fakeUser3:fakePort3": true, "fakeHost4:fakeUser4:fakePort4": true},
+			want:         0,
 		},
 		{
 			name: "ConnectFailsEmptyInstance",
@@ -554,7 +647,8 @@ func TestConnectToDatabases(t *testing.T) {
 					},
 				},
 			},
-			want: 0,
+			connectedDBs: make(map[string]bool),
+			want:         0,
 		},
 		{
 			name: "ConnectFailsPassword",
@@ -572,7 +666,8 @@ func TestConnectToDatabases(t *testing.T) {
 					},
 				},
 			},
-			want: 0,
+			connectedDBs: make(map[string]bool),
+			want:         0,
 		},
 		{
 			name: "ConnectFailsSecretNameOverride",
@@ -594,7 +689,8 @@ func TestConnectToDatabases(t *testing.T) {
 					GetSecretErr:  []error{nil},
 				},
 			},
-			want: 0,
+			connectedDBs: make(map[string]bool),
+			want:         0,
 		},
 		{
 			name: "SecretNameFailsToReadNoDBConnection",
@@ -613,14 +709,16 @@ func TestConnectToDatabases(t *testing.T) {
 					GetSecretErr:  []error{errors.New("error")},
 				},
 			},
-			want: 0,
+			connectedDBs: make(map[string]bool),
+			want:         0,
 		},
 		{
 			name: "HANAMonitoringConfigNotSet",
 			params: Parameters{
 				Config: &configpb.Configuration{},
 			},
-			want: 0,
+			connectedDBs: make(map[string]bool),
+			want:         0,
 		},
 		{
 			name: "ConnectViaHDBUserstoreKey",
@@ -628,13 +726,14 @@ func TestConnectToDatabases(t *testing.T) {
 				Config: &configpb.Configuration{
 					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
 						HanaInstances: []*configpb.HANAInstance{
-							&configpb.HANAInstance{Sid: "fakeSID", HdbuserstoreKey: "fakeKey"},
-							&configpb.HANAInstance{Sid: "fakeSID", HdbuserstoreKey: "fakeKey"},
-							&configpb.HANAInstance{Sid: "fakeSID", HdbuserstoreKey: "fakeKey"}},
+							&configpb.HANAInstance{User: "fakeUser1", Sid: "fakeSID", HdbuserstoreKey: "fakeKey"},
+							&configpb.HANAInstance{User: "fakeUser2", Sid: "fakeSID", HdbuserstoreKey: "fakeKey"},
+							&configpb.HANAInstance{User: "fakeUser3", Sid: "fakeSID", HdbuserstoreKey: "fakeKey"}},
 					},
 				},
 			},
-			want: 3,
+			connectedDBs: make(map[string]bool),
+			want:         3,
 		},
 		{
 			name: "ConnectViaHDBUserstoreKeyFailsNoSID",
@@ -646,7 +745,8 @@ func TestConnectToDatabases(t *testing.T) {
 					},
 				},
 			},
-			want: 0,
+			connectedDBs: make(map[string]bool),
+			want:         0,
 		},
 		{
 			name: "ConnectViaHDBUserstoreKeyFailsNoKey",
@@ -658,13 +758,14 @@ func TestConnectToDatabases(t *testing.T) {
 					},
 				},
 			},
-			want: 0,
+			connectedDBs: make(map[string]bool),
+			want:         0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := connectToDatabases(context.Background(), test.params)
+			got := connectToDatabases(context.Background(), test.params, test.connectedDBs)
 
 			if len(got) != test.want {
 				t.Errorf("ConnectToDatabases(%#v) returned unexpected database count, got: %d, want: %d", test.params, len(got), test.want)

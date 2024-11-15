@@ -450,11 +450,12 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		return
 	}
 	hanamonitoring.Start(hanaCtx, hanamonitoring.Parameters{
-		Config:            d.config,
-		GCEService:        gceService,
-		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
-		TimeSeriesCreator: hanaMonitoringMetricClient,
-		HRC:               sapdiscovery.HANAReplicationConfig,
+		Config:                  d.config,
+		GCEService:              gceService,
+		BackOffs:                cloudmonitoring.NewDefaultBackOffIntervals(),
+		TimeSeriesCreator:       hanaMonitoringMetricClient,
+		HRC:                     sapdiscovery.HANAReplicationConfig,
+		ConnectionRetryInterval: 300 * time.Second,
 	})
 
 	waitForShutdown(ctx, shutdownch, cancel, restarting)

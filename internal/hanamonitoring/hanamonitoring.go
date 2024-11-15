@@ -85,6 +85,7 @@ type (
 		dailyMetricsRoutine     *recovery.RecoverableRoutine
 		createWorkerPoolRoutine *recovery.RecoverableRoutine
 		HRC                     hanaReplicationConfig
+		ConnectionRetryInterval time.Duration
 	}
 
 	// queryOptions holds parameters for the queryAndSend workflows.
@@ -106,9 +107,10 @@ type (
 		instance  *cpb.HANAInstance
 	}
 
-	// createWorkerPoolArgs holds the parameters necessary to invoke the routine createWorkerPool().
-	createWorkerPoolArgs struct {
+	// submitQueriesToWorkerPoolArgs holds the parameters necessary to invoke the routine submitQueriesToWorkerPool().
+	submitQueriesToWorkerPoolArgs struct {
 		params    Parameters
+		wp        *workerpool.WorkerPool
 		databases []*database
 	}
 )
@@ -126,24 +128,19 @@ func Start(ctx context.Context, params Parameters) bool {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		return false
 	}
+
 	if len(cfg.GetHanaInstances()) == 0 {
 		log.CtxLogger(ctx).Info("HANA Monitoring enabled but no HANA instances defined, not starting HANA Monitoring.")
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
 		return false
 	}
+
 	// Log usagemetric if any one of the HANA instances has hdbuserstore key configured.
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
 		if i.GetHdbuserstoreKey() != "" {
 			usagemetrics.Action(usagemetrics.HDBUserstoreKeyConfigured)
 			break
 		}
-	}
-
-	databases := connectToDatabases(ctx, params)
-	if len(databases) == 0 {
-		log.CtxLogger(ctx).Info("No HANA databases to query, not starting HANA Monitoring.")
-		usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
-		return false
 	}
 
 	log.CtxLogger(ctx).Info("Starting HANA Monitoring.")
@@ -156,27 +153,82 @@ func Start(ctx context.Context, params Parameters) bool {
 	}
 	params.dailyMetricsRoutine.StartRoutine(ctx)
 
-	createWorkerPoolArgs := createWorkerPoolArgs{
+	createWorkerPoolRoutine := &recovery.RecoverableRoutine{
+		Routine: func(ctx context.Context, a any) {
+			if params, ok := a.(Parameters); ok {
+				createWorkerPool(ctx, params)
+			}
+		},
+		RoutineArg:          params,
+		ErrorCode:           usagemetrics.HANAMonitoringCreateWorkerPoolFailure,
+		UsageLogger:         *usagemetrics.Logger,
+		ExpectedMinDuration: time.Minute,
+	}
+	createWorkerPoolRoutine.StartRoutine(ctx)
+	return true
+}
+
+func createWorkerPool(ctx context.Context, params Parameters) {
+	ticker := time.NewTicker(params.ConnectionRetryInterval)
+	connectedDBs := map[string]bool{}
+	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
+		connectedDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())] = false
+	}
+	wp := workerpool.New(int(params.Config.GetHanaMonitoringConfiguration().GetExecutionThreads()))
+	databases := connectToDatabases(ctx, params, connectedDBs)
+	invokeSubmitQueriesToWorkerPool(ctx, params, wp, databases)
+	for {
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("HANA Monitoring context cancelled, exiting")
+			return
+		case <-ticker.C:
+			databases := connectToDatabases(ctx, params, connectedDBs)
+			paramsCopy := params
+			wpCopy := wp
+			invokeSubmitQueriesToWorkerPool(ctx, paramsCopy, wpCopy, databases)
+			retry := false
+			for _, dbsConnected := range connectedDBs {
+				if !dbsConnected {
+					log.CtxLogger(ctx).Debugw("Some DBs are not connected, retrying connection", "ConnectedDBs", dbsConnected)
+					retry = true
+					break
+				}
+			}
+			if !retry {
+				log.CtxLogger(ctx).Info("All DBs connected, exiting the connection retrial loop")
+				return
+			}
+		}
+	}
+}
+
+func invokeSubmitQueriesToWorkerPool(ctx context.Context, params Parameters, wp *workerpool.WorkerPool, databases []*database) {
+	if len(databases) == 0 {
+		log.CtxLogger(ctx).Info("No databases to submit queries to workerpool")
+		return
+	}
+	submitQueriesToWPArgs := submitQueriesToWorkerPoolArgs{
 		params:    params,
 		databases: databases,
+		wp:        wp,
 	}
 	params.createWorkerPoolRoutine = &recovery.RecoverableRoutine{
-		Routine:             createWorkerPool,
-		RoutineArg:          createWorkerPoolArgs,
+		Routine:             submitQueriesToWorkerPool,
+		RoutineArg:          submitQueriesToWPArgs,
 		ErrorCode:           usagemetrics.HANAMonitoringCreateWorkerPoolFailure,
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: time.Minute,
 	}
 	params.createWorkerPoolRoutine.StartRoutine(ctx)
-	return true
 }
 
-// createWorkerPool creates a job for each query on each database. If the SID
+// submitQueriesToWorkerPool creates a job for each query on each database. If the SID
 // is not present in the config, the database will be queried to populate it.
-func createWorkerPool(ctx context.Context, a any) {
-	var args createWorkerPoolArgs
+func submitQueriesToWorkerPool(ctx context.Context, a any) {
+	var args submitQueriesToWorkerPoolArgs
 	var ok bool
-	if args, ok = a.(createWorkerPoolArgs); !ok {
+	if args, ok = a.(submitQueriesToWorkerPoolArgs); !ok {
 		log.CtxLogger(ctx).Infow(
 			"args is not of type createWorkerPoolArgs",
 			"typeOfArgs", reflect.TypeOf(a),
@@ -185,7 +237,12 @@ func createWorkerPool(ctx context.Context, a any) {
 	}
 
 	cfg := args.params.Config.GetHanaMonitoringConfiguration()
-	wp := workerpool.New(int(cfg.GetExecutionThreads()))
+	var wp *workerpool.WorkerPool
+	if args.wp != nil {
+		wp = args.wp
+	} else {
+		wp = workerpool.New(int(cfg.GetExecutionThreads()))
+	}
 	queryNamesMap := queryMap(cfg.GetQueries())
 	var queryNames []string
 	for qn := range queryNamesMap {
@@ -402,9 +459,12 @@ func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (
 }
 
 // connectToDatabases attempts to create a DB handle for each HANAInstance.
-func connectToDatabases(ctx context.Context, params Parameters) []*database {
+func connectToDatabases(ctx context.Context, params Parameters, connectedDBs map[string]bool) []*database {
 	var databases []*database
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
+		if connected, ok := connectedDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())]; connected && ok {
+			continue
+		}
 		hanaMonitoringConfig := params.Config.GetHanaMonitoringConfiguration()
 
 		dbp := databaseconnector.Params{
@@ -433,8 +493,10 @@ func connectToDatabases(ctx context.Context, params Parameters) []*database {
 		handle, err := databaseconnector.CreateDBHandle(ctx, dbp)
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
+			usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
 			continue
 		}
+		connectedDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())] = true
 		databases = append(databases, &database{queryFunc: handle.Query, instance: i})
 	}
 	return databases
