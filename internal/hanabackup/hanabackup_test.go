@@ -365,3 +365,188 @@ func TestReadDataDirMountPath(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckTopology(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		SID     string
+		want    bool
+		wantErr error
+	}{
+		{
+			name: "InstanceNotFound",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    cmpopts.AnyError,
+					ExitCode: 1,
+				}
+			},
+			SID:     "SID",
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoSAPInstancesFound",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			SID:     "SID",
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ScaleoutTopology",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			SID:     "SID",
+			want:    true,
+			wantErr: nil,
+		},
+		{
+			name: "ScaleupTopology",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			SID:     "SID",
+			want:    false,
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := CheckTopology(ctx, tc.exec, tc.SID)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("CheckTopology(%v, %q) = %v, want: %v", tc.exec, tc.SID, err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("CheckTopology(%v, %q) = %v, want: %v", tc.exec, tc.SID, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetInstanceNumber(t *testing.T) {
+	tests := []struct {
+		name               string
+		exec               commandlineexecutor.Execute
+		SID                string
+		wantInstanceNumber string
+		wantErr            error
+	}{
+		{
+			name: "Failure",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    cmpopts.AnyError,
+					ExitCode: 1,
+				}
+			},
+			SID:     "SID",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoInstanceFound",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			SID:                "SID",
+			wantInstanceNumber: "",
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			SID:                "SID",
+			wantInstanceNumber: "00",
+			wantErr:            nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := getInstanceNumber(ctx, tc.exec, tc.SID)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("getInstanceNumber(%v, %q) = %v, want: %v", tc.exec, tc.SID, err, tc.wantErr)
+			}
+			if got != tc.wantInstanceNumber {
+				t.Errorf("getInstanceNumber(%v, %q) = %v, want: %v", tc.exec, tc.SID, got, tc.wantInstanceNumber)
+			}
+		})
+	}
+}

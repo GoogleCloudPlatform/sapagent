@@ -29,7 +29,6 @@ import (
 	smpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/file/v1"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
@@ -360,13 +359,13 @@ func (g *GCE) WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.
 }
 
 // AttachDisk attaches the disk with the given name to the instance.
-func (g *GCE) AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error {
+func (g *GCE) AttachDisk(ctx context.Context, diskName string, instanceName, project, dataDiskZone string) error {
 	log.CtxLogger(ctx).Infow("Attaching disk", "diskName", diskName)
 	attachDiskToVM := &compute.AttachedDisk{
 		DeviceName: diskName, // Keep the device name and disk name same.
 		Source:     fmt.Sprintf("projects/%s/zones/%s/disks/%s", project, dataDiskZone, diskName),
 	}
-	op, err := g.service.Instances.AttachDisk(project, dataDiskZone, cp.GetInstanceName(), attachDiskToVM).Do()
+	op, err := g.service.Instances.AttachDisk(project, dataDiskZone, instanceName, attachDiskToVM).Do()
 	if err != nil {
 		return fmt.Errorf("failed to attach disk: %v", err)
 	}
@@ -377,9 +376,9 @@ func (g *GCE) AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProp
 }
 
 // DetachDisk detaches given disk from the instance.
-func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error {
+func (g *GCE) DetachDisk(ctx context.Context, instanceName, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error {
 	log.CtxLogger(ctx).Infow("Detatching disk", "diskName", dataDiskName, "deviceName", dataDiskDeviceName)
-	op, err := g.service.Instances.DetachDisk(project, dataDiskZone, cp.GetInstanceName(), dataDiskDeviceName).Do()
+	op, err := g.service.Instances.DetachDisk(project, dataDiskZone, instanceName, dataDiskDeviceName).Do()
 	if err != nil {
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
@@ -387,7 +386,7 @@ func (g *GCE) DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, 
 		return fmt.Errorf("detach data disk operation failed: %v", err)
 	}
 
-	_, ok, err := g.DiskAttachedToInstance(project, dataDiskZone, cp.GetInstanceName(), dataDiskName)
+	_, ok, err := g.DiskAttachedToInstance(project, dataDiskZone, instanceName, dataDiskName)
 	if err != nil {
 		return fmt.Errorf("failed to check if disk %v is still attached to the instance", dataDiskName)
 	}
