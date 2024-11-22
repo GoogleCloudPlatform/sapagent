@@ -327,6 +327,7 @@ func filterMetrics(cd *cdpb.CollectionDefinition) *cdpb.CollectionDefinition {
 			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().HanaOperationMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetHanaOperationMetrics())
 			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().FenceAgentMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetFenceAgentMetrics())
 			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().AscsMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetAscsMetrics())
+			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().OpOptionMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetOpOptionMetrics())
 		}
 	}
 	if cd.WorkloadValidation.GetValidationCustom() != nil {

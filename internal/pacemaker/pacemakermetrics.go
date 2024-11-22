@@ -108,6 +108,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"ascs_failure_timeout":             true,
 		"ascs_migration_threshold":         true,
 		"ascs_resource_stickiness":         true,
+		"op_timeout":                       true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -130,6 +131,9 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
 	for _, m := range pconfig.GetAscsMetrics() {
+		delete(pruneLabels, m.GetMetricInfo().GetLabel())
+	}
+	for _, m := range pconfig.GetOpOptionMetrics() {
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
 
@@ -221,6 +225,9 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	collectASCSInstance(ctx, l, params.Exists, params.Execute)
 	collectEnqueueServer(ctx, l, params.Execute)
 	setASCSConfigMetrics(l, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ascs"))
+
+	// sets the OP options from the pacemaker configuration.
+	setOPOptions(l, pacemakerDocument.Configuration.OPDefaults)
 
 	return 1.0, l
 }
@@ -640,6 +647,19 @@ func setASCSConfigMetrics(l map[string]string, group Group) {
 				key := "ascs_" + strings.ReplaceAll(nvPair.Name, "-", "_")
 				l[key] = nvPair.Value
 			}
+		}
+	}
+}
+
+func setOPOptions(l map[string]string, opOptions ClusterPropertySet) {
+	opOptionsKeys := map[string]bool{
+		"timeout": true,
+	}
+
+	for _, nvPair := range opOptions.NVPairs {
+		if _, ok := opOptionsKeys[nvPair.Name]; ok {
+			key := "op_" + strings.ReplaceAll(nvPair.Name, "-", "_")
+			l[key] = strings.ReplaceAll(nvPair.Value, "s", "")
 		}
 	}
 }
