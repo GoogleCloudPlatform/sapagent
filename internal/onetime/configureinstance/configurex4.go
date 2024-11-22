@@ -117,19 +117,17 @@ func (c *ConfigureInstance) configureX4SLES(ctx context.Context) (bool, error) {
 	if err := c.saptuneService(ctx); err != nil {
 		return false, err
 	}
-	sapTuneReapply, err := c.checkAndRegenerateFile(ctx, "/etc/saptune/extra/google-x4.conf", googleX4Conf)
+	noteRegenerated, err := c.checkAndRegenerateFile(ctx, "/etc/saptune/extra/google-x4.conf", googleX4Conf)
 	if err != nil {
 		return false, err
 	}
-	if c.saptuneSolutions(ctx) {
-		sapTuneReapply = true
-	}
-	if err := c.saptuneReapply(ctx, sapTuneReapply); err != nil {
+	solutionReapply, noteReapply := c.saptuneSolutions(ctx)
+	noteReapply = noteReapply || noteRegenerated
+	if err := c.saptuneReapply(ctx, solutionReapply, noteReapply); err != nil {
 		return false, err
 	}
-
 	log.CtxLogger(ctx).Info("SLES specific configurations complete.")
-	return sapTuneReapply, nil
+	return solutionReapply || noteReapply, nil
 }
 
 // saptuneService checks if saptune service is running. If it is not running,
@@ -169,25 +167,25 @@ func (c *ConfigureInstance) saptuneService(ctx context.Context) error {
 }
 
 // saptuneSolutions checks if SAPTune solutions and notes are correct.
-// Returns true if saptune reapply is required.
-func (c *ConfigureInstance) saptuneSolutions(ctx context.Context) bool {
-	sapTuneReapply := false
+// Returns true if saptune solution and note reapply is required.
+func (c *ConfigureInstance) saptuneSolutions(ctx context.Context) (bool, bool) {
+	solutionReapply, noteReapply := false, false
 	saptuneSolutions := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status"})
-	if match, _ := regexp.MatchString(`enabled Solution:\s*HANA`, saptuneSolutions.StdOut); !match {
-		log.CtxLogger(ctx).Info("Enabled solution is not `HANA`, SAPTune re-apply required.")
-		sapTuneReapply = true
+	if match, _ := regexp.MatchString(`enabled Solution:\s*(HANA|NETWEAVER\+HANA|S4HANA\-APP\+DB|S4HANA\-DBSERVER)`, saptuneSolutions.StdOut); !match {
+		log.CtxLogger(ctx).Info("Enabled solution is not `(HANA|NETWEAVER+HANA|S4HANA-APP+DB|S4HANA-DBSERVER)`, SAPTune solution re-apply required.")
+		solutionReapply = true
 	}
 	if match, _ := regexp.MatchString(`additional enabled Notes:\s*google-x4`, saptuneSolutions.StdOut); !match {
-		log.CtxLogger(ctx).Info("Enabled note is not `google-x4`, SAPTune re-apply required.")
-		sapTuneReapply = true
+		log.CtxLogger(ctx).Info("Enabled note is not `google-x4`, SAPTune note re-apply required.")
+		noteReapply = true
 	}
-	return sapTuneReapply
+	return solutionReapply, noteReapply
 }
 
 // saptuneReapply executes SAPTune re-apply by applying the
 // HANA solution and the google-x4 note.
-func (c *ConfigureInstance) saptuneReapply(ctx context.Context, sapTuneReapply bool) error {
-	if !sapTuneReapply {
+func (c *ConfigureInstance) saptuneReapply(ctx context.Context, solutionReapply, noteReapply bool) error {
+	if !solutionReapply && !noteReapply {
 		log.CtxLogger(ctx).Info("SAPTune re-apply is not required.")
 		return nil
 	}
@@ -195,18 +193,20 @@ func (c *ConfigureInstance) saptuneReapply(ctx context.Context, sapTuneReapply b
 		log.CtxLogger(ctx).Info("Run 'configureinstance -apply' to execute SAPTune re-apply.")
 		return nil
 	}
-	log.CtxLogger(ctx).Info("Executing SAPTune re-apply.")
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution revert HANA", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune solution revert HANA' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
+	if solutionReapply {
+		log.CtxLogger(ctx).Info("Executing SAPTune solution re-apply.")
+		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution change --force HANA", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
+			return fmt.Errorf("'saptune solution change --force HANA' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
+		}
 	}
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution apply HANA", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune solution apply HANA' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
-	}
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune note revert google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
-	}
-	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
-		return fmt.Errorf("'saptune note apply google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
+	if noteReapply {
+		log.CtxLogger(ctx).Info("Executing SAPTune note re-apply.")
+		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note revert google-x4", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
+			return fmt.Errorf("'saptune note revert google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
+		}
+		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x4", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
+			return fmt.Errorf("'saptune note apply google-x4' failed, code: %d, err: %v, stderr: %s", res.ExitCode, res.Error, res.StdErr)
+		}
 	}
 	return nil
 }

@@ -295,37 +295,49 @@ func TestSaptuneService(t *testing.T) {
 
 func TestSaptuneSolutions(t *testing.T) {
 	tests := []struct {
-		name string
-		c    ConfigureInstance
-		want bool
+		name         string
+		c            ConfigureInstance
+		wantSolution bool
+		wantNote     bool
 	}{
+		{
+			name: "BothUpdate",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+			},
+			wantSolution: true,
+			wantNote:     true,
+		},
 		{
 			name: "SolutionUpdate",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: NOT_HANA"}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: NOT_HANA\nadditional enabled Notes: google-x4"}),
 			},
-			want: true,
+			wantSolution: true,
+			wantNote:     false,
 		},
 		{
 			name: "NoteUpdate",
 			c: ConfigureInstance{
 				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: NOT_google-x4"}),
 			},
-			want: true,
+			wantSolution: false,
+			wantNote:     true,
 		},
 		{
 			name: "NoUpdateRequired",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: google-x4"}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: NETWEAVER+HANA\nadditional enabled Notes: google-x4"}),
 			},
-			want: false,
+			wantSolution: false,
+			wantNote:     false,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.c.saptuneSolutions(context.Background())
-			if got != tc.want {
-				t.Errorf("saptuneSolutions(%#v) = %v, want: %v", tc.c, got, tc.want)
+			gotSolution, gotNote := tc.c.saptuneSolutions(context.Background())
+			if gotSolution != tc.wantSolution || gotNote != tc.wantNote {
+				t.Errorf("saptuneSolutions(%#v) = %v, %v, want: %v, %v", tc.c, gotSolution, gotNote, tc.wantSolution, tc.wantNote)
 			}
 		})
 	}
@@ -333,25 +345,27 @@ func TestSaptuneSolutions(t *testing.T) {
 
 func TestSaptuneReapply(t *testing.T) {
 	tests := []struct {
-		name           string
-		sapTuneReapply bool
-		c              ConfigureInstance
-		wantErr        error
+		name            string
+		solutionReapply bool
+		noteReapply     bool
+		c               ConfigureInstance
+		wantErr         error
 	}{
 		{
-			name:           "ReapplyNotRequired",
-			sapTuneReapply: false,
+			name:            "ReapplyNotRequired",
+			solutionReapply: false,
+			noteReapply:     false,
 		},
 		{
-			name:           "CheckMode",
-			sapTuneReapply: true,
+			name:            "CheckMode",
+			solutionReapply: true,
 			c: ConfigureInstance{
 				Check: true,
 			},
 		},
 		{
-			name:           "FailSolutionRevert",
-			sapTuneReapply: true,
+			name:            "FailSolutionChange",
+			solutionReapply: true,
 			c: ConfigureInstance{
 				Apply:       true,
 				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
@@ -359,8 +373,17 @@ func TestSaptuneReapply(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:           "FailSolutionApply",
-			sapTuneReapply: true,
+			name:        "FailNoteRevert",
+			noteReapply: true,
+			c: ConfigureInstance{
+				Apply:       true,
+				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:        "FailNoteApply",
+			noteReapply: true,
 			c: ConfigureInstance{
 				Apply:       true,
 				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
@@ -368,37 +391,20 @@ func TestSaptuneReapply(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:           "FailNoteRevert",
-			sapTuneReapply: true,
+			name:            "Success",
+			solutionReapply: true,
+			noteReapply:     true,
 			c: ConfigureInstance{
 				Apply:       true,
-				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
-			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name:           "FailNoteApply",
-			sapTuneReapply: true,
-			c: ConfigureInstance{
-				Apply:       true,
-				ExecuteFunc: defaultExecute([]int{0, 0, 0, 1}, []string{"", "", "", ""}),
-			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name:           "Success",
-			sapTuneReapply: true,
-			c: ConfigureInstance{
-				Apply:       true,
-				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0}, []string{"", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0}, []string{"", "", ""}),
 			},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotErr := tc.c.saptuneReapply(context.Background(), tc.sapTuneReapply)
+			gotErr := tc.c.saptuneReapply(context.Background(), tc.solutionReapply, tc.noteReapply)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("saptuneReapply(%v) returned error: %v, want error: %v", tc.sapTuneReapply, gotErr, tc.wantErr)
+				t.Errorf("saptuneReapply(%v, %v) returned error: %v, want error: %v", tc.solutionReapply, tc.noteReapply, gotErr, tc.wantErr)
 			}
 		})
 	}
