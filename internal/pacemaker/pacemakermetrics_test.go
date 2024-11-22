@@ -284,6 +284,9 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"saphanatopology_monitor_timeout":  "600",
 		"ascs_instance":                    "",
 		"enqueue_server":                   "",
+		"op_timeout":                       "600",
+		"stonith_enabled":                  "true",
+		"stonith_timeout":                  "300s",
 	}
 }
 
@@ -310,6 +313,9 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"ascs_failure_timeout":             "60",
 		"ascs_migration_threshold":         "3",
 		"ascs_resource_stickiness":         "5000",
+		"op_timeout":                       "600",
+		"stonith_enabled":                  "true",
+		"stonith_timeout":                  "300s",
 	}
 }
 
@@ -1969,6 +1975,83 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 			setASCSConfigMetrics(got, test.group)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setASCSConfigMetrics() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSetOPOptions(t *testing.T) {
+	tests := []struct {
+		name      string
+		opOptions ClusterPropertySet
+		want      map[string]string
+	}{
+		{
+			name: "Success",
+			opOptions: ClusterPropertySet{
+				ID: "op-options",
+				NVPairs: []NVPair{
+					{Name: "timeout", Value: "600"},
+				},
+			},
+			want: map[string]string{
+				"op_timeout": "600",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			setOPOptions(got, test.opOptions)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("setOPOptions() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSetPacemakerStonithClusterProperty(t *testing.T) {
+	tests := []struct {
+		name string
+		cps  []ClusterPropertySet
+		want map[string]string
+	}{
+		{
+			name: "NoCIBBootstrapOptions",
+			cps: []ClusterPropertySet{
+				{
+					ID: "not-cib-bootstrap-options",
+					NVPairs: []NVPair{
+						{Name: "stonith-enabled", Value: "true"},
+						{Name: "stonith-timeout", Value: "10"},
+					},
+				},
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "Success",
+			cps: []ClusterPropertySet{
+				{
+					ID: "cib-bootstrap-options",
+					NVPairs: []NVPair{
+						{Name: "stonith-enabled", Value: "true"},
+						{Name: "stonith-timeout", Value: "10"},
+					},
+				},
+			},
+			want: map[string]string{
+				"stonith_enabled": "true",
+				"stonith_timeout": "10",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			setPacemakerStonithClusterProperty(got, test.cps)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("setPacemakerStonithClusterProperty() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
