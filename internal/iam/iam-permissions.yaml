@@ -25,10 +25,7 @@ features:
       -
         type: Project
         permissions:
-          - monitoring.metricDescriptors.list
           - monitoring.timeSeries.create
-          - monitoring.metricDescriptors.create
-          - monitoring.metricDescriptors.get
 
   -
     name: PROCESS_METRICS
@@ -177,3 +174,10 @@ features:
         type: Project
         permissions:
           - secretmanager.versions.access
+  -
+    name: AGENT_HEALTH_METRICS
+    permissionsList:
+      -
+        type: Project
+        permissions:
+          - monitoring.timeSeries.create
