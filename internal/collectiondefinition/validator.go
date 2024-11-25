@@ -197,6 +197,12 @@ func (v *Validator) validatePacemakerConfigMetrics(config *wlmpb.PacemakerConfig
 			validationFailure(v, m, "ASCSVariable metric has no value specified")
 		}
 	}
+	for _, m := range config.GetOpOptionMetrics() {
+		validateMetricInfo(v, m)
+		if m.GetValue() == wlmpb.OPOptionVariable_OP_OPTION_VARIABLE_UNSPECIFIED {
+			validationFailure(v, m, "OPOptionVariable metric has no value specified")
+		}
+	}
 }
 
 // validateEvalMetrics runs a series of validation checks against an EvalMetric slice.
