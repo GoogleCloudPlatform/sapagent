@@ -437,7 +437,7 @@ Agent Status:
 				Services: []*spb.ServiceStatus{
 					{
 						Name:            "Process Metrics",
-						Enabled:         true,
+						Enabled:         spb.State_SUCCESS_STATE,
 						FullyFunctional: spb.State_SUCCESS_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						IamPermissions: []*spb.IAMPermission{
@@ -465,7 +465,7 @@ Agent Status:
 					},
 					{
 						Name:            "Host Metrics",
-						Enabled:         true,
+						Enabled:         spb.State_SUCCESS_STATE,
 						FullyFunctional: spb.State_SUCCESS_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						ConfigValues: []*spb.ConfigValue{
@@ -478,7 +478,7 @@ Agent Status:
 					},
 					{
 						Name:            "Backint",
-						Enabled:         false,
+						Enabled:         spb.State_FAILURE_STATE,
 						FullyFunctional: spb.State_FAILURE_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						ConfigValues: []*spb.ConfigValue{
@@ -547,7 +547,7 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 				Services: []*spb.ServiceStatus{
 					{
 						Name:            "Process Metrics",
-						Enabled:         true,
+						Enabled:         spb.State_SUCCESS_STATE,
 						FullyFunctional: spb.State_FAILURE_STATE,
 						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
 						IamPermissions: []*spb.IAMPermission{
@@ -574,7 +574,7 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 					},
 					{
 						Name:            "Host Metrics",
-						Enabled:         true,
+						Enabled:         spb.State_SUCCESS_STATE,
 						FullyFunctional: spb.State_UNSPECIFIED_STATE,
 						ConfigValues: []*spb.ConfigValue{
 							{
@@ -585,10 +585,11 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 						},
 					},
 					{
-						Name:            "Backint",
-						Enabled:         false,
-						FullyFunctional: spb.State_FAILURE_STATE,
-						ErrorMessage:    "Cannot write to Cloud Monitoring, check IAM permissions",
+						Name:                      "Backint",
+						Enabled:                   spb.State_UNSPECIFIED_STATE,
+						EnabledUnspecifiedMessage: "Backint parameters file not specified",
+						FullyFunctional:           spb.State_FAILURE_STATE,
+						ErrorMessage:              "Cannot write to Cloud Monitoring, check IAM permissions",
 						ConfigValues: []*spb.ConfigValue{
 							{
 								Name:      "fake_config",
@@ -638,7 +639,7 @@ Host Metrics: Enabled
     Configuration:
         Hello: World (default)
 --------------------------------------------------------------------------------
-Backint: Disabled
+Backint: Backint parameters file not specified
 --------------------------------------------------------------------------------
 References:
 IAM Permissions: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/planning#required_iam_roles

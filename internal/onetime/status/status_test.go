@@ -133,7 +133,7 @@ func TestStatusHandler(t *testing.T) {
 				Services: []*spb.ServiceStatus{
 					{
 						Name:    "Host Metrics",
-						Enabled: true,
+						Enabled: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
 							{Name: "example.compute.viewer"},
 						},
@@ -143,7 +143,7 @@ func TestStatusHandler(t *testing.T) {
 					},
 					{
 						Name:           "Process Metrics",
-						Enabled:        false,
+						Enabled:        spb.State_FAILURE_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_process_metrics", Value: "false", IsDefault: true},
@@ -154,7 +154,7 @@ func TestStatusHandler(t *testing.T) {
 					},
 					{
 						Name:           "HANA Monitoring Metrics",
-						Enabled:        false,
+						Enabled:        spb.State_FAILURE_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "connection_timeout", Value: "0", IsDefault: false},
@@ -168,7 +168,7 @@ func TestStatusHandler(t *testing.T) {
 					},
 					{
 						Name:           "System Discovery",
-						Enabled:        true,
+						Enabled:        spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
@@ -178,20 +178,29 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:           "Backint",
-						Enabled:        false,
-						IamPermissions: []*spb.IAMPermission{},
-						ConfigValues:   []*spb.ConfigValue{},
+						Name:                      "Backint",
+						Enabled:                   spb.State_UNSPECIFIED_STATE,
+						EnabledUnspecifiedMessage: "Backint parameters file not specified",
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "storage.objects.list"},
+							{Name: "storage.objects.create"},
+							{Name: "storage.objects.get"},
+							{Name: "storage.objects.update"},
+							{Name: "storage.objects.delete"},
+							{Name: "storage.multipartUploads.create"},
+							{Name: "storage.multipartUploads.abort"},
+						},
+						ConfigValues: []*spb.ConfigValue{},
 					},
 					{
 						Name:           "Disk Snapshot",
-						Enabled:        false,
+						Enabled:        spb.State_UNSPECIFIED_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
 						Name:           "Workload Manager",
-						Enabled:        true,
+						Enabled:        spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
@@ -232,6 +241,7 @@ func TestStatusHandler(t *testing.T) {
 				exists: func(string) bool {
 					return false
 				},
+				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
 			},
 			want: &spb.AgentStatus{
 				AgentName:             agentPackageName,
@@ -244,7 +254,7 @@ func TestStatusHandler(t *testing.T) {
 				Services: []*spb.ServiceStatus{
 					{
 						Name:    "Host Metrics",
-						Enabled: true,
+						Enabled: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
 							{Name: "example.compute.viewer"},
 						},
@@ -254,7 +264,7 @@ func TestStatusHandler(t *testing.T) {
 					},
 					{
 						Name:           "Process Metrics",
-						Enabled:        true,
+						Enabled:        spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_process_metrics", Value: "true", IsDefault: false},
@@ -265,7 +275,7 @@ func TestStatusHandler(t *testing.T) {
 					},
 					{
 						Name:           "HANA Monitoring Metrics",
-						Enabled:        true,
+						Enabled:        spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "connection_timeout", Value: "120", IsDefault: true},
@@ -279,7 +289,7 @@ func TestStatusHandler(t *testing.T) {
 					},
 					{
 						Name:           "System Discovery",
-						Enabled:        true,
+						Enabled:        spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
@@ -289,20 +299,28 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:           "Backint",
-						Enabled:        false,
-						IamPermissions: []*spb.IAMPermission{},
-						ConfigValues:   []*spb.ConfigValue{},
+						Name:    "Backint",
+						Enabled: spb.State_UNSPECIFIED_STATE,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "storage.objects.list"},
+							{Name: "storage.objects.create"},
+							{Name: "storage.objects.get"},
+							{Name: "storage.objects.update"},
+							{Name: "storage.objects.delete"},
+							{Name: "storage.multipartUploads.create"},
+							{Name: "storage.multipartUploads.abort"},
+						},
+						ConfigValues: []*spb.ConfigValue{},
 					},
 					{
 						Name:           "Disk Snapshot",
-						Enabled:        false,
+						Enabled:        spb.State_UNSPECIFIED_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
 						Name:           "Workload Manager",
-						Enabled:        true,
+						Enabled:        spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},

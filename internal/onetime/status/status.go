@@ -45,7 +45,8 @@ const (
 
 // Status stores the status subcommand parameters.
 type Status struct {
-	ConfigFilePath string
+	ConfigFilePath        string
+	BackintParametersPath string
 
 	verbose           bool
 	help              bool
@@ -65,16 +66,19 @@ func (*Status) Synopsis() string { return "get the status of the agent and its s
 
 // Usage implements the subcommand interface for status.
 func (*Status) Usage() string {
-	return `status [-config <path-to-config-file>] [-v]
+	return `status [-config <path-to-agent-config-file>]
+       [-backint <path-to-backint-parameters-file>] [-v]
 
   Get the status of the agent and its services.
-  `
+`
 }
 
 // SetFlags implements the subcommand interface for status.
 func (s *Status) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.ConfigFilePath, "config", "", "Configuration path override")
 	fs.StringVar(&s.ConfigFilePath, "c", "", "Configuration path override")
+	fs.StringVar(&s.BackintParametersPath, "backint", "", "Backint parameters path")
+	fs.StringVar(&s.BackintParametersPath, "b", "", "Backint parameters path")
 	fs.BoolVar(&s.verbose, "v", false, "Display verbose status information")
 	fs.BoolVar(&s.help, "h", false, "Display help")
 }
@@ -188,13 +192,16 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:    "Host Metrics",
-		Enabled: config.GetProvideSapHostAgentMetrics().GetValue(),
+		Enabled: spb.State_FAILURE_STATE,
 		IamPermissions: []*spb.IAMPermission{
 			{Name: "example.compute.viewer"},
 		},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("provide_sap_host_agent_metrics", config.GetProvideSapHostAgentMetrics().GetValue(), true),
 		},
+	}
+	if config.GetProvideSapHostAgentMetrics().GetValue() {
+		status.Enabled = spb.State_SUCCESS_STATE
 	}
 
 	return status
@@ -203,7 +210,7 @@ func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuratio
 func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:           "Process Metrics",
-		Enabled:        config.GetCollectionConfiguration().GetCollectProcessMetrics(),
+		Enabled:        spb.State_FAILURE_STATE,
 		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_process_metrics", config.GetCollectionConfiguration().GetCollectProcessMetrics(), false),
@@ -212,6 +219,9 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 			configValue("slow_process_metrics_frequency", config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency(), 30),
 		},
 	}
+	if config.GetCollectionConfiguration().GetCollectProcessMetrics() {
+		status.Enabled = spb.State_SUCCESS_STATE
+	}
 
 	return status
 }
@@ -219,7 +229,7 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:           "HANA Monitoring Metrics",
-		Enabled:        config.GetHanaMonitoringConfiguration().GetEnabled(),
+		Enabled:        spb.State_FAILURE_STATE,
 		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("connection_timeout", config.GetHanaMonitoringConfiguration().GetConnectionTimeout().GetSeconds(), 120),
@@ -231,6 +241,9 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 			configValue("send_query_response_time", config.GetHanaMonitoringConfiguration().GetSendQueryResponseTime(), false),
 		},
 	}
+	if config.GetHanaMonitoringConfiguration().GetEnabled() {
+		status.Enabled = spb.State_SUCCESS_STATE
+	}
 	// TODO: Do we need to include instances and queries in configuration?
 
 	return status
@@ -239,7 +252,7 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:           "System Discovery",
-		Enabled:        config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(),
+		Enabled:        spb.State_FAILURE_STATE,
 		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("enable_discovery", config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(), true),
@@ -248,18 +261,33 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 			configValue("system_discovery_update_frequency", config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().GetSeconds(), 4*60*60),
 		},
 	}
+	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
+		status.Enabled = spb.State_SUCCESS_STATE
+	}
 
 	return status
 }
 
 func (s *Status) backintStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:           "Backint",
-		Enabled:        false,
-		IamPermissions: []*spb.IAMPermission{},
-		// TODO: Add config values.
-		ConfigValues: []*spb.ConfigValue{},
+		Name:    "Backint",
+		Enabled: spb.State_UNSPECIFIED_STATE,
+		IamPermissions: []*spb.IAMPermission{
+			{Name: "storage.objects.list"},
+			{Name: "storage.objects.create"},
+			{Name: "storage.objects.get"},
+			{Name: "storage.objects.update"},
+			{Name: "storage.objects.delete"},
+			{Name: "storage.multipartUploads.create"},
+			{Name: "storage.multipartUploads.abort"},
+		},
 	}
+	if s.BackintParametersPath == "" {
+		status.EnabledUnspecifiedMessage = "Backint parameters file not specified"
+		return status
+	}
+	// TODO: Parse backint parameters file and add config values.
+	// TODO: Perform IAM checks.
 
 	return status
 }
@@ -267,7 +295,7 @@ func (s *Status) backintStatus(ctx context.Context, config *cpb.Configuration) *
 func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:           "Disk Snapshot",
-		Enabled:        false,
+		Enabled:        spb.State_UNSPECIFIED_STATE,
 		IamPermissions: []*spb.IAMPermission{},
 		// TODO: Add config values.
 		ConfigValues: []*spb.ConfigValue{},
@@ -279,7 +307,7 @@ func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configurati
 func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:           "Workload Manager",
-		Enabled:        config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(),
+		Enabled:        spb.State_FAILURE_STATE,
 		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_workload_validation_metrics", config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(), true),
@@ -288,6 +316,9 @@ func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configur
 			configValue("workload_validation_db_metrics_frequency", config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsFrequency(), 3600),
 			configValue("workload_validation_metrics_frequency", config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency(), 300),
 		},
+	}
+	if config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
+		status.Enabled = spb.State_SUCCESS_STATE
 	}
 
 	return status

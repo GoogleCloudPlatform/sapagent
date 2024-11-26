@@ -242,12 +242,20 @@ func printState(ctx context.Context, name string, state spb.State) {
 // appropriate formatting and coloring.
 func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 	printColor(info, "--------------------------------------------------------------------------------\n")
-	if !status.GetEnabled() {
+	switch status.GetEnabled() {
+	case spb.State_UNSPECIFIED_STATE:
+		printColor(faint, "%s: %s\n", status.GetName(), status.GetEnabledUnspecifiedMessage())
+		return
+	case spb.State_FAILURE_STATE:
 		printColor(faint, "%s: Disabled\n", status.GetName())
 		return
+	case spb.State_ERROR_STATE:
+		printColor(failure, "%s: Error: could not determine status\n", status.GetName())
+		return
+	default:
+		printColor(info, "%s: ", status.GetName())
+		printColor(success, "Enabled\n")
 	}
-	printColor(info, "%s: ", status.GetName())
-	printColor(success, "Enabled\n")
 
 	printColor(info, "    Status: ")
 	if status.GetFullyFunctional() == spb.State_SUCCESS_STATE {
