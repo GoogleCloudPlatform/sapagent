@@ -106,4 +106,32 @@ message SapValidation {
 }
 
 // The schema of torso workload validation data.
-message TorsoValidation {}
+message TorsoValidation {
+  // WorkloadType enumerates the types of supported torso workloads.
+  enum WorkloadType {
+    WORKLOAD_TYPE_UNSPECIFIED = 0;
+    MYSQL = 1;
+    ORACLE = 2;
+    REDIS = 3;
+  }
+
+  // workload_type specifies the type of torso workload.
+  WorkloadType workload_type = 1;
+
+  // validation_details contains the <k,v> pairs of validation data:
+  // field name & field value.
+  map<string, string> validation_details = 2;
+
+  // agent_version lists the version of the agent that collected this data.
+  string agent_version = 3;
+
+  // project_id lists the human readable cloud project that the data comes from.
+  string project_id = 4;
+
+  // instance_name lists the human readable name of the instance that the data
+  // comes from.
+  // (-- api-linter: core::0122::name-suffix=disabled
+  //     aip.dev/not-precedent: Disambiguation between instance_id and
+  //     instance_name. --)
+  string instance_name = 5;
+}
