@@ -128,6 +128,8 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"ascs_migration_threshold":         "3",
 					"ascs_resource_stickiness":         "5000",
 					"op_timeout":                       "600",
+					"stonith_enabled":                  "true",
+					"stonith_timeout":                  "300",
 				},
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,

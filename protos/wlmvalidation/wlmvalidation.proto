@@ -113,6 +113,8 @@ enum ASCSVariable {
 enum CIBBootstrapOptionVariable {
   CIB_BOOTSTRAP_OPTION_VARIABLE_UNSPECIFIED = 0;
   MAINTENANCE_MODE_ACTIVE = 1;
+  STONITH_ENABLED = 2;
+  STONITH_TIMEOUT = 3;
 }
 
 enum OPOptionVariable {

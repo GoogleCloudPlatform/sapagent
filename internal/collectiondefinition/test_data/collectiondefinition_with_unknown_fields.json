@@ -965,6 +965,20 @@
             "label": "maintenance_mode_active"
           },
           "value": "MAINTENANCE_MODE_ACTIVE"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/pacemaker",
+            "label": "stonith_enabled"
+          },
+          "value": "STONITH_ENABLED"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/pacemaker",
+            "label": "stonith_timeout"
+          },
+          "value": "STONITH_TIMEOUT"
         }
       ],
       "os_command_metrics": [
