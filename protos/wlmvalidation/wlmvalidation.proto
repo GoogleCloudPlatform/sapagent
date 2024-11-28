@@ -115,6 +115,11 @@ enum CIBBootstrapOptionVariable {
   MAINTENANCE_MODE_ACTIVE = 1;
 }
 
+enum OPOptionVariable {
+  OP_OPTION_VARIABLE_UNSPECIFIED = 0;
+  OP_TIMEOUT = 1;
+}
+
 message WorkloadValidation {
   ValidationSystem validation_system = 1;
   ValidationCorosync validation_corosync = 2;
@@ -191,6 +196,7 @@ message PacemakerConfigMetrics {
   repeated PacemakerHANAOperationMetric hana_operation_metrics = 4;
   repeated PacemakerFenceAgentMetric fence_agent_metrics = 5;
   repeated PacemakerASCSMetric ascs_metrics = 6;
+  repeated OPOptionMetric op_option_metrics = 7;
 }
 
 message PacemakerPrimitiveMetric {
@@ -226,6 +232,11 @@ message PacemakerASCSMetric {
 message CIBBootstrapOptionMetric {
   configurablemetrics.MetricInfo metric_info = 1;
   CIBBootstrapOptionVariable value = 2;
+}
+
+message OPOptionMetric {
+  configurablemetrics.MetricInfo metric_info = 1;
+  OPOptionVariable value = 2;
 }
 
 message ValidationCustom {

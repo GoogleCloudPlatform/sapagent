@@ -327,6 +327,7 @@ func filterMetrics(cd *cdpb.CollectionDefinition) *cdpb.CollectionDefinition {
 			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().HanaOperationMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetHanaOperationMetrics())
 			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().FenceAgentMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetFenceAgentMetrics())
 			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().AscsMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetAscsMetrics())
+			cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().OpOptionMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationPacemaker().GetConfigMetrics().GetOpOptionMetrics())
 		}
 	}
 	if cd.WorkloadValidation.GetValidationCustom() != nil {
@@ -435,6 +436,7 @@ func mapWorkloadValidationMetrics(wlm *wlmpb.WorkloadValidation) metricsMap {
 	iterator(pacemakerConfig.GetAscsMetrics(), mapper)
 	iterator(pacemaker.GetCibBootstrapOptionMetrics(), mapper)
 	iterator(pacemaker.GetOsCommandMetrics(), mapper)
+	iterator(pacemakerConfig.GetOpOptionMetrics(), mapper)
 
 	custom := wlm.GetValidationCustom()
 	iterator(custom.GetOsCommandMetrics(), mapper)

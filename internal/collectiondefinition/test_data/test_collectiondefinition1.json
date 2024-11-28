@@ -946,6 +946,15 @@
             },
             "value": "ASCS_RESOURCE_STICKINESS"
           }
+        ],
+        "op_option_metrics": [
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "op_timeout"
+            },
+            "value": "OP_TIMEOUT"
+          }
         ]
       },
       "cib_bootstrap_option_metrics": [
