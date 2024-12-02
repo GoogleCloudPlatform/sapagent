@@ -587,7 +587,7 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 					{
 						Name:                      "Backint",
 						Enabled:                   spb.State_UNSPECIFIED_STATE,
-						EnabledUnspecifiedMessage: "Backint parameters file not specified",
+						EnabledUnspecifiedMessage: "Backint parameters file not specified / Disabled",
 						FullyFunctional:           spb.State_FAILURE_STATE,
 						ErrorMessage:              "Cannot write to Cloud Monitoring, check IAM permissions",
 						ConfigValues: []*spb.ConfigValue{
@@ -639,7 +639,7 @@ Host Metrics: Enabled
     Configuration:
         Hello: World (default)
 --------------------------------------------------------------------------------
-Backint: Backint parameters file not specified
+Backint: Backint parameters file not specified / Disabled
 --------------------------------------------------------------------------------
 References:
 IAM Permissions: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/planning#required_iam_roles

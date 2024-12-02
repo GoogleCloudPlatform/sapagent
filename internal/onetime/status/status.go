@@ -33,6 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/statushelper"
 
+	backintconfiguration "github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
@@ -54,6 +55,7 @@ type Status struct {
 	oteLogger         *onetime.OTELogger
 	cloudProps        *iipb.CloudProperties
 	readFile          configuration.ReadConfigFile
+	backintReadFile   backintconfiguration.ReadConfigFile
 	exec              commandlineexecutor.Execute
 	exists            commandlineexecutor.Exists
 }
@@ -106,6 +108,7 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	}
 	log.CtxLogger(ctx).Infow("Agent Status", "status", agentStatus)
 	statushelper.PrintStatus(ctx, agentStatus)
+	log.CtxLogger(ctx).Info("Status finished")
 	return exitStatus
 }
 
@@ -113,6 +116,7 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentStatus, subcommands.ExitStatus) {
 	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	s.readFile = os.ReadFile
+	s.backintReadFile = os.ReadFile
 	s.exec = commandlineexecutor.ExecuteCommand
 	s.exists = commandlineexecutor.CommandExists
 	status, err := s.statusHandler(ctx)
@@ -125,12 +129,13 @@ func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentS
 
 // statusHandler executes the status checks and returns the results as the AgentStatus proto.
 func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
+	log.CtxLogger(ctx).Info("Status starting")
 	agentStatus, config := s.agentStatus(ctx)
 	agentStatus.Services = append(agentStatus.Services, s.hostMetricsStatus(ctx, config))
 	agentStatus.Services = append(agentStatus.Services, s.processMetricsStatus(ctx, config))
 	agentStatus.Services = append(agentStatus.Services, s.hanaMonitoringMetricsStatus(ctx, config))
 	agentStatus.Services = append(agentStatus.Services, s.systemDiscoveryStatus(ctx, config))
-	agentStatus.Services = append(agentStatus.Services, s.backintStatus(ctx, config))
+	agentStatus.Services = append(agentStatus.Services, s.backintStatus(ctx))
 	agentStatus.Services = append(agentStatus.Services, s.diskSnapshotStatus(ctx, config))
 	agentStatus.Services = append(agentStatus.Services, s.workloadManagerStatus(ctx, config))
 
@@ -268,7 +273,7 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 	return status
 }
 
-func (s *Status) backintStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:    "Backint",
 		Enabled: spb.State_UNSPECIFIED_STATE,
@@ -283,11 +288,62 @@ func (s *Status) backintStatus(ctx context.Context, config *cpb.Configuration) *
 		},
 	}
 	if s.BackintParametersPath == "" {
-		status.EnabledUnspecifiedMessage = "Backint parameters file not specified"
+		status.EnabledUnspecifiedMessage = "Backint parameters file not specified / Disabled"
 		return status
 	}
-	// TODO: Parse backint parameters file and add config values.
-	// TODO: Perform IAM checks.
+	p := backintconfiguration.Parameters{
+		User:      "Status OTE",
+		Function:  "diagnose",
+		ParamFile: s.BackintParametersPath,
+	}
+	config, err := p.ParseArgsAndValidateConfig(s.backintReadFile, s.backintReadFile)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not parse backint parameters", "error", err)
+		status.Enabled = spb.State_ERROR_STATE
+		status.ErrorMessage = err.Error()
+		return status
+	}
+	config = backintconfiguration.ConfigToPrint(config)
+	status.Enabled = spb.State_SUCCESS_STATE
+	log.CtxLogger(ctx).Infof("Backint parameters: %v", config)
+
+	// Due to the large number of config values, print the important ones always
+	// and the others only if the user has overridden the default.
+	status.ConfigValues = []*spb.ConfigValue{
+		configValue("bucket", config.Bucket, ""),
+		configValue("log_to_cloud", config.LogToCloud.GetValue(), true),
+		configValue("param_file", config.ParamFile, ""),
+	}
+	overrideOnlyConfigValues := []*spb.ConfigValue{
+		configValue("buffer_size_mb", config.BufferSizeMb, 100),
+		configValue("client_endpoint", config.ClientEndpoint, ""),
+		configValue("compress", config.Compress, false),
+		configValue("custom_time", config.CustomTime, ""),
+		configValue("encryption_key", config.EncryptionKey, ""),
+		configValue("folder_prefix", config.FolderPrefix, ""),
+		configValue("file_read_timeout_ms", config.FileReadTimeoutMs, 60000),
+		configValue("kms_key", config.KmsKey, ""),
+		configValue("metadata", config.Metadata, map[string]string{}),
+		configValue("parallel_streams", config.ParallelStreams, 1),
+		configValue("parallel_recovery_streams", config.ParallelRecoveryStreams, 0),
+		configValue("rate_limit_mb", config.RateLimitMb, 0),
+		configValue("recovery_bucket", config.RecoveryBucket, ""),
+		configValue("recovery_folder_prefix", config.RecoveryFolderPrefix, ""),
+		configValue("retries", config.Retries, 5),
+		configValue("send_metrics_to_monitoring", config.SendMetricsToMonitoring.GetValue(), true),
+		configValue("service_account_key", config.ServiceAccountKey, ""),
+		configValue("shorten_folder_path", config.ShortenFolderPath, false),
+		configValue("storage_class", config.StorageClass, "STANDARD"),
+		configValue("threads", config.Threads, 64),
+		configValue("xml_multipart_upload", config.XmlMultipartUpload, false),
+	}
+	for _, configValue := range overrideOnlyConfigValues {
+		if !configValue.GetIsDefault() {
+			status.ConfigValues = append(status.ConfigValues, configValue)
+		}
+	}
+
+	// TODO: Perform IAM and Functional checks.
 
 	return status
 }

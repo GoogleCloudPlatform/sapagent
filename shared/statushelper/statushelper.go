@@ -250,7 +250,10 @@ func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 		printColor(faint, "%s: Disabled\n", status.GetName())
 		return
 	case spb.State_ERROR_STATE:
-		printColor(failure, "%s: Error: could not determine status\n", status.GetName())
+		if status.GetErrorMessage() == "" {
+			status.ErrorMessage = "could not determine status"
+		}
+		printColor(failure, "%s: Error: %s\n", status.GetName(), status.GetErrorMessage())
 		return
 	default:
 		printColor(info, "%s: ", status.GetName())
@@ -293,6 +296,9 @@ func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 
 	if len(status.GetConfigValues()) > 0 {
 		printColor(info, "    Configuration:\n")
+		sort.Slice(status.GetConfigValues(), func(i, j int) bool {
+			return status.GetConfigValues()[i].GetName() < status.GetConfigValues()[j].GetName()
+		})
 	}
 	for _, configValue := range status.GetConfigValues() {
 		defaultString := "default"

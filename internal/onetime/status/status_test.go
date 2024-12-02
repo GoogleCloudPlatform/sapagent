@@ -115,6 +115,9 @@ func TestStatusHandler(t *testing.T) {
 				readFile: func(string) ([]byte, error) {
 					return nil, nil
 				},
+				backintReadFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
 				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{StdOut: "enabled", StdErr: "", ExitCode: 0, Error: nil}
 				},
@@ -180,7 +183,7 @@ func TestStatusHandler(t *testing.T) {
 					{
 						Name:                      "Backint",
 						Enabled:                   spb.State_UNSPECIFIED_STATE,
-						EnabledUnspecifiedMessage: "Backint parameters file not specified",
+						EnabledUnspecifiedMessage: "Backint parameters file not specified / Disabled",
 						IamPermissions: []*spb.IAMPermission{
 							{Name: "storage.objects.list"},
 							{Name: "storage.objects.create"},
@@ -232,6 +235,17 @@ func TestStatusHandler(t *testing.T) {
   "hana_monitoring_configuration": {
     "enabled": true
   }
+}
+`), nil
+				},
+				backintReadFile: func(string) ([]byte, error) {
+					return []byte(`
+{
+  "bucket": "fake-bucket",
+  "log_to_cloud": true,
+	"parallel_streams": 16,
+	"threads": 1,
+	"service_account_key": "fake-key"
 }
 `), nil
 				},
@@ -300,7 +314,7 @@ func TestStatusHandler(t *testing.T) {
 					},
 					{
 						Name:    "Backint",
-						Enabled: spb.State_UNSPECIFIED_STATE,
+						Enabled: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
 							{Name: "storage.objects.list"},
 							{Name: "storage.objects.create"},
@@ -310,7 +324,14 @@ func TestStatusHandler(t *testing.T) {
 							{Name: "storage.multipartUploads.create"},
 							{Name: "storage.multipartUploads.abort"},
 						},
-						ConfigValues: []*spb.ConfigValue{},
+						ConfigValues: []*spb.ConfigValue{
+							{Name: "bucket", Value: "fake-bucket", IsDefault: false},
+							{Name: "log_to_cloud", Value: "true", IsDefault: true},
+							{Name: "param_file", Value: "fake-path/backint-gcs/parameters.json", IsDefault: false},
+							{Name: "parallel_streams", Value: "16", IsDefault: false},
+							{Name: "service_account_key", Value: "***", IsDefault: false},
+							{Name: "threads", Value: "1", IsDefault: false},
+						},
 					},
 					{
 						Name:           "Disk Snapshot",
