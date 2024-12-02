@@ -316,6 +316,10 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"op_timeout":                       "600",
 		"stonith_enabled":                  "true",
 		"stonith_timeout":                  "300",
+		"saphana_notify":                   "true",
+		"saphana_clone_max":                "2",
+		"saphana_clone_node_max":           "1",
+		"saphana_interleave":               "true",
 	}
 }
 
@@ -842,7 +846,8 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 		name       string
 		c          *cnfpb.Configuration
 		instances  []string
-		primitives []PrimitiveClass
+		resources  Resources
+		osVendorID string
 		want       map[string]string
 		wantLabels map[string]string
 	}{
@@ -850,15 +855,17 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			name:      "TestSetPacemakerPrimitivesImproperTypes",
 			c:         defaultConfiguration,
 			instances: []string{"fake-id"},
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "fake-type",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "fake-id",
-						NVPairs: []NVPair{
-							NVPair{
-								Name:  "serviceaccount",
-								Value: "external/test/account/path",
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "fake-type",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "fake-id",
+							NVPairs: []NVPair{
+								NVPair{
+									Name:  "serviceaccount",
+									Value: "external/test/account/path",
+								},
 							},
 						},
 					},
@@ -873,12 +880,14 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			name:      "TestSetPacemakerPrimitivesNoMatch",
 			c:         defaultConfiguration,
 			instances: []string{"fake-id"},
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "fence_gce",
-					InstanceAttributes: ClusterPropertySet{
-						ID:      "fake-id",
-						NVPairs: []NVPair{},
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "fence_gce",
+						InstanceAttributes: ClusterPropertySet{
+							ID:      "fake-id",
+							NVPairs: []NVPair{},
+						},
 					},
 				},
 			},
@@ -891,15 +900,17 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			name:      "TestSetPacemakerPrimitivesBasicMatch1",
 			c:         defaultConfiguration,
 			instances: []string{"instance-name"},
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "fake-type",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "test-instance-name-instance_attributes",
-						NVPairs: []NVPair{
-							NVPair{
-								Name:  "serviceaccount",
-								Value: "external/test/account/path",
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "fake-type",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "test-instance-name-instance_attributes",
+							NVPairs: []NVPair{
+								NVPair{
+									Name:  "serviceaccount",
+									Value: "external/test/account/path",
+								},
 							},
 						},
 					},
@@ -914,22 +925,24 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			name:      "TestSetPacemakerPrimitivesBasicMatch2",
 			c:         defaultConfiguration,
 			instances: []string{"instance-name", "fake-id"},
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "fake-type",
-					InstanceAttributes: ClusterPropertySet{
-						ID:      "test-instance-name-instance_attributes",
-						NVPairs: []NVPair{},
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "fake-type",
+						InstanceAttributes: ClusterPropertySet{
+							ID:      "test-instance-name-instance_attributes",
+							NVPairs: []NVPair{},
+						},
 					},
-				},
-				{
-					ClassType: "fence_gce",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "fake-id",
-						NVPairs: []NVPair{
-							NVPair{
-								Name:  "serviceaccount",
-								Value: "external/test/account/path2",
+					{
+						ClassType: "fence_gce",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "fake-id",
+							NVPairs: []NVPair{
+								NVPair{
+									Name:  "serviceaccount",
+									Value: "external/test/account/path2",
+								},
 							},
 						},
 					},
@@ -944,42 +957,44 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			name:      "pcmkDelayMaxSingleValue",
 			c:         defaultConfiguration,
 			instances: []string{"instance-name-1", "instance-name-2", "instance-name-3", "instance-name-4"},
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "stonith",
-					ID:        "STONITH-instance-name-1",
-					InstanceAttributes: ClusterPropertySet{
-						ID:      "STONITH-instance-name-1-instance_attributes",
-						NVPairs: []NVPair{},
-					},
-				},
-				{
-					ClassType: "stonith",
-					ID:        "invalid",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "STONITH-instance-name-2-instance_attributes",
-						NVPairs: []NVPair{
-							{ID: "STONITH-instance-name-2-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "60"},
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "stonith",
+						ID:        "STONITH-instance-name-1",
+						InstanceAttributes: ClusterPropertySet{
+							ID:      "STONITH-instance-name-1-instance_attributes",
+							NVPairs: []NVPair{},
 						},
 					},
-				},
-				{
-					ClassType: "stonith",
-					ID:        "STONITH-instance-name-3",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "STONITH-instance-name-3-instance_attributes",
-						NVPairs: []NVPair{
-							{ID: "STONITH-invalid-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "90"},
+					{
+						ClassType: "stonith",
+						ID:        "invalid",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "STONITH-instance-name-2-instance_attributes",
+							NVPairs: []NVPair{
+								{ID: "STONITH-instance-name-2-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "60"},
+							},
 						},
 					},
-				},
-				{
-					ClassType: "stonith",
-					ID:        "STONITH-instance-name-4",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "STONITH-instance-name-4-instance_attributes",
-						NVPairs: []NVPair{
-							{ID: "STONITH-instance-name-4-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "30"},
+					{
+						ClassType: "stonith",
+						ID:        "STONITH-instance-name-3",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "STONITH-instance-name-3-instance_attributes",
+							NVPairs: []NVPair{
+								{ID: "STONITH-invalid-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "90"},
+							},
+						},
+					},
+					{
+						ClassType: "stonith",
+						ID:        "STONITH-instance-name-4",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "STONITH-instance-name-4-instance_attributes",
+							NVPairs: []NVPair{
+								{ID: "STONITH-instance-name-4-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "30"},
+							},
 						},
 					},
 				},
@@ -995,24 +1010,26 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			name:      "pcmkDelayMaxMultipleValues",
 			c:         defaultConfiguration,
 			instances: []string{"instance-name-1", "instance-name-2"},
-			primitives: []PrimitiveClass{
-				{
-					ClassType: "stonith",
-					ID:        "STONITH-instance-name-1",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "STONITH-instance-name-1-instance_attributes",
-						NVPairs: []NVPair{
-							{ID: "STONITH-instance-name-1-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "60"},
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "stonith",
+						ID:        "STONITH-instance-name-1",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "STONITH-instance-name-1-instance_attributes",
+							NVPairs: []NVPair{
+								{ID: "STONITH-instance-name-1-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "60"},
+							},
 						},
 					},
-				},
-				{
-					ClassType: "stonith",
-					ID:        "STONITH-instance-name-2",
-					InstanceAttributes: ClusterPropertySet{
-						ID: "STONITH-instance-name-2-instance_attributes",
-						NVPairs: []NVPair{
-							{ID: "STONITH-instance-name-2-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "30"},
+					{
+						ClassType: "stonith",
+						ID:        "STONITH-instance-name-2",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "STONITH-instance-name-2-instance_attributes",
+							NVPairs: []NVPair{
+								{ID: "STONITH-instance-name-2-instance_attributes-pcmk_delay_max", Name: "pcmk_delay_max", Value: "30"},
+							},
 						},
 					},
 				},
@@ -1024,12 +1041,124 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"pcmk_delay_max": "instance-name-1=60,instance-name-2=30",
 			},
 		},
+		{
+			name:      "pacemaker_hana_clone_attrs_rhel",
+			c:         defaultConfiguration,
+			instances: []string{"instance-name-1", "instance-name-2"},
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "fake-type",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "test-instance-name-instance_attributes",
+							NVPairs: []NVPair{
+								NVPair{
+									Name:  "serviceaccount",
+									Value: "external/test/account/path",
+								},
+							},
+						},
+					},
+				},
+				Clone: Clone{
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPHana",
+							MetaAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{
+										Name:  "notify",
+										Value: "true",
+									},
+									{
+										Name:  "clone-max",
+										Value: "2",
+									},
+									{
+										Name:  "clone-node-max",
+										Value: "1",
+									},
+									{
+										Name:  "interleave",
+										Value: "true",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			osVendorID: "rhel",
+			want: map[string]string{
+				"serviceAccountJsonFile": "external/test/account/path",
+			},
+			wantLabels: map[string]string{
+				"saphana_notify":         "true",
+				"saphana_clone_max":      "2",
+				"saphana_clone_node_max": "1",
+				"saphana_interleave":     "true",
+			},
+		},
+		{
+			name:      "pacemaker_hana_clone_attrs_sles",
+			c:         defaultConfiguration,
+			instances: []string{"instance-name-1", "instance-name-2"},
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ClassType: "fake-type",
+						InstanceAttributes: ClusterPropertySet{
+							ID: "test-instance-name-instance_attributes",
+							NVPairs: []NVPair{
+								NVPair{
+									Name:  "serviceaccount",
+									Value: "external/test/account/path",
+								},
+							},
+						},
+					},
+				},
+				Master: Clone{
+					Attributes: ClusterPropertySet{
+						NVPairs: []NVPair{
+							{
+								Name:  "notify",
+								Value: "true",
+							},
+							{
+								Name:  "clone-max",
+								Value: "2",
+							},
+							{
+								Name:  "clone-node-max",
+								Value: "1",
+							},
+							{
+								Name:  "interleave",
+								Value: "true",
+							},
+						},
+					},
+				},
+			},
+			osVendorID: "sles",
+			want: map[string]string{
+				"serviceAccountJsonFile": "external/test/account/path",
+			},
+			wantLabels: map[string]string{
+				"saphana_notify":         "true",
+				"saphana_clone_max":      "2",
+				"saphana_clone_node_max": "1",
+				"saphana_interleave":     "true",
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gotLabels := map[string]string{}
-			got := setPacemakerPrimitives(gotLabels, test.primitives, test.instances, test.c)
+			ctx := context.Background()
+			got := setPacemakerPrimitives(ctx, gotLabels, test.resources, test.instances, test.c, test.osVendorID)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerPrimitives() returned unexpected return map diff (-want +got):\n%s", diff)

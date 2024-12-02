@@ -184,8 +184,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	// Ex: instance11, ... , instance1
 	sort.Slice(instances, func(i, j int) bool { return len(instances[i]) > len(instances[j]) })
 
-	primitives := pacemakerDocument.Configuration.Resources.Primitives
-	results := setPacemakerPrimitives(l, primitives, instances, params.Config)
+	results := setPacemakerPrimitives(ctx, l, pacemakerDocument.Configuration.Resources, instances, params.Config, params.OSVendorID)
 
 	if id, ok := results["projectId"]; ok {
 		projectID = id
@@ -387,7 +386,8 @@ func setLabelsForRSCNVPairs(l map[string]string, rscOptionNvPairs []NVPair, name
 }
 
 // setPacemakerPrimitives sets the pacemaker primitives labels for the metric validation collector.
-func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, instances []string, c *cpb.Configuration) map[string]string {
+func setPacemakerPrimitives(ctx context.Context, l map[string]string, resources Resources, instances []string, c *cpb.Configuration, osVendorID string) map[string]string {
+	primitives := resources.Primitives
 	returnMap := map[string]string{}
 	var pcmkDelayMax []string
 	serviceAccountJSONFile := ""
@@ -419,6 +419,8 @@ func setPacemakerPrimitives(l map[string]string, primitives []PrimitiveClass, in
 		l["pcmk_delay_max"] = strings.Join(pcmkDelayMax, ",")
 	}
 	returnMap["serviceAccountJsonFile"] = serviceAccountJSONFile
+
+	setPacemakerHANACloneAttrs(ctx, l, resources, osVendorID)
 	return returnMap
 }
 
@@ -685,6 +687,42 @@ func setPacemakerStonithClusterProperty(l map[string]string, cps []ClusterProper
 				}
 			}
 			return
+		}
+	}
+}
+
+func setPacemakerHANACloneAttrs(ctx context.Context, l map[string]string, resources Resources, osVendorID string) {
+	var metaAttrs ClusterPropertySet
+	switch osVendorID {
+	case "rhel":
+		clone := resources.Clone
+		for _, p := range clone.Primitives {
+			if p.ClassType == "SAPHana" {
+				metaAttrs = p.MetaAttributes
+				break
+			}
+		}
+	case "sles":
+		metaAttrs = resources.Master.Attributes
+	default:
+		log.CtxLogger(ctx).Debugw("Unsupported OS vendor ID for pacemakerHANACloneAttrs", "osVendorID", osVendorID)
+		return
+	}
+	if len(metaAttrs.NVPairs) == 0 {
+		return
+	}
+
+	pacemakerHANACloneAttrsKeys := map[string]bool{
+		"notify":         true,
+		"clone-max":      true,
+		"clone-node-max": true,
+		"interleave":     true,
+	}
+
+	for _, nvPair := range metaAttrs.NVPairs {
+		if _, ok := pacemakerHANACloneAttrsKeys[nvPair.Name]; ok {
+			key := "saphana_" + strings.ReplaceAll(nvPair.Name, "-", "_")
+			l[key] = nvPair.Value
 		}
 	}
 }
