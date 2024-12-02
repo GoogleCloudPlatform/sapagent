@@ -25,15 +25,17 @@ import (
 	"runtime"
 
 	"flag"
+	store "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
+	backintconfiguration "github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 	"github.com/GoogleCloudPlatform/sapagent/shared/statushelper"
+	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 
-	backintconfiguration "github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
@@ -58,6 +60,7 @@ type Status struct {
 	backintReadFile   backintconfiguration.ReadConfigFile
 	exec              commandlineexecutor.Execute
 	exists            commandlineexecutor.Exists
+	backintClient     storage.Client
 }
 
 // Name implements the subcommand interface for status.
@@ -119,6 +122,7 @@ func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentS
 	s.backintReadFile = os.ReadFile
 	s.exec = commandlineexecutor.ExecuteCommand
 	s.exists = commandlineexecutor.CommandExists
+	s.backintClient = store.NewClient
 	status, err := s.statusHandler(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
@@ -303,39 +307,39 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		status.ErrorMessage = err.Error()
 		return status
 	}
-	config = backintconfiguration.ConfigToPrint(config)
+	printConfig := backintconfiguration.ConfigToPrint(config)
 	status.Enabled = spb.State_SUCCESS_STATE
-	log.CtxLogger(ctx).Infof("Backint parameters: %v", config)
+	log.CtxLogger(ctx).Infof("Backint parameters: %v", printConfig)
 
 	// Due to the large number of config values, print the important ones always
 	// and the others only if the user has overridden the default.
 	status.ConfigValues = []*spb.ConfigValue{
-		configValue("bucket", config.Bucket, ""),
-		configValue("log_to_cloud", config.LogToCloud.GetValue(), true),
-		configValue("param_file", config.ParamFile, ""),
+		configValue("bucket", printConfig.Bucket, ""),
+		configValue("log_to_cloud", printConfig.LogToCloud.GetValue(), true),
+		configValue("param_file", printConfig.ParamFile, ""),
 	}
 	overrideOnlyConfigValues := []*spb.ConfigValue{
-		configValue("buffer_size_mb", config.BufferSizeMb, 100),
-		configValue("client_endpoint", config.ClientEndpoint, ""),
-		configValue("compress", config.Compress, false),
-		configValue("custom_time", config.CustomTime, ""),
-		configValue("encryption_key", config.EncryptionKey, ""),
-		configValue("folder_prefix", config.FolderPrefix, ""),
-		configValue("file_read_timeout_ms", config.FileReadTimeoutMs, 60000),
-		configValue("kms_key", config.KmsKey, ""),
-		configValue("metadata", config.Metadata, map[string]string{}),
-		configValue("parallel_streams", config.ParallelStreams, 1),
-		configValue("parallel_recovery_streams", config.ParallelRecoveryStreams, 0),
-		configValue("rate_limit_mb", config.RateLimitMb, 0),
-		configValue("recovery_bucket", config.RecoveryBucket, ""),
-		configValue("recovery_folder_prefix", config.RecoveryFolderPrefix, ""),
-		configValue("retries", config.Retries, 5),
-		configValue("send_metrics_to_monitoring", config.SendMetricsToMonitoring.GetValue(), true),
-		configValue("service_account_key", config.ServiceAccountKey, ""),
-		configValue("shorten_folder_path", config.ShortenFolderPath, false),
-		configValue("storage_class", config.StorageClass, "STANDARD"),
-		configValue("threads", config.Threads, 64),
-		configValue("xml_multipart_upload", config.XmlMultipartUpload, false),
+		configValue("buffer_size_mb", printConfig.BufferSizeMb, 100),
+		configValue("client_endpoint", printConfig.ClientEndpoint, ""),
+		configValue("compress", printConfig.Compress, false),
+		configValue("custom_time", printConfig.CustomTime, ""),
+		configValue("encryption_key", printConfig.EncryptionKey, ""),
+		configValue("folder_prefix", printConfig.FolderPrefix, ""),
+		configValue("file_read_timeout_ms", printConfig.FileReadTimeoutMs, 60000),
+		configValue("kms_key", printConfig.KmsKey, ""),
+		configValue("metadata", printConfig.Metadata, map[string]string{}),
+		configValue("parallel_streams", printConfig.ParallelStreams, 1),
+		configValue("parallel_recovery_streams", printConfig.ParallelRecoveryStreams, 0),
+		configValue("rate_limit_mb", printConfig.RateLimitMb, 0),
+		configValue("recovery_bucket", printConfig.RecoveryBucket, ""),
+		configValue("recovery_folder_prefix", printConfig.RecoveryFolderPrefix, ""),
+		configValue("retries", printConfig.Retries, 5),
+		configValue("send_metrics_to_monitoring", printConfig.SendMetricsToMonitoring.GetValue(), true),
+		configValue("service_account_key", printConfig.ServiceAccountKey, ""),
+		configValue("shorten_folder_path", printConfig.ShortenFolderPath, false),
+		configValue("storage_class", printConfig.StorageClass, "STANDARD"),
+		configValue("threads", printConfig.Threads, 64),
+		configValue("xml_multipart_upload", printConfig.XmlMultipartUpload, false),
 	}
 	for _, configValue := range overrideOnlyConfigValues {
 		if !configValue.GetIsDefault() {
@@ -343,8 +347,25 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		}
 	}
 
-	// TODO: Perform IAM and Functional checks.
+	// TODO: Perform IAM checks.
 
+	connectParams := &storage.ConnectParameters{
+		StorageClient:    s.backintClient,
+		ServiceAccount:   config.GetServiceAccountKey(),
+		BucketName:       config.GetBucket(),
+		UserAgentSuffix:  "Backint for GCS",
+		VerifyConnection: true,
+		MaxRetries:       config.GetRetries(),
+		Endpoint:         config.GetClientEndpoint(),
+		UserAgent:        configuration.StorageAgentName(),
+	}
+	_, ok := storage.ConnectToBucket(ctx, connectParams)
+	if !ok {
+		status.FullyFunctional = spb.State_FAILURE_STATE
+		status.ErrorMessage = "Failed to connect to bucket"
+		return status
+	}
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 

@@ -25,8 +25,11 @@ import (
 	"testing"
 
 	"flag"
+	store "cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -35,6 +38,37 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
+
+const (
+	defaultBucketName = "fake-bucket"
+)
+
+var (
+	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*store.Client, error) {
+		return fakeServer(defaultBucketName).Client(), nil
+	}
+	defaultBackintIAMPermissions = []*spb.IAMPermission{
+		{Name: "storage.objects.list"},
+		{Name: "storage.objects.create"},
+		{Name: "storage.objects.get"},
+		{Name: "storage.objects.update"},
+		{Name: "storage.objects.delete"},
+		{Name: "storage.multipartUploads.create"},
+		{Name: "storage.multipartUploads.abort"},
+	}
+)
+
+func fakeServer(bucketName string) *fakestorage.Server {
+	return fakestorage.NewServer([]fakestorage.Object{
+		{
+			ObjectAttrs: fakestorage.ObjectAttrs{
+				BucketName: bucketName,
+				Name:       "object.txt",
+			},
+			Content: []byte("hello world"),
+		},
+	})
+}
 
 func TestSynopsisForStatus(t *testing.T) {
 	want := "get the status of the agent and its services"
@@ -184,16 +218,8 @@ func TestStatusHandler(t *testing.T) {
 						Name:                      "Backint",
 						Enabled:                   spb.State_UNSPECIFIED_STATE,
 						EnabledUnspecifiedMessage: "Backint parameters file not specified / Disabled",
-						IamPermissions: []*spb.IAMPermission{
-							{Name: "storage.objects.list"},
-							{Name: "storage.objects.create"},
-							{Name: "storage.objects.get"},
-							{Name: "storage.objects.update"},
-							{Name: "storage.objects.delete"},
-							{Name: "storage.multipartUploads.create"},
-							{Name: "storage.multipartUploads.abort"},
-						},
-						ConfigValues: []*spb.ConfigValue{},
+						IamPermissions:            defaultBackintIAMPermissions,
+						ConfigValues:              []*spb.ConfigValue{},
 					},
 					{
 						Name:           "Disk Snapshot",
@@ -256,6 +282,7 @@ func TestStatusHandler(t *testing.T) {
 					return false
 				},
 				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
+				backintClient:         defaultStorageClient,
 			},
 			want: &spb.AgentStatus{
 				AgentName:             agentPackageName,
@@ -313,17 +340,10 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:    "Backint",
-						Enabled: spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{
-							{Name: "storage.objects.list"},
-							{Name: "storage.objects.create"},
-							{Name: "storage.objects.get"},
-							{Name: "storage.objects.update"},
-							{Name: "storage.objects.delete"},
-							{Name: "storage.multipartUploads.create"},
-							{Name: "storage.multipartUploads.abort"},
-						},
+						Name:            "Backint",
+						Enabled:         spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_SUCCESS_STATE,
+						IamPermissions:  defaultBackintIAMPermissions,
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "bucket", Value: "fake-bucket", IsDefault: false},
 							{Name: "log_to_cloud", Value: "true", IsDefault: true},
@@ -363,6 +383,88 @@ func TestStatusHandler(t *testing.T) {
 			}
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("statusHandler()=%v want %v", gotErr, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestBackintStatusFailures(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Status
+		want *spb.ServiceStatus
+	}{
+		{
+			name: "NoBackintParametersFile",
+			s: Status{
+				backintReadFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:                      "Backint",
+				Enabled:                   spb.State_UNSPECIFIED_STATE,
+				EnabledUnspecifiedMessage: "Backint parameters file not specified / Disabled",
+				IamPermissions:            defaultBackintIAMPermissions,
+				ConfigValues:              []*spb.ConfigValue{},
+			},
+		},
+		{
+			name: "FailedToParseBackintParametersFile",
+			s: Status{
+				backintReadFile: func(string) ([]byte, error) {
+					return []byte(`
+{
+
+}
+`), nil
+				},
+				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
+				backintClient:         defaultStorageClient,
+			},
+			want: &spb.ServiceStatus{
+				Name:           "Backint",
+				Enabled:        spb.State_ERROR_STATE,
+				ErrorMessage:   `bucket must be provided`,
+				IamPermissions: defaultBackintIAMPermissions,
+				ConfigValues:   []*spb.ConfigValue{},
+			},
+		},
+		{
+			name: "FailedToConnectToBucket",
+			s: Status{
+				backintReadFile: func(string) ([]byte, error) {
+					return []byte(`
+{
+  "bucket": "bucket-does-not-exist",
+  "log_to_cloud": true,
+	"threads": 1
+}
+`), nil
+				},
+				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
+				backintClient:         defaultStorageClient,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Backint",
+				Enabled:         spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Failed to connect to bucket",
+				IamPermissions:  defaultBackintIAMPermissions,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "bucket", Value: "bucket-does-not-exist", IsDefault: false},
+					{Name: "log_to_cloud", Value: "true", IsDefault: true},
+					{Name: "param_file", Value: "fake-path/backint-gcs/parameters.json", IsDefault: false},
+					{Name: "threads", Value: "1", IsDefault: false},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := test.s.backintStatus(context.Background())
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("backintStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
