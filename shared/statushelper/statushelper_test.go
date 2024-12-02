@@ -24,10 +24,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"text/tabwriter"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/fatih/color"
 	spb "github.com/GoogleCloudPlatform/sapagent/protos/status"
 	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
 )
@@ -416,10 +416,10 @@ Agent Status:
     Available Version: 
     Systemd Service Enabled: Error: could not determine status
     Systemd Service Running: Error: could not determine status
+    Cloud API Full Scopes:   Error: could not determine status
     Configuration File: 
     Configuration Valid: Error: could not determine status
         
-    Default VM Service Account Cloud API Full Scopes Granted: Error: could not determine status
 
 
 `,
@@ -511,16 +511,16 @@ Agent Status:
     Available Version: 3.6
     Systemd Service Enabled: True
     Systemd Service Running: True
+    Cloud API Full Scopes:   True
     Configuration File: /etc/google-cloud-sap-agent/configuration.json
     Configuration Valid: True
-    Default VM Service Account Cloud API Full Scopes Granted: True
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Fully Functional
     IAM Permissions: All granted
     Configuration:
-        collect_process_metrics: True (default)
-        process_metrics_frequency: 5 (default)
+        collect_process_metrics:   True (default)
+        process_metrics_frequency: 5    (default)
 --------------------------------------------------------------------------------
 Host Metrics: Enabled
     Status: Fully Functional
@@ -622,22 +622,22 @@ Agent Status:
     Available Version: 3.6
     Systemd Service Enabled: False
     Systemd Service Running: False
+    Cloud API Full Scopes:   False
     Configuration File: /etc/google-cloud-sap-agent/configuration.json
     Configuration Valid: False
         error: proto: (line 6:44): invalid value for bool field value: 2
-    Default VM Service Account Cloud API Full Scopes Granted: False
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Error: Cannot write to Cloud Monitoring, check IAM permissions
     IAM Permissions: 6 not granted (output limited to 5)
-        example.failed: False
-        example.failed: False
-        example.failed: False
-        example.failed: False
+        example.failed:            False
+        example.failed:            False
+        example.failed:            False
+        example.failed:            False
         example.monitoring.viewer: Error: could not determine status
     Configuration:
-        collect_process_metrics: True (configuration file)
-        process_metrics_frequency: nil (default)
+        collect_process_metrics:   True (configuration file)
+        process_metrics_frequency: nil  (default)
 --------------------------------------------------------------------------------
 Host Metrics: Enabled
     Status: Error: could not determine status
@@ -656,14 +656,12 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Monkey patch stdout to check the output.
-			defer func(oldStdout *os.File) {
-				os.Stdout = oldStdout
-				color.Output = oldStdout
-			}(os.Stdout)
+			// Monkey patch the tab writer to check the output.
+			defer func(oldWriter *tabwriter.Writer) {
+				tabWriter = oldWriter
+			}(tabWriter)
 			r, w, _ := os.Pipe()
-			os.Stdout = w
-			color.Output = w
+			tabWriter = tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
 			PrintStatus(context.Background(), tc.status)
 
 			w.Close()
