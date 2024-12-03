@@ -43,6 +43,9 @@ const (
 	MachineTypeUnknown = "unknown"
 )
 
+// GetCloudProperties abstracts metadataserver.FetchCloudProperties function for testability.
+type GetCloudProperties func() *CloudProperties
+
 var (
 	zonePattern        = regexp.MustCompile("zones/([^/]*)")
 	machineTypePattern = regexp.MustCompile("machineTypes/([^/]*)")
@@ -73,16 +76,26 @@ type (
 	}
 
 	instanceInfo struct {
-		ID          int64  `json:"id"`
-		Zone        string `json:"zone"`
-		Name        string `json:"name"`
-		Image       string `json:"image"`
-		MachineType string `json:"machineType"`
+		ID              int64           `json:"id"`
+		Zone            string          `json:"zone"`
+		Name            string          `json:"name"`
+		Image           string          `json:"image"`
+		MachineType     string          `json:"machineType"`
+		ServiceAccounts serviceAccounts `json:"serviceAccounts"`
+	}
+
+	serviceAccounts struct {
+		DefaultInfo defaultInfo `json:"default"`
+	}
+
+	defaultInfo struct {
+		Scopes []string `json:"scopes"`
 	}
 
 	// CloudProperties contains the cloud properties of the instance.
 	CloudProperties struct {
 		ProjectID, NumericProjectID, InstanceID, Zone, InstanceName, Image, MachineType string
+		Scopes                                                                          []string
 	}
 )
 
@@ -216,6 +229,7 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 	machineType := parseMachineType(instance.MachineType)
 	instanceName := instance.Name
 	image := instance.Image
+	scopes := instance.ServiceAccounts.DefaultInfo.Scopes
 
 	if image == "" {
 		image = ImageUnknown
@@ -225,7 +239,7 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 	}
 
 	log.Logger.Debugw("Default Cloud Properties from metadata server",
-		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image, "machinetype", machineType)
+		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image, "machinetype", machineType, "scopes", scopes)
 
 	if projectID == "" || numericProjectID == "0" || instanceID == "0" || zone == "" || instanceName == "" {
 		return nil, fmt.Errorf("metadata server responded with incomplete information")
@@ -239,6 +253,7 @@ func requestCloudProperties() (*instancepb.CloudProperties, error) {
 		InstanceName:     instanceName,
 		Image:            image,
 		MachineType:      machineType,
+		Scopes:           scopes,
 	}, nil
 }
 
@@ -262,6 +277,7 @@ func requestProperties() (*CloudProperties, error) {
 	machineType := parseMachineType(instance.MachineType)
 	instanceName := instance.Name
 	image := instance.Image
+	scopes := instance.ServiceAccounts.DefaultInfo.Scopes
 
 	if image == "" {
 		image = ImageUnknown
@@ -271,7 +287,7 @@ func requestProperties() (*CloudProperties, error) {
 	}
 
 	log.Logger.Debugw("Default Cloud Properties from metadata server",
-		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image, "machinetype", machineType)
+		"projectid", projectID, "projectnumber", numericProjectID, "instanceid", instanceID, "zone", zone, "instancename", instanceName, "image", image, "machinetype", machineType, "scopes", scopes)
 
 	if projectID == "" || numericProjectID == "0" || instanceID == "0" || zone == "" || instanceName == "" {
 		return nil, fmt.Errorf("metadata server responded with incomplete information")
@@ -285,6 +301,7 @@ func requestProperties() (*CloudProperties, error) {
 		InstanceName:     instanceName,
 		Image:            image,
 		MachineType:      machineType,
+		Scopes:           scopes,
 	}, nil
 }
 

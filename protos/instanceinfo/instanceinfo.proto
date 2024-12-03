@@ -29,6 +29,7 @@ message CloudProperties {
   string region = 7;  // This is needed only for baremtal systems and is not
                       // used for GCE instances.
   string machine_type = 8;
+  repeated string scopes = 9;
 }
 
 message Disk {

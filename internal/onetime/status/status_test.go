@@ -158,15 +158,19 @@ func TestStatusHandler(t *testing.T) {
 				exists: func(string) bool {
 					return true
 				},
+				cloudProps: &ipb.CloudProperties{
+					Scopes: []string{requiredScope},
+				},
 			},
 			want: &spb.AgentStatus{
-				AgentName:             agentPackageName,
-				InstalledVersion:      fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
-				AvailableVersion:      "enabled",
-				SystemdServiceEnabled: spb.State_SUCCESS_STATE,
-				SystemdServiceRunning: spb.State_SUCCESS_STATE,
-				ConfigurationFilePath: configuration.LinuxConfigPath,
-				ConfigurationValid:    spb.State_SUCCESS_STATE,
+				AgentName:                       agentPackageName,
+				InstalledVersion:                fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
+				AvailableVersion:                "enabled",
+				SystemdServiceEnabled:           spb.State_SUCCESS_STATE,
+				SystemdServiceRunning:           spb.State_SUCCESS_STATE,
+				ConfigurationFilePath:           configuration.LinuxConfigPath,
+				ConfigurationValid:              spb.State_SUCCESS_STATE,
+				CloudApiAccessFullScopesGranted: spb.State_SUCCESS_STATE,
 				Services: []*spb.ServiceStatus{
 					{
 						Name:    "Host Metrics",
@@ -281,17 +285,21 @@ func TestStatusHandler(t *testing.T) {
 				exists: func(string) bool {
 					return false
 				},
+				cloudProps: &ipb.CloudProperties{
+					Scopes: []string{},
+				},
 				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
 				backintClient:         defaultStorageClient,
 			},
 			want: &spb.AgentStatus{
-				AgentName:             agentPackageName,
-				InstalledVersion:      fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
-				AvailableVersion:      fetchLatestVersionError,
-				SystemdServiceEnabled: spb.State_ERROR_STATE,
-				SystemdServiceRunning: spb.State_ERROR_STATE,
-				ConfigurationFilePath: configuration.LinuxConfigPath,
-				ConfigurationValid:    spb.State_SUCCESS_STATE,
+				AgentName:                       agentPackageName,
+				InstalledVersion:                fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
+				AvailableVersion:                fetchLatestVersionError,
+				SystemdServiceEnabled:           spb.State_ERROR_STATE,
+				SystemdServiceRunning:           spb.State_ERROR_STATE,
+				ConfigurationFilePath:           configuration.LinuxConfigPath,
+				ConfigurationValid:              spb.State_SUCCESS_STATE,
+				CloudApiAccessFullScopesGranted: spb.State_FAILURE_STATE,
 				Services: []*spb.ServiceStatus{
 					{
 						Name:    "Host Metrics",

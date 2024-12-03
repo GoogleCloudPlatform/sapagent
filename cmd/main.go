@@ -146,6 +146,7 @@ func main() {
 			Image:            cp.Image,
 			NumericProjectId: cp.NumericProjectID,
 			MachineType:      cp.MachineType,
+			Scopes:           cp.Scopes,
 		}
 	}
 	lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, cloudProps.GetProjectId(), configuration.UserAgent())

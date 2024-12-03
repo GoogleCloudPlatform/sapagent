@@ -30,6 +30,7 @@ message AgentStatus {
   repeated ServiceStatus services = 8;
   repeated Reference references = 9;
   string agent_name = 10;
+  State cloud_api_access_full_scopes_granted = 11;
 }
 
 message ServiceStatus {

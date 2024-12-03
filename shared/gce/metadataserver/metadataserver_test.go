@@ -242,6 +242,11 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 						Name:        "test-instance-name",
 						Image:       "test-image",
 						MachineType: "projects/test-project/machineTypes/test-machine-type",
+						ServiceAccounts: serviceAccounts{
+							DefaultInfo: defaultInfo{
+								Scopes: []string{"scope1", "scope2"},
+							},
+						},
 					},
 				})},
 			want: &instancepb.CloudProperties{
@@ -252,6 +257,7 @@ func TestCloudPropertiesWithRetry(t *testing.T) {
 				InstanceName:     "test-instance-name",
 				Image:            "test-image",
 				MachineType:      "test-machine-type",
+				Scopes:           []string{"scope1", "scope2"},
 			},
 		},
 		{
@@ -399,6 +405,11 @@ func TestReadCloudPropertiesWithRetry(t *testing.T) {
 						Name:        "test-instance-name",
 						Image:       "test-image",
 						MachineType: "projects/test-project/machineTypes/test-machine-type",
+						ServiceAccounts: serviceAccounts{
+							DefaultInfo: defaultInfo{
+								Scopes: []string{"scope1", "scope2"},
+							},
+						},
 					},
 				})},
 			want: &CloudProperties{
@@ -409,6 +420,7 @@ func TestReadCloudPropertiesWithRetry(t *testing.T) {
 				InstanceName:     "test-instance-name",
 				Image:            "test-image",
 				MachineType:      "test-machine-type",
+				Scopes:           []string{"scope1", "scope2"},
 			},
 		},
 		{
@@ -497,6 +509,11 @@ func TestFetchCloudProperties(t *testing.T) {
 				Name:        "test-instance-name",
 				Image:       "test-image",
 				MachineType: "projects/test-project/machineTypes/test-machine-type",
+				ServiceAccounts: serviceAccounts{
+					DefaultInfo: defaultInfo{
+						Scopes: []string{"scope1", "scope2"},
+					},
+				},
 			},
 		})}
 	want := &CloudProperties{
@@ -507,6 +524,7 @@ func TestFetchCloudProperties(t *testing.T) {
 		InstanceName:     "test-instance-name",
 		Image:            "test-image",
 		MachineType:      "test-machine-type",
+		Scopes:           []string{"scope1", "scope2"},
 	}
 
 	ts := mockMetadataServer(t, url)

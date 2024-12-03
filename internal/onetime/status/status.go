@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 
 	"flag"
 	store "cloud.google.com/go/storage"
@@ -44,6 +45,8 @@ import (
 const (
 	agentPackageName        = "google-cloud-sap-agent"
 	fetchLatestVersionError = "Error: could not fetch latest version"
+	// TODO: Implement status OTE check for WIF based authentications access to scopes.
+	requiredScope = "https://www.googleapis.com/auth/cloud-platform"
 )
 
 // Status stores the status subcommand parameters.
@@ -159,6 +162,16 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not fetch latest version", "error", err)
 		agentStatus.AvailableVersion = fetchLatestVersionError
+	}
+
+	switch {
+	case s.cloudProps == nil:
+		log.CtxLogger(ctx).Errorw("Could not fetch scopes", "error", err)
+		agentStatus.CloudApiAccessFullScopesGranted = spb.State_ERROR_STATE
+	case slices.Contains(s.cloudProps.GetScopes(), requiredScope):
+		agentStatus.CloudApiAccessFullScopesGranted = spb.State_SUCCESS_STATE
+	default:
+		agentStatus.CloudApiAccessFullScopesGranted = spb.State_FAILURE_STATE
 	}
 
 	enabled, running, err := statushelper.CheckAgentEnabledAndRunning(ctx, agentPackageName, runtime.GOOS, s.exec)

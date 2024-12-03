@@ -217,6 +217,7 @@ func PrintStatus(ctx context.Context, status *spb.AgentStatus) {
 	if status.GetConfigurationValid() != spb.State_SUCCESS_STATE {
 		printColor(failure, "        %s\n", status.GetConfigurationErrorMessage())
 	}
+	printState(ctx, "    Default VM Service Account Cloud API Full Scopes Granted", status.GetCloudApiAccessFullScopesGranted())
 
 	for _, service := range status.GetServices() {
 		printServiceStatus(ctx, service)

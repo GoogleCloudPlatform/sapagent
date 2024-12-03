@@ -419,6 +419,7 @@ Agent Status:
     Configuration File: 
     Configuration Valid: Error: could not determine status
         
+    Default VM Service Account Cloud API Full Scopes Granted: Error: could not determine status
 
 
 `,
@@ -426,14 +427,15 @@ Agent Status:
 		{
 			name: "fullStatusAllSuccess",
 			status: &spb.AgentStatus{
-				AgentName:                 "Agent for SAP",
-				InstalledVersion:          "3.6",
-				AvailableVersion:          "3.6",
-				SystemdServiceEnabled:     spb.State_SUCCESS_STATE,
-				SystemdServiceRunning:     spb.State_SUCCESS_STATE,
-				ConfigurationFilePath:     "/etc/google-cloud-sap-agent/configuration.json",
-				ConfigurationValid:        spb.State_SUCCESS_STATE,
-				ConfigurationErrorMessage: "error: proto: (line 6:44): invalid value for bool field value: 2",
+				AgentName:                       "Agent for SAP",
+				InstalledVersion:                "3.6",
+				AvailableVersion:                "3.6",
+				SystemdServiceEnabled:           spb.State_SUCCESS_STATE,
+				SystemdServiceRunning:           spb.State_SUCCESS_STATE,
+				ConfigurationFilePath:           "/etc/google-cloud-sap-agent/configuration.json",
+				ConfigurationValid:              spb.State_SUCCESS_STATE,
+				ConfigurationErrorMessage:       "error: proto: (line 6:44): invalid value for bool field value: 2",
+				CloudApiAccessFullScopesGranted: spb.State_SUCCESS_STATE,
 				Services: []*spb.ServiceStatus{
 					{
 						Name:            "Process Metrics",
@@ -511,6 +513,7 @@ Agent Status:
     Systemd Service Running: True
     Configuration File: /etc/google-cloud-sap-agent/configuration.json
     Configuration Valid: True
+    Default VM Service Account Cloud API Full Scopes Granted: True
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Fully Functional
@@ -536,14 +539,15 @@ What's New: https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new
 		{
 			name: "fullStatusWithFailures",
 			status: &spb.AgentStatus{
-				AgentName:                 "Agent for SAP",
-				InstalledVersion:          "3.5",
-				AvailableVersion:          "3.6",
-				SystemdServiceEnabled:     spb.State_FAILURE_STATE,
-				SystemdServiceRunning:     spb.State_FAILURE_STATE,
-				ConfigurationFilePath:     "/etc/google-cloud-sap-agent/configuration.json",
-				ConfigurationValid:        spb.State_FAILURE_STATE,
-				ConfigurationErrorMessage: "error: proto: (line 6:44): invalid value for bool field value: 2",
+				AgentName:                       "Agent for SAP",
+				InstalledVersion:                "3.5",
+				AvailableVersion:                "3.6",
+				SystemdServiceEnabled:           spb.State_FAILURE_STATE,
+				SystemdServiceRunning:           spb.State_FAILURE_STATE,
+				ConfigurationFilePath:           "/etc/google-cloud-sap-agent/configuration.json",
+				ConfigurationValid:              spb.State_FAILURE_STATE,
+				ConfigurationErrorMessage:       "error: proto: (line 6:44): invalid value for bool field value: 2",
+				CloudApiAccessFullScopesGranted: spb.State_FAILURE_STATE,
 				Services: []*spb.ServiceStatus{
 					{
 						Name:            "Process Metrics",
@@ -621,6 +625,7 @@ Agent Status:
     Configuration File: /etc/google-cloud-sap-agent/configuration.json
     Configuration Valid: False
         error: proto: (line 6:44): invalid value for bool field value: 2
+    Default VM Service Account Cloud API Full Scopes Granted: False
 --------------------------------------------------------------------------------
 Process Metrics: Enabled
     Status: Error: Cannot write to Cloud Monitoring, check IAM permissions
