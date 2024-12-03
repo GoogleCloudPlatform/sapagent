@@ -206,7 +206,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 			}
 		} else {
 			metricevents.AddEvent(ctx, metricevents.Parameters{
-				Path:    mPath,
+				Path:    metricURL + mPath,
 				Message: "HANA System Availability",
 				Labels:  appendLabels(ip, nil),
 				Value:   strconv.FormatInt(availabilityValue, 10),
@@ -351,7 +351,7 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 		}
 	} else {
 		metricevents.AddEvent(ctx, metricevents.Parameters{
-			Path:       pmNWAvailabilityPath,
+			Path:       metricURL + pmNWAvailabilityPath,
 			Message:    "NetWeaver Availability",
 			Labels:     appendLabels(p, nil),
 			Value:      strconv.FormatInt(availabilityValue, 10),
