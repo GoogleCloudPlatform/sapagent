@@ -826,6 +826,34 @@
               "label": "pcmk_reboot_timeout"
             },
             "value": "PCMK_REBOOT_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_notify"
+            },
+            "value": "SAPHANA_NOTIFY"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_clone_max"
+            },
+            "value": "SAPHANA_CLONE_MAX"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_clone_node_max"
+            },
+            "value": "SAPHANA_CLONE_NODE_MAX"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_interleave"
+            },
+            "value": "SAPHANA_INTERLEAVE"
           }
         ],
         "rsc_location_metrics": [

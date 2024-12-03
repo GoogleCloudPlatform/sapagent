@@ -71,6 +71,10 @@ enum PrimitiveVariable {
   PCMK_DELAY_MAX = 2;
   PCMK_MONITOR_RETRIES = 3;
   PCMK_REBOOT_TIMEOUT = 4;
+  SAPHANA_NOTIFY = 5;
+  SAPHANA_CLONE_MAX = 6;
+  SAPHANA_CLONE_NODE_MAX = 7;
+  SAPHANA_INTERLEAVE = 8;
 }
 
 enum RSCLocationVariable {
