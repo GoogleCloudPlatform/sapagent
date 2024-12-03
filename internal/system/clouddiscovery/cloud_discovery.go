@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -48,6 +49,11 @@ const (
 	filestoresURIPart      = "filestores"
 	healthChecksURIPart    = "healthChecks"
 	locationsURIPart       = "locations"
+)
+
+var (
+	addressRegex = regexp.MustCompile("^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$")
+	uriRegex     = regexp.MustCompile("https?://(www|beta)\\.googleapis\\.com(\\/[a-zA-Z0-9\\-]+)+")
 )
 
 type gceInterface interface {
@@ -175,7 +181,31 @@ func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentRes
 		}
 		r, dis, err := d.discoverResource(ctx, h, cp.GetProjectId())
 		if err != nil {
+			log.CtxLogger(ctx).Infow("discoverResource error", "err", err, "h", h.name)
 			continue
+		}
+		// If the parent is not an instance, and this resource is, then move the instance properties
+		// virtual hostname from the parent to this resource.
+		if h.parent != nil && r.ResourceKind == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE &&
+			h.parent.ResourceKind != spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE &&
+			h.parent.GetInstanceProperties().GetVirtualHostname() != "" {
+			if r.InstanceProperties == nil {
+				r.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{}
+			}
+			r.InstanceProperties.VirtualHostname = h.parent.GetInstanceProperties().GetVirtualHostname()
+			h.parent.InstanceProperties = nil
+		}
+
+		if h.name != r.ResourceUri {
+			// Only apply a virtual hostn	ame if the name being discovered is not a URI or IP address.
+			log.CtxLogger(ctx).Debugw("Checking virtual hostname", "h", h.name)
+			if !addressRegex.MatchString(h.name) && !uriRegex.MatchString(h.name) {
+				if r.InstanceProperties == nil {
+					r.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{}
+				}
+				log.CtxLogger(ctx).Debugw("Setting virtual hostname on resource", "h", h.name, "r", r)
+				r.InstanceProperties.VirtualHostname = h.name
+			}
 		}
 		log.CtxLogger(ctx).Debugw("Adding to queue", "dis", dis, "h", h.name)
 		discoverQueue = append(discoverQueue, dis...)
@@ -304,6 +334,10 @@ func (d *CloudDiscovery) discoverResourceForURI(ctx context.Context, uri string)
 		d.configureDiscoveryFunctions()
 	}
 	resourceKind := getResourceKind(uri)
+	if resourceKind == "" {
+		return nil, nil, fmt.Errorf("Undetected resource kind for URI %q", uri)
+	}
+	log.CtxLogger(ctx).Debugw("discoverResourceForURI", "uri", uri, "resourceKind", resourceKind)
 	f, ok := d.discoveryFunctions[resourceKind]
 	if !ok {
 		return nil, nil, fmt.Errorf("Unsupported resource URI: %q", uri)
@@ -312,6 +346,7 @@ func (d *CloudDiscovery) discoverResourceForURI(ctx context.Context, uri string)
 }
 
 func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverAddress", "addressURI", addressURI)
 	project := extractFromURI(addressURI, projectsURIPart)
 	region := extractFromURI(addressURI, regionsURIPart)
 	ca, err := d.GceService.GetAddress(project, region, extractFromURI(addressURI, addressesURIPart))
@@ -347,6 +382,7 @@ func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string)
 }
 
 func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverInstance", "instanceURI", instanceURI)
 	project := extractFromURI(instanceURI, projectsURIPart)
 	zone := extractFromURI(instanceURI, zonesURIPart)
 	region := regionFromZone(zone)
@@ -398,6 +434,7 @@ func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI strin
 }
 
 func (d *CloudDiscovery) discoverDisk(ctx context.Context, diskURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverDisk", "diskURI", diskURI)
 	diskName := extractFromURI(diskURI, disksURIPart)
 	diskZone := extractFromURI(diskURI, zonesURIPart)
 	projectID := extractFromURI(diskURI, projectsURIPart)
@@ -415,6 +452,7 @@ func (d *CloudDiscovery) discoverDisk(ctx context.Context, diskURI string) (*spb
 }
 
 func (d *CloudDiscovery) discoverForwardingRule(ctx context.Context, fwrURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverForwardingRule", "fwrURI", fwrURI)
 	project := extractFromURI(fwrURI, projectsURIPart)
 	region := extractFromURI(fwrURI, regionsURIPart)
 	fwrName := extractFromURI(fwrURI, forwardingRulesURIPart)
@@ -485,6 +523,7 @@ func (d *CloudDiscovery) discoverInstanceGroup(ctx context.Context, groupURI str
 }
 
 func (d *CloudDiscovery) discoverInstanceGroupInstances(ctx context.Context, groupURI string) ([]string, error) {
+	log.CtxLogger(ctx).Debug("discoverInstanceGroupInstances", "groupURI", groupURI)
 	project := extractFromURI(groupURI, projectsURIPart)
 	zone := extractFromURI(groupURI, zonesURIPart)
 	name := extractFromURI(groupURI, instanceGroupsURIPart)
@@ -502,6 +541,7 @@ func (d *CloudDiscovery) discoverInstanceGroupInstances(ctx context.Context, gro
 }
 
 func (d *CloudDiscovery) discoverFilestore(ctx context.Context, filestoreURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverFilestore", "filestoreURI", filestoreURI)
 	project := extractFromURI(filestoreURI, projectsURIPart)
 	location := extractFromURI(filestoreURI, locationsURIPart)
 	name := extractFromURI(filestoreURI, filestoresURIPart)
@@ -519,6 +559,7 @@ func (d *CloudDiscovery) discoverFilestore(ctx context.Context, filestoreURI str
 }
 
 func (d *CloudDiscovery) discoverHealthCheck(ctx context.Context, healthCheckURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverHealthCheck", "healthCheckURI", healthCheckURI)
 	project := extractFromURI(healthCheckURI, projectsURIPart)
 	name := extractFromURI(healthCheckURI, healthChecksURIPart)
 	hc, err := d.GceService.GetHealthCheck(project, name)
@@ -534,6 +575,7 @@ func (d *CloudDiscovery) discoverHealthCheck(ctx context.Context, healthCheckURI
 }
 
 func (d *CloudDiscovery) discoverBackendService(ctx context.Context, backendServiceURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverBackendService", "backendServiceURI", backendServiceURI)
 	project := extractFromURI(backendServiceURI, projectsURIPart)
 	region := extractFromURI(backendServiceURI, regionsURIPart)
 	name := extractFromURI(backendServiceURI, backendServicesURIPart)
@@ -623,6 +665,7 @@ func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string)
 }
 
 func (d *CloudDiscovery) discoverSubnetwork(ctx context.Context, subnetworkURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
+	log.CtxLogger(ctx).Debugw("discoverSubnetwork", "subnetworkURI", subnetworkURI)
 	return &spb.SapDiscovery_Resource{
 		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_NETWORK,
 		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_SUBNETWORK,

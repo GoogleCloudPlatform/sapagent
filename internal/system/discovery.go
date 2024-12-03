@@ -359,10 +359,12 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			break
 		}
 	}
+
 	if fileInfo, err := d.OSStatReader(systemDiscoveryOverride); fileInfo != nil && err == nil {
 		log.CtxLogger(ctx).Info("Discovering system from override file")
 		return d.discoverOverrideSystem(ctx, systemDiscoveryOverride, instanceResource)
 	}
+
 	log.CtxLogger(ctx).Info("Starting host discovery")
 	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)
 	log.CtxLogger(ctx).Debugw("Host Resource Names", "names", hostResourceNames)
