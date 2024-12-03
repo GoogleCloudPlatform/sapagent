@@ -177,6 +177,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			name: "RestoreFromSnapshotErr",
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
+				NewDiskPrefix: "test-prefix",
 				disks: []*ipb.Disk{
 					&ipb.Disk{
 						DiskName: "test-disk-1",
