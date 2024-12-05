@@ -26,13 +26,46 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/shared/log"
 )
 
 var (
-	events         map[string]eventData
-	mu             sync.Mutex
-	logDelayEvents map[string]eventData
+	events          map[string]eventData
+	mu              sync.Mutex
+	logDelayEvents  map[string]eventData
+	defaultLogDelay = time.Minute
+
+	// logLevelMap maps path and value to log level, defaulting to InfoLevel.
+	logLevelMap = map[string]map[string]zapcore.Level{
+		"workload.googleapis.com/sap/hana/service": map[string]zapcore.Level{
+			"0": zapcore.ErrorLevel,
+		},
+		"workload.googleapis.com/sap/hana/availability": map[string]zapcore.Level{
+			"0": zapcore.ErrorLevel,
+		},
+		"workload.googleapis.com/sap/nw/service": map[string]zapcore.Level{
+			"0": zapcore.ErrorLevel,
+		},
+		"workload.googleapis.com/sap/nw/availability": map[string]zapcore.Level{
+			"0": zapcore.ErrorLevel,
+		},
+		"workload.googleapis.com/sap/cluster/nodes": map[string]zapcore.Level{
+			"0":  zapcore.ErrorLevel,
+			"-1": zapcore.WarnLevel,
+		},
+		"workload.googleapis.com/sap/cluster/resources": map[string]zapcore.Level{
+			"0": zapcore.ErrorLevel,
+			"1": zapcore.ErrorLevel,
+			"2": zapcore.WarnLevel,
+		},
+		"workload.googleapis.com/sap/hana/ha/replication": map[string]zapcore.Level{
+			"0":  zapcore.ErrorLevel,
+			"11": zapcore.ErrorLevel,
+			"12": zapcore.ErrorLevel,
+			"14": zapcore.WarnLevel,
+		},
+	}
 )
 
 type eventData struct {
@@ -83,7 +116,7 @@ func AddEvent(ctx context.Context, p Parameters) bool {
 			}
 		} else {
 			logDelayEvents[logDelayKey] = event
-			time.AfterFunc(time.Minute, func() {
+			time.AfterFunc(defaultLogDelay, func() {
 				// Lock the mutex as this runs in a separate goroutine.
 				mu.Lock()
 				defer mu.Unlock()
@@ -94,9 +127,13 @@ func AddEvent(ctx context.Context, p Parameters) bool {
 					sort.Strings(labelSlice)
 					logEvent.labels[k] = strings.Join(slices.Compact(labelSlice), ", ")
 				}
+				logLevel, ok := logLevelMap[p.Path][p.Value]
+				if !ok {
+					logLevel = zapcore.InfoLevel
+				}
 				// NOTE: This log message has specific keys used in querying Cloud Logging.
 				// Never change these keys since it would have downstream effects.
-				log.CtxLogger(ctx).Infow(p.Message, "metricEvent", true, "metric", p.Path, "previousValue", logEvent.lastValue, "currentValue", p.Value, "previousLabels", p.Labels, "currentLabels", logEvent.labels, "lastUpdated", logEvent.lastUpdated)
+				log.CtxLogger(ctx).Logw(logLevel, p.Message, "metricEvent", true, "metric", p.Path, "previousValue", logEvent.lastValue, "currentValue", p.Value, "previousLabels", p.Labels, "currentLabels", logEvent.labels, "lastUpdated", logEvent.lastUpdated)
 				delete(logDelayEvents, logDelayKey)
 			})
 		}
