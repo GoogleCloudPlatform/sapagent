@@ -21,8 +21,10 @@ package statushelper
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/google/safetext/shsprintf"
 	"github.com/fatih/color"
@@ -46,16 +48,16 @@ const (
 	osWindows = "windows"
 )
 
+var (
+	tabWriter = tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+)
+
 // printColor prints a string with the specified color code.
 func printColor(code colorCode, str string, a ...any) {
 	var colorString string
 	switch code {
 	case faint:
-		// faint does not have a helper function in the color package and needs to
-		// be handled differently.
-		colorFunc := color.New(color.Faint).PrintfFunc()
-		colorFunc(str, a...)
-		return
+		colorString = color.New(color.Faint).Sprintf(str, a...)
 	case info:
 		colorString = fmt.Sprintf(str, a...)
 	case failure:
@@ -67,7 +69,7 @@ func printColor(code colorCode, str string, a ...any) {
 	default:
 		colorString = fmt.Sprintf(str, a...)
 	}
-	fmt.Print(colorString)
+	fmt.Fprint(tabWriter, colorString)
 }
 
 // FetchLatestVersion returns latest version of the agent package from the
@@ -212,23 +214,24 @@ func PrintStatus(ctx context.Context, status *spb.AgentStatus) {
 
 	printState(ctx, "    Systemd Service Enabled", status.GetSystemdServiceEnabled())
 	printState(ctx, "    Systemd Service Running", status.GetSystemdServiceRunning())
+	printState(ctx, "    Cloud API Full Scopes", status.GetCloudApiAccessFullScopesGranted())
 	printColor(info, "    Configuration File: %s\n", status.GetConfigurationFilePath())
 	printState(ctx, "    Configuration Valid", status.GetConfigurationValid())
 	if status.GetConfigurationValid() != spb.State_SUCCESS_STATE {
 		printColor(failure, "        %s\n", status.GetConfigurationErrorMessage())
 	}
-	printState(ctx, "    Default VM Service Account Cloud API Full Scopes Granted", status.GetCloudApiAccessFullScopesGranted())
 
 	for _, service := range status.GetServices() {
 		printServiceStatus(ctx, service)
 	}
 	printReferences(ctx, status.GetReferences())
 	printColor(info, "\n\n")
+	tabWriter.Flush()
 }
 
 // printState prints a valid/invalid/error state with formatting and coloring.
 func printState(ctx context.Context, name string, state spb.State) {
-	printColor(info, "%s: ", name)
+	printColor(info, "%s:\t", name)
 	switch state {
 	case spb.State_SUCCESS_STATE:
 		printColor(success, "True\n")
@@ -307,9 +310,9 @@ func printServiceStatus(ctx context.Context, status *spb.ServiceStatus) {
 			defaultString = "configuration file"
 		}
 		if configValue.GetValue() == "" {
-			printColor(info, "        %s: nil (%s)\n", configValue.GetName(), defaultString)
+			printColor(info, "        %s:\tnil\t(%s)\n", configValue.GetName(), defaultString)
 		} else {
-			printColor(info, "        %s: %s (%s)\n", configValue.GetName(), configValue.GetValue(), defaultString)
+			printColor(info, "        %s:\t%s\t(%s)\n", configValue.GetName(), configValue.GetValue(), defaultString)
 		}
 	}
 }
